@@ -3,7 +3,7 @@
 [![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/otfabric/opcua)](https://goreportcard.com/report/github.com/otfabric/opcua)
-[![CI](https://github.com/otfabric/opcua/actions/workflows/go.yml/badge.svg)](https://github.com/otfabric/opcua/actions/workflows/go.yml)
+[![CI](https://github.com/otfabric/opcua/actions/workflows/ci.yml/badge.svg)](https://github.com/otfabric/opcua/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/otfabric/opcua?style=flat&color=blue)](https://github.com/otfabric/opcua/releases)
 
 A pure Go implementation of the OPC-UA Binary Protocol, providing both **client** and **server** capabilities. No C dependencies, no CGo — just Go.
