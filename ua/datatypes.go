@@ -196,6 +196,17 @@ type LocalizedText struct {
 	Text         string
 }
 
+// String implements fmt.Stringer. Returns the text; if locale is set, returns "locale: text".
+func (l *LocalizedText) String() string {
+	if l == nil {
+		return ""
+	}
+	if l.Locale != "" {
+		return l.Locale + ": " + l.Text
+	}
+	return l.Text
+}
+
 // NewLocalizedText creates a new localized text without a locale.
 func NewLocalizedText(text string) *LocalizedText {
 	return NewLocalizedTextWithLocale(text, "")

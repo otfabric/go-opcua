@@ -53,3 +53,20 @@ func TestQualifiedName(t *testing.T) {
 	}
 	RunCodecTest(t, cases)
 }
+
+func TestQualifiedName_String(t *testing.T) {
+	tests := []struct {
+		q    *QualifiedName
+		want string
+	}{
+		{nil, ""},
+		{&QualifiedName{NamespaceIndex: 0, Name: "Server"}, "Server"},
+		{&QualifiedName{NamespaceIndex: 2, Name: "Temperature"}, "2:Temperature"},
+	}
+	for _, tt := range tests {
+		got := tt.q.String()
+		if got != tt.want {
+			t.Errorf("QualifiedName.String() = %q, want %q", got, tt.want)
+		}
+	}
+}

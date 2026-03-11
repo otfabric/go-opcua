@@ -221,3 +221,21 @@ func TestLocalizedText(t *testing.T) {
 	}
 	RunCodecTest(t, cases)
 }
+
+func TestLocalizedText_String(t *testing.T) {
+	tests := []struct {
+		l    *LocalizedText
+		want string
+	}{
+		{nil, ""},
+		{NewLocalizedText("Siemens AG"), "Siemens AG"},
+		{NewLocalizedTextWithLocale("Siemens AG", "en-US"), "en-US: Siemens AG"},
+		{&LocalizedText{}, ""},
+	}
+	for _, tt := range tests {
+		got := tt.l.String()
+		if got != tt.want {
+			t.Errorf("LocalizedText.String() = %q, want %q", got, tt.want)
+		}
+	}
+}

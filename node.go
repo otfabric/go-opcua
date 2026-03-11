@@ -80,8 +80,8 @@ func (n *Node) WalkLimitDedup(ctx context.Context, maxDepth int) iter.Seq2[WalkR
 // defaults: MaxDepth -1 (unlimited), RefType HierarchicalReferences, Direction
 // Forward, NodeClassMask All, IncludeSubtypes true.
 type BrowseWithDepthOptions struct {
-	MaxDepth        int           // stop recursing after this depth; -1 = unlimited
-	RefType         uint32        // reference type to follow; 0 = HierarchicalReferences
+	MaxDepth        int    // stop recursing after this depth; -1 = unlimited
+	RefType         uint32 // reference type to follow; 0 = HierarchicalReferences
 	Direction       ua.BrowseDirection
 	NodeClassMask   ua.NodeClass
 	IncludeSubtypes bool

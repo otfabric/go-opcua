@@ -1,3 +1,21 @@
+# Release v0.1.13
+
+**Date:** 2026-03-11
+**Previous release:** v0.1.12
+
+## Summary
+
+Implements `fmt.Stringer` for `*ua.LocalizedText` and `*ua.QualifiedName` so that `fmt.Sprintf("%v", v)` and logging print readable text instead of struct literals (e.g. `&{3 en-US Siemens AG}`).
+
+## LocalizedText and QualifiedName display
+
+- **`(*ua.LocalizedText).String() string`** — Returns the text; if locale is set, returns `"locale: text"` (e.g. `"en-US: Siemens AG"`). Nil receiver returns `""`.
+- **`(*ua.QualifiedName).String() string`** — Returns the name only when namespace is 0, otherwise `"ns:name"` (e.g. `"2:Temperature"`). Nil receiver returns `""`.
+
+CLI and tools that print variant values, display names, or browse names no longer need custom formatting for these types; `%v` and default logging use the new methods.
+
+---
+
 # Release v0.1.12
 
 **Date:** 2026-03-11
