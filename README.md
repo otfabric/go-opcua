@@ -151,9 +151,9 @@ func main() {
 | Area | Capabilities |
 |------|-------------|
 | **Connection** | Secure channel, session management, auto-reconnect, connection state callbacks, `SkipNamespaceUpdate` |
-| **Reading** | Single/batch reads, all attributes, `Node.Value()`, `Node.Summary()` |
+| **Reading** | Single/batch reads, all attributes, `Node.Value()`, `Node.Summary()`, `ReadMulti` (chunked batch N×attributes) |
 | **Writing** | Single/batch writes, any attribute, `WriteValue`, `WriteAttribute` |
-| **Browsing** | Forward/inverse/both, continuation points, `BrowseAll`, `Walk` / `WalkLimit` (depth-limited), `WalkLimitDedup` (no duplicate nodes) |
+| **Browsing** | Forward/inverse/both, continuation points, `BrowseAll`, `Walk` / `WalkLimit` (depth-limited), `WalkLimitDedup`, `BrowseWithDepth` (client-side recursive, returns slice) |
 | **Path resolution** | `NodeFromPath`, `NodeFromPathInNamespace`, `NodeFromQualifiedPath` (ns:name), `Node.TranslateBrowsePathInNamespaceToNodeID` (TranslateBrowsePathsToNodeIDs). Symbolic node names: `StandardNodeID("CurrentTime")`, `id.NodeIDByName(name)` |
 | **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder API |
 | **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |

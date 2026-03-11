@@ -41,6 +41,82 @@ func TestReadValues(t *testing.T) {
 	require.Equal(t, "hello", results[2].Value.Value())
 }
 
+func TestReadMulti(t *testing.T) {
+	srv, url := testutil.NewTestServer(t)
+	ns := testutil.AddTestNodes(t, srv)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
+
+	items := []opcua.ReadItem{
+		{NodeID: ua.NewStringNodeID(ns.ID(), "IntVar"), AttributeID: ua.AttributeIDValue},
+		{NodeID: ua.NewStringNodeID(ns.ID(), "FloatVar"), AttributeID: ua.AttributeIDValue},
+		{NodeID: ua.NewStringNodeID(ns.ID(), "StringVar"), AttributeID: ua.AttributeIDValue},
+	}
+	results, err := c.ReadMulti(ctx, items)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+	require.Equal(t, ua.StatusOK, results[0].StatusCode)
+	require.Equal(t, int32(42), results[0].DataValue.Value.Value())
+	require.Equal(t, ua.StatusOK, results[1].StatusCode)
+	require.Equal(t, float64(3.14), results[1].DataValue.Value.Value())
+	require.Equal(t, ua.StatusOK, results[2].StatusCode)
+	require.Equal(t, "hello", results[2].DataValue.Value.Value())
+}
+
+func TestReadMultiChunking(t *testing.T) {
+	srv, url := testutil.NewTestServer(t)
+	ns := testutil.AddTestNodes(t, srv)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
+
+	// Request more than default chunk size (32) to trigger chunking
+	var items []opcua.ReadItem
+	for i := 0; i < 5; i++ {
+		items = append(items, opcua.ReadItem{NodeID: ua.NewStringNodeID(ns.ID(), "IntVar"), AttributeID: ua.AttributeIDValue})
+	}
+	results, err := c.ReadMulti(ctx, items, opcua.ReadMultiWithChunkSize(2))
+	require.NoError(t, err)
+	require.Len(t, results, 5)
+	for i := range results {
+		require.Equal(t, ua.StatusOK, results[i].StatusCode)
+		require.Equal(t, int32(42), results[i].DataValue.Value.Value())
+	}
+}
+
+func TestReadMultiEmptyItems(t *testing.T) {
+	c, _ := opcua.NewClient("opc.tcp://localhost:4840")
+	ctx := context.Background()
+	results, err := c.ReadMulti(ctx, nil)
+	require.NoError(t, err)
+	require.Nil(t, results)
+	results, err = c.ReadMulti(ctx, []opcua.ReadItem{})
+	require.NoError(t, err)
+	require.Nil(t, results)
+}
+
+func TestReadMultiMixedAttributes(t *testing.T) {
+	srv, url := testutil.NewTestServer(t)
+	ns := testutil.AddTestNodes(t, srv)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
+
+	nodeID := ua.NewStringNodeID(ns.ID(), "IntVar")
+	items := []opcua.ReadItem{
+		{NodeID: nodeID, AttributeID: ua.AttributeIDValue},
+		{NodeID: nodeID, AttributeID: ua.AttributeIDDisplayName},
+		{NodeID: nodeID, AttributeID: ua.AttributeIDNodeClass},
+	}
+	results, err := c.ReadMulti(ctx, items)
+	require.NoError(t, err)
+	require.Len(t, results, 3)
+	require.Equal(t, ua.StatusOK, results[0].StatusCode)
+	require.Equal(t, int32(42), results[0].DataValue.Value.Value())
+	require.Equal(t, ua.StatusOK, results[1].StatusCode)
+	require.NotNil(t, results[1].DataValue.Value.Value()) // DisplayName LocalizedText
+	require.Equal(t, ua.StatusOK, results[2].StatusCode)
+	require.NotNil(t, results[2].DataValue.Value.Value())
+}
+
 func TestWriteValue(t *testing.T) {
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
@@ -272,6 +348,63 @@ func TestNodeWalkLimitDedup(t *testing.T) {
 		}
 	}
 	require.Greater(t, count, 0, "WalkLimitDedup should yield at least one result")
+}
+
+func TestNodeBrowseWithDepth(t *testing.T) {
+	_, url := testutil.NewTestServer(t)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
+
+	n := c.Node(ua.NewNumericNodeID(0, 85)) // Objects folder
+	opts := opcua.BrowseWithDepthOptions{
+		MaxDepth:        2,
+		IncludeSubtypes: true,
+	}
+	results, err := n.BrowseWithDepth(ctx, opts)
+	require.NoError(t, err)
+	require.Greater(t, len(results), 0, "BrowseWithDepth should return at least one result")
+	for _, r := range results {
+		require.NotNil(t, r.Ref, "each result should have a reference")
+		require.LessOrEqual(t, r.Depth, opts.MaxDepth, "depth must not exceed MaxDepth")
+	}
+}
+
+func TestNodeBrowseWithDepthMaxDepthZero(t *testing.T) {
+	_, url := testutil.NewTestServer(t)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
+
+	n := c.Node(ua.NewNumericNodeID(0, 85))
+	opts := opcua.BrowseWithDepthOptions{
+		MaxDepth:        0,
+		IncludeSubtypes: true,
+	}
+	results, err := n.BrowseWithDepth(ctx, opts)
+	require.NoError(t, err)
+	for _, r := range results {
+		require.Equal(t, 0, r.Depth, "MaxDepth 0 should only return depth 0")
+	}
+}
+
+func TestNodeBrowseWithDepthInverse(t *testing.T) {
+	_, url := testutil.NewTestServer(t)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
+
+	n := c.Node(ua.NewNumericNodeID(0, 85))
+	opts := opcua.BrowseWithDepthOptions{
+		MaxDepth:        1,
+		Direction:       ua.BrowseDirectionInverse,
+		IncludeSubtypes: true,
+	}
+	results, err := n.BrowseWithDepth(ctx, opts)
+	require.NoError(t, err)
+	// Inverse from Objects folder may yield parents; just ensure no panic and depths are 0 or 1
+	for _, r := range results {
+		require.NotNil(t, r.Ref)
+		require.GreaterOrEqual(t, r.Depth, 0)
+		require.LessOrEqual(t, r.Depth, 1)
+	}
 }
 
 func TestClientServerStatus(t *testing.T) {

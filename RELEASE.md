@@ -1,3 +1,34 @@
+# Release v0.1.12
+
+**Date:** 2026-03-11
+**Previous release:** v0.1.11
+
+## Summary
+
+Adds batch read (`ReadMulti`) and client-side recursive browse (`BrowseWithDepth`) APIs, with tests and documentation updates.
+
+## ReadMulti (batch read)
+
+- **`Client.ReadMulti(ctx, items []ReadItem, opts ...ReadMultiOption) ([]ReadResult, error)`** — Batch read of N node/attribute pairs in one or more OPC UA Read calls. Chunks by `DefaultReadMultiChunkSize` (32) or by `ReadMultiWithChunkSize(n)`. Results match input order; each result has `DataValue` and `StatusCode`. Use for large subtrees or bulk export to reduce round-trips.
+- **`ReadItem`** — NodeID, AttributeID, optional IndexRange.
+- **`ReadResult`** — DataValue and StatusCode per item.
+- Empty or nil `items` returns `(nil, nil)` without sending a request.
+
+## BrowseWithDepth (client-side recursive browse)
+
+- **`Node.BrowseWithDepth(ctx, opts BrowseWithDepthOptions) ([]BrowseWithDepthResult, error)`** — Client-side recursive browse up to `opts.MaxDepth`. Returns a flat slice of references with depth (no iterator). Options: MaxDepth, RefType, Direction, NodeClassMask, IncludeSubtypes. Standard OPC UA Browse is single-level; recursion is implemented via multiple Browse calls (same as Walk/WalkLimit).
+- **`BrowseWithDepthOptions`** — MaxDepth (-1 = unlimited), RefType (0 = HierarchicalReferences), Direction, NodeClassMask, IncludeSubtypes.
+- **`BrowseWithDepthResult`** — Ref (*ua.ReferenceDescription) and Depth.
+
+## Tests and documentation
+
+- **Tests:** `TestReadMulti`, `TestReadMultiChunking`, `TestReadMultiEmptyItems`, `TestReadMultiMixedAttributes`, `TestNodeBrowseWithDepth`, `TestNodeBrowseWithDepthMaxDepthZero`, `TestNodeBrowseWithDepthInverse`.
+- **API.md:** ReadMulti and BrowseWithDepth types and behavior; empty-items note.
+- **README.md:** Reading and Browsing rows mention ReadMulti and BrowseWithDepth.
+- **docs/client-guide.md:** "Batch read (ReadMulti)" and "Recursive browse (BrowseWithDepth)" sections with examples.
+
+---
+
 # Release v0.1.11
 
 **Date:** 2026-03-11

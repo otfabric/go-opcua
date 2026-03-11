@@ -139,6 +139,19 @@ for _, dv := range dvs {
 }
 ```
 
+### Batch read (ReadMulti)
+
+For many node/attribute pairs (e.g. whole subtrees or bulk export), use `ReadMulti`. It chunks requests by server limits (default 32 items per request) and returns results in the same order as the input. Each result includes `DataValue` and `StatusCode`.
+
+```go
+items := []opcua.ReadItem{
+    {NodeID: n1, AttributeID: ua.AttributeIDValue},
+    {NodeID: n2, AttributeID: ua.AttributeIDDisplayName},
+}
+results, err := c.ReadMulti(ctx, items)
+// optional: opcua.ReadMultiWithChunkSize(16) to override chunk size
+```
+
 ### Using the Node Helper
 
 The `Node` type provides convenience methods for common attributes:
@@ -281,6 +294,22 @@ req := &ua.BrowseRequest{
 }
 
 resp, err := c.Browse(ctx, req)
+```
+
+### Recursive browse (BrowseWithDepth)
+
+When you need a **slice** of all references up to a given depth (e.g. for filtering or batch display), use `Node.BrowseWithDepth`. It performs client-side recursion (multiple Browse calls, like `Walk`/`WalkLimit`) and returns a flat list with depth. Standard OPC UA Browse is single-level; recursion is implemented in the client.
+
+```go
+node := c.Node(ua.NewNumericNodeID(0, id.ObjectsFolder))
+opts := opcua.BrowseWithDepthOptions{
+    MaxDepth:        3,
+    IncludeSubtypes: true,
+}
+results, err := node.BrowseWithDepth(ctx, opts)
+for _, r := range results {
+    fmt.Printf("depth %d: %s\n", r.Depth, r.Ref.NodeID)
+}
 ```
 
 ---

@@ -1768,6 +1768,83 @@ func (c *Client) ReadValues(ctx context.Context, nodeIDs ...*ua.NodeID) ([]*ua.D
 	return resp.Results, nil
 }
 
+// ReadItem specifies one node/attribute to read in a batch.
+type ReadItem struct {
+	NodeID      *ua.NodeID
+	AttributeID ua.AttributeID
+	IndexRange  string // optional; empty means entire value
+}
+
+// ReadResult holds the result of one read in a batch. StatusCode is the
+// per-item status from the server; DataValue may be nil if the read failed.
+type ReadResult struct {
+	DataValue  *ua.DataValue
+	StatusCode ua.StatusCode
+}
+
+// DefaultReadMultiChunkSize is the default max items per Read request when
+// using ReadMulti, to stay under typical server MaxNodesPerRead limits.
+const DefaultReadMultiChunkSize = 32
+
+// ReadMulti performs a batch read of N nodes × attributes in one or more
+// OPC UA Read calls, chunking by DefaultReadMultiChunkSize (or chunkSize if
+// provided via [ReadMultiWithChunkSize]). Results are in the same order as
+// items. Each result's StatusCode reflects the server's status for that
+// item; a failed overall request returns (nil, err).
+func (c *Client) ReadMulti(ctx context.Context, items []ReadItem, opts ...ReadMultiOption) ([]ReadResult, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+	chunkSize := int(DefaultReadMultiChunkSize)
+	for _, o := range opts {
+		if o.chunkSize > 0 {
+			chunkSize = int(o.chunkSize)
+		}
+	}
+	results := make([]ReadResult, len(items))
+	for i := 0; i < len(items); i += chunkSize {
+		end := i + chunkSize
+		if end > len(items) {
+			end = len(items)
+		}
+		chunk := items[i:end]
+		rvs := make([]*ua.ReadValueID, len(chunk))
+		for j, it := range chunk {
+			attrID := it.AttributeID
+			if attrID == 0 {
+				attrID = ua.AttributeIDValue
+			}
+			rvs[j] = &ua.ReadValueID{
+				NodeID:      it.NodeID,
+				AttributeID: attrID,
+				IndexRange:  it.IndexRange,
+			}
+		}
+		req := &ua.ReadRequest{
+			NodesToRead:        rvs,
+			TimestampsToReturn: ua.TimestampsToReturnBoth,
+		}
+		resp, err := c.Read(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+		for k, dv := range resp.Results {
+			idx := i + k
+			results[idx] = ReadResult{DataValue: dv, StatusCode: dv.Status}
+		}
+	}
+	return results, nil
+}
+
+// ReadMultiOption configures [Client.ReadMulti].
+type ReadMultiOption struct{ chunkSize uint32 }
+
+// ReadMultiWithChunkSize sets the max number of items per Read request.
+// If 0 or unset, [DefaultReadMultiChunkSize] is used.
+func ReadMultiWithChunkSize(n uint32) ReadMultiOption {
+	return ReadMultiOption{chunkSize: n}
+}
+
 // WriteValue writes a DataValue to a single node's Value attribute.
 //
 // Returns the status code from the server indicating success or failure.

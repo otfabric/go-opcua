@@ -66,6 +66,23 @@ func (c *Client) ServerStatus(ctx context.Context) (*ua.ServerStatusDataType, er
 func (c *Client) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadResponse, error)
 func (c *Client) ReadValue(ctx context.Context, nodeID *ua.NodeID) (*ua.DataValue, error)
 func (c *Client) ReadValues(ctx context.Context, nodeIDs ...*ua.NodeID) ([]*ua.DataValue, error)
+func (c *Client) ReadMulti(ctx context.Context, items []ReadItem, opts ...ReadMultiOption) ([]ReadResult, error)
+```
+
+`ReadMulti` performs a batch read of N node/attribute pairs in one or more Read calls, chunking by `DefaultReadMultiChunkSize` (32) or by the size given via `ReadMultiWithChunkSize`. Results are in the same order as `items`; each result has `DataValue` and `StatusCode`. Use for large subtrees or bulk export to minimize round-trips. Empty or nil `items` returns `(nil, nil)` without a request.
+
+```go
+type ReadItem struct {
+    NodeID      *ua.NodeID
+    AttributeID ua.AttributeID
+    IndexRange  string
+}
+type ReadResult struct {
+    DataValue  *ua.DataValue
+    StatusCode ua.StatusCode
+}
+const DefaultReadMultiChunkSize = 32
+func ReadMultiWithChunkSize(n uint32) ReadMultiOption
 ```
 
 #### Write
@@ -286,6 +303,23 @@ func (n *Node) WalkLimitDedup(ctx context.Context, maxDepth int) iter.Seq2[WalkR
 ```
 
 `Walk` recursively descends through the node's hierarchical references with no depth limit. `WalkLimit` is like `Walk` but stops recursing when depth reaches `maxDepth`; the node at depth `maxDepth` is still yielded. If `maxDepth < 0`, depth is unlimited (same as `Walk`). Use `WalkLimit` for "find node", "find type", or "browse tree" style tools to avoid unbounded traversal (e.g. pass a `-depth` flag from the CLI). The same node may be yielded more than once if reachable via multiple paths; use `WalkLimitDedup` to yield each node at most once (deduplication by NodeID).
+
+`BrowseWithDepth` performs a client-side recursive browse up to `opts.MaxDepth` and returns a flat slice of references with depth (no iterator). Uses the same Browse calls as Walk; useful when a slice is preferred over an iterator. Standard OPC UA Browse is single-level; recursion is implemented client-side.
+
+```go
+func (n *Node) BrowseWithDepth(ctx context.Context, opts BrowseWithDepthOptions) ([]BrowseWithDepthResult, error)
+type BrowseWithDepthOptions struct {
+    MaxDepth        int
+    RefType         uint32
+    Direction       ua.BrowseDirection
+    NodeClassMask   ua.NodeClass
+    IncludeSubtypes bool
+}
+type BrowseWithDepthResult struct {
+    Ref   *ua.ReferenceDescription
+    Depth int
+}
+```
 
 Each yielded `WalkResult` contains:
 

@@ -76,6 +76,71 @@ func (n *Node) WalkLimitDedup(ctx context.Context, maxDepth int) iter.Seq2[WalkR
 	}
 }
 
+// BrowseWithDepthOptions configures [Node.BrowseWithDepth]. Zero values use
+// defaults: MaxDepth -1 (unlimited), RefType HierarchicalReferences, Direction
+// Forward, NodeClassMask All, IncludeSubtypes true.
+type BrowseWithDepthOptions struct {
+	MaxDepth        int           // stop recursing after this depth; -1 = unlimited
+	RefType         uint32        // reference type to follow; 0 = HierarchicalReferences
+	Direction       ua.BrowseDirection
+	NodeClassMask   ua.NodeClass
+	IncludeSubtypes bool
+}
+
+// BrowseWithDepthResult is one reference returned by [Node.BrowseWithDepth],
+// with the depth at which it was found (0 = direct children of the start node).
+type BrowseWithDepthResult struct {
+	Ref   *ua.ReferenceDescription
+	Depth int
+}
+
+// BrowseWithDepth performs a client-side recursive browse from this node up to
+// opts.MaxDepth, using the given reference type, direction, and node class filter.
+// It returns a flat slice of references with their depth. Standard OPC UA Browse
+// is single-level; this method implements recursion by issuing multiple Browse
+// calls (same as [Node.WalkLimit] but returns a slice instead of an iterator).
+func (n *Node) BrowseWithDepth(ctx context.Context, opts BrowseWithDepthOptions) ([]BrowseWithDepthResult, error) {
+	refType := opts.RefType
+	if refType == 0 {
+		refType = id.HierarchicalReferences
+	}
+	dir := opts.Direction
+	if dir == 0 {
+		dir = ua.BrowseDirectionForward
+	}
+	mask := opts.NodeClassMask
+	if mask == 0 {
+		mask = ua.NodeClassAll
+	}
+	includeSubtypes := opts.IncludeSubtypes
+	// default when not set is true for backward compatibility with BrowseAll
+	// (we don't have a sentinel; zero value false is explicit)
+	maxDepth := opts.MaxDepth
+	if maxDepth < 0 {
+		maxDepth = -1
+	}
+	var out []BrowseWithDepthResult
+	err := n.browseWithDepthRec(ctx, 0, maxDepth, refType, dir, mask, includeSubtypes, &out)
+	return out, err
+}
+
+func (n *Node) browseWithDepthRec(ctx context.Context, depth, maxDepth int, refType uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool, out *[]BrowseWithDepthResult) error {
+	for ref, err := range n.BrowseAll(ctx, refType, dir, mask, includeSubtypes) {
+		if err != nil {
+			return err
+		}
+		*out = append(*out, BrowseWithDepthResult{Ref: ref, Depth: depth})
+		if maxDepth >= 0 && depth+1 > maxDepth {
+			continue
+		}
+		child := n.c.NodeFromExpandedNodeID(ref.NodeID)
+		if err := child.browseWithDepthRec(ctx, depth+1, maxDepth, refType, dir, mask, includeSubtypes, out); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (n *Node) walkRecursive(ctx context.Context, depth int, maxDepth int, visited map[string]struct{}, yield func(WalkResult, error) bool) bool {
 	for ref, err := range n.BrowseAll(ctx, id.HierarchicalReferences, ua.BrowseDirectionForward, ua.NodeClassAll, true) {
 		if err != nil {
