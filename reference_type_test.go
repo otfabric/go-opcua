@@ -77,3 +77,25 @@ func TestStandardNodeID(t *testing.T) {
 		require.Nil(t, nid)
 	})
 }
+
+func TestTypeDefinitionDisplayName(t *testing.T) {
+	t.Run("nil", func(t *testing.T) {
+		require.Equal(t, "", TypeDefinitionDisplayName(nil))
+	})
+	t.Run("VariableType ns=0", func(t *testing.T) {
+		nid := ua.NewNumericNodeID(0, 68) // PropertyType
+		require.Equal(t, "PropertyType", TypeDefinitionDisplayName(nid))
+	})
+	t.Run("ObjectType ns=0", func(t *testing.T) {
+		nid := ua.NewNumericNodeID(0, 61) // FolderType
+		require.Equal(t, "FolderType", TypeDefinitionDisplayName(nid))
+	})
+	t.Run("unknown ns=0 falls back to NodeID string", func(t *testing.T) {
+		nid := ua.NewNumericNodeID(0, 99999)
+		require.Equal(t, nid.String(), TypeDefinitionDisplayName(nid))
+	})
+	t.Run("non-zero namespace falls back to NodeID string", func(t *testing.T) {
+		nid := ua.NewNumericNodeID(1, 68)
+		require.Equal(t, nid.String(), TypeDefinitionDisplayName(nid))
+	})
+}

@@ -1,3 +1,32 @@
+# Release v0.1.11
+
+**Date:** 2026-03-11
+**Previous release:** v0.1.10
+
+## Summary
+
+Exposes the remaining standard-node name lookups in the `id` package and adds
+a type-definition display helper so browse UIs can show "PropertyType",
+"FolderType", and other well-known names instead of raw NodeIDs.
+
+## Type definition display
+
+- **`id.VariableTypeName(id uint32) string`** — Standard name for well-known VariableTypes in namespace 0 (e.g. 68 → "PropertyType", 63 → "BaseDataVariableType"), or "" if unknown.
+- **`id.ObjectTypeName(id uint32) string`** — Same for ObjectTypes (e.g. 58 → "BaseObjectType", 61 → "FolderType").
+- **`TypeDefinitionDisplayName(typeDefID *ua.NodeID) string`** — Root package: tries VariableTypeName then ObjectTypeName; otherwise returns the NodeID string. Use when displaying type definition columns (e.g. browse) so "PropertyType" is shown instead of "i=68".
+
+## id package: Object, Variable, Method names
+
+All seven name maps used by `id.Name(id)` are now exposed as dedicated helpers:
+
+- **`id.ObjectName(id uint32) string`** — Well-known Object nodes (e.g. 84 → "RootFolder", 85 → "ObjectsFolder", 2253 → "Server").
+- **`id.VariableName(id uint32) string`** — Well-known Variable nodes (e.g. 2256 → "Server_ServerStatus", 2258 → "Server_ServerStatus_CurrentTime").
+- **`id.MethodName(id uint32) string`** — Well-known Method nodes (e.g. 11492 → "Server_GetMonitoredItems").
+
+Together with existing `DataTypeName`, `ReferenceTypeName`, `VariableTypeName`, and `ObjectTypeName`, callers can resolve standard names by node class when displaying NodeIDs (e.g. in browse or diagnostics).
+
+---
+
 # Release v0.1.10
 
 **Date:** 2026-03-11

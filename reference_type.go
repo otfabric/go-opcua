@@ -26,6 +26,26 @@ func ReferenceTypeDisplayName(refTypeID *ua.NodeID) string {
 	return refTypeID.String()
 }
 
+// TypeDefinitionDisplayName returns a display string for a type definition NodeID
+// (VariableType or ObjectType in namespace 0). It tries VariableTypeName then
+// ObjectTypeName; if neither matches, returns the NodeID string. Use when
+// displaying type definition columns (e.g. browse) so "PropertyType" is shown
+// instead of "i=68". Returns the empty string if typeDefID is nil.
+func TypeDefinitionDisplayName(typeDefID *ua.NodeID) string {
+	if typeDefID == nil {
+		return ""
+	}
+	if typeDefID.Namespace() == 0 {
+		if name := id.VariableTypeName(typeDefID.IntID()); name != "" {
+			return name
+		}
+		if name := id.ObjectTypeName(typeDefID.IntID()); name != "" {
+			return name
+		}
+	}
+	return typeDefID.String()
+}
+
 // DataTypeDisplayName returns a display string for a DataType NodeID.
 // For well-known DataTypes in namespace 0 (e.g. Float, String, Boolean, UtcTime),
 // it returns the standard name; otherwise it returns the NodeID string.

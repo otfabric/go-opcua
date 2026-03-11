@@ -531,8 +531,11 @@ All option functions return `Option` and are passed to `NewClient`:
 func NewMonitoredItemCreateRequestWithDefaults(nodeID *ua.NodeID, attributeID ua.AttributeID, clientHandle uint32) *ua.MonitoredItemCreateRequest
 func ReferenceTypeDisplayName(refTypeID *ua.NodeID) string
 func DataTypeDisplayName(dataTypeID *ua.NodeID) string
+func TypeDefinitionDisplayName(typeDefID *ua.NodeID) string
 func StandardNodeID(name string) (*ua.NodeID, bool)
 ```
+
+`TypeDefinitionDisplayName` returns a display string for a type definition NodeID (VariableType or ObjectType in namespace 0): tries VariableTypeName then ObjectTypeName (e.g. i=68 → "PropertyType", i=61 → "FolderType"); otherwise the NodeID string. Use when displaying type definition columns in browse. Returns the empty string if typeDefID is nil.
 
 `StandardNodeID` returns the namespace-0 NodeID for a well-known standard node name (e.g. "CurrentTime" → i=2258, "ServerStatus" → i=2256, "Objects" → i=85). Use for CLI or config that accepts symbolic names like `-n CurrentTime` instead of `-n i=2258`. Uses [id.NodeIDByName](id package) under the hood. Returns (nil, false) if the name is not found.
 
@@ -1655,3 +1658,18 @@ func NodeIDByName(name string) (uint32, bool)
 ```
 
 `NodeIDByName` is the reverse of `Name`: it maps well-known standard node names (namespace 0 only) to numeric IDs. Names include full spec names (e.g. "Server", "ObjectsFolder", "Server_ServerStatus_CurrentTime") and short aliases "CurrentTime" (→ 2258), "ServerStatus" (→ 2256), "Objects" (→ 85). Returns (0, false) if not found. For a `*ua.NodeID` use [StandardNodeID](opcua package) in the root package.
+
+```go
+func VariableTypeName(id uint32) string
+func ObjectTypeName(id uint32) string
+```
+
+`VariableTypeName` returns the standard OPC UA name for a well-known VariableType in namespace 0 (e.g. 68 → "PropertyType", 63 → "BaseDataVariableType"), or "" if unknown. `ObjectTypeName` does the same for ObjectTypes (e.g. 58 → "BaseObjectType", 61 → "FolderType"). For a NodeID-based display helper use [TypeDefinitionDisplayName](opcua package) in the root package.
+
+```go
+func ObjectName(id uint32) string
+func VariableName(id uint32) string
+func MethodName(id uint32) string
+```
+
+`ObjectName` returns the standard name for a well-known Object node in namespace 0 (e.g. 84 → "RootFolder", 85 → "ObjectsFolder", 2253 → "Server"). `VariableName` does the same for Variable nodes (e.g. 2256 → "Server_ServerStatus", 2258 → "Server_ServerStatus_CurrentTime"). `MethodName` does the same for Method nodes (e.g. 11492 → "Server_GetMonitoredItems"). Each returns "" if the id is not in that category. The generic [Name](id package) function looks up across all categories.
