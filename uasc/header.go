@@ -7,8 +7,8 @@ package uasc
 import (
 	"fmt"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // MessageType definitions.
@@ -57,7 +57,7 @@ func (h *Header) Encode() ([]byte, error) {
 		return nil, fmt.Errorf("%w: %q", errors.ErrInvalidMessageType, h.MessageType)
 	}
 	buf.Write([]byte(h.MessageType))
-	buf.WriteByte(h.ChunkType)
+	_ = buf.WriteByte(h.ChunkType)
 	buf.WriteUint32(h.MessageSize)
 	buf.WriteUint32(h.SecureChannelID)
 	return buf.Bytes(), buf.Error()

@@ -3,7 +3,7 @@ package opcua
 import (
 	"testing"
 
-	"github.com/otfabric/opcua/id"
+	"github.com/otfabric/go-opcua/id"
 )
 
 func TestAggregateType(t *testing.T) {

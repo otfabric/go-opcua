@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 // NodeID is an identifier for a node in the address space of an OPC UA Server.
@@ -79,7 +79,7 @@ func NewByteStringNodeID(ns uint16, id []byte) *NodeID {
 	}
 }
 
-// NewNodeIDFromExpandedNodeID returns a new NodeID derived from ExpandedNodeID
+// NewNodeIDFromExpandedNodeID returns a new NodeID derived from ExpandedNodeID.
 func NewNodeIDFromExpandedNodeID(id *ExpandedNodeID) *NodeID {
 	bid := make([]byte, len(id.NodeID.bid))
 	copy(bid, id.NodeID.bid)
@@ -377,17 +377,17 @@ func (n *NodeID) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
 	if n == nil {
 		// OPC UA null NodeID: two-byte form id=0. Preserves wire layout for optional fields.
-		buf.WriteByte(byte(NodeIDTypeTwoByte))
-		buf.WriteByte(0)
+		_ = buf.WriteByte(byte(NodeIDTypeTwoByte))
+		_ = buf.WriteByte(0)
 		return buf.Bytes(), buf.Error()
 	}
-	buf.WriteByte(byte(n.mask))
+	_ = buf.WriteByte(byte(n.mask))
 
 	switch n.Type() {
 	case NodeIDTypeTwoByte:
-		buf.WriteByte(byte(n.nid))
+		_ = buf.WriteByte(byte(n.nid))
 	case NodeIDTypeFourByte:
-		buf.WriteByte(byte(n.ns))
+		_ = buf.WriteByte(byte(n.ns))
 		buf.WriteUint16(uint16(n.nid))
 	case NodeIDTypeNumeric:
 		buf.WriteUint16(n.ns)

@@ -11,11 +11,11 @@ import "fmt"
 // StatusCode is an error type for a status code.
 type StatusCode uint32
 
-func (n StatusCode) Error() string {
-	if d, ok := StatusCodes[n]; ok {
-		return fmt.Sprintf("%s %s (0x%X)", d.Text, d.Name, uint32(n))
+func (s StatusCode) Error() string {
+	if d, ok := StatusCodes[s]; ok {
+		return fmt.Sprintf("%s %s (0x%X)", d.Text, d.Name, uint32(s))
 	}
-	return fmt.Sprintf("0x%X", uint32(n))
+	return fmt.Sprintf("0x%X", uint32(s))
 }
 
 var (

@@ -18,7 +18,7 @@ const (
 
 // DiagnosticInfo represents the DiagnosticInfo.
 //
-// Specification: Part 4, 7.8
+// Specification: Part 4, 7.8.
 type DiagnosticInfo struct {
 	EncodingMask        uint8
 	SymbolicID          int32
@@ -60,7 +60,7 @@ func (d *DiagnosticInfo) Decode(b []byte) (int, error) {
 
 func (d *DiagnosticInfo) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
-	buf.WriteByte(d.EncodingMask)
+	_ = buf.WriteByte(d.EncodingMask)
 	if d.Has(DiagnosticInfoSymbolicID) {
 		buf.WriteInt32(d.SymbolicID)
 	}

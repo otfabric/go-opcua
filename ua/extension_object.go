@@ -7,7 +7,7 @@ package ua
 import (
 	"log/slog"
 
-	"github.com/otfabric/opcua/id"
+	"github.com/otfabric/go-opcua/id"
 )
 
 // eotypes contains all known extension objects.
@@ -32,7 +32,7 @@ const (
 // ExtensionObject is encoded as sequence of bytes prefixed by the NodeId of its DataTypeEncoding
 // and the number of bytes encoded.
 //
-// Specification: Part 6, 5.2.2.15
+// Specification: Part 6, 5.2.2.15.
 type ExtensionObject struct {
 	EncodingMask uint8
 	TypeID       *ExpandedNodeID
@@ -92,7 +92,7 @@ func (e *ExtensionObject) Encode() ([]byte, error) {
 		e = &ExtensionObject{TypeID: NewTwoByteExpandedNodeID(0), EncodingMask: ExtensionObjectEmpty}
 	}
 	buf.WriteStruct(e.TypeID)
-	buf.WriteByte(e.EncodingMask)
+	_ = buf.WriteByte(e.EncodingMask)
 	if e.EncodingMask == ExtensionObjectEmpty {
 		return buf.Bytes(), buf.Error()
 	}

@@ -1,6 +1,6 @@
 # Security Guide
 
-> Configuring OPC-UA security for the `github.com/otfabric/opcua` library.
+> Configuring OPC-UA security for the `github.com/otfabric/go-opcua` library.
 
 ---
 

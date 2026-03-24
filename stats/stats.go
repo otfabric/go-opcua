@@ -1,4 +1,4 @@
-// Package stats provides instrumentation for the otfabric/opcua library via expvar.
+// Package stats provides instrumentation for the otfabric/go-opcua library via expvar.
 //
 // The API is experimental and might change.
 package stats
@@ -10,7 +10,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // stats is the global statistics counter.
@@ -20,7 +20,7 @@ func init() {
 	expvar.Publish("otfabric-opcua", expvar.Func(func() interface{} { return stats }))
 }
 
-// Stats collects otfabric/opcua statistics via expvar.
+// Stats collects otfabric/go-opcua statistics via expvar.
 type Stats struct {
 	Client       *expvar.Map
 	Error        *expvar.Map

@@ -1,6 +1,6 @@
 # Client Development Guide
 
-> Using the `github.com/otfabric/opcua` client to connect to OPC-UA servers.
+> Using the `github.com/otfabric/go-opcua` client to connect to OPC-UA servers.
 
 ---
 
@@ -15,8 +15,8 @@ import (
     "context"
     "log"
 
-    "github.com/otfabric/opcua"
-    "github.com/otfabric/opcua/ua"
+    "github.com/otfabric/go-opcua"
+    "github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -393,7 +393,7 @@ node := c.Node(nodeID)
 
 ### Low-level: multiple paths in one request
 
-For full control (e.g. multiple paths or custom reference types), use **TranslateBrowsePathsToNodeIDs** on a Node with a slice of [ua.QualifiedName](https://pkg.go.dev/github.com/otfabric/opcua/ua#QualifiedName) segments:
+For full control (e.g. multiple paths or custom reference types), use **TranslateBrowsePathsToNodeIDs** on a Node with a slice of [ua.QualifiedName](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#QualifiedName) segments:
 
 ```go
 root := c.Node(ua.NewNumericNodeID(0, id.ObjectsFolder))
@@ -500,7 +500,7 @@ The same EOF wrapping applies: if the server closes the connection during `Subsc
 The `monitor` package provides a higher-level API with callbacks:
 
 ```go
-import "github.com/otfabric/opcua/monitor"
+import "github.com/otfabric/go-opcua/monitor"
 
 m, err := monitor.NewNodeMonitor(c)
 if err != nil {
@@ -640,7 +640,7 @@ This is useful for failover scenarios or migrating between connections.
 The library provides sentinel errors for common failure modes:
 
 ```go
-import "github.com/otfabric/opcua/errors"
+import "github.com/otfabric/go-opcua/errors"
 
 // Check for specific errors
 if errors.Is(err, errors.ErrTimeout) {
@@ -681,8 +681,8 @@ import (
     "log"
     "time"
 
-    "github.com/otfabric/opcua"
-    "github.com/otfabric/opcua/ua"
+    "github.com/otfabric/go-opcua"
+    "github.com/otfabric/go-opcua/ua"
 )
 
 func main() {

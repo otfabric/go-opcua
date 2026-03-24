@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uapolicy"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // Option is an option function type to modify the configuration.
@@ -27,7 +27,7 @@ func PrivateKey(key *rsa.PrivateKey) Option {
 	}
 }
 
-// EndPointHostName adds an additional endpoint to the server based on the host name
+// EndPoint adds an additional endpoint to the server based on the host name and port.
 func EndPoint(host string, port int) Option {
 	return func(s *serverConfig) {
 		if s.endpoints == nil {
@@ -39,7 +39,7 @@ func EndPoint(host string, port int) Option {
 }
 
 // Certificate sets the client X509 certificate in the secure channel configuration
-// and also detects and sets the ApplicationURI from the URI within the certificate
+// and also detects and sets the ApplicationURI from the URI within the certificate.
 func Certificate(cert []byte) Option {
 	return func(s *serverConfig) {
 		s.certificate = cert
@@ -56,7 +56,7 @@ func Certificate(cert []byte) Option {
 }
 
 // EnableSecurity registers a new endpoint security mode to the server.
-// This will also register the security policy against each enabled auth mode
+// This will also register the security policy against each enabled auth mode.
 func EnableSecurity(secPolicy string, secMode ua.MessageSecurityMode) Option {
 	return func(s *serverConfig) {
 		if !strings.HasPrefix(secPolicy, "http://opcfoundation.org/UA/SecurityPolicy#") {
@@ -94,7 +94,7 @@ func EnableSecurity(secPolicy string, secMode ua.MessageSecurityMode) Option {
 
 // EnableAuthMode registers a new user authentication mode to the server.
 // All AuthModes except Anonymous require encryption by default, so EnableSecurity()
-// must also be called with at least one non-"None" SecurityPolicy
+// must also be called with at least one non-"None" SecurityPolicy.
 func EnableAuthMode(tokenType ua.UserTokenType) Option {
 	return func(s *serverConfig) {
 

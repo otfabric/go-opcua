@@ -7,9 +7,9 @@ import (
 	"expvar"
 	"testing"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/stats"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/stats"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
 

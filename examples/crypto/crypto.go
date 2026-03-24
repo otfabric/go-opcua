@@ -20,10 +20,10 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/errors"
-	uatest "github.com/otfabric/opcua/tests/python"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/errors"
+	uatest "github.com/otfabric/go-opcua/tests/python"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 var (
@@ -75,7 +75,7 @@ func main() {
 	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	// Use our connection (read the server's time)
 	v, err := c.Node(ua.NewNumericNodeID(0, 2258)).Value(ctx)
@@ -100,8 +100,10 @@ func main() {
 	}
 
 	// Create a channel only and do not activate it automatically
-	d.Dial(ctx)
-	defer d.Close(ctx)
+	if err := d.Dial(ctx); err != nil {
+		log.Fatal(err)
+	}
+	defer func() { _ = d.Close(ctx) }()
 
 	// Activate the previous session on the new channel
 	err = d.ActivateSession(ctx, s)

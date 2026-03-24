@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -53,7 +53,7 @@ func TestClient_StateCallback(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	c.Close(context.Background())
+	_ = c.Close(context.Background())
 	assert.Contains(t, states, Closed)
 }
 
@@ -112,7 +112,7 @@ func TestClient_StateTransitions_Full(t *testing.T) {
 func TestClient_SubscriptionIDs_Empty(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	ids := c.SubscriptionIDs()
 	assert.Empty(t, ids)
@@ -123,7 +123,7 @@ func TestClient_SubscriptionIDs_Empty(t *testing.T) {
 func TestClient_Read_Disconnected(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	_, err = c.Read(context.Background(), &ua.ReadRequest{})
 	assert.Equal(t, ua.StatusBadServerNotConnected, err)
@@ -134,7 +134,7 @@ func TestClient_Read_Disconnected(t *testing.T) {
 func TestClient_Write_Disconnected(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	_, err = c.Write(context.Background(), &ua.WriteRequest{})
 	assert.Equal(t, ua.StatusBadServerNotConnected, err)
@@ -145,7 +145,7 @@ func TestClient_Write_Disconnected(t *testing.T) {
 func TestClient_Browse_Disconnected(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	_, err = c.Browse(context.Background(), &ua.BrowseRequest{})
 	assert.Equal(t, ua.StatusBadServerNotConnected, err)
@@ -156,7 +156,7 @@ func TestClient_Browse_Disconnected(t *testing.T) {
 func TestClient_Call_Disconnected(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	_, err = c.Call(context.Background(), &ua.CallMethodRequest{})
 	assert.Equal(t, ua.StatusBadServerNotConnected, err)
@@ -167,7 +167,7 @@ func TestClient_Call_Disconnected(t *testing.T) {
 func TestClient_Subscribe_Disconnected(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	ch := make(chan *PublishNotificationData, 1)
 	_, err = c.Subscribe(context.Background(), &SubscriptionParameters{}, ch)
@@ -178,7 +178,7 @@ func TestClient_Subscribe_Disconnected(t *testing.T) {
 func TestClient_HistoryRead_Disconnected(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	_, err = c.HistoryReadRawModified(context.Background(), nil, nil)
 	assert.Equal(t, ua.StatusBadServerNotConnected, err)
@@ -188,7 +188,7 @@ func TestClient_HistoryRead_Disconnected(t *testing.T) {
 func TestClient_AutoReconnect_DefaultEnabled(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 	assert.True(t, c.cfg.sechan.AutoReconnect)
 }
 
@@ -196,7 +196,7 @@ func TestClient_AutoReconnect_DefaultEnabled(t *testing.T) {
 func TestClient_AutoReconnect_Disabled(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840", AutoReconnect(false))
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 	assert.False(t, c.cfg.sechan.AutoReconnect)
 }
 
@@ -204,7 +204,7 @@ func TestClient_AutoReconnect_Disabled(t *testing.T) {
 func TestClient_ReconnectInterval_Custom(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840", ReconnectInterval(5*time.Second))
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 	assert.Equal(t, 5*time.Second, c.cfg.sechan.ReconnectInterval)
 }
 
@@ -212,7 +212,7 @@ func TestClient_ReconnectInterval_Custom(t *testing.T) {
 func TestClient_Namespaces_Default(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	ns := c.Namespaces()
 	assert.NotNil(t, ns)

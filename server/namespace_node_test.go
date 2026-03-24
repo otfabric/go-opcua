@@ -3,9 +3,9 @@ package server
 import (
 	"testing"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server/attrs"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/attrs"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

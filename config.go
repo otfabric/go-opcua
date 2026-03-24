@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
-	"github.com/otfabric/opcua/uapolicy"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uapolicy"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // serverCertValidator holds options for server certificate validation.
@@ -55,7 +55,7 @@ func DefaultSessionConfig() *uasc.SessionConfig {
 		ClientDescription: &ua.ApplicationDescription{
 			ApplicationURI:  "urn:otfabric:opcua:client",
 			ProductURI:      "urn:otfabric:opcua",
-			ApplicationName: ua.NewLocalizedText("otfabric/opcua - OPC UA implementation in Go"),
+			ApplicationName: ua.NewLocalizedText("otfabric/go-opcua - OPC UA implementation in Go"),
 			ApplicationType: ua.ApplicationTypeClient,
 		},
 		LocaleIDs:          []string{"en-us"},
@@ -190,7 +190,7 @@ func ProductURI(s string) Option {
 	}
 }
 
-// stubbed out for testing
+// stubbed out for testing.
 var randomRequestID func() uint32 = nil
 
 // RandomRequestID assigns a random initial request id.
@@ -261,7 +261,7 @@ func SecurityPolicy(s string) Option {
 
 // SkipNamespaceUpdate disables automatic namespace table update on connect
 // and reconnect. Use this when the server does not support namespace queries.
-// See https://github.com/otfabric/opcua/pull/512 for discussion.
+// See https://github.com/otfabric/go-opcua/pull/512 for discussion.
 func SkipNamespaceUpdate() Option {
 	return func(cfg *Config) error {
 		cfg.skipNamespaceUpdate = true
@@ -393,7 +393,7 @@ func setCertificate(cert []byte, cfg *Config) error {
 }
 
 // SecurityFromEndpoint sets the server-related security parameters from
-// a chosen endpoint (received from GetEndpoints())
+// a chosen endpoint (received from GetEndpoints()).
 func SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType) Option {
 	return func(cfg *Config) error {
 		cfg.sechan.SecurityPolicyURI = ep.SecurityPolicyURI
@@ -522,7 +522,7 @@ func AuthCertificate(cert []byte) Option {
 
 // AuthPrivateKey sets the client's authentication RSA private key
 // Note: PolicyID still needs to be set outside of this method, typically through
-// the SecurityFromEndpoint() Option
+// the SecurityFromEndpoint() Option.
 func AuthPrivateKey(key *rsa.PrivateKey) Option {
 	return func(cfg *Config) error {
 		cfg.sechan.UserKey = key
@@ -565,7 +565,7 @@ func applyPendingPolicyID(cfg *Config) {
 	}
 }
 
-// RequestTimeout sets the timeout for all requests over SecureChannel
+// RequestTimeout sets the timeout for all requests over SecureChannel.
 func RequestTimeout(t time.Duration) Option {
 	return func(cfg *Config) error {
 		cfg.sechan.RequestTimeout = t

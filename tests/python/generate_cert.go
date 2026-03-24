@@ -8,6 +8,7 @@
 // Based on src/crypto/tls/generate_cert.go from the Go SDK
 // Modified by the Gopcua Authors for use in creating an OPC-UA compliant client certificate
 
+// Package uatest provides integration test helpers for testing against the Python OPC UA server.
 package uatest
 
 import (

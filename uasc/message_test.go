@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/logger"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/logger"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 var testLogger = logger.NopLogger()
@@ -52,7 +52,7 @@ func TestMessage(t *testing.T) {
 
 				// set message size manually, since it is computed in Encode
 				// otherwise, the decode tests failed.
-				m.Header.MessageSize = 131
+				m.MessageSize = 131
 
 				return m
 			}(),
@@ -149,7 +149,7 @@ func TestMessage(t *testing.T) {
 
 				// set message size manually, since it is computed in Encode
 				// otherwise, the decode tests failed.
-				m.Header.MessageSize = 107
+				m.MessageSize = 107
 
 				return m
 			}(),
@@ -220,7 +220,7 @@ func TestMessage(t *testing.T) {
 
 				// set message size manually, since it is computed in Encode
 				// otherwise, the decode tests failed.
-				m.Header.MessageSize = 57
+				m.MessageSize = 57
 
 				return m
 			}(),

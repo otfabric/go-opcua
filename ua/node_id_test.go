@@ -11,7 +11,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/stretchr/testify/require"
 )
 

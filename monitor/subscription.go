@@ -1,3 +1,4 @@
+// Package monitor provides a high-level API for monitoring OPC UA nodes via subscriptions.
 package monitor
 
 import (
@@ -6,58 +7,58 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 var (
-	// DefaultCallbackBufferLen is the size of the internal buffer when using a callback-based subscription
+	// DefaultCallbackBufferLen is the size of the internal buffer when using a callback-based subscription.
 	DefaultCallbackBufferLen = 8192
 
-	// ErrSlowConsumer is returned when a subscriber does not keep up with the incoming messages
+	// ErrSlowConsumer is returned when a subscriber does not keep up with the incoming messages.
 	ErrSlowConsumer = errors.ErrSlowConsumer
 )
 
-// ErrHandler is a function that is called when there is an out of band issue with delivery
+// ErrHandler is a function that is called when there is an out of band issue with delivery.
 type ErrHandler func(*opcua.Client, *Subscription, error)
 
-// MsgHandler is a function that is called for each new DataValue
+// MsgHandler is a function that is called for each new DataValue.
 type MsgHandler func(*Subscription, *DataChangeMessage)
 
 // DataChangeMessage represents the changed DataValue from the server. It also includes a reference
-// to the sending NodeID and error (if any)
+// to the sending NodeID and error (if any).
 type DataChangeMessage struct {
 	*ua.DataValue
 	Error  error
 	NodeID *ua.NodeID
 }
 
-// NodeMonitor creates new subscriptions
+// NodeMonitor creates new subscriptions.
 type NodeMonitor struct {
 	client           *opcua.Client
 	nextClientHandle uint32
 	errHandlerCB     ErrHandler
 }
 
-// Item is a struct to manage Monitored Items
+// Item is a struct to manage Monitored Items.
 type Item struct {
 	id     uint32     // from server
 	nodeID *ua.NodeID // from request
 	handle uint32     // client provided
 }
 
-// ID returns the MonitorItemID set by the server
+// ID returns the MonitorItemID set by the server.
 func (m *Item) ID() uint32 {
 	return m.id
 }
 
-// NodeID returns the NodeID for the Item
+// NodeID returns the NodeID for the Item.
 func (m *Item) NodeID() *ua.NodeID {
 	return m.nodeID
 }
 
-// Request is a struct to manage a request to monitor a node or modify a monitored node
+// Request is a struct to manage a request to monitor a node or modify a monitored node.
 type Request struct {
 	NodeID               *ua.NodeID
 	MonitoringMode       ua.MonitoringMode
@@ -80,7 +81,7 @@ type Subscription struct {
 	itemLookup       map[uint32]Item
 }
 
-// NewNodeMonitor creates a new NodeMonitor
+// NewNodeMonitor creates a new NodeMonitor.
 func NewNodeMonitor(client *opcua.Client) (*NodeMonitor, error) {
 	m := &NodeMonitor{
 		client:           client,
@@ -115,7 +116,7 @@ func newSubscription(ctx context.Context, m *NodeMonitor, params *opcua.Subscrip
 	return s, nil
 }
 
-// SetErrorHandler sets an optional callback for async errors
+// SetErrorHandler sets an optional callback for async errors.
 func (m *NodeMonitor) SetErrorHandler(cb ErrHandler) {
 	m.errHandlerCB = cb
 }
@@ -156,7 +157,7 @@ func (s *Subscription) sendError(err error) {
 	}
 }
 
-// internal func to read from internal channel and write to client provided channel
+// internal func to read from internal channel and write to client provided channel.
 func (s *Subscription) pump(ctx context.Context, notifyCh chan<- *DataChangeMessage, cb MsgHandler) {
 	for {
 		select {
@@ -227,19 +228,19 @@ func (s *Subscription) pump(ctx context.Context, notifyCh chan<- *DataChangeMess
 	}
 }
 
-// Modify modifies the subscription settings
+// Modify modifies the subscription settings.
 func (s *Subscription) Modify(ctx context.Context, params *opcua.SubscriptionParameters) error {
 	_, err := s.sub.ModifySubscription(ctx, *params)
 	return err
 }
 
-// Unsubscribe removes the subscription interests and cleans up any resources
+// Unsubscribe removes the subscription interests and cleans up any resources.
 func (s *Subscription) Unsubscribe(ctx context.Context) error {
 	s.closeOnce.Do(func() { close(s.closed) })
 	return s.sub.Cancel(ctx)
 }
 
-// Subscribed returns the number of currently subscribed to nodes
+// Subscribed returns the number of currently subscribed to nodes.
 func (s *Subscription) Subscribed() int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -247,22 +248,22 @@ func (s *Subscription) Subscribed() int {
 	return len(s.handles)
 }
 
-// SubscriptionID returns the underlying subscription id
+// SubscriptionID returns the underlying subscription id.
 func (s *Subscription) SubscriptionID() uint32 {
 	return s.sub.SubscriptionID
 }
 
-// Delivered returns the number of DataChangeMessages delivered
+// Delivered returns the number of DataChangeMessages delivered.
 func (s *Subscription) Delivered() uint64 {
 	return atomic.LoadUint64(&s.delivered)
 }
 
-// Dropped returns the number of DataChangeMessages dropped due to a slow consumer
+// Dropped returns the number of DataChangeMessages dropped due to a slow consumer.
 func (s *Subscription) Dropped() uint64 {
 	return atomic.LoadUint64(&s.dropped)
 }
 
-// AddNodes adds nodes defined by their string representation
+// AddNodes adds nodes defined by their string representation.
 func (s *Subscription) AddNodes(ctx context.Context, nodes ...string) error {
 	nodeIDs, err := parseNodeSlice(nodes...)
 	if err != nil {
@@ -271,7 +272,7 @@ func (s *Subscription) AddNodes(ctx context.Context, nodes ...string) error {
 	return s.AddNodeIDs(ctx, nodeIDs...)
 }
 
-// AddNodeIDs adds nodes
+// AddNodeIDs adds nodes.
 func (s *Subscription) AddNodeIDs(ctx context.Context, nodes ...*ua.NodeID) error {
 	requests := make([]Request, len(nodes))
 
@@ -285,7 +286,7 @@ func (s *Subscription) AddNodeIDs(ctx context.Context, nodes ...*ua.NodeID) erro
 	return err
 }
 
-// AddMonitorItems adds nodes with monitoring parameters to the subscription
+// AddMonitorItems adds nodes with monitoring parameters to the subscription.
 func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([]Item, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -342,7 +343,7 @@ func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([
 	return monitoredItems, nil
 }
 
-// RemoveNodes removes nodes defined by their string representation
+// RemoveNodes removes nodes defined by their string representation.
 func (s *Subscription) RemoveNodes(ctx context.Context, nodes ...string) error {
 	nodeIDs, err := parseNodeSlice(nodes...)
 	if err != nil {
@@ -351,7 +352,7 @@ func (s *Subscription) RemoveNodes(ctx context.Context, nodes ...string) error {
 	return s.RemoveNodeIDs(ctx, nodeIDs...)
 }
 
-// RemoveNodeIDs removes nodes
+// RemoveNodeIDs removes nodes.
 func (s *Subscription) RemoveNodeIDs(ctx context.Context, nodes ...*ua.NodeID) error {
 	if len(nodes) == 0 {
 		return nil
@@ -370,7 +371,7 @@ func (s *Subscription) RemoveNodeIDs(ctx context.Context, nodes ...*ua.NodeID) e
 	return s.RemoveMonitorItems(ctx, toRemove...)
 }
 
-// RemoveMonitorItems removes nodes
+// RemoveMonitorItems removes nodes.
 func (s *Subscription) RemoveMonitorItems(ctx context.Context, items ...Item) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -412,7 +413,7 @@ func (s *Subscription) RemoveMonitorItems(ctx context.Context, items ...Item) er
 	return nil
 }
 
-// ModifyMonitorItems modifies nodes with monitoring parameters to the subscription
+// ModifyMonitorItems modifies nodes with monitoring parameters to the subscription.
 func (s *Subscription) ModifyMonitorItems(ctx context.Context, nodes ...Request) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -465,7 +466,7 @@ func (s *Subscription) ModifyMonitorItems(ctx context.Context, nodes ...Request)
 	return nil
 }
 
-// SetMonitoringModeForNodes sets the monitoring mode for nodes defined by their string representation
+// SetMonitoringModeForNodes sets the monitoring mode for nodes defined by their string representation.
 func (s *Subscription) SetMonitoringModeForNodes(ctx context.Context, monitoringMode ua.MonitoringMode, nodes ...string) error {
 	nodeIDs, err := parseNodeSlice(nodes...)
 	if err != nil {
@@ -475,7 +476,7 @@ func (s *Subscription) SetMonitoringModeForNodes(ctx context.Context, monitoring
 	return s.SetMonitoringModeForNodeIDs(ctx, monitoringMode, nodeIDs...)
 }
 
-// SetMonitoringModeForNodeIDs sets the monitoring mode for nodes
+// SetMonitoringModeForNodeIDs sets the monitoring mode for nodes.
 func (s *Subscription) SetMonitoringModeForNodeIDs(ctx context.Context, monitoringMode ua.MonitoringMode, nodes ...*ua.NodeID) error {
 	if len(nodes) == 0 {
 		return nil
@@ -494,7 +495,7 @@ func (s *Subscription) SetMonitoringModeForNodeIDs(ctx context.Context, monitori
 	return s.SetMonitoringMode(ctx, monitoringMode, toSet...)
 }
 
-// SetMonitoringMode sets the monitoring mode for nodes
+// SetMonitoringMode sets the monitoring mode for nodes.
 func (s *Subscription) SetMonitoringMode(ctx context.Context, monitoringMode ua.MonitoringMode, items ...Item) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -530,7 +531,7 @@ func (s *Subscription) SetMonitoringMode(ctx context.Context, monitoringMode ua.
 	return nil
 }
 
-// Stats returns statistics for the subscription
+// Stats returns statistics for the subscription.
 func (s *Subscription) Stats(ctx context.Context) (*ua.SubscriptionDiagnosticsDataType, error) {
 	return s.sub.Stats(ctx)
 }

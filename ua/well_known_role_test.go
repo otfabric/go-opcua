@@ -7,7 +7,7 @@ package ua
 import (
 	"testing"
 
-	"github.com/otfabric/opcua/id"
+	"github.com/otfabric/go-opcua/id"
 )
 
 func TestWellKnownRoleString(t *testing.T) {

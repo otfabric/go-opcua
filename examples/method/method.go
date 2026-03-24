@@ -18,8 +18,8 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -44,7 +44,7 @@ func main() {
 	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	in := int64(12)
 	req := &ua.CallMethodRequest{

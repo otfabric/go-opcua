@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // NodeManagementService implements the Node Management Service Set.
@@ -15,6 +15,7 @@ type NodeManagementService struct {
 	srv *Server
 }
 
+// AddNodes implements the OPC UA AddNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.2
 func (s *NodeManagementService) AddNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -87,6 +88,7 @@ func (s *NodeManagementService) addNode(item *ua.AddNodesItem) *ua.AddNodesResul
 	}
 }
 
+// AddReferences implements the OPC UA AddReferences service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.3
 func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -141,6 +143,7 @@ func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.Secu
 	}, nil
 }
 
+// DeleteNodes implements the OPC UA DeleteNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.4
 func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -178,6 +181,7 @@ func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.Secure
 	}, nil
 }
 
+// DeleteReferences implements the OPC UA DeleteReferences service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5
 func (s *NodeManagementService) DeleteReferences(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)

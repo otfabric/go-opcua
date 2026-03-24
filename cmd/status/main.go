@@ -14,7 +14,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/otfabric/opcua/cmd/service/goname"
+	"github.com/otfabric/go-opcua/cmd/service/goname"
 )
 
 func main() {
@@ -35,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading %s: %v", *in, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	// rows have the format of "name,id,description"
 	// but the description is not quoted and can contain commas

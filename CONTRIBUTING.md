@@ -1,14 +1,14 @@
-# Contributing to otfabric/opcua
+# Contributing to otfabric/go-opcua
 
 Thank you for your interest in contributing. This document explains how to get started.
 
 ## Development setup
 
-- **Go**: 1.23 or later.
+- **Go**: 1.25 or later.
 - **Python**: 3.11+ (optional, for integration tests against the Python client).
 
 ```sh
-git clone https://github.com/otfabric/opcua.git
+git clone https://github.com/otfabric/go-opcua.git
 cd opcua
 go mod download
 ```

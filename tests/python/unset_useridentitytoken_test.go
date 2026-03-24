@@ -8,8 +8,8 @@ import (
 	"log"
 	"testing"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func TestUnsetUserIdentityTokenConnect(t *testing.T) {

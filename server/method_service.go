@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // MethodHandler is the callback signature for server-side method implementations.
@@ -22,6 +22,7 @@ type MethodService struct {
 	srv *Server
 }
 
+// Call implements the OPC UA Call service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.11.2
 func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)

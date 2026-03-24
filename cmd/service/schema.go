@@ -61,7 +61,7 @@ func ReadTypes(filename string) (*TypeDictionary, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	d := new(TypeDictionary)
 	if err := xml.NewDecoder(f).Decode(&d); err != nil {

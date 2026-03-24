@@ -7,10 +7,10 @@ import (
 	"slices"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/stats"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/stats"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // Subscribe creates a new OPC-UA subscription with the given parameters.
@@ -84,11 +84,11 @@ func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, 
 	}
 
 	c.subs[sub.SubscriptionID] = sub
-	c.updatePublishTimeout_NeedsSubMuxLock()
+	c.updatePublishTimeoutNeedsSubMuxLock()
 	return sub, nil
 }
 
-// SubscriptionIDs gets a list of subscriptionIDs
+// SubscriptionIDs gets a list of subscriptionIDs.
 func (c *Client) SubscriptionIDs() []uint32 {
 	c.subMux.RLock()
 	defer c.subMux.RUnlock()
@@ -101,7 +101,7 @@ func (c *Client) SubscriptionIDs() []uint32 {
 }
 
 // recreateSubscriptions creates new subscriptions
-// with the same parameters to replace the previous one
+// with the same parameters to replace the previous one.
 func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
 	c.subMux.Lock()
 	defer c.subMux.Unlock()
@@ -111,9 +111,9 @@ func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
 		return ua.StatusBadSubscriptionIDInvalid
 	}
 
-	sub.recreate_delete(ctx)
-	c.forgetSubscription_NeedsSubMuxLock(ctx, id)
-	return sub.recreate_create(ctx)
+	_ = sub.recreateDelete(ctx)
+	c.forgetSubscriptionNeedsSubMuxLock(ctx, id)
+	return sub.recreateCreate(ctx)
 }
 
 // transferSubscriptions ask the server to transfer the given subscriptions
@@ -232,8 +232,8 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 	}
 }
 
-// registerSubscription_NeedsSubMuxLock registers a subscription
-func (c *Client) registerSubscription_NeedsSubMuxLock(sub *Subscription) error {
+// registerSubscriptionNeedsSubMuxLock registers a subscription.
+func (c *Client) registerSubscriptionNeedsSubMuxLock(sub *Subscription) error {
 	if sub.SubscriptionID == 0 {
 		return ua.StatusBadSubscriptionIDInvalid
 	}
@@ -248,13 +248,13 @@ func (c *Client) registerSubscription_NeedsSubMuxLock(sub *Subscription) error {
 
 func (c *Client) forgetSubscription(ctx context.Context, id uint32) {
 	c.subMux.Lock()
-	c.forgetSubscription_NeedsSubMuxLock(ctx, id)
+	c.forgetSubscriptionNeedsSubMuxLock(ctx, id)
 	c.subMux.Unlock()
 }
 
-func (c *Client) forgetSubscription_NeedsSubMuxLock(ctx context.Context, id uint32) {
+func (c *Client) forgetSubscriptionNeedsSubMuxLock(ctx context.Context, id uint32) {
 	delete(c.subs, id)
-	c.updatePublishTimeout_NeedsSubMuxLock()
+	c.updatePublishTimeoutNeedsSubMuxLock()
 	stats.Subscription().Add("Count", -1)
 
 	if len(c.subs) == 0 {
@@ -264,7 +264,7 @@ func (c *Client) forgetSubscription_NeedsSubMuxLock(ctx context.Context, id uint
 	}
 }
 
-func (c *Client) updatePublishTimeout_NeedsSubMuxLock() {
+func (c *Client) updatePublishTimeoutNeedsSubMuxLock() {
 	maxTimeout := uasc.MaxTimeout
 	for _, s := range c.subs {
 		if d := s.publishTimeout(); d < maxTimeout {
@@ -297,8 +297,8 @@ func (c *Client) notifyAllSubscriptionsOfError(ctx context.Context, err error) {
 }
 
 func (c *Client) notifySubscription(ctx context.Context, sub *Subscription, notif *ua.NotificationMessage) {
-	// Note: Publish ACK results are already handled in handleAcks_NeedsSubMuxLock().
-	// See https://github.com/otfabric/opcua/issues/337 for discussion.
+	// Note: Publish ACK results are already handled in handleAcksNeedsSubMuxLock().
+	// See https://github.com/otfabric/go-opcua/issues/337 for discussion.
 
 	if notif == nil {
 		sub.notify(ctx, &PublishNotificationData{
@@ -474,7 +474,7 @@ func (c *Client) publish(ctx context.Context) error {
 	default:
 		c.subMux.Lock()
 		// handle pending acks for all subscriptions
-		c.handleAcks_NeedsSubMuxLock(res.Results)
+		c.handleAcksNeedsSubMuxLock(res.Results)
 
 		sub, ok := c.subs[res.SubscriptionID]
 		if !ok {
@@ -486,7 +486,7 @@ func (c *Client) publish(ctx context.Context) error {
 		}
 
 		// handle the publish response for a specific subscription
-		c.handleNotification_NeedsSubMuxLock(sub, res)
+		c.handleNotificationNeedsSubMuxLock(sub, res)
 		c.subMux.Unlock()
 
 		c.notifySubscription(ctx, sub, res.NotificationMessage)
@@ -496,7 +496,7 @@ func (c *Client) publish(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) handleAcks_NeedsSubMuxLock(res []ua.StatusCode) {
+func (c *Client) handleAcksNeedsSubMuxLock(res []ua.StatusCode) {
 	// we assume that the number of results in the response match
 	// the number of pending acks from the previous PublishRequest.
 	if len(c.pendingAcks) != len(res) {
@@ -527,7 +527,7 @@ func (c *Client) handleAcks_NeedsSubMuxLock(res []ua.StatusCode) {
 	c.cfg.logger.Debugf("publish: not acked not_acked=%v", notAcked)
 }
 
-func (c *Client) handleNotification_NeedsSubMuxLock(sub *Subscription, res *ua.PublishResponse) {
+func (c *Client) handleNotificationNeedsSubMuxLock(sub *Subscription, res *ua.PublishResponse) {
 	// keep-alive message
 	// Per OPC-UA Part 4 §7.21, keep-alive messages reuse the last sequence number.
 	// Updating nextSeq to the server's value is correct.

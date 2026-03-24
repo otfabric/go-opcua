@@ -3,7 +3,7 @@ package opcua
 import (
 	"time"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // RetryPolicy controls retry behaviour for failed client requests.

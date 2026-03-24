@@ -4,7 +4,7 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 const (

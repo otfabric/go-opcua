@@ -14,8 +14,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/otfabric/opcua/server"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 var (
@@ -115,7 +115,7 @@ func main() {
 	if err := s.Start(context.Background()); err != nil {
 		log.Fatalf("Error starting server, exiting: %s", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	select {}
 

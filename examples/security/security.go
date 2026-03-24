@@ -41,8 +41,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -185,7 +185,7 @@ func main() {
 	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 	log.Println("Connected successfully!")
 
 	// Read the server's current time as a simple connectivity test.

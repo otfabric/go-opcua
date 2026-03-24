@@ -124,13 +124,13 @@ func (r *ReferenceDescription) MarshalJSON() ([]byte, error) {
 }
 
 // MarshalJSON implements json.Marshaler for StatusCode.
-func (n StatusCode) MarshalJSON() ([]byte, error) {
-	if d, ok := StatusCodes[n]; ok {
+func (s StatusCode) MarshalJSON() ([]byte, error) {
+	if d, ok := StatusCodes[s]; ok {
 		return json.Marshal(struct {
 			Code uint32 `json:"code"`
 			Name string `json:"name"`
 		}{
-			Code: uint32(n),
+			Code: uint32(s),
 			Name: d.Name,
 		})
 	}
@@ -138,8 +138,8 @@ func (n StatusCode) MarshalJSON() ([]byte, error) {
 		Code uint32 `json:"code"`
 		Name string `json:"name"`
 	}{
-		Code: uint32(n),
-		Name: fmt.Sprintf("0x%08X", uint32(n)),
+		Code: uint32(s),
+		Name: fmt.Sprintf("0x%08X", uint32(s)),
 	})
 }
 

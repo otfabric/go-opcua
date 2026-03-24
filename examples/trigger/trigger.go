@@ -13,9 +13,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -72,7 +72,7 @@ func main() {
 	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	notifyCh := make(chan *opcua.PublishNotificationData)
 
@@ -82,7 +82,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer sub.Cancel(ctx)
+	defer func() { _ = sub.Cancel(ctx) }()
 	log.Printf("Created subscription with id %v", sub.SubscriptionID)
 
 	triggeringNode, err := ua.ParseNodeID(*triggerNodeID)

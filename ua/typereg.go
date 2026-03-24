@@ -9,7 +9,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 // TypeRegistry provides a registry for Go types.

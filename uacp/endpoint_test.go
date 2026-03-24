@@ -6,10 +6,10 @@ package uacp
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
-	_ "github.com/stretchr/testify/require"
 	"net/url"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestResolveEndpoint(t *testing.T) {
@@ -88,6 +88,6 @@ func TestDialTCP(t *testing.T) {
 			require.Nil(t, conn)
 			return
 		}
-		conn.Close()
+		_ = conn.Close()
 	})
 }

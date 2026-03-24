@@ -18,10 +18,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
-	"github.com/otfabric/opcua/uapolicy"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 const (
@@ -241,7 +241,7 @@ func newSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, kind channelKi
 }
 
 func (s *SecureChannel) RemoteAddr() net.Addr {
-	return s.c.TCPConn.RemoteAddr()
+	return s.c.RemoteAddr()
 }
 
 // SecurityMode returns the message security mode configured for this channel.
@@ -351,7 +351,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 			}
 
 			hdr := chunk.Header
-			reqID := chunk.SequenceHeader.RequestID
+			reqID := chunk.RequestID
 
 			strdat := string(chunk.Data)
 			if strings.Contains(strdat, "CurrentTime") {
@@ -360,7 +360,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			msg := &MessageBody{
 				RequestID:       reqID,
-				SecureChannelID: chunk.MessageHeader.Header.SecureChannelID,
+				SecureChannelID: chunk.SecureChannelID,
 			}
 
 			s.cfg.Logger.Debugf("recv channel_id=%v request_id=%v message_type=%s chunk_type=%s bytes=%v", s.c.ID(), reqID, string(hdr.MessageType), string([]byte{hdr.ChunkType}), hdr.MessageSize)
@@ -497,7 +497,7 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 
 		s.cfg.SecurityPolicyURI = m.SecurityPolicyURI
 		if m.SecurityPolicyURI != ua.SecurityPolicyURINone {
-			s.cfg.RemoteCertificate = m.AsymmetricSecurityHeader.SenderCertificate
+			s.cfg.RemoteCertificate = m.SenderCertificate
 			s.cfg.Logger.Debugf("setting securityPolicy channel_id=%v policy=%v", s.c.ID(), m.SecurityPolicyURI)
 
 			remoteKey, err := uapolicy.PublicKey(s.cfg.RemoteCertificate)
@@ -546,9 +546,9 @@ func (s *SecureChannel) verifyAndDecrypt(m *MessageChunk, b []byte, instance *ch
 		return instance.verifyAndDecrypt(m, b)
 	}
 
-	instances := s.getInstancesBySecureChannelID(m.MessageHeader.SecureChannelID)
+	instances := s.getInstancesBySecureChannelID(m.SecureChannelID)
 	if len(instances) == 0 {
-		return nil, fmt.Errorf("%w: SecureChannelID=%d", errors.ErrInvalidState, m.MessageHeader.SecureChannelID)
+		return nil, fmt.Errorf("%w: SecureChannelID=%d", errors.ErrInvalidState, m.SecureChannelID)
 	}
 
 	var (
@@ -1049,11 +1049,11 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 
 		// send the message
 		var n int
-		s.c.SetWriteDeadline(time.Now().Add(timeout))
+		_ = s.c.SetWriteDeadline(time.Now().Add(timeout))
 		if n, err = s.c.Write(chunk); err != nil {
 			return nil, err
 		}
-		s.c.SetWriteDeadline(time.Time{})
+		_ = s.c.SetWriteDeadline(time.Time{})
 
 		atomic.AddUint64(&instance.bytesSent, uint64(n))
 		atomic.AddUint32(&instance.messagesSent, 1)
@@ -1155,8 +1155,8 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 
 	// Set a write deadline from the context if one is available.
 	if deadline, ok := ctx.Deadline(); ok {
-		s.c.SetWriteDeadline(deadline)
-		defer s.c.SetWriteDeadline(time.Time{})
+		_ = s.c.SetWriteDeadline(deadline)
+		defer func() { _ = s.c.SetWriteDeadline(time.Time{}) }()
 	}
 
 	// send the message
@@ -1190,9 +1190,9 @@ func (s *SecureChannel) nextRequestID() uint32 {
 	return s.requestID
 }
 
-// Close closes an existing secure channel
+// Close closes an existing secure channel.
 func (s *SecureChannel) Close() (err error) {
-	// https://github.com/otfabric/opcua/pull/470
+	// https://github.com/otfabric/go-opcua/pull/470
 	// guard against double close until we found the root cause
 	err = io.EOF
 	s.closeOnce.Do(func() { err = s.close() })
@@ -1207,7 +1207,7 @@ func (s *SecureChannel) close() error {
 		// Close the underlying UACP connection so that the secure channel
 		// is the single owner of the connection lifecycle. This is safe
 		// to call even if the connection is already closed (closeOnce).
-		s.c.Close()
+		_ = s.c.Close()
 	}()
 
 	s.reqLocker.unlock()
@@ -1220,7 +1220,7 @@ func (s *SecureChannel) close() error {
 
 	// Best-effort: try to send CloseSecureChannelRequest but don't
 	// fail the close if the connection is already dead.
-	s.SendRequest(context.Background(), &ua.CloseSecureChannelRequest{}, nil, nil)
+	_ = s.SendRequest(context.Background(), &ua.CloseSecureChannelRequest{}, nil, nil)
 
 	return io.EOF
 }
@@ -1243,10 +1243,10 @@ func mergeChunks(chunks []*MessageChunk) []byte {
 	var b []byte
 	var seqnr uint32
 	for _, c := range chunks {
-		if c.SequenceHeader.SequenceNumber == seqnr {
+		if c.SequenceNumber == seqnr {
 			continue // duplicate chunk
 		}
-		seqnr = c.SequenceHeader.SequenceNumber
+		seqnr = c.SequenceNumber
 		b = append(b, c.Data...)
 	}
 	return b

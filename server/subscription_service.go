@@ -5,8 +5,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // SubscriptionService implements the Subscription Service Set.
@@ -19,7 +19,7 @@ type SubscriptionService struct {
 	Subs map[uint32]*Subscription
 }
 
-// get rid of all references to a subscription and all monitored items that are pointed at this subscription.
+// DeleteSubscription removes all references to a subscription and all monitored items pointed at it.
 func (s *SubscriptionService) DeleteSubscription(id uint32) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -41,6 +41,7 @@ func (s *SubscriptionService) DeleteSubscription(id uint32) {
 
 }
 
+// CreateSubscription implements the OPC UA CreateSubscription service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.13.2
 func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -88,6 +89,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 	return resp, nil
 }
 
+// ModifySubscription implements the OPC UA ModifySubscription service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.13.3
 func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -150,6 +152,7 @@ func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.S
 	}, nil
 }
 
+// SetPublishingMode implements the OPC UA SetPublishingMode service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.13.4
 func (s *SubscriptionService) SetPublishingMode(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -195,6 +198,7 @@ func (s *SubscriptionService) SetPublishingMode(ctx context.Context, sc *uasc.Se
 	}, nil
 }
 
+// Publish implements the OPC UA Publish service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.13.5
 func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("raw publish request")
@@ -220,7 +224,7 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 			SubscriptionID:           0,
 			MoreNotifications:        false,
 			NotificationMessage:      &ua.NotificationMessage{NotificationData: []*ua.ExtensionObject{}},
-			AvailableSequenceNumbers: []uint32{}, // an empty array indicates taht we don't support retransmission of messages
+			AvailableSequenceNumbers: []uint32{}, // an empty array indicates that we don't support retransmission of messages
 			Results:                  []ua.StatusCode{},
 			DiagnosticInfos:          []*ua.DiagnosticInfo{},
 		}
@@ -239,6 +243,7 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 	return nil, nil
 }
 
+// Republish implements the OPC UA Republish service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.13.6
 func (s *SubscriptionService) Republish(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -271,6 +276,7 @@ func (s *SubscriptionService) Republish(ctx context.Context, sc *uasc.SecureChan
 	}, nil
 }
 
+// TransferSubscriptions implements the OPC UA TransferSubscriptions service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.13.7
 func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -314,6 +320,7 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 	}, nil
 }
 
+// DeleteSubscriptions implements the OPC UA DeleteSubscriptions service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.13.8
 func (s *SubscriptionService) DeleteSubscriptions(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -368,11 +375,11 @@ type PubReq struct {
 	ID uint32
 }
 
-// This is the type that with its run() function will work in the bakground fullfilling subscription
+// Subscription is the type that with its run function works in the background fulfilling subscription
 // publishes.
 //
 // MonitoredItems will send updates on the NotifyChannel to let the background task know that
-// an event has occured that needs to be published.
+// an event has occurred that needs to be published.
 type Subscription struct {
 	srv                       *SubscriptionService
 	Session                   *session
@@ -483,7 +490,7 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 		SubscriptionID:           s.ID,
 		MoreNotifications:        false,
 		NotificationMessage:      &msg,
-		AvailableSequenceNumbers: []uint32{}, // an empty array indicates taht we don't support retransmission of messages
+		AvailableSequenceNumbers: []uint32{}, // an empty array indicates that we don't support retransmission of messages
 		Results:                  []ua.StatusCode{},
 		DiagnosticInfos:          []*ua.DiagnosticInfo{},
 	}
@@ -496,7 +503,7 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 
 // this function should be run as a go-routine and will handle sending data out
 // to the client at the correct rate assuming there are publish requests queued up.
-// if the function returns it deletes the subscription
+// if the function returns it deletes the subscription.
 func (s *Subscription) run() {
 	// if this go routine dies, we need to delete ourselves.
 	defer func() {
@@ -504,8 +511,8 @@ func (s *Subscription) run() {
 		s.srv.DeleteSubscription(s.ID)
 	}()
 
-	keepalive_counter := 0
-	lifetime_counter := 0
+	keepaliveCounter := 0
+	lifetimeCounter := 0
 	//TODO: if a sub is modified, this ticker time may need to change.
 	s.T = time.NewTicker(time.Millisecond * time.Duration(s.RevisedPublishingInterval))
 	defer s.T.Stop()
@@ -545,9 +552,9 @@ func (s *Subscription) run() {
 				if (len(publishQueue) == 0 && len(eventQueue) == 0) || !enabled {
 					// nothing to publish, increment the keepalive counter and send a keepalive if it
 					// has been enough intervals.
-					keepalive_counter++
-					if keepalive_counter > int(s.RevisedMaxKeepAliveCount) {
-						keepalive_counter = 0
+					keepaliveCounter++
+					if keepaliveCounter > int(s.RevisedMaxKeepAliveCount) {
+						keepaliveCounter = 0
 						select {
 						case pubreq := <-s.Session.PublishRequests:
 							err := s.keepalive(pubreq)
@@ -556,8 +563,8 @@ func (s *Subscription) run() {
 								return
 							}
 						default:
-							lifetime_counter++
-							if lifetime_counter > int(s.RevisedLifetimeCount) {
+							lifetimeCounter++
+							if lifetimeCounter > int(s.RevisedLifetimeCount) {
 								s.srv.srv.cfg.logger.Warnf("subscription timed out sub_id=%v", s.ID)
 								return
 							}
@@ -590,15 +597,15 @@ func (s *Subscription) run() {
 
 			case <-s.T.C:
 				// we had another tick without a publish request.
-				lifetime_counter++
-				if lifetime_counter > int(s.RevisedLifetimeCount) {
+				lifetimeCounter++
+				if lifetimeCounter > int(s.RevisedLifetimeCount) {
 					s.srv.srv.cfg.logger.Warnf("subscription timed out sub_id=%v", s.ID)
 					return
 				}
 			}
 		}
-		lifetime_counter = 0
-		keepalive_counter = 0
+		lifetimeCounter = 0
+		keepaliveCounter = 0
 
 		s.SequenceID++
 		if s.SequenceID == 0 {
@@ -613,17 +620,17 @@ func (s *Subscription) run() {
 		//delete(s.SeqNums, a.SequenceNumber)
 		//}
 
-		final_items := make([]*ua.MonitoredItemNotification, len(publishQueue))
+		finalItems := make([]*ua.MonitoredItemNotification, len(publishQueue))
 		i := 0
 		for k := range publishQueue {
-			final_items[i] = publishQueue[k]
+			finalItems[i] = publishQueue[k]
 			i++
 		}
 
 		eo := make([]*ua.ExtensionObject, 0, 2)
-		if len(final_items) > 0 {
+		if len(finalItems) > 0 {
 			dcn := ua.DataChangeNotification{
-				MonitoredItems:  final_items,
+				MonitoredItems:  finalItems,
 				DiagnosticInfos: []*ua.DiagnosticInfo{},
 			}
 			dcnEO := ua.NewExtensionObject(&dcn)

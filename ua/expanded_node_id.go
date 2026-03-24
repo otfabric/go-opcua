@@ -11,22 +11,22 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 // ExpandedNodeID extends the NodeID structure by allowing the NamespaceURI to be
 // explicitly specified instead of using the NamespaceIndex. The NamespaceURI is optional.
 // If it is specified, then the NamespaceIndex inside the NodeID shall be ignored.
 //
-// Specification: Part 6, 5.2.2.10
+// Specification: Part 6, 5.2.2.10.
 type ExpandedNodeID struct {
 	NodeID       *NodeID
 	NamespaceURI string
 	ServerIndex  uint32
 }
 
-func (a ExpandedNodeID) String() string {
-	return a.NodeID.String()
+func (e ExpandedNodeID) String() string {
+	return e.NodeID.String()
 }
 
 // NewExpandedNodeID creates a new ExpandedNodeID.

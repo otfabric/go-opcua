@@ -1,6 +1,6 @@
 # Server Development Guide
 
-> Building OPC-UA servers with the `github.com/otfabric/opcua/server` package.
+> Building OPC-UA servers with the `github.com/otfabric/go-opcua/server` package.
 
 ---
 
@@ -15,8 +15,8 @@ import (
     "context"
     "log"
 
-    "github.com/otfabric/opcua/server"
-    "github.com/otfabric/opcua/ua"
+    "github.com/otfabric/go-opcua/server"
+    "github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -192,7 +192,7 @@ ns.DeleteNode(nodeID)
 
 ## Methods
 
-Register callable methods on the server. The handler has type [MethodHandler](https://pkg.go.dev/github.com/otfabric/opcua/server#MethodHandler): it receives `context.Context`, the object and method NodeIDs, and the input arguments, and returns output arguments and a status code.
+Register callable methods on the server. The handler has type [MethodHandler](https://pkg.go.dev/github.com/otfabric/go-opcua/server#MethodHandler): it receives `context.Context`, the object and method NodeIDs, and the input arguments, and returns output arguments and a status code.
 
 ```go
 // Define the method handler: (ctx, objectID, methodID, args) -> (outputs, status)
@@ -227,7 +227,7 @@ import (
     "encoding/xml"
     "os"
 
-    "github.com/otfabric/opcua/schema"
+    "github.com/otfabric/go-opcua/schema"
 )
 
 // Parse the XML
@@ -357,8 +357,8 @@ import (
     "os"
     "time"
 
-    "github.com/otfabric/opcua/server"
-    "github.com/otfabric/opcua/ua"
+    "github.com/otfabric/go-opcua/server"
+    "github.com/otfabric/go-opcua/ua"
 )
 
 func main() {

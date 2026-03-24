@@ -17,9 +17,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/monitor"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/monitor"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -83,7 +83,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	m, err := monitor.NewNodeMonitor(c)
 	if err != nil {
@@ -159,6 +159,6 @@ func startChanSub(ctx context.Context, m *monitor.NodeMonitor, interval, lag tim
 
 func cleanup(ctx context.Context, sub *monitor.Subscription, wg *sync.WaitGroup) {
 	log.Printf("stats: sub=%d delivered=%d dropped=%d", sub.SubscriptionID(), sub.Delivered(), sub.Dropped())
-	sub.Unsubscribe(ctx)
+	_ = sub.Unsubscribe(ctx)
 	wg.Done()
 }

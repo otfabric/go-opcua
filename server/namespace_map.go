@@ -4,18 +4,18 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server/attrs"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/attrs"
+	"github.com/otfabric/go-opcua/ua"
 )
 
-// This namespaces give a convenient way to have data mapped to the OPC server
-// without having to map your application data to the OCP-UA data abstraction
+// MapNamespace provides a convenient way to have data mapped to the OPC server
+// without having to map your application data to the OPC-UA data abstraction.
 //
 // It (currently) supports ints, floats, strings, and timestamps. No maps inside of maps and no arrays.
 //
 // To notify subscribers of changes, be sure to call ChangeNotification(key) after changing the value.
-// To be notified of changes from the opc-ua server to the map, receive on ExternalNotification channel
+// To be notified of changes from the opc-ua server to the map, receive on ExternalNotification channel.
 type MapNamespace struct {
 	srv  *Server
 	name string
@@ -28,29 +28,29 @@ type MapNamespace struct {
 	id uint16
 }
 
-// Get the value associated with key from the MapNamespace.
+// GetValue returns the value associated with key from the MapNamespace.
 // This function handles locking and getting the value.
 //
 // Returns nil if the value doesn't exist.
-func (s *MapNamespace) GetValue(key string) any {
-	s.Mu.RLock()
-	defer s.Mu.RUnlock()
-	return s.Data[key]
+func (ns *MapNamespace) GetValue(key string) any {
+	ns.Mu.RLock()
+	defer ns.Mu.RUnlock()
+	return ns.Data[key]
 }
 
-// update the value associated with a key and trigger the change notification
-// to the OPC server
-func (s *MapNamespace) SetValue(key string, value any) {
-	s.Mu.Lock()
-	defer s.Mu.Unlock()
-	s.Data[key] = value
-	s.ChangeNotification(key)
+// SetValue updates the value associated with a key and triggers the change notification
+// to the OPC server.
+func (ns *MapNamespace) SetValue(key string, value any) {
+	ns.Mu.Lock()
+	defer ns.Mu.Unlock()
+	ns.Data[key] = value
+	ns.ChangeNotification(key)
 }
 
-// This function is used to notify OPC UA subscribers if a key was changed without using the
-// SetValue() function
-func (s *MapNamespace) ChangeNotification(key string) {
-	s.srv.ChangeNotification(ua.NewStringNodeID(s.id, key))
+// ChangeNotification notifies OPC UA subscribers if a key was changed without using the
+// SetValue function.
+func (ns *MapNamespace) ChangeNotification(key string) {
+	ns.srv.ChangeNotification(ua.NewStringNodeID(ns.id, key))
 }
 
 func NewMapNamespace(srv *Server, name string) *MapNamespace {
@@ -64,8 +64,8 @@ func NewMapNamespace(srv *Server, name string) *MapNamespace {
 	return &mrw
 }
 
-func (s *MapNamespace) ID() uint16 {
-	return s.id
+func (ns *MapNamespace) ID() uint16 {
+	return ns.id
 }
 func (ns *MapNamespace) SetID(id uint16) {
 	ns.id = id
@@ -309,11 +309,11 @@ func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue 
 	return dv
 }
 
-func (s *MapNamespace) SetAttribute(node *ua.NodeID, attr ua.AttributeID, val *ua.DataValue) ua.StatusCode {
+func (ns *MapNamespace) SetAttribute(node *ua.NodeID, attr ua.AttributeID, val *ua.DataValue) ua.StatusCode {
 
-	s.Mu.Lock()
-	defer s.Mu.Unlock()
-	s.srv.cfg.logger.Debugf("pre-write namespace=%v", s.name)
+	ns.Mu.Lock()
+	defer ns.Mu.Unlock()
+	ns.srv.cfg.logger.Debugf("pre-write namespace=%v", ns.name)
 
 	key := node.StringID()
 
@@ -321,14 +321,14 @@ func (s *MapNamespace) SetAttribute(node *ua.NodeID, attr ua.AttributeID, val *u
 	// going to use the node id directly to look it up from our data map.
 	if attr == ua.AttributeIDValue {
 		v := val.Value.Value()
-		s.Data[key] = v
+		ns.Data[key] = v
 	}
 
 	// notify the opc ua server the value has changed.
-	s.srv.ChangeNotification(node)
+	ns.srv.ChangeNotification(node)
 	// notify the non-opc application the value has changed.
 	select {
-	case s.ExternalNotification <- key:
+	case ns.ExternalNotification <- key:
 	default:
 	}
 

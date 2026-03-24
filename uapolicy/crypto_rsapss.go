@@ -5,11 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 
-	// Force compilation of required hashing algorithms, although we don't directly use the packages
+	// Force compilation of required hashing algorithms, although we don't directly use the packages.
 	_ "crypto/sha1"
 	_ "crypto/sha256"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 type RSAPSS struct {

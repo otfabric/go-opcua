@@ -2,6 +2,7 @@
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
+// Package id provides well-known OPC UA node identifiers, names, and lookup functions.
 package id
 
 // DataTypeName returns the standard OPC UA name for a well-known DataType

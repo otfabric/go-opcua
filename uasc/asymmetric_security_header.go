@@ -7,7 +7,7 @@ package uasc
 import (
 	"fmt"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // AsymmetricSecurityHeader represents a Asymmetric Algorithm Security Header in OPC UA Secure Conversation.
@@ -43,12 +43,12 @@ func (h *AsymmetricSecurityHeader) Encode() ([]byte, error) {
 }
 
 // String returns Header in string.
-func (a *AsymmetricSecurityHeader) String() string {
+func (h *AsymmetricSecurityHeader) String() string {
 	return fmt.Sprintf(
 		"SecurityPolicyURI: %v, SenderCertificate: %v, ReceiverCertificateThumbprint: %v",
-		a.SecurityPolicyURI,
-		a.SenderCertificate,
-		a.ReceiverCertificateThumbprint,
+		h.SecurityPolicyURI,
+		h.SenderCertificate,
+		h.ReceiverCertificateThumbprint,
 	)
 }
 

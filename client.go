@@ -19,13 +19,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/stats"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
-	"github.com/otfabric/opcua/uapolicy"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/stats"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uapolicy"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // FindServers returns the servers known to a server or discovery server.
@@ -38,7 +38,7 @@ func FindServers(ctx context.Context, endpoint string, opts ...Option) ([]*ua.Ap
 	if err := c.Dial(ctx); err != nil {
 		return nil, err
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 	res, err := c.FindServers(ctx)
 	if err != nil {
 		return nil, err
@@ -56,7 +56,7 @@ func FindServersOnNetwork(ctx context.Context, endpoint string, opts ...Option) 
 	if err := c.Dial(ctx); err != nil {
 		return nil, err
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 	res, err := c.FindServersOnNetwork(ctx)
 	if err != nil {
 		return nil, err
@@ -74,7 +74,7 @@ func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.E
 	if err := c.Dial(ctx); err != nil {
 		return nil, err
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 	res, err := c.GetEndpoints(ctx)
 	if err != nil {
 		return nil, err
@@ -204,7 +204,7 @@ type Client struct {
 // To modify configuration you can provide any number of Options as opts. See
 // #Option for details.
 //
-// https://godoc.org/github.com/otfabric/opcua#Option
+// https://godoc.org/github.com/otfabric/go-opcua#Option
 func NewClient(endpoint string, opts ...Option) (*Client, error) {
 	cfg, err := ApplyConfig(opts...)
 	if err != nil {
@@ -278,14 +278,14 @@ func (c *Client) Connect(ctx context.Context) error {
 
 	s, err := c.CreateSession(ctx, c.cfg.session)
 	if err != nil {
-		c.Close(ctx)
+		_ = c.Close(ctx)
 		stats.RecordError(err)
 
 		return err
 	}
 
 	if err := c.ActivateSession(ctx, s); err != nil {
-		c.Close(ctx)
+		_ = c.Close(ctx)
 		stats.RecordError(err)
 
 		return err
@@ -300,10 +300,10 @@ func (c *Client) Connect(ctx context.Context) error {
 	})
 
 	// Update the client's namespace table from the server.
-	// See https://github.com/otfabric/opcua/pull/512 for discussion.
+	// See https://github.com/otfabric/go-opcua/pull/512 for discussion.
 	if !c.cfg.skipNamespaceUpdate {
 		if err := c.UpdateNamespaces(ctx); err != nil {
-			c.Close(ctx)
+			_ = c.Close(ctx)
 			stats.RecordError(err)
 
 			return err
@@ -313,7 +313,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	return nil
 }
 
-// monitor manages connection alteration
+// monitor manages connection alteration.
 func (c *Client) monitor(ctx context.Context) {
 	c.cfg.logger.Debugf("monitor: start")
 	defer c.cfg.logger.Debugf("monitor: done")
@@ -321,7 +321,7 @@ func (c *Client) monitor(ctx context.Context) {
 	defer c.mcancel()
 	defer c.setState(ctx, Closed)
 
-	action := none
+	var action reconnectAction
 	for {
 		select {
 		case <-ctx.Done():
@@ -348,7 +348,6 @@ func (c *Client) monitor(ctx context.Context) {
 
 			if !c.cfg.sechan.AutoReconnect {
 				// the connection is closed and should not be restored
-				action = abortReconnect
 				c.cfg.logger.Debugf("monitor: auto-reconnect disabled")
 				return
 			}
@@ -393,7 +392,7 @@ func (c *Client) monitor(ctx context.Context) {
 				action = createSecureChannel
 
 			default:
-				// unknown error has occured
+				// unknown error has occurred
 				action = createSecureChannel
 			}
 
@@ -415,6 +414,9 @@ func (c *Client) monitor(ctx context.Context) {
 				default:
 					switch action {
 
+					case none:
+						// no action needed
+
 					case createSecureChannel:
 						c.cfg.logger.Debugf("monitor: action: createSecureChannel")
 
@@ -426,12 +428,12 @@ func (c *Client) monitor(ctx context.Context) {
 						// Only close the raw connection as a fallback when no secure
 						// channel exists.
 						if sc := c.SecureChannel(); sc != nil {
-							sc.Close()
+							_ = sc.Close()
 							c.setSecureChannel(nil)
 						} else {
 							c.connMu.Lock()
 							if c.conn != nil {
-								c.conn.Close()
+								_ = c.conn.Close()
 							}
 							c.connMu.Unlock()
 						}
@@ -595,7 +597,6 @@ func (c *Client) monitor(ctx context.Context) {
 						for _, subID := range subsToRecreate {
 							if err := c.recreateSubscription(ctx, subID); err != nil {
 								c.cfg.logger.Debugf("monitor: recreate subscriptions failed error=%v", err)
-								action = recreateSession
 								continue
 							}
 							activeSubs++
@@ -655,12 +656,12 @@ func (c *Client) Dial(ctx context.Context) error {
 
 	sc, err := uasc.NewSecureChannel(c.endpointURL, conn, c.cfg.sechan, c.sechanErr)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 
 	if err := sc.Open(ctx); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		return err
 	}
 	c.setSecureChannel(sc)
@@ -668,8 +669,8 @@ func (c *Client) Dial(ctx context.Context) error {
 	// Validate the server certificate configured via SecurityFromEndpoint
 	// or RemoteCertificate before proceeding.
 	if err := c.cfg.validateServerCertificate(c.cfg.sechan.RemoteCertificate, c.cfg.sechan.SecurityMode); err != nil {
-		sc.Close()
-		conn.Close()
+		_ = sc.Close()
+		_ = conn.Close()
 		c.setSecureChannel(nil)
 		return err
 	}
@@ -690,18 +691,18 @@ func (c *Client) Close(ctx context.Context) error {
 
 	// try to close the session but ignore any error
 	// so that we close the underlying channel and connection.
-	c.CloseSession(ctx)
+	_ = c.CloseSession(ctx)
 	c.setState(ctx, Closed)
 
 	if c.mcancel != nil {
 		c.mcancel()
 	}
 	if sc := c.SecureChannel(); sc != nil {
-		sc.Close()
+		_ = sc.Close()
 		c.setSecureChannel(nil)
 	}
 
-	// https://github.com/otfabric/opcua/pull/462
+	// https://github.com/otfabric/go-opcua/pull/462
 	//
 	// do not close the c.sechanErr channel since it leads to
 	// race conditions and it gets garbage collected anyway.
@@ -713,7 +714,7 @@ func (c *Client) Close(ctx context.Context) error {
 	// anything we can do about it anyway
 	c.connMu.Lock()
 	if c.conn != nil {
-		c.conn.Close()
+		_ = c.conn.Close()
 	}
 	c.connMu.Unlock()
 
@@ -852,7 +853,7 @@ func (s *Session) MaxRequestMessageSize() uint32 {
 // that the server sent in Create Session Response. The default PolicyID
 // "Anonymous" wii be set if it's missing in response.
 //
-// See Part 4, 5.6.2
+// See Part 4, 5.6.2.
 func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*Session, error) {
 	sc := c.SecureChannel()
 	if sc == nil {
@@ -948,7 +949,7 @@ func anonymousPolicyID(endpoints []*ua.EndpointDescription) string {
 // the client already has a session it will be closed. To retain the current
 // session call DetachSession.
 //
-// See Part 4, 5.6.3
+// See Part 4, 5.6.3.
 func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 	sc := c.SecureChannel()
 	if sc == nil {
@@ -1009,12 +1010,12 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 
 		// close the previous session
 		//
-		// https://github.com/otfabric/opcua/issues/474
+		// https://github.com/otfabric/go-opcua/issues/474
 		//
 		// We decided not to check the error of CloseSession() since we
 		// can't do much about it anyway and it creates a race in the
 		// re-connection logic.
-		c.CloseSession(ctx)
+		_ = c.CloseSession(ctx)
 
 		c.setSession(s)
 		return nil
@@ -1023,7 +1024,7 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 
 // CloseSession closes the current session.
 //
-// See Part 4, 5.6.4
+// See Part 4, 5.6.4.
 func (c *Client) CloseSession(ctx context.Context) error {
 	stats.Client().Add("CloseSession", 1)
 	if err := c.closeSession(ctx, c.Session()); err != nil {
@@ -1239,7 +1240,7 @@ func parseQualifiedPath(path string) ([]*ua.QualifiedName, error) {
 	return out, nil
 }
 
-// FindServers finds the servers available at an endpoint
+// FindServers finds the servers available at an endpoint.
 func (c *Client) FindServers(ctx context.Context) (*ua.FindServersResponse, error) {
 	stats.Client().Add("FindServers", 1)
 
@@ -1249,7 +1250,7 @@ func (c *Client) FindServers(ctx context.Context) (*ua.FindServersResponse, erro
 	return send[ua.FindServersResponse](ctx, c, req)
 }
 
-// FindServersOnNetwork finds the servers available at an endpoint
+// FindServersOnNetwork finds the servers available at an endpoint.
 func (c *Client) FindServersOnNetwork(ctx context.Context) (*ua.FindServersOnNetworkResponse, error) {
 	stats.Client().Add("FindServersOnNetwork", 1)
 
@@ -1394,7 +1395,7 @@ func (c *Client) BrowseNext(ctx context.Context, req *ua.BrowseNextRequest) (*ua
 
 // RegisterNodes registers node ids for more efficient reads.
 //
-// Part 4, Section 5.8.5
+// Part 4, Section 5.8.5.
 func (c *Client) RegisterNodes(ctx context.Context, req *ua.RegisterNodesRequest) (*ua.RegisterNodesResponse, error) {
 	stats.Client().Add("RegisterNodes", 1)
 	stats.Client().Add("NodesToRegister", int64(len(req.NodesToRegister)))
@@ -1404,7 +1405,7 @@ func (c *Client) RegisterNodes(ctx context.Context, req *ua.RegisterNodesRequest
 
 // UnregisterNodes unregisters node ids previously registered with RegisterNodes.
 //
-// Part 4, Section 5.8.6
+// Part 4, Section 5.8.6.
 func (c *Client) UnregisterNodes(ctx context.Context, req *ua.UnregisterNodesRequest) (*ua.UnregisterNodesResponse, error) {
 	stats.Client().Add("UnregisterNodes", 1)
 	stats.Client().Add("NodesToUnregister", int64(len(req.NodesToUnregister)))
@@ -1415,7 +1416,7 @@ func (c *Client) UnregisterNodes(ctx context.Context, req *ua.UnregisterNodesReq
 // SetPublishingMode enables or disables publishing of notification messages
 // for one or more subscriptions.
 //
-// Part 4, Section 5.13.4
+// Part 4, Section 5.13.4.
 func (c *Client) SetPublishingMode(ctx context.Context, publishingEnabled bool, subscriptionIDs ...uint32) (*ua.SetPublishingModeResponse, error) {
 	stats.Client().Add("SetPublishingMode", 1)
 
@@ -1429,7 +1430,7 @@ func (c *Client) SetPublishingMode(ctx context.Context, publishingEnabled bool, 
 
 // AddNodes adds one or more nodes to the server address space.
 //
-// Part 4, Section 5.7.2
+// Part 4, Section 5.7.2.
 func (c *Client) AddNodes(ctx context.Context, req *ua.AddNodesRequest) (*ua.AddNodesResponse, error) {
 	stats.Client().Add("AddNodes", 1)
 	stats.Client().Add("NodesToAdd", int64(len(req.NodesToAdd)))
@@ -1439,7 +1440,7 @@ func (c *Client) AddNodes(ctx context.Context, req *ua.AddNodesRequest) (*ua.Add
 
 // DeleteNodes deletes one or more nodes from the server address space.
 //
-// Part 4, Section 5.7.3
+// Part 4, Section 5.7.3.
 func (c *Client) DeleteNodes(ctx context.Context, req *ua.DeleteNodesRequest) (*ua.DeleteNodesResponse, error) {
 	stats.Client().Add("DeleteNodes", 1)
 	stats.Client().Add("NodesToDelete", int64(len(req.NodesToDelete)))
@@ -1449,7 +1450,7 @@ func (c *Client) DeleteNodes(ctx context.Context, req *ua.DeleteNodesRequest) (*
 
 // AddReferences adds one or more references to one or more nodes.
 //
-// Part 4, Section 5.7.4
+// Part 4, Section 5.7.4.
 func (c *Client) AddReferences(ctx context.Context, req *ua.AddReferencesRequest) (*ua.AddReferencesResponse, error) {
 	stats.Client().Add("AddReferences", 1)
 	stats.Client().Add("ReferencesToAdd", int64(len(req.ReferencesToAdd)))
@@ -1459,7 +1460,7 @@ func (c *Client) AddReferences(ctx context.Context, req *ua.AddReferencesRequest
 
 // DeleteReferences deletes one or more references from one or more nodes.
 //
-// Part 4, Section 5.7.5
+// Part 4, Section 5.7.5.
 func (c *Client) DeleteReferences(ctx context.Context, req *ua.DeleteReferencesRequest) (*ua.DeleteReferencesResponse, error) {
 	stats.Client().Add("DeleteReferences", 1)
 	stats.Client().Add("ReferencesToDelete", int64(len(req.ReferencesToDelete)))
@@ -1545,7 +1546,7 @@ func (c *Client) HistoryReadAtTime(ctx context.Context, nodes []*ua.HistoryReadV
 
 // HistoryUpdateData updates historical data values for one or more nodes.
 //
-// Part 4, Section 5.10.5 / Part 11, Section 6.8.2
+// Part 4, Section 5.10.5 / Part 11, Section 6.8.2.
 func (c *Client) HistoryUpdateData(ctx context.Context, details ...*ua.UpdateDataDetails) (*ua.HistoryUpdateResponse, error) {
 	stats.Client().Add("HistoryUpdateData", 1)
 
@@ -1567,7 +1568,7 @@ func (c *Client) HistoryUpdateData(ctx context.Context, details ...*ua.UpdateDat
 
 // HistoryUpdateEvents updates historical events for one or more nodes.
 //
-// Part 4, Section 5.10.5 / Part 11, Section 6.8.4
+// Part 4, Section 5.10.5 / Part 11, Section 6.8.4.
 func (c *Client) HistoryUpdateEvents(ctx context.Context, details ...*ua.UpdateEventDetails) (*ua.HistoryUpdateResponse, error) {
 	stats.Client().Add("HistoryUpdateEvents", 1)
 
@@ -1589,7 +1590,7 @@ func (c *Client) HistoryUpdateEvents(ctx context.Context, details ...*ua.UpdateE
 
 // HistoryDeleteRawModified deletes raw or modified historical data within a time range.
 //
-// Part 4, Section 5.10.5 / Part 11, Section 6.8.5
+// Part 4, Section 5.10.5 / Part 11, Section 6.8.5.
 func (c *Client) HistoryDeleteRawModified(ctx context.Context, details ...*ua.DeleteRawModifiedDetails) (*ua.HistoryUpdateResponse, error) {
 	stats.Client().Add("HistoryDeleteRawModified", 1)
 
@@ -1611,7 +1612,7 @@ func (c *Client) HistoryDeleteRawModified(ctx context.Context, details ...*ua.De
 
 // HistoryDeleteAtTime deletes historical data values at specific timestamps.
 //
-// Part 4, Section 5.10.5 / Part 11, Section 6.8.6
+// Part 4, Section 5.10.5 / Part 11, Section 6.8.6.
 func (c *Client) HistoryDeleteAtTime(ctx context.Context, details ...*ua.DeleteAtTimeDetails) (*ua.HistoryUpdateResponse, error) {
 	stats.Client().Add("HistoryDeleteAtTime", 1)
 
@@ -1633,7 +1634,7 @@ func (c *Client) HistoryDeleteAtTime(ctx context.Context, details ...*ua.DeleteA
 
 // HistoryDeleteEvents deletes historical events matching specific event IDs.
 //
-// Part 4, Section 5.10.5 / Part 11, Section 6.8.7
+// Part 4, Section 5.10.5 / Part 11, Section 6.8.7.
 func (c *Client) HistoryDeleteEvents(ctx context.Context, details ...*ua.DeleteEventDetails) (*ua.HistoryUpdateResponse, error) {
 	stats.Client().Add("HistoryDeleteEvents", 1)
 

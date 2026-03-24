@@ -8,9 +8,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 var (
@@ -31,6 +31,7 @@ type ViewService struct {
 	cps map[string]*continuationPoint // keyed by hex-encoded token
 }
 
+// Browse implements the OPC UA Browse service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.2
 func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 
@@ -98,7 +99,7 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 // storeContinuation saves remaining references and returns a continuation point token.
 func (s *ViewService) storeContinuation(refs []*ua.ReferenceDescription) []byte {
 	var buf [16]byte
-	rand.Read(buf[:])
+	_, _ = rand.Read(buf[:])
 	token := hex.EncodeToString(buf[:])
 
 	stored := make([]*ua.ReferenceDescription, len(refs))
@@ -113,6 +114,7 @@ func (s *ViewService) storeContinuation(refs []*ua.ReferenceDescription) []byte 
 	return []byte(token)
 }
 
+// BrowseNext implements the OPC UA BrowseNext service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.3
 func (s *ViewService) BrowseNext(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -232,6 +234,7 @@ func getSubRefs(srv *Server, nid *ua.NodeID) []*ua.NodeID {
 	return refs
 }
 
+// TranslateBrowsePathsToNodeIDs implements the OPC UA TranslateBrowsePathsToNodeIDs service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.4
 func (s *ViewService) TranslateBrowsePathsToNodeIDs(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -334,6 +337,7 @@ func (s *ViewService) translatePath(bp *ua.BrowsePath) *ua.BrowsePathResult {
 	}
 }
 
+// RegisterNodes implements the OPC UA RegisterNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.5
 func (s *ViewService) RegisterNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -368,6 +372,7 @@ func (s *ViewService) RegisterNodes(ctx context.Context, sc *uasc.SecureChannel,
 	}, nil
 }
 
+// UnregisterNodes implements the OPC UA UnregisterNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.6
 func (s *ViewService) UnregisterNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)

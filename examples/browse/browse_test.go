@@ -5,10 +5,10 @@ import (
 	"log"
 	"testing"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server"
-	"github.com/otfabric/opcua/testutil"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/testutil"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func TestBrowse(t *testing.T) {
@@ -46,8 +46,8 @@ func populateServer(s *server.Server) {
 	// here we are choosing to add the namespaces to the root/object folder
 	// to do this we first need to get the root namespace object folder so we
 	// get the object node
-	root_ns, _ := s.Namespace(0)
-	root_obj_node := root_ns.Objects()
+	rootNs, _ := s.Namespace(0)
+	rootObjNode := rootNs.Objects()
 
 	// Now we'll add a node namespace.
 	nodeNS := server.NewNodeNameSpace(s, "NodeNamespace")
@@ -55,12 +55,12 @@ func populateServer(s *server.Server) {
 
 	// add the reference for this namespace's root object folder to the server's root object folder
 	// but you can add a reference to whatever node(s) you need
-	nns_obj := nodeNS.Objects()
-	root_obj_node.AddRef(nns_obj, id.HasComponent, true)
+	nnsObj := nodeNS.Objects()
+	rootObjNode.AddRef(nnsObj, id.HasComponent, true)
 
 	// Create some nodes for it.  Here we are usin gthe AddNewVariableNode utility function to create a new variable node
 	// with an integer node ID that is automatically assigned. (ns=<namespace id>,s=<auto assigned>)
 	// be sure to add the reference to the node somewhere if desired, or clients won't be able to browse it.
 	var1 := nodeNS.AddNewVariableNode("TestVar1", float32(123.45))
-	nns_obj.AddRef(var1, id.HasComponent, true)
+	nnsObj.AddRef(var1, id.HasComponent, true)
 }

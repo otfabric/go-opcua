@@ -5,8 +5,8 @@
 package opcua
 
 import (
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // ReferenceTypeDisplayName returns a display string for a reference type NodeID.

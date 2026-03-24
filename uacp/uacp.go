@@ -7,13 +7,13 @@ package uacp
 import (
 	"fmt"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // MessageType definitions.
 //
-// Specification: Part 6, 7.1.2.2
+// Specification: Part 6, 7.1.2.2.
 const (
 	MessageTypeHello        = "HEL"
 	MessageTypeAcknowledge  = "ACK"
@@ -23,7 +23,7 @@ const (
 
 // ChunkType definitions.
 //
-// Specification: Part 6, 6.7.2.2
+// Specification: Part 6, 6.7.2.2.
 const (
 	ChunkTypeIntermediate = 'C'
 	ChunkTypeFinal        = 'F'
@@ -32,7 +32,7 @@ const (
 
 // Header represents a OPC UA Connection Header.
 //
-// Specification: Part 6, 7.1.2.2
+// Specification: Part 6, 7.1.2.2.
 type Header struct {
 	MessageType string
 	ChunkType   byte
@@ -53,14 +53,14 @@ func (h *Header) Encode() ([]byte, error) {
 		return nil, fmt.Errorf("%w: %q", errors.ErrInvalidMessageType, h.MessageType)
 	}
 	buf.Write([]byte(h.MessageType))
-	buf.WriteByte(h.ChunkType)
+	_ = buf.WriteByte(h.ChunkType)
 	buf.WriteUint32(h.MessageSize)
 	return buf.Bytes(), buf.Error()
 }
 
 // Hello represents a OPC UA Hello.
 //
-// Specification: Part6, 7.1.2.3
+// Specification: Part6, 7.1.2.3.
 type Hello struct {
 	Version        uint32
 	ReceiveBufSize uint32
@@ -94,7 +94,7 @@ func (h *Hello) Encode() ([]byte, error) {
 
 // Acknowledge represents a OPC UA Acknowledge.
 //
-// Specification: Part6, 7.1.2.4
+// Specification: Part6, 7.1.2.4.
 type Acknowledge struct {
 	Version        uint32
 	ReceiveBufSize uint32
@@ -125,7 +125,7 @@ func (a *Acknowledge) Encode() ([]byte, error) {
 
 // ReverseHello represents a OPC UA ReverseHello.
 //
-// Specification: Part6, 7.1.2.6
+// Specification: Part6, 7.1.2.6.
 type ReverseHello struct {
 	ServerURI   string
 	EndpointURL string
@@ -147,7 +147,7 @@ func (r *ReverseHello) Encode() ([]byte, error) {
 
 // Error represents a OPC UA Error.
 //
-// Specification: Part6, 7.1.2.5
+// Specification: Part6, 7.1.2.5.
 type Error struct {
 	ErrorCode uint32
 	Reason    string

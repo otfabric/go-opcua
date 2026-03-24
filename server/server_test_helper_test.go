@@ -1,9 +1,9 @@
 package server
 
 import (
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server/attrs"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/attrs"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // newTestServer creates a Server suitable for unit tests, without starting
@@ -36,7 +36,7 @@ func addTestNamespace(s *Server) (*NodeNameSpace, *Node) {
 
 	// Read-only bool variable
 	n := ns.AddNewVariableStringNode("ro_bool", true)
-	n.SetAttribute(ua.AttributeIDUserAccessLevel, &ua.DataValue{
+	_ = n.SetAttribute(ua.AttributeIDUserAccessLevel, &ua.DataValue{
 		EncodingMask: ua.DataValueValue,
 		Value:        ua.MustVariant(uint32(ua.AccessLevelTypeCurrentRead)),
 	})

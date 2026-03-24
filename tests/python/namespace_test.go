@@ -6,7 +6,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/otfabric/opcua"
+	"github.com/otfabric/go-opcua"
 	"github.com/stretchr/testify/require"
 )
 

@@ -3,8 +3,8 @@ package server
 import (
 	"context"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // AccessController defines the interface for controlling access to server operations.

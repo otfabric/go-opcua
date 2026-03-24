@@ -4,7 +4,7 @@
 
 package opcua
 
-import "github.com/otfabric/opcua/logger"
+import "github.com/otfabric/go-opcua/logger"
 
 // Logger is a printf-style leveled logging interface.
 type Logger = logger.Logger

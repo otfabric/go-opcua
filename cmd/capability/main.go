@@ -40,7 +40,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading %s: %v", *in, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	var entries []entry
 	sc := bufio.NewScanner(f)

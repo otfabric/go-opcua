@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server/attrs"
-	"github.com/otfabric/opcua/server/refs"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/attrs"
+	"github.com/otfabric/go-opcua/server/refs"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 type Attributes map[ua.AttributeID]*ua.DataValue
@@ -228,8 +228,8 @@ func (n *Node) Attribute(id ua.AttributeID) (*AttrValue, error) {
 func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
-	switch {
-	case id == ua.AttributeIDValue:
+	switch id {
+	case ua.AttributeIDValue:
 		if !n.access(ua.AccessLevelTypeCurrentWrite) {
 			return ua.StatusBadUserAccessDenied
 		}

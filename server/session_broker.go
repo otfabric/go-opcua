@@ -7,8 +7,8 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 type session struct {

@@ -2,6 +2,7 @@
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
+// Package server implements an OPC UA server with configurable namespaces, security, and services.
 package server
 
 import (
@@ -15,17 +16,22 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/schema"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
-	"github.com/otfabric/opcua/uapolicy"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/schema"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 //go:generate go run ../cmd/predefined-nodes/main.go
 
 const defaultListenAddr = "opc.tcp://localhost:0"
+
+var (
+	builtinNodeSetOnce sync.Once
+	builtinNodeSet     schema.UANodeSet
+)
 
 // Server is a high-level OPC-UA server.
 //
@@ -61,6 +67,8 @@ type Server struct {
 
 	// methods stores registered server-side method handlers keyed by "objectID\x00methodID".
 	methods map[string]MethodHandler
+
+	cancelMonitor context.CancelFunc
 
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
@@ -177,7 +185,7 @@ func New(opts ...Option) *Server {
 			CurrentTime: time.Now(),
 			State:       ua.ServerStateSuspended,
 			BuildInfo: &ua.BuildInfo{
-				ProductURI:       "https://github.com/otfabric/opcua",
+				ProductURI:       "https://github.com/otfabric/go-opcua",
 				ManufacturerName: cfg.manufacturerName,
 				ProductName:      cfg.productName,
 				SoftwareVersion:  "0.0.0-dev",
@@ -189,15 +197,11 @@ func New(opts ...Option) *Server {
 		},
 	}
 
-	// init server address space
-	//for _, n := range PredefinedNodes() {
-	//s.namespaces[0].AddNode(n)
-	//}
-
-	// this nodeset is pre-compiled into the binary and contains a known set of nodes
-	// so it should *always* work ok.
-	var nodes schema.UANodeSet
-	xml.Unmarshal(schema.OpcUaNodeSet2, &nodes)
+	builtinNodeSetOnce.Do(func() {
+		if err := xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet); err != nil {
+			panic(fmt.Sprintf("failed to unmarshal built-in node set: %v", err))
+		}
+	})
 
 	n0, ok := s.namespaces[0].(*NodeNameSpace)
 	n0.srv = s
@@ -205,7 +209,9 @@ func New(opts ...Option) *Server {
 		// this should never happen because we just set namespace 0 to be a node namespace
 		panic("Namespace 0 is not a node namespace!")
 	}
-	s.ImportNodeSet(&nodes)
+	if err := s.ImportNodeSet(&builtinNodeSet); err != nil {
+		panic(fmt.Sprintf("failed to import built-in node set: %v", err))
+	}
 
 	s.namespaces[0].AddNode(CurrentTimeNode())
 	s.namespaces[0].AddNode(NamespacesNode(s))
@@ -298,7 +304,7 @@ func (s *Server) URLs() []string {
 
 // Start initializes and starts a Server listening on addr
 // If s was not initialized with NewServer(), addr defaults
-// to localhost:0 to let the OS select a random port
+// to localhost:0 to let the OS select a random port.
 func (s *Server) Start(ctx context.Context) error {
 	var err error
 
@@ -325,8 +331,11 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cb = newChannelBroker(s.cfg.logger, s.url)
 	}
 
-	go s.acceptAndRegister(ctx, s.l)
-	go s.monitorConnections(ctx)
+	mctx, cancel := context.WithCancel(ctx)
+	s.cancelMonitor = cancel
+
+	go s.acceptAndRegister(mctx, s.l)
+	go s.monitorConnections(mctx)
 
 	return nil
 }
@@ -338,13 +347,17 @@ func (s *Server) setServerState(state ua.ServerState) {
 }
 
 // Close gracefully shuts the server down by closing all open connections,
-// and stops listening on all endpoints
+// and stops listening on all endpoints.
 func (s *Server) Close() error {
 	s.setServerState(ua.ServerStateShutdown)
 
+	if s.cancelMonitor != nil {
+		s.cancelMonitor()
+	}
+
 	// Close the listener, preventing new sessions from starting
 	if s.l != nil {
-		s.l.Close()
+		_ = s.l.Close()
 	}
 
 	// Shut down all secure channels and UACP connections
@@ -365,8 +378,8 @@ func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
 			if err != nil {
 				switch x := err.(type) {
 				case *net.OpError:
-					// socket closed. Cannot recover from this.
-					s.cfg.logger.Errorf("socket closed error=%v", err)
+					// Listener was closed (normal during shutdown).
+					s.cfg.logger.Debugf("listener closed error=%v", err)
 					return
 				case temporary:
 					if x.Temporary() {
@@ -378,14 +391,14 @@ func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
 				}
 			}
 
-			go s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey)
+			go func() { _ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey) }()
 			s.cfg.logger.Infof("registered connection remote_addr=%v", c.RemoteAddr())
 		}
 	}
 }
 
 // monitorConnections reads messages off the secure channel connection and
-// sends the message to the service handler
+// sends the message to the service handler.
 func (s *Server) monitorConnections(ctx context.Context) {
 	for ctx.Err() == nil {
 		msg := s.cb.ReadMessage(ctx)
@@ -422,7 +435,7 @@ func (s *Server) monitorConnections(ctx context.Context) {
 	}
 }
 
-// initEndpoints builds the endpoint list from the server's configuration
+// initEndpoints builds the endpoint list from the server's configuration.
 func (s *Server) initEndpoints() {
 	var endpoints []*ua.EndpointDescription
 	for _, sec := range s.cfg.enabledSec {

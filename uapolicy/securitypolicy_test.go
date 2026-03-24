@@ -11,7 +11,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
 
@@ -236,10 +236,10 @@ func TestZeroStruct(t *testing.T) {
 	// Call all the methods and make sure they don't panic due to nil pointers
 	require.NotPanics(t, func() { ze.BlockSize() })
 	require.NotPanics(t, func() { ze.PlaintextBlockSize() })
-	require.NotPanics(t, func() { ze.Encrypt(plaintext) })
-	require.NotPanics(t, func() { ze.Decrypt(plaintext) })
-	require.NotPanics(t, func() { ze.Signature(plaintext) })
-	require.NotPanics(t, func() { ze.VerifySignature(plaintext, plaintext) })
+	require.NotPanics(t, func() { _, _ = ze.Encrypt(plaintext) })
+	require.NotPanics(t, func() { _, _ = ze.Decrypt(plaintext) })
+	require.NotPanics(t, func() { _, _ = ze.Signature(plaintext) })
+	require.NotPanics(t, func() { _ = ze.VerifySignature(plaintext, plaintext) })
 	require.NotPanics(t, func() { ze.NonceLength() })
 	require.NotPanics(t, func() { ze.SignatureLength() })
 	require.NotPanics(t, func() { ze.EncryptionURI() })

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,7 +19,7 @@ func TestConn(t *testing.T) {
 		ep := "opc.tcp://127.0.0.1:4840/foo/bar"
 		ln, err := Listen(context.Background(), ep, nil)
 		require.NoError(t, err)
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
@@ -32,7 +32,7 @@ func TestConn(t *testing.T) {
 				acceptErr <- err
 				return
 			}
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 			close(done)
 		}()
 
@@ -66,7 +66,7 @@ func TestClientWrite(t *testing.T) {
 	ep := "opc.tcp://127.0.0.1:4840/foo/bar"
 	ln, err := Listen(context.Background(), ep, nil)
 	require.NoError(t, err, "Listen failed")
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -75,7 +75,7 @@ func TestClientWrite(t *testing.T) {
 	done := make(chan int)
 	acceptErr := make(chan error, 1)
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		var err error
 		srvConn, err = ln.Accept(ctx)
 		if err != nil {
@@ -120,7 +120,7 @@ func TestServerWrite(t *testing.T) {
 	ep := "opc.tcp://127.0.0.1:4840/foo/bar"
 	ln, err := Listen(context.Background(), ep, nil)
 	require.NoError(t, err, "Listen failed")
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -129,7 +129,7 @@ func TestServerWrite(t *testing.T) {
 	done := make(chan int)
 	acceptErr := make(chan error, 1)
 	go func() {
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		var err error
 		srvConn, err = ln.Accept(ctx)
 		if err != nil {

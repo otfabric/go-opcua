@@ -25,7 +25,7 @@ const (
 
 // DataValue is always preceded by a mask that indicates which fields are present in the stream.
 //
-// Specification: Part 6, 5.2.2.17
+// Specification: Part 6, 5.2.2.17.
 type DataValue struct {
 	EncodingMask      byte
 	Value             *Variant
@@ -114,7 +114,7 @@ func (d *DataValue) UpdateMask() {
 
 // GUID represents GUID in binary stream. It is a 16-byte globally unique identifier.
 //
-// Specification: Part 6, 5.1.3
+// Specification: Part 6, 5.1.3.
 type GUID struct {
 	Data1 uint32
 	Data2 uint16
@@ -126,7 +126,7 @@ type GUID struct {
 // Input should be GUID string of 16 hexadecimal characters like 1111AAAA-22BB-33CC-44DD-55EE77FF9900.
 // Dash can be omitted, and alphabets are not case-sensitive.
 func NewGUID(guid string) *GUID {
-	h := strings.Replace(guid, "-", "", -1)
+	h := strings.ReplaceAll(guid, "-", "")
 	b, err := hex.DecodeString(h)
 	if err != nil {
 		return nil
@@ -189,7 +189,7 @@ const (
 // For that reason, the encoding uses a bit mask to indicate which fields
 // are actually present in the encoded form.
 //
-// Specification: Part 6, 5.2.2.14
+// Specification: Part 6, 5.2.2.14.
 type LocalizedText struct {
 	EncodingMask uint8
 	Locale       string
