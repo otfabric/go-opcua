@@ -17,11 +17,6 @@ linters:
     staticcheck:
       checks:
         - "all"
-  exclusions:
-    rules:
-      - linters: [staticcheck]
-        text: "ST1003"
-        path: "(_gen\\.go$|^schema/)"
 
 formatters:
   enable:

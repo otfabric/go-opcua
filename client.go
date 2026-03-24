@@ -1478,7 +1478,7 @@ func (c *Client) HistoryReadEvent(ctx context.Context, nodes []*ua.HistoryReadVa
 		NodesToRead:        nodes,
 		// Part 11, 6.4 HistoryReadDetails parameters
 		HistoryReadDetails: &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadEventDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadEventDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        details,
 		},
@@ -1497,7 +1497,7 @@ func (c *Client) HistoryReadRawModified(ctx context.Context, nodes []*ua.History
 		NodesToRead:        nodes,
 		// Part 11, 6.4 HistoryReadDetails parameters
 		HistoryReadDetails: &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadRawModifiedDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadRawModifiedDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        details,
 		},
@@ -1516,7 +1516,7 @@ func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryRe
 		NodesToRead:        nodes,
 		// Part 11, 6.4 HistoryReadDetails parameters
 		HistoryReadDetails: &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadProcessedDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadProcessedDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        details,
 		},
@@ -1535,7 +1535,7 @@ func (c *Client) HistoryReadAtTime(ctx context.Context, nodes []*ua.HistoryReadV
 		NodesToRead:        nodes,
 		//Part 11, 6.4.5 ReadAtTimeDetails parameters
 		HistoryReadDetails: &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadAtTimeDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadAtTimeDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        details,
 		},
@@ -1553,7 +1553,7 @@ func (c *Client) HistoryUpdateData(ctx context.Context, details ...*ua.UpdateDat
 	eos := make([]*ua.ExtensionObject, len(details))
 	for i, d := range details {
 		eos[i] = &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.UpdateDataDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.UpdateDataDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        d,
 		}
@@ -1575,7 +1575,7 @@ func (c *Client) HistoryUpdateEvents(ctx context.Context, details ...*ua.UpdateE
 	eos := make([]*ua.ExtensionObject, len(details))
 	for i, d := range details {
 		eos[i] = &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.UpdateEventDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.UpdateEventDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        d,
 		}
@@ -1597,7 +1597,7 @@ func (c *Client) HistoryDeleteRawModified(ctx context.Context, details ...*ua.De
 	eos := make([]*ua.ExtensionObject, len(details))
 	for i, d := range details {
 		eos[i] = &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.DeleteRawModifiedDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.DeleteRawModifiedDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        d,
 		}
@@ -1619,7 +1619,7 @@ func (c *Client) HistoryDeleteAtTime(ctx context.Context, details ...*ua.DeleteA
 	eos := make([]*ua.ExtensionObject, len(details))
 	for i, d := range details {
 		eos[i] = &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.DeleteAtTimeDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.DeleteAtTimeDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        d,
 		}
@@ -1641,7 +1641,7 @@ func (c *Client) HistoryDeleteEvents(ctx context.Context, details ...*ua.DeleteE
 	eos := make([]*ua.ExtensionObject, len(details))
 	for i, d := range details {
 		eos[i] = &ua.ExtensionObject{
-			TypeID:       ua.NewFourByteExpandedNodeID(0, id.DeleteEventDetails_Encoding_DefaultBinary),
+			TypeID:       ua.NewFourByteExpandedNodeID(0, id.DeleteEventDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
 			Value:        d,
 		}
@@ -1657,7 +1657,7 @@ func (c *Client) HistoryDeleteEvents(ctx context.Context, details ...*ua.DeleteE
 // NamespaceArray returns the list of namespaces registered on the server.
 func (c *Client) NamespaceArray(ctx context.Context) ([]string, error) {
 	stats.Client().Add("NamespaceArray", 1)
-	node := c.Node(ua.NewNumericNodeID(0, id.Server_NamespaceArray))
+	node := c.Node(ua.NewNumericNodeID(0, id.ServerNamespaceArray))
 	v, err := node.Value(ctx)
 	if err != nil {
 		return nil, err
@@ -1922,7 +1922,7 @@ func (c *Client) CallMethod(ctx context.Context, objectID, methodID *ua.NodeID, 
 
 // ServerStatus reads the server's ServerStatusDataType from node i=2256.
 func (c *Client) ServerStatus(ctx context.Context) (*ua.ServerStatusDataType, error) {
-	node := c.Node(ua.NewNumericNodeID(0, id.Server_ServerStatus))
+	node := c.Node(ua.NewNumericNodeID(0, id.ServerServerStatus))
 	v, err := node.Value(ctx)
 	if err != nil {
 		return nil, err

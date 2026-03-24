@@ -11,8 +11,8 @@ var OpcUaNodeSet2 []byte
 // UANodeSet ...
 type UANodeSet struct {
 	LastModifiedAttr string             `xml:"LastModified,attr,omitempty"`
-	NamespaceUris    *UriTable          `xml:"NamespaceUris"`
-	ServerUris       *UriTable          `xml:"ServerUris"`
+	NamespaceUris    *URITable          `xml:"NamespaceUris"`
+	ServerUris       *URITable          `xml:"ServerUris"`
 	Models           *ModelTable        `xml:"Models"`
 	Aliases          *AliasTable        `xml:"Aliases"`
 	Extensions       *ListOfExtensions  `xml:"Extensions"`
@@ -29,10 +29,10 @@ type UANodeSet struct {
 // UANodeSetChanges ...
 type UANodeSetChanges struct {
 	LastModifiedAttr       string              `xml:"LastModified,attr,omitempty"`
-	TransactionIdAttr      string              `xml:"TransactionId,attr"`
+	TransactionIDAttr      string              `xml:"TransactionId,attr"`
 	AcceptAllOrNothingAttr bool                `xml:"AcceptAllOrNothing,attr,omitempty"`
-	NamespaceUris          *UriTable           `xml:"NamespaceUris"`
-	ServerUris             *UriTable           `xml:"ServerUris"`
+	NamespaceUris          *URITable           `xml:"NamespaceUris"`
+	ServerUris             *URITable           `xml:"ServerUris"`
 	Aliases                *AliasTable         `xml:"Aliases"`
 	Extensions             *ListOfExtensions   `xml:"Extensions"`
 	NodesToAdd             *NodesToAdd         `xml:"NodesToAdd"`
@@ -44,7 +44,7 @@ type UANodeSetChanges struct {
 // UANodeSetChangesStatus ...
 type UANodeSetChangesStatus struct {
 	LastModifiedAttr   string             `xml:"LastModified,attr,omitempty"`
-	TransactionIdAttr  string             `xml:"TransactionId,attr"`
+	TransactionIDAttr  string             `xml:"TransactionId,attr"`
 	NodesToAdd         *NodeSetStatusList `xml:"NodesToAdd"`
 	ReferencesToAdd    *NodeSetStatusList `xml:"ReferencesToAdd"`
 	NodesToDelete      *NodeSetStatusList `xml:"NodesToDelete"`
@@ -71,7 +71,7 @@ type NodesToDelete struct {
 // NodeToDelete ...
 type NodeToDelete struct {
 	DeleteReverseReferencesAttr bool `xml:"DeleteReverseReferences,attr,omitempty"`
-	*NodeId
+	*NodeID
 }
 
 // ReferencesToChange ...
@@ -84,7 +84,7 @@ type ReferenceChange struct {
 	SourceAttr        string `xml:"Source,attr"`
 	ReferenceTypeAttr string `xml:"ReferenceType,attr"`
 	IsForwardAttr     *bool  `xml:"IsForward,attr,omitempty"` // EDIT: this was changed from a bool to a *bool because the default value if this attribute isn't present is true
-	*NodeId
+	*NodeID
 }
 
 // NodeSetStatus ...
@@ -98,15 +98,15 @@ type NodeSetStatusList struct {
 	Status []*NodeSetStatus `xml:"Status"`
 }
 
-// UriTable ...
-type UriTable struct {
-	Uri []string `xml:"Uri"`
+// URITable ...
+type URITable struct {
+	URI []string `xml:"Uri"`
 }
 
 // ModelTableEntry ...
 type ModelTableEntry struct {
-	ModelUriAttr           string                 `xml:"ModelUri,attr"`
-	XmlSchemaUriAttr       string                 `xml:"XmlSchemaUri,attr,omitempty"`
+	ModelURIAttr           string                 `xml:"ModelUri,attr"`
+	XMLSchemaURIAttr       string                 `xml:"XmlSchemaUri,attr,omitempty"`
 	VersionAttr            string                 `xml:"Version,attr,omitempty"`
 	PublicationDateAttr    string                 `xml:"PublicationDate,attr,omitempty"`
 	AccessRestrictionsAttr uint16                 `xml:"AccessRestrictions,attr,omitempty"`
@@ -119,21 +119,21 @@ type ModelTable struct {
 	Model []*ModelTableEntry `xml:"Model"`
 }
 
-// NodeId ...
-type NodeId string
+// NodeID ...
+type NodeID string
 
 // QualifiedName ...
 type QualifiedName string
 
-// NodeIdAlias ...
-type NodeIdAlias struct {
+// NodeIDAlias ...
+type NodeIDAlias struct {
 	AliasAttr string `xml:"Alias,attr"`
 	Value     string `xml:",chardata"`
 }
 
 // AliasTable ...
 type AliasTable struct {
-	Alias []*NodeIdAlias `xml:"Alias"`
+	Alias []*NodeIDAlias `xml:"Alias"`
 }
 
 // Locale ...
@@ -206,7 +206,7 @@ type ReleaseStatus string
 
 // UANode ...
 type UANode struct {
-	NodeIdAttr             string                 `xml:"NodeId,attr"`
+	NodeIDAttr             string                 `xml:"NodeId,attr"`
 	BrowseNameAttr         string                 `xml:"BrowseName,attr"`
 	WriteMaskAttr          uint32                 `xml:"WriteMask,attr,omitempty"`
 	UserWriteMaskAttr      uint32                 `xml:"UserWriteMask,attr,omitempty"`
@@ -225,7 +225,7 @@ type UANode struct {
 
 // UAInstance ...
 type UAInstance struct {
-	ParentNodeIdAttr string `xml:"ParentNodeId,attr,omitempty"`
+	ParentNodeIDAttr string `xml:"ParentNodeId,attr,omitempty"`
 	*UANode
 }
 
@@ -263,7 +263,7 @@ type UAMethodArgument struct {
 type UAMethod struct {
 	ExecutableAttr          bool                `xml:"Executable,attr,omitempty"`
 	UserExecutableAttr      bool                `xml:"UserExecutable,attr,omitempty"`
-	MethodDeclarationIdAttr string              `xml:"MethodDeclarationId,attr,omitempty"`
+	MethodDeclarationIDAttr string              `xml:"MethodDeclarationId,attr,omitempty"`
 	ArgumentDescription     []*UAMethodArgument `xml:"ArgumentDescription"`
 	*UAInstance
 }

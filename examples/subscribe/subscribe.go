@@ -183,7 +183,7 @@ func eventRequest(nodeID *ua.NodeID) (*ua.MonitoredItemCreateRequest, []string) 
 					{
 						EncodingMask: 1,
 						TypeID: &ua.ExpandedNodeID{
-							NodeID: ua.NewNumericNodeID(0, id.SimpleAttributeOperand_Encoding_DefaultBinary),
+							NodeID: ua.NewNumericNodeID(0, id.SimpleAttributeOperandEncodingDefaultBinary),
 						},
 						Value: ua.SimpleAttributeOperand{
 							TypeDefinitionID: ua.NewNumericNodeID(0, id.BaseEventType),
@@ -194,7 +194,7 @@ func eventRequest(nodeID *ua.NodeID) (*ua.MonitoredItemCreateRequest, []string) 
 					{
 						EncodingMask: 1,
 						TypeID: &ua.ExpandedNodeID{
-							NodeID: ua.NewNumericNodeID(0, id.LiteralOperand_Encoding_DefaultBinary),
+							NodeID: ua.NewNumericNodeID(0, id.LiteralOperandEncodingDefaultBinary),
 						},
 						Value: ua.LiteralOperand{
 							Value: ua.MustVariant(uint16(0)),
@@ -213,7 +213,7 @@ func eventRequest(nodeID *ua.NodeID) (*ua.MonitoredItemCreateRequest, []string) 
 	filterExtObj := ua.ExtensionObject{
 		EncodingMask: ua.ExtensionObjectBinary,
 		TypeID: &ua.ExpandedNodeID{
-			NodeID: ua.NewNumericNodeID(0, id.EventFilter_Encoding_DefaultBinary),
+			NodeID: ua.NewNumericNodeID(0, id.EventFilterEncodingDefaultBinary),
 		},
 		Value: filter,
 	}

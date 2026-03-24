@@ -19,8 +19,8 @@ var (
 // from the spec (e.g. "Server_ServerStatus_CurrentTime").
 var shortAliases = map[string]uint32{
 	"Objects":      ObjectsFolder,
-	"CurrentTime":  Server_ServerStatus_CurrentTime,
-	"ServerStatus": Server_ServerStatus,
+	"CurrentTime":  ServerServerStatusCurrentTime,
+	"ServerStatus": ServerServerStatus,
 }
 
 func buildNameToID() {

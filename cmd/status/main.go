@@ -14,8 +14,15 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/otfabric/go-opcua/cmd/service/goname"
+	"github.com/otfabric/go-opcua/internal/goname"
 )
+
+type statusRow struct {
+	GoName      string
+	SpecName    string
+	Value       string
+	Description string
+}
 
 func main() {
 	log.SetFlags(0)
@@ -41,18 +48,20 @@ func main() {
 	// but the description is not quoted and can contain commas
 	// Therefore, do not use the csv.Reader here.
 
-	var rows [][]string
+	var rows []statusRow
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {
-		rows = append(rows, strings.SplitN(sc.Text(), ",", 3))
+		parts := strings.SplitN(sc.Text(), ",", 3)
+		specName := parts[0]
+		rows = append(rows, statusRow{
+			GoName:      "Status" + goname.Format(specName),
+			SpecName:    specName,
+			Value:       parts[1],
+			Description: parts[2],
+		})
 	}
 	if sc.Err() != nil {
 		log.Fatalf("Error parsing csv: %v", err)
-	}
-
-	// goify the name and prefix with Status
-	for i := range rows {
-		rows[i][0] = "Status" + goname.Format(rows[i][0])
 	}
 
 	var b bytes.Buffer
@@ -85,16 +94,16 @@ import "fmt"
 // StatusCode is an error type for a status code.
 type StatusCode uint32
 
-func (n StatusCode) Error() string {
-	if d, ok := StatusCodes[n]; ok {
-		return fmt.Sprintf("%s %s (0x%X)", d.Text, d.Name, uint32(n))
+func (s StatusCode) Error() string {
+	if d, ok := StatusCodes[s]; ok {
+		return fmt.Sprintf("%s %s (0x%X)", d.Text, d.Name, uint32(s))
 	}
-	return fmt.Sprintf("0x%X", uint32(n))
+	return fmt.Sprintf("0x%X", uint32(s))
 }
 
 var (
 	StatusOK StatusCode = 0x0
-	{{range .}}{{index . 0}} StatusCode = {{index . 1}}
+	{{range .}}{{.GoName}} StatusCode = {{.Value}}
 	{{end}}
 )
 
@@ -108,7 +117,7 @@ var StatusCodes = map[StatusCode]StatusCodeDesc{
 	StatusOK: {Name: "OK", Text: ""},
 	StatusUncertain: {Name: "Uncertain", Text: ""},
 	StatusBad: {Name: "Bad", Text: ""},
-	{{range .}}{{index . 0}}: { Name: "{{index . 0}}", Text: {{index . 2}} },
+	{{range .}}{{.GoName}}: { Name: "{{.GoName}}", Text: {{.Description}} },
 	{{end}}
 }
 `))

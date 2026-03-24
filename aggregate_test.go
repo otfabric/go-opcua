@@ -11,26 +11,26 @@ func TestAggregateType(t *testing.T) {
 		name   string
 		wantID uint32
 	}{
-		{"Average", id.AggregateFunction_Average},
-		{"Minimum", id.AggregateFunction_Minimum},
-		{"Maximum", id.AggregateFunction_Maximum},
-		{"Count", id.AggregateFunction_Count},
-		{"Total", id.AggregateFunction_Total},
-		{"Interpolative", id.AggregateFunction_Interpolative},
-		{"Start", id.AggregateFunction_Start},
-		{"End", id.AggregateFunction_End},
-		{"Delta", id.AggregateFunction_Delta},
-		{"Range", id.AggregateFunction_Range},
-		{"PercentGood", id.AggregateFunction_PercentGood},
-		{"PercentBad", id.AggregateFunction_PercentBad},
-		{"DurationGood", id.AggregateFunction_DurationGood},
-		{"DurationBad", id.AggregateFunction_DurationBad},
-		{"WorstQuality", id.AggregateFunction_WorstQuality},
-		{"TimeAverage", id.AggregateFunction_TimeAverage},
-		{"AnnotationCount", id.AggregateFunction_AnnotationCount},
-		{"MinimumActualTime", id.AggregateFunction_MinimumActualTime},
-		{"MaximumActualTime", id.AggregateFunction_MaximumActualTime},
-		{"NumberOfTransitions", id.AggregateFunction_NumberOfTransitions},
+		{"Average", id.AggregateFunctionAverage},
+		{"Minimum", id.AggregateFunctionMinimum},
+		{"Maximum", id.AggregateFunctionMaximum},
+		{"Count", id.AggregateFunctionCount},
+		{"Total", id.AggregateFunctionTotal},
+		{"Interpolative", id.AggregateFunctionInterpolative},
+		{"Start", id.AggregateFunctionStart},
+		{"End", id.AggregateFunctionEnd},
+		{"Delta", id.AggregateFunctionDelta},
+		{"Range", id.AggregateFunctionRange},
+		{"PercentGood", id.AggregateFunctionPercentGood},
+		{"PercentBad", id.AggregateFunctionPercentBad},
+		{"DurationGood", id.AggregateFunctionDurationGood},
+		{"DurationBad", id.AggregateFunctionDurationBad},
+		{"WorstQuality", id.AggregateFunctionWorstQuality},
+		{"TimeAverage", id.AggregateFunctionTimeAverage},
+		{"AnnotationCount", id.AggregateFunctionAnnotationCount},
+		{"MinimumActualTime", id.AggregateFunctionMinimumActualTime},
+		{"MaximumActualTime", id.AggregateFunctionMaximumActualTime},
+		{"NumberOfTransitions", id.AggregateFunctionNumberOfTransitions},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -52,8 +52,8 @@ func TestAggregateTypeCaseInsensitive(t *testing.T) {
 		if nid == nil {
 			t.Fatalf("AggregateType(%q) returned nil", name)
 		}
-		if nid.IntID() != id.AggregateFunction_Average {
-			t.Errorf("AggregateType(%q): got %d, want %d", name, nid.IntID(), id.AggregateFunction_Average)
+		if nid.IntID() != id.AggregateFunctionAverage {
+			t.Errorf("AggregateType(%q): got %d, want %d", name, nid.IntID(), id.AggregateFunctionAverage)
 		}
 	}
 }

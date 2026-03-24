@@ -98,7 +98,7 @@ func (f *FieldOperand) toExtensionObject() *ExtensionObject {
 	return &ExtensionObject{
 		EncodingMask: ExtensionObjectBinary,
 		TypeID: &ExpandedNodeID{
-			NodeID: NewNumericNodeID(0, id.SimpleAttributeOperand_Encoding_DefaultBinary),
+			NodeID: NewNumericNodeID(0, id.SimpleAttributeOperandEncodingDefaultBinary),
 		},
 		Value: SimpleAttributeOperand{
 			TypeDefinitionID: f.typeID,
@@ -112,7 +112,7 @@ func literalOperand(value interface{}) *ExtensionObject {
 	return &ExtensionObject{
 		EncodingMask: ExtensionObjectBinary,
 		TypeID: &ExpandedNodeID{
-			NodeID: NewNumericNodeID(0, id.LiteralOperand_Encoding_DefaultBinary),
+			NodeID: NewNumericNodeID(0, id.LiteralOperandEncodingDefaultBinary),
 		},
 		Value: LiteralOperand{
 			Value: MustVariant(value),

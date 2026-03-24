@@ -119,7 +119,7 @@ const (
 	CertificateGroupType                         = 12555
 	CertificateType                              = 12556
 	ApplicationCertificateType                   = 12557
-	HttpsCertificateType                         = 12558
+	HTTPSCertificateType                         = 12558
 	RsaMinApplicationCertificateType             = 12559
 	RsaSha256ApplicationCertificateType          = 12560
 	TrustListUpdatedAuditEventType               = 12561
@@ -200,9 +200,9 @@ const (
 	AuditHistoryAnnotationUpdateEventType        = 19095
 	TrustListOutOfDateAlarmType                  = 19297
 	UserCertificateType                          = 19323
-	TlsCertificateType                           = 19324
-	TlsServerCertificateType                     = 19325
-	TlsClientCertificateType                     = 19326
+	TLSCertificateType                           = 19324
+	TLSServerCertificateType                     = 19325
+	TLSClientCertificateType                     = 19326
 	LogObjectType                                = 19352
 	BaseLogEventType                             = 19362
 	LogOverflowEventType                         = 19369
@@ -346,7 +346,7 @@ var nameObjectType = map[uint32]string{
 	2378:  "ProgramTransitionEventType",
 	2391:  "ProgramStateMachineType",
 	2738:  "SemanticChangeEventType",
-	2748:  "AuditURLMismatchEventType",
+	2748:  "AuditUrlMismatchEventType",
 	2771:  "FiniteStateMachineType",
 	2782:  "ConditionType",
 	2787:  "RefreshStartEventType",
@@ -460,7 +460,7 @@ var nameObjectType = map[uint32]string{
 	17589: "DictionaryEntryType",
 	17591: "DictionaryFolderType",
 	17598: "IrdiDictionaryEntryType",
-	17600: "URIDictionaryEntryType",
+	17600: "UriDictionaryEntryType",
 	17602: "BaseInterfaceType",
 	17641: "RoleMappingRuleChangedAuditEventType",
 	17721: "ConnectionTransportType",
@@ -505,18 +505,18 @@ var nameObjectType = map[uint32]string{
 	21091: "ReaderGroupMessageType",
 	21096: "DataSetWriterMessageType",
 	21104: "DataSetReaderMessageType",
-	21105: "UADPWriterGroupMessageType",
-	21111: "UADPDataSetWriterMessageType",
-	21116: "UADPDataSetReaderMessageType",
-	21126: "JSONWriterGroupMessageType",
-	21128: "JSONDataSetWriterMessageType",
-	21130: "JSONDataSetReaderMessageType",
+	21105: "UadpWriterGroupMessageType",
+	21111: "UadpDataSetWriterMessageType",
+	21116: "UadpDataSetReaderMessageType",
+	21126: "JsonWriterGroupMessageType",
+	21128: "JsonDataSetWriterMessageType",
+	21130: "JsonDataSetReaderMessageType",
 	21133: "DatagramWriterGroupTransportType",
 	21136: "BrokerWriterGroupTransportType",
 	21138: "BrokerDataSetWriterTransportType",
 	21142: "BrokerDataSetReaderTransportType",
 	21145: "NetworkAddressType",
-	21147: "NetworkAddressURLType",
+	21147: "NetworkAddressUrlType",
 	23455: "AliasNameType",
 	23456: "AliasNameCategoryType",
 	23513: "IOrderedObjectType",
@@ -550,7 +550,7 @@ var nameObjectType = map[uint32]string{
 	24205: "IPriorityMappingEntryType",
 	24233: "IIeeeAutoNegotiationStatusType",
 	24264: "UserManagementType",
-	25218: "IVlanIDType",
+	25218: "IVlanIdType",
 	25221: "IetfBaseNetworkInterfaceType",
 	25227: "PriorityMappingTableType",
 	25337: "PubSubKeyPushTargetType",

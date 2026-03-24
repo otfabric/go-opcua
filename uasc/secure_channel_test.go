@@ -57,7 +57,7 @@ func TestNewRequestMessage(t *testing.T) {
 						RequestID:      1,
 					},
 				},
-				TypeID: ua.NewFourByteExpandedNodeID(0, id.ReadRequest_Encoding_DefaultBinary),
+				TypeID: ua.NewFourByteExpandedNodeID(0, id.ReadRequestEncodingDefaultBinary),
 				Service: &ua.ReadRequest{
 					RequestHeader: &ua.RequestHeader{
 						AuthenticationToken: ua.NewTwoByteNodeID(0),
@@ -95,7 +95,7 @@ func TestNewRequestMessage(t *testing.T) {
 						RequestID:      556,
 					},
 				},
-				TypeID: ua.NewFourByteExpandedNodeID(0, id.ReadRequest_Encoding_DefaultBinary),
+				TypeID: ua.NewFourByteExpandedNodeID(0, id.ReadRequestEncodingDefaultBinary),
 				Service: &ua.ReadRequest{
 					RequestHeader: &ua.RequestHeader{
 						AuthenticationToken: ua.NewTwoByteNodeID(0),
@@ -129,7 +129,7 @@ func TestNewRequestMessage(t *testing.T) {
 						RequestID:      1,
 					},
 				},
-				TypeID: ua.NewFourByteExpandedNodeID(0, id.ReadRequest_Encoding_DefaultBinary),
+				TypeID: ua.NewFourByteExpandedNodeID(0, id.ReadRequestEncodingDefaultBinary),
 				Service: &ua.ReadRequest{
 					RequestHeader: &ua.RequestHeader{
 						AuthenticationToken: ua.NewTwoByteNodeID(0),

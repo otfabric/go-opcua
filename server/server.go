@@ -24,8 +24,6 @@ import (
 	"github.com/otfabric/go-opcua/uapolicy"
 )
 
-//go:generate go run ../cmd/predefined-nodes/main.go
-
 const defaultListenAddr = "opc.tcp://localhost:0"
 
 var (

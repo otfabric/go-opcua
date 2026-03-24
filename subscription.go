@@ -370,7 +370,7 @@ func (s *Subscription) notify(ctx context.Context, data *PublishNotificationData
 // but the current approach works with all servers regardless of how they
 // structure the diagnostics address space.
 func (s *Subscription) Stats(ctx context.Context) (*ua.SubscriptionDiagnosticsDataType, error) {
-	node := s.c.Node(ua.NewNumericNodeID(0, id.Server_ServerDiagnostics_SubscriptionDiagnosticsArray))
+	node := s.c.Node(ua.NewNumericNodeID(0, id.ServerServerDiagnosticsSubscriptionDiagnosticsArray))
 	v, err := node.Value(ctx)
 	if err != nil {
 		return nil, err

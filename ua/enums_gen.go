@@ -340,7 +340,7 @@ func ActionStateFromString(s string) ActionState {
 }
 
 const (
-	ActionStateIDle      ActionState = 0
+	ActionStateIdle      ActionState = 0
 	ActionStateExecuting ActionState = 1
 	ActionStateDone      ActionState = 2
 )

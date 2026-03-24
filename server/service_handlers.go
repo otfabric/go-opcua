@@ -18,65 +18,65 @@ import (
 type Handler func(ctx context.Context, sc *uasc.SecureChannel, req ua.Request, reqID uint32) (ua.Response, error)
 
 func (s *Server) initHandlers() {
-	// s.registerHandlerFunc(id.ServiceFault_Encoding_DefaultBinary, handleServiceFault)
+	// s.registerHandlerFunc(id.ServiceFaultEncodingDefaultBinary, handleServiceFault)
 
 	discovery := &DiscoveryService{s}
-	s.RegisterHandler(id.FindServersRequest_Encoding_DefaultBinary, discovery.FindServers)
-	s.RegisterHandler(id.FindServersOnNetworkRequest_Encoding_DefaultBinary, discovery.FindServersOnNetwork)
-	s.RegisterHandler(id.GetEndpointsRequest_Encoding_DefaultBinary, discovery.GetEndpoints)
-	s.RegisterHandler(id.RegisterServerRequest_Encoding_DefaultBinary, discovery.RegisterServer)
-	s.RegisterHandler(id.RegisterServer2Request_Encoding_DefaultBinary, discovery.RegisterServer2)
+	s.RegisterHandler(id.FindServersRequestEncodingDefaultBinary, discovery.FindServers)
+	s.RegisterHandler(id.FindServersOnNetworkRequestEncodingDefaultBinary, discovery.FindServersOnNetwork)
+	s.RegisterHandler(id.GetEndpointsRequestEncodingDefaultBinary, discovery.GetEndpoints)
+	s.RegisterHandler(id.RegisterServerRequestEncodingDefaultBinary, discovery.RegisterServer)
+	s.RegisterHandler(id.RegisterServer2RequestEncodingDefaultBinary, discovery.RegisterServer2)
 
 	// SecureChannel service (handled in the uasc stack)
-	// s.registerHandlerFunc(id.OpenSecureChannelRequest_Encoding_DefaultBinary, handleOpenSecureChannel)
-	// s.registerHandlerFunc(id.CloseSecureChannelRequest_Encoding_DefaultBinary, handleCloseSecureChannel)
+	// s.registerHandlerFunc(id.OpenSecureChannelRequestEncodingDefaultBinary, handleOpenSecureChannel)
+	// s.registerHandlerFunc(id.CloseSecureChannelRequestEncodingDefaultBinary, handleCloseSecureChannel)
 
 	session := &SessionService{s}
-	s.RegisterHandler(id.CreateSessionRequest_Encoding_DefaultBinary, session.CreateSession)
-	s.RegisterHandler(id.ActivateSessionRequest_Encoding_DefaultBinary, session.ActivateSession)
-	s.RegisterHandler(id.CloseSessionRequest_Encoding_DefaultBinary, session.CloseSession)
-	s.RegisterHandler(id.CancelRequest_Encoding_DefaultBinary, session.Cancel)
+	s.RegisterHandler(id.CreateSessionRequestEncodingDefaultBinary, session.CreateSession)
+	s.RegisterHandler(id.ActivateSessionRequestEncodingDefaultBinary, session.ActivateSession)
+	s.RegisterHandler(id.CloseSessionRequestEncodingDefaultBinary, session.CloseSession)
+	s.RegisterHandler(id.CancelRequestEncodingDefaultBinary, session.Cancel)
 
 	node := &NodeManagementService{s}
-	s.RegisterHandler(id.AddNodesRequest_Encoding_DefaultBinary, node.AddNodes)
-	s.RegisterHandler(id.AddReferencesRequest_Encoding_DefaultBinary, node.AddReferences)
-	s.RegisterHandler(id.DeleteNodesRequest_Encoding_DefaultBinary, node.DeleteNodes)
-	s.RegisterHandler(id.DeleteReferencesRequest_Encoding_DefaultBinary, node.DeleteReferences)
+	s.RegisterHandler(id.AddNodesRequestEncodingDefaultBinary, node.AddNodes)
+	s.RegisterHandler(id.AddReferencesRequestEncodingDefaultBinary, node.AddReferences)
+	s.RegisterHandler(id.DeleteNodesRequestEncodingDefaultBinary, node.DeleteNodes)
+	s.RegisterHandler(id.DeleteReferencesRequestEncodingDefaultBinary, node.DeleteReferences)
 
 	view := &ViewService{srv: s, cps: make(map[string]*continuationPoint)}
-	s.RegisterHandler(id.BrowseRequest_Encoding_DefaultBinary, view.Browse)
-	s.RegisterHandler(id.BrowseNextRequest_Encoding_DefaultBinary, view.BrowseNext)
-	s.RegisterHandler(id.TranslateBrowsePathsToNodeIDsRequest_Encoding_DefaultBinary, view.TranslateBrowsePathsToNodeIDs)
-	s.RegisterHandler(id.RegisterNodesRequest_Encoding_DefaultBinary, view.RegisterNodes)
-	s.RegisterHandler(id.UnregisterNodesRequest_Encoding_DefaultBinary, view.UnregisterNodes)
+	s.RegisterHandler(id.BrowseRequestEncodingDefaultBinary, view.Browse)
+	s.RegisterHandler(id.BrowseNextRequestEncodingDefaultBinary, view.BrowseNext)
+	s.RegisterHandler(id.TranslateBrowsePathsToNodeIDsRequestEncodingDefaultBinary, view.TranslateBrowsePathsToNodeIDs)
+	s.RegisterHandler(id.RegisterNodesRequestEncodingDefaultBinary, view.RegisterNodes)
+	s.RegisterHandler(id.UnregisterNodesRequestEncodingDefaultBinary, view.UnregisterNodes)
 
 	query := &QueryService{s}
-	s.RegisterHandler(id.QueryFirstRequest_Encoding_DefaultBinary, query.QueryFirst)
-	s.RegisterHandler(id.QueryNextRequest_Encoding_DefaultBinary, query.QueryNext)
+	s.RegisterHandler(id.QueryFirstRequestEncodingDefaultBinary, query.QueryFirst)
+	s.RegisterHandler(id.QueryNextRequestEncodingDefaultBinary, query.QueryNext)
 
 	attr := &AttributeService{s}
-	s.RegisterHandler(id.ReadRequest_Encoding_DefaultBinary, attr.Read)
-	s.RegisterHandler(id.HistoryReadRequest_Encoding_DefaultBinary, attr.HistoryRead)
-	s.RegisterHandler(id.WriteRequest_Encoding_DefaultBinary, attr.Write)
-	s.RegisterHandler(id.HistoryUpdateRequest_Encoding_DefaultBinary, attr.HistoryUpdate)
+	s.RegisterHandler(id.ReadRequestEncodingDefaultBinary, attr.Read)
+	s.RegisterHandler(id.HistoryReadRequestEncodingDefaultBinary, attr.HistoryRead)
+	s.RegisterHandler(id.WriteRequestEncodingDefaultBinary, attr.Write)
+	s.RegisterHandler(id.HistoryUpdateRequestEncodingDefaultBinary, attr.HistoryUpdate)
 
 	method := &MethodService{s}
 	// CallRequest is the correct service-level handler per Part 4 §5.11.2.
 	// CallMethodRequest is the per-method detail within a CallRequest, not a service message.
-	s.RegisterHandler(id.CallRequest_Encoding_DefaultBinary, method.Call)
+	s.RegisterHandler(id.CallRequestEncodingDefaultBinary, method.Call)
 
 	sub := &SubscriptionService{
 		srv:  s,
 		Subs: make(map[uint32]*Subscription),
 	}
 	s.SubscriptionService = sub
-	s.RegisterHandler(id.CreateSubscriptionRequest_Encoding_DefaultBinary, sub.CreateSubscription)
-	s.RegisterHandler(id.ModifySubscriptionRequest_Encoding_DefaultBinary, sub.ModifySubscription)
-	s.RegisterHandler(id.SetPublishingModeRequest_Encoding_DefaultBinary, sub.SetPublishingMode)
-	s.RegisterHandler(id.PublishRequest_Encoding_DefaultBinary, sub.Publish)
-	s.RegisterHandler(id.RepublishRequest_Encoding_DefaultBinary, sub.Republish)
-	s.RegisterHandler(id.TransferSubscriptionsRequest_Encoding_DefaultBinary, sub.TransferSubscriptions)
-	s.RegisterHandler(id.DeleteSubscriptionsRequest_Encoding_DefaultBinary, sub.DeleteSubscriptions)
+	s.RegisterHandler(id.CreateSubscriptionRequestEncodingDefaultBinary, sub.CreateSubscription)
+	s.RegisterHandler(id.ModifySubscriptionRequestEncodingDefaultBinary, sub.ModifySubscription)
+	s.RegisterHandler(id.SetPublishingModeRequestEncodingDefaultBinary, sub.SetPublishingMode)
+	s.RegisterHandler(id.PublishRequestEncodingDefaultBinary, sub.Publish)
+	s.RegisterHandler(id.RepublishRequestEncodingDefaultBinary, sub.Republish)
+	s.RegisterHandler(id.TransferSubscriptionsRequestEncodingDefaultBinary, sub.TransferSubscriptions)
+	s.RegisterHandler(id.DeleteSubscriptionsRequestEncodingDefaultBinary, sub.DeleteSubscriptions)
 
 	item := &MonitoredItemService{
 		SubService: sub,
@@ -85,14 +85,14 @@ func (s *Server) initHandlers() {
 		Subs:       make(map[uint32][]*MonitoredItem),
 	}
 	s.MonitoredItemService = item
-	// s.registerHandler(id.MonitoredItemCreateRequest_Encoding_DefaultBinary, item.MonitoredItemCreate)
-	s.RegisterHandler(id.CreateMonitoredItemsRequest_Encoding_DefaultBinary, item.CreateMonitoredItems)
-	//s.RegisterHandler(id.CreateMonitoredItemsRequest_Encoding_DefaultBinary, s.CreateMonitoredItems)
-	// s.registerHandler(id.MonitoredItemModifyRequest_Encoding_DefaultBinary, item.MonitoredItemModify)
-	s.RegisterHandler(id.ModifyMonitoredItemsRequest_Encoding_DefaultBinary, item.ModifyMonitoredItems)
-	s.RegisterHandler(id.SetMonitoringModeRequest_Encoding_DefaultBinary, item.SetMonitoringMode)
-	s.RegisterHandler(id.SetTriggeringRequest_Encoding_DefaultBinary, item.SetTriggering)
-	s.RegisterHandler(id.DeleteMonitoredItemsRequest_Encoding_DefaultBinary, item.DeleteMonitoredItems)
+	// s.registerHandler(id.MonitoredItemCreateRequestEncodingDefaultBinary, item.MonitoredItemCreate)
+	s.RegisterHandler(id.CreateMonitoredItemsRequestEncodingDefaultBinary, item.CreateMonitoredItems)
+	//s.RegisterHandler(id.CreateMonitoredItemsRequestEncodingDefaultBinary, s.CreateMonitoredItems)
+	// s.registerHandler(id.MonitoredItemModifyRequestEncodingDefaultBinary, item.MonitoredItemModify)
+	s.RegisterHandler(id.ModifyMonitoredItemsRequestEncodingDefaultBinary, item.ModifyMonitoredItems)
+	s.RegisterHandler(id.SetMonitoringModeRequestEncodingDefaultBinary, item.SetMonitoringMode)
+	s.RegisterHandler(id.SetTriggeringRequestEncodingDefaultBinary, item.SetTriggering)
+	s.RegisterHandler(id.DeleteMonitoredItemsRequestEncodingDefaultBinary, item.DeleteMonitoredItems)
 }
 
 // RegisterHandler allows you to overwrite a handler before you call start.

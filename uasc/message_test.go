@@ -46,7 +46,7 @@ func TestMessage(t *testing.T) {
 						SecurityMode:          ua.MessageSecurityModeNone,
 						RequestedLifetime:     6000000,
 					},
-					id.OpenSecureChannelRequest_Encoding_DefaultBinary,
+					id.OpenSecureChannelRequestEncodingDefaultBinary,
 					s.nextRequestID(),
 				)
 
@@ -143,7 +143,7 @@ func TestMessage(t *testing.T) {
 						},
 						EndpointURL: "opc.tcp://wow.its.easy:11111/UA/Server",
 					},
-					id.GetEndpointsRequest_Encoding_DefaultBinary,
+					id.GetEndpointsRequestEncodingDefaultBinary,
 					s.nextRequestID(),
 				)
 
@@ -214,7 +214,7 @@ func TestMessage(t *testing.T) {
 							AdditionalHeader:    ua.NewExtensionObject(nil),
 						},
 					},
-					id.CloseSecureChannelRequest_Encoding_DefaultBinary,
+					id.CloseSecureChannelRequestEncodingDefaultBinary,
 					s.nextRequestID(),
 				)
 

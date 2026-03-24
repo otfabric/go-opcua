@@ -58,10 +58,10 @@ func TestStandardNodeID(t *testing.T) {
 	t.Run("short aliases", func(t *testing.T) {
 		nid, ok := StandardNodeID("CurrentTime")
 		require.True(t, ok)
-		require.True(t, nid.Equal(ua.NewNumericNodeID(0, id.Server_ServerStatus_CurrentTime)))
+		require.True(t, nid.Equal(ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime)))
 		nid, ok = StandardNodeID("ServerStatus")
 		require.True(t, ok)
-		require.True(t, nid.Equal(ua.NewNumericNodeID(0, id.Server_ServerStatus)))
+		require.True(t, nid.Equal(ua.NewNumericNodeID(0, id.ServerServerStatus)))
 		nid, ok = StandardNodeID("Objects")
 		require.True(t, ok)
 		require.True(t, nid.Equal(ua.NewNumericNodeID(0, id.ObjectsFolder)))

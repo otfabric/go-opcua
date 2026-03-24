@@ -10,7 +10,7 @@ import (
 
 func CurrentTimeNode() *Node {
 	return NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_CurrentTime),
+		ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("CurrentTime")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -22,7 +22,7 @@ func CurrentTimeNode() *Node {
 
 func NamespacesNode(s *Server) *Node {
 	return NewNode(
-		ua.NewNumericNodeID(0, id.Server_NamespaceArray),
+		ua.NewNumericNodeID(0, id.ServerNamespaceArray),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("Namespaces")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassObject)),
@@ -46,18 +46,18 @@ func ServerCapabilitiesNodes(s *Server) []*Node {
 		valueFunc  func() uint32
 	}
 	limits := []limitNode{
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerRead, "MaxNodesPerRead", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerRead }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerWrite, "MaxNodesPerWrite", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerWrite }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerBrowse, "MaxNodesPerBrowse", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerBrowse }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerMethodCall, "MaxNodesPerMethodCall", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerMethodCall }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerRegisterNodes, "MaxNodesPerRegisterNodes", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerRegisterNodes }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerTranslateBrowsePathsToNodeIDs, "MaxNodesPerTranslateBrowsePathsToNodeIds", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerTranslateBrowsePathsToNodeIDs }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerNodeManagement, "MaxNodesPerNodeManagement", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerNodeManagement }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxMonitoredItemsPerCall, "MaxMonitoredItemsPerCall", func() uint32 { return s.cfg.cap.OperationalLimits.MaxMonitoredItemsPerCall }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerHistoryReadData, "MaxNodesPerHistoryReadData", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryReadData }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerHistoryReadEvents, "MaxNodesPerHistoryReadEvents", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryReadEvents }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerHistoryUpdateData, "MaxNodesPerHistoryUpdateData", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryUpdateData }},
-		{id.Server_ServerCapabilities_OperationLimits_MaxNodesPerHistoryUpdateEvents, "MaxNodesPerHistoryUpdateEvents", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryUpdateEvents }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerRead, "MaxNodesPerRead", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerRead }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerWrite, "MaxNodesPerWrite", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerWrite }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerBrowse, "MaxNodesPerBrowse", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerBrowse }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerMethodCall, "MaxNodesPerMethodCall", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerMethodCall }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerRegisterNodes, "MaxNodesPerRegisterNodes", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerRegisterNodes }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerTranslateBrowsePathsToNodeIDs, "MaxNodesPerTranslateBrowsePathsToNodeIds", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerTranslateBrowsePathsToNodeIDs }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerNodeManagement, "MaxNodesPerNodeManagement", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerNodeManagement }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxMonitoredItemsPerCall, "MaxMonitoredItemsPerCall", func() uint32 { return s.cfg.cap.OperationalLimits.MaxMonitoredItemsPerCall }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerHistoryReadData, "MaxNodesPerHistoryReadData", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryReadData }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerHistoryReadEvents, "MaxNodesPerHistoryReadEvents", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryReadEvents }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerHistoryUpdateData, "MaxNodesPerHistoryUpdateData", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryUpdateData }},
+		{id.ServerServerCapabilitiesOperationLimitsMaxNodesPerHistoryUpdateEvents, "MaxNodesPerHistoryUpdateEvents", func() uint32 { return s.cfg.cap.OperationalLimits.MaxNodesPerHistoryUpdateEvents }},
 	}
 
 	var nodes []*Node
@@ -127,7 +127,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	*/
 
 	sStatus := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus),
+		ua.NewNumericNodeID(0, id.ServerServerStatus),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("Status")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -137,7 +137,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	)
 
 	sState := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_State),
+		ua.NewNumericNodeID(0, id.ServerServerStatusState),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ServerStatus")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -146,7 +146,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 		func() *ua.DataValue { return DataValueFromValue(int32(s.Status().State)) },
 	)
 	mName := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_BuildInfo_ManufacturerName),
+		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoManufacturerName),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ProductName")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -155,7 +155,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 		func() *ua.DataValue { return DataValueFromValue(s.cfg.manufacturerName) },
 	)
 	pName := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_BuildInfo_ProductName),
+		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoProductName),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ProductName")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -165,7 +165,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	)
 
 	pURI := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_BuildInfo_ProductURI),
+		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoProductURI),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ProductURI")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -175,7 +175,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	)
 
 	bInfo := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_BuildInfo),
+		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfo),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("BuildInfo")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -184,7 +184,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 		func() *ua.DataValue { return DataValueFromValue("") },
 	)
 	sVersion := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_BuildInfo_SoftwareVersion),
+		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoSoftwareVersion),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("SoftwareVersion")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -194,7 +194,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	)
 
 	bNumber := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_BuildInfo_BuildNumber),
+		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoBuildNumber),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("BuildNumber")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -205,7 +205,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 
 	ts := time.Now()
 	bDate := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_BuildInfo_BuildDate),
+		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoBuildDate),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("BuildDate")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -214,7 +214,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 		func() *ua.DataValue { return DataValueFromValue(ts) },
 	)
 	timeStart := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_StartTime),
+		ua.NewNumericNodeID(0, id.ServerServerStatusStartTime),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("StartTime")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -223,7 +223,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 		func() *ua.DataValue { return DataValueFromValue(ts) },
 	)
 	timeCurrent := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_CurrentTime),
+		ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("CurrentTime")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -235,7 +235,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	//Server_ServerStatus_SecondsTillShutdown                                                                                                                               = 2992
 	//Server_ServerStatus_ShutdownReason                                                                                                                                    = 2993
 	sTillShutdown := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_SecondsTillShutdown),
+		ua.NewNumericNodeID(0, id.ServerServerStatusSecondsTillShutdown),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("SecondsTillShutdown")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
@@ -244,7 +244,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 		func() *ua.DataValue { return DataValueFromValue(int32(0)) },
 	)
 	sReason := NewNode(
-		ua.NewNumericNodeID(0, id.Server_ServerStatus_ShutdownReason),
+		ua.NewNumericNodeID(0, id.ServerServerStatusShutdownReason),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ShutdownReason")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
