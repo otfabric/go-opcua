@@ -1,22 +1,22 @@
-# otfabric/opcua — OPC-UA library for Go
+# otfabric/go-opcua — OPC-UA library for Go
 
-[![Go](https://img.shields.io/badge/Go-1.23+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/otfabric/opcua)](https://goreportcard.com/report/github.com/otfabric/opcua)
-[![CI](https://github.com/otfabric/opcua/actions/workflows/ci.yml/badge.svg)](https://github.com/otfabric/opcua/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/otfabric/opcua?style=flat&color=blue)](https://github.com/otfabric/opcua/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/otfabric/go-opcua)](https://goreportcard.com/report/github.com/otfabric/go-opcua)
+[![CI](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml/badge.svg)](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/otfabric/go-opcua?style=flat&color=blue)](https://github.com/otfabric/go-opcua/releases)
 
 A pure Go implementation of the OPC-UA Binary Protocol, providing both **client** and **server** capabilities. No C dependencies, no CGo — just Go.
 
 ```sh
-go get github.com/otfabric/opcua
+go get github.com/otfabric/go-opcua
 ```
 
-Requires **Go 1.23** or later.
+Requires **Go 1.25** or later.
 
 ## Overview
 
-otfabric/opcua gives you everything needed to interact with OPC-UA servers or build your own:
+otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or build your own:
 
 - **Client** — connect, browse, read, write, subscribe, call methods, read history
 - **Server** — host namespaces, expose variables, handle methods, emit events
@@ -50,8 +50,8 @@ import (
     "fmt"
     "log"
 
-    "github.com/otfabric/opcua"
-    "github.com/otfabric/opcua/ua"
+    "github.com/otfabric/go-opcua"
+    "github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -119,8 +119,8 @@ import (
     "context"
     "log"
 
-    "github.com/otfabric/opcua/server"
-    "github.com/otfabric/opcua/ua"
+    "github.com/otfabric/go-opcua/server"
+    "github.com/otfabric/go-opcua/ua"
 )
 
 func main() {

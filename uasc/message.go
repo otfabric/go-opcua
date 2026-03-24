@@ -9,8 +9,8 @@ import (
 	"log/slog"
 	"math"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 type MessageHeader struct {
@@ -26,7 +26,7 @@ func (m *MessageHeader) Decode(b []byte) (int, error) {
 	m.Header = new(Header)
 	buf.ReadStruct(m.Header)
 
-	switch m.Header.MessageType {
+	switch m.MessageType {
 	case "OPN":
 		m.AsymmetricSecurityHeader = new(AsymmetricSecurityHeader)
 		buf.ReadStruct(m.AsymmetricSecurityHeader)
@@ -36,7 +36,7 @@ func (m *MessageHeader) Decode(b []byte) (int, error) {
 		buf.ReadStruct(m.SymmetricSecurityHeader)
 
 	default:
-		return buf.Pos(), fmt.Errorf("%w: %q", errors.ErrInvalidMessageType, m.Header.MessageType)
+		return buf.Pos(), fmt.Errorf("%w: %q", errors.ErrInvalidMessageType, m.MessageType)
 	}
 
 	// Sequence header could be encrypted, defer decoding until after decryption
@@ -63,7 +63,7 @@ func (m *MessageChunk) Decode(b []byte) (int, error) {
 
 // MessageAbort represents a non-terminal OPC UA Secure Channel error.
 //
-// Specification: Part6, 7.3
+// Specification: Part6, 7.3.
 type MessageAbort struct {
 	ErrorCode uint32
 	Reason    string
@@ -141,7 +141,7 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 	nrChunks := uint32(dataBody.Len())/(maxBodySize) + 1
 	chunks := make([][]byte, nrChunks)
 
-	switch m.Header.MessageType {
+	switch m.MessageType {
 	case "OPN":
 		partialHeader := ua.NewBuffer(nil)
 		partialHeader.WriteStruct(m.AsymmetricSecurityHeader)
@@ -151,7 +151,7 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 			return nil, partialHeader.Error()
 		}
 
-		m.Header.MessageSize = uint32(12 + partialHeader.Len() + dataBody.Len())
+		m.MessageSize = uint32(12 + partialHeader.Len() + dataBody.Len())
 		buf := ua.NewBuffer(nil)
 		buf.WriteStruct(m.Header)
 		buf.Write(partialHeader.Bytes())
@@ -162,8 +162,8 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 	case "CLO", "MSG":
 
 		for i := uint32(0); i < nrChunks-1; i++ {
-			m.Header.MessageSize = maxBodySize + 24
-			m.Header.ChunkType = ChunkTypeIntermediate
+			m.MessageSize = maxBodySize + 24
+			m.ChunkType = ChunkTypeIntermediate
 			chunk := ua.NewBuffer(nil)
 			chunk.WriteStruct(m.Header)
 			chunk.WriteStruct(m.SymmetricSecurityHeader)
@@ -176,8 +176,8 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 			chunks[i] = chunk.Bytes()
 		}
 
-		m.Header.ChunkType = ChunkTypeFinal
-		m.Header.MessageSize = uint32(24 + dataBody.Len())
+		m.ChunkType = ChunkTypeFinal
+		m.MessageSize = uint32(24 + dataBody.Len())
 		chunk := ua.NewBuffer(nil)
 		chunk.WriteStruct(m.Header)
 		chunk.WriteStruct(m.SymmetricSecurityHeader)
@@ -190,6 +190,6 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 		chunks[nrChunks-1] = chunk.Bytes()
 		return chunks, nil
 	default:
-		return nil, fmt.Errorf("%w: %q", errors.ErrInvalidMessageType, m.Header.MessageType)
+		return nil, fmt.Errorf("%w: %q", errors.ErrInvalidMessageType, m.MessageType)
 	}
 }

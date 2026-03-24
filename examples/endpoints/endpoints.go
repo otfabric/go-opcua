@@ -12,7 +12,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/otfabric/opcua"
+	"github.com/otfabric/go-opcua"
 )
 
 func main() {

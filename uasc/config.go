@@ -8,8 +8,8 @@ import (
 	"crypto/rsa"
 	"time"
 
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // Config represents a configuration which UASC client/server has in common.

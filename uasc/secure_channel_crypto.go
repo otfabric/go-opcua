@@ -9,11 +9,11 @@ import (
 	"crypto/x509"
 	"encoding/binary"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uapolicy"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
-// NewSessionSignature issues a new signature for the client to send on the next ActivateSessionRequest
+// NewSessionSignature issues a new signature for the client to send on the next ActivateSessionRequest.
 func (s *SecureChannel) NewSessionSignature(cert, nonce []byte) ([]byte, string, error) {
 	if s.cfg.SecurityMode == ua.MessageSecurityModeNone {
 		return nil, "", nil
@@ -39,7 +39,7 @@ func (s *SecureChannel) NewSessionSignature(cert, nonce []byte) ([]byte, string,
 	return sig, sigAlg, nil
 }
 
-// VerifySessionSignature checks the integrity of a Create/Activate Session response's signature
+// VerifySessionSignature checks the integrity of a Create/Activate Session response's signature.
 func (s *SecureChannel) VerifySessionSignature(cert, nonce, signature []byte) error {
 	if s.cfg.SecurityMode == ua.MessageSecurityModeNone {
 		return nil
@@ -63,7 +63,7 @@ func (s *SecureChannel) VerifySessionSignature(cert, nonce, signature []byte) er
 	return nil
 }
 
-// EncryptUserPassword issues a new signature for the client to send in ActivateSessionRequest
+// EncryptUserPassword issues a new signature for the client to send in ActivateSessionRequest.
 func (s *SecureChannel) EncryptUserPassword(policyURI, password string, cert, nonce []byte) ([]byte, string, error) {
 	// If the User ID Token's policy was null, then default to the secure channel's policy
 	if policyURI == "" {

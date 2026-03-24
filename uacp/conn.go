@@ -15,9 +15,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 const (
@@ -50,10 +50,10 @@ var (
 	}
 )
 
-// connid stores the current connection id. updated with atomic.AddUint32
+// connid stores the current connection id. updated with atomic.AddUint32.
 var connid uint32
 
-// nextid returns the next connection id
+// nextid returns the next connection id.
 func nextid() uint32 {
 	return atomic.AddUint32(&connid, 1)
 }
@@ -95,7 +95,7 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 
 	conn, err := NewConn(c.(*net.TCPConn), d.ClientACK)
 	if err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, err
 	}
 	conn.logger = d.Logger
@@ -103,13 +103,13 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 	conn.logDebugf("starting HEL/ACK handshake conn_id=%d", conn.id)
 	if err := conn.Handshake(ctx, endpoint); err != nil {
 		conn.logWarnf("HEL/ACK handshake failed conn_id=%d error=%v", conn.id, err)
-		conn.Close()
+		_ = conn.Close()
 		return nil, err
 	}
 	return conn, nil
 }
 
-// Dial uses the default dialer to establish a connection to the endpoint
+// Dial uses the default dialer to establish a connection to the endpoint.
 func Dial(ctx context.Context, endpoint string) (*Conn, error) {
 	d := &Dialer{}
 	return d.Dial(ctx, endpoint)
@@ -180,7 +180,7 @@ func (l *Listener) Accept(ctx context.Context) (*Conn, error) {
 		return &b
 	}
 	if err := conn.srvhandshake(l.endpoint); err != nil {
-		c.Close()
+		_ = c.Close()
 		return nil, err
 	}
 	return conn, nil
@@ -292,7 +292,7 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 
 	// set a deadline if there is one
 	if dl, ok := ctx.Deadline(); ok {
-		c.SetDeadline(dl)
+		_ = c.SetDeadline(dl)
 	}
 
 	if err := c.Send("HELF", hel); err != nil {
@@ -305,7 +305,7 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 	}
 
 	// clear the deadline
-	c.SetDeadline(time.Time{})
+	_ = c.SetDeadline(time.Time{})
 
 	msgtyp := string(b[:4])
 	switch msgtyp {
@@ -382,7 +382,7 @@ func (c *Conn) srvhandshake(endpoint string) error {
 			return fmt.Errorf("%w: %s", errors.ErrInvalidEndpoint, rhe.EndpointURL)
 		}
 		c.logDebugf("reverse hello redirect conn_id=%d server_uri=%s", c.id, rhe.ServerURI)
-		c.Close()
+		_ = c.Close()
 		var dialer net.Dialer
 		c2, err := dialer.DialContext(context.Background(), "tcp", rhe.ServerURI)
 		if err != nil {
@@ -436,7 +436,7 @@ func endpointMatch(clientURL, serverURL string) bool {
 	return cp == sp
 }
 
-// hdrlen is the size of the uacp header
+// hdrlen is the size of the uacp header.
 const hdrlen = 8
 
 // Receive reads a full UACP message from the underlying connection.

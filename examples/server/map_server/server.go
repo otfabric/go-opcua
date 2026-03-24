@@ -20,10 +20,10 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/server"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 var (
@@ -188,28 +188,28 @@ func main() {
 	// occurs through the opc ua server
 	go func() {
 		for {
-			changed_key := <-myMapNamespace2.ExternalNotification
-			log.Printf("%s changed to %v", changed_key, myMapNamespace2.GetValue(changed_key))
+			changedKey := <-myMapNamespace2.ExternalNotification
+			log.Printf("%s changed to %v", changedKey, myMapNamespace2.GetValue(changedKey))
 		}
 	}()
 
 	// add the namespaces to the server. If you want them to show up in a browse, you'll
 	// also have to add a reference to them (probably from the object node).
-	root_ns, _ := s.Namespace(0)
-	root_obj_node := root_ns.Objects()
+	rootNs, _ := s.Namespace(0)
+	rootObjNode := rootNs.Objects()
 
 	// then we add the namespace to the server and add a reference to it from the object node.
 	// the object node of the map namespace is a virtual node that contains all the "nodes" for each
 	// map key
-	root_obj_node.AddRef(myMapNamespace1.Objects(), id.HasComponent, true)
-	root_obj_node.AddRef(myMapNamespace2.Objects(), id.HasComponent, true)
+	rootObjNode.AddRef(myMapNamespace1.Objects(), id.HasComponent, true)
+	rootObjNode.AddRef(myMapNamespace2.Objects(), id.HasComponent, true)
 
 	// Start the server
 	// Note that you can add namespaces before or after starting the server.
 	if err := s.Start(context.Background()); err != nil {
 		log.Fatalf("Error starting server, exiting: %s", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	// catch ctrl-c and gracefully shutdown the server.
 	sigch := make(chan os.Signal, 1)

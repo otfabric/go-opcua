@@ -9,11 +9,12 @@ import (
 	"encoding/csv"
 	"flag"
 	"go/format"
-	"golang.org/x/exp/maps"
 	"log"
 	"os"
 	"strings"
 	"text/template"
+
+	"golang.org/x/exp/maps"
 )
 
 func main() {
@@ -37,7 +38,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading %s: %v", *in, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	rows, err := csv.NewReader(f).ReadAll()
 	if err != nil {

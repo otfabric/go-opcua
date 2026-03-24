@@ -12,13 +12,13 @@ const (
 	NodeClassAll NodeClass = 0xff
 )
 
-// Built-in type identifiers.
+// TypeID represents built-in type identifiers.
 //
 // All OPC UA DataEncodings are based on rules that are defined for a standard
 // set of built-in types. These built-in types are then used to construct
 // structures, arrays and messages.
 //
-// Specification: Part 6, 5.1.2
+// Specification: Part 6, 5.1.2.
 type TypeID byte
 
 const (
@@ -72,7 +72,7 @@ var SecurityPolicyURIs = map[string]string{
 	"Aes256Sha256RsaPss":  SecurityPolicyURIAes256Sha256RsaPss,
 }
 
-// FormatSecurityPolicy converts a short name for a security policy into a
+// FormatSecurityPolicyURI converts a short name for a security policy into a
 // canonical policy URI.
 func FormatSecurityPolicyURI(policy string) string {
 	if policy == "" {

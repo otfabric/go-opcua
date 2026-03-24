@@ -1,14 +1,36 @@
-# Minimal config for broader checks alongside staticcheck.
-# See https://golangci-lint.run/usage/configuration/
 version: "2"
-run:
-  timeout: 5m
-  modules-download-mode: readonly
 
-# Run govet here; staticcheck is run separately via 'make lint'.
-# Use default: none so only govet runs (avoids duplicating staticcheck and extra rules).
 linters:
   default: none
   enable:
-    - govet
-    - unparam
+    - errcheck       # unchecked errors
+    - govet          # go vet checks (shadow, printf, etc.)
+    - ineffassign    # assigned but never used
+    - staticcheck    # comprehensive static analysis (includes gosimple + unused)
+    - misspell       # common spelling mistakes
+    - godot          # comment punctuation
+    - nilerr         # return nil instead of err
+    - exhaustive     # exhaustive switch on enums
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    staticcheck:
+      checks:
+        - "all"
+  exclusions:
+    rules:
+      - linters: [staticcheck]
+        text: "ST1003"
+        path: "(_gen\\.go$|^schema/)"
+
+formatters:
+  enable:
+    - gofmt          # formatting
+    - goimports      # import grouping / formatting
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+run:
+  timeout: 5m

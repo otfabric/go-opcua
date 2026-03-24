@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 var (

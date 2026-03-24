@@ -1,117 +1,20 @@
-name: CI Tests
+name: CI
+run-name: "CI (${{ github.event_name }}) on ${{ github.ref_name }} by @${{ github.actor }}"
 
 on:
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
+    branches: ["**"]
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
-  test:
-    name: Test ${{ matrix.os }} go${{ matrix.go }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-        go: ["1.24.x", "1.25.x"]
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go ${{ matrix.go }}
-        uses: actions/setup-go@v6
-        with:
-          go-version: ${{ matrix.go }}
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Run vet
-        run: make vet
-
-      - name: Run tests
-        run: make test
-
-  coverage:
-    name: Coverage
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.x"
-
-      - name: Download dependencies
-        run: go mod download
-
-      - name: Run tests with coverage
-        run: |
-          make coverage
-          go tool cover -html=coverage.out -o coverage.html
-          go tool cover -func=coverage.out | tail -1
-
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v7
-        with:
-          name: coverage-report
-          path: |
-            coverage.out
-            coverage.html
-          retention-days: 14
-
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.x"
-
-      - name: Install staticcheck
-        run: go install honnef.co/go/tools/cmd/staticcheck@latest
-
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
-
-      - name: Run staticcheck
-        run: make lint
-
-      - name: Run golangci-lint
-        run: make lint-ci
-
-  integration:
-    name: Integration
-    runs-on: ubuntu-latest
-    needs: test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.25.x"
-
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          go mod download
-          make install-py-opcua
-
-      - name: Run integration tests
-        run: make integration selfintegration
+  ci:
+    uses: otfabric/.github/.github/workflows/go-ci.yml@v2
+    with:
+      codecov-name: go-opcua
+      go-versions: '["1.25","1.26"]'
+    secrets: inherit

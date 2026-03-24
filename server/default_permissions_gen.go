@@ -6,7 +6,7 @@
 
 package server
 
-import "github.com/otfabric/opcua/ua"
+import "github.com/otfabric/go-opcua/ua"
 
 // NodePermissionDefault holds the default access restrictions and role
 // permissions for a single standard node as defined by the OPC UA specification.

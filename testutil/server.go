@@ -1,3 +1,4 @@
+// Package testutil provides test server and client helpers for OPC UA unit tests.
 package testutil
 
 import (
@@ -7,11 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
 )
 
 func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
@@ -29,7 +30,7 @@ func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string)
 	if err := srv.Start(ctx); err != nil {
 		t.Fatalf("testutil: start server: %v", err)
 	}
-	t.Cleanup(func() { srv.Close() })
+	t.Cleanup(func() { _ = srv.Close() })
 	return srv, url
 }
 
@@ -56,7 +57,7 @@ func NewTestClient(t *testing.T, url string) *opcua.Client {
 	if err := c.Connect(ctx); err != nil {
 		t.Fatalf("testutil: connect: %v", err)
 	}
-	t.Cleanup(func() { c.Close(ctx) })
+	t.Cleanup(func() { _ = c.Close(ctx) })
 	return c
 }
 
@@ -86,6 +87,6 @@ func freePort(t *testing.T) int {
 		t.Fatalf("testutil: free port: %v", err)
 	}
 	port := l.Addr().(*net.TCPAddr).Port
-	l.Close()
+	_ = l.Close()
 	return port
 }

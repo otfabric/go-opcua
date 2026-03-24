@@ -7,12 +7,12 @@ const (
 
 type None struct{}
 
-func (c *None) Decrypt(src []byte) ([]byte, error) {
+func (s *None) Decrypt(src []byte) ([]byte, error) {
 	var b []byte
 	return append(b, src...), nil
 }
 
-func (c *None) Encrypt(src []byte) ([]byte, error) {
+func (s *None) Encrypt(src []byte) ([]byte, error) {
 	var b []byte
 	return append(b, src...), nil
 }

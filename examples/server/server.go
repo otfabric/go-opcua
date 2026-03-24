@@ -9,7 +9,7 @@ import (
 	"flag"
 	"log"
 
-	"github.com/otfabric/opcua/uacp"
+	"github.com/otfabric/go-opcua/uacp"
 )
 
 func main() {
@@ -29,7 +29,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	log.Printf("conn %d: connection from %s", c.ID(), c.RemoteAddr())
 
 	// listener, err := uacp.Listen(*endpoint, uint32(*bufsize))

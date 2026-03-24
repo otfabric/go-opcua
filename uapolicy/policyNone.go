@@ -24,7 +24,7 @@ SymmetricEncryptionAlgorithm_None 		This algorithm does not apply.
 AsymmetricSignatureAlgorithm_None 		This algorithm does not apply.
 AsymmetricEncryptionAlgorithm_None 		This algorithm does not apply.
 KeyDerivationAlgorithm_None 		This algorithm does not apply.
-SecurityPolicy_None_Limits 		DerivedSignatureKeyLength: 0
+SecurityPolicy_None_Limits 		DerivedSignatureKeyLength: 0.
 */
 func newNoneAsymmetric(*rsa.PrivateKey, *rsa.PublicKey) (*EncryptionAlgorithm, error) {
 	return &EncryptionAlgorithm{

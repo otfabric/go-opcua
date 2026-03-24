@@ -1,4 +1,66 @@
-# Release v0.1.14
+# go-opcua Releases
+
+## v0.1.15
+
+**Date:** 2026-03-24
+**Previous release:** v0.1.14
+
+## Summary
+
+Renames the Go module from `github.com/otfabric/opcua` to `github.com/otfabric/go-opcua`, migrates CI and release workflows to shared reusable workflows, upgrades Go and all dependencies, expands the linter configuration, and fixes all lint issues across the codebase.
+
+## Module rename
+
+- **Go module** — `github.com/otfabric/opcua` → `github.com/otfabric/go-opcua`. All import paths across the entire codebase (source, tests, examples, commands, documentation) are updated accordingly.
+- **Retract directives removed** — The `retract` block referencing old `otfabric/opcua` tags (v0.7.2, v0.2.4, v0.2.5) has been dropped since it no longer applies to the new module path.
+
+## Go and dependency upgrades
+
+- **Go version** — `go 1.23` → `go 1.25.0`.
+- **testify** — v1.10.0 → v1.11.1.
+- **golang.org/x/exp** — updated to 2026-03-12 snapshot.
+- **golang.org/x/term** — v0.27.0 → v0.41.0.
+- **golang.org/x/sys** — v0.28.0 → v0.42.0.
+
+## GitHub workflows
+
+- **CI** (`ci.yml`) — Replaced the inline multi-job workflow (test matrix, coverage, lint, integration) with a single call to the shared reusable workflow `otfabric/.github/.github/workflows/go-ci.yml@v2`. Test matrix now targets Go 1.25 and 1.26. Triggers on pushes and PRs to all branches.
+- **Release** (`release.yml`) — Replaced the inline release workflow (version detection, tag creation, release notes extraction, GitHub release creation) with a call to the shared reusable workflow `otfabric/.github/.github/workflows/go-package-release.yml@v2`. Supports a `release-name-prefix` parameter (`go-opcua`).
+- **goreleaser** — Removed `.goreleaser.yml` and the `make release` target. Release is now handled entirely by the shared workflow.
+
+## Linting and code quality
+
+- **golangci-lint** (`.golangci.yml`) — Expanded from 2 linters (`govet`, `unparam`) to 8 linters with all checks enabled: `errcheck`, `govet`, `ineffassign`, `staticcheck` (full SA/S/ST/QF), `misspell`, `godot`, `nilerr`, `exhaustive`. Added `gofmt` and `goimports` formatters. No exclusions except ST1003 on generated code (OPC UA spec names use underscores). All issues fixed at the source across code, tests, examples, and cmd/.
+- **errcheck** — All unchecked error returns resolved across the entire codebase: `defer` calls wrapped in `defer func() { _ = ... }()`, cleanup `Close()`/`SetDeadline()`/`WriteByte()` calls prefixed with `_ =`, and `xml.Unmarshal`/`ImportNodeSet` in server init now panic on error.
+- **godot** — Trailing periods added to all comments (production code, tests, examples, generated template).
+- **misspell** — `occured` → `occurred`, `taht` → `that`.
+- **ineffassign** — Removed 3 dead assignments to `action` in `client.go` reconnect logic.
+- **exhaustive** — Added missing switch cases for `reconnectAction`, `ConnState`, and `crypto.Hash`.
+- **goimports** — Fixed import grouping in `cmd/id/main.go` and `uacp/endpoint_test.go`.
+- **staticcheck QF** — Applied 44 quickfix suggestions: removed redundant embedded field selectors (`.Header.`, `.PublicKey.`, `.MessageHeader.`, `.SequenceHeader.`, `.TCPConn.`), replaced `strings.Replace(..., -1)` with `strings.ReplaceAll`, converted untagged switches to tagged switches, and lifted loop conditions.
+- **staticcheck ST1003** — Renamed 25 underscore-named variables and methods to camelCase across `client_sub.go`, `subscription.go`, `server/`, and examples (e.g. `recreate_delete` → `recreateDelete`, `matching_endpoints` → `matchingEndpoints`).
+- **staticcheck ST1016** — Standardized inconsistent receiver names across 10 files (`server/namespace_map.go`, `server/namespace_node.go`, `server/nodeset2_import.go`, `ua/expanded_node_id.go`, `ua/status_gen.go`, `uapolicy/`, `uasc/`).
+- **staticcheck ST1020/ST1021** — Fixed 48 exported method comments to start with the method name and 5 exported type comments to start with the type name, following Go doc conventions.
+- **staticcheck ST1000** — Added package doc comments to all 11 packages that lacked them (`id`, `logger`, `monitor`, `schema`, `server`, `server/attrs`, `server/refs`, `testutil`, `tests/go`, `tests/python`, `cmd/service/goname`).
+- **.gitignore** — Reorganized with categories (Python, binaries, IDE, coverage, certificates). Added `/bin/`, `cover.*`, `coverage.*`, `*.out`. Removed `vendor/`, `build/`, `dist/`, `__debug*`.
+- **Makefile** — Removed the `release` target (goreleaser). Added `coverage` to the `check` target.
+
+## Documentation
+
+All references to `otfabric/opcua` updated to `otfabric/go-opcua` across:
+
+- **README.md** — Title, badges, `go get` command, import paths, overview text.
+- **API.md** — Module path and `pkg.go.dev` links.
+- **CONTRIBUTING.md** — Title and `git clone` URL.
+- **docs/architecture.md**, **docs/client-guide.md**, **docs/security.md**, **docs/server-guide.md** — Module path references and import paths in code examples.
+
+## Files changed
+
+196 files changed, +1130 / -1235 lines.
+
+---
+
+## v0.1.14
 
 **Date:** 2026-03-12
 **Previous release:** v0.1.13
@@ -9,7 +71,7 @@ New unified github release flow.
 
 ---
 
-# Release v0.1.13
+## v0.1.13
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.12
@@ -27,7 +89,7 @@ CLI and tools that print variant values, display names, or browse names no longe
 
 ---
 
-# Release v0.1.12
+## v0.1.12
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.11
@@ -58,7 +120,7 @@ Adds batch read (`ReadMulti`) and client-side recursive browse (`BrowseWithDepth
 
 ---
 
-# Release v0.1.11
+## v0.1.11
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.10
@@ -87,7 +149,7 @@ Together with existing `DataTypeName`, `ReferenceTypeName`, `VariableTypeName`, 
 
 ---
 
-# Release v0.1.10
+## v0.1.10
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.9
@@ -143,7 +205,7 @@ improvements for path semantics and CSV/JSON consistency.
 
 ---
 
-# Release v0.1.9
+## v0.1.9
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.8
@@ -169,7 +231,7 @@ Clients can call `ReferenceTypeDisplayName(ref.ReferenceTypeID)` when rendering
 
 ---
 
-# Release v0.1.8
+## v0.1.8
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.7
@@ -200,7 +262,7 @@ yielded at most once.
 
 ---
 
-# Release v0.1.7
+## v0.1.7
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.6
@@ -241,7 +303,7 @@ Connection establishment and all messages with optional `*QualifiedName` or
 
 ---
 
-# Release v0.1.6
+## v0.1.6
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.5
@@ -272,7 +334,7 @@ note that connection-close errors may wrap `io.EOF` with this hint.
 
 ---
 
-# Release v0.1.5
+## v0.1.5
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.4
@@ -306,7 +368,7 @@ other history read calls when the optional `DataEncoding` field was omitted.
 
 ---
 
-# Release v0.1.4
+## v0.1.4
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.3
@@ -386,7 +448,7 @@ type serverCertValidator struct {
 
 ---
 
-# Release v0.1.3
+## v0.1.3
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.2
@@ -408,7 +470,7 @@ to be applied first.
 
 ---
 
-# Release v0.1.2
+## v0.1.2
 
 **Date:** 2026-03-11
 **Previous release:** v0.1.1

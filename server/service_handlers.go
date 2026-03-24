@@ -8,9 +8,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // Handler processes a service request. ctx is derived from the request and can be used
@@ -95,7 +95,7 @@ func (s *Server) initHandlers() {
 	s.RegisterHandler(id.DeleteMonitoredItemsRequest_Encoding_DefaultBinary, item.DeleteMonitoredItems)
 }
 
-// This function allows you to overwrite a handler before you call start.
+// RegisterHandler allows you to overwrite a handler before you call start.
 func (s *Server) RegisterHandler(typeID uint16, h Handler) {
 	_, ok := s.handlers[typeID]
 	if !ok {

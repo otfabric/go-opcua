@@ -33,7 +33,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading %s: %v", *in, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	rows, err := csv.NewReader(f).ReadAll()
 	if err != nil {
@@ -71,7 +71,7 @@ package ua
 
 // Identifiers assigned to Attributes.
 //
-// Specification: Part 6, A.1
+// Specification: Part 6, A.1.
 type AttributeID uint32
 
 const (

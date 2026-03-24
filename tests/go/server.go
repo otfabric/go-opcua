@@ -4,16 +4,17 @@
 
 //go:build integration
 
+// Package uatest2 provides integration test helpers for the Go OPC UA server.
 package uatest2
 
 import (
 	"context"
 	"log"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server"
-	"github.com/otfabric/opcua/server/attrs"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/server/attrs"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func startServer() *server.Server {

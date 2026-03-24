@@ -6,7 +6,7 @@
 
 package ua
 
-import "github.com/otfabric/opcua/id"
+import "github.com/otfabric/go-opcua/id"
 
 func init() {
 	RegisterService(id.ServiceFault_Encoding_DefaultBinary, new(ServiceFault))

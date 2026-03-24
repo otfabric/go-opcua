@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uapolicy"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 type instanceState int
@@ -93,7 +93,7 @@ func (c *channelInstance) newMessage(srv interface{}, typeID uint16, requestID u
 		// Do not send the thumbprint for security mode None
 		// even if we have a certificate.
 		//
-		// See https://github.com/otfabric/opcua/issues/259
+		// See https://github.com/otfabric/go-opcua/issues/259
 		thumbprint := c.sc.cfg.Thumbprint
 		if c.sc.cfg.SecurityMode == ua.MessageSecurityModeNone {
 			thumbprint = nil
@@ -159,7 +159,7 @@ func (c *channelInstance) signAndEncrypt(m *Message, b []byte) ([]byte, error) {
 		return b, nil
 	}
 
-	isAsymmetric := m.MessageHeader.AsymmetricSecurityHeader != nil
+	isAsymmetric := m.AsymmetricSecurityHeader != nil
 
 	var headerLength int
 
@@ -192,7 +192,7 @@ func (c *channelInstance) signAndEncrypt(m *Message, b []byte) ([]byte, error) {
 
 	// Fix header size to account for signing / encryption
 	binary.LittleEndian.PutUint32(b[4:], uint32(headerLength+encryptedLength))
-	m.Header.MessageSize = uint32(headerLength + encryptedLength)
+	m.MessageSize = uint32(headerLength + encryptedLength)
 
 	signature, err := c.algo.Signature(b)
 	if err != nil {

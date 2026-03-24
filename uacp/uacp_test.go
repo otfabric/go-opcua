@@ -7,7 +7,7 @@ package uacp
 import (
 	"testing"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func TestHello(t *testing.T) {

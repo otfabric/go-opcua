@@ -6,9 +6,9 @@
 
 package ua
 
-// Identifiers assigned to Attributes.
+// AttributeID represents identifiers assigned to Attributes.
 //
-// Specification: Part 6, A.1
+// Specification: Part 6, A.1.
 type AttributeID uint32
 
 const (

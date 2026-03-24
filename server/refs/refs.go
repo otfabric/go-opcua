@@ -1,9 +1,10 @@
+// Package refs provides OPC UA reference constructors for building node hierarchies.
 package refs
 
 import (
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server/attrs"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/attrs"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // HasSubtype returns a HasSubtype reference.
@@ -15,7 +16,7 @@ func HasSubtype(typeID *ua.ExpandedNodeID) *ua.ReferenceDescription {
 	}
 }
 
-// HasSubtype returns a HasSubtype reference.
+// Organizes returns an Organizes reference.
 func Organizes(nid *ua.NodeID, browseName, displayName string, typeID *ua.ExpandedNodeID) *ua.ReferenceDescription {
 	return &ua.ReferenceDescription{
 		ReferenceTypeID: ua.NewNumericNodeID(0, id.Organizes),

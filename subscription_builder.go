@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // SubscriptionBuilder provides a fluent API for constructing and starting
@@ -156,7 +156,7 @@ func (b *SubscriptionBuilder) Start(ctx context.Context) (*Subscription, chan *P
 
 	if len(b.monitorReq) > 0 {
 		if _, err := sub.Monitor(ctx, b.ts, b.monitorReq...); err != nil {
-			sub.Cancel(ctx)
+			_ = sub.Cancel(ctx)
 			return nil, nil, err
 		}
 	}

@@ -1,5 +1,6 @@
 //go:build integration
 
+// Package uatest provides integration test helpers for testing against the Python OPC UA server.
 package uatest
 
 import (
@@ -10,9 +11,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // Server is the test server interface used by integration tests.

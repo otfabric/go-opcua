@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/testutil"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/testutil"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
 
@@ -421,7 +421,7 @@ func TestClientServerStatus(t *testing.T) {
 func TestClientSecurityAccessors(t *testing.T) {
 	c, err := opcua.NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
-	defer c.Close(context.Background())
+	defer func() { _ = c.Close(context.Background()) }()
 
 	require.Equal(t, ua.SecurityPolicyURINone, c.SecurityPolicy())
 	require.Equal(t, ua.MessageSecurityModeNone, c.SecurityMode())

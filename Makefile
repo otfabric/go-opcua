@@ -3,7 +3,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help all test coverage cover lint lint-ci fmt vet integration selfintegration examples test-race install-py-opcua gen release
+.PHONY: help all test coverage cover lint lint-ci fmt vet integration selfintegration examples test-race install-py-opcua gen
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -12,25 +12,15 @@ all: ## Format, test, integration tests, and build examples
 	@echo "Running all: fmt, test, integration, selfintegration, examples"
 	@$(MAKE) fmt test integration selfintegration examples
 
-check: fmt lint lint-ci vet test ## Run all checks (format, lint, vet, test)
-
 test: ## Run unit tests with race detector
 	@echo "Running unit tests (race detector)"
 	@go test -count=1 -race ./...
-
-coverage: ## Run tests with coverage (writes coverage.out)
-	@echo "Running tests with coverage"
-	@go test -count=1 -race -coverprofile=coverage.out -covermode=atomic ./...
-
-cover: coverage ## Open coverage report in browser (run coverage first)
-	@echo "Opening coverage report in browser"
-	@go tool cover -html=coverage.out
 
 lint: ## Run staticcheck
 	@echo "Running staticcheck"
 	@staticcheck ./...
 
-lint-ci: ## Run golangci-lint (install: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest)
+lint-ci: ## Run golangci-lint
 	@echo "Running golangci-lint"
 	@golangci-lint run ./...
 
@@ -60,6 +50,14 @@ test-race: ## Run all tests (unit + both integration suites) with race detector
 	@go test -count=1 -race -v -tags=integration ./tests/python...
 	@go test -count=1 -race -v -tags=integration ./tests/go...
 
+coverage: ## Run tests with coverage on core library only (writes coverage.out)
+	@echo "Running coverage"
+	@go test -count=1 -race -coverprofile=coverage.out -covermode=atomic $(TEST_PKGS)
+
+cover: coverage ## Open coverage report in browser
+	@echo "Opening coverage report"
+	@go tool cover -html=coverage.out
+
 install-py-opcua: ## Install Python opcua package (for integration tests)
 	@echo "Installing Python opcua package"
 	@pip3 install opcua
@@ -70,6 +68,4 @@ gen: ## Regenerate code (stringer, go generate)
 	@find . -name '*_gen.go' -delete
 	@go generate ./...
 
-release: ## Run goreleaser (uses GITHUB_TOKEN from keychain)
-	@echo "Running goreleaser"
-	@GITHUB_TOKEN=$$(security find-generic-password -gs GITHUB_TOKEN -w) goreleaser --clean
+check: fmt lint lint-ci vet test coverage ## Run lint + vet + test

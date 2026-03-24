@@ -5,29 +5,29 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/server/attrs"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server/attrs"
+	"github.com/otfabric/go-opcua/ua"
 )
 
-// the base "node-centric" namespace
+// NodeNameSpace is the base "node-centric" namespace.
 type NodeNameSpace struct {
-	srv             *Server
-	name            string
-	mu              sync.RWMutex
-	nodes           []*Node
-	m               map[string]*Node
-	id              uint16
-	nodeid_sequence uint32
+	srv            *Server
+	name           string
+	mu             sync.RWMutex
+	nodes          []*Node
+	m              map[string]*Node
+	id             uint16
+	nodeidSequence uint32
 
 	ExternalNotification chan *ua.NodeID
 }
 
-func (ns *NodeNameSpace) GetNextNodeID() uint32 {
-	if ns.nodeid_sequence < 100 {
-		ns.nodeid_sequence = 100
+func (as *NodeNameSpace) GetNextNodeID() uint32 {
+	if as.nodeidSequence < 100 {
+		as.nodeidSequence = 100
 	}
-	return atomic.AddUint32(&(ns.nodeid_sequence), 1)
+	return atomic.AddUint32(&(as.nodeidSequence), 1)
 }
 
 func NewNodeNameSpace(srv *Server, name string) *NodeNameSpace {
@@ -65,14 +65,14 @@ func NewNodeNameSpace(srv *Server, name string) *NodeNameSpace {
 
 }
 
-// This function is to notify opc subscribers if a node was changed
-// without using the SetAttribute method
-func (s *NodeNameSpace) ChangeNotification(nodeid *ua.NodeID) {
-	s.srv.ChangeNotification(nodeid)
+// ChangeNotification notifies OPC UA subscribers if a node was changed
+// without using the SetAttribute method.
+func (as *NodeNameSpace) ChangeNotification(nodeid *ua.NodeID) {
+	as.srv.ChangeNotification(nodeid)
 }
 
-func (ns *NodeNameSpace) Name() string {
-	return ns.name
+func (as *NodeNameSpace) Name() string {
+	return as.name
 }
 
 func NewNameSpace(name string) *NodeNameSpace {
@@ -216,13 +216,13 @@ func (as *NodeNameSpace) Root() *Node {
 	return as.Node(RootFolder)
 }
 
-func (ns *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
-	ns.mu.RLock()
-	defer ns.mu.RUnlock()
+func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
+	as.mu.RLock()
+	defer as.mu.RUnlock()
 
-	ns.srv.cfg.logger.Debugf("browse request node_id=%v result_mask=%v", bd.NodeID, bd.ResultMask)
+	as.srv.cfg.logger.Debugf("browse request node_id=%v result_mask=%v", bd.NodeID, bd.ResultMask)
 
-	n := ns.Node(bd.NodeID)
+	n := as.Node(bd.NodeID)
 	if n == nil {
 		return &ua.BrowseResult{StatusCode: ua.StatusBadNodeIDUnknown}
 	}
@@ -237,11 +237,11 @@ func (ns *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 		}
 
 		// see if this is a ref the client was interested in.
-		if !suitableRef(ns.srv, bd, r) {
+		if !suitableRef(as.srv, bd, r) {
 			continue
 		}
 
-		td := ns.srv.Node(r.NodeID.NodeID)
+		td := as.srv.Node(r.NodeID.NodeID)
 
 		rf := &ua.ReferenceDescription{
 			ReferenceTypeID: r.ReferenceTypeID,
@@ -268,12 +268,12 @@ func (ns *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 
 }
 
-func (ns *NodeNameSpace) ID() uint16 {
-	return ns.id
+func (as *NodeNameSpace) ID() uint16 {
+	return as.id
 }
 
-func (ns *NodeNameSpace) SetID(id uint16) {
-	ns.id = id
+func (as *NodeNameSpace) SetID(id uint16) {
+	as.id = id
 }
 func (as *NodeNameSpace) SetAttribute(id *ua.NodeID, attr ua.AttributeID, val *ua.DataValue) ua.StatusCode {
 	n := as.Node(id)

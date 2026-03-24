@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/testutil"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/testutil"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
 	"github.com/stretchr/testify/require"
 )
 
@@ -99,7 +99,7 @@ func TestConcurrentSubscriptions(t *testing.T) {
 				errs <- err
 				return
 			}
-			defer c.Close(ctx)
+			defer func() { _ = c.Close(ctx) }()
 
 			notifyCh := make(chan *opcua.PublishNotificationData, 16)
 			sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{
@@ -147,7 +147,7 @@ func TestReconnectDuringOperation(t *testing.T) {
 	require.Equal(t, ua.StatusOK, resp.Results[0].Status)
 
 	// Close the server while the client is still connected.
-	srv.Close()
+	_ = srv.Close()
 
 	// Give the server a moment to fully shut down.
 	time.Sleep(500 * time.Millisecond)

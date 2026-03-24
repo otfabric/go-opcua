@@ -2,7 +2,7 @@ package errors
 
 import "errors"
 
-// Connection errors
+// Connection errors.
 var (
 	ErrAlreadyConnected    = errors.New("opcua: already connected")
 	ErrNotConnected        = errors.New("opcua: not connected")
@@ -12,7 +12,7 @@ var (
 	ErrReconnectAborted    = errors.New("opcua: reconnect aborted")
 )
 
-// Configuration errors
+// Configuration errors.
 var (
 	ErrInvalidEndpoint    = errors.New("opcua: invalid endpoint")
 	ErrNoCertificate      = errors.New("opcua: no certificate")
@@ -22,7 +22,7 @@ var (
 	ErrNoEndpoints        = errors.New("opcua: no endpoints available")
 )
 
-// Subscription errors
+// Subscription errors.
 var (
 	ErrSubscriptionNotFound  = errors.New("opcua: subscription not found")
 	ErrMonitoredItemNotFound = errors.New("opcua: monitored item not found")
@@ -30,26 +30,26 @@ var (
 	ErrSlowConsumer          = errors.New("opcua: slow consumer: messages may be dropped")
 )
 
-// Namespace errors
+// Namespace errors.
 var (
 	ErrNamespaceNotFound    = errors.New("opcua: namespace not found")
 	ErrInvalidNamespaceType = errors.New("opcua: invalid namespace array type")
 )
 
-// Codec errors
+// Codec errors.
 var (
 	ErrUnsupportedType = errors.New("opcua: unsupported type")
 	ErrArrayTooLarge   = errors.New("opcua: array too large")
 	ErrUnbalancedArray = errors.New("opcua: unbalanced multi-dimensional array")
 )
 
-// Response errors
+// Response errors.
 var (
 	ErrInvalidResponseType = errors.New("opcua: invalid response type")
 	ErrEmptyResponse       = errors.New("opcua: empty response")
 )
 
-// Security errors
+// Security errors.
 var (
 	ErrUnsupportedSecurityPolicy = errors.New("opcua: unsupported security policy")
 	ErrInvalidSecurityConfig     = errors.New("opcua: invalid security configuration")
@@ -58,7 +58,7 @@ var (
 	ErrInvalidPlaintext          = errors.New("opcua: invalid plaintext")
 )
 
-// Protocol errors
+// Protocol errors.
 var (
 	ErrInvalidMessageType = errors.New("opcua: invalid message type")
 	ErrMessageTooLarge    = errors.New("opcua: message too large")
@@ -69,7 +69,7 @@ var (
 	ErrUnknownService     = errors.New("opcua: unknown service")
 )
 
-// Node ID errors
+// Node ID errors.
 var (
 	ErrInvalidNodeID         = errors.New("opcua: invalid node ID")
 	ErrInvalidNamespace      = errors.New("opcua: invalid namespace")

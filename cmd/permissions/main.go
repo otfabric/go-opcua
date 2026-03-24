@@ -48,7 +48,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Error reading %s: %v", *in, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	rows, err := csv.NewReader(f).ReadAll()
 	if err != nil {
@@ -122,10 +122,10 @@ func parseAccessRestrictions(s string) uint16 {
 	return result
 }
 
-// rolePermRe matches entries like 'Anonymous':'(33) Browse|Read'
+// rolePermRe matches entries like 'Anonymous':'(33) Browse|Read'.
 var rolePermRe = regexp.MustCompile(`'(\w+)':'(?:\((\d+)\)[^']*)'`)
 
-// parseRolePermissions parses "{'Anonymous':'(33) Browse|Read','SecurityAdmin':'(131071) All'}"
+// parseRolePermissions parses "{'Anonymous':'(33) Browse|Read','SecurityAdmin':'(131071) All'}".
 func parseRolePermissions(s string) []rolePermission {
 	matches := rolePermRe.FindAllStringSubmatch(s, -1)
 	if len(matches) == 0 {
@@ -164,7 +164,7 @@ var tmpl = template.Must(template.New("").Funcs(funcMap).Parse(`
 
 package server
 
-import "github.com/otfabric/opcua/ua"
+import "github.com/otfabric/go-opcua/ua"
 
 // NodePermissionDefault holds the default access restrictions and role
 // permissions for a single standard node as defined by the OPC UA specification.

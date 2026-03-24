@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // DiscoveryService implements the Discovery Service Set
@@ -15,6 +15,7 @@ type DiscoveryService struct {
 	srv *Server
 }
 
+// FindServers implements the OPC UA FindServers service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.2
 func (s *DiscoveryService) FindServers(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -34,6 +35,7 @@ func (s *DiscoveryService) FindServers(ctx context.Context, sc *uasc.SecureChann
 	return response, nil
 }
 
+// FindServersOnNetwork implements the OPC UA FindServersOnNetwork service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.3
 func (s *DiscoveryService) FindServersOnNetwork(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -45,6 +47,7 @@ func (s *DiscoveryService) FindServersOnNetwork(ctx context.Context, sc *uasc.Se
 	return serviceUnsupported(req.RequestHeader), nil
 }
 
+// GetEndpoints implements the OPC UA GetEndpoints service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.4
 func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -55,22 +58,23 @@ func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChan
 	}
 
 	requrl := strings.ToLower(req.EndpointURL)
-	matching_endpoints := make([]*ua.EndpointDescription, 0)
+	matchingEndpoints := make([]*ua.EndpointDescription, 0)
 	for i := range s.srv.endpoints {
 		ep := s.srv.endpoints[i]
 		if strings.ToLower(ep.EndpointURL) == requrl {
-			matching_endpoints = append(matching_endpoints, ep)
+			matchingEndpoints = append(matchingEndpoints, ep)
 		}
 	}
 
 	response := &ua.GetEndpointsResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
-		Endpoints:      matching_endpoints,
+		Endpoints:      matchingEndpoints,
 	}
 
 	return response, nil
 }
 
+// RegisterServer implements the OPC UA RegisterServer service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.5
 func (s *DiscoveryService) RegisterServer(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -82,6 +86,7 @@ func (s *DiscoveryService) RegisterServer(ctx context.Context, sc *uasc.SecureCh
 	return serviceUnsupported(req.RequestHeader), nil
 }
 
+// RegisterServer2 implements the OPC UA RegisterServer2 service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.6
 func (s *DiscoveryService) RegisterServer2(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)

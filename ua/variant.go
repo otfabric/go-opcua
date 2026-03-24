@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 var (
-	// MaxVariantArrayLength sets a limit on the number of elements in array
+	// MaxVariantArrayLength sets a limit on the number of elements in array.
 	MaxVariantArrayLength = 0xffff
 )
 
 const (
-	// VariantArrayDimensions flags whether the array has more than one dimension
+	// VariantArrayDimensions flags whether the array has more than one dimension.
 	VariantArrayDimensions = 0x40
 
 	// VariantArrayValues flags whether the value is an array.
@@ -32,7 +32,7 @@ type ByteArray []byte
 
 // Variant is a union of the built-in types.
 //
-// Specification: Part 6, 5.1.2 Table 1
+// Specification: Part 6, 5.1.2 Table 1.
 type Variant struct {
 	// mask contains the type and the array flags
 	// bits 0:5: built-in type id 1-25
@@ -170,9 +170,9 @@ func (m *Variant) Decode(b []byte) (int, error) {
 	}
 
 	var vals reflect.Value
-	switch {
+	switch n {
 	// decode a nil slice
-	case n == -1:
+	case -1:
 		vals = reflect.Zero(reflect.MakeSlice(sliceType, 0, 0).Type())
 		m.value = vals.Interface()
 
@@ -351,7 +351,7 @@ func (m *Variant) decodeValue(buf *Buffer) interface{} {
 // Encode implements the codec interface.
 func (m *Variant) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
-	buf.WriteByte(m.mask)
+	_ = buf.WriteByte(m.mask)
 
 	// a null value specifies that no other fields are encoded
 	if m.Type() == TypeIDNull {
@@ -393,7 +393,7 @@ func (m *Variant) encodeValue(buf *Buffer, v interface{}) {
 	case int8:
 		buf.WriteInt8(x)
 	case byte:
-		buf.WriteByte(x)
+		_ = buf.WriteByte(x)
 	case int16:
 		buf.WriteInt16(x)
 	case uint16:
@@ -462,7 +462,7 @@ func sliceDim(val reflect.Value) (typ reflect.Type, dim []int32, count int32, er
 	// array of Byte. The ByteArray type alias supports sending a []byte as an
 	// array of Byte.
 	//
-	// https://github.com/otfabric/opcua/issues/463
+	// https://github.com/otfabric/go-opcua/issues/463
 	if val.Type() == reflect.TypeOf([]byte{}) && val.Type() != reflect.TypeOf(ByteArray{}) {
 		return val.Type(), nil, 1, nil
 	}

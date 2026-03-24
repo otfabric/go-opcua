@@ -3,8 +3,8 @@ package opcua
 import (
 	"strings"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // aggregateTypes maps common aggregate function names to their well-known NodeIDs.

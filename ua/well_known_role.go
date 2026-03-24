@@ -5,7 +5,7 @@
 package ua
 
 import (
-	"github.com/otfabric/opcua/id"
+	"github.com/otfabric/go-opcua/id"
 )
 
 // WellKnownRole identifies a standard OPC UA role.

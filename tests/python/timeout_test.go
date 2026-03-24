@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/stretchr/testify/require"
 )
 

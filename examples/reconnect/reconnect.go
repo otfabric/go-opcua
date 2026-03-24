@@ -25,8 +25,8 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -57,6 +57,8 @@ func main() {
 			// This callback fires on every state transition.
 			// Use it for monitoring, alerting, or coordinating application behavior.
 			switch state {
+			case opcua.Connecting:
+				log.Println("[STATE] Connecting...")
 			case opcua.Connected:
 				log.Println("[STATE] Connected — operations will succeed")
 			case opcua.Disconnected:
@@ -75,7 +77,7 @@ func main() {
 	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	id, err := ua.ParseNodeID(*nodeID)
 	if err != nil {

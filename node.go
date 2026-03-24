@@ -9,8 +9,8 @@ import (
 	"iter"
 	"strings"
 
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // nodeIDKey returns a string key for deduplication. Returns "" if id is nil.

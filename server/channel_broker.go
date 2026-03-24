@@ -8,10 +8,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 type channelBroker struct {
@@ -53,7 +53,7 @@ func newChannelBroker(logger logger.Logger, endpointURL string) *channelBroker {
 // RegisterConn connects a new UACP connection to the channel broker's list
 // of connections and starts waiting for data on it.  Data is pushed onto the broker's
 // Response channel
-// Blocks until the context is done, the connection closes, or a critical error
+// Blocks until the context is done, the connection closes, or a critical error.
 func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, localCert []byte, localKey *rsa.PrivateKey) error {
 	cfg := defaultChannelConfig()
 	cfg.Certificate = localCert
@@ -129,7 +129,7 @@ func (c *channelBroker) Close(ctx context.Context) error {
 	var err error
 	c.mu.Lock()
 	for _, s := range c.s {
-		s.Close()
+		_ = s.Close()
 	}
 	c.mu.Unlock()
 

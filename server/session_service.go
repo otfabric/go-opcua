@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 const (
@@ -25,6 +25,7 @@ type SessionService struct {
 	srv *Server
 }
 
+// CreateSession implements the OPC UA CreateSession service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.2
 func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -57,13 +58,13 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		return nil, ua.StatusBadInternalError
 	}
 
-	matching_endpoints := make([]*ua.EndpointDescription, 0)
+	matchingEndpoints := make([]*ua.EndpointDescription, 0)
 	reqTrimmedURL, _ := strings.CutSuffix(req.EndpointURL, "/")
 	for i := range s.srv.endpoints {
 		ep := s.srv.endpoints[i]
 		epTrimmedURL, _ := strings.CutSuffix(ep.EndpointURL, "/")
 		if epTrimmedURL == reqTrimmedURL {
-			matching_endpoints = append(matching_endpoints, ep)
+			matchingEndpoints = append(matchingEndpoints, ep)
 		}
 	}
 
@@ -79,12 +80,13 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		},
 		ServerCertificate: s.srv.cfg.certificate,
 		ServerNonce:       nonce,
-		ServerEndpoints:   matching_endpoints,
+		ServerEndpoints:   matchingEndpoints,
 	}
 
 	return response, nil
 }
 
+// ActivateSession implements the OPC UA ActivateSession service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.3
 func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -134,6 +136,7 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	return response, nil
 }
 
+// CloseSession implements the OPC UA CloseSession service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.4
 func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -172,6 +175,7 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 	return response, nil
 }
 
+// Cancel implements the OPC UA Cancel service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.5
 func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debugf("handling request type=%T", r)

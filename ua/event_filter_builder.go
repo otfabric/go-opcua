@@ -1,7 +1,7 @@
 package ua
 
 import (
-	"github.com/otfabric/opcua/id"
+	"github.com/otfabric/go-opcua/id"
 )
 
 // EventFilterBuilder provides a fluent API for constructing EventFilter objects.

@@ -10,7 +10,7 @@ import (
 	"net"
 	"net/url"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 const defaultPort = "4840"

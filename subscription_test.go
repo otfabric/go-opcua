@@ -5,8 +5,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,11 +19,11 @@ func TestMonitor_EOFErrorFormat(t *testing.T) {
 	require.Contains(t, err.Error(), "server may not support event or alarm", "error message should suggest server limitation")
 }
 
-// Running tool: /Users/frank/sdk/go1.17.1/bin/go test -benchmem -run=^$ -bench ^BenchmarkUnmonitorItems$ github.com/otfabric/opcua
+// Running tool: /Users/frank/sdk/go1.17.1/bin/go test -benchmem -run=^$ -bench ^BenchmarkUnmonitorItems$ github.com/otfabric/go-opcua
 
 // goos: darwin
 // goarch: arm64
-// pkg: github.com/otfabric/opcua
+// pkg: github.com/otfabric/go-opcua
 // BenchmarkUnmonitorItems/slice-8         	51153620	        24.03 ns/op	      20 B/op	       0 allocs/op
 // --- BENCH: BenchmarkUnmonitorItems/slice-8
 //     subscription_test.go:29: src 1 dst 0
@@ -46,7 +46,7 @@ func TestMonitor_EOFErrorFormat(t *testing.T) {
 //     subscription_test.go:75: src 500000
 //     subscription_test.go:75: src 19942775
 // PASS
-// ok  	github.com/otfabric/opcua	116.192s
+// ok  	github.com/otfabric/go-opcua	116.192s
 
 func BenchmarkUnmonitorItems(b *testing.B) {
 	b.Run("slice", func(b *testing.B) {

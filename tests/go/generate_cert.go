@@ -8,6 +8,7 @@
 // Based on src/crypto/tls/generate_cert.go from the Go SDK
 // Modified by the Gopcua Authors for use in creating an OPC-UA compliant client certificate
 
+// Package uatest2 provides integration test helpers for the Go OPC UA server.
 package uatest2
 
 import (

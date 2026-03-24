@@ -7,7 +7,7 @@ package uasc
 import (
 	"fmt"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // SequenceHeader represents a Sequence Header in OPC UA Secure Conversation.
@@ -39,10 +39,10 @@ func (h *SequenceHeader) Encode() ([]byte, error) {
 }
 
 // String returns Header in string.
-func (s *SequenceHeader) String() string {
+func (h *SequenceHeader) String() string {
 	return fmt.Sprintf(
 		"SequenceNumber: %d, RequestID: %d",
-		s.SequenceNumber,
-		s.RequestID,
+		h.SequenceNumber,
+		h.RequestID,
 	)
 }

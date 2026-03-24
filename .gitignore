@@ -1,12 +1,21 @@
-.DS_Store
-vendor/
-build/
+# Ignore python directories
 dist/
 __pycache__/
+
+# Ignore the bin directory
+/bin/
+*.exe
+
+# Ignore IDE settings
 .vscode/
+.idea/
+
+# Ignore coverage files
+cover.*
+coverage.*
+*.out
+
+# Certificates
 *.pem
 *.crt
 *.csr
-*.exe
-.idea/
-__debug*

@@ -5,11 +5,11 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 
-	// Force compilation of required hashing algorithms, although we don't directly use the packages
+	// Force compilation of required hashing algorithms, although we don't directly use the packages.
 	_ "crypto/sha1"
 	_ "crypto/sha256"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 const PKCS1v15MinPadding = 11
@@ -20,8 +20,8 @@ type PKCS1v15 struct {
 	PrivateKey *rsa.PrivateKey
 }
 
-func (c *PKCS1v15) Decrypt(src []byte) ([]byte, error) {
-	if c.PrivateKey == nil {
+func (s *PKCS1v15) Decrypt(src []byte) ([]byte, error) {
+	if s.PrivateKey == nil {
 		return nil, ua.StatusBadSecurityChecksFailed
 	}
 
@@ -29,7 +29,7 @@ func (c *PKCS1v15) Decrypt(src []byte) ([]byte, error) {
 
 	var plaintext []byte
 
-	blockSize := c.PrivateKey.PublicKey.Size()
+	blockSize := s.PrivateKey.Size()
 	srcRemaining := len(src)
 	start := 0
 
@@ -39,7 +39,7 @@ func (c *PKCS1v15) Decrypt(src []byte) ([]byte, error) {
 			end = len(src)
 		}
 
-		p, err := rsa.DecryptPKCS1v15(rng, c.PrivateKey, src[start:end])
+		p, err := rsa.DecryptPKCS1v15(rng, s.PrivateKey, src[start:end])
 		if err != nil {
 			return nil, err
 		}
@@ -52,8 +52,8 @@ func (c *PKCS1v15) Decrypt(src []byte) ([]byte, error) {
 	return plaintext, nil
 }
 
-func (c *PKCS1v15) Encrypt(src []byte) ([]byte, error) {
-	if c.PublicKey == nil {
+func (s *PKCS1v15) Encrypt(src []byte) ([]byte, error) {
+	if s.PublicKey == nil {
 		return nil, ua.StatusBadSecurityChecksFailed
 	}
 
@@ -61,7 +61,7 @@ func (c *PKCS1v15) Encrypt(src []byte) ([]byte, error) {
 
 	var ciphertext []byte
 
-	maxBlock := c.PublicKey.Size() - PKCS1v15MinPadding
+	maxBlock := s.PublicKey.Size() - PKCS1v15MinPadding
 	srcRemaining := len(src)
 	start := 0
 	for srcRemaining > 0 {
@@ -70,7 +70,7 @@ func (c *PKCS1v15) Encrypt(src []byte) ([]byte, error) {
 			end = len(src)
 		}
 
-		c, err := rsa.EncryptPKCS1v15(rng, c.PublicKey, src[start:end])
+		c, err := rsa.EncryptPKCS1v15(rng, s.PublicKey, src[start:end])
 		if err != nil {
 			return nil, err
 		}

@@ -13,7 +13,7 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/otfabric/opcua/cmd/service/goname"
+	"github.com/otfabric/go-opcua/cmd/service/goname"
 )
 
 var in, out, pkg, nodeids string
@@ -46,7 +46,7 @@ func loadNodeIDs(filename string) map[string]bool {
 	if err != nil {
 		log.Fatalf("Error reading %s: %v", filename, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	rows, err := csv.NewReader(f).ReadAll()
 	if err != nil {
@@ -313,7 +313,7 @@ const (
 
 var tmplRegExtObjs = template.Must(template.New("").Parse(`
 import (
-	"github.com/otfabric/opcua/id"
+	"github.com/otfabric/go-opcua/id"
 )
 
 func init() {
@@ -372,7 +372,7 @@ var funcs = template.FuncMap{
 
 var tmplRegister = template.Must(template.New("").Funcs(funcs).Parse(`
 
-import "github.com/otfabric/opcua/id"
+import "github.com/otfabric/go-opcua/id"
 
 func init() {
 	{{- range $i, $v := . -}}

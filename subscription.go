@@ -7,11 +7,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/stats"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/stats"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 const (
@@ -331,7 +331,7 @@ func (s *Subscription) SetTriggering(ctx context.Context, triggeringItemID uint3
 
 // SetPublishingMode enables or disables publishing of notification messages for this subscription.
 //
-// Part 4, Section 5.13.4
+// Part 4, Section 5.13.4.
 func (s *Subscription) SetPublishingMode(ctx context.Context, publishingEnabled bool) (*ua.SetPublishingModeResponse, error) {
 	stats.Subscription().Add("SetPublishingMode", 1)
 
@@ -420,24 +420,24 @@ func (p *SubscriptionParameters) setDefaults() {
 	}
 }
 
-// recreate_delete is called by the client when it is trying to
+// recreateDelete is called by the client when it is trying to
 // recreate an existing subscription. This function deletes the
 // existing subscription from the server.
-func (s *Subscription) recreate_delete(ctx context.Context) error { //nolint:unparam
+func (s *Subscription) recreateDelete(ctx context.Context) error { //nolint:unparam
 	req := &ua.DeleteSubscriptionsRequest{
 		SubscriptionIDs: []uint32{s.SubscriptionID},
 	}
 	if _, err := send[ua.DeleteSubscriptionsResponse](ctx, s.c, req); err != nil {
-		s.c.cfg.logger.Debugf("recreate_delete: delete failed (continuing anyway) sub_id=%v error=%v", s.SubscriptionID, err)
+		s.c.cfg.logger.Debugf("recreateDelete: delete failed (continuing anyway) sub_id=%v error=%v", s.SubscriptionID, err)
 	}
-	s.c.cfg.logger.Debugf("recreate_delete: subscription deleted sub_id=%v", s.SubscriptionID)
+	s.c.cfg.logger.Debugf("recreateDelete: subscription deleted sub_id=%v", s.SubscriptionID)
 	return nil
 }
 
-// recreate_create is called by the client when it is trying to
+// recreateCreate is called by the client when it is trying to
 // recreate an existing subscription. This function creates a
 // new subscription with the same parameters as the previous one.
-func (s *Subscription) recreate_create(ctx context.Context) error {
+func (s *Subscription) recreateCreate(ctx context.Context) error {
 	s.paramsMu.Lock()
 	params := s.params
 	s.paramsMu.Unlock()
@@ -452,7 +452,7 @@ func (s *Subscription) recreate_create(ctx context.Context) error {
 	}
 	res, err := send[ua.CreateSubscriptionResponse](ctx, s.c, req)
 	if err != nil {
-		s.c.cfg.logger.Debugf("recreate_create: failed to recreate subscription sub_id=%v", s.SubscriptionID)
+		s.c.cfg.logger.Debugf("recreateCreate: failed to recreate subscription sub_id=%v", s.SubscriptionID)
 		return err
 	}
 	// Redundant: send[T]() already checks ServiceResult via SecureChannel.Receive().
@@ -460,7 +460,7 @@ func (s *Subscription) recreate_create(ctx context.Context) error {
 	if status := res.ResponseHeader.ServiceResult; status != ua.StatusOK {
 		return status
 	}
-	s.c.cfg.logger.Debugf("recreate_create: recreated subscription sub_id=%v new_sub_id=%v", s.SubscriptionID, res.SubscriptionID)
+	s.c.cfg.logger.Debugf("recreateCreate: recreated subscription sub_id=%v new_sub_id=%v", s.SubscriptionID, res.SubscriptionID)
 
 	s.SubscriptionID = res.SubscriptionID
 	s.RevisedPublishingInterval = time.Duration(res.RevisedPublishingInterval) * time.Millisecond
@@ -469,10 +469,10 @@ func (s *Subscription) recreate_create(ctx context.Context) error {
 	s.lastSeq = 0
 	s.nextSeq = 1
 
-	if err := s.c.registerSubscription_NeedsSubMuxLock(s); err != nil {
+	if err := s.c.registerSubscriptionNeedsSubMuxLock(s); err != nil {
 		return err
 	}
-	s.c.cfg.logger.Debugf("recreate_create: subscription registered sub_id=%v", s.SubscriptionID)
+	s.c.cfg.logger.Debugf("recreateCreate: subscription registered sub_id=%v", s.SubscriptionID)
 
 	// Sort by timestamp to return
 	itemsByTimestamps := make(map[ua.TimestampsToReturn][]*ua.MonitoredItemCreateRequest)
@@ -492,7 +492,7 @@ func (s *Subscription) recreate_create(ctx context.Context) error {
 
 		res, err := send[ua.CreateMonitoredItemsResponse](ctx, s.c, req)
 		if err != nil {
-			s.c.cfg.logger.Debugf("recreate_create: failed to create monitored items sub_id=%v error=%v", s.SubscriptionID, err)
+			s.c.cfg.logger.Debugf("recreateCreate: failed to create monitored items sub_id=%v error=%v", s.SubscriptionID, err)
 			return err
 		}
 
@@ -512,7 +512,7 @@ func (s *Subscription) recreate_create(ctx context.Context) error {
 		}
 		s.itemsMu.Unlock()
 	}
-	s.c.cfg.logger.Debugf("recreate_create: subscription successfully recreated sub_id=%v", s.SubscriptionID)
+	s.c.cfg.logger.Debugf("recreateCreate: subscription successfully recreated sub_id=%v", s.SubscriptionID)
 
 	return nil
 }

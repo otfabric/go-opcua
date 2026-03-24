@@ -9,7 +9,7 @@ import "fmt"
 // QualifiedName contains a qualified name. It is, for example, used as BrowseName.
 // The name part of the QualifiedName is restricted to 512 characters.
 //
-// Specification: Part 3, 8.3
+// Specification: Part 3, 8.3.
 type QualifiedName struct {
 	NamespaceIndex uint16
 	Name           string

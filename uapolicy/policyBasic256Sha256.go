@@ -9,11 +9,11 @@ import (
 	"crypto/rsa"
 	"fmt"
 
-	// Force compilation of required hashing algorithms, although we don't directly use the packages
+	// Force compilation of required hashing algorithms, although we don't directly use the packages.
 	_ "crypto/sha1"
 	_ "crypto/sha256"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 /*
@@ -88,8 +88,8 @@ func newBasic256Rsa256Asymmetric(localKey *rsa.PrivateKey, remoteKey *rsa.Public
 		nonceLength            = 32
 	)
 
-	if localKey != nil && (localKey.PublicKey.Size() < minAsymmetricKeyLength || localKey.PublicKey.Size() > maxAsymmetricKeyLength) {
-		return nil, fmt.Errorf("%w: local key size should be %d-%d bytes, got %d bytes", errors.ErrInvalidSecurityConfig, minAsymmetricKeyLength, maxAsymmetricKeyLength, localKey.PublicKey.Size())
+	if localKey != nil && (localKey.Size() < minAsymmetricKeyLength || localKey.Size() > maxAsymmetricKeyLength) {
+		return nil, fmt.Errorf("%w: local key size should be %d-%d bytes, got %d bytes", errors.ErrInvalidSecurityConfig, minAsymmetricKeyLength, maxAsymmetricKeyLength, localKey.Size())
 	}
 
 	if remoteKey != nil && (remoteKey.Size() < minAsymmetricKeyLength || remoteKey.Size() > maxAsymmetricKeyLength) {
@@ -97,7 +97,7 @@ func newBasic256Rsa256Asymmetric(localKey *rsa.PrivateKey, remoteKey *rsa.Public
 	}
 	var localKeySize, remoteKeySize int
 	if localKey != nil {
-		localKeySize = localKey.PublicKey.Size()
+		localKeySize = localKey.Size()
 	}
 
 	if remoteKey != nil {

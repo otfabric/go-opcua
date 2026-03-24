@@ -4,12 +4,13 @@ import (
 	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
+	"fmt"
 
-	// Force compilation of required hashing algorithms, although we don't directly use the packages
+	// Force compilation of required hashing algorithms, although we don't directly use the packages.
 	_ "crypto/sha1"
 	_ "crypto/sha256"
 
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // messageLen = (keyLenBits / 8) - 2*(hashLenBits / 8) - 2
@@ -36,7 +37,7 @@ func (a *RSAOAEP) Decrypt(src []byte) ([]byte, error) {
 
 	var plaintext []byte
 
-	blockSize := a.PrivateKey.PublicKey.Size()
+	blockSize := a.PrivateKey.Size()
 	srcRemaining := len(src)
 	start := 0
 
@@ -74,6 +75,8 @@ func (a *RSAOAEP) Encrypt(src []byte) ([]byte, error) {
 		minPadding = RSAOAEPMinPaddingSHA1
 	case crypto.SHA256:
 		minPadding = RSAOAEPMinPaddingSHA256
+	default:
+		return nil, fmt.Errorf("unsupported hash: %v", a.Hash)
 	}
 
 	maxBlock := a.PublicKey.Size() - minPadding

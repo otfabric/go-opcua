@@ -1,6 +1,7 @@
+// Package attrs provides default OPC UA node attribute constructors.
 package attrs
 
-import "github.com/otfabric/opcua/ua"
+import "github.com/otfabric/go-opcua/ua"
 
 func BrowseName(name string) *ua.QualifiedName {
 	return &ua.QualifiedName{Name: name}

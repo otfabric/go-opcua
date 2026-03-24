@@ -16,16 +16,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
-	"github.com/otfabric/opcua/uapolicy"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uapolicy"
+	"github.com/otfabric/go-opcua/uasc"
 	"github.com/stretchr/testify/require"
 )
 
 // test certificate generated with
 // go run ~/sdk/gotip/src/crypto/tls/generate_cert.go -rsa-bits 1024 -host localhost
-// expires Jun  5 20:10:13 2020 GMT
+// expires Jun  5 20:10:13 2020 GMT.
 var (
 	certPEM = []byte(`-----BEGIN CERTIFICATE-----
 MIIB9TCCAV6gAwIBAgIRAJkygYaTfLZ9tOwtJvxdP7EwDQYJKoZIhvcNAQELBQAw
@@ -174,7 +174,7 @@ func TestOptions(t *testing.T) {
 
 	err = os.WriteFile(keyPEMFile, keyPEM, 0644)
 	require.NoError(t, err, "WriteFile(keyPEMFile) failed")
-	defer os.Remove(keyPEMFile)
+	defer func() { _ = os.Remove(keyPEMFile) }()
 
 	connStateCh := make(chan ConnState)
 	connStateFunc := func(ConnState) {}

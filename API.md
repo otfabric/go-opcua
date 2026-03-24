@@ -1,6 +1,6 @@
 # API Reference
 
-Complete reference for all public types, functions, and interfaces in `github.com/otfabric/opcua`.
+Complete reference for all public types, functions, and interfaces in `github.com/otfabric/go-opcua`.
 
 ---
 
@@ -292,7 +292,7 @@ func (n *Node) TranslateBrowsePathsToNodeIDs(ctx context.Context, pathNames []*u
 func (n *Node) TranslateBrowsePathInNamespaceToNodeID(ctx context.Context, ns uint16, browsePath string) (*ua.NodeID, error)
 ```
 
-`TranslateBrowsePathInNamespaceToNodeID` splits `browsePath` on "." and builds a path of [QualifiedName](https://pkg.go.dev/github.com/otfabric/opcua/ua#QualifiedName) segments in the given namespace. Use when the path starts from this node (e.g. custom root). For paths from the server's Objects folder, use `Client.NodeFromPath` or `Client.NodeFromPathInNamespace` instead.
+`TranslateBrowsePathInNamespaceToNodeID` splits `browsePath` on "." and builds a path of [QualifiedName](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#QualifiedName) segments in the given namespace. Use when the path starts from this node (e.g. custom root). For paths from the server's Objects folder, use `Client.NodeFromPath` or `Client.NodeFromPathInNamespace` instead.
 
 #### Walk
 

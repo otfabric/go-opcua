@@ -21,9 +21,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/otfabric/opcua"
-	"github.com/otfabric/opcua/id"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 type NodeDef struct {
@@ -189,7 +189,7 @@ func main() {
 	if err := c.Connect(ctx); err != nil {
 		log.Fatal(err)
 	}
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	id, err := ua.ParseNodeID(*nodeID)
 	if err != nil {
@@ -204,9 +204,9 @@ func main() {
 	w := csv.NewWriter(os.Stdout)
 	w.Comma = ';'
 	hdr := []string{"Name", "Type", "Addr", "Unit (SI)", "Scale", "Min", "Max", "Writable", "Description"}
-	w.Write(hdr)
+	_ = w.Write(hdr)
 	for _, s := range nodeList {
-		w.Write(s.Records())
+		_ = w.Write(s.Records())
 	}
 	w.Flush()
 }

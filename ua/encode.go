@@ -13,7 +13,7 @@ import (
 	"reflect"
 	"time"
 
-	"github.com/otfabric/opcua/errors"
+	"github.com/otfabric/go-opcua/errors"
 )
 
 // BinaryEncoder is the interface implemented by an object that can

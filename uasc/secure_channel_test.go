@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/opcua/id"
-	uatest "github.com/otfabric/opcua/tests/python"
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uacp"
-	"github.com/otfabric/opcua/uapolicy"
+	"github.com/otfabric/go-opcua/id"
+	uatest "github.com/otfabric/go-opcua/tests/python"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uapolicy"
 	"github.com/stretchr/testify/require"
 )
 

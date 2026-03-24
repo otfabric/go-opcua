@@ -17,10 +17,10 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/otfabric/opcua/logger"
-	"github.com/otfabric/opcua/schema"
-	"github.com/otfabric/opcua/server"
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/logger"
+	"github.com/otfabric/go-opcua/schema"
+	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 var (
@@ -150,13 +150,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("error opening nodeset file: %v", err)
 	}
-	node_data, err := io.ReadAll(file)
+	nodeData, err := io.ReadAll(file)
 	if err != nil {
 		log.Fatalf("error reading nodeset file: %v", err)
 	}
 	var nodes schema.UANodeSet
-	xml.Unmarshal(node_data, &nodes)
-	s.ImportNodeSet(&nodes)
+	if err := xml.Unmarshal(nodeData, &nodes); err != nil {
+		log.Fatalf("error parsing nodeset XML: %v", err)
+	}
+	if err := s.ImportNodeSet(&nodes); err != nil {
+		log.Fatalf("error importing nodeset: %v", err)
+	}
 
 	// At this point you can lookup any specific node by its nodeid to add references or modify it or whatever
 	// your heart desires
@@ -169,7 +173,7 @@ func main() {
 	if err := s.Start(context.Background()); err != nil {
 		log.Fatalf("Error starting server, exiting: %s", err)
 	}
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	// catch ctrl-c and gracefully shutdown the server.
 	sigch := make(chan os.Signal, 1)

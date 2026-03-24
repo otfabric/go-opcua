@@ -1,6 +1,6 @@
 # Architecture Guide
 
-> Internal architecture of the `github.com/otfabric/opcua` Go library.
+> Internal architecture of the `github.com/otfabric/go-opcua` Go library.
 
 ---
 

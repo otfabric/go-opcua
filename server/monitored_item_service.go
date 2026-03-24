@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/otfabric/opcua/ua"
-	"github.com/otfabric/opcua/uasc"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 // MonitoredItemService implements the MonitoredItem Service Set.
@@ -29,7 +29,7 @@ type MonitoredItemService struct {
 	id uint32
 }
 
-// function to get rid of all references to a specific Monitored Item (by ID number)
+// DeleteMonitoredItem removes all references to a specific monitored item by ID.
 func (s *MonitoredItemService) DeleteMonitoredItem(id uint32) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -82,7 +82,7 @@ func (s *MonitoredItemService) DeleteMonitoredItem(id uint32) {
 	}
 }
 
-// function to delete all monitored items associated with a specific sub (as indicated by id number)
+// DeleteSub deletes all monitored items associated with a specific subscription ID.
 func (s *MonitoredItemService) DeleteSub(id uint32) {
 	s.Mu.Lock()
 	items, ok := s.Subs[id]
@@ -151,6 +151,7 @@ type MonitoredItem struct {
 	Mode ua.MonitoringMode
 }
 
+// CreateMonitoredItems implements the OPC UA CreateMonitoredItems service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.2
 func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -235,6 +236,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 
 }
 
+// ModifyMonitoredItems implements the OPC UA ModifyMonitoredItems service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.3
 func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -300,6 +302,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 	}, nil
 }
 
+// SetMonitoringMode implements the OPC UA SetMonitoringMode service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.4
 func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -346,6 +349,7 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 
 }
 
+// SetTriggering implements the OPC UA SetTriggering service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.5
 func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
@@ -402,6 +406,7 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 	}, nil
 }
 
+// DeleteMonitoredItems implements the OPC UA DeleteMonitoredItems service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.6
 func (s *MonitoredItemService) DeleteMonitoredItems(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)

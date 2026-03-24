@@ -1,7 +1,7 @@
 package server
 
 import (
-	"github.com/otfabric/opcua/ua"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // EventEmitter provides the ability to emit events on server nodes.
