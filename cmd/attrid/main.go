@@ -11,8 +11,9 @@ import (
 	"go/format"
 	"log"
 	"os"
-	"strings"
 	"text/template"
+
+	"github.com/otfabric/go-opcua/internal/goname"
 )
 
 func main() {
@@ -41,7 +42,7 @@ func main() {
 	}
 
 	for i := range rows {
-		rows[i][0] = goName(rows[i][0])
+		rows[i][0] = goname.Format(rows[i][0])
 	}
 
 	var b bytes.Buffer
@@ -69,9 +70,7 @@ var tmpl = template.Must(template.New("").Parse(`
 
 package ua
 
-// Identifiers assigned to Attributes.
-//
-// Specification: Part 6, A.1.
+// AttributeID identifies an OPC UA node attribute (Part 6, A.1).
 type AttributeID uint32
 
 const (
@@ -81,20 +80,3 @@ const (
 	{{- end}}
 )
 `))
-
-func goName(s string) string {
-	r1 := strings.NewReplacer(
-		"Guid", "GUID",
-		"Id", "ID",
-		"Json", "JSON",
-		"QualityOfService", "QoS",
-		"Uadp", "UADP",
-		"Uri", "URI",
-		"Url", "URL",
-		"Xml", "XML",
-	)
-	r2 := strings.NewReplacer(
-		"IDentity", "Identity",
-	)
-	return r2.Replace(r1.Replace(s))
-}

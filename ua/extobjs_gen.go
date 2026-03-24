@@ -283,7 +283,7 @@ type PortableQualifiedName struct {
 
 type PortableNodeID struct {
 	NamespaceURI string
-	IDentifier   *NodeID
+	Identifier   *NodeID
 }
 
 type UnsignedRationalNumber struct {
@@ -701,7 +701,7 @@ type PubSubConfigurationRefDataType struct {
 type PubSubConfigurationValueDataType struct {
 	ConfigurationElement *PubSubConfigurationRefDataType
 	Name                 string
-	IDentifier           *Variant
+	Identifier           *Variant
 }
 
 type JSONNetworkMessage struct {
@@ -848,10 +848,10 @@ type UserManagementDataType struct {
 }
 
 type PriorityMappingEntryType struct {
-	MappingURI         string
-	PriorityLabel      string
-	PriorityValue_PCP  uint8
-	PriorityValue_DSCP uint32
+	MappingURI        string
+	PriorityLabel     string
+	PriorityValuePCP  uint8
+	PriorityValueDSCP uint32
 }
 
 type LldpManagementAddressTxPortType struct {
@@ -912,7 +912,7 @@ type TraceContextDataType struct {
 	TraceID          *GUID
 	SpanID           uint64
 	ParentSpanID     uint64
-	ParentIDentifier string
+	ParentIdentifier string
 }
 
 type NameValuePair struct {

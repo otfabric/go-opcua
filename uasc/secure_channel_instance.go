@@ -89,7 +89,7 @@ func (c *channelInstance) newMessage(srv interface{}, typeID uint16, requestID u
 	c.sc.cfg.Logger.Debugf("got sequence number sequence_number=%v", sequenceNumber)
 
 	switch typeID {
-	case id.OpenSecureChannelRequest_Encoding_DefaultBinary, id.OpenSecureChannelResponse_Encoding_DefaultBinary:
+	case id.OpenSecureChannelRequestEncodingDefaultBinary, id.OpenSecureChannelResponseEncodingDefaultBinary:
 		// Do not send the thumbprint for security mode None
 		// even if we have a certificate.
 		//
@@ -109,7 +109,7 @@ func (c *channelInstance) newMessage(srv interface{}, typeID uint16, requestID u
 			Service: srv,
 		}
 
-	case id.CloseSecureChannelRequest_Encoding_DefaultBinary, id.CloseSecureChannelResponse_Encoding_DefaultBinary:
+	case id.CloseSecureChannelRequestEncodingDefaultBinary, id.CloseSecureChannelResponseEncodingDefaultBinary:
 		return &Message{
 			MessageHeader: &MessageHeader{
 				Header:                  NewHeader(MessageTypeCloseSecureChannel, ChunkTypeFinal, c.secureChannelID),

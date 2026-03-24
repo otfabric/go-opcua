@@ -2,29 +2,12 @@
 // Use of this source code is governed by a MIT-style license that can be
 // found in the LICENSE file.
 
-// Package goname provides Go naming conventions for code generation.
+// Package goname delegates to the shared naming formatter.
 package goname
 
-import "strings"
+import "github.com/otfabric/go-opcua/internal/goname"
 
-var (
-	idents = strings.NewReplacer(
-		"Guid", "GUID",
-		"Id", "ID",
-		"Json", "JSON",
-		"QualityOfService", "QoS",
-		"Tcp", "TCP",
-		"Uadp", "UADP",
-		"Uri", "URI",
-		"Url", "URL",
-		"Xml", "XML",
-	)
-
-	fixes = strings.NewReplacer(
-		"IDentity", "Identity",
-	)
-)
-
+// Format converts an OPC UA spec token into an idiomatic Go identifier.
 func Format(s string) string {
-	return fixes.Replace(idents.Replace(s))
+	return goname.Format(s)
 }

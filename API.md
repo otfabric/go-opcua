@@ -1663,9 +1663,9 @@ func RecordError(err error)
 
 Generated constants for all standard OPC-UA node IDs from the specification.
 
-Contains ~10,000 constants organised by node class:
-- Object IDs (e.g. `id.Server`, `id.Server_ServerStatus`)
-- Variable IDs (e.g. `id.Server_ServerStatus_CurrentTime`)
+Contains ~14,600 constants organised by node class:
+- Object IDs (e.g. `id.Server`, `id.ServerServerStatus`)
+- Variable IDs (e.g. `id.ServerServerStatusCurrentTime`)
 - ObjectType IDs (e.g. `id.BaseObjectType`, `id.FolderType`)
 - VariableType IDs
 - DataType IDs (e.g. `id.BaseDataType`, `id.Boolean`, `id.String`)

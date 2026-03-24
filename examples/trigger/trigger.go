@@ -172,7 +172,7 @@ func getFilter(filterStr string) *ua.ExtensionObject {
 	return &ua.ExtensionObject{
 		EncodingMask: ua.ExtensionObjectBinary,
 		TypeID: &ua.ExpandedNodeID{
-			NodeID: ua.NewNumericNodeID(0, id.DataChangeFilter_Encoding_DefaultBinary),
+			NodeID: ua.NewNumericNodeID(0, id.DataChangeFilterEncodingDefaultBinary),
 		},
 		Value: filter,
 	}

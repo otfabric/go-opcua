@@ -6,9 +6,7 @@
 
 package ua
 
-// AttributeID represents identifiers assigned to Attributes.
-//
-// Specification: Part 6, A.1.
+// AttributeID identifies an OPC UA node attribute (Part 6, A.1).
 type AttributeID uint32
 
 const (

@@ -34,8 +34,8 @@ func (s *Server) namespacesImportNodeSet(nodes *schema.UANodeSet) error { //noli
 	if nodes.NamespaceUris == nil {
 		return nil
 	}
-	for i := range nodes.NamespaceUris.Uri {
-		_ = NewNodeNameSpace(s, nodes.NamespaceUris.Uri[i])
+	for i := range nodes.NamespaceUris.URI {
+		_ = NewNodeNameSpace(s, nodes.NamespaceUris.URI[i])
 	}
 	return nil
 }
@@ -51,9 +51,9 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	for i := range nodes.UAReferenceType {
 		rt := nodes.UAReferenceType[i]
 		reftypes[rt.BrowseNameAttr] = rt // sometimes they use browse name
-		reftypes[rt.NodeIdAttr] = rt     // sometimes they use node id
+		reftypes[rt.NodeIDAttr] = rt     // sometimes they use node id
 
-		nid := ua.MustParseNodeID(rt.NodeIdAttr)
+		nid := ua.MustParseNodeID(rt.NodeIDAttr)
 
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(rt.AccessRestrictionsAttr)
@@ -90,7 +90,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	// set up the data types.
 	for i := range nodes.UADataType {
 		dt := nodes.UADataType[i]
-		nid := ua.MustParseNodeID(dt.NodeIdAttr)
+		nid := ua.MustParseNodeID(dt.NodeIDAttr)
 
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(dt.AccessRestrictionsAttr)
@@ -123,7 +123,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	// set up the object types
 	for i := range nodes.UAObjectType {
 		ot := nodes.UAObjectType[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
 		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
@@ -154,7 +154,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	// set up the variable Types
 	for i := range nodes.UAVariableType {
 		ot := nodes.UAVariableType[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
 		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
@@ -184,7 +184,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	// set up the variables
 	for i := range nodes.UAVariable {
 		ot := nodes.UAVariable[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
 		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
@@ -214,7 +214,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	// set up the methods
 	for i := range nodes.UAMethod {
 		ot := nodes.UAMethod[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
 		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
@@ -244,8 +244,8 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	// set up the objects
 	for i := range nodes.UAObject {
 		ot := nodes.UAObject[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
-		if ot.NodeIdAttr == "i=85" {
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
+		if ot.NodeIDAttr == "i=85" {
 			s.cfg.logger.Debugf("doing objects")
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
@@ -286,7 +286,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	for i := range nodes.UAReferenceType {
 		rt := nodes.UAReferenceType[i]
 		reftypes[rt.BrowseNameAttr] = rt // sometimes they use browse name
-		reftypes[rt.NodeIdAttr] = rt     // sometimes they use node id
+		reftypes[rt.NodeIDAttr] = rt     // sometimes they use node id
 	}
 
 	aliases := make(map[string]string)
@@ -308,7 +308,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 		rt.UAType = new(schema.UAType)
 		rt.UANode = new(schema.UANode)
 		rt.BrowseNameAttr = alias
-		rt.NodeIdAttr = aliases[alias]
+		rt.NodeIDAttr = aliases[alias]
 		isSymmetricValue, err := refnode.Attribute(ua.AttributeIDSymmetric)
 		if err == nil {
 			rt.SymmetricAttr = isSymmetricValue.Value.Value.Value().(bool)
@@ -337,10 +337,10 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	for i := range nodes.UAReferenceType {
 		rt := nodes.UAReferenceType[i]
 
-		nodeid := ua.MustParseNodeID(rt.NodeIdAttr)
+		nodeid := ua.MustParseNodeID(rt.NodeIDAttr)
 		node := s.Node(nodeid)
 		if node == nil {
-			s.cfg.logger.Warnf("error loading node node_id=%v", rt.NodeIdAttr)
+			s.cfg.logger.Warnf("error loading node node_id=%v", rt.NodeIDAttr)
 		}
 
 		for rid := range rt.References.Reference {
@@ -354,7 +354,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 			}
 
 			fwd := isForward(ref)
-			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIdAttr)
+			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIDAttr)
 			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
 			if !reftypes[ref.ReferenceTypeAttr].SymmetricAttr {
 				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
@@ -366,7 +366,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	// set up the data types.
 	for i := range nodes.UADataType {
 		dt := nodes.UADataType[i]
-		nid := ua.MustParseNodeID(dt.NodeIdAttr)
+		nid := ua.MustParseNodeID(dt.NodeIDAttr)
 		node := s.Node(nid)
 
 		if nid.IntID() == 24 {
@@ -384,7 +384,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 			}
 
 			fwd := isForward(ref)
-			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIdAttr)
+			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIDAttr)
 			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
 			if !reftypes[ref.ReferenceTypeAttr].SymmetricAttr {
 				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
@@ -397,7 +397,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	// set up the object types
 	for i := range nodes.UAObjectType {
 		ot := nodes.UAObjectType[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		node := s.Node(nid)
 
 		for rid := range ot.References.Reference {
@@ -410,7 +410,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 				continue
 			}
 			fwd := isForward(ref)
-			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIdAttr)
+			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIDAttr)
 			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
 			if !reftypes[ref.ReferenceTypeAttr].SymmetricAttr {
 				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
@@ -421,7 +421,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	// set up the variable Types
 	for i := range nodes.UAVariableType {
 		ot := nodes.UAVariableType[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		node := s.Node(nid)
 
 		for rid := range ot.References.Reference {
@@ -434,7 +434,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 				continue
 			}
 			fwd := isForward(ref)
-			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIdAttr)
+			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIDAttr)
 			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
 			if !reftypes[ref.ReferenceTypeAttr].SymmetricAttr {
 				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
@@ -447,7 +447,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	// set up the variables
 	for i := range nodes.UAVariable {
 		ot := nodes.UAVariable[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		node := s.Node(nid)
 
 		for rid := range ot.References.Reference {
@@ -460,7 +460,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 				continue
 			}
 			fwd := isForward(ref)
-			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIdAttr)
+			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIDAttr)
 			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
 			if !reftypes[ref.ReferenceTypeAttr].SymmetricAttr {
 				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
@@ -473,7 +473,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	// set up the methods
 	for i := range nodes.UAMethod {
 		ot := nodes.UAMethod[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		node := s.Node(nid)
 
 		for rid := range ot.References.Reference {
@@ -486,7 +486,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 				continue
 			}
 			fwd := isForward(ref)
-			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIdAttr)
+			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIDAttr)
 			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
 			if !reftypes[ref.ReferenceTypeAttr].SymmetricAttr {
 				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
@@ -498,9 +498,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 	// set up the objects
 	for i := range nodes.UAObject {
 		ot := nodes.UAObject[i]
-		nid := ua.MustParseNodeID(ot.NodeIdAttr)
+		nid := ua.MustParseNodeID(ot.NodeIDAttr)
 		node := s.Node(nid)
-		if ot.NodeIdAttr == "i=84" {
+		if ot.NodeIDAttr == "i=84" {
 			s.cfg.logger.Debugf("doing root")
 		}
 
@@ -514,7 +514,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unp
 				continue
 			}
 			fwd := isForward(ref)
-			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIdAttr)
+			reftypeid := ua.MustParseNodeID(reftypes[ref.ReferenceTypeAttr].NodeIDAttr)
 			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
 			if !reftypes[ref.ReferenceTypeAttr].SymmetricAttr {
 				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)

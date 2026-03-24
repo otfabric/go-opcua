@@ -318,7 +318,7 @@ import (
 
 func init() {
 	{{- range $i, $v := . -}}
-		RegisterExtensionObject(NewNumericNodeID(0, id.{{$v.Name}}_Encoding_DefaultBinary), new({{$v.Name}}))
+		RegisterExtensionObject(NewNumericNodeID(0, id.{{$v.Name}}EncodingDefaultBinary), new({{$v.Name}}))
 	{{end -}}
 }
 `))
@@ -377,7 +377,7 @@ import "github.com/otfabric/go-opcua/id"
 func init() {
 	{{- range $i, $v := . -}}
 		{{- if isService $v.Name -}}
-			RegisterService(id.{{$v.Name}}_Encoding_DefaultBinary, new({{$v.Name}}))
+			RegisterService(id.{{$v.Name}}EncodingDefaultBinary, new({{$v.Name}}))
 		{{end -}}
 	{{end -}}
 }

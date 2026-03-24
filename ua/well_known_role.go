@@ -13,18 +13,18 @@ import (
 type WellKnownRole uint32
 
 const (
-	RoleAnonymous               WellKnownRole = id.WellKnownRole_Anonymous
-	RoleAuthenticatedUser       WellKnownRole = id.WellKnownRole_AuthenticatedUser
-	RoleObserver                WellKnownRole = id.WellKnownRole_Observer
-	RoleOperator                WellKnownRole = id.WellKnownRole_Operator
-	RoleSupervisor              WellKnownRole = id.WellKnownRole_Supervisor
-	RoleSecurityAdmin           WellKnownRole = id.WellKnownRole_SecurityAdmin
-	RoleConfigureAdmin          WellKnownRole = id.WellKnownRole_ConfigureAdmin
-	RoleEngineer                WellKnownRole = id.WellKnownRole_Engineer
-	RoleTrustedApplication      WellKnownRole = id.WellKnownRole_TrustedApplication
-	RoleSecurityKeyServerAdmin  WellKnownRole = id.WellKnownRole_SecurityKeyServerAdmin
-	RoleSecurityKeyServerPush   WellKnownRole = id.WellKnownRole_SecurityKeyServerPush
-	RoleSecurityKeyServerAccess WellKnownRole = id.WellKnownRole_SecurityKeyServerAccess
+	RoleAnonymous               WellKnownRole = id.WellKnownRoleAnonymous
+	RoleAuthenticatedUser       WellKnownRole = id.WellKnownRoleAuthenticatedUser
+	RoleObserver                WellKnownRole = id.WellKnownRoleObserver
+	RoleOperator                WellKnownRole = id.WellKnownRoleOperator
+	RoleSupervisor              WellKnownRole = id.WellKnownRoleSupervisor
+	RoleSecurityAdmin           WellKnownRole = id.WellKnownRoleSecurityAdmin
+	RoleConfigureAdmin          WellKnownRole = id.WellKnownRoleConfigureAdmin
+	RoleEngineer                WellKnownRole = id.WellKnownRoleEngineer
+	RoleTrustedApplication      WellKnownRole = id.WellKnownRoleTrustedApplication
+	RoleSecurityKeyServerAdmin  WellKnownRole = id.WellKnownRoleSecurityKeyServerAdmin
+	RoleSecurityKeyServerPush   WellKnownRole = id.WellKnownRoleSecurityKeyServerPush
+	RoleSecurityKeyServerAccess WellKnownRole = id.WellKnownRoleSecurityKeyServerAccess
 )
 
 // String returns the short name of the role (e.g. "Anonymous").

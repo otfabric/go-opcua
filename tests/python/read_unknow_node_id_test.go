@@ -43,7 +43,7 @@ func TestReadUnknowNodeID(t *testing.T) {
 	_, err = c.Read(ctx, &ua.ReadRequest{
 		NodesToRead: []*ua.ReadValueID{
 			{
-				NodeID: ua.NewNumericNodeID(0, id.Server_ServerStatus_State),
+				NodeID: ua.NewNumericNodeID(0, id.ServerServerStatusState),
 			},
 		},
 	})

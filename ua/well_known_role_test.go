@@ -40,7 +40,7 @@ func TestWellKnownRoleString(t *testing.T) {
 
 func TestWellKnownRoleNodeID(t *testing.T) {
 	n := RoleAnonymous.NodeID()
-	if got, want := n.IntID(), uint32(id.WellKnownRole_Anonymous); got != want {
+	if got, want := n.IntID(), uint32(id.WellKnownRoleAnonymous); got != want {
 		t.Errorf("NodeID().IntID() = %d, want %d", got, want)
 	}
 }

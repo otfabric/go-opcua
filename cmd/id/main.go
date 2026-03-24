@@ -8,14 +8,22 @@ import (
 	"bytes"
 	"encoding/csv"
 	"flag"
+	"fmt"
 	"go/format"
 	"log"
 	"os"
 	"strings"
 	"text/template"
 
+	"github.com/otfabric/go-opcua/internal/goname"
 	"golang.org/x/exp/maps"
 )
+
+type idRow struct {
+	GoName   string
+	SpecName string
+	Value    string
+}
 
 func main() {
 	log.SetFlags(0)
@@ -45,23 +53,42 @@ func main() {
 		log.Fatalf("Error parsing %s: %v", *in, err)
 	}
 
-	for i := range rows {
-		rows[i][0] = goName(rows[i][0])
+	type groupData struct {
+		NodeClass string
+		Rows      []idRow
 	}
 
-	groupedRows := map[string][][]string{}
+	grouped := map[string]*groupData{}
+	seen := map[string]string{} // goName → specName for collision detection
+
 	for _, row := range rows {
+		specName := row[0]
+		value := row[1]
 		nodeClass := row[2]
-		groupedRows[nodeClass] = append(groupedRows[nodeClass], row)
+
+		goN := goname.Format(specName)
+
+		if !goname.IsValidIdent(goN) {
+			log.Fatalf("invalid Go identifier %q (from spec name %q)", goN, specName)
+		}
+
+		if prev, ok := seen[goN]; ok && prev != specName {
+			log.Fatalf("collision: spec names %q and %q both normalize to Go identifier %q", prev, specName, goN)
+		}
+		seen[goN] = specName
+
+		g, ok := grouped[nodeClass]
+		if !ok {
+			g = &groupData{NodeClass: nodeClass}
+			grouped[nodeClass] = g
+		}
+		g.Rows = append(g.Rows, idRow{GoName: goN, SpecName: specName, Value: value})
 	}
 
-	for nodeClass, rows := range groupedRows {
+	for nodeClass, g := range grouped {
 		out := strings.ReplaceAll(*out, "*", nodeClass)
 		var b bytes.Buffer
-		if err := idTmpl.Execute(&b, struct {
-			NodeClass string
-			Rows      [][]string
-		}{nodeClass, rows}); err != nil {
+		if err := idTmpl.Execute(&b, g); err != nil {
 			log.Fatalf("Error generating code: %v", err)
 		}
 
@@ -79,7 +106,7 @@ func main() {
 	{
 		out := strings.ReplaceAll(*out, "*", "names")
 		var b bytes.Buffer
-		if err := nameTmpl.Execute(&b, maps.Keys(groupedRows)); err != nil {
+		if err := nameTmpl.Execute(&b, maps.Keys(grouped)); err != nil {
 			log.Fatalf("Error generating code: %v", err)
 		}
 
@@ -93,6 +120,8 @@ func main() {
 		}
 		log.Printf("Wrote %s", out)
 	}
+
+	fmt.Fprintf(os.Stderr, "id: %d identifiers, 0 collisions\n", len(seen))
 }
 
 var idTmpl = template.Must(template.New("").Parse(`
@@ -105,13 +134,13 @@ var idTmpl = template.Must(template.New("").Parse(`
 package id
 
 const (
-	{{range .Rows}}{{index . 0}} = {{index . 1}}
+	{{range .Rows}}{{.GoName}} = {{.Value}}
 	{{end}}
 )
 
 var name{{.NodeClass}} = map[uint32]string{
 	{{- range .Rows}}
-	{{index . 1}}: "{{index . 0}}",
+	{{.Value}}: "{{.SpecName}}",
 	{{- end}}
 }
 `))
@@ -136,20 +165,3 @@ func Name(id uint32) string {
 	return strconv.FormatUint(uint64(id), 10)
 }
 `))
-
-func goName(s string) string {
-	r1 := strings.NewReplacer(
-		"Guid", "GUID",
-		"Id", "ID",
-		"Json", "JSON",
-		"QualityOfService", "QoS",
-		"Uadp", "UADP",
-		"Uri", "URI",
-		"Url", "URL",
-		"Xml", "XML",
-	)
-	r2 := strings.NewReplacer(
-		"IDentity", "Identity",
-	)
-	return r2.Replace(r1.Replace(s))
-}

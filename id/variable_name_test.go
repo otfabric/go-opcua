@@ -13,8 +13,8 @@ func TestVariableName(t *testing.T) {
 		id   uint32
 		want string
 	}{
-		{Server_ServerStatus, "Server_ServerStatus"},
-		{Server_ServerStatus_CurrentTime, "Server_ServerStatus_CurrentTime"},
+		{ServerServerStatus, "Server_ServerStatus"},
+		{ServerServerStatusCurrentTime, "Server_ServerStatus_CurrentTime"},
 		{0, ""},
 		{99999, ""},
 	}

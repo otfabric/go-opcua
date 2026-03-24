@@ -120,15 +120,15 @@ func (e *ExtensionObject) UpdateMask() {
 func ExtensionObjectTypeID(v interface{}) *ExpandedNodeID {
 	switch v.(type) {
 	case *AnonymousIdentityToken:
-		return NewFourByteExpandedNodeID(0, id.AnonymousIdentityToken_Encoding_DefaultBinary)
+		return NewFourByteExpandedNodeID(0, id.AnonymousIdentityTokenEncodingDefaultBinary)
 	case *UserNameIdentityToken:
-		return NewFourByteExpandedNodeID(0, id.UserNameIdentityToken_Encoding_DefaultBinary)
+		return NewFourByteExpandedNodeID(0, id.UserNameIdentityTokenEncodingDefaultBinary)
 	case *X509IdentityToken:
-		return NewFourByteExpandedNodeID(0, id.X509IdentityToken_Encoding_DefaultBinary)
+		return NewFourByteExpandedNodeID(0, id.X509IdentityTokenEncodingDefaultBinary)
 	case *IssuedIdentityToken:
-		return NewFourByteExpandedNodeID(0, id.IssuedIdentityToken_Encoding_DefaultBinary)
+		return NewFourByteExpandedNodeID(0, id.IssuedIdentityTokenEncodingDefaultBinary)
 	case *ServerStatusDataType:
-		return NewFourByteExpandedNodeID(0, id.ServerStatusDataType_Encoding_DefaultBinary)
+		return NewFourByteExpandedNodeID(0, id.ServerStatusDataTypeEncodingDefaultBinary)
 	default:
 		if id := eotypes.Lookup(v); id != nil {
 			return &ExpandedNodeID{NodeID: id}

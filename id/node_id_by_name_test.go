@@ -14,12 +14,12 @@ func TestNodeIDByName(t *testing.T) {
 		wantID uint32
 		wantOK bool
 	}{
-		{"CurrentTime", Server_ServerStatus_CurrentTime, true},
-		{"ServerStatus", Server_ServerStatus, true},
+		{"CurrentTime", ServerServerStatusCurrentTime, true},
+		{"ServerStatus", ServerServerStatus, true},
 		{"Objects", ObjectsFolder, true},
 		{"Server", Server, true},
 		{"ObjectsFolder", ObjectsFolder, true},
-		{"Server_ServerStatus_CurrentTime", Server_ServerStatus_CurrentTime, true},
+		{"Server_ServerStatus_CurrentTime", ServerServerStatusCurrentTime, true},
 		{"unknown", 0, false},
 		{"", 0, false},
 	}

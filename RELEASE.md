@@ -1,5 +1,99 @@
 # go-opcua Releases
 
+## v1.0.0
+
+**Date:** 2026-03-24
+**Previous release:** v0.1.15
+
+### Summary
+
+Makes all generated Go identifiers fully idiomatic by removing spec-derived underscore names from exported constants, fields, and symbols. This is a **breaking change** — all exported identifiers containing underscores have been renamed to CamelCase, and `id.Name()` now returns OPC UA spec names instead of Go identifier spellings.
+
+### Breaking changes
+
+#### Identifier renames
+
+All exported generated identifiers now use idiomatic Go CamelCase without underscores. Approximately 14,600 `id` package constants, plus status code constants and schema struct fields, have been renamed.
+
+Common rename patterns:
+
+| Old name | New name |
+|----------|----------|
+| `id.ServerType_ServerArray` | `id.ServerTypeServerArray` |
+| `id.Server_ServerStatus_CurrentTime` | `id.ServerServerStatusCurrentTime` |
+| `id.AggregateFunction_Average` | `id.AggregateFunctionAverage` |
+| `id.WellKnownRole_Anonymous` | `id.WellKnownRoleAnonymous` |
+| `id.FindServersRequest_Encoding_DefaultBinary` | `id.FindServersRequestEncodingDefaultBinary` |
+| `StatusGoodEdited_DependentValueChanged` | `StatusGoodEditedDependentValueChanged` |
+
+#### Go initialism normalization
+
+Standard Go initialisms are now consistently applied across all generators:
+
+| Token | Normalized |
+|-------|-----------|
+| `Id` | `ID` |
+| `Uri` | `URI` |
+| `Url` | `URL` |
+| `Xml` | `XML` |
+| `Json` | `JSON` |
+| `Guid` | `GUID` |
+| `Tcp` | `TCP` |
+| `Tls` | `TLS` |
+| `Http` | `HTTP` |
+| `Https` | `HTTPS` |
+| `Dns` | `DNS` |
+| `Uadp` | `UADP` |
+
+#### `id.Name()` returns spec names
+
+`id.Name()` now returns the original OPC UA specification name (with underscores) instead of the Go identifier spelling:
+
+```go
+id.Name(2005) == "ServerType_ServerArray"  // was: "ServerTypeServerArray"
+```
+
+#### Schema struct field renames
+
+`schema/uaNodeSet.go` struct fields and types updated to use Go initialisms:
+- `NodeIdAttr` → `NodeIDAttr`
+- `TransactionIdAttr` → `TransactionIDAttr`
+- `UriTable` → `URITable`
+- `NodeId` → `NodeID`
+- `NodeIdAlias` → `NodeIDAlias`
+
+XML tags are unchanged — wire format compatibility is preserved.
+
+### New features
+
+#### Shared naming formatter (`internal/goname`)
+
+All code generators now use a single shared naming formatter (`internal/goname.Format`) that:
+- Removes underscores and applies CamelCase conversion.
+- Normalizes all standard Go initialisms.
+- Validates generated identifiers.
+
+#### Collision detection
+
+The `cmd/id` generator now detects naming collisions (where distinct spec names would normalize to the same Go identifier) and fails with a clear error. No collisions exist in the current OPC UA specification.
+
+### Lint and quality
+
+- **ST1003 exclusion removed** — The `.golangci.yml` exclusion for `ST1003` on generated files and `schema/` has been removed. All generated code now passes staticcheck without exceptions.
+- **ST1016** — Fixed inconsistent receiver name `n` → `s` on `StatusCode.Error()`.
+- **ST1021** — Fixed `AttributeID` type comment format.
+
+### Migration guide
+
+This release contains no compatibility aliases. Update all references mechanically:
+
+1. Replace `id.Foo_Bar_Baz` with `id.FooBarBaz` (remove all underscores).
+2. Replace `StatusFoo_Bar` with `StatusFooBar`.
+3. Update any code using `id.Name()` that expected Go-style names — it now returns spec-style names with underscores.
+4. Update `schema.NodeIdAttr` → `schema.NodeIDAttr` and similar field references.
+
+---
+
 ## v0.1.15
 
 **Date:** 2026-03-24
