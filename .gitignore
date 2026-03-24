@@ -5,6 +5,7 @@ __pycache__/
 # Ignore the bin directory
 /bin/
 *.exe
+*.log
 
 # Ignore IDE settings
 .vscode/

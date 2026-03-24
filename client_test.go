@@ -223,11 +223,11 @@ func TestClient_SetState(t *testing.T) {
 			var stateCh chan ConnState
 			if tt.withChan {
 				stateCh = make(chan ConnState, 1)
-				opts = append(opts, StateChangedCh(stateCh))
+				opts = append(opts, WithConnStateChan(stateCh))
 			}
 			funcCallback := false
 			if tt.withFunc {
-				opts = append(opts, StateChangedFunc(func(ConnState) {
+				opts = append(opts, WithConnStateHandler(func(ConnState) {
 					funcCallback = true
 				}))
 			}

@@ -46,7 +46,10 @@ func startServer() *server.Server {
 		server.EndPoint("localhost", port),
 	)
 
-	s := server.New(opts...)
+	s, err := server.New(opts...)
+	if err != nil {
+		log.Fatalf("Error creating server: %s", err)
+	}
 
 	root_ns, _ := s.Namespace(0)
 	obj_node := root_ns.Objects()

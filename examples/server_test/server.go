@@ -108,7 +108,10 @@ func main() {
 		}
 	}
 
-	s := server.New(opts...)
+	s, err := server.New(opts...)
+	if err != nil {
+		log.Fatalf("Error creating server: %s", err)
+	}
 
 	// Create a new node namespace.  You can add namespaces before or after starting the server.
 	// Start the server

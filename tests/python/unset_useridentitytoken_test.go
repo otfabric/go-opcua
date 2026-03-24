@@ -23,7 +23,7 @@ func TestUnsetUserIdentityTokenConnect(t *testing.T) {
 		log.Fatal(err)
 	}
 
-	ep, err := opcua.SelectEndpoint(endpoints, "None", ua.MessageSecurityModeFromString("None"))
+	ep, err := ua.SelectEndpoint(endpoints, "None", ua.MessageSecurityModeFromString("None"))
 	if err != nil {
 		t.Fatal(err)
 	}

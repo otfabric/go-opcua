@@ -326,15 +326,15 @@ func TestOptions(t *testing.T) {
 			err:  notFoundError("certificate", "x"),
 		},
 		{
-			name: `ConnStateCh`,
-			opt:  StateChangedCh(connStateCh),
+			name: `WithConnStateChan`,
+			opt:  WithConnStateChan(connStateCh),
 			cfg: &Config{
 				stateCh: connStateCh,
 			},
 		},
 		{
-			name: `ConnStateCh`,
-			opt:  StateChangedFunc(connStateFunc),
+			name: `WithConnStateHandler`,
+			opt:  WithConnStateHandler(connStateFunc),
 			cfg: &Config{
 				stateFunc: connStateFunc,
 			},

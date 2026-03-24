@@ -10,11 +10,12 @@ import (
 )
 
 func TestDiscoveryService_FindServers(t *testing.T) {
-	srv := New(
+	srv, err := New(
 		EndPoint("localhost", 4840),
 		EnableSecurity("None", ua.MessageSecurityModeNone),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
+	require.NoError(t, err)
 	srv.initEndpoints()
 	svc := &DiscoveryService{srv: srv}
 
@@ -35,11 +36,12 @@ func TestDiscoveryService_FindServers(t *testing.T) {
 }
 
 func TestDiscoveryService_GetEndpoints(t *testing.T) {
-	srv := New(
+	srv, err := New(
 		EndPoint("localhost", 4840),
 		EnableSecurity("None", ua.MessageSecurityModeNone),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
+	require.NoError(t, err)
 	srv.initEndpoints()
 	svc := &DiscoveryService{srv: srv}
 

@@ -62,7 +62,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	ep, err := opcua.SelectEndpoint(endpoints, *policy, ua.MessageSecurityModeFromString(*mode))
+	ep, err := ua.SelectEndpoint(endpoints, *policy, ua.MessageSecurityModeFromString(*mode))
 	if err != nil {
 		log.Fatal(err)
 	}

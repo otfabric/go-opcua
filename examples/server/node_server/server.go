@@ -137,7 +137,10 @@ func main() {
 	// Now that all the options are set, create the server.
 	// When the server is created, it will automatically create namespace 0 and populate it with
 	// the core opc ua nodes.
-	s := server.New(opts...)
+	s, err := server.New(opts...)
+	if err != nil {
+		log.Fatalf("Error creating server: %s", err)
+	}
 
 	// add the namespaces to the server, and add a reference to them if desired.
 	// here we are choosing to add the namespaces to the root/object folder

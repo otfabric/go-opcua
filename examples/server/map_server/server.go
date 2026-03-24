@@ -135,7 +135,10 @@ func main() {
 	// Now that all the options are set, create the server.
 	// When the server is created, it will automatically create namespace 0 and populate it with
 	// the core opc ua nodes.
-	s := server.New(opts...)
+	s, err := server.New(opts...)
+	if err != nil {
+		log.Fatalf("Error creating server: %s", err)
+	}
 
 	// Create some map namespaces.  These are backed by go map[string]any
 	// which may be more convenient for some use cases than the NodeNamespace which requires

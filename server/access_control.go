@@ -47,8 +47,9 @@ func (DefaultAccessController) CheckCall(_ context.Context, _ *session, _ *ua.No
 
 // WithAccessController sets a custom access controller on the server.
 func WithAccessController(ac AccessController) Option {
-	return func(s *serverConfig) {
+	return func(s *serverConfig) error {
 		s.accessController = ac
+		return nil
 	}
 }
 
@@ -124,8 +125,9 @@ func DefaultRoleMapper(token ua.IdentityToken) []*ua.NodeID {
 
 // WithRoleMapper configures a custom role mapper for session identity → role resolution.
 func WithRoleMapper(rm RoleMapper) Option {
-	return func(s *serverConfig) {
+	return func(s *serverConfig) error {
 		s.roleMapper = rm
+		return nil
 	}
 }
 

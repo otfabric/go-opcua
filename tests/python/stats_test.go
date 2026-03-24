@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua"
-	"github.com/otfabric/go-opcua/stats"
+	"github.com/otfabric/go-opcua/internal/stats"
 	"github.com/stretchr/testify/require"
 )
 

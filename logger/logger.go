@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 // Package logger provides a configurable logging interface for the OPC UA library.
+//
+// This is an advanced public package (Tier 2). The Logger type and constructors
+// are also re-exported from the root opcua package for convenience.
 package logger
 
 import (

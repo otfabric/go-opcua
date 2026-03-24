@@ -4,6 +4,28 @@
 
 ---
 
+## Service Support Matrix
+
+| Service Set | Operations | Status |
+|-------------|-----------|--------|
+| **Discovery** | FindServers, GetEndpoints | Fully implemented |
+| | FindServersOnNetwork, RegisterServer, RegisterServer2 | Unsupported (`StatusBadServiceUnsupported`) |
+| **Secure Channel** | OpenSecureChannel, CloseSecureChannel | Implemented (handled in `uasc` layer) |
+| **Session** | CreateSession, ActivateSession, CloseSession, Cancel | Fully implemented |
+| **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences | Fully implemented |
+| **View** | Browse, BrowseNext, TranslateBrowsePathsToNodeIDs, RegisterNodes, UnregisterNodes | Fully implemented |
+| **Attribute** | Read, Write | Fully implemented |
+| | HistoryRead, HistoryUpdate | Unsupported (`StatusBadHistoryOperationUnsupported`); no history store |
+| **Method** | Call | Fully implemented |
+| **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented |
+| **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented |
+| **Query** | QueryFirst, QueryNext | Unsupported (`StatusBadServiceUnsupported`) |
+
+Unsupported services return consistent OPC UA status codes. Any request type
+not registered with the server returns `StatusBadServiceUnsupported`.
+
+---
+
 ## Minimal Server
 
 A working server needs at least an endpoint and a security configuration:
@@ -223,20 +245,10 @@ Clients call the method via the standard `Call` service.
 Import standard OPC-UA companion specifications or custom information models from NodeSet2 XML files:
 
 ```go
-import (
-    "encoding/xml"
-    "os"
+import "os"
 
-    "github.com/otfabric/go-opcua/schema"
-)
-
-// Parse the XML
 data, _ := os.ReadFile("my-model.xml")
-var nodeset schema.UANodeSet
-xml.Unmarshal(data, &nodeset)
-
-// Import into the server
-if err := s.ImportNodeSet(&nodeset); err != nil {
+if err := s.ImportNodeSetXML(data); err != nil {
     log.Fatal(err)
 }
 ```

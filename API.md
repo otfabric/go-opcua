@@ -508,7 +508,6 @@ func WithMetrics(m ClientMetrics) Option
 func FindServers(ctx context.Context, endpoint string, opts ...Option) ([]*ua.ApplicationDescription, error)
 func FindServersOnNetwork(ctx context.Context, endpoint string, opts ...Option) ([]*ua.ServerOnNetwork, error)
 func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.EndpointDescription, error)
-func SelectEndpoint(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode) (*ua.EndpointDescription, error)
 ```
 
 ---
@@ -556,6 +555,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `WithMetrics(m ClientMetrics)` | Metrics handler |
 | `WithRetryPolicy(p RetryPolicy)` | Retry policy |
 | `WithLogger(l Logger)` | Logger |
+| `WithSlogLogger(l *slog.Logger)` | Logger from `slog.Logger` |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE) |
 | `TrustedCertificates(certs ...*x509.Certificate)` | Add CA/self-signed certs to the trust pool |
 
@@ -563,19 +563,7 @@ All option functions return `Option` and are passed to `NewClient`:
 
 ```go
 func NewMonitoredItemCreateRequestWithDefaults(nodeID *ua.NodeID, attributeID ua.AttributeID, clientHandle uint32) *ua.MonitoredItemCreateRequest
-func ReferenceTypeDisplayName(refTypeID *ua.NodeID) string
-func DataTypeDisplayName(dataTypeID *ua.NodeID) string
-func TypeDefinitionDisplayName(typeDefID *ua.NodeID) string
-func StandardNodeID(name string) (*ua.NodeID, bool)
 ```
-
-`TypeDefinitionDisplayName` returns a display string for a type definition NodeID (VariableType or ObjectType in namespace 0): tries VariableTypeName then ObjectTypeName (e.g. i=68 → "PropertyType", i=61 → "FolderType"); otherwise the NodeID string. Use when displaying type definition columns in browse. Returns the empty string if typeDefID is nil.
-
-`StandardNodeID` returns the namespace-0 NodeID for a well-known standard node name (e.g. "CurrentTime" → i=2258, "ServerStatus" → i=2256, "Objects" → i=85). Use for CLI or config that accepts symbolic names like `-n CurrentTime` instead of `-n i=2258`. Uses [id.NodeIDByName](id package) under the hood. Returns (nil, false) if the name is not found.
-
-`ReferenceTypeDisplayName` returns a display string for a reference type NodeID: the standard name (e.g. "HasComponent", "Organizes") for well-known types in namespace 0, otherwise the NodeID string. Use when displaying the reference type column in browse refs.
-
-`DataTypeDisplayName` returns a display string for a DataType NodeID: the standard name (e.g. "Float", "String", "UtcTime") for well-known types in namespace 0, otherwise the NodeID string. Use when displaying DataType attributes or type columns to normalize type rendering.
 
 ---
 
@@ -1075,6 +1063,28 @@ These are the concrete types delivered in `PublishNotificationData.Value`.
 
 ---
 
+### Display name and endpoint helpers
+
+```go
+func SelectEndpoint(endpoints []*EndpointDescription, policy string, mode MessageSecurityMode) (*EndpointDescription, error)
+func ReferenceTypeDisplayName(refTypeID *NodeID) string
+func TypeDefinitionDisplayName(typeDefID *NodeID) string
+func DataTypeDisplayName(dataTypeID *NodeID) string
+func StandardNodeID(name string) (*NodeID, bool)
+```
+
+`SelectEndpoint` filters endpoints by security policy and mode, returning the best match or an error if none match.
+
+`ReferenceTypeDisplayName` returns the standard name for a reference type NodeID in namespace 0 (e.g. "HasComponent", "Organizes"), or the NodeID string for unknown types.
+
+`TypeDefinitionDisplayName` returns a display string for a type definition NodeID (VariableType or ObjectType in namespace 0): tries VariableTypeName then ObjectTypeName (e.g. i=68 → "PropertyType", i=61 → "FolderType"); otherwise the NodeID string. Returns the empty string if typeDefID is nil.
+
+`DataTypeDisplayName` returns the standard name for a DataType NodeID in namespace 0 (e.g. "Float", "String", "UtcTime"), or the NodeID string for unknown types.
+
+`StandardNodeID` returns the namespace-0 NodeID for a well-known standard node name (e.g. "CurrentTime" → i=2258, "ServerStatus" → i=2256, "Objects" → i=85). Returns (nil, false) if the name is not found.
+
+---
+
 ### Buffer
 
 Low-level helper for reading/writing OPC-UA binary protocol data.
@@ -1119,7 +1129,7 @@ func (b *Buffer) Error() error
 ### Server
 
 ```go
-func New(opts ...Option) *Server
+func New(opts ...Option) (*Server, error)
 ```
 
 #### Lifecycle
@@ -1155,6 +1165,15 @@ type Handler func(ctx context.Context, sc *uasc.SecureChannel, req ua.Request, r
 func (s *Server) RegisterHandler(typeID uint16, h Handler)
 ```
 
+#### NodeSet import
+
+```go
+func (s *Server) ImportNodeSetXML(data []byte) error
+```
+
+Parses OPC UA NodeSet2 XML data and imports nodes, references, and namespaces
+into the server's address space. Use this to load custom information models.
+
 #### Info
 
 ```go
@@ -1174,14 +1193,14 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 | `EndPoint(host string, port int)` | Listen address |
 | `Certificate(cert []byte)` | Server certificate (DER) |
 | `PrivateKey(key *rsa.PrivateKey)` | Server private key |
-| `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination |
-| `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type |
-| `ApplicationName(s string)` | Application name |
-| `ApplicationURI(s string)` | Application URI |
+| `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate) |
+| `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate) |
+| `ServerName(name string)` | Application name |
 | `ManufacturerName(s string)` | Manufacturer name |
 | `ProductName(s string)` | Product name |
 | `SoftwareVersion(s string)` | Software version string |
-| `WithLogger(l Logger)` | Logger |
+| `SetLogger(l logger.Logger)` | Logger |
+| `WithSlogLogger(l *slog.Logger)` | Logger from `slog.Logger` |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithAccessController(ac AccessController)` | Access controller |
 
@@ -1208,13 +1227,13 @@ type NameSpace interface {
 Implementations:
 
 ```go
-func NodeNameSpace(uri string, generator NodeGenerator) NameSpace
-func MapNamespace(uri string) *MapNamespace
+func NewNodeNameSpace(srv *Server, name string) *NodeNameSpace
+func NewMapNamespace(srv *Server, name string) *MapNamespace
 ```
 
-`NodeNameSpace` provides a full OPC-UA node graph with references and type
-definitions. `MapNamespace` provides a simple key-value store for IoT/sensor
-data.
+`NewNodeNameSpace` provides a full OPC-UA node graph with references and type
+definitions. `NewMapNamespace` provides a simple key-value store for IoT/sensor
+data. Both constructors register the namespace with the server automatically.
 
 ---
 
@@ -1645,20 +1664,6 @@ type SessionConfig struct {
 
 ---
 
-## Package `stats`
-
-Runtime statistics via `expvar`.
-
-```go
-func Reset()
-func Client() *expvar.Map
-func Error() *expvar.Map
-func Subscription() *expvar.Map
-func RecordError(err error)
-```
-
----
-
 ## Package `id`
 
 Generated constants for all standard OPC-UA node IDs from the specification.
@@ -1679,26 +1684,26 @@ to well-known nodes in the address space.
 func ReferenceTypeName(id uint32) string
 ```
 
-`ReferenceTypeName` returns the standard OPC UA name for a well-known reference type in namespace 0 (e.g. 47 → "HasComponent", 35 → "Organizes"), or "" if unknown. Use when displaying reference type NodeIDs (e.g. browse refs) to show names instead of raw NodeIDs. For a single call that accepts a NodeID and returns either the name or the NodeID string, use [ReferenceTypeDisplayName](opcua package) in the root package.
+`ReferenceTypeName` returns the standard OPC UA name for a well-known reference type in namespace 0 (e.g. 47 → "HasComponent", 35 → "Organizes"), or "" if unknown. Use when displaying reference type NodeIDs (e.g. browse refs) to show names instead of raw NodeIDs. For a single call that accepts a NodeID and returns either the name or the NodeID string, use `ua.ReferenceTypeDisplayName`.
 
 ```go
 func DataTypeName(id uint32) string
 ```
 
-`DataTypeName` returns the standard OPC UA name for a well-known DataType in namespace 0 (e.g. 10 → "Float", 12 → "String", 294 → "UtcTime"), or "" if unknown. Use when displaying DataType NodeIDs to normalize type rendering. For a NodeID-based helper, use [DataTypeDisplayName](opcua package) in the root package.
+`DataTypeName` returns the standard OPC UA name for a well-known DataType in namespace 0 (e.g. 10 → "Float", 12 → "String", 294 → "UtcTime"), or "" if unknown. Use when displaying DataType NodeIDs to normalize type rendering. For a NodeID-based helper, use `ua.DataTypeDisplayName`.
 
 ```go
 func NodeIDByName(name string) (uint32, bool)
 ```
 
-`NodeIDByName` is the reverse of `Name`: it maps well-known standard node names (namespace 0 only) to numeric IDs. Names include full spec names (e.g. "Server", "ObjectsFolder", "Server_ServerStatus_CurrentTime") and short aliases "CurrentTime" (→ 2258), "ServerStatus" (→ 2256), "Objects" (→ 85). Returns (0, false) if not found. For a `*ua.NodeID` use [StandardNodeID](opcua package) in the root package.
+`NodeIDByName` is the reverse of `Name`: it maps well-known standard node names (namespace 0 only) to numeric IDs. Names include full spec names (e.g. "Server", "ObjectsFolder", "Server_ServerStatus_CurrentTime") and short aliases "CurrentTime" (→ 2258), "ServerStatus" (→ 2256), "Objects" (→ 85). Returns (0, false) if not found. For a `*ua.NodeID` use `ua.StandardNodeID`.
 
 ```go
 func VariableTypeName(id uint32) string
 func ObjectTypeName(id uint32) string
 ```
 
-`VariableTypeName` returns the standard OPC UA name for a well-known VariableType in namespace 0 (e.g. 68 → "PropertyType", 63 → "BaseDataVariableType"), or "" if unknown. `ObjectTypeName` does the same for ObjectTypes (e.g. 58 → "BaseObjectType", 61 → "FolderType"). For a NodeID-based display helper use [TypeDefinitionDisplayName](opcua package) in the root package.
+`VariableTypeName` returns the standard OPC UA name for a well-known VariableType in namespace 0 (e.g. 68 → "PropertyType", 63 → "BaseDataVariableType"), or "" if unknown. `ObjectTypeName` does the same for ObjectTypes (e.g. 58 → "BaseObjectType", 61 → "FolderType"). For a NodeID-based display helper use `ua.TypeDefinitionDisplayName`.
 
 ```go
 func ObjectName(id uint32) string
@@ -1707,3 +1712,9 @@ func MethodName(id uint32) string
 ```
 
 `ObjectName` returns the standard name for a well-known Object node in namespace 0 (e.g. 84 → "RootFolder", 85 → "ObjectsFolder", 2253 → "Server"). `VariableName` does the same for Variable nodes (e.g. 2256 → "Server_ServerStatus", 2258 → "Server_ServerStatus_CurrentTime"). `MethodName` does the same for Method nodes (e.g. 11492 → "Server_GetMonitoredItems"). Each returns "" if the id is not in that category. The generic [Name](id package) function looks up across all categories.
+
+```go
+func AggregateType(name string) (uint32, bool)
+```
+
+`AggregateType` returns the numeric node ID for a well-known aggregate name (e.g. "Average" → 2342, "Count" → 2352). Returns (0, false) if the name is not found.

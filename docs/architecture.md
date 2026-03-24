@@ -27,23 +27,42 @@ The library follows a layered architecture aligned with the OPC-UA specification
 └──────────────────────────────────────────────────┘
 ```
 
-### Package Ownership
+### Package Ownership and Stability
+
+Packages are tiered by intended audience and stability commitment:
+
+**Tier 1 — Stable public API.** Intended for normal downstream use. Breaking changes require a major version bump.
 
 | Package | Responsibility |
 |---------|---------------|
 | `opcua` (root) | High-level client API: `Client`, `Node`, `Subscription`, `SubscriptionBuilder` |
 | `server/` | High-level server: address space, service handlers, session management |
 | `ua/` | OPC-UA data types, service request/response structs, binary encoding |
-| `uasc/` | Secure channel management, message chunking, token renewal |
-| `uacp/` | TCP transport, connection handshake, listener |
-| `uapolicy/` | Cryptographic algorithms per security policy |
+| `id/` | Generated OPC-UA standard node ID constants and reverse lookup |
 | `monitor/` | Convenience subscription API with callback/channel patterns |
-| `errors/` | Sentinel errors and error types |
+| `errors/` | Sentinel errors and error types for `errors.Is` / `errors.As` |
+
+**Tier 2 — Advanced public API.** Public but specialized. Useful for custom transports, security, or schema loading. Documented and versioned but more likely to evolve.
+
+| Package | Responsibility |
+|---------|---------------|
+| `uacp/` | TCP transport, connection handshake, listener |
+| `uasc/` | Secure channel management, message chunking, token renewal |
+| `uapolicy/` | Cryptographic algorithms per security policy |
 | `logger/` | Logging abstraction over `*slog.Logger` |
-| `id/` | Generated OPC-UA standard node ID constants |
-| `schema/` | OPC-UA NodeSet2 XML schema and parser |
-| `stats/` | Metrics collection (subscriptions, errors) |
-| `testutil/` | Test server/client helpers for integration tests |
+| `schema/` | OPC-UA schema input files (CSVs, BSD, XSD) for code generators |
+| `server/attrs/` | Server attribute helpers |
+| `server/refs/` | Server reference helpers |
+
+**Tier 3 — Internal.** Not part of the supported public API. May change without notice.
+
+| Package | Responsibility |
+|---------|---------------|
+| `internal/schema/` | NodeSet2 XML types, parser, and embedded spec data |
+| `internal/stats/` | Metrics collection (experimental, `expvar`-based) |
+| `internal/testutil/` | Test server/client helpers for integration tests |
+| `internal/goname/` | Shared identifier normalization for code generators |
+| `internal/cmd/gen/` | Go-based code generation driver |
 
 ---
 

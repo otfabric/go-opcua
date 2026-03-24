@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
-	"github.com/otfabric/go-opcua/testutil"
 	"github.com/otfabric/go-opcua/ua"
 )
 

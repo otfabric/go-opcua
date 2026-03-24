@@ -1,11 +1,9 @@
 package server
 
 import (
-	"encoding/xml"
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
-	"github.com/otfabric/go-opcua/schema"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,11 +91,7 @@ func TestImportNodeSet_Custom(t *testing.T) {
   </Aliases>
 </UANodeSet>`
 
-	var nodes schema.UANodeSet
-	err := xml.Unmarshal([]byte(customXML), &nodes)
-	require.NoError(t, err)
-
-	err = srv.ImportNodeSet(&nodes)
+	err := srv.ImportNodeSetXML([]byte(customXML))
 	require.NoError(t, err)
 
 	// The import should have created a namespace for "http://example.com/test"
