@@ -9,7 +9,7 @@ import (
 
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/id"
-	"github.com/otfabric/go-opcua/stats"
+	"github.com/otfabric/go-opcua/internal/stats"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
 )

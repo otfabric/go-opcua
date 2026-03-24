@@ -30,6 +30,36 @@ By default, `go test ./...` does not run integration tests; use the targets abov
 
 Please run `make fmt` and `make lint` before submitting a PR.
 
+## Code generation
+
+All generated code (`*_gen.go` files) is produced by a Go-based driver at
+`internal/cmd/gen/main.go`. To regenerate:
+
+```sh
+make gen          # or: go generate ./...
+```
+
+The driver:
+- cleans an explicit list of generated files (no shell globs)
+- runs each generator under `cmd/` in order
+- discovers enum types in `ua/enums*.go` via Go's parser and runs `stringer`
+- uses `go tool stringer` (version pinned in `go.mod` via the `tool` directive)
+- does not install tools or run `go mod tidy`
+
+Generators under `cmd/`:
+
+| Generator | Input | Output |
+|-----------|-------|--------|
+| `cmd/id` | `schema/NodeIds.csv` | `id/id_*_gen.go`, `id/id_names_gen.go` |
+| `cmd/status` | `schema/StatusCode.csv` | `ua/status_gen.go` |
+| `cmd/attrid` | `schema/AttributeIds.csv` | `ua/enums_attribute_id_gen.go` |
+| `cmd/capability` | `schema/ServerCapabilities.csv` | `ua/server_capabilities_gen.go` |
+| `cmd/permissions` | `schema/Opc.Ua.NodeIds.permissions.csv` | `server/default_permissions_gen.go` |
+| `cmd/service` | `schema/Opc.Ua.Types.bsd` | `ua/enums_gen.go`, `ua/extobjs_gen.go`, `ua/service_gen.go`, `ua/register_extobjs_gen.go` |
+
+All generators use the shared naming formatter at `internal/goname` for
+idiomatic Go identifier normalization.
+
 ## Submitting changes
 
 1. Open an issue or pick an existing one to discuss the change.

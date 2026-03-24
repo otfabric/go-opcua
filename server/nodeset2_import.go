@@ -1,11 +1,25 @@
 package server
 
 import (
+	"encoding/xml"
 	"fmt"
 
-	"github.com/otfabric/go-opcua/schema"
+	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
 )
+
+// ImportNodeSetXML parses OPC UA NodeSet2 XML data and imports the nodes,
+// references, and namespaces into the server's address space.
+//
+// This is the primary public API for loading custom NodeSet data. Users
+// do not need to import the schema package directly.
+func (s *Server) ImportNodeSetXML(data []byte) error {
+	var nodes schema.UANodeSet
+	if err := xml.Unmarshal(data, &nodes); err != nil {
+		return fmt.Errorf("server: unmarshal NodeSet XML: %w", err)
+	}
+	return s.importNodeSet(&nodes)
+}
 
 // isForward returns the value of the IsForward attribute, defaulting to true
 // when absent. This avoids mutating the source schema struct so that a cached
@@ -14,7 +28,7 @@ func isForward(ref *schema.Reference) bool {
 	return ref.IsForwardAttr == nil || *ref.IsForwardAttr
 }
 
-func (s *Server) ImportNodeSet(nodes *schema.UANodeSet) error {
+func (s *Server) importNodeSet(nodes *schema.UANodeSet) error {
 	err := s.namespacesImportNodeSet(nodes)
 	if err != nil {
 		return fmt.Errorf("opcua: problem creating namespaces: %w", err)

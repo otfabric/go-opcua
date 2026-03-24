@@ -10,7 +10,7 @@ import (
 // a network listener. It initialises namespace 0 (the OPC-UA base nodeset)
 // and a MonitoredItemService so that write-side tests don't panic.
 func newTestServer() *Server {
-	s := New(EndPoint("localhost", 4840))
+	s, _ := New(EndPoint("localhost", 4840))
 
 	// initHandlers is normally called by Start().
 	// We need SubscriptionService and MonitoredItemService

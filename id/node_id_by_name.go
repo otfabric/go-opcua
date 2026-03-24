@@ -74,7 +74,7 @@ func buildNameToID() {
 // Names are the same as in the id package forward lookup (e.g. "Server", "ObjectsFolder",
 // "Server_ServerStatus_CurrentTime"). Short aliases include "CurrentTime" (→ 2258),
 // "ServerStatus" (→ 2256), and "Objects" (→ 85). Returns (0, false) if the name is not found.
-// For a *ua.NodeID use the root package: opcua.StandardNodeID(name) or ua.NewNumericNodeID(0, id).
+// For a *ua.NodeID use ua.StandardNodeID(name).
 func NodeIDByName(name string) (uint32, bool) {
 	nameToIDMu.Do(buildNameToID)
 	id, ok := nameToID[name]

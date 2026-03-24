@@ -27,8 +27,9 @@ type ServerMetrics interface {
 // WithMetrics sets a metrics callback handler for the server.
 // All methods are called synchronously; implementations must be non-blocking.
 func WithMetrics(m ServerMetrics) Option {
-	return func(s *serverConfig) {
+	return func(s *serverConfig) error {
 		s.metrics = m
+		return nil
 	}
 }
 

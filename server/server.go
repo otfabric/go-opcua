@@ -17,8 +17,8 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/logger"
-	"github.com/otfabric/go-opcua/schema"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -29,6 +29,7 @@ const defaultListenAddr = "opc.tcp://localhost:0"
 var (
 	builtinNodeSetOnce sync.Once
 	builtinNodeSet     schema.UANodeSet
+	builtinNodeSetErr  error
 )
 
 // Server is a high-level OPC-UA server.
@@ -148,7 +149,7 @@ type security struct {
 // Server status, capabilities, and current time nodes.
 //
 // Call [Server.Start] to begin accepting connections.
-func New(opts ...Option) *Server {
+func New(opts ...Option) (*Server, error) {
 	cfg := &serverConfig{
 		cap:              capabilities,
 		applicationName:  "GOPCUA",                 // override with the ServerName option
@@ -158,7 +159,9 @@ func New(opts ...Option) *Server {
 		logger:           logger.Default(),
 	}
 	for _, opt := range opts {
-		opt(cfg)
+		if err := opt(cfg); err != nil {
+			return nil, err
+		}
 	}
 	if cfg.accessController == nil {
 		cfg.accessController = DefaultAccessController{}
@@ -196,19 +199,19 @@ func New(opts ...Option) *Server {
 	}
 
 	builtinNodeSetOnce.Do(func() {
-		if err := xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet); err != nil {
-			panic(fmt.Sprintf("failed to unmarshal built-in node set: %v", err))
-		}
+		builtinNodeSetErr = xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet)
 	})
+	if builtinNodeSetErr != nil {
+		return nil, fmt.Errorf("server: unmarshal built-in node set: %w", builtinNodeSetErr)
+	}
 
 	n0, ok := s.namespaces[0].(*NodeNameSpace)
-	n0.srv = s
 	if !ok {
-		// this should never happen because we just set namespace 0 to be a node namespace
-		panic("Namespace 0 is not a node namespace!")
+		return nil, fmt.Errorf("server: namespace 0 is not a NodeNameSpace")
 	}
-	if err := s.ImportNodeSet(&builtinNodeSet); err != nil {
-		panic(fmt.Sprintf("failed to import built-in node set: %v", err))
+	n0.srv = s
+	if err := s.importNodeSet(&builtinNodeSet); err != nil {
+		return nil, fmt.Errorf("server: import built-in node set: %w", err)
 	}
 
 	s.namespaces[0].AddNode(CurrentTimeNode())
@@ -220,7 +223,7 @@ func New(opts ...Option) *Server {
 		s.namespaces[0].AddNode(n)
 	}
 
-	return s
+	return s, nil
 }
 
 func (s *Server) Session(hdr *ua.RequestHeader) *session {

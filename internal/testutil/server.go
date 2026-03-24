@@ -25,7 +25,10 @@ func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string)
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}
 	all := append(defaults, opts...)
-	srv := server.New(all...)
+	srv, err := server.New(all...)
+	if err != nil {
+		t.Fatalf("testutil: new server: %v", err)
+	}
 	ctx := context.Background()
 	if err := srv.Start(ctx); err != nil {
 		t.Fatalf("testutil: start server: %v", err)

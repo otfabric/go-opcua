@@ -132,7 +132,7 @@ func main() {
 			secMode = ua.MessageSecurityModeFromString(*mode)
 		}
 
-		ep, err := opcua.SelectEndpoint(endpoints, secPolicy, secMode)
+		ep, err := ua.SelectEndpoint(endpoints, secPolicy, secMode)
 		if err != nil {
 			log.Fatalf("No matching endpoint: %v", err)
 		}

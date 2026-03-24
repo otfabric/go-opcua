@@ -9,6 +9,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"math/rand"
 	"net"
 	"os"
@@ -130,6 +131,16 @@ func WithRetryPolicy(p RetryPolicy) Option {
 func WithLogger(l Logger) Option {
 	return func(cfg *Config) error {
 		cfg.logger = l
+		return nil
+	}
+}
+
+// WithSlogLogger sets the logger from an *slog.Logger.
+// This is a convenience wrapper around WithLogger that adapts the
+// slog.Logger's handler to the library's Logger interface.
+func WithSlogLogger(l *slog.Logger) Option {
+	return func(cfg *Config) error {
+		cfg.logger = logger.NewSlogLogger(l.Handler())
 		return nil
 	}
 }
@@ -622,38 +633,21 @@ func SendBufferSize(n uint32) Option {
 	}
 }
 
-// StateChangedCh sets the channel for receiving client connection state changes.
-//
-// The caller must either consume the channel immediately or provide a buffer
-// to prevent blocking state changes in the client.
-//
-// Deprecated: Use WithConnStateHandler instead.
-func StateChangedCh(ch chan<- ConnState) Option {
-	return func(cfg *Config) error {
-		cfg.stateCh = ch
-		return nil
-	}
-}
-
-// StateChangedFunc sets the function for receiving client connection state changes.
-//
-// Deprecated: Use WithConnStateHandler instead.
-func StateChangedFunc(f func(ConnState)) Option {
-	return func(cfg *Config) error {
-		cfg.stateFunc = f
-		return nil
-	}
-}
-
 // WithConnStateHandler sets a callback for receiving client connection state changes.
-// This is the preferred way to observe state transitions. To use a channel instead,
-// wrap it in a function:
-//
-//	ch := make(chan ConnState, 8)
-//	WithConnStateHandler(func(s ConnState) { ch <- s })
 func WithConnStateHandler(h func(ConnState)) Option {
 	return func(cfg *Config) error {
 		cfg.stateFunc = h
+		return nil
+	}
+}
+
+// WithConnStateChan sets a channel for receiving client connection state changes.
+// The caller must provide a buffered channel and consume it promptly to prevent
+// blocking. Sends are context-aware: if the context is cancelled, the state
+// change is dropped rather than blocking.
+func WithConnStateChan(ch chan<- ConnState) Option {
+	return func(cfg *Config) error {
+		cfg.stateCh = ch
 		return nil
 	}
 }

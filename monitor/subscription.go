@@ -218,7 +218,7 @@ func (s *Subscription) pump(ctx context.Context, notifyCh chan<- *DataChangeMess
 						cb(s, out)
 						atomic.AddUint64(&s.delivered, 1)
 					} else {
-						panic("notifyCh or cb must be set")
+						s.sendError(fmt.Errorf("monitor: internal error: neither channel nor callback is set"))
 					}
 				}
 			default:

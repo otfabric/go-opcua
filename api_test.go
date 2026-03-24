@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
-	"github.com/otfabric/go-opcua/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )

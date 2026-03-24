@@ -47,7 +47,7 @@ func TestClient_CloseIdempotent(t *testing.T) {
 func TestClient_StateCallback(t *testing.T) {
 	var states []ConnState
 	c, err := NewClient("opc.tcp://example.com:4840",
-		StateChangedFunc(func(s ConnState) {
+		WithConnStateHandler(func(s ConnState) {
 			states = append(states, s)
 		}),
 	)
@@ -85,8 +85,8 @@ func TestClient_StateTransitions_Full(t *testing.T) {
 	var funcStates []ConnState
 
 	c, err := NewClient("opc.tcp://example.com:4840",
-		StateChangedCh(stateCh),
-		StateChangedFunc(func(s ConnState) {
+		WithConnStateChan(stateCh),
+		WithConnStateHandler(func(s ConnState) {
 			funcStates = append(funcStates, s)
 		}),
 	)

@@ -66,7 +66,7 @@ func main() {
     }
     defer c.Close(ctx)
 
-    v, err := c.Node(ua.MustParseNodeID("i=2258")).Value(ctx) // or opcua.StandardNodeID("CurrentTime") for symbolic name
+    v, err := c.Node(ua.MustParseNodeID("i=2258")).Value(ctx) // or ua.StandardNodeID("CurrentTime") for symbolic name
     if err != nil {
         log.Fatal(err)
     }
@@ -124,11 +124,14 @@ import (
 )
 
 func main() {
-    srv := server.New(
+    srv, err := server.New(
         server.EndPoint("localhost", 4840),
         server.EnableSecurity("None", ua.MessageSecurityModeNone),
         server.EnableAuthMode(ua.UserTokenTypeAnonymous),
     )
+    if err != nil {
+        log.Fatal(err)
+    }
 
     ns := server.NewNodeNameSpace(srv, "example")
     idx := srv.AddNamespace(ns)
@@ -154,13 +157,13 @@ func main() {
 | **Reading** | Single/batch reads, all attributes, `Node.Value()`, `Node.Summary()`, `ReadMulti` (chunked batch N×attributes) |
 | **Writing** | Single/batch writes, any attribute, `WriteValue`, `WriteAttribute` |
 | **Browsing** | Forward/inverse/both, continuation points, `BrowseAll`, `Walk` / `WalkLimit` (depth-limited), `WalkLimitDedup`, `BrowseWithDepth` (client-side recursive, returns slice) |
-| **Path resolution** | `NodeFromPath`, `NodeFromPathInNamespace`, `NodeFromQualifiedPath` (ns:name), `Node.TranslateBrowsePathInNamespaceToNodeID` (TranslateBrowsePathsToNodeIDs). Symbolic node names: `StandardNodeID("CurrentTime")`, `id.NodeIDByName(name)` |
+| **Path resolution** | `NodeFromPath`, `NodeFromPathInNamespace`, `NodeFromQualifiedPath` (ns:name), `Node.TranslateBrowsePathInNamespaceToNodeID` (TranslateBrowsePathsToNodeIDs). Symbolic node names: `ua.StandardNodeID("CurrentTime")`, `id.NodeIDByName(name)` |
 | **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder API |
 | **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |
 | **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` |
 | **Query** | `QueryFirst`, `QueryNext` |
-| **Discovery** | `FindServers`, `GetEndpoints`, `SelectEndpoint` |
+| **Discovery** | `FindServers`, `GetEndpoints`, `ua.SelectEndpoint` |
 | **Security** | None, Basic128Rsa15, Basic256, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss |
 | **Authentication** | Anonymous, username/password, X.509 certificate, issued token |
 | **Retry** | Pluggable `RetryPolicy`, exponential backoff with jitter |
@@ -171,16 +174,16 @@ func main() {
 | Area | Capabilities |
 |------|-------------|
 | **Namespaces** | Custom `NameSpace` interface, `NodeNameSpace` in-memory implementation |
-| **Services** | Read, Write, Browse, BrowseNext, TranslateBrowsePaths, Call, HistoryRead, HistoryUpdate |
+| **Services** | Read, Write, Browse, BrowseNext, TranslateBrowsePaths, Call |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences |
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode |
 | **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering |
-| **View** | RegisterNodes, UnregisterNodes, QueryFirst, QueryNext |
+| **View** | RegisterNodes, UnregisterNodes |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel |
 | **Methods** | Register handlers via `RegisterMethod`, argument introspection |
 | **Events** | `EmitEvent` to push event notifications to subscribers |
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
-| **NodeSet2 Import** | Load standard or custom NodeSet2 XML files |
+| **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML` |
 | **Security** | Same encryption policies as client (server-side) |
 | **Authentication** | Anonymous, username/password, X.509, issued token identity tokens |
 
@@ -189,25 +192,25 @@ func main() {
 | Service Set | Service | Client | Server |
 |---|---|:---:|:---:|
 | **Discovery** | FindServers | Yes | Yes |
-| | FindServersOnNetwork | Yes | Yes |
+| | FindServersOnNetwork | Yes | — |
 | | GetEndpoints | Yes | Yes |
 | **Secure Channel** | OpenSecureChannel | Yes | Yes |
 | | CloseSecureChannel | Yes | Yes |
 | **Session** | CreateSession | Yes | Yes |
 | | ActivateSession | Yes | Yes |
 | | CloseSession | Yes | Yes |
-| | Cancel | | Yes |
+| | Cancel | — | Yes |
 | **Attribute** | Read | Yes | Yes |
 | | Write | Yes | Yes |
-| | HistoryRead | Yes | Yes |
-| | HistoryUpdate | Yes | Yes |
+| | HistoryRead | Yes | — |
+| | HistoryUpdate | Yes | — |
 | **View** | Browse | Yes | Yes |
 | | BrowseNext | Yes | Yes |
 | | TranslateBrowsePathsToNodeIDs | Yes | Yes |
 | | RegisterNodes | Yes | Yes |
 | | UnregisterNodes | Yes | Yes |
-| **Query** | QueryFirst | Yes | Yes |
-| | QueryNext | Yes | Yes |
+| **Query** | QueryFirst | Yes | — |
+| | QueryNext | Yes | — |
 | **Method** | Call | Yes | Yes |
 | **Node Management** | AddNodes | Yes | Yes |
 | | DeleteNodes | Yes | Yes |
@@ -222,16 +225,18 @@ func main() {
 | | ModifySubscription | Yes | Yes |
 | | SetPublishingMode | Yes | Yes |
 | | Publish | Yes | Yes |
-| | Republish | | Yes |
-| | TransferSubscriptions | | Yes |
+| | Republish | — | Yes |
+| | TransferSubscriptions | — | Yes |
 | | DeleteSubscriptions | Yes | Yes |
+
+**—** = API present but server returns `StatusBadServiceUnsupported`, or client has no dedicated helper (use `Client.Send`).
 
 ## Package Structure
 
 | Package | Purpose |
 |---------|---------|
 | `opcua` | Client, Node, Subscription, configuration options, retry, metrics |
-| `ua` | All OPC-UA types: Variant, DataValue, NodeID, StatusCode, enums, codec |
+| `ua` | All OPC-UA types: Variant, DataValue, NodeID, StatusCode, enums, codec, `SelectEndpoint`, display name helpers |
 | `server` | Server, NameSpace, AccessController, service implementations |
 | `monitor` | High-level `NodeMonitor` with callback and channel-based subscriptions |
 | `errors` | Sentinel errors for `errors.Is()` checking |
@@ -239,7 +244,7 @@ func main() {
 | `uacp` | OPC-UA Connection Protocol (TCP transport) |
 | `uasc` | OPC-UA Secure Conversation (secure channel) |
 | `uapolicy` | Security policy implementations (encryption, signing) |
-| `stats` | Expvar-based statistics collection |
+| `internal/stats` | Expvar-based statistics collection (internal) |
 | `logger` | Logger interface with slog and stdlib adapters |
 
 ## Examples

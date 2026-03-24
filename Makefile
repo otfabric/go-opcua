@@ -63,9 +63,7 @@ install-py-opcua: ## Install Python opcua package (for integration tests)
 	@pip3 install opcua
 
 gen: ## Regenerate code (stringer, go generate)
-	@echo "Regenerating code (stringer, go generate)"
-	@which stringer || go install golang.org/x/tools/cmd/stringer@latest
-	@find . -name '*_gen.go' -delete
+	@echo "Regenerating code"
 	@go generate ./...
 
 check: fmt lint lint-ci vet test coverage ## Run lint + vet + test

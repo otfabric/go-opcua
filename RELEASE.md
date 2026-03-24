@@ -1,5 +1,140 @@
 # go-opcua Releases
 
+## v1.0.1
+
+**Date:** 2026-03-24
+**Previous release:** v1.0.0
+
+### Summary
+
+Production hardening and maintainability release. Replaces shell-driven code generation with a Go-based driver, tightens package boundaries, unifies configuration patterns, eliminates avoidable panics, internalizes non-public packages, documents service support, and reduces root package sprawl.
+
+### Breaking changes
+
+#### `server.New` returns `(*Server, error)`
+
+`server.New` now returns an error instead of panicking on bootstrap failures. All server option functions also return `error`, matching the client's `Option func(*Config) error` pattern.
+
+```go
+// Before
+srv := server.New(opts...)
+
+// After
+srv, err := server.New(opts...)
+```
+
+#### Server options return errors instead of logging warnings
+
+`EnableSecurity` and `EnableAuthMode` now return `fmt.Errorf` for invalid or duplicate configurations instead of silently logging warnings.
+
+#### `schema` package moved to `internal/schema`
+
+The `schema` package (NodeSet2 XML types and embedded spec data) is now internal. Use `server.ImportNodeSetXML(data []byte)` instead of unmarshaling into `schema.UANodeSet` directly.
+
+```go
+// Before
+import "github.com/otfabric/go-opcua/schema"
+var nodes schema.UANodeSet
+xml.Unmarshal(data, &nodes)
+srv.ImportNodeSet(&nodes)
+
+// After
+srv.ImportNodeSetXML(data)
+```
+
+#### `stats` package moved to `internal/stats`
+
+The experimental `stats` package is now internal. It was not intended for downstream use.
+
+#### `testutil` package moved to `internal/testutil`
+
+The test helper package is now internal. It was not intended for downstream use.
+
+#### Root package helpers removed
+
+The following functions have been removed from the root `opcua` package and moved to their canonical locations:
+
+| Function | New location |
+|----------|-------------|
+| `AggregateType` | `id.AggregateType` (returns `(uint32, bool)` instead of `*ua.NodeID`) |
+| `ReferenceTypeDisplayName` | `ua.ReferenceTypeDisplayName` |
+| `TypeDefinitionDisplayName` | `ua.TypeDefinitionDisplayName` |
+| `DataTypeDisplayName` | `ua.DataTypeDisplayName` |
+| `StandardNodeID` | `ua.StandardNodeID` |
+| `SelectEndpoint` | `ua.SelectEndpoint` |
+
+### New features
+
+#### Go-based code generation driver
+
+`generate.sh` has been replaced by `internal/cmd/gen/main.go`. The new driver:
+- Cleans an explicit list of generated files (no shell globs).
+- Runs each generator in dependency order.
+- Discovers enum types via Go's `go/ast` parser and runs `stringer`.
+- Uses `go tool stringer` (version pinned in `go.mod` via the `tool` directive).
+- Does not install tools or run `go mod tidy`.
+
+Generation is invoked via `go generate ./...` or `make gen`.
+
+#### Pinned stringer version
+
+`stringer` is now declared as a tool dependency in `go.mod` (`golang.org/x/tools v0.43.0`) and invoked via `go tool stringer` instead of `go install ...@latest`.
+
+#### `server.ImportNodeSetXML`
+
+New public API for importing custom NodeSet2 XML data without depending on schema types:
+
+```go
+data, _ := os.ReadFile("my-model.xml")
+if err := srv.ImportNodeSetXML(data); err != nil {
+    log.Fatal(err)
+}
+```
+
+#### `WithSlogLogger` option
+
+Both client and server now accept `WithSlogLogger(*slog.Logger)` as a convenience option for configuring structured logging without manually wrapping a handler.
+
+#### Service support matrices
+
+Comprehensive service support matrices added to:
+- `docs/server-guide.md` — server-side service status
+- `docs/client-guide.md` — client-side method coverage
+- `README.md` — combined matrix with accurate unsupported-service markers
+
+### Improvements
+
+#### Package tiering
+
+All packages are now explicitly classified into three tiers in `docs/architecture.md`:
+- **Tier 1 (stable public):** `opcua`, `server`, `ua`, `id`, `monitor`, `errors`
+- **Tier 2 (advanced public):** `uacp`, `uasc`, `uapolicy`, `logger`, `schema/` (data files), `server/attrs`, `server/refs`
+- **Tier 3 (internal):** `internal/schema`, `internal/stats`, `internal/testutil`, `internal/goname`, `internal/cmd/gen`
+
+#### Panic discipline
+
+- Three panics in `server.New` replaced with error returns (XML unmarshal, namespace assertion, node set import).
+- Panic in `monitor/subscription.go` goroutine replaced with `sendError`.
+- All remaining panics audited and documented as justified (`Must*` helpers, init-time registration, or internal invariants).
+
+#### Unified config semantics
+
+Client and server option patterns now follow the same model: `type Option func(*config) error` with error aggregation. Invalid configurations fail explicitly instead of being silently ignored.
+
+#### Code generation documentation
+
+Generation flow documented in `CONTRIBUTING.md` with a table mapping each generator to its inputs and outputs.
+
+### Migration guide
+
+1. **`server.New`** — add error handling: `srv, err := server.New(opts...)`.
+2. **`schema` import** — replace `schema.UANodeSet` + `xml.Unmarshal` + `ImportNodeSet` with `srv.ImportNodeSetXML(data)`.
+3. **`stats` import** — remove direct imports of `stats`; the package is now internal.
+4. **`testutil` import** — remove direct imports of `testutil`; the package is now internal.
+5. **Relocated helpers** — update imports to use `id.AggregateType`, `ua.SelectEndpoint`, `ua.ReferenceTypeDisplayName`, etc. The root package wrappers have been removed.
+
+---
+
 ## v1.0.0
 
 **Date:** 2026-03-24

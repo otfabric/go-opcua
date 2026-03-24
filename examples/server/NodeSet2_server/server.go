@@ -8,9 +8,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/tls"
-	"encoding/xml"
 	"flag"
-	"io"
 	"log"
 	"log/slog"
 	"os"
@@ -18,7 +16,6 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/logger"
-	"github.com/otfabric/go-opcua/schema"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -138,27 +135,21 @@ func main() {
 	// Now that all the options are set, create the server.
 	// When the server is created, it will automatically create namespace 0 and populate it with
 	// the core opc ua nodes.
-	s := server.New(opts...)
+	s, err := server.New(opts...)
+	if err != nil {
+		log.Fatalf("Error creating server: %s", err)
+	}
 
 	// Now we'll import our NodeSet2.xml file.
 	// These files often create additional namespaces and reference them assuming they
 	// stat at namespace 1.  So you'll want to import the nodeset first, then add any custom namespaces
 	// after that.
 
-	// first, we read the file and unmarshal it into a schema.UANodeSet struct.  Then it can be imported
-	file, err := os.Open("Opc.Ua.Di.NodeSet2.xml")
-	if err != nil {
-		log.Fatalf("error opening nodeset file: %v", err)
-	}
-	nodeData, err := io.ReadAll(file)
+	nodeData, err := os.ReadFile("Opc.Ua.Di.NodeSet2.xml")
 	if err != nil {
 		log.Fatalf("error reading nodeset file: %v", err)
 	}
-	var nodes schema.UANodeSet
-	if err := xml.Unmarshal(nodeData, &nodes); err != nil {
-		log.Fatalf("error parsing nodeset XML: %v", err)
-	}
-	if err := s.ImportNodeSet(&nodes); err != nil {
+	if err := s.ImportNodeSetXML(nodeData); err != nil {
 		log.Fatalf("error importing nodeset: %v", err)
 	}
 

@@ -4,6 +4,26 @@
 
 ---
 
+## Client Service Support
+
+| Service Set | Client Methods | Status |
+|-------------|---------------|--------|
+| **Discovery** | `GetEndpoints`, `FindServers`, `FindServersOnNetwork` | Fully implemented |
+| **Session** | Automatic via `Connect` / `Close` | Fully implemented |
+| **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented |
+| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadEvents`, `HistoryUpdateData`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented |
+| **Browse** | `Browse`, `BrowseNext` | Fully implemented |
+| **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
+| **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
+| **Method** | `Call`, `CallMethod` | Fully implemented |
+| **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode` | Fully implemented |
+| **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented |
+| **Query** | `QueryFirst`, `QueryNext` | API present; server-dependent |
+
+For services not wrapped by a dedicated method, use `Client.Send(req, resp)` directly.
+
+---
+
 ## Connecting
 
 ### Basic Connection
