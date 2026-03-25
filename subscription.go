@@ -428,9 +428,9 @@ func (s *Subscription) recreateDelete(ctx context.Context) error { //nolint:unpa
 		SubscriptionIDs: []uint32{s.SubscriptionID},
 	}
 	if _, err := send[ua.DeleteSubscriptionsResponse](ctx, s.c, req); err != nil {
-		s.c.cfg.logger.Debugf("recreateDelete: delete failed (continuing anyway) sub_id=%v error=%v", s.SubscriptionID, err)
+		s.c.cfg.logger.Debug("recreateDelete: delete failed (continuing anyway)", "sub_id", s.SubscriptionID, "error", err)
 	}
-	s.c.cfg.logger.Debugf("recreateDelete: subscription deleted sub_id=%v", s.SubscriptionID)
+	s.c.cfg.logger.Debug("recreateDelete: subscription deleted", "sub_id", s.SubscriptionID)
 	return nil
 }
 
@@ -452,7 +452,7 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 	}
 	res, err := send[ua.CreateSubscriptionResponse](ctx, s.c, req)
 	if err != nil {
-		s.c.cfg.logger.Debugf("recreateCreate: failed to recreate subscription sub_id=%v", s.SubscriptionID)
+		s.c.cfg.logger.Debug("recreateCreate: failed to recreate subscription", "sub_id", s.SubscriptionID)
 		return err
 	}
 	// Redundant: send[T]() already checks ServiceResult via SecureChannel.Receive().
@@ -460,7 +460,7 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 	if status := res.ResponseHeader.ServiceResult; status != ua.StatusOK {
 		return status
 	}
-	s.c.cfg.logger.Debugf("recreateCreate: recreated subscription sub_id=%v new_sub_id=%v", s.SubscriptionID, res.SubscriptionID)
+	s.c.cfg.logger.Debug("recreateCreate: recreated subscription", "sub_id", s.SubscriptionID, "new_sub_id", res.SubscriptionID)
 
 	s.SubscriptionID = res.SubscriptionID
 	s.RevisedPublishingInterval = time.Duration(res.RevisedPublishingInterval) * time.Millisecond
@@ -472,7 +472,7 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 	if err := s.c.registerSubscriptionNeedsSubMuxLock(s); err != nil {
 		return err
 	}
-	s.c.cfg.logger.Debugf("recreateCreate: subscription registered sub_id=%v", s.SubscriptionID)
+	s.c.cfg.logger.Debug("recreateCreate: subscription registered", "sub_id", s.SubscriptionID)
 
 	// Sort by timestamp to return
 	itemsByTimestamps := make(map[ua.TimestampsToReturn][]*ua.MonitoredItemCreateRequest)
@@ -492,7 +492,7 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 
 		res, err := send[ua.CreateMonitoredItemsResponse](ctx, s.c, req)
 		if err != nil {
-			s.c.cfg.logger.Debugf("recreateCreate: failed to create monitored items sub_id=%v error=%v", s.SubscriptionID, err)
+			s.c.cfg.logger.Debug("recreateCreate: failed to create monitored items", "sub_id", s.SubscriptionID, "error", err)
 			return err
 		}
 
@@ -512,7 +512,7 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 		}
 		s.itemsMu.Unlock()
 	}
-	s.c.cfg.logger.Debugf("recreateCreate: subscription successfully recreated sub_id=%v", s.SubscriptionID)
+	s.c.cfg.logger.Debug("recreateCreate: subscription successfully recreated", "sub_id", s.SubscriptionID)
 
 	return nil
 }

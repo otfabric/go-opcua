@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -18,7 +19,7 @@ type NodeManagementService struct {
 // AddNodes implements the OPC UA AddNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.2
 func (s *NodeManagementService) AddNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.AddNodesRequest](r)
 	if err != nil {
@@ -91,7 +92,7 @@ func (s *NodeManagementService) addNode(item *ua.AddNodesItem) *ua.AddNodesResul
 // AddReferences implements the OPC UA AddReferences service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.3
 func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.AddReferencesRequest](r)
 	if err != nil {
@@ -146,7 +147,7 @@ func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.Secu
 // DeleteNodes implements the OPC UA DeleteNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.4
 func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.DeleteNodesRequest](r)
 	if err != nil {
@@ -184,7 +185,7 @@ func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.Secure
 // DeleteReferences implements the OPC UA DeleteReferences service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5
 func (s *NodeManagementService) DeleteReferences(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.DeleteReferencesRequest](r)
 	if err != nil {

@@ -76,7 +76,7 @@ This creates a server with:
 | `ManufacturerName(name)` | Manufacturer metadata |
 | `ProductName(name)` | Product metadata |
 | `SoftwareVersion(version)` | Version string |
-| `SetLogger(logger)` | Custom `logger.Logger` interface |
+| `SetLogger(l)` | `*slog.Logger`; defaults to `slog.Default()` |
 | `WithAccessController(ac)` | Custom authorization logic |
 
 ---

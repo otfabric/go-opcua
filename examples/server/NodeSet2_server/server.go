@@ -15,7 +15,6 @@ import (
 	"os/signal"
 	"time"
 
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -85,10 +84,8 @@ func main() {
 		server.EndPoint(hostname, *port),
 	)
 
-	// server.SetLogger takes a logger.Logger.
-	l := logger.NewSlogLogger(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
 	opts = append(opts,
-		server.SetLogger(l),
+		server.SetLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))),
 	)
 
 	// Here is an example of certificate generation.  This is not necessary if you already have a certificate.

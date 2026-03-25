@@ -37,12 +37,10 @@ func NewTypeRegistry() *TypeRegistry {
 
 // New returns a new instance of the type with the given id.
 //
-// If the id is not known the function returns nil.
-//
-// New panics if id is nil.
+// If the id is nil or not known the function returns nil.
 func (r *TypeRegistry) New(id *NodeID) interface{} {
 	if id == nil {
-		panic("opcua: missing id in call to TypeRegistry.New")
+		return nil
 	}
 
 	r.mu.Lock()

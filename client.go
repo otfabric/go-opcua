@@ -273,8 +273,8 @@ func (c *Client) Connect(ctx context.Context) error {
 
 // monitor manages connection alteration.
 func (c *Client) monitor(ctx context.Context) {
-	c.cfg.logger.Debugf("monitor: start")
-	defer c.cfg.logger.Debugf("monitor: done")
+	c.cfg.logger.Debug("monitor: start")
+	defer c.cfg.logger.Debug("monitor: done")
 
 	defer c.mcancel()
 	defer c.setState(ctx, Closed)
@@ -290,7 +290,7 @@ func (c *Client) monitor(ctx context.Context) {
 
 			// return if channel or connection is closed
 			if !ok || err == io.EOF && c.State() == Closed {
-				c.cfg.logger.Debugf("monitor: closed")
+				c.cfg.logger.Debug("monitor: closed")
 				return
 			}
 
@@ -302,15 +302,14 @@ func (c *Client) monitor(ctx context.Context) {
 
 			// tell the handler the connection is disconnected
 			c.setState(ctx, Disconnected)
-			c.cfg.logger.Debugf("monitor: disconnected")
+			c.cfg.logger.Debug("monitor: disconnected")
 
 			if !c.cfg.sechan.AutoReconnect {
-				// the connection is closed and should not be restored
-				c.cfg.logger.Debugf("monitor: auto-reconnect disabled")
+				c.cfg.logger.Debug("monitor: auto-reconnect disabled")
 				return
 			}
 
-			c.cfg.logger.Debugf("monitor: auto-reconnecting")
+			c.cfg.logger.Debug("monitor: auto-reconnecting")
 
 			switch {
 			case errors.Is(err, io.EOF):
@@ -376,7 +375,7 @@ func (c *Client) monitor(ctx context.Context) {
 						// no action needed
 
 					case createSecureChannel:
-						c.cfg.logger.Debugf("monitor: action: createSecureChannel")
+						c.cfg.logger.Debug("monitor: action: createSecureChannel")
 
 						// recreate a secure channel by brute forcing
 						// a reconnection to the server
@@ -398,102 +397,89 @@ func (c *Client) monitor(ctx context.Context) {
 
 						c.setState(ctx, Reconnecting)
 
-						c.cfg.logger.Debugf("monitor: trying to recreate secure channel")
+						c.cfg.logger.Debug("monitor: trying to recreate secure channel")
 						for {
 							if err := c.Dial(ctx); err != nil {
 								select {
 								case <-ctx.Done():
 									return
 								case <-time.After(c.cfg.sechan.ReconnectInterval):
-									c.cfg.logger.Debugf("monitor: trying to recreate secure channel")
+									c.cfg.logger.Debug("monitor: trying to recreate secure channel")
 									continue
 								}
 							}
 							break
 						}
-						c.cfg.logger.Debugf("monitor: secure channel recreated")
+						c.cfg.logger.Debug("monitor: secure channel recreated")
 						action = restoreSession
 
 					case restoreSession:
-						c.cfg.logger.Debugf("monitor: action: restoreSession")
-
-						// try to reactivate the session,
-						// This only works if the session is still open on the server
-						// otherwise recreate it
+						c.cfg.logger.Debug("monitor: action: restoreSession")
 
 						c.setState(ctx, Reconnecting)
 
 						s := c.Session()
 						if s == nil {
-							c.cfg.logger.Debugf("monitor: no session to restore")
+							c.cfg.logger.Debug("monitor: no session to restore")
 							action = recreateSession
 							continue
 						}
 
-						c.cfg.logger.Debugf("monitor: trying to restore session")
+						c.cfg.logger.Debug("monitor: trying to restore session")
 						if err := c.ActivateSession(ctx, s); err != nil {
-							c.cfg.logger.Debugf("monitor: restore session failed error=%v", err)
+							c.cfg.logger.Debug("monitor: restore session failed", "error", err)
 							action = recreateSession
 							continue
 						}
-						c.cfg.logger.Debugf("monitor: session restored")
+						c.cfg.logger.Debug("monitor: session restored")
 
-						// todo(fs): see comment about guarding this with an option in Connect()
-						c.cfg.logger.Debugf("monitor: trying to update namespaces")
+						c.cfg.logger.Debug("monitor: trying to update namespaces")
 						if !c.cfg.skipNamespaceUpdate {
 							if err := c.UpdateNamespaces(ctx); err != nil {
-								c.cfg.logger.Debugf("monitor: updating namespaces failed error=%v", err)
+								c.cfg.logger.Debug("monitor: updating namespaces failed", "error", err)
 								action = createSecureChannel
 								continue
 							}
 						}
-						c.cfg.logger.Debugf("monitor: namespaces updated")
+						c.cfg.logger.Debug("monitor: namespaces updated")
 
 						action = restoreSubscriptions
 
 					case recreateSession:
-						c.cfg.logger.Debugf("monitor: action: recreateSession")
+						c.cfg.logger.Debug("monitor: action: recreateSession")
 
 						c.setState(ctx, Reconnecting)
-						// create a new session to replace the previous one
 
-						// clear any previous session as we know the server has closed it
-						// this also prevents any unnecessary calls to CloseSession
 						c.setSession(nil)
 
-						c.cfg.logger.Debugf("monitor: trying to recreate session")
+						c.cfg.logger.Debug("monitor: trying to recreate session")
 						s, err := c.CreateSession(ctx, c.cfg.session)
 						if err != nil {
-							c.cfg.logger.Debugf("monitor: recreate session failed error=%v", err)
+							c.cfg.logger.Debug("monitor: recreate session failed", "error", err)
 							action = createSecureChannel
 							continue
 						}
 						if err := c.ActivateSession(ctx, s); err != nil {
-							c.cfg.logger.Debugf("monitor: reactivate session failed error=%v", err)
+							c.cfg.logger.Debug("monitor: reactivate session failed", "error", err)
 							action = createSecureChannel
 							continue
 						}
-						c.cfg.logger.Debugf("monitor: session recreated")
+						c.cfg.logger.Debug("monitor: session recreated")
 
-						// todo(fs): see comment about guarding this with an option in Connect()
-						c.cfg.logger.Debugf("monitor: trying to update namespaces")
+						c.cfg.logger.Debug("monitor: trying to update namespaces")
 						if !c.cfg.skipNamespaceUpdate {
 							if err := c.UpdateNamespaces(ctx); err != nil {
-								c.cfg.logger.Debugf("monitor: updating namespaces failed error=%v", err)
+								c.cfg.logger.Debug("monitor: updating namespaces failed", "error", err)
 								action = createSecureChannel
 								continue
 							}
 						}
-						c.cfg.logger.Debugf("monitor: namespaces updated")
+						c.cfg.logger.Debug("monitor: namespaces updated")
 
 						action = transferSubscriptions
 
 					case transferSubscriptions:
-						c.cfg.logger.Debugf("monitor: action: transferSubscriptions")
-
-						// transfer subscriptions from the old to the new session
-						// and try to republish the subscriptions.
-						// Restore the subscriptions where republishing fails.
+						c.cfg.logger.Debug("monitor: action: transferSubscriptions")
 
 						subIDs := c.SubscriptionIDs()
 
@@ -501,29 +487,25 @@ func (c *Client) monitor(ctx context.Context) {
 						subsToRecreate = nil
 						subsToRepublish = nil
 
-						// try to transfer all subscriptions to the new session and
-						// recreate them all if that fails.
 						res, err := c.transferSubscriptions(ctx, subIDs)
 						switch {
 
 						case errors.Is(err, ua.StatusBadServiceUnsupported):
-							c.cfg.logger.Debugf("monitor: transfer subscriptions not supported, recreating all subscriptions error=%v", err)
+							c.cfg.logger.Debug("monitor: transfer subscriptions not supported, recreating all subscriptions", "error", err)
 							subsToRepublish = nil
 							subsToRecreate = subIDs
 
 						case err != nil:
-							c.cfg.logger.Debugf("monitor: transfer subscriptions failed, recreating all subscriptions error=%v", err)
+							c.cfg.logger.Debug("monitor: transfer subscriptions failed, recreating all subscriptions", "error", err)
 							subsToRepublish = nil
 							subsToRecreate = subIDs
 
 						default:
-							// otherwise, try a republish for the subscriptions that were transferred
-							// and recreate the rest.
 							for i := range res.Results {
 								transferResult := res.Results[i]
 								switch transferResult.StatusCode {
 								case ua.StatusBadSubscriptionIDInvalid:
-									c.cfg.logger.Debugf("monitor: transfer subscription failed sub_id=%v", subIDs[i])
+									c.cfg.logger.Debug("monitor: transfer subscription failed", "sub_id", subIDs[i])
 									subsToRecreate = append(subsToRecreate, subIDs[i])
 
 								default:
@@ -536,17 +518,12 @@ func (c *Client) monitor(ctx context.Context) {
 						action = restoreSubscriptions
 
 					case restoreSubscriptions:
-						c.cfg.logger.Debugf("monitor: action: restoreSubscriptions")
-
-						// try to republish the previous subscriptions from the server
-						// otherwise restore them.
-						// Assume that subsToRecreate and subsToRepublish have been
-						// populated in the previous step.
+						c.cfg.logger.Debug("monitor: action: restoreSubscriptions")
 
 						activeSubs = 0
 						for _, subID := range subsToRepublish {
 							if err := c.republishSubscription(ctx, subID, availableSeqs[subID]); err != nil {
-								c.cfg.logger.Debugf("monitor: republish of subscription failed sub_id=%v", subID)
+								c.cfg.logger.Debug("monitor: republish of subscription failed", "sub_id", subID)
 								subsToRecreate = append(subsToRecreate, subID)
 							}
 							activeSubs++
@@ -554,7 +531,7 @@ func (c *Client) monitor(ctx context.Context) {
 
 						for _, subID := range subsToRecreate {
 							if err := c.recreateSubscription(ctx, subID); err != nil {
-								c.cfg.logger.Debugf("monitor: recreate subscriptions failed error=%v", err)
+								c.cfg.logger.Debug("monitor: recreate subscriptions failed", "error", err)
 								continue
 							}
 							activeSubs++
@@ -564,12 +541,9 @@ func (c *Client) monitor(ctx context.Context) {
 						action = none
 
 					case abortReconnect:
-						c.cfg.logger.Debugf("monitor: action: abortReconnect")
+						c.cfg.logger.Debug("monitor: action: abortReconnect")
 
-						// Non-recoverable disconnection — stop the client.
-						// The error is already surfaced via the state callback;
-						// callers should monitor state changes to detect this.
-						c.cfg.logger.Warnf("monitor: reconnection not recoverable")
+						c.cfg.logger.Warn("monitor: reconnection not recoverable")
 						return
 					}
 				}
@@ -582,11 +556,11 @@ func (c *Client) monitor(ctx context.Context) {
 
 			switch {
 			case activeSubs > 0:
-				c.cfg.logger.Debugf("monitor: resuming subscriptions count=%v", activeSubs)
+				c.cfg.logger.Debug("monitor: resuming subscriptions", "count", activeSubs)
 				c.resumeSubscriptions(ctx)
-				c.cfg.logger.Debugf("monitor: resumed subscriptions count=%v", activeSubs)
+				c.cfg.logger.Debug("monitor: resumed subscriptions", "count", activeSubs)
 			default:
-				c.cfg.logger.Debugf("monitor: no subscriptions to resume")
+				c.cfg.logger.Debug("monitor: no subscriptions to resume")
 			}
 		}
 	}
@@ -926,7 +900,7 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 	case *ua.UserNameIdentityToken:
 		pass, passAlg, err := sc.EncryptUserPassword(s.cfg.AuthPolicyURI, s.cfg.AuthPassword, s.serverCertificate, s.serverNonce)
 		if err != nil {
-			c.cfg.logger.Warnf("error encrypting user password error=%v", err)
+			c.cfg.logger.Warn("error encrypting user password", "error", err)
 			return err
 		}
 		tok.Password = pass
@@ -935,7 +909,7 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 	case *ua.X509IdentityToken:
 		tokSig, tokSigAlg, err := sc.NewUserTokenSignature(s.cfg.AuthPolicyURI, s.serverCertificate, s.serverNonce)
 		if err != nil {
-			c.cfg.logger.Warnf("error creating session signature error=%v", err)
+			c.cfg.logger.Warn("error creating session signature", "error", err)
 			return err
 		}
 		s.cfg.UserTokenSignature = &ua.SignatureData{

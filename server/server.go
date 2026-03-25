@@ -10,6 +10,7 @@ import (
 	"crypto/rsa"
 	"encoding/xml"
 	"fmt"
+	"log/slog"
 	"net"
 	"slices"
 	"strings"
@@ -18,7 +19,6 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/schema"
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -94,7 +94,7 @@ type serverConfig struct {
 	roleMapper       RoleMapper
 	metrics          ServerMetrics
 
-	logger logger.Logger
+	logger *slog.Logger
 }
 
 var capabilities = ServerCapabilities{
@@ -156,7 +156,7 @@ func New(opts ...Option) (*Server, error) {
 		manufacturerName: "otfabric",               // override with the ManufacturerName option
 		productName:      "otfabric OPC/UA Server", // override with the ProductName option
 		softwareVersion:  "0.0.0-dev",              // override with the SoftwareVersion option
-		logger:           logger.Default(),
+		logger:           slog.Default(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
@@ -323,7 +323,7 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	s.cfg.logger.Infof("started listening urls=%v", s.URLs())
+	s.cfg.logger.Info("started listening", "urls", s.URLs())
 
 	s.initEndpoints()
 	s.setServerState(ua.ServerStateRunning)
@@ -380,20 +380,20 @@ func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
 				switch x := err.(type) {
 				case *net.OpError:
 					// Listener was closed (normal during shutdown).
-					s.cfg.logger.Debugf("listener closed error=%v", err)
+					s.cfg.logger.Debug("listener closed", "error", err)
 					return
 				case temporary:
 					if x.Temporary() {
 						continue
 					}
 				default:
-					s.cfg.logger.Errorf("error accepting connection error=%v", err)
+					s.cfg.logger.Error("error accepting connection", "error", err)
 					continue
 				}
 			}
 
 			go func() { _ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey) }()
-			s.cfg.logger.Infof("registered connection remote_addr=%v", c.RemoteAddr())
+			s.cfg.logger.Info("registered connection", "remote_addr", c.RemoteAddr())
 		}
 	}
 }
@@ -407,25 +407,25 @@ func (s *Server) monitorConnections(ctx context.Context) {
 			continue // ctx is likely done, ctx.Err will be non-nil
 		}
 		if msg.Err != nil {
-			s.cfg.logger.Errorf("monitorConnections: error received error=%v", msg.Err)
+			s.cfg.logger.Error("monitorConnections: error received", "error", msg.Err)
 			// Closing the SC here is risky: the channel may recover from transient errors.
 			// The channel broker already handles fatal errors by breaking its read loop.
 			continue
 		}
 		if resp := msg.Response(); resp != nil {
-			s.cfg.logger.Errorf("monitorConnections: server received response type=%T", resp)
+			s.cfg.logger.Error("monitorConnections: server received response", "type", fmt.Sprintf("%T", resp))
 			// A server should never receive a response. This is a protocol violation
 			// but closing the channel could disrupt active sessions on the same channel.
 			continue
 		}
-		s.cfg.logger.Debugf("monitorConnections: received message type=%T", msg.Request())
+		s.cfg.logger.Debug("monitorConnections: received message", "type", fmt.Sprintf("%T", msg.Request()))
 		s.cb.mu.RLock()
 		sc, ok := s.cb.s[msg.SecureChannelID]
 		s.cb.mu.RUnlock()
 		if !ok {
 			// if the secure channel ID is 0, this is probably a open secure channel request.
 			if msg.SecureChannelID != 0 {
-				s.cfg.logger.Errorf("monitorConnections: unknown secure channel secure_channel_id=%v", msg.SecureChannelID)
+				s.cfg.logger.Error("monitorConnections: unknown secure channel", "secure_channel_id", msg.SecureChannelID)
 			}
 			continue
 		}
