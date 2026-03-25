@@ -86,7 +86,7 @@ func (c *channelInstance) newRequestMessage(req ua.Request, reqID uint32, authTo
 
 func (c *channelInstance) newMessage(srv interface{}, typeID uint16, requestID uint32) *Message {
 	sequenceNumber := c.nextSequenceNumber()
-	c.sc.cfg.Logger.Debugf("got sequence number sequence_number=%v", sequenceNumber)
+	c.sc.cfg.Logger.Debug("got sequence number", "sequence_number", sequenceNumber)
 
 	switch typeID {
 	case id.OpenSecureChannelRequestEncodingDefaultBinary, id.OpenSecureChannelResponseEncodingDefaultBinary:

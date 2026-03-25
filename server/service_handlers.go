@@ -6,6 +6,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -104,7 +105,7 @@ func (s *Server) RegisterHandler(typeID uint16, h Handler) {
 }
 
 func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqID uint32, req ua.Request) {
-	s.cfg.logger.Debugf("handleService type=%T", req)
+	s.cfg.logger.Debug("handleService", "type", fmt.Sprintf("%T", req))
 
 	m := s.cfg.metrics
 	var svc string
@@ -124,7 +125,7 @@ func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqI
 		resp, err = h(ctx, sc, req, reqID)
 	} else {
 		if typeID == 0 {
-			s.cfg.logger.Warnf("unknown service type=%T", req)
+			s.cfg.logger.Warn("unknown service", "type", fmt.Sprintf("%T", req))
 		}
 		err = ua.StatusBadServiceUnsupported
 	}
@@ -152,7 +153,7 @@ func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqI
 
 	err = sc.SendResponseWithContext(ctx, reqID, resp)
 	if err != nil {
-		s.cfg.logger.Warnf("error sending response error=%v", err)
+		s.cfg.logger.Warn("error sending response", "error", err)
 	}
 }
 

@@ -9,25 +9,25 @@ package id
 import "strconv"
 
 func Name(id uint32) string {
-	if s, ok := nameReferenceType[id]; ok {
-		return s
-	}
-	if s, ok := nameObjectType[id]; ok {
-		return s
-	}
-	if s, ok := nameVariableType[id]; ok {
-		return s
-	}
-	if s, ok := nameObject[id]; ok {
-		return s
-	}
-	if s, ok := nameVariable[id]; ok {
+	if s, ok := nameDataType[id]; ok {
 		return s
 	}
 	if s, ok := nameMethod[id]; ok {
 		return s
 	}
-	if s, ok := nameDataType[id]; ok {
+	if s, ok := nameObject[id]; ok {
+		return s
+	}
+	if s, ok := nameObjectType[id]; ok {
+		return s
+	}
+	if s, ok := nameReferenceType[id]; ok {
+		return s
+	}
+	if s, ok := nameVariable[id]; ok {
+		return s
+	}
+	if s, ok := nameVariableType[id]; ok {
 		return s
 	}
 	return strconv.FormatUint(uint64(id), 10)

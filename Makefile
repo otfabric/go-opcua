@@ -3,7 +3,7 @@
 
 .DEFAULT_GOAL := help
 
-.PHONY: help all test coverage cover lint lint-ci fmt vet integration selfintegration examples test-race install-py-opcua gen
+.PHONY: help all test coverage cover lint lint-ci fmt vet integration selfintegration examples test-race install-py-opcua gen check-gen
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -65,5 +65,13 @@ install-py-opcua: ## Install Python opcua package (for integration tests)
 gen: ## Regenerate code (stringer, go generate)
 	@echo "Regenerating code"
 	@go generate ./...
+
+check-gen: gen ## Verify generated files are up to date
+	@echo "Checking for generation drift"
+	@if ! git diff --quiet; then \
+		echo "ERROR: Generated files are out of date. Run 'make gen' and commit."; \
+		git diff --stat; \
+		exit 1; \
+	fi
 
 check: fmt lint lint-ci vet test coverage ## Run lint + vet + test

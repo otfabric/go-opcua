@@ -6,10 +6,14 @@
 //
 // It replaces the former generate.sh with a deterministic, tested Go
 // program that:
-//   - cleans an explicit list of generated files (no shell globs)
-//   - runs each generator in order
+//   - runs each generator in order (overwriting output files in place)
 //   - discovers enum types and runs stringer via go tool
 //   - does not install tools or run go mod tidy
+//
+// Generated files are NOT cleaned before regeneration because the
+// generators import the ua package which depends on its own generated
+// files. Deleting them first creates a circular dependency that breaks
+// compilation on cold caches (e.g. CI).
 //
 // Invoke via: go generate ./...  (from module root)
 // Or directly: go run ./internal/cmd/gen
@@ -17,14 +21,9 @@ package main
 
 import (
 	"fmt"
-	"go/ast"
-	"go/parser"
-	"go/token"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"sort"
 	"strings"
 )
 
@@ -64,88 +63,63 @@ var generators = [][]string{
 func main() {
 	log.SetFlags(0)
 
-	clean()
-	generate()
-	stringer()
-}
-
-// clean removes all known generated files. Ignores files that don't exist.
-func clean() {
-	for _, f := range generatedFiles {
-		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
-			log.Fatalf("clean: %v", err)
-		}
+	if err := generate(); err != nil {
+		log.Fatal("generate: ", err)
+	}
+	if err := stringer(); err != nil {
+		log.Fatal("stringer: ", err)
 	}
 }
 
 // generate runs each code generator.
-func generate() {
+func generate() error {
 	for _, args := range generators {
-		run(args[0], args[1:]...)
+		if err := run(args[0], args[1:]...); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // stringer discovers enum types in ua/enums*.go files and runs
 // `go tool stringer` to generate String() methods.
-func stringer() {
-	enums := discoverEnumTypes("ua", "enums*.go")
+func stringer() error {
+	enums, err := discoverEnumTypes("ua", "enums*.go")
+	if err != nil {
+		return fmt.Errorf("stringer: %w", err)
+	}
 	if len(enums) == 0 {
-		log.Fatal("stringer: no enum types found in ua/enums*.go")
+		return fmt.Errorf("stringer: no enum types found in ua/enums*.go")
 	}
 
-	run("go", "tool", "stringer",
+	if err := run("go", "tool", "stringer",
 		"-type", strings.Join(enums, ","),
 		"-output", "ua/enums_strings_gen.go",
 		"./ua",
-	)
+	); err != nil {
+		return err
+	}
 	fmt.Println("Wrote ua/enums_strings_gen.go")
 
-	run("go", "tool", "stringer",
+	if err := run("go", "tool", "stringer",
 		"-type", "ConnState",
 		"-output", "connstate_strings_gen.go",
 		".",
-	)
+	); err != nil {
+		return err
+	}
 	fmt.Println("Wrote connstate_strings_gen.go")
+
+	return nil
 }
 
-// discoverEnumTypes parses Go files matching the glob pattern in dir
-// and returns all exported type names declared in those files, sorted.
-func discoverEnumTypes(dir, pattern string) []string {
-	matches, err := filepath.Glob(filepath.Join(dir, pattern))
-	if err != nil {
-		log.Fatalf("glob %s/%s: %v", dir, pattern, err)
-	}
-
-	fset := token.NewFileSet()
-	var types []string
-	for _, path := range matches {
-		f, err := parser.ParseFile(fset, path, nil, 0)
-		if err != nil {
-			log.Fatalf("parse %s: %v", path, err)
-		}
-		for _, decl := range f.Decls {
-			gd, ok := decl.(*ast.GenDecl)
-			if !ok || gd.Tok != token.TYPE {
-				continue
-			}
-			for _, spec := range gd.Specs {
-				ts := spec.(*ast.TypeSpec)
-				if ts.Name.IsExported() {
-					types = append(types, ts.Name.Name)
-				}
-			}
-		}
-	}
-	sort.Strings(types)
-	return types
-}
-
-// run executes a command, forwarding stdout/stderr. Exits on failure.
-func run(name string, args ...string) {
+// run executes a command, forwarding stdout/stderr.
+func run(name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
-		log.Fatalf("%s %s: %v", name, strings.Join(args, " "), err)
+		return fmt.Errorf("run %s %s: %w", name, strings.Join(args, " "), err)
 	}
+	return nil
 }
