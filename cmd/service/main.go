@@ -119,7 +119,8 @@ func write(src []byte, filename string) {
 		log.Fatalf("Failed to write %s: %v", filename, err)
 	}
 
-	if err := exec.Command("goimports", "-w", filename).Run(); err != nil {
+	// Use go tool goimports (pinned in go.mod) so CI does not need a global goimports install.
+	if err := exec.Command("go", "tool", "goimports", "-w", filename).Run(); err != nil {
 		fmt.Println(string(src))
 		log.Fatalf("Failed to format %s: %v", filename, err)
 	}

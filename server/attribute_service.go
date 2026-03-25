@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -18,7 +19,7 @@ type AttributeService struct {
 // Read implements the OPC UA Read service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.10.2
 func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.ReadRequest](r)
 	if err != nil {
@@ -30,7 +31,7 @@ func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r u
 
 	results := make([]*ua.DataValue, len(req.NodesToRead))
 	for i, n := range req.NodesToRead {
-		s.srv.cfg.logger.Debugf("read node_id=%v attribute=%v", n.NodeID, n.AttributeID)
+		s.srv.cfg.logger.Debug("read", "node_id", n.NodeID, "attribute", n.AttributeID)
 
 		if sc := ac.CheckRead(ctx, sess, n.NodeID); sc != ua.StatusOK {
 			results[i] = &ua.DataValue{
@@ -77,7 +78,7 @@ func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r u
 // HistoryRead implements the OPC UA HistoryRead service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.10.3
 func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.HistoryReadRequest](r)
 	if err != nil {
@@ -116,7 +117,7 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 
 	for i := range req.NodesToWrite {
 		n := req.NodesToWrite[i]
-		s.srv.cfg.logger.Debugf("write node_id=%v attribute=%v", n.NodeID, n.AttributeID)
+		s.srv.cfg.logger.Debug("write", "node_id", n.NodeID, "attribute", n.AttributeID)
 
 		if sc := ac.CheckWrite(ctx, sess, n.NodeID); sc != ua.StatusOK {
 			status[i] = sc
@@ -159,7 +160,7 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 // HistoryUpdate implements the OPC UA HistoryUpdate service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.10.5
 func (s *AttributeService) HistoryUpdate(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.HistoryUpdateRequest](r)
 	if err != nil {

@@ -49,7 +49,7 @@ Packages are tiered by intended audience and stability commitment:
 | `uacp/` | TCP transport, connection handshake, listener |
 | `uasc/` | Secure channel management, message chunking, token renewal |
 | `uapolicy/` | Cryptographic algorithms per security policy |
-| `logger/` | Logging abstraction over `*slog.Logger` |
+
 | `schema/` | OPC-UA schema input files (CSVs, BSD, XSD) for code generators |
 | `server/attrs/` | Server attribute helpers |
 | `server/refs/` | Server reference helpers |

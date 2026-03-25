@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -119,7 +120,7 @@ func (s *MonitoredItemService) ChangeNotification(n *ua.NodeID) {
 		val := new(ua.MonitoredItemNotification)
 		val.ClientHandle = item.Req.RequestedParameters.ClientHandle
 		if err != nil {
-			s.SubService.srv.cfg.logger.Warnf("error getting namespace namespace=%v error=%v", n.Namespace(), err)
+			s.SubService.srv.cfg.logger.Warn("error getting namespace", "namespace", n.Namespace(), "error", err)
 			val.Value = &ua.DataValue{}
 			val.Value.Status = ua.StatusBad
 			val.Value.EncodingMask |= ua.DataValueStatusCode
@@ -154,7 +155,7 @@ type MonitoredItem struct {
 // CreateMonitoredItems implements the OPC UA CreateMonitoredItems service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.2
 func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.SubService.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.CreateMonitoredItemsRequest](r)
 	if err != nil {
@@ -168,7 +169,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 	res := make([]*ua.MonitoredItemCreateResult, count)
 
 	subID := req.SubscriptionID
-	s.SubService.srv.cfg.logger.Debugf("creating monitored items sub_id=%v", subID)
+	s.SubService.srv.cfg.logger.Debug("creating monitored items", "sub_id", subID)
 	s.SubService.Mu.Lock()
 	sub, ok := s.SubService.Subs[subID]
 	s.SubService.Mu.Unlock()
@@ -204,7 +205,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		}
 		s.Subs[item.Sub.ID] = append(list, &item)
 
-		s.SubService.srv.cfg.logger.Debugf("adding monitored item node_id=%v sub_id=%v item_id=%v client_handle=%v", nodeid.String(), subID, item.ID, itemreq.RequestedParameters.ClientHandle)
+		s.SubService.srv.cfg.logger.Debug("adding monitored item", "node_id", nodeid.String(), "sub_id", subID, "item_id", item.ID, "client_handle", itemreq.RequestedParameters.ClientHandle)
 		res[i] = &ua.MonitoredItemCreateResult{
 			StatusCode:              ua.StatusOK,
 			MonitoredItemID:         item.ID,
@@ -239,7 +240,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 // ModifyMonitoredItems implements the OPC UA ModifyMonitoredItems service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.3
 func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.SubService.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.ModifyMonitoredItemsRequest](r)
 	if err != nil {
@@ -305,7 +306,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 // SetMonitoringMode implements the OPC UA SetMonitoringMode service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.4
 func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.SubService.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.SetMonitoringModeRequest](r)
 	if err != nil {
@@ -352,7 +353,7 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 // SetTriggering implements the OPC UA SetTriggering service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.5
 func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.SubService.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.SetTriggeringRequest](r)
 	if err != nil {
@@ -409,7 +410,7 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 // DeleteMonitoredItems implements the OPC UA DeleteMonitoredItems service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.12.6
 func (s *MonitoredItemService) DeleteMonitoredItems(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.SubService.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.SubService.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.DeleteMonitoredItemsRequest](r)
 	if err != nil {

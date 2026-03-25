@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -69,7 +68,7 @@ type Config struct {
 	dialer              *uacp.Dialer
 	sechan              *uasc.Config
 	session             *uasc.SessionConfig
-	logger              logger.Logger
+	logger              *slog.Logger
 	stateCh             chan<- ConnState
 	stateFunc           func(ConnState)
 	metrics             ClientMetrics
@@ -92,7 +91,7 @@ func newConfig() *Config {
 		dialer:  DefaultDialer(),
 		sechan:  DefaultClientConfig(),
 		session: DefaultSessionConfig(),
-		logger:  logger.Default(),
+		logger:  slog.Default(),
 	}
 }
 
@@ -128,19 +127,9 @@ func WithRetryPolicy(p RetryPolicy) Option {
 
 // WithLogger sets the logger for the client.
 // By default, the library delegates to slog.Default().
-func WithLogger(l Logger) Option {
+func WithLogger(l *slog.Logger) Option {
 	return func(cfg *Config) error {
 		cfg.logger = l
-		return nil
-	}
-}
-
-// WithSlogLogger sets the logger from an *slog.Logger.
-// This is a convenience wrapper around WithLogger that adapts the
-// slog.Logger's handler to the library's Logger interface.
-func WithSlogLogger(l *slog.Logger) Option {
-	return func(cfg *Config) error {
-		cfg.logger = logger.NewSlogLogger(l.Handler())
 		return nil
 	}
 }
@@ -478,7 +467,7 @@ func AuthAnonymous() Option {
 
 		_, ok := cfg.session.UserIdentityToken.(*ua.AnonymousIdentityToken)
 		if !ok {
-			cfg.logger.Warnf("non-anonymous authentication already configured, ignoring")
+			cfg.logger.Warn("non-anonymous authentication already configured, ignoring")
 			return nil
 		}
 		applyPendingPolicyID(cfg)
@@ -498,7 +487,7 @@ func AuthUsername(user, pass string) Option {
 
 		t, ok := cfg.session.UserIdentityToken.(*ua.UserNameIdentityToken)
 		if !ok {
-			cfg.logger.Warnf("non-username authentication already configured, ignoring")
+			cfg.logger.Warn("non-username authentication already configured, ignoring")
 			return nil
 		}
 
@@ -521,7 +510,7 @@ func AuthCertificate(cert []byte) Option {
 
 		t, ok := cfg.session.UserIdentityToken.(*ua.X509IdentityToken)
 		if !ok {
-			cfg.logger.Warnf("non-certificate authentication already configured, ignoring")
+			cfg.logger.Warn("non-certificate authentication already configured, ignoring")
 			return nil
 		}
 
@@ -557,7 +546,7 @@ func AuthIssuedToken(tokenData []byte) Option {
 
 		t, ok := cfg.session.UserIdentityToken.(*ua.IssuedIdentityToken)
 		if !ok {
-			cfg.logger.Warnf("non-issued token authentication already configured, ignoring")
+			cfg.logger.Warn("non-issued token authentication already configured, ignoring")
 			return nil
 		}
 
@@ -746,7 +735,7 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 	// and self-signed certs don't set key usage properly.
 	const requiredUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
 	if cert.KeyUsage != 0 && cert.KeyUsage&requiredUsage != requiredUsage {
-		cfg.logger.Warnf("opcua: server certificate missing recommended key usage bits (DigitalSignature, KeyEncipherment)")
+		cfg.logger.Warn("opcua: server certificate missing recommended key usage bits (DigitalSignature, KeyEncipherment)")
 	}
 
 	return nil

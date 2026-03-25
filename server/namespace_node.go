@@ -220,7 +220,7 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 	as.mu.RLock()
 	defer as.mu.RUnlock()
 
-	as.srv.cfg.logger.Debugf("browse request node_id=%v result_mask=%v", bd.NodeID, bd.ResultMask)
+	as.srv.cfg.logger.Debug("browse request", "node_id", bd.NodeID, "result_mask", bd.ResultMask)
 
 	n := as.Node(bd.NodeID)
 	if n == nil {

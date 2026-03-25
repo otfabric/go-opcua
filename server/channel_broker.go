@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/rsa"
 	"io"
+	"log/slog"
 	mrand "math/rand"
 	"sync"
 	"time"
 
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uasc"
@@ -34,10 +34,10 @@ type channelBroker struct {
 	// msgChan is the common channel that all messages from all channels
 	// get funneled into for handling
 	msgChan chan *uasc.MessageBody
-	logger  logger.Logger
+	logger  *slog.Logger
 }
 
-func newChannelBroker(logger logger.Logger, endpointURL string) *channelBroker {
+func newChannelBroker(l *slog.Logger, endpointURL string) *channelBroker {
 	rng := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 	return &channelBroker{
 		endpoints:       make(map[string]*ua.EndpointDescription),
@@ -46,7 +46,7 @@ func newChannelBroker(logger logger.Logger, endpointURL string) *channelBroker {
 		msgChan:         make(chan *uasc.MessageBody),
 		secureChannelID: uint32(rng.Int31()),
 		secureTokenID:   uint32(rng.Int31()),
-		logger:          logger,
+		logger:          l,
 	}
 }
 
@@ -79,29 +79,29 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 		secureTokenID,
 	)
 	if err != nil {
-		c.logger.Errorf("error creating secure channel for new connection error=%v", err)
+		c.logger.Error("error creating secure channel for new connection", "error", err)
 		return err
 	}
 
 	c.mu.Lock()
 	c.s[secureChannelID] = sc
-	c.logger.Infof("registered new channel secure_channel_id=%d total_channels=%d", secureChannelID, len(c.s))
+	c.logger.Info("registered new channel", "secure_channel_id", secureChannelID, "total_channels", len(c.s))
 	c.mu.Unlock()
 	c.wg.Add(1)
 outer:
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Warnf("context done, closing secure channel secure_channel_id=%d", secureChannelID)
+			c.logger.Warn("context done, closing secure channel", "secure_channel_id", secureChannelID)
 			break outer
 
 		default:
 			msg := sc.Receive(ctx)
 			if msg.Err == io.EOF {
-				c.logger.Warnf("secure channel closed secure_channel_id=%d", secureChannelID)
+				c.logger.Warn("secure channel closed", "secure_channel_id", secureChannelID)
 				break outer
 			} else if msg.Err != nil {
-				c.logger.Errorf("secure channel error secure_channel_id=%d error=%v", secureChannelID, msg.Err)
+				c.logger.Error("secure channel error", "secure_channel_id", secureChannelID, "error", msg.Err)
 				break outer
 			}
 			select {
@@ -152,7 +152,7 @@ func (c *channelBroker) Close(ctx context.Context) error {
 	select {
 	case <-done:
 	case <-ctx.Done():
-		c.logger.Errorf("CloseAll: timed out waiting for channels to exit")
+		c.logger.Error("CloseAll: timed out waiting for channels to exit")
 	}
 
 	return err

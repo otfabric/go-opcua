@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -17,7 +18,7 @@ type QueryService struct {
 // QueryFirst implements the OPC UA QueryFirst service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.9.3
 func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.QueryFirstRequest](r)
 	if err != nil {
@@ -29,7 +30,7 @@ func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r
 // QueryNext implements the OPC UA QueryNext service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.9.4
 func (s *QueryService) QueryNext(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.QueryNextRequest](r)
 	if err != nil {

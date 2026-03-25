@@ -5,16 +5,16 @@
 package uasc
 
 import (
+	"log/slog"
 	"testing"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
-	"github.com/otfabric/go-opcua/logger"
 
 	"github.com/otfabric/go-opcua/ua"
 )
 
-var testLogger = logger.NopLogger()
+var testLogger = slog.New(slog.DiscardHandler)
 
 func TestMessage(t *testing.T) {
 	cases := []CodecTestCase{

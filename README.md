@@ -24,7 +24,7 @@ otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or
 - **Subscriptions** — data-change and event monitoring with automatic publishing
 - **Retry & Reconnect** — exponential backoff and automatic session recovery
 - **Metrics** — pluggable instrumentation for request/response/error tracking
-- **Logging** — structured logging via `slog` or any custom `Logger` interface
+- **Logging** — structured logging via `*slog.Logger`; library is slog-native internally
 
 For full API details see [API.md](API.md).
 
@@ -245,7 +245,7 @@ func main() {
 | `uasc` | OPC-UA Secure Conversation (secure channel) |
 | `uapolicy` | Security policy implementations (encryption, signing) |
 | `internal/stats` | Expvar-based statistics collection (internal) |
-| `logger` | Logger interface with slog and stdlib adapters |
+
 
 ## Examples
 

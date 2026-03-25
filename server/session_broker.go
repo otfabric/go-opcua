@@ -1,13 +1,13 @@
 package server
 
 import (
+	"log/slog"
 	mrand "math/rand"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -39,13 +39,13 @@ type sessionBroker struct {
 
 	// s contains all sessions watched by the session broker
 	s      map[string]*session
-	logger logger.Logger
+	logger *slog.Logger
 }
 
-func newSessionBroker(logger logger.Logger) *sessionBroker {
+func newSessionBroker(l *slog.Logger) *sessionBroker {
 	return &sessionBroker{
 		s:      make(map[string]*session),
-		logger: logger,
+		logger: l,
 	}
 }
 
@@ -68,7 +68,7 @@ func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
 	defer sb.mu.Unlock()
 
 	if sb.s[authToken.String()] == nil {
-		sb.logger.Warnf("sessionBroker.Close: error looking up session auth_token=%v", authToken)
+		sb.logger.Warn("sessionBroker.Close: error looking up session", "auth_token", authToken)
 	}
 	delete(sb.s, authToken.String())
 
@@ -81,7 +81,7 @@ func (sb *sessionBroker) Session(authToken *ua.NodeID) *session {
 
 	s := sb.s[authToken.String()]
 	if s == nil {
-		sb.logger.Warnf("sessionBroker.Session: error looking up session auth_token=%v", authToken)
+		sb.logger.Warn("sessionBroker.Session: error looking up session", "auth_token", authToken)
 	}
 
 	return s

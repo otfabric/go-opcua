@@ -1,5 +1,124 @@
 # go-opcua Releases
 
+## v1.0.2
+
+**Date:** 2026-03-24
+**Previous release:** v1.0.1
+
+### Summary
+
+Production-grade hardening release. Makes the library fully slog-native, removes the custom logger abstraction, hardens NodeSet2 XML import against malformed input, adds generator tests and CI drift detection, and finishes the panic audit.
+
+### Breaking changes
+
+#### Logger package removed
+
+The `logger/` package and `logger_alias.go` re-exports have been deleted. The library is now slog-native internally — all logging uses `*slog.Logger` directly.
+
+```go
+// Before
+import "github.com/otfabric/go-opcua/logger"
+opcua.WithLogger(logger.NewSlogLogger(handler))
+
+// After
+import "log/slog"
+opcua.WithLogger(slog.New(handler))
+```
+
+#### `WithLogger` accepts `*slog.Logger`
+
+The client option `WithLogger` now takes `*slog.Logger` directly instead of the former `logger.Logger` interface. The separate `WithSlogLogger` option has been removed (merged into `WithLogger`).
+
+```go
+// Before
+opcua.WithSlogLogger(myLogger)
+
+// After
+opcua.WithLogger(myLogger)
+```
+
+#### `SetLogger` accepts `*slog.Logger` (server)
+
+The server option `SetLogger` now takes `*slog.Logger` directly instead of `logger.Logger`.
+
+#### `uacp.Dialer.Logger` and `uasc.Config.Logger` type changed
+
+The exported `Logger` fields on `uacp.Dialer` and `uasc.Config` have changed from `logger.Logger` to `*slog.Logger`.
+
+#### `uacp.Conn.SetLogger` accepts `*slog.Logger`
+
+The `SetLogger` method now takes `*slog.Logger`.
+
+#### `TypeRegistry.New(nil)` returns nil instead of panicking
+
+`TypeRegistry.New` with a nil NodeID now returns nil instead of panicking. This protects runtime paths processing incoming messages with potentially malformed type IDs.
+
+#### Stricter NodeSet2 XML import validation
+
+`ImportNodeSetXML` now returns contextual errors instead of panicking when NodeSet2 XML contains invalid node IDs, reference targets, or reference types. All 29 uses of `ua.MustParseNodeID` on XML-derived data have been replaced with `ua.ParseNodeID` and error propagation.
+
+Error messages include the import phase, node type, and offending value:
+```
+nodeset import: variable: parse node id "not-valid": ...
+nodeset import: reference type "ns=1;i=1": parse reference target "bad-ref": ...
+nodeset import: data type "ns=1;i=2": unknown reference type "NonExistent"
+```
+
+### New features
+
+#### Slog-native logging
+
+All internal logging now uses `*slog.Logger` with structured key-value fields. No `Debugf`/`Infof`/`Warnf`/`Errorf` format-string logging remains in production code.
+
+The default logger is `slog.Default()`, which means the library respects any global slog configuration set by the application.
+
+#### Generator test coverage
+
+`internal/cmd/gen` now has focused tests covering:
+- Enum type discovery (sorted, deduplicated)
+- Generated file list validation (no duplicates)
+- File cleanup behavior
+- Missing file tolerance
+
+#### CI generation drift detection
+
+A new `gen-drift` CI job runs `go generate ./...` and fails if the working tree becomes dirty, ensuring generated files stay in sync with source changes.
+
+A new `check-gen` Makefile target provides the same check locally: `make check-gen`.
+
+#### NodeSet2 import regression tests
+
+New test suite `TestImportNodeSetXML_BadInput` covers 12 malformed XML scenarios including invalid node IDs for each node type, invalid alias references, invalid reference targets, unknown reference types, and malformed XML.
+
+### Improvements
+
+#### All logging converted to structured slog
+
+243+ log call sites across all packages (`client`, `server`, `uacp`, `uasc`) converted from printf-style format strings to structured slog calls with meaningful key-value fields.
+
+#### Deterministic generator targets
+
+`discoverEnumTypes` now deduplicates discovered types using `slices.Compact` after sorting, and returns errors instead of calling `log.Fatalf`.
+
+#### Generator error propagation
+
+All generator functions (`clean`, `generate`, `stringer`, `run`) now return errors instead of calling `log.Fatalf`, making failures actionable and testable.
+
+#### Nil-safe map lookups in NodeSet import
+
+Reference type lookups in NodeSet import now use the comma-ok pattern and return descriptive errors for unknown reference types instead of nil-pointer panics.
+
+### Migration guide
+
+1. **Logger package** — remove all imports of `"github.com/otfabric/go-opcua/logger"`. Use `*slog.Logger` directly.
+2. **`WithLogger`** — change argument from `logger.Logger` to `*slog.Logger`. Remove calls to `WithSlogLogger` (use `WithLogger` instead).
+3. **`SetLogger` (server)** — change argument from `logger.Logger` to `*slog.Logger`.
+4. **`uacp`/`uasc` Logger fields** — update any direct assignments of `Dialer.Logger` or `Config.Logger` to use `*slog.Logger`.
+5. **NodeSet import errors** — callers of `ImportNodeSetXML` should handle more granular errors from stricter validation.
+6. **CI** — the new `gen-drift` job will fail PRs that modify generator inputs without regenerating. Run `make gen` before committing generated file changes.
+
+---
+
 ## v1.0.1
 
 **Date:** 2026-03-24
