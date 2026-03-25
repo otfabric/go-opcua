@@ -43,3 +43,32 @@ func TestSubscription_Counters(t *testing.T) {
 	assert.Equal(t, uint64(0), s.Delivered())
 	assert.Equal(t, uint64(0), s.Dropped())
 }
+
+func TestNewNodeMonitor_nilClient(t *testing.T) {
+	m, err := NewNodeMonitor(nil)
+	require.NoError(t, err)
+	require.NotNil(t, m)
+	assert.Nil(t, m.client)
+}
+
+func TestItemAccessors(t *testing.T) {
+	nid := ua.NewNumericNodeID(0, 42)
+	it := Item{id: 7, nodeID: nid}
+	assert.Equal(t, uint32(7), it.ID())
+	assert.True(t, it.NodeID().Equal(nid))
+}
+
+func TestParseNodeSlice(t *testing.T) {
+	ids, err := parseNodeSlice("i=1", "ns=2;s=foo")
+	require.NoError(t, err)
+	require.Len(t, ids, 2)
+	assert.True(t, ids[0].Equal(ua.NewNumericNodeID(0, 1)))
+	assert.True(t, ids[1].Equal(ua.NewStringNodeID(2, "foo")))
+
+	_, err = parseNodeSlice("ns=0;i=not-a-number")
+	require.Error(t, err)
+
+	ids, err = parseNodeSlice()
+	require.NoError(t, err)
+	assert.Empty(t, ids)
+}
