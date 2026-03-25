@@ -12,11 +12,11 @@ import (
 	"go/format"
 	"log"
 	"os"
+	"slices"
 	"strings"
 	"text/template"
 
 	"github.com/otfabric/go-opcua/internal/goname"
-	"golang.org/x/exp/maps"
 )
 
 type idRow struct {
@@ -105,8 +105,14 @@ func main() {
 
 	{
 		out := strings.ReplaceAll(*out, "*", "names")
+		nameOrder := make([]string, 0, len(grouped))
+		for k := range grouped {
+			nameOrder = append(nameOrder, k)
+		}
+		slices.Sort(nameOrder)
+
 		var b bytes.Buffer
-		if err := nameTmpl.Execute(&b, maps.Keys(grouped)); err != nil {
+		if err := nameTmpl.Execute(&b, nameOrder); err != nil {
 			log.Fatalf("Error generating code: %v", err)
 		}
 

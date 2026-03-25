@@ -12,7 +12,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
 	"github.com/otfabric/go-opcua/uasc"
@@ -152,7 +151,7 @@ func SoftwareVersion(name string) Option {
 }
 
 // SetLogger sets the logger for the server.
-func SetLogger(l logger.Logger) Option {
+func SetLogger(l *slog.Logger) Option {
 	return func(s *serverConfig) error {
 		s.logger = l
 		return nil
@@ -162,7 +161,7 @@ func SetLogger(l logger.Logger) Option {
 // WithSlogLogger sets the logger from an slog.Logger.
 func WithSlogLogger(l *slog.Logger) Option {
 	return func(s *serverConfig) error {
-		s.logger = logger.NewSlogLogger(l.Handler())
+		s.logger = l
 		return nil
 	}
 }

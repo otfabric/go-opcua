@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/url"
 	"strings"
@@ -16,7 +17,6 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -69,12 +69,12 @@ type Dialer struct {
 
 	// Logger is the logger for connection-level messages.
 	// If nil, logging is disabled.
-	Logger logger.Logger
+	Logger *slog.Logger
 }
 
 func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 	if d.Logger != nil {
-		d.Logger.Debugf("connecting endpoint=%s", endpoint)
+		d.Logger.Debug("connecting", "endpoint", endpoint)
 	}
 
 	_, raddr, err := ResolveEndpoint(ctx, endpoint)
@@ -100,9 +100,9 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 	}
 	conn.logger = d.Logger
 
-	conn.logDebugf("starting HEL/ACK handshake conn_id=%d", conn.id)
+	conn.logDebug("starting HEL/ACK handshake", "conn_id", conn.id)
 	if err := conn.Handshake(ctx, endpoint); err != nil {
-		conn.logWarnf("HEL/ACK handshake failed conn_id=%d error=%v", conn.id, err)
+		conn.logWarn("HEL/ACK handshake failed", "conn_id", conn.id, "error", err)
 		_ = conn.Close()
 		return nil, err
 	}
@@ -205,7 +205,7 @@ type Conn struct {
 	*net.TCPConn
 	id     uint32
 	ack    *Acknowledge
-	logger logger.Logger
+	logger *slog.Logger
 
 	closeOnce sync.Once
 	bufPool   sync.Pool
@@ -227,22 +227,22 @@ func NewConn(c *net.TCPConn, ack *Acknowledge) (*Conn, error) {
 }
 
 // SetLogger sets the logger for connection-level messages.
-func (c *Conn) SetLogger(l logger.Logger) {
+func (c *Conn) SetLogger(l *slog.Logger) {
 	c.logger = l
 }
 
-func (c *Conn) logDebugf(format string, args ...any) {
+func (c *Conn) logDebug(msg string, args ...any) {
 	if c.logger == nil {
 		return
 	}
-	c.logger.Debugf(format, args...)
+	c.logger.Debug(msg, args...)
 }
 
-func (c *Conn) logWarnf(format string, args ...any) {
+func (c *Conn) logWarn(msg string, args ...any) {
 	if c.logger == nil {
 		return
 	}
-	c.logger.Warnf(format, args...)
+	c.logger.Warn(msg, args...)
 }
 
 func (c *Conn) ID() uint32 {
@@ -276,7 +276,7 @@ func (c *Conn) Close() (err error) {
 }
 
 func (c *Conn) close() error {
-	c.logDebugf("closing connection conn_id=%d", c.id)
+	c.logDebug("closing connection", "conn_id", c.id)
 	return c.TCPConn.Close()
 }
 
@@ -319,14 +319,14 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 		}
 		if ack.MaxChunkCount == 0 {
 			ack.MaxChunkCount = DefaultMaxChunkCount
-			c.logDebugf("server has no chunk limit, using default conn_id=%d max_chunk_count=%d", c.id, ack.MaxChunkCount)
+			c.logDebug("server has no chunk limit, using default", "conn_id", c.id, "max_chunk_count", ack.MaxChunkCount)
 		}
 		if ack.MaxMessageSize == 0 {
 			ack.MaxMessageSize = DefaultMaxMessageSize
-			c.logDebugf("server has no message size limit, using default conn_id=%d max_message_size=%d", c.id, ack.MaxMessageSize)
+			c.logDebug("server has no message size limit, using default", "conn_id", c.id, "max_message_size", ack.MaxMessageSize)
 		}
 		c.ack = ack
-		c.logDebugf("received ACK conn_id=%d ack=%#v", c.id, ack)
+		c.logDebug("received ACK", "conn_id", c.id, "ack", fmt.Sprintf("%#v", ack))
 		return nil
 
 	case "ERRF":
@@ -334,7 +334,7 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 		if _, err := errf.Decode(b[hdrlen:]); err != nil {
 			return fmt.Errorf("uacp: decode ERR failed: %w", err)
 		}
-		c.logDebugf("received ERRF conn_id=%d error=%v", c.id, errf)
+		c.logDebug("received ERRF", "conn_id", c.id, "error", errf)
 		return errf
 
 	default:
@@ -368,7 +368,7 @@ func (c *Conn) srvhandshake(endpoint string) error {
 			c.SendError(ua.StatusBadTCPInternalError)
 			return err
 		}
-		c.logDebugf("received HEL conn_id=%d hello=%#v", c.id, hel)
+		c.logDebug("received HEL", "conn_id", c.id, "hello", fmt.Sprintf("%#v", hel))
 		return nil
 
 	case "RHEF":
@@ -381,7 +381,7 @@ func (c *Conn) srvhandshake(endpoint string) error {
 			c.SendError(ua.StatusBadTCPEndpointURLInvalid)
 			return fmt.Errorf("%w: %s", errors.ErrInvalidEndpoint, rhe.EndpointURL)
 		}
-		c.logDebugf("reverse hello redirect conn_id=%d server_uri=%s", c.id, rhe.ServerURI)
+		c.logDebug("reverse hello redirect", "conn_id", c.id, "server_uri", rhe.ServerURI)
 		_ = c.Close()
 		var dialer net.Dialer
 		c2, err := dialer.DialContext(context.Background(), "tcp", rhe.ServerURI)
@@ -389,7 +389,7 @@ func (c *Conn) srvhandshake(endpoint string) error {
 			return err
 		}
 		c.TCPConn = c2.(*net.TCPConn)
-		c.logDebugf("received RHE conn_id=%d rhe=%#v", c.id, rhe)
+		c.logDebug("received RHE", "conn_id", c.id, "rhe", fmt.Sprintf("%#v", rhe))
 		return nil
 
 	case "ERRF":
@@ -397,7 +397,7 @@ func (c *Conn) srvhandshake(endpoint string) error {
 		if _, err := errf.Decode(b[hdrlen:]); err != nil {
 			return fmt.Errorf("uacp: decode ERR failed: %w", err)
 		}
-		c.logDebugf("received ERRF conn_id=%d error=%v", c.id, errf)
+		c.logDebug("received ERRF", "conn_id", c.id, "error", errf)
 		return errf
 
 	default:
@@ -467,7 +467,7 @@ func (c *Conn) Receive() ([]byte, error) {
 		return nil, err // not wrapped to preserve io.EOF for errors.Is checks
 	}
 
-	c.logDebugf("received message conn_id=%d msg_type=%s chunk_type=%s size=%d", c.id, string(h.MessageType), string(h.ChunkType), h.MessageSize)
+	c.logDebug("received message", "conn_id", c.id, "msg_type", string(h.MessageType), "chunk_type", string(h.ChunkType), "size", h.MessageSize)
 
 	if h.MessageType == "ERR" {
 		errf := new(Error)
@@ -512,7 +512,7 @@ func (c *Conn) Send(typ string, msg interface{}) error {
 	if _, err := c.Write(b); err != nil {
 		return fmt.Errorf("uacp: write failed: %w", err)
 	}
-	c.logDebugf("sent message conn_id=%d msg_type=%s size=%d", c.id, typ, len(b))
+	c.logDebug("sent message", "conn_id", c.id, "msg_type", typ, "size", len(b))
 
 	return nil
 }

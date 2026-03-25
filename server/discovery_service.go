@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -18,7 +19,7 @@ type DiscoveryService struct {
 // FindServers implements the OPC UA FindServers service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.2
 func (s *DiscoveryService) FindServers(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.FindServersRequest](r)
 	if err != nil {
@@ -38,7 +39,7 @@ func (s *DiscoveryService) FindServers(ctx context.Context, sc *uasc.SecureChann
 // FindServersOnNetwork implements the OPC UA FindServersOnNetwork service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.3
 func (s *DiscoveryService) FindServersOnNetwork(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.FindServersOnNetworkRequest](r)
 	if err != nil {
@@ -50,7 +51,7 @@ func (s *DiscoveryService) FindServersOnNetwork(ctx context.Context, sc *uasc.Se
 // GetEndpoints implements the OPC UA GetEndpoints service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.4
 func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.GetEndpointsRequest](r)
 	if err != nil {
@@ -77,7 +78,7 @@ func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChan
 // RegisterServer implements the OPC UA RegisterServer service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.5
 func (s *DiscoveryService) RegisterServer(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.RegisterServerRequest](r)
 	if err != nil {
@@ -89,7 +90,7 @@ func (s *DiscoveryService) RegisterServer(ctx context.Context, sc *uasc.SecureCh
 // RegisterServer2 implements the OPC UA RegisterServer2 service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.6
 func (s *DiscoveryService) RegisterServer2(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.RegisterServer2Request](r)
 	if err != nil {

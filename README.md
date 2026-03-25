@@ -4,6 +4,7 @@
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Go Report Card](https://goreportcard.com/badge/github.com/otfabric/go-opcua)](https://goreportcard.com/report/github.com/otfabric/go-opcua)
 [![CI](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml/badge.svg)](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml)
+[![Codecov](https://codecov.io/github/otfabric/go-opcua/graph/badge.svg?token=GT87MSYXJK)](https://codecov.io/github/otfabric/go-opcua)
 [![Release](https://img.shields.io/github/v/release/otfabric/go-opcua?style=flat&color=blue)](https://github.com/otfabric/go-opcua/releases)
 
 A pure Go implementation of the OPC-UA Binary Protocol, providing both **client** and **server** capabilities. No C dependencies, no CGo — just Go.
@@ -24,7 +25,7 @@ otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or
 - **Subscriptions** — data-change and event monitoring with automatic publishing
 - **Retry & Reconnect** — exponential backoff and automatic session recovery
 - **Metrics** — pluggable instrumentation for request/response/error tracking
-- **Logging** — structured logging via `slog` or any custom `Logger` interface
+- **Logging** — structured logging via `*slog.Logger`; library is slog-native internally
 
 For full API details see [API.md](API.md).
 
@@ -245,7 +246,7 @@ func main() {
 | `uasc` | OPC-UA Secure Conversation (secure channel) |
 | `uapolicy` | Security policy implementations (encryption, signing) |
 | `internal/stats` | Expvar-based statistics collection (internal) |
-| `logger` | Logger interface with slog and stdlib adapters |
+
 
 ## Examples
 

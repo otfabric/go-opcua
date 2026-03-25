@@ -75,7 +75,7 @@ func (ns *MapNamespace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 	ns.Mu.RLock()
 	defer ns.Mu.RUnlock()
 
-	ns.srv.cfg.logger.Debugf("browse request node_id=%v result_mask=%v", bd.NodeID, bd.ResultMask)
+	ns.srv.cfg.logger.Debug("browse request", "node_id", bd.NodeID, "result_mask", bd.ResultMask)
 	if bd.NodeID.IntID() != id.RootFolder && bd.NodeID.IntID() != id.ObjectsFolder {
 		refs := make([]*ua.ReferenceDescription, 0)
 		return &ua.BrowseResult{
@@ -133,7 +133,7 @@ func (ns *MapNamespace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 }
 
 func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue {
-	ns.srv.cfg.logger.Debugf("read node_id=%v attribute=%v", n, a)
+	ns.srv.cfg.logger.Debug("read", "node_id", n, "attribute", a)
 
 	if n.IntID() != 0 {
 		// this is not one of our normal tags.
@@ -167,7 +167,7 @@ func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue 
 	key := n.StringID()
 
 	var err error
-	ns.srv.cfg.logger.Debugf("read request key=%v namespace=%v", key, ns.name)
+	ns.srv.cfg.logger.Debug("read request", "key", key, "namespace", ns.name)
 
 	// because our data is native go types we don't have any of the ua "attributes" attached to it.
 	// so depending on what attribute the client wants, we'll inspect the data and return the appropriate
@@ -249,39 +249,39 @@ func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue 
 		case string:
 			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 12))
 			if err != nil {
-				ns.srv.cfg.logger.Warnf("problem creating variant error=%v", err)
+				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
 		case int:
 			// we can't use an int because it is of unspecified length.  I'm going to use int64 so that we don't
 			// have to worry about cutting data off.
 			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 6))
 			if err != nil {
-				ns.srv.cfg.logger.Warnf("problem creating variant error=%v", err)
+				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
 		case int32:
 			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 6))
 			if err != nil {
-				ns.srv.cfg.logger.Warnf("problem creating variant error=%v", err)
+				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
 		case float32:
 			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 10))
 			if err != nil {
-				ns.srv.cfg.logger.Warnf("problem creating variant error=%v", err)
+				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
 		case float64:
 			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 11))
 			if err != nil {
-				ns.srv.cfg.logger.Warnf("problem creating variant error=%v", err)
+				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
 		case bool:
 			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 1))
 			if err != nil {
-				ns.srv.cfg.logger.Warnf("problem creating variant error=%v", err)
+				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
 		default:
 			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 24))
 			if err != nil {
-				ns.srv.cfg.logger.Warnf("problem creating variant error=%v", err)
+				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
 		}
 
@@ -301,9 +301,9 @@ func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue 
 	}
 
 	if dv.Value == nil {
-		ns.srv.cfg.logger.Warnf("bad dv value")
+		ns.srv.cfg.logger.Warn("bad dv value")
 	} else {
-		ns.srv.cfg.logger.Debugf("read complete key=%v value=%v", key, dv.Value)
+		ns.srv.cfg.logger.Debug("read complete", "key", key, "value", dv.Value)
 	}
 
 	return dv
@@ -313,7 +313,7 @@ func (ns *MapNamespace) SetAttribute(node *ua.NodeID, attr ua.AttributeID, val *
 
 	ns.Mu.Lock()
 	defer ns.Mu.Unlock()
-	ns.srv.cfg.logger.Debugf("pre-write namespace=%v", ns.name)
+	ns.srv.cfg.logger.Debug("pre-write", "namespace", ns.name)
 
 	key := node.StringID()
 

@@ -289,15 +289,15 @@ func (s *SecureChannel) dispatcher() {
 			}
 
 			if msg.Err != nil {
-				s.cfg.Logger.Debugf("error channel_id=%v request_id=%v error=%v", s.c.ID(), msg.RequestID, msg.Err)
+				s.cfg.Logger.Debug("error", "channel_id", s.c.ID(), "request_id", msg.RequestID, "error", msg.Err)
 			} else {
-				s.cfg.Logger.Debugf("received channel_id=%v request_id=%v type=%T", s.c.ID(), msg.RequestID, msg.body)
+				s.cfg.Logger.Debug("received", "channel_id", s.c.ID(), "request_id", msg.RequestID, "type", fmt.Sprintf("%T", msg.body))
 			}
 
 			ch, ok := s.popHandler(msg.RequestID)
 
 			if !ok {
-				s.cfg.Logger.Debugf("no handler channel_id=%v request_id=%v type=%T", s.c.ID(), msg.RequestID, msg.body)
+				s.cfg.Logger.Debug("no handler", "channel_id", s.c.ID(), "request_id", msg.RequestID, "type", fmt.Sprintf("%T", msg.body))
 				continue
 			}
 
@@ -308,12 +308,12 @@ func (s *SecureChannel) dispatcher() {
 				isOpenResp = true
 			}
 
-			s.cfg.Logger.Debugf("sending to handler channel_id=%v request_id=%v type=%T", s.c.ID(), msg.RequestID, msg.body)
+			s.cfg.Logger.Debug("sending to handler", "channel_id", s.c.ID(), "request_id", msg.RequestID, "type", fmt.Sprintf("%T", msg.body))
 			select {
 			case ch <- msg:
 			default:
 				// this should never happen since the chan is of size one
-				s.cfg.Logger.Warnf("unexpected state: channel write should always succeed channel_id=%v request_id=%v", s.c.ID(), msg.RequestID)
+				s.cfg.Logger.Warn("unexpected state: channel write should always succeed", "channel_id", s.c.ID(), "request_id", msg.RequestID)
 			}
 
 			if isOpenResp {
@@ -342,7 +342,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 		default:
 			chunk, err := s.readChunk()
 			if err == io.EOF {
-				s.cfg.Logger.Debugf("read chunk EOF channel_id=%v", s.c.ID())
+				s.cfg.Logger.Debug("read chunk EOF", "channel_id", s.c.ID())
 				return &MessageBody{Err: err}
 			}
 
@@ -355,7 +355,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			strdat := string(chunk.Data)
 			if strings.Contains(strdat, "CurrentTime") {
-				s.cfg.Logger.Debugf("requested CurrentTime")
+				s.cfg.Logger.Debug("requested CurrentTime")
 			}
 
 			msg := &MessageBody{
@@ -363,7 +363,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 				SecureChannelID: chunk.SecureChannelID,
 			}
 
-			s.cfg.Logger.Debugf("recv channel_id=%v request_id=%v message_type=%s chunk_type=%s bytes=%v", s.c.ID(), reqID, string(hdr.MessageType), string([]byte{hdr.ChunkType}), hdr.MessageSize)
+			s.cfg.Logger.Debug("recv", "channel_id", s.c.ID(), "request_id", reqID, "message_type", string(hdr.MessageType), "chunk_type", string([]byte{hdr.ChunkType}), "bytes", hdr.MessageSize)
 
 			s.chunksMu.Lock()
 
@@ -374,7 +374,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 				msga := new(MessageAbort)
 				if _, err := msga.Decode(chunk.Data); err != nil {
-					s.cfg.Logger.Debugf("invalid MSGA chunk channel_id=%v request_id=%v error=%v", s.c.ID(), reqID, err)
+					s.cfg.Logger.Debug("invalid MSGA chunk", "channel_id", s.c.ID(), "request_id", reqID, "error", err)
 					msg.Err = ua.StatusBadDecodingError
 					return msg
 				}
@@ -435,7 +435,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 				}
 				err := s.handleOpenSecureChannelRequest(reqID, req)
 				if err != nil {
-					s.cfg.Logger.Debugf("handling failed channel_id=%v request_id=%v type=%T error=%v", s.c.ID(), reqID, req, err)
+					s.cfg.Logger.Debug("handling failed", "channel_id", s.c.ID(), "request_id", reqID, "type", fmt.Sprintf("%T", req), "error", err)
 					return &MessageBody{Err: err}
 				}
 				return &MessageBody{}
@@ -498,7 +498,7 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 		s.cfg.SecurityPolicyURI = m.SecurityPolicyURI
 		if m.SecurityPolicyURI != ua.SecurityPolicyURINone {
 			s.cfg.RemoteCertificate = m.SenderCertificate
-			s.cfg.Logger.Debugf("setting securityPolicy channel_id=%v policy=%v", s.c.ID(), m.SecurityPolicyURI)
+			s.cfg.Logger.Debug("setting securityPolicy", "channel_id", s.c.ID(), "policy", m.SecurityPolicyURI)
 
 			remoteKey, err := uapolicy.PublicKey(s.cfg.RemoteCertificate)
 			if err != nil {
@@ -560,7 +560,7 @@ func (s *SecureChannel) verifyAndDecrypt(m *MessageChunk, b []byte, instance *ch
 		if verified, err = instances[i].verifyAndDecrypt(m, b); err == nil {
 			return verified, nil
 		}
-		s.cfg.Logger.Debugf("attempting older channel state channel_id=%v", s.c.ID())
+		s.cfg.Logger.Debug("attempting older channel state", "channel_id", s.c.ID())
 	}
 
 	return nil, err
@@ -591,7 +591,7 @@ func (s *SecureChannel) Open(ctx context.Context) error {
 }
 
 func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, requestType ua.SecurityTokenRequestType) error {
-	s.cfg.Logger.Debugf("opening secure channel")
+	s.cfg.Logger.Debug("opening secure channel")
 
 	// Signal the dispatcher that open() has finished processing the
 	// OpenSecureChannelResponse, allowing it to resume reading messages.
@@ -656,7 +656,7 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 	// trigger cleanup after we are all done
 	defer func() {
 		if s.openingInstance == nil || s.openingInstance.state != channelActive {
-			s.cfg.Logger.Warnf("failed to open a new secure channel channel_id=%v", s.c.ID())
+			s.cfg.Logger.Warn("failed to open a new secure channel", "channel_id", s.c.ID())
 		}
 		s.openingInstance = nil
 	}()
@@ -680,7 +680,7 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 	}
 
 	return s.sendRequestWithTimeout(ctx, req, reqID, s.openingInstance, nil, s.cfg.RequestTimeout, func(v ua.Response) error {
-		s.cfg.Logger.Debugf("handling OpenSecureChannelResponse")
+		s.cfg.Logger.Debug("handling OpenSecureChannelResponse")
 		resp, ok := v.(*ua.OpenSecureChannelResponse)
 		if !ok {
 			return fmt.Errorf("%w: got %T", errors.ErrInvalidResponseType, v)
@@ -690,7 +690,7 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 }
 
 func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChannelResponse, localNonce []byte, instance *channelInstance) (err error) {
-	s.cfg.Logger.Debugf("handling OpenSecureChannelResponse")
+	s.cfg.Logger.Debug("handling OpenSecureChannelResponse")
 	instance.state = channelActive
 	instance.secureChannelID = resp.SecurityToken.ChannelID
 	instance.securityTokenID = resp.SecurityToken.TokenID
@@ -718,7 +718,7 @@ func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChann
 
 	s.activeInstance = instance
 
-	s.cfg.Logger.Debugf("received security token channel_id=%v secure_channel_id=%v token_id=%v created_at=%v lifetime=%v", s.c.ID(), instance.secureChannelID, instance.securityTokenID, instance.createdAt.Format(time.RFC3339), instance.revisedLifetime)
+	s.cfg.Logger.Debug("received security token", "channel_id", s.c.ID(), "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID, "created_at", instance.createdAt.Format(time.RFC3339), "lifetime", instance.revisedLifetime)
 
 	// depending on whether the channel is used in a client
 	// or a server we need to trigger different behavior.
@@ -738,13 +738,13 @@ func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChann
 }
 
 func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Request) error {
-	s.cfg.Logger.Debugf("handling OpenSecureChannelRequest")
+	s.cfg.Logger.Debug("handling OpenSecureChannelRequest")
 
 	var err error
 
 	req, ok := svc.(*ua.OpenSecureChannelRequest)
 	if !ok {
-		s.cfg.Logger.Warnf("expected OpenSecureChannelRequest got=%T", svc)
+		s.cfg.Logger.Warn("expected OpenSecureChannelRequest", "got", fmt.Sprintf("%T", svc))
 	}
 
 	// Part 6 §6.7.4: ClientProtocolVersion must match the version
@@ -843,7 +843,7 @@ func (s *SecureChannel) scheduleRenewal(instance *channelInstance) {
 	const renewAfter = 0.75
 	when := time.Second * time.Duration(instance.revisedLifetime.Seconds()*renewAfter)
 
-	s.cfg.Logger.Debugf("security token refresh scheduled channel_id=%v refresh_at=%v timeout=%v secure_channel_id=%v token_id=%v", s.c.ID(), time.Now().UTC().Add(when).Format(time.RFC3339), when, instance.secureChannelID, instance.securityTokenID)
+	s.cfg.Logger.Debug("security token refresh scheduled", "channel_id", s.c.ID(), "refresh_at", time.Now().UTC().Add(when).Format(time.RFC3339), "timeout", when, "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
 
 	t := time.NewTimer(when)
 	defer t.Stop()
@@ -876,7 +876,7 @@ func (s *SecureChannel) scheduleExpiration(instance *channelInstance) {
 	const expireAfter = 1.25
 	when := instance.createdAt.Add(time.Second * time.Duration(instance.revisedLifetime.Seconds()*expireAfter))
 
-	s.cfg.Logger.Debugf("security token expiration scheduled channel_id=%v expires_at=%v secure_channel_id=%v token_id=%v", s.c.ID(), when.UTC().Format(time.RFC3339), instance.secureChannelID, instance.securityTokenID)
+	s.cfg.Logger.Debug("security token expiration scheduled", "channel_id", s.c.ID(), "expires_at", when.UTC().Format(time.RFC3339), "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
 
 	t := time.NewTimer(time.Until(when))
 	defer t.Stop()
@@ -897,7 +897,7 @@ func (s *SecureChannel) scheduleExpiration(instance *channelInstance) {
 	for _, oldInstance := range oldInstances {
 		if oldInstance.secureChannelID != instance.secureChannelID {
 			// something has gone horribly wrong!
-			s.cfg.Logger.Warnf("secureChannelID mismatch during scheduleExpiration channel_id=%v", s.c.ID())
+			s.cfg.Logger.Warn("secureChannelID mismatch during scheduleExpiration", "channel_id", s.c.ID())
 		}
 		if oldInstance.securityTokenID == instance.securityTokenID {
 			continue
@@ -1058,7 +1058,7 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 		atomic.AddUint64(&instance.bytesSent, uint64(n))
 		atomic.AddUint32(&instance.messagesSent, 1)
 
-		s.cfg.Logger.Debugf("send channel_id=%v request_id=%v type=%T bytes=%v", s.c.ID(), reqID, req, len(chunk))
+		s.cfg.Logger.Debug("send", "channel_id", s.c.ID(), "request_id", reqID, "type", fmt.Sprintf("%T", req), "bytes", len(chunk))
 	}
 
 	return resp, nil
@@ -1111,7 +1111,7 @@ func (s *SecureChannel) SendMsgWithContext(ctx context.Context, instance *channe
 	atomic.AddUint64(&instance.bytesSent, uint64(n))
 	atomic.AddUint32(&instance.messagesSent, 1)
 
-	s.cfg.Logger.Debugf("send channel_id=%v request_id=%v type=%T bytes=%v", s.c.ID(), reqID, resp, len(b))
+	s.cfg.Logger.Debug("send", "channel_id", s.c.ID(), "request_id", reqID, "type", fmt.Sprintf("%T", resp), "bytes", len(b))
 
 	return nil
 }
@@ -1142,7 +1142,7 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 	m := instance.newMessage(resp, typeID, reqID)
 	b, err := m.Encode()
 	if err != nil {
-		s.cfg.Logger.Warnf("error encoding msg error=%v", err)
+		s.cfg.Logger.Warn("error encoding msg", "error", err)
 		return err
 	}
 
@@ -1173,7 +1173,7 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 	atomic.AddUint64(&instance.bytesSent, uint64(n))
 	atomic.AddUint32(&instance.messagesSent, 1)
 
-	s.cfg.Logger.Debugf("send channel_id=%v request_id=%v type=%T bytes=%v", s.c.ID(), reqID, resp, len(b))
+	s.cfg.Logger.Debug("send", "channel_id", s.c.ID(), "request_id", reqID, "type", fmt.Sprintf("%T", resp), "bytes", len(b))
 
 	return nil
 }
@@ -1200,7 +1200,7 @@ func (s *SecureChannel) Close() (err error) {
 }
 
 func (s *SecureChannel) close() error {
-	s.cfg.Logger.Debugf("closing secure channel channel_id=%v", s.c.ID())
+	s.cfg.Logger.Debug("closing secure channel", "channel_id", s.c.ID())
 
 	defer func() {
 		close(s.closing)

@@ -18,3 +18,20 @@ jobs:
       codecov-name: go-opcua
       go-versions: '["1.25","1.26"]'
     secrets: inherit
+
+  gen-drift:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+      - name: Regenerate
+        run: go generate ./...
+      - name: Check for drift
+        run: |
+          if ! git diff --quiet; then
+            echo "::error::Generated files are out of date. Run 'go generate ./...' and commit."
+            git diff --stat
+            exit 1
+          fi

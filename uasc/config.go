@@ -6,9 +6,9 @@ package uasc
 
 import (
 	"crypto/rsa"
+	"log/slog"
 	"time"
 
-	"github.com/otfabric/go-opcua/logger"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -84,7 +84,7 @@ type Config struct {
 
 	// Logger is the logger for protocol-level messages.
 	// If nil, logging is disabled.
-	Logger logger.Logger
+	Logger *slog.Logger
 }
 
 // SessionConfig is a set of common configurations used in Session.

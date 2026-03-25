@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"slices"
 	"sync"
 	"time"
@@ -39,7 +40,7 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 	if err != nil {
 		return nil, err
 	}
-	s.srv.cfg.logger.Debugf("browse incoming")
+	s.srv.cfg.logger.Debug("browse incoming")
 
 	resp := &ua.BrowseResponse{
 		ResponseHeader: &ua.ResponseHeader{
@@ -62,7 +63,7 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 
 	for i := range req.NodesToBrowse {
 		br := req.NodesToBrowse[i]
-		s.srv.cfg.logger.Debugf("browse node_id=%v", br.NodeID)
+		s.srv.cfg.logger.Debug("browse", "node_id", br.NodeID)
 
 		if sc := ac.CheckBrowse(context.Background(), sess, br.NodeID); sc != ua.StatusOK {
 			resp.Results[i] = &ua.BrowseResult{StatusCode: sc}
@@ -117,7 +118,7 @@ func (s *ViewService) storeContinuation(refs []*ua.ReferenceDescription) []byte 
 // BrowseNext implements the OPC UA BrowseNext service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.3
 func (s *ViewService) BrowseNext(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.BrowseNextRequest](r)
 	if err != nil {
@@ -167,15 +168,15 @@ func (s *ViewService) BrowseNext(ctx context.Context, sc *uasc.SecureChannel, r 
 
 func suitableRef(srv *Server, desc *ua.BrowseDescription, ref *ua.ReferenceDescription) bool {
 	if !suitableDirection(desc.BrowseDirection, ref.IsForward) {
-		srv.cfg.logger.Debugf("not suitable because of direction ref=%v", ref)
+		srv.cfg.logger.Debug("not suitable because of direction", "ref", ref)
 		return false
 	}
 	if !suitableRefType(srv, desc.ReferenceTypeID, ref.ReferenceTypeID, desc.IncludeSubtypes) {
-		srv.cfg.logger.Debugf("not suitable because of ref type ref=%v", ref)
+		srv.cfg.logger.Debug("not suitable because of ref type", "ref", ref)
 		return false
 	}
 	if desc.NodeClassMask > 0 && desc.NodeClassMask&uint32(ref.NodeClass) == 0 {
-		srv.cfg.logger.Debugf("not suitable because of node class ref=%v", ref)
+		srv.cfg.logger.Debug("not suitable because of node class", "ref", ref)
 		return false
 	}
 	return true
@@ -237,7 +238,7 @@ func getSubRefs(srv *Server, nid *ua.NodeID) []*ua.NodeID {
 // TranslateBrowsePathsToNodeIDs implements the OPC UA TranslateBrowsePathsToNodeIDs service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.4
 func (s *ViewService) TranslateBrowsePathsToNodeIDs(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.TranslateBrowsePathsToNodeIDsRequest](r)
 	if err != nil {
@@ -340,7 +341,7 @@ func (s *ViewService) translatePath(bp *ua.BrowsePath) *ua.BrowsePathResult {
 // RegisterNodes implements the OPC UA RegisterNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.5
 func (s *ViewService) RegisterNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.RegisterNodesRequest](r)
 	if err != nil {
@@ -375,7 +376,7 @@ func (s *ViewService) RegisterNodes(ctx context.Context, sc *uasc.SecureChannel,
 // UnregisterNodes implements the OPC UA UnregisterNodes service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8.6
 func (s *ViewService) UnregisterNodes(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.UnregisterNodesRequest](r)
 	if err != nil {

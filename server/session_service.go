@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"fmt"
 	"strings"
 	"time"
 
@@ -28,7 +29,7 @@ type SessionService struct {
 // CreateSession implements the OPC UA CreateSession service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.2
 func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.CreateSessionRequest](r)
 	if err != nil {
@@ -46,7 +47,7 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 
 	nonce := make([]byte, sessionNonceLength)
 	if _, err := rand.Read(nonce); err != nil {
-		s.srv.cfg.logger.Warnf("error creating session nonce")
+		s.srv.cfg.logger.Warn("error creating session nonce")
 		return nil, ua.StatusBadInternalError
 	}
 	sess.serverNonce = nonce
@@ -54,7 +55,7 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 
 	sig, alg, err := sc.NewSessionSignature(req.ClientCertificate, req.ClientNonce)
 	if err != nil {
-		s.srv.cfg.logger.Warnf("error creating session signature")
+		s.srv.cfg.logger.Warn("error creating session signature")
 		return nil, ua.StatusBadInternalError
 	}
 
@@ -89,7 +90,7 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 // ActivateSession implements the OPC UA ActivateSession service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.3
 func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.ActivateSessionRequest](r)
 	if err != nil {
@@ -103,13 +104,13 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 
 	err = sc.VerifySessionSignature(sess.remoteCertificate, sess.serverNonce, req.ClientSignature.Signature)
 	if err != nil {
-		s.srv.cfg.logger.Warnf("error verifying session signature error=%v", err)
+		s.srv.cfg.logger.Warn("error verifying session signature", "error", err)
 		return nil, ua.StatusBadSecurityChecksFailed
 	}
 
 	nonce := make([]byte, sessionNonceLength)
 	if _, err := rand.Read(nonce); err != nil {
-		s.srv.cfg.logger.Warnf("error creating session nonce")
+		s.srv.cfg.logger.Warn("error creating session nonce")
 		return nil, ua.StatusBadInternalError
 	}
 	sess.serverNonce = nonce
@@ -139,7 +140,7 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 // CloseSession implements the OPC UA CloseSession service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.4
 func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.CloseSessionRequest](r)
 	if err != nil {
@@ -178,7 +179,7 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 // Cancel implements the OPC UA Cancel service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.5
 func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.CancelRequest](r)
 	if err != nil {

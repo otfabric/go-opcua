@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -25,7 +26,7 @@ type MethodService struct {
 // Call implements the OPC UA Call service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.11.2
 func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debugf("handling request type=%T", r)
+	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
 	req, err := safeReq[*ua.CallRequest](r)
 	if err != nil {

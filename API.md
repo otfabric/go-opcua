@@ -514,14 +514,10 @@ func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.E
 
 ### Logger
 
-```go
-type Logger = logger.Logger  // re-exported alias
-```
-
-See the `logger` package below.
+Logging uses `*slog.Logger` from the standard library. The default logger is `slog.Default()`.
 
 ```go
-func WithLogger(l Logger) Option
+func WithLogger(l *slog.Logger) Option
 ```
 
 ---
@@ -554,8 +550,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `WithConnStateChan(ch chan<- ConnState)` | Connection state channel |
 | `WithMetrics(m ClientMetrics)` | Metrics handler |
 | `WithRetryPolicy(p RetryPolicy)` | Retry policy |
-| `WithLogger(l Logger)` | Logger |
-| `WithSlogLogger(l *slog.Logger)` | Logger from `slog.Logger` |
+| `WithLogger(l *slog.Logger)` | Logger (`*slog.Logger`; defaults to `slog.Default()`) |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE) |
 | `TrustedCertificates(certs ...*x509.Certificate)` | Add CA/self-signed certs to the trust pool |
 
@@ -1199,8 +1194,7 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 | `ManufacturerName(s string)` | Manufacturer name |
 | `ProductName(s string)` | Product name |
 | `SoftwareVersion(s string)` | Software version string |
-| `SetLogger(l logger.Logger)` | Logger |
-| `WithSlogLogger(l *slog.Logger)` | Logger from `slog.Logger` |
+| `SetLogger(l *slog.Logger)` | Logger (`*slog.Logger`; defaults to `slog.Default()`) |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithAccessController(ac AccessController)` | Access controller |
 
@@ -1490,28 +1484,6 @@ func Join(errs ...error) error
 
 ---
 
-## Package `logger`
-
-```go
-type Logger interface {
-    Debugf(format string, args ...any)
-    Infof(format string, args ...any)
-    Warnf(format string, args ...any)
-    Errorf(format string, args ...any)
-}
-```
-
-Built-in implementations:
-
-```go
-func Default() Logger                  // delegates to slog.Default()
-func NewStdLogger(l *log.Logger) Logger
-func NewSlogLogger(h slog.Handler) Logger
-func NopLogger() Logger                // discards all output
-```
-
----
-
 ## Package `uacp`
 
 TCP transport layer (OPC-UA Connection Protocol).
@@ -1548,7 +1520,7 @@ func (c *Conn) ReceiveBufSize() uint32
 func (c *Conn) SendBufSize() uint32
 func (c *Conn) MaxMessageSize() uint32
 func (c *Conn) MaxChunkCount() uint32
-func (c *Conn) SetLogger(l logger.Logger)
+func (c *Conn) SetLogger(l *slog.Logger)
 func (c *Conn) Handshake(ctx context.Context, endpoint string) error
 func (c *Conn) Receive() ([]byte, error)
 func (c *Conn) Send(typ string, msg interface{}) error
@@ -1561,7 +1533,7 @@ func (c *Conn) SendError(code ua.StatusCode)
 type Dialer struct {
     Dialer    *net.Dialer
     ClientACK *ClientACK
-    Logger    Logger
+    Logger    *slog.Logger
 }
 
 func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error)
@@ -1643,7 +1615,7 @@ type Config struct {
     RequestIDSeed     uint32
     AutoReconnect     bool
     ReconnectInterval time.Duration
-    Logger            Logger
+    Logger            *slog.Logger
 }
 ```
 

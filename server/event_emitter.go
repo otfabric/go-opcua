@@ -41,7 +41,7 @@ func (s *Server) EmitEvent(nodeID *ua.NodeID, fields *ua.EventFieldList) error {
 		case item.Sub.EventNotifyChannel <- ef:
 		default:
 			// Channel full, drop event for this item.
-			s.cfg.logger.Warnf("event channel full, dropping event for monitored item id=%v", item.ID)
+			s.cfg.logger.Warn("event channel full, dropping event for monitored item", "id", item.ID)
 		}
 	}
 
