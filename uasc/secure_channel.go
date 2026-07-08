@@ -1,6 +1,4 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 package uasc
 
@@ -272,7 +270,7 @@ func (s *SecureChannel) dispatcher() {
 			return
 		default:
 			msg := s.Receive(ctx)
-			if msg.Err != nil {
+			if msg.Err != nil && s.notifyMonitor(msg) {
 				select {
 				case <-s.closing:
 					return
@@ -327,6 +325,39 @@ func (s *SecureChannel) dispatcher() {
 				}
 			}
 		}
+	}
+}
+
+// notifyMonitor reports whether a failed message should be forwarded to the
+// connection monitor (via errch) to drive reconnection.
+//
+// Connection- and transport-level failures (no decoded response body, e.g.
+// io.EOF, decode errors, message-abort) are always forwarded. A message that
+// carries a fully decoded response is an operation-level ServiceFault: it is
+// returned to the waiting caller and must NOT tear down the channel, unless the
+// fault indicates that the secure channel, session, or subscriptions must be
+// recreated (which only the monitor can do).
+func (s *SecureChannel) notifyMonitor(msg *MessageBody) bool {
+	if msg.Response() == nil {
+		return true
+	}
+	return isReconnectTrigger(msg.Err)
+}
+
+// isReconnectTrigger reports whether a service-level fault requires the secure
+// channel, session, or subscriptions to be recreated. These are the status
+// codes the client's connection monitor acts on; every other operation-level
+// fault is delivered to the caller without disturbing the connection.
+func isReconnectTrigger(err error) bool {
+	switch {
+	case errors.Is(err, ua.StatusBadSecureChannelIDInvalid),
+		errors.Is(err, ua.StatusBadSessionIDInvalid),
+		errors.Is(err, ua.StatusBadSubscriptionIDInvalid),
+		errors.Is(err, ua.StatusBadNoSubscription),
+		errors.Is(err, ua.StatusBadCertificateInvalid):
+		return true
+	default:
+		return false
 	}
 }
 

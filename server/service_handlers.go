@@ -1,6 +1,4 @@
-// Copyright 2018-2019 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 package server
 
@@ -51,7 +49,7 @@ func (s *Server) initHandlers() {
 	s.RegisterHandler(id.RegisterNodesRequestEncodingDefaultBinary, view.RegisterNodes)
 	s.RegisterHandler(id.UnregisterNodesRequestEncodingDefaultBinary, view.UnregisterNodes)
 
-	query := &QueryService{s}
+	query := &QueryService{srv: s, cps: make(map[string]*queryContinuation)}
 	s.RegisterHandler(id.QueryFirstRequestEncodingDefaultBinary, query.QueryFirst)
 	s.RegisterHandler(id.QueryNextRequestEncodingDefaultBinary, query.QueryNext)
 

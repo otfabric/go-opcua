@@ -1,8 +1,9 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Example write demonstrates writing a value to an OPC-UA node.
+//
+// It shows the high-level WriteNodeValue helper (which wraps any Go value in a
+// DataValue automatically) as well as the low-level Write service.
 //
 // Usage:
 //
@@ -51,6 +52,16 @@ func main() {
 		log.Fatalf("invalid node id: %v", err)
 	}
 
+	// High-level: WriteNodeValue wraps a plain Go value in a DataValue using
+	// NewVariant (auto-detecting the OPC-UA type) and writes the Value attribute.
+	status, err := c.WriteNodeValue(ctx, id, *value)
+	if err != nil {
+		log.Fatalf("WriteNodeValue failed: %s", err)
+	}
+	log.Printf("WriteNodeValue status: %v", status)
+
+	// Low-level: for full control over the DataValue (timestamps, encoding mask,
+	// specific Variant type, ...) build a WriteRequest and call Write.
 	v, err := ua.NewVariant(*value)
 	if err != nil {
 		log.Fatalf("invalid value: %v", err)

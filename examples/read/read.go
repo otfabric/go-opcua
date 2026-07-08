@@ -1,15 +1,15 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Example read demonstrates reading a node value from an OPC-UA server.
 //
-// It shows the low-level Read service with proper error handling, including
-// retry logic for transient errors that occur during reconnection.
+// It shows the high-level ReadValue / ReadValues helpers as well as the
+// low-level Read service with proper error handling, including retry logic
+// for transient errors that occur during reconnection.
 //
 // Usage:
 //
 //	go run read.go -endpoint opc.tcp://localhost:4840 -node "ns=2;s=Temperature"
+//	go run read.go -endpoint opc.tcp://localhost:4840 -node "ns=2;s=Temperature" -node2 "ns=0;i=2258"
 package main
 
 import (
@@ -30,6 +30,7 @@ func main() {
 	var (
 		endpoint = flag.String("endpoint", "opc.tcp://localhost:4840", "OPC UA Endpoint URL")
 		nodeID   = flag.String("node", "", "NodeID to read")
+		nodeID2  = flag.String("node2", "", "optional second NodeID for the ReadValues demo")
 	)
 	var debugMode bool
 	flag.BoolVar(&debugMode, "debug", false, "enable debug logging")
@@ -56,6 +57,35 @@ func main() {
 		log.Fatalf("invalid node id: %v", err)
 	}
 
+	// High-level: ReadValue reads a single node's Value attribute and returns
+	// the DataValue directly, without building a ReadRequest.
+	dv, err := c.ReadValue(ctx, id)
+	if err != nil {
+		log.Fatalf("ReadValue failed: %s", err)
+	}
+	log.Printf("ReadValue: %v", dv.Value.Value())
+
+	// High-level: ReadValues reads several nodes' Value attributes in one
+	// round-trip and returns the results in order.
+	ids := []*ua.NodeID{id}
+	if *nodeID2 != "" {
+		id2, err := ua.ParseNodeID(*nodeID2)
+		if err != nil {
+			log.Fatalf("invalid node2 id: %v", err)
+		}
+		ids = append(ids, id2)
+	}
+	dvs, err := c.ReadValues(ctx, ids...)
+	if err != nil {
+		log.Fatalf("ReadValues failed: %s", err)
+	}
+	for i, v := range dvs {
+		log.Printf("ReadValues[%d] (%s): %v", i, ids[i], v.Value.Value())
+	}
+
+	// Low-level: for full control (MaxAge, timestamps, index ranges, ...) build
+	// a ReadRequest and call Read. The retry loop below shows how to handle the
+	// transient errors that can occur during reconnection.
 	req := &ua.ReadRequest{
 		MaxAge: 2000,
 		NodesToRead: []*ua.ReadValueID{

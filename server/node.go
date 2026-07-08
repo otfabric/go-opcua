@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package server
 
 import (
@@ -94,7 +96,7 @@ func NewFolderNode(nodeID *ua.NodeID, name string) *Node {
 			ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassObject)),
 			ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(name)),
 			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
-			ua.AttributeIDDescription:   DataValueFromValue(uint32(ua.NodeClassObject)),
+			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 			ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
 		},
 		[]*ua.ReferenceDescription{{
@@ -122,7 +124,7 @@ func NewVariableNode(nodeID *ua.NodeID, name string, value any) *Node {
 				ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassVariable)),
 				ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(name)),
 				ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
-				ua.AttributeIDDescription:   DataValueFromValue(uint32(ua.NodeClassVariable)),
+				ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 				ua.AttributeIDDataType:      DataValueFromValue(typedef),
 				ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
 			},
@@ -144,7 +146,7 @@ func NewVariableNode(nodeID *ua.NodeID, name string, value any) *Node {
 			ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassVariable)),
 			ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(name)),
 			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
-			ua.AttributeIDDescription:   DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 			ua.AttributeIDDataType:      DataValueFromValue(typedef),
 			ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
 		},

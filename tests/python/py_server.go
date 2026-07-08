@@ -1,5 +1,7 @@
 //go:build integration
 
+// SPDX-License-Identifier: MIT
+
 // Package uatest provides integration test helpers for testing against the Python OPC UA server.
 package uatest
 

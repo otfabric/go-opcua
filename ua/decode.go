@@ -1,6 +1,4 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 package ua
 
@@ -83,7 +81,7 @@ func decode(b []byte, val reflect.Value, name string) (n int, err error) {
 			return decodeSlice(b, val, name)
 		case reflect.Array:
 			return decodeArray(b, val, name)
-		case reflect.Ptr:
+		case reflect.Pointer:
 			return decode(b, val.Elem(), name)
 		case reflect.Struct:
 			return decodeStruct(b, val, name)
@@ -104,7 +102,7 @@ func decodeStruct(b []byte, val reflect.Value, name string) (int, error) {
 		// if the field is a pointer we need to create
 		// the value before we can marshal data into it.
 		f := val.Field(i)
-		if f.Type().Kind() == reflect.Ptr {
+		if f.Type().Kind() == reflect.Pointer {
 			f.Set(reflect.New(f.Type().Elem()))
 			// fmt.Printf("decode: %s has type %v and has new value %#v\n", fname, f.Type(), f.Interface())
 		}
@@ -152,7 +150,7 @@ func decodeSlice(b []byte, val reflect.Value, name string) (int, error) {
 
 		// if the slice elements are pointers we need to create
 		// them before we can marshal data into them.
-		if elemType.Kind() == reflect.Ptr {
+		if elemType.Kind() == reflect.Pointer {
 			a.Index(i).Set(reflect.New(elemType.Elem()))
 		}
 
@@ -206,7 +204,7 @@ func decodeArray(b []byte, val reflect.Value, name string) (int, error) {
 
 		// if the slice elements are pointers we need to create
 		// them before we can marshal data into them.
-		if elemType.Kind() == reflect.Ptr {
+		if elemType.Kind() == reflect.Pointer {
 			a.Index(i).Set(reflect.New(elemType.Elem()))
 		}
 

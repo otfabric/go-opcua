@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package opcua
 
 // ConnState represents the connection state of an OPC-UA [Client].

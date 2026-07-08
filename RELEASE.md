@@ -1,5 +1,104 @@
 # go-opcua Releases
 
+## v1.1.0
+
+**Date:** 2026-07-09
+**Previous release:** v1.0.2
+
+### Summary
+
+Feature and hardening release, and the first release prepared for open-source distribution under the MIT license.
+
+Highlights:
+- New **server-side Query service** (QueryFirst/QueryNext) with a full Part 4 `ContentFilter` evaluator.
+- A new **client↔server conformance test suite** (conformance, adversarial, concurrency, and property-based tiers) covering the client/server API surface over a real `opc.tcp` loopback.
+- **Correctness fixes** in the binary codec, the client's fault handling, and the server's fault routing.
+- **Open-source preparation**: SPDX license headers across the codebase and licensing/documentation updates.
+
+No breaking API changes. Minor version bump.
+
+### New features
+
+#### Server-side Query service (QueryFirst / QueryNext)
+
+The server now implements the Query Service Set. Previously `QueryFirst`/`QueryNext` returned `Bad_ServiceUnsupported`.
+
+- `QueryFirst` matches candidate nodes by `TypeDefinition` (with `IncludeSubTypes` via the type tree), applies the `ContentFilter` WhereClause, and builds `QueryDataSet`s by resolving each `QueryDataDescription` (`RelativePath` + attribute read). It honors `MaxDataSetsToReturn` and reports per-NodeType `ParsingResults` and a `FilterResult`.
+- `QueryNext` supports pagination via a continuation-point store, releasing continuation points, and returns `Bad_ContinuationPointInvalid` for unknown tokens.
+- A specified but unknown `View` returns `Bad_ViewIdUnknown`; a null view scans the whole address space. Empty `NodeTypes` returns `Bad_NothingToDo`.
+
+The Service Support Matrix in the README now lists QueryFirst/QueryNext as supported on both client and server.
+
+#### Full ContentFilter evaluator
+
+New self-contained `ContentFilter` evaluator (`server/content_filter.go`) implementing full Part 4 semantics:
+
+- All 18 `FilterOperator`s: `Equals`, `IsNull`, `GreaterThan`, `LessThan`, `GreaterThanOrEqual`, `LessThanOrEqual`, `Like`, `Not`, `Between`, `InList`, `And`, `Or`, `Cast`, `InView`, `OfType`, `RelatedTo`, `BitwiseAnd`, `BitwiseOr`.
+- Three-valued logic (TRUE/FALSE/NULL) for the logical operators.
+- Operand resolution for `LiteralOperand`, `ElementOperand` (with forward-only, cycle-checked element references), `AttributeOperand`, and `SimpleAttributeOperand`.
+- Implicit numeric/string comparison, the OPC UA `Like` grammar (`%`, `_`, `[]`, `[^]`, `\` escaping) translated to a Go regexp, and a `Cast` conversion for the common built-in scalar types.
+- A structural validation pass producing a `ContentFilterResult` with per-element/per-operand status codes.
+
+#### Node enumeration API
+
+New optional `Nodes()` accessors return a snapshot of a namespace's nodes:
+
+```go
+func (as *NodeNameSpace) Nodes() []*Node
+func (ns *MapNamespace) Nodes() []*Node
+```
+
+The Query service uses these to scan candidate nodes; custom namespaces that implement the same signature participate automatically.
+
+#### New and modernized examples
+
+New runnable examples: `readmulti` (auto-chunked batch read), `history-read-simple` (`ReadHistoryAll` iterator), `serverstatus`, `metrics` (`WithMetrics`/`WithRetryPolicy`), `node-summary` (`Node.Summary`), `regread` (register-nodes), and dedicated server examples `server/node_server`, `server/map_server`, `server/NodeSet2_server`, and `server/method_server`. Existing `read`/`write`/`subscribe`/`method`/`translate`/`history-read` examples were reworked to demonstrate both the high-level convenience wrappers and the low-level service calls.
+
+### Bug fixes
+
+#### Binary encoder nil-pointer asymmetry
+
+`ua/encode.go` wrote zero bytes for a nil pointer field, but the decoder always allocates and reads pointer fields. Any message that left a pointer field nil produced a stream that could not be decoded symmetrically. The encoder now writes the zero value for a nil pointer, matching decode (a nil `*NodeID` encodes as the null NodeID `0x00 0x00`). Existing messages that fully populate their pointers are unaffected. Added round-trip idempotence tests covering empty `QueryFirstRequest`/`QueryNextRequest`, `ContentFilter` with each operand type, and nil `*NodeID`.
+
+#### Operation-level ServiceFaults no longer disconnect the client
+
+The client's read dispatcher forwarded every failed message to the connection monitor, which treats any notification as a connection failure. A normal operation-level ServiceFault (a decoded response carrying a non-OK `ServiceResult`, e.g. a bad NodeID or an invalid filter) therefore tore down the whole connection. The dispatcher now forwards only connection/transport-level failures and the faults that actually require the channel, session, or subscriptions to be recreated (`Bad_SecureChannelIdInvalid`, `Bad_SessionIdInvalid`, `Bad_SubscriptionIdInvalid`, `Bad_NoSubscription`, `Bad_CertificateInvalid`). Ordinary faults are returned to the caller with the connection left usable. Auto-reconnect behavior is unchanged.
+
+#### Server no longer tears down the secure channel on a per-request error
+
+When a single request failed to decode/process, the server's channel broker closed the entire secure channel without replying, so the client blocked until its full `RequestTimeout` (and `Client.Close` then blocked too). The broker now returns a `ServiceFault` correlated to the offending `RequestID` and keeps serving the channel; only connection-level failures close it.
+
+#### Node.Description panic
+
+`Node.Description` could panic because the server's node constructors stored the wrong value type (a numeric NodeClass instead of a `LocalizedText`) under the Description attribute. The server constructors now store a `LocalizedText`, and the client-side `Node.Description` performs a checked type assertion and returns an error instead of panicking on unexpected types.
+
+### Testing
+
+#### New conformance test suite (`conformance/` package)
+
+A new in-process client↔server test suite exercises the full client/server API surface over a real `opc.tcp` loopback:
+
+- **Conformance** per service set (attribute, view, method, node management, subscription, events, history, query, misc).
+- **Adversarial** tests for malformed/hostile inputs and edge cases.
+- **Concurrency** tests (safe under `-race`).
+- **Property-based** round-trip/invariance tests using `pgregory.net/rapid` (added as a dependency).
+- An **API coverage matrix** (`matrix_test.go`) that reflects over the client/server APIs to guard against untested surface.
+- Shared harness and a rich node `Fixture` in `internal/testutil` (scalars of every common type, arrays, access-controlled nodes, a callable method, an event source, and a typed/subtyped `VariableType` hierarchy for Query).
+
+Unit tests were also added for the ContentFilter evaluator (`server/content_filter_test.go`: operator matrix, three-valued logic, `Like` grammar, `Cast`, validation).
+
+### Open-source preparation / licensing
+
+- **SPDX headers**: every first-party Go file now begins with `// SPDX-License-Identifier: MIT`. Code-generator templates (`cmd/*`) and the generation orchestrator (`internal/cmd/gen`) emit the SPDX header, and `stringer` output is post-processed so generated files stay consistent with `go generate ./...`.
+- **LICENSE**: added the OT Fabric copyright line; the project remains MIT-licensed.
+- **Documentation**: `README.md` badges refreshed (pkg.go.dev reference, Codecov, release), the examples table expanded, and the Query rows updated; `API.md` documents the client Query API and the new `Nodes()` accessors.
+
+### Compatibility
+
+No breaking API changes. All additions are new methods/behavior; the encoder change only affects previously-undecodable output; SPDX headers and licensing updates are non-functional. Minor version bump.
+
+---
+
 ## v1.0.2
 
 **Date:** 2026-03-24

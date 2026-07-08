@@ -1,12 +1,10 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Example subscribe demonstrates creating an OPC-UA subscription that monitors
 // a node for data changes or events.
 //
-// It connects with configurable security, creates a subscription with a
-// monitored item, and prints incoming notifications until the context expires.
+// It uses the high-level SubscriptionBuilder to create the subscription and
+// monitored items, and the EventFilterBuilder to construct an event filter.
 //
 // Usage:
 //
@@ -27,9 +25,12 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
-	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
 )
+
+// eventFieldNames are the event fields selected by the event filter, in order.
+// The EventNotificationList delivers EventFields in the same order.
+var eventFieldNames = []string{"EventId", "EventType", "Severity", "Time", "Message"}
 
 func main() {
 	var (
@@ -88,41 +89,33 @@ func main() {
 	}
 	defer func() { _ = c.Close(ctx) }()
 
-	notifyCh := make(chan *opcua.PublishNotificationData)
-
-	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{
-		Interval: *interval,
-	}, notifyCh)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer func() { _ = sub.Cancel(ctx) }()
-	log.Printf("Created subscription with id %v", sub.SubscriptionID)
-
 	id, err := ua.ParseNodeID(*nodeID)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var miCreateRequest *ua.MonitoredItemCreateRequest
-	var eventFieldNames []string
+	// Build the subscription with the fluent SubscriptionBuilder. Start creates
+	// the subscription and the monitored item(s) in one call, and returns the
+	// notification channel to read from.
+	builder := c.NewSubscription().Interval(*interval)
 	if *event {
-		miCreateRequest, eventFieldNames = eventRequest(id)
+		// Construct an event filter with the EventFilterBuilder: select the
+		// fields to report and only deliver events with Severity >= 0.
+		filter := ua.NewEventFilter().
+			Select(eventFieldNames...).
+			Where(ua.Field("Severity").GreaterThanOrEqual(uint16(0))).
+			Build()
+		builder = builder.MonitorEvents(filter, id)
 	} else {
-		miCreateRequest = valueRequest(id)
-	}
-	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, miCreateRequest)
-	if err != nil || res.Results[0].StatusCode != ua.StatusOK {
-		log.Fatal(err)
+		builder = builder.Monitor(id)
 	}
 
-	// Uncomment the following to try modifying the subscription
-	//
-	// var params opcua.SubscriptionParameters
-	// params.Interval = time.Millisecond * 2000
-	// if _, err := sub.ModifySubscription(ctx, params); err != nil {
-	// 	log.Fatal(err)
-	// }
+	sub, notifyCh, err := builder.Start(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer func() { _ = sub.Cancel(ctx) }()
+	log.Printf("Created subscription with id %v", sub.SubscriptionID)
 
 	// read from subscription's notification channel until ctx is cancelled
 	for {
@@ -156,84 +149,4 @@ func main() {
 			}
 		}
 	}
-}
-
-func valueRequest(nodeID *ua.NodeID) *ua.MonitoredItemCreateRequest {
-	handle := uint32(42)
-	return opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, handle)
-}
-
-func eventRequest(nodeID *ua.NodeID) (*ua.MonitoredItemCreateRequest, []string) {
-	fieldNames := []string{"EventId", "EventType", "Severity", "Time", "Message"}
-	selects := make([]*ua.SimpleAttributeOperand, len(fieldNames))
-
-	for i, name := range fieldNames {
-		selects[i] = &ua.SimpleAttributeOperand{
-			TypeDefinitionID: ua.NewNumericNodeID(0, id.BaseEventType),
-			BrowsePath:       []*ua.QualifiedName{{NamespaceIndex: 0, Name: name}},
-			AttributeID:      ua.AttributeIDValue,
-		}
-	}
-
-	wheres := &ua.ContentFilter{
-		Elements: []*ua.ContentFilterElement{
-			{
-				FilterOperator: ua.FilterOperatorGreaterThanOrEqual,
-				FilterOperands: []*ua.ExtensionObject{
-					{
-						EncodingMask: 1,
-						TypeID: &ua.ExpandedNodeID{
-							NodeID: ua.NewNumericNodeID(0, id.SimpleAttributeOperandEncodingDefaultBinary),
-						},
-						Value: ua.SimpleAttributeOperand{
-							TypeDefinitionID: ua.NewNumericNodeID(0, id.BaseEventType),
-							BrowsePath:       []*ua.QualifiedName{{NamespaceIndex: 0, Name: "Severity"}},
-							AttributeID:      ua.AttributeIDValue,
-						},
-					},
-					{
-						EncodingMask: 1,
-						TypeID: &ua.ExpandedNodeID{
-							NodeID: ua.NewNumericNodeID(0, id.LiteralOperandEncodingDefaultBinary),
-						},
-						Value: ua.LiteralOperand{
-							Value: ua.MustVariant(uint16(0)),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	filter := ua.EventFilter{
-		SelectClauses: selects,
-		WhereClause:   wheres,
-	}
-
-	filterExtObj := ua.ExtensionObject{
-		EncodingMask: ua.ExtensionObjectBinary,
-		TypeID: &ua.ExpandedNodeID{
-			NodeID: ua.NewNumericNodeID(0, id.EventFilterEncodingDefaultBinary),
-		},
-		Value: filter,
-	}
-
-	handle := uint32(42)
-	req := &ua.MonitoredItemCreateRequest{
-		ItemToMonitor: &ua.ReadValueID{
-			NodeID:       nodeID,
-			AttributeID:  ua.AttributeIDEventNotifier,
-			DataEncoding: &ua.QualifiedName{},
-		},
-		MonitoringMode: ua.MonitoringModeReporting,
-		RequestedParameters: &ua.MonitoringParameters{
-			ClientHandle:     handle,
-			DiscardOldest:    true,
-			Filter:           &filterExtObj,
-			QueueSize:        10,
-			SamplingInterval: 1.0,
-		},
-	}
-
-	return req, fieldNames
 }

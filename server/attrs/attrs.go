@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package attrs provides default OPC UA node attribute constructors.
 package attrs
 

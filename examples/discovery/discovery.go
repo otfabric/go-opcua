@@ -1,6 +1,4 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Example discovery demonstrates the OPC-UA discovery services:
 // FindServers and GetEndpoints. These are used to discover available

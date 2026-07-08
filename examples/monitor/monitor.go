@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Example monitor demonstrates the high-level monitor package which
 // provides callback-based and channel-based subscription APIs.
 // This is simpler than using Client.Subscribe directly.

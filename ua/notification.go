@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package ua
 
 // Notification is implemented by the three notification types

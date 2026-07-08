@@ -1229,6 +1229,14 @@ func NewMapNamespace(srv *Server, name string) *MapNamespace
 definitions. `NewMapNamespace` provides a simple key-value store for IoT/sensor
 data. Both constructors register the namespace with the server automatically.
 
+Both implementations also expose a node-enumeration accessor used by the Query
+service (a namespace is scanned by QueryFirst only if it provides this method):
+
+```go
+func (as *NodeNameSpace) Nodes() []*Node
+func (ns *MapNamespace) Nodes() []*Node
+```
+
 ---
 
 ### Node (server-side)

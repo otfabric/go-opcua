@@ -1,11 +1,11 @@
 # otfabric/go-opcua — OPC-UA library for Go
 
-[![Go](https://img.shields.io/badge/Go-1.25+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Reference](https://pkg.go.dev/badge/github.com/otfabric/go-opcua.svg)](https://pkg.go.dev/github.com/otfabric/go-opcua)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Go Report Card](https://goreportcard.com/badge/github.com/otfabric/go-opcua)](https://goreportcard.com/report/github.com/otfabric/go-opcua)
 [![CI](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml/badge.svg)](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml)
-[![Codecov](https://codecov.io/github/otfabric/go-opcua/graph/badge.svg?token=GT87MSYXJK)](https://codecov.io/github/otfabric/go-opcua)
-[![Release](https://img.shields.io/github/v/release/otfabric/go-opcua?style=flat&color=blue)](https://github.com/otfabric/go-opcua/releases)
+[![Codecov](https://codecov.io/gh/otfabric/go-opcua/graph/badge.svg)](https://codecov.io/gh/otfabric/go-opcua)
+[![Release](https://img.shields.io/github/v/release/otfabric/go-opcua?label=release)](https://github.com/otfabric/go-opcua/releases)
 
 A pure Go implementation of the OPC-UA Binary Protocol, providing both **client** and **server** capabilities. No C dependencies, no CGo — just Go.
 
@@ -180,6 +180,7 @@ func main() {
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode |
 | **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering |
 | **View** | RegisterNodes, UnregisterNodes |
+| **Query** | QueryFirst, QueryNext with full ContentFilter evaluation (all 18 operators, 3-valued logic), type/subtype matching, and continuation points |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel |
 | **Methods** | Register handlers via `RegisterMethod`, argument introspection |
 | **Events** | `EmitEvent` to push event notifications to subscribers |
@@ -210,8 +211,8 @@ func main() {
 | | TranslateBrowsePathsToNodeIDs | Yes | Yes |
 | | RegisterNodes | Yes | Yes |
 | | UnregisterNodes | Yes | Yes |
-| **Query** | QueryFirst | Yes | — |
-| | QueryNext | Yes | — |
+| **Query** | QueryFirst | Yes | Yes |
+| | QueryNext | Yes | Yes |
 | **Method** | Call | Yes | Yes |
 | **Node Management** | AddNodes | Yes | Yes |
 | | DeleteNodes | Yes | Yes |
@@ -254,23 +255,36 @@ The `examples/` directory contains runnable programs:
 
 | Example | Description |
 |---------|-------------|
-| `read` | Read a single node value |
-| `write` | Write a value to a node |
+| `read` | Read a node value (high-level `ReadValue`/`ReadValues` and low-level `Read`) |
+| `readmulti` | Batch read a whole subtree with `ReadMulti` (auto-chunked) |
+| `write` | Write a value to a node (high-level `WriteNodeValue` and low-level `Write`) |
 | `browse` | Browse the server address space |
-| `subscribe` | Subscribe to data changes |
+| `subscribe` | Subscribe to data changes/events with `SubscriptionBuilder` + `EventFilterBuilder` |
 | `monitor` | High-level monitoring with `NodeMonitor` |
-| `method` | Call a server method |
-| `history-read` | Read historical data |
+| `method` | Call a server method (high-level `CallMethod`/`MethodArguments` and low-level `Call`) |
+| `history-read` | Read historical data with manual continuation points |
+| `history-read-simple` | Read historical data with the `ReadHistoryAll` iterator |
 | `crypto` | Connect with encryption and certificates |
 | `datetime` | Read the server's current time |
 | `discovery` | Discover servers on the network |
 | `endpoints` | List available endpoints |
-| `translate` | Translate browse paths to NodeIDs |
+| `translate` | Resolve browse paths to NodeIDs (`NodeFromPath`/`NodeFromQualifiedPath`) |
 | `trigger` | Set up monitored item triggering |
 | `accesslevel` | Read node access levels |
+| `regread` | Register nodes before reading for optimized repeated reads |
+| `serverstatus` | Read `ServerStatus`, namespace table, and resolve a namespace URI |
+| `metrics` | Instrument a client with `WithMetrics` and `WithRetryPolicy` |
+| `node-summary` | Read all common node attributes in one call with `Node.Summary` |
 | `udt` | Work with user-defined types |
-| `server` | Run a simple OPC-UA server |
 | `reconnect` | Demonstrate auto-reconnection |
+| `server/node_server` | Run a server using the node-based namespace |
+| `server/map_server` | Run a server using a Go map-backed namespace |
+| `server/NodeSet2_server` | Run a server that imports a NodeSet2 XML information model |
+| `server/method_server` | Register a server-side method and call it from a client |
+
+> Note: `examples/server/server.go` is a minimal low-level `uacp` transport
+> stub (TCP listener only), not a full OPC-UA server. For a runnable server,
+> use one of the `server/*_server` examples above.
 
 Run any example:
 
@@ -303,4 +317,4 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 
 ## License
 
-[MIT](LICENSE)
+This project is licensed under the MIT License. See [LICENSE](./LICENSE).

@@ -1,10 +1,10 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Example method demonstrates calling a method on an OPC-UA server object.
-// It shows how to pass input arguments and receive output arguments using
-// the Call service.
+//
+// It shows the high-level CallMethod helper (which wraps Go values into
+// Variants automatically) and MethodArguments (which reports a method's
+// declared input/output arguments), as well as the low-level Call service.
 //
 // Usage:
 //
@@ -46,10 +46,39 @@ func main() {
 	}
 	defer func() { _ = c.Close(ctx) }()
 
+	objectID := ua.NewStringNodeID(2, "main")
+	methodID := ua.NewStringNodeID(2, "even")
 	in := int64(12)
+
+	// MethodArguments reports a method's declared input/output arguments, which
+	// is handy for discovering the signature before calling. Servers that do not
+	// expose Input/OutputArguments properties return empty slices.
+	inputs, outputs, err := c.MethodArguments(ctx, objectID, methodID)
+	if err != nil {
+		log.Printf("MethodArguments unavailable: %v", err)
+	} else {
+		for _, a := range inputs {
+			log.Printf("input  arg: %s", a.Name)
+		}
+		for _, a := range outputs {
+			log.Printf("output arg: %s", a.Name)
+		}
+	}
+
+	// High-level: CallMethod wraps each Go argument in a Variant automatically.
+	result, err := c.CallMethod(ctx, objectID, methodID, in)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if result.StatusCode != ua.StatusOK {
+		log.Fatalf("CallMethod status: %v", result.StatusCode)
+	}
+	log.Printf("CallMethod: %d is even: %v", in, result.OutputArguments[0].Value())
+
+	// Low-level: for full control, build a CallMethodRequest and call Call.
 	req := &ua.CallMethodRequest{
-		ObjectID:       ua.NewStringNodeID(2, "main"),
-		MethodID:       ua.NewStringNodeID(2, "even"),
+		ObjectID:       objectID,
+		MethodID:       methodID,
 		InputArguments: []*ua.Variant{ua.MustVariant(in)},
 	}
 
@@ -61,5 +90,5 @@ func main() {
 		log.Fatalf("got status %v want %v", got, want)
 	}
 	out := resp.OutputArguments[0].Value()
-	log.Printf("%d is even: %v", in, out)
+	log.Printf("Call: %d is even: %v", in, out)
 }

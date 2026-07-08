@@ -1,6 +1,4 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // This file is copied to packages ua, uacp and uasc to break an import cycle.
 
@@ -34,7 +32,7 @@ func RunCodecTest(t *testing.T, cases []CodecTestCase) {
 				typ := reflect.ValueOf(c.Struct).Type()
 				var v reflect.Value
 				switch typ.Kind() {
-				case reflect.Ptr:
+				case reflect.Pointer:
 					v = reflect.New(typ.Elem()) // typ: *struct, v: *struct
 				case reflect.Slice:
 					v = reflect.New(typ) // typ: []x, v: *[]x
