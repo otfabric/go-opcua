@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package refs provides OPC UA reference constructors for building node hierarchies.
 package refs
 

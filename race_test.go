@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package opcua_test
 
 import (

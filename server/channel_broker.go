@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package server
 
 import (
@@ -101,6 +103,22 @@ outer:
 				c.logger.Warn("secure channel closed", "secure_channel_id", secureChannelID)
 				break outer
 			} else if msg.Err != nil {
+				// A per-request decoding/processing error must not tear down the
+				// whole channel. When the failure can be correlated to a request
+				// (RequestID != 0), return a ServiceFault so the caller fails
+				// fast instead of blocking until its timeout, then keep serving.
+				// Only unrecoverable/connection-level errors (RequestID == 0)
+				// close the channel.
+				if msg.RequestID != 0 {
+					c.logger.Warn("request error, returning service fault",
+						"secure_channel_id", secureChannelID, "request_id", msg.RequestID, "error", msg.Err)
+					fault := &ua.ServiceFault{ResponseHeader: faultHeader(msg.Err)}
+					if err := sc.SendResponseWithContext(ctx, msg.RequestID, fault); err != nil {
+						c.logger.Error("error sending service fault", "secure_channel_id", secureChannelID, "error", err)
+						break outer
+					}
+					continue
+				}
 				c.logger.Error("secure channel error", "secure_channel_id", secureChannelID, "error", msg.Err)
 				break outer
 			}
@@ -118,6 +136,23 @@ outer:
 	c.wg.Done()
 
 	return ctx.Err()
+}
+
+// faultHeader builds a ResponseHeader for a ServiceFault returned in response
+// to a request-scoped error. If the error is a ua.StatusCode it is used
+// directly; otherwise the fault reports a generic decoding error.
+func faultHeader(err error) *ua.ResponseHeader {
+	status := ua.StatusBadDecodingError
+	if sc, ok := err.(ua.StatusCode); ok {
+		status = sc
+	}
+	return &ua.ResponseHeader{
+		Timestamp:          time.Now(),
+		ServiceResult:      status,
+		ServiceDiagnostics: &ua.DiagnosticInfo{},
+		StringTable:        []string{},
+		AdditionalHeader:   ua.NewExtensionObject(nil),
+	}
 }
 
 const brokerCloseTimeout = 10 * time.Second

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package ua
 
 import "github.com/otfabric/go-opcua/id"

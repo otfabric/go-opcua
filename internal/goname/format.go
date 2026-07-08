@@ -1,6 +1,4 @@
-// Copyright 2018-2024 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Package goname provides a shared naming formatter for all OPC UA code
 // generators. It converts OPC UA spec identifiers into idiomatic Go names

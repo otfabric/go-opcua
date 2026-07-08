@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package stats provides instrumentation for the otfabric/go-opcua library via expvar.
 //
 // The API is experimental and might change.

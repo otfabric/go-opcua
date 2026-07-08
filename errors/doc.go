@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package errors provides sentinel errors and helpers for the OPC-UA library.
 //
 // # Sentinel errors

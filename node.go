@@ -1,11 +1,10 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 package opcua
 
 import (
 	"context"
+	"fmt"
 	"iter"
 	"strings"
 
@@ -193,7 +192,11 @@ func (n *Node) Description(ctx context.Context) (*ua.LocalizedText, error) {
 	if err != nil {
 		return nil, err
 	}
-	return v.Value().(*ua.LocalizedText), nil
+	lt, ok := v.Value().(*ua.LocalizedText)
+	if !ok {
+		return nil, fmt.Errorf("opcua: unexpected Description type %T", v.Value())
+	}
+	return lt, nil
 }
 
 // DisplayName returns the display name of the node.

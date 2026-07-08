@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package monitor provides a high-level API for monitoring OPC UA nodes via subscriptions.
 package monitor
 

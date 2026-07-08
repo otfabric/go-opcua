@@ -1,6 +1,4 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 package ua
 
@@ -71,9 +69,13 @@ func encode(val reflect.Value, name string) ([]byte, error) {
 			buf.WriteFloat64(float64(val.Float()))
 		case reflect.String:
 			buf.WriteString(val.String())
-		case reflect.Ptr:
+		case reflect.Pointer:
 			if val.IsNil() {
-				return nil, nil
+				// Encode the zero value so the output is symmetric with
+				// decode, which always allocates and reads pointer fields
+				// (see decodeStruct). Writing nothing here corrupts the
+				// stream whenever a pointer field is left nil.
+				return dump(encode(reflect.New(val.Type().Elem()), name))
 			}
 			return dump(encode(val.Elem(), name))
 		case reflect.Struct:

@@ -1,7 +1,14 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
+// Example history-read demonstrates reading historical data with
+// HistoryReadRawModified and manual continuation-point handling.
+//
+// For a simpler approach that pages through all values automatically, see the
+// history-read-simple example, which uses the Client.ReadHistoryAll iterator.
+//
+// Usage:
+//
+//	go run history-read.go -endpoint opc.tcp://localhost:4840 -node "ns=2;s=Temperature"
 package main
 
 import (

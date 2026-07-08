@@ -1,6 +1,4 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 //
 // This example program shows how to create a simple OPC UA server with data backed by a map.
 // This allows you to easily create a server with a simple data model that can be updated from

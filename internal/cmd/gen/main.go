@@ -1,6 +1,4 @@
-// Copyright 2018-2024 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 // Command gen is the Go-based code generation driver for go-opcua.
 //
@@ -99,6 +97,9 @@ func stringer() error {
 	); err != nil {
 		return err
 	}
+	if err := prependSPDX("ua/enums_strings_gen.go"); err != nil {
+		return err
+	}
 	fmt.Println("Wrote ua/enums_strings_gen.go")
 
 	if err := run("go", "tool", "stringer",
@@ -108,8 +109,32 @@ func stringer() error {
 	); err != nil {
 		return err
 	}
+	if err := prependSPDX("connstate_strings_gen.go"); err != nil {
+		return err
+	}
 	fmt.Println("Wrote connstate_strings_gen.go")
 
+	return nil
+}
+
+// prependSPDX inserts the SPDX license identifier at the top of a
+// stringer-generated file. Unlike the in-repo generators, stringer does
+// not let us customize its header, so we add the line afterwards to keep
+// every generated file's header aligned. The "// Code generated ... DO NOT
+// EDIT." line stays before the package clause, so Go still treats the file
+// as generated.
+func prependSPDX(path string) error {
+	const header = "// SPDX-License-Identifier: MIT\n\n"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("prependSPDX %s: %w", path, err)
+	}
+	if strings.HasPrefix(string(data), header) {
+		return nil
+	}
+	if err := os.WriteFile(path, append([]byte(header), data...), 0o644); err != nil {
+		return fmt.Errorf("prependSPDX %s: %w", path, err)
+	}
 	return nil
 }
 

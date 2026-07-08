@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 // Package testutil provides test server and client helpers for OPC UA unit tests.
 package testutil
 

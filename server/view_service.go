@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package server
 
 import (
@@ -265,73 +267,20 @@ func (s *ViewService) TranslateBrowsePathsToNodeIDs(ctx context.Context, sc *uas
 }
 
 func (s *ViewService) translatePath(bp *ua.BrowsePath) *ua.BrowsePathResult {
-	if bp.StartingNode == nil || bp.RelativePath == nil || len(bp.RelativePath.Elements) == 0 {
+	if bp == nil {
 		return &ua.BrowsePathResult{StatusCode: ua.StatusBadBrowseNameInvalid}
 	}
 
-	currentNode := s.srv.Node(bp.StartingNode)
-	if currentNode == nil {
-		return &ua.BrowsePathResult{StatusCode: ua.StatusBadNodeIDUnknown}
-	}
-
-	for idx, elem := range bp.RelativePath.Elements {
-		if elem.TargetName == nil {
-			return &ua.BrowsePathResult{StatusCode: ua.StatusBadBrowseNameInvalid}
-		}
-
-		found := false
-		for _, ref := range currentNode.refs {
-			if ref.NodeID == nil || ref.BrowseName == nil {
-				continue
-			}
-			// Check direction: forward for normal, inverse for IsInverse.
-			if elem.IsInverse && ref.IsForward {
-				continue
-			}
-			if !elem.IsInverse && !ref.IsForward {
-				continue
-			}
-			// Check reference type if specified.
-			if elem.ReferenceTypeID != nil && !elem.ReferenceTypeID.Equal(ua.NewNumericNodeID(0, 0)) {
-				if !elem.ReferenceTypeID.Equal(ref.ReferenceTypeID) {
-					if elem.IncludeSubtypes {
-						if !suitableRefType(s.srv, elem.ReferenceTypeID, ref.ReferenceTypeID, true) {
-							continue
-						}
-					} else {
-						continue
-					}
-				}
-			}
-			// Match target name (browse name comparison).
-			if ref.BrowseName.Name != elem.TargetName.Name {
-				continue
-			}
-			if elem.TargetName.NamespaceIndex != 0 && ref.BrowseName.NamespaceIndex != elem.TargetName.NamespaceIndex {
-				continue
-			}
-			// Found matching reference — follow it.
-			next := s.srv.Node(ref.NodeID.NodeID)
-			if next == nil {
-				continue
-			}
-			currentNode = next
-			found = true
-			break
-		}
-		if !found {
-			if idx == len(bp.RelativePath.Elements)-1 {
-				return &ua.BrowsePathResult{StatusCode: ua.StatusBadNoMatch}
-			}
-			return &ua.BrowsePathResult{StatusCode: ua.StatusBadNoMatch}
-		}
+	target, st := s.srv.resolveRelativePath(bp.StartingNode, bp.RelativePath)
+	if st != ua.StatusGood {
+		return &ua.BrowsePathResult{StatusCode: st}
 	}
 
 	return &ua.BrowsePathResult{
 		StatusCode: ua.StatusGood,
 		Targets: []*ua.BrowsePathTarget{
 			{
-				TargetID:           ua.NewExpandedNodeID(currentNode.ID(), "", 0),
+				TargetID:           ua.NewExpandedNodeID(target, "", 0),
 				RemainingPathIndex: 0xFFFFFFFF, // indicates complete resolution
 			},
 		},

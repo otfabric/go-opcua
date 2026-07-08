@@ -1,6 +1,8 @@
 //go:build integration
 // +build integration
 
+// SPDX-License-Identifier: MIT
+
 package uatest
 
 import (

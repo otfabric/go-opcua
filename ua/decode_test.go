@@ -1,6 +1,4 @@
-// Copyright 2018-2020 opcua authors. All rights reserved.
-// Use of this source code is governed by a MIT-style license that can be
-// found in the LICENSE file.
+// SPDX-License-Identifier: MIT
 
 package ua
 
@@ -385,7 +383,7 @@ func TestCodec(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, reflect.Ptr, reflect.ValueOf(tt.v).Kind(), "%T is not a pointer", tt.v)
+			require.Equal(t, reflect.Pointer, reflect.ValueOf(tt.v).Kind(), "%T is not a pointer", tt.v)
 
 			t.Run("decode", func(t *testing.T) {
 				// create a new instance of the same type as tt.v

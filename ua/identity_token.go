@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MIT
+
 package ua
 
 // IdentityToken is implemented by all user identity token types.
