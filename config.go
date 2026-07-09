@@ -29,7 +29,7 @@ type serverCertValidator struct {
 }
 
 const (
-	DefaultDialTimeout = 10 * time.Second
+	DefaultDialTimeout = uacp.DefaultDialTimeout
 )
 
 // DefaultClientConfig returns the default configuration for a client
@@ -78,7 +78,7 @@ type Config struct {
 func DefaultDialer() *uacp.Dialer {
 	return &uacp.Dialer{
 		Dialer: &net.Dialer{
-			Timeout: DefaultDialTimeout,
+			Timeout: uacp.DefaultDialTimeout,
 		},
 		ClientACK: uacp.DefaultClientACK,
 	}
@@ -702,10 +702,18 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 		return nil
 	}
 
-	cert, err := x509.ParseCertificate(der)
+	// The server may present its certificate as a chain of leaf plus
+	// intermediate certificates (e.g. Siemens WinCC Unified Runtime). Parse all
+	// of them: x509.ParseCertificate rejects trailing data, so a chain must be
+	// parsed with x509.ParseCertificates.
+	certs, err := x509.ParseCertificates(der)
 	if err != nil {
 		return fmt.Errorf("opcua: server certificate validation failed: %w", err)
 	}
+	if len(certs) == 0 {
+		return nil
+	}
+	cert := certs[0]
 
 	// Build verification options.
 	roots, err := x509.SystemCertPool()
@@ -719,9 +727,17 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 		roots.AddCert(c)
 	}
 
+	// Any additional certificates in the blob are intermediates used to build
+	// the trust chain up to a trusted root.
+	intermediates := x509.NewCertPool()
+	for _, ic := range certs[1:] {
+		intermediates.AddCert(ic)
+	}
+
 	opts := x509.VerifyOptions{
-		Roots:     roots,
-		KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+		Roots:         roots,
+		Intermediates: intermediates,
+		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
 	}
 
 	if _, err := cert.Verify(opts); err != nil {

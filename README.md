@@ -21,7 +21,7 @@ otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or
 
 - **Client** — connect, browse, read, write, subscribe, call methods, read history
 - **Server** — host namespaces, expose variables, handle methods, emit events
-- **Security** — six encryption policies, certificate and username/password authentication, server certificate validation with `TrustedCertificates()` and `InsecureSkipVerify()` options
+- **Security** — six encryption policies, certificate and username/password authentication, server certificate validation with `TrustedCertificates()` and `InsecureSkipVerify()` options; **certificate chains** (leaf + intermediate) supported on connect
 - **Subscriptions** — data-change and event monitoring with automatic publishing
 - **Retry & Reconnect** — exponential backoff and automatic session recovery
 - **Metrics** — pluggable instrumentation for request/response/error tracking
@@ -154,12 +154,13 @@ func main() {
 
 | Area | Capabilities |
 |------|-------------|
-| **Connection** | Secure channel, session management, auto-reconnect, connection state callbacks, `SkipNamespaceUpdate` |
+| **Connection** | Secure channel, session management, auto-reconnect, connection state callbacks, `SkipNamespaceUpdate`, configurable `DialTimeout` |
 | **Reading** | Single/batch reads, all attributes, `Node.Value()`, `Node.Summary()`, `ReadMulti` (chunked batch N×attributes) |
 | **Writing** | Single/batch writes, any attribute, `WriteValue`, `WriteAttribute` |
 | **Browsing** | Forward/inverse/both, continuation points, `BrowseAll`, `Walk` / `WalkLimit` (depth-limited), `WalkLimitDedup`, `BrowseWithDepth` (client-side recursive, returns slice) |
 | **Path resolution** | `NodeFromPath`, `NodeFromPathInNamespace`, `NodeFromQualifiedPath` (ns:name), `Node.TranslateBrowsePathInNamespaceToNodeID` (TranslateBrowsePathsToNodeIDs). Symbolic node names: `ua.StandardNodeID("CurrentTime")`, `id.NodeIDByName(name)` |
 | **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder API |
+| **Monitoring** | `monitor` package: callback/channel subscriptions; batch add with per-item `ItemError` on partial failure |
 | **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |
 | **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` |
@@ -178,7 +179,7 @@ func main() {
 | **Services** | Read, Write, Browse, BrowseNext, TranslateBrowsePaths, Call |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences |
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode |
-| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering |
+| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; per-item rejection for unknown nodes in a batch |
 | **View** | RegisterNodes, UnregisterNodes |
 | **Query** | QueryFirst, QueryNext with full ContentFilter evaluation (all 18 operators, 3-valued logic), type/subtype matching, and continuation points |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel |
@@ -243,7 +244,7 @@ func main() {
 | `monitor` | High-level `NodeMonitor` with callback and channel-based subscriptions |
 | `errors` | Sentinel errors for `errors.Is()` checking |
 | `id` | Well-known NodeID constants (generated from OPC-UA schema) |
-| `uacp` | OPC-UA Connection Protocol (TCP transport) |
+| `uacp` | OPC-UA Connection Protocol (TCP transport); `ParseEndpoint`, `DialWithTimeout` |
 | `uasc` | OPC-UA Secure Conversation (secure channel) |
 | `uapolicy` | Security policy implementations (encryption, signing) |
 | `internal/stats` | Expvar-based statistics collection (internal) |

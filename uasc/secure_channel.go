@@ -529,6 +529,10 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 		s.cfg.SecurityPolicyURI = m.SecurityPolicyURI
 		if m.SecurityPolicyURI != ua.SecurityPolicyURINone {
 			s.cfg.RemoteCertificate = m.SenderCertificate
+			// Record the client's certificate thumbprint so the OPN response we
+			// send back carries a correct ReceiverCertificateThumbprint. Strict
+			// clients (UaExpert, Prosys) reject encrypted channels otherwise.
+			s.cfg.Thumbprint = uapolicy.Thumbprint(m.SenderCertificate)
 			s.cfg.Logger.Debug("setting securityPolicy", "channel_id", s.c.ID(), "policy", m.SecurityPolicyURI)
 
 			remoteKey, err := uapolicy.PublicKey(s.cfg.RemoteCertificate)
@@ -854,6 +858,12 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 		return err
 	}
 
+	// Now that the symmetric algorithm is known, compute the maximum body size
+	// per chunk from the negotiated send buffer so large responses (e.g. a
+	// Browse of a big folder) are split into multiple chunks instead of
+	// overflowing the client's receive buffer and dropping the connection.
+	instance.SetMaximumBodySize(int(s.c.SendBufSize()))
+
 	instance.state = channelActive // correct: per Part 6 §6.7.2, server considers channel open after sending response
 
 	s.instancesMu.Lock()
@@ -1169,18 +1179,21 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 	instance.Lock()
 	defer instance.Unlock()
 
-	// encode the message
-	m := instance.newMessage(resp, typeID, reqID)
-	b, err := m.Encode()
-	if err != nil {
-		s.cfg.Logger.Warn("error encoding msg", "error", err)
-		return err
+	// Encode the message into one or more chunks. maxBodySize is derived from
+	// the negotiated send buffer (see SetMaximumBodySize), so large responses
+	// such as a Browse of a folder with many nodes are split across multiple
+	// chunks instead of overflowing the peer's receive buffer and dropping the
+	// connection. Before the channel is fully negotiated (OPN exchange)
+	// maxBodySize is 0; OPN responses are small and always a single chunk.
+	maxBodySize := instance.maxBodySize
+	if maxBodySize == 0 {
+		maxBodySize = s.c.SendBufSize()
 	}
 
-	// encrypt the message prior to sending it
-	// if SecurityMode == None, this returns the byte stream untouched
-	b, err = instance.signAndEncrypt(m, b)
+	m := instance.newMessage(resp, typeID, reqID)
+	chunks, err := m.EncodeChunks(maxBodySize)
 	if err != nil {
+		s.cfg.Logger.Warn("error encoding msg", "error", err)
 		return err
 	}
 
@@ -1190,21 +1203,41 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 		defer func() { _ = s.c.SetWriteDeadline(time.Time{}) }()
 	}
 
-	// send the message
-	n, err := s.c.Write(b)
-	if err != nil {
-		return err
+	for i, chunk := range chunks {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+
+		if i > 0 { // fix sequence number on subsequent chunks
+			number := instance.nextSequenceNumber()
+			binary.LittleEndian.PutUint32(chunk[16:], uint32(number))
+		}
+
+		// encrypt the chunk prior to sending it
+		// if SecurityMode == None, this returns the byte stream untouched
+		chunk, err = instance.signAndEncrypt(m, chunk)
+		if err != nil {
+			return err
+		}
+
+		// send the chunk
+		n, err := s.c.Write(chunk)
+		if err != nil {
+			return err
+		}
+
+		// Go's net.Conn guarantees err != nil when n < len(b), so this is defense-in-depth.
+		if len(chunk) != n {
+			return fmt.Errorf("%w: %T len=%d sent=%d", errors.ErrMessageTooLarge, resp, len(chunk), n)
+		}
+
+		atomic.AddUint64(&instance.bytesSent, uint64(n))
+		atomic.AddUint32(&instance.messagesSent, 1)
+
+		s.cfg.Logger.Debug("send", "channel_id", s.c.ID(), "request_id", reqID, "type", fmt.Sprintf("%T", resp), "bytes", len(chunk))
 	}
-
-	// Go's net.Conn guarantees err != nil when n < len(b), so this is defense-in-depth.
-	if len(b) != n {
-		return fmt.Errorf("%w: %T len=%d sent=%d", errors.ErrMessageTooLarge, resp, len(b), n)
-	}
-
-	atomic.AddUint64(&instance.bytesSent, uint64(n))
-	atomic.AddUint32(&instance.messagesSent, 1)
-
-	s.cfg.Logger.Debug("send", "channel_id", s.c.ID(), "request_id", reqID, "type", fmt.Sprintf("%T", resp), "bytes", len(b))
 
 	return nil
 }

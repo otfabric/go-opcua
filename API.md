@@ -554,6 +554,8 @@ All option functions return `Option` and are passed to `NewClient`:
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE) |
 | `TrustedCertificates(certs ...*x509.Certificate)` | Add CA/self-signed certs to the trust pool |
 
+Server certificates may be presented as a **DER chain** (leaf followed by intermediates); validation parses the full chain and verifies the leaf against the trust pool.
+
 ### Helper
 
 ```go
@@ -1349,10 +1351,23 @@ func (m *NodeMonitor) ChanSubscribe(ctx context.Context, params *opcua.Subscript
 ```go
 func (s *Subscription) Unsubscribe(ctx context.Context) error
 func (s *Subscription) AddNodes(ctx context.Context, nodes ...string) error
+func (s *Subscription) AddNodeIDs(ctx context.Context, nodes ...*ua.NodeID) error
+func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([]Item, error)
 func (s *Subscription) RemoveNodes(ctx context.Context, nodeIDs ...*ua.NodeID) error
 func (s *Subscription) RemoveNodeByHandle(handle uint32) error
 func (s *Subscription) Delivered() uint64
 func (s *Subscription) Dropped() uint64
+```
+
+`AddMonitorItems` succeeds for valid nodes in a batch even when some items are rejected. Per-item failures are returned as `*ItemError` values joined into the error (recover with `errors.As`). `errors.Is(err, ua.StatusBad…)` works via `ItemError.Unwrap`.
+
+```go
+type ItemError struct {
+    NodeID     *ua.NodeID
+    StatusCode ua.StatusCode
+}
+func (e *ItemError) Error() string
+func (e *ItemError) Unwrap() error
 ```
 
 ### DataChangeMessage
@@ -1496,6 +1511,16 @@ func Join(errs ...error) error
 
 TCP transport layer (OPC-UA Connection Protocol).
 
+### Endpoint parsing
+
+```go
+const DefaultDialTimeout = 10 * time.Second
+
+func ParseEndpoint(endpoint string) (network string, u *url.URL, err error)
+```
+
+`ParseEndpoint` parses and validates an `opc.tcp://` URL without DNS lookup. The host must be present; an explicit port must be numeric. Hostname resolution is deferred to `net.Dialer` at dial time.
+
 ### Conn
 
 `Conn` embeds `*net.TCPConn` and adds OPC-UA Connection Protocol framing.
@@ -1550,10 +1575,13 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error)
 `Dial` performs TCP connect, OPC UA HEL/ACK handshake, and returns a UACP `*Conn`. For TCP-only reachability (e.g. ping or diagnostics without HEL/ACK), use `DialTCP`.
 
 ```go
+func Dial(ctx context.Context, endpoint string) (*Conn, error)
+func DialWithTimeout(ctx context.Context, endpoint string, timeout time.Duration) (*Conn, error)
 func DialTCP(ctx context.Context, endpoint string) (net.Conn, error)
+func DialTCPWithTimeout(ctx context.Context, endpoint string, timeout time.Duration) (net.Conn, error)
 ```
 
-`DialTCP` parses the endpoint URL and opens a raw TCP connection to the host:port. No OPC UA protocol is performed. The caller must close the returned connection. Use for TCP reachability tests when fine-grained diagnostics are needed.
+`Dial` and `DialTCP` use `DefaultDialTimeout`. `DialWithTimeout` / `DialTCPWithTimeout` accept an explicit timeout; zero means no dial timeout (only any deadline on `ctx`).
 
 ### Listener
 

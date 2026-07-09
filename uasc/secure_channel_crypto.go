@@ -3,8 +3,6 @@
 package uasc
 
 import (
-	"crypto/rsa"
-	"crypto/x509"
 	"encoding/binary"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -17,11 +15,10 @@ func (s *SecureChannel) NewSessionSignature(cert, nonce []byte) ([]byte, string,
 		return nil, "", nil
 	}
 
-	remoteX509Cert, err := x509.ParseCertificate(cert)
+	remoteKey, err := uapolicy.PublicKey(cert)
 	if err != nil {
 		return nil, "", err
 	}
-	remoteKey := remoteX509Cert.PublicKey.(*rsa.PublicKey)
 
 	enc, err := uapolicy.Asymmetric(s.cfg.SecurityPolicyURI, s.cfg.LocalKey, remoteKey)
 	if err != nil {
@@ -43,11 +40,10 @@ func (s *SecureChannel) VerifySessionSignature(cert, nonce, signature []byte) er
 		return nil
 	}
 
-	remoteX509Cert, err := x509.ParseCertificate(cert)
+	remoteKey, err := uapolicy.PublicKey(cert)
 	if err != nil {
 		return err
 	}
-	remoteKey := remoteX509Cert.PublicKey.(*rsa.PublicKey)
 
 	enc, err := uapolicy.Asymmetric(s.cfg.SecurityPolicyURI, s.cfg.LocalKey, remoteKey)
 	if err != nil {
@@ -72,11 +68,10 @@ func (s *SecureChannel) EncryptUserPassword(policyURI, password string, cert, no
 		return []byte(password), "", nil
 	}
 
-	remoteX509Cert, err := x509.ParseCertificate(cert)
+	remoteKey, err := uapolicy.PublicKey(cert)
 	if err != nil {
 		return nil, "", err
 	}
-	remoteKey := remoteX509Cert.PublicKey.(*rsa.PublicKey)
 
 	enc, err := uapolicy.Asymmetric(policyURI, s.cfg.LocalKey, remoteKey)
 	if err != nil {
@@ -109,11 +104,10 @@ func (s *SecureChannel) NewUserTokenSignature(policyURI string, cert, nonce []by
 		return nil, "", nil
 	}
 
-	remoteX509Cert, err := x509.ParseCertificate(cert)
+	remoteKey, err := uapolicy.PublicKey(cert)
 	if err != nil {
 		return nil, "", err
 	}
-	remoteKey := remoteX509Cert.PublicKey.(*rsa.PublicKey)
 
 	enc, err := uapolicy.Asymmetric(policyURI, s.cfg.UserKey, remoteKey)
 	if err != nil {

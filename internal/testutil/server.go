@@ -41,19 +41,27 @@ func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string)
 
 func NewTestClient(t *testing.T, url string) *opcua.Client {
 	t.Helper()
+	return NewTestClientWithACK(t, url, &uacp.Acknowledge{
+		ReceiveBufSize: uacp.DefaultReceiveBufSize,
+		SendBufSize:    uacp.DefaultSendBufSize,
+		MaxChunkCount:  0,
+		MaxMessageSize: 0,
+	})
+}
+
+// NewTestClientWithACK connects a client using the given UACP buffer parameters.
+// A small ReceiveBufSize forces the server to split large responses across
+// multiple chunks, which is useful for exercising the chunking paths.
+func NewTestClientWithACK(t *testing.T, url string, ack *uacp.Acknowledge) *opcua.Client {
+	t.Helper()
 	ctx := context.Background()
 	c, err := opcua.NewClient(url,
 		opcua.SecurityMode(ua.MessageSecurityModeNone),
 		opcua.DialTimeout(30*time.Second),    // allow time for server to accept under load (e.g. race detector)
 		opcua.RequestTimeout(30*time.Second), // allow handshake to complete under load
 		opcua.Dialer(&uacp.Dialer{
-			Dialer: &net.Dialer{},
-			ClientACK: &uacp.Acknowledge{
-				ReceiveBufSize: uacp.DefaultReceiveBufSize,
-				SendBufSize:    uacp.DefaultSendBufSize,
-				MaxChunkCount:  0,
-				MaxMessageSize: 0,
-			},
+			Dialer:    &net.Dialer{},
+			ClientACK: ack,
 		}),
 	)
 	if err != nil {

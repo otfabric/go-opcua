@@ -1,5 +1,75 @@
 # go-opcua Releases
 
+## v1.1.1
+
+**Date:** 2026-07-09
+**Previous release:** v1.1.0
+
+### Summary
+
+Patch release focused on **interop hardening** with strict OPC UA clients and servers (certificate chains, encrypted-channel handshakes, large responses), plus **monitoring ergonomics** and **transport-layer improvements** in `uacp`.
+
+Highlights:
+- **Certificate chains** (leaf + intermediate) are parsed correctly on connect; thumbprints use the leaf certificate only.
+- **Server secure-channel handshake** now includes `ReceiverCertificateThumbprint` on OpenSecureChannel responses.
+- **Large server responses** (e.g. Browse of a big folder) are split across multiple chunks instead of dropping the connection.
+- **`monitor.ItemError`** — batch monitored-item creation succeeds for valid nodes and reports per-item failures individually.
+- **`uacp.ParseEndpoint`** and default dial timeouts for direct `uacp` package users; DNS resolution delegated to `net.Dialer`.
+
+No breaking API changes. Patch version bump.
+
+### Bug fixes
+
+#### Certificate chains on connect
+
+Servers that present their application instance certificate as a **leaf plus intermediate chain** (e.g. Siemens WinCC Unified Runtime) previously failed validation because `x509.ParseCertificate` rejects trailing DER. The client now uses `x509.ParseCertificates`, validates the leaf against the trust pool with intermediates, and `uapolicy.PublicKey` / `Thumbprint` extract the **leaf** certificate only. Session signature paths use the same chain-aware helpers.
+
+#### Server OpenSecureChannel response missing client thumbprint
+
+The server recorded the client's certificate on incoming OPN requests but never set `cfg.Thumbprint`, so OpenSecureChannel responses carried an empty `ReceiverCertificateThumbprint`. Strict clients (UaExpert, Prosys) reject encrypted channels against the server. The thumbprint is now derived from the client's `SenderCertificate` when the OPN request is processed.
+
+#### Server large responses dropped the connection
+
+`sendResponseWithContext` encoded the entire response as a single chunk. Responses larger than the negotiated buffer (common when browsing folders with many nodes) overflowed the client's receive buffer and closed the connection. Server responses now use `EncodeChunks(maxBodySize)` with per-chunk sign/encrypt/write, mirroring the client request path. `SetMaximumBodySize` is called on the server after symmetric keys are established. The UACP server handshake also negotiates send/receive buffer sizes to the **minimum** of what each side advertises.
+
+#### Monitor batch failed on first bad node
+
+`monitor.Subscription.AddMonitorItems` returned immediately on the first per-item `StatusCode` failure, abandoning valid items in the same batch. It now collects `ItemError` values for rejected items (recoverable via `errors.As`), cleans up speculatively registered handles, and still returns successfully created items. The server's `CreateMonitoredItems` handler rejects unknown nodes individually with `BadNodeIDUnknown` instead of failing the whole request.
+
+### New features / improvements
+
+#### `monitor.ItemError`
+
+```go
+type ItemError struct {
+    NodeID     *ua.NodeID
+    StatusCode ua.StatusCode
+}
+```
+
+`AddMonitorItems` returns `(items, errors.Join(itemErrors...))` when some items fail. `errors.Is(err, ua.StatusBadNodeIDUnknown)` works via `Unwrap`.
+
+#### `uacp` endpoint parsing and dial timeouts
+
+- `ParseEndpoint(endpoint)` — parse and validate `opc.tcp://` URLs **without DNS**; requires a host and validates explicit ports. Hostname resolution is deferred to `net.Dialer` / `net.Listen` (standard library happy eyeballs).
+- `uacp.DefaultDialTimeout` (10s); `Dial` / `DialTCP` use it by default.
+- `DialWithTimeout` / `DialTCPWithTimeout` for explicit timeouts (zero = no dial timeout beyond `ctx`).
+- `opcua.DefaultDialTimeout` is now an alias of `uacp.DefaultDialTimeout`.
+
+### Testing
+
+- `uapolicy/cert_utils_test.go` — chain thumbprint and public-key extraction.
+- `config_test.go` — leaf+intermediate chain validation.
+- `conformance/monitor_chunk_test.go` — partial-batch monitor (`ItemError`), multi-chunk browse with small negotiated buffer.
+- `uacp/dial_timeout_test.go` — default dial timeout and zero-timeout behavior.
+- `monitor/subscription_test.go` — `ItemError` unit test.
+
+### Compatibility
+
+No breaking API changes. All additions are new types/functions or relaxed behavior (partial monitor success, chain parsing). Patch version bump.
+
+---
+
 ## v1.1.0
 
 **Date:** 2026-07-09

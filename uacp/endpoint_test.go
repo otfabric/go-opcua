@@ -10,14 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestResolveEndpoint(t *testing.T) {
+func TestParseEndpoint(t *testing.T) {
 	cases := []struct {
 		input   string
 		network string
 		u       *url.URL
 		errStr  string
 	}{
-		{ // Valid, full EndpointURL
+		{ // Valid, full EndpointURL with IP
 			"opc.tcp://10.0.0.1:4840/foo/bar",
 			"tcp",
 			&url.URL{
@@ -37,39 +37,63 @@ func TestResolveEndpoint(t *testing.T) {
 			},
 			"",
 		},
-		{ // Valid, hostname resolved
-			// note: see https://github.com/cunnie/sslip.io
-			"opc.tcp://www.1.1.1.1.sslip.io:4840/foo/bar",
+		{ // Valid, hostname preserved (no DNS lookup)
+			"opc.tcp://www.example.com:4840/foo/bar",
 			"tcp",
 			&url.URL{
 				Scheme: "opc.tcp",
-				Host:   "1.1.1.1:4840",
+				Host:   "www.example.com:4840",
 				Path:   "/foo/bar",
 			},
 			"",
 		},
-		{ // Invalid, schema is not "opc.tcp://"
+		{ // Valid, IPv6 literal
+			"opc.tcp://[::1]:4840/foo/bar",
+			"tcp",
+			&url.URL{
+				Scheme: "opc.tcp",
+				Host:   "[::1]:4840",
+				Path:   "/foo/bar",
+			},
+			"",
+		},
+		{ // Invalid, missing host
+			"opc.tcp://:4840/foo/bar",
+			"",
+			nil,
+			"opcua: invalid endpoint: missing host",
+		},
+		{ // Invalid, zero port
+			"opc.tcp://host:0/path",
+			"",
+			nil,
+			`opcua: invalid endpoint: invalid port "0"`,
+		},
+		{ // Invalid, port out of range
+			"opc.tcp://host:70000/path",
+			"",
+			nil,
+			`opcua: invalid endpoint: invalid port "70000"`,
+		},
+		{ // Invalid, schema is not "opc.tcp"
 			"tcp://10.0.0.1:4840/foo/bar",
 			"",
 			nil,
-			"opcua: invalid endpoint: unsupported scheme tcp",
-		},
-		{ // Invalid, bad formatted schema
-			"opc.tcp:/10.0.0.1:4840/foo1337bar/baz",
-			"",
-			nil,
-			"lookup : no such host",
+			`opcua: invalid endpoint: unsupported scheme "tcp"`,
 		},
 	}
 
 	for _, c := range cases {
-		network, u, err := ResolveEndpoint(context.Background(), c.input)
-		if c.errStr != "" {
-			require.EqualError(t, err, c.errStr)
-		} else {
+		t.Run(c.input, func(t *testing.T) {
+			network, u, err := ParseEndpoint(c.input)
+			if c.errStr != "" {
+				require.EqualError(t, err, c.errStr)
+				return
+			}
+			require.NoError(t, err)
 			require.Equal(t, c.network, network)
 			require.Equal(t, c.u, u)
-		}
+		})
 	}
 }
 
