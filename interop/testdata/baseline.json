@@ -1,0 +1,962 @@
+{
+  "schemaVersion": "1.0",
+  "id": "baseline",
+  "description": "Baseline interoperability fixture. Covers scalar types, array types, DataValue metadata, browse hierarchy, access control, dynamic values, and methods. Both adapters must realize an equivalent address space from this single file.",
+  "server": {
+    "applicationUri": "urn:otfabric:opcua-interop:server",
+    "productUri": "urn:otfabric:opcua-interop",
+    "applicationName": "OTFabric OPC UA Compatibility Server"
+  },
+  "endpoint": {
+    "path": "/opcua-interop",
+    "port": 4840
+  },
+  "namespaces": [
+    {
+      "alias": "compat",
+      "uri": "urn:otfabric:opcua-interop:model"
+    }
+  ],
+  "nodes": [
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "browseName": "1:Compatibility",
+      "displayName": "Compatibility",
+      "description": "Root container for all compatibility test nodes.",
+      "parentNodeId": "i=85",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "browseName": "1:Scalars",
+      "displayName": "Scalars",
+      "description": "Readable and writable variables for every OPC UA built-in scalar type.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "browseName": "1:Arrays",
+      "displayName": "Arrays",
+      "description": "Array and matrix variables exercising Variant, ValueRank, and binary encoding.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic",
+      "browseName": "1:Dynamic",
+      "displayName": "Dynamic",
+      "description": "Variables with deterministic dynamic value generators.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Access",
+      "browseName": "1:Access",
+      "displayName": "Access",
+      "description": "Variables with different access-level configurations.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods",
+      "browseName": "1:Methods",
+      "displayName": "Methods",
+      "description": "Callable methods with deterministic behavior.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=DataValues",
+      "browseName": "1:DataValues",
+      "displayName": "DataValues",
+      "description": "Variables exercising DataValue timestamp and status-code metadata.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Diagnostics",
+      "browseName": "1:Diagnostics",
+      "displayName": "Diagnostics",
+      "description": "Server-side diagnostic and metadata nodes.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Boolean",
+      "browseName": "1:Scalar.Boolean",
+      "displayName": "Boolean Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Boolean",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": true
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.SByte",
+      "browseName": "1:Scalar.SByte",
+      "displayName": "SByte Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "SByte",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": -100
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Byte",
+      "browseName": "1:Scalar.Byte",
+      "displayName": "Byte Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Byte",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 200
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Int16",
+      "browseName": "1:Scalar.Int16",
+      "displayName": "Int16 Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Int16",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": -12345
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.UInt16",
+      "browseName": "1:Scalar.UInt16",
+      "displayName": "UInt16 Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "UInt16",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 54321
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Int32",
+      "browseName": "1:Scalar.Int32",
+      "displayName": "Int32 Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": -123456789
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.UInt32",
+      "browseName": "1:Scalar.UInt32",
+      "displayName": "UInt32 Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "UInt32",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 3234567890
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Int64",
+      "browseName": "1:Scalar.Int64",
+      "displayName": "Int64 Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Int64",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "-1234567890123456789"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.UInt64",
+      "browseName": "1:Scalar.UInt64",
+      "displayName": "UInt64 Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "UInt64",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "12345678901234567890"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Float",
+      "browseName": "1:Scalar.Float",
+      "displayName": "Float Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Float",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 12.5
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Double",
+      "browseName": "1:Scalar.Double",
+      "displayName": "Double Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": -12345.6789
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.String",
+      "browseName": "1:Scalar.String",
+      "displayName": "String Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "String",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "OPC UA \u2013 \u517c\u5bb9\u6027 \u2013 \u0394"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.DateTime",
+      "browseName": "1:Scalar.DateTime",
+      "displayName": "DateTime Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "DateTime",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "2024-01-01T00:00:00Z"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Guid",
+      "browseName": "1:Scalar.Guid",
+      "displayName": "Guid Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "Guid",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "72962b91-fa75-4ae6-8d28-b404dc7daf63"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.ByteString",
+      "browseName": "1:Scalar.ByteString",
+      "displayName": "ByteString Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "ByteString",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "b3BjdWEtY29tcGF0"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.XmlElement",
+      "browseName": "1:Scalar.XmlElement",
+      "displayName": "XmlElement Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "XmlElement",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "<compat>test</compat>"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.NodeId",
+      "browseName": "1:Scalar.NodeId",
+      "displayName": "NodeId Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "NodeId",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "i=85"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.QualifiedName",
+      "browseName": "1:Scalar.QualifiedName",
+      "displayName": "QualifiedName Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "QualifiedName",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "0:Objects"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.LocalizedText",
+      "browseName": "1:Scalar.LocalizedText",
+      "displayName": "LocalizedText Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "LocalizedText",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "en:OPC UA Compatibility"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.StatusCode",
+      "browseName": "1:Scalar.StatusCode",
+      "displayName": "StatusCode Value",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalars",
+      "referenceType": "Organizes",
+      "dataType": "StatusCode",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 0
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.Empty",
+      "browseName": "1:Array.Empty",
+      "displayName": "Empty Array",
+      "description": "An Int32 array with zero elements.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": []
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.OneElement",
+      "browseName": "1:Array.OneElement",
+      "displayName": "One-Element Array",
+      "description": "An Int32 array with exactly one element.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        42
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.Int32",
+      "browseName": "1:Array.Int32",
+      "displayName": "Int32 Array",
+      "description": "A multi-element Int32 array with values chosen to expose encoding errors.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        0,
+        1,
+        -1,
+        2147483647,
+        -2147483648,
+        -123456789
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.String",
+      "browseName": "1:Array.String",
+      "displayName": "String Array",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "String",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        "alpha",
+        "beta",
+        "OPC UA \u2013 \u517c\u5bb9\u6027",
+        ""
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.ByteString",
+      "browseName": "1:Array.ByteString",
+      "displayName": "ByteString Array",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "ByteString",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        "AQID",
+        "BAUG"
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.Boolean",
+      "browseName": "1:Array.Boolean",
+      "displayName": "Boolean Array",
+      "description": "A Boolean array with three elements.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "Boolean",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        true,
+        false,
+        true
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.Double",
+      "browseName": "1:Array.Double",
+      "displayName": "Double Array",
+      "description": "A Double array with four elements including a large value.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        0.0,
+        1.5,
+        -1.5,
+        3.141592653589793
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Array.Matrix2D",
+      "browseName": "1:Array.Matrix2D",
+      "displayName": "2D Matrix",
+      "description": "A 3x2 Double matrix. Stored as a flat array in row-major order; arrayDimensions declares the shape.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Arrays",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": 2,
+      "arrayDimensions": [
+        3,
+        2
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        1.1,
+        2.2,
+        3.3,
+        4.4,
+        5.5,
+        6.6
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Access.ReadWrite",
+      "browseName": "1:Access.ReadWrite",
+      "displayName": "Read-Write Variable",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Access",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 0
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Access.ReadOnly",
+      "browseName": "1:Access.ReadOnly",
+      "displayName": "Read-Only Variable",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Access",
+      "referenceType": "Organizes",
+      "dataType": "String",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": "immutable"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Access.WriteOnly",
+      "browseName": "1:Access.WriteOnly",
+      "displayName": "Write-Only Variable",
+      "description": "Write returns Good; reads return BadNotReadable.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Access",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentWrite"
+      ],
+      "initialValue": 0
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic.Counter",
+      "browseName": "1:Dynamic.Counter",
+      "displayName": "Counter",
+      "description": "Monotonically increasing Int64 counter. Increments by 1 every 250 ms.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic",
+      "referenceType": "Organizes",
+      "dataType": "Int64",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": "0"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic.Toggle",
+      "browseName": "1:Dynamic.Toggle",
+      "displayName": "Boolean Toggle",
+      "description": "Alternates between true and false every 500 ms.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic",
+      "referenceType": "Organizes",
+      "dataType": "Boolean",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": false
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic.Ramp",
+      "browseName": "1:Dynamic.Ramp",
+      "displayName": "Ramp",
+      "description": "Double value that increases from 0.0 to 100.0 in steps of 1.0 every 100 ms, then resets.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": 0.0
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=DataValues.GoodWithTimestamps",
+      "browseName": "1:DataValues.GoodWithTimestamps",
+      "displayName": "Good With Both Timestamps",
+      "description": "Good status. Both source and server timestamps are set.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=DataValues",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": 3.14159
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=DataValues.Uncertain",
+      "browseName": "1:DataValues.Uncertain",
+      "displayName": "Uncertain Status",
+      "description": "Value has an Uncertain status code.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=DataValues",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": 0
+    },
+    {
+      "nodeClass": "Method",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods.Add",
+      "browseName": "1:Methods.Add",
+      "displayName": "Add",
+      "description": "Returns the sum of two Int32 inputs.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods",
+      "referenceType": "HasComponent",
+      "methodBehavior": "Add",
+      "inputArguments": [
+        {
+          "name": "a",
+          "dataType": "Int32",
+          "valueRank": -1,
+          "description": "First operand."
+        },
+        {
+          "name": "b",
+          "dataType": "Int32",
+          "valueRank": -1,
+          "description": "Second operand."
+        }
+      ],
+      "outputArguments": [
+        {
+          "name": "result",
+          "dataType": "Int32",
+          "valueRank": -1,
+          "description": "Sum of a and b."
+        }
+      ]
+    },
+    {
+      "nodeClass": "Method",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods.Multiply",
+      "browseName": "1:Methods.Multiply",
+      "displayName": "Multiply",
+      "description": "Returns the product of two Double inputs.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods",
+      "referenceType": "HasComponent",
+      "methodBehavior": "Multiply",
+      "inputArguments": [
+        {
+          "name": "a",
+          "dataType": "Double",
+          "valueRank": -1,
+          "description": "First factor."
+        },
+        {
+          "name": "b",
+          "dataType": "Double",
+          "valueRank": -1,
+          "description": "Second factor."
+        }
+      ],
+      "outputArguments": [
+        {
+          "name": "result",
+          "dataType": "Double",
+          "valueRank": -1,
+          "description": "Product of a and b."
+        }
+      ]
+    },
+    {
+      "nodeClass": "Method",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods.Echo",
+      "browseName": "1:Methods.Echo",
+      "displayName": "Echo",
+      "description": "Returns the input String unchanged.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods",
+      "referenceType": "HasComponent",
+      "methodBehavior": "Echo",
+      "inputArguments": [
+        {
+          "name": "input",
+          "dataType": "String",
+          "valueRank": -1,
+          "description": "String to echo."
+        }
+      ],
+      "outputArguments": [
+        {
+          "name": "output",
+          "dataType": "String",
+          "valueRank": -1,
+          "description": "Echoed string."
+        }
+      ]
+    },
+    {
+      "nodeClass": "Method",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods.NoArguments",
+      "browseName": "1:Methods.NoArguments",
+      "displayName": "NoArguments",
+      "description": "Takes no inputs, returns a Boolean indicating success.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods",
+      "referenceType": "HasComponent",
+      "methodBehavior": "NoArguments",
+      "inputArguments": [],
+      "outputArguments": [
+        {
+          "name": "success",
+          "dataType": "Boolean",
+          "valueRank": -1,
+          "description": "Always true."
+        }
+      ]
+    },
+    {
+      "nodeClass": "Method",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods.MultipleOutputs",
+      "browseName": "1:Methods.MultipleOutputs",
+      "displayName": "MultipleOutputs",
+      "description": "Returns two outputs from one Int32 input.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods",
+      "referenceType": "HasComponent",
+      "methodBehavior": "MultipleOutputs",
+      "inputArguments": [
+        {
+          "name": "input",
+          "dataType": "Int32",
+          "valueRank": -1,
+          "description": "Input value."
+        }
+      ],
+      "outputArguments": [
+        {
+          "name": "doubled",
+          "dataType": "Int32",
+          "valueRank": -1,
+          "description": "input * 2"
+        },
+        {
+          "name": "label",
+          "dataType": "String",
+          "valueRank": -1,
+          "description": "String representation of input."
+        }
+      ]
+    },
+    {
+      "nodeClass": "Method",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods.Fail",
+      "browseName": "1:Methods.Fail",
+      "displayName": "Fail",
+      "description": "Always returns a Bad service result. Callers must receive a non-Good status.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Methods",
+      "referenceType": "HasComponent",
+      "methodBehavior": "Fail",
+      "inputArguments": [],
+      "outputArguments": []
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Diagnostics.AdapterName",
+      "browseName": "1:Diagnostics.AdapterName",
+      "displayName": "Adapter Name",
+      "description": "Name of the OPC UA stack running this server (e.g. open62541 or milo).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Diagnostics",
+      "referenceType": "Organizes",
+      "dataType": "String",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": ""
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Diagnostics.StackVersion",
+      "browseName": "1:Diagnostics.StackVersion",
+      "displayName": "Stack Version",
+      "description": "Version string of the underlying OPC UA stack.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Diagnostics",
+      "referenceType": "Organizes",
+      "dataType": "String",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": ""
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Diagnostics.FixtureId",
+      "browseName": "1:Diagnostics.FixtureId",
+      "displayName": "Fixture ID",
+      "description": "The id field from the loaded fixture file.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Diagnostics",
+      "referenceType": "Organizes",
+      "dataType": "String",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": "baseline"
+    }
+  ],
+  "behaviors": [
+    {
+      "target": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic.Counter",
+      "kind": "counter",
+      "initial": 0,
+      "increment": 1,
+      "intervalMs": 250
+    },
+    {
+      "target": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic.Toggle",
+      "kind": "toggle",
+      "intervalMs": 500
+    },
+    {
+      "target": "nsu=urn:otfabric:opcua-interop:model;s=Dynamic.Ramp",
+      "kind": "ramp",
+      "initial": 0.0,
+      "increment": 1.0,
+      "minimum": 0.0,
+      "maximum": 100.0,
+      "intervalMs": 100
+    },
+    {
+      "target": "nsu=urn:otfabric:opcua-interop:model;s=DataValues.Uncertain",
+      "kind": "fixed-status",
+      "initial": 1083834368
+    }
+  ],
+  "users": [
+    {
+      "username": "test-user",
+      "password": "test-password",
+      "roles": [
+        "AuthenticatedUser"
+      ]
+    }
+  ],
+  "securityProfiles": [
+    {
+      "securityPolicy": "None",
+      "securityMode": "None"
+    },
+    {
+      "securityPolicy": "Basic256Sha256",
+      "securityMode": "Sign"
+    },
+    {
+      "securityPolicy": "Basic256Sha256",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "Aes128_Sha256_RsaOaep",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "Aes256_Sha256_RsaPss",
+      "securityMode": "SignAndEncrypt"
+    }
+  ]
+}

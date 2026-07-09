@@ -77,6 +77,10 @@ func (as *NodeNameSpace) Name() string {
 	return as.name
 }
 
+// NewNameSpace creates a bare NodeNameSpace with no server back-reference.
+// It is intended only for the ns:0 bootstrap path inside New(); the server
+// patches srv immediately afterwards. For user-defined namespaces always use
+// NewNodeNameSpace(srv, name), which sets srv correctly from the start.
 func NewNameSpace(name string) *NodeNameSpace {
 	return &NodeNameSpace{name: name, m: map[string]*Node{}}
 }
@@ -100,6 +104,7 @@ func (as *NodeNameSpace) AddNode(n *Node) *Node {
 	}
 
 	as.m[k] = n
+	n.ns = as
 	return n
 }
 
@@ -245,6 +250,11 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 
 		td := as.srv.Node(r.NodeID.NodeID)
 
+		var typeDefinition *ua.ExpandedNodeID
+		if td != nil {
+			typeDefinition = td.DataType()
+		}
+
 		rf := &ua.ReferenceDescription{
 			ReferenceTypeID: r.ReferenceTypeID,
 			IsForward:       r.IsForward,
@@ -252,7 +262,7 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 			BrowseName:      r.BrowseName,
 			DisplayName:     r.DisplayName,
 			NodeClass:       r.NodeClass,
-			TypeDefinition:  td.DataType(),
+			TypeDefinition:  typeDefinition,
 		}
 
 		if rf.ReferenceTypeID.IntID() == id.HasTypeDefinition && rf.IsForward {

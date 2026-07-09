@@ -387,6 +387,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 		node := s.Node(nodeid)
 		if node == nil {
 			s.cfg.logger.Warn("error loading node", "node_id", rt.NodeIDAttr)
+			continue
 		}
 
 		if rt.References == nil {
@@ -430,6 +431,10 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			return fmt.Errorf("nodeset import: data type refs: parse node id %q: %w", dt.NodeIDAttr, err)
 		}
 		node := s.Node(nid)
+		if node == nil {
+			s.cfg.logger.Warn("error loading data type node", "node_id", dt.NodeIDAttr)
+			continue
+		}
 
 		if nid.IntID() == 24 {
 			s.cfg.logger.Debug("doing BaseDataType")
@@ -477,6 +482,10 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			return fmt.Errorf("nodeset import: object type refs: parse node id %q: %w", ot.NodeIDAttr, err)
 		}
 		node := s.Node(nid)
+		if node == nil {
+			s.cfg.logger.Warn("error loading object type node", "node_id", ot.NodeIDAttr)
+			continue
+		}
 
 		if ot.References == nil {
 			continue
@@ -517,6 +526,10 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			return fmt.Errorf("nodeset import: variable type refs: parse node id %q: %w", ot.NodeIDAttr, err)
 		}
 		node := s.Node(nid)
+		if node == nil {
+			s.cfg.logger.Warn("error loading variable type node", "node_id", ot.NodeIDAttr)
+			continue
+		}
 
 		if ot.References == nil {
 			continue
@@ -559,6 +572,10 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			return fmt.Errorf("nodeset import: variable refs: parse node id %q: %w", ot.NodeIDAttr, err)
 		}
 		node := s.Node(nid)
+		if node == nil {
+			s.cfg.logger.Warn("error loading variable node", "node_id", ot.NodeIDAttr)
+			continue
+		}
 
 		if ot.References == nil {
 			continue
@@ -601,6 +618,10 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			return fmt.Errorf("nodeset import: method refs: parse node id %q: %w", ot.NodeIDAttr, err)
 		}
 		node := s.Node(nid)
+		if node == nil {
+			s.cfg.logger.Warn("error loading method node", "node_id", ot.NodeIDAttr)
+			continue
+		}
 
 		if ot.References == nil {
 			continue
@@ -642,6 +663,10 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			return fmt.Errorf("nodeset import: object refs: parse node id %q: %w", ot.NodeIDAttr, err)
 		}
 		node := s.Node(nid)
+		if node == nil {
+			s.cfg.logger.Warn("error loading object node", "node_id", ot.NodeIDAttr)
+			continue
+		}
 		if ot.NodeIDAttr == "i=84" {
 			s.cfg.logger.Debug("doing root")
 		}

@@ -192,3 +192,81 @@ func TestMonitoredItemService_SetTriggering(t *testing.T) {
 		assert.Error(t, err)
 	})
 }
+
+// TestSetMonitoringMode_NilSession verifies that SetMonitoringMode does not
+// panic when the request has no valid session (srv.Session returns nil).
+func TestSetMonitoringMode_NilSession(t *testing.T) {
+	mis, _, _, itemID := setupMonitoredItemTest(t)
+
+	badHdr := &ua.RequestHeader{
+		RequestHandle:       99,
+		AuthenticationToken: ua.NewByteStringNodeID(0, []byte("bad-session")),
+	}
+	req := &ua.SetMonitoringModeRequest{
+		RequestHeader:    badHdr,
+		MonitoringMode:   ua.MonitoringModeDisabled,
+		MonitoredItemIDs: []uint32{itemID},
+	}
+	require.NotPanics(t, func() {
+		resp, err := mis.SetMonitoringMode(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		r := resp.(*ua.SetMonitoringModeResponse)
+		require.Equal(t, ua.StatusBadSessionIDInvalid, r.Results[0])
+	})
+}
+
+// TestSetMonitoringMode_UnknownItemID verifies that SetMonitoringMode returns
+// BadMonitoredItemIDInvalid (not panic) when the item ID is unknown.
+func TestSetMonitoringMode_UnknownItemID(t *testing.T) {
+	mis, _, hdr, _ := setupMonitoredItemTest(t)
+
+	req := &ua.SetMonitoringModeRequest{
+		RequestHeader:    hdr,
+		MonitoringMode:   ua.MonitoringModeDisabled,
+		MonitoredItemIDs: []uint32{99999},
+	}
+	require.NotPanics(t, func() {
+		resp, err := mis.SetMonitoringMode(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		r := resp.(*ua.SetMonitoringModeResponse)
+		require.Equal(t, ua.StatusBadMonitoredItemIDInvalid, r.Results[0])
+	})
+}
+
+// TestDeleteMonitoredItems_NilSession verifies that DeleteMonitoredItems does
+// not panic when Session() returns nil for the request.
+func TestDeleteMonitoredItems_NilSession(t *testing.T) {
+	mis, _, _, itemID := setupMonitoredItemTest(t)
+
+	badHdr := &ua.RequestHeader{
+		RequestHandle:       99,
+		AuthenticationToken: ua.NewByteStringNodeID(0, []byte("bad-session")),
+	}
+	req := &ua.DeleteMonitoredItemsRequest{
+		RequestHeader:    badHdr,
+		MonitoredItemIDs: []uint32{itemID},
+	}
+	require.NotPanics(t, func() {
+		resp, err := mis.DeleteMonitoredItems(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		r := resp.(*ua.DeleteMonitoredItemsResponse)
+		require.Equal(t, ua.StatusBadSessionIDInvalid, r.Results[0])
+	})
+}
+
+// TestDeleteMonitoredItems_UnknownItemID verifies that DeleteMonitoredItems
+// returns BadMonitoredItemIDInvalid (not panic) for an unknown item ID.
+func TestDeleteMonitoredItems_UnknownItemID(t *testing.T) {
+	mis, _, hdr, _ := setupMonitoredItemTest(t)
+
+	req := &ua.DeleteMonitoredItemsRequest{
+		RequestHeader:    hdr,
+		MonitoredItemIDs: []uint32{99999},
+	}
+	require.NotPanics(t, func() {
+		resp, err := mis.DeleteMonitoredItems(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		r := resp.(*ua.DeleteMonitoredItemsResponse)
+		require.Equal(t, ua.StatusBadMonitoredItemIDInvalid, r.Results[0])
+	})
+}

@@ -347,7 +347,7 @@ func (s *SubscriptionService) DeleteSubscriptions(ctx context.Context, sc *uasc.
 			results[i] = ua.StatusBadSubscriptionIDInvalid
 			continue
 		}
-		if session.AuthTokenID.String() != sub.Session.AuthTokenID.String() {
+		if session == nil || session.AuthTokenID.String() != sub.Session.AuthTokenID.String() {
 			results[i] = ua.StatusBadSessionIDInvalid
 			continue
 		}
@@ -473,6 +473,9 @@ func (s *Subscription) Start() {
 }
 
 func (s *Subscription) keepalive(pubreq PubReq) error {
+	if s.Channel == nil {
+		return fmt.Errorf("subscription %d has no channel", s.ID)
+	}
 	eo := make([]*ua.ExtensionObject, 0)
 
 	msg := ua.NotificationMessage{
@@ -513,6 +516,17 @@ func (s *Subscription) run() {
 		s.srv.srv.cfg.logger.Info("subscription shutting down", "sub_id", s.ID)
 		s.srv.DeleteSubscription(s.ID)
 	}()
+
+	// A subscription created with an invalid session token will have a nil
+	// Session.  Fail fast rather than panicking inside the select.
+	if s.Session == nil {
+		s.srv.srv.cfg.logger.Warn("subscription has no session, shutting down", "sub_id", s.ID)
+		return
+	}
+	if s.Channel == nil {
+		s.srv.srv.cfg.logger.Warn("subscription has no channel, shutting down", "sub_id", s.ID)
+		return
+	}
 
 	keepaliveCounter := 0
 	lifetimeCounter := 0

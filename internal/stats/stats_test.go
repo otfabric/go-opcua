@@ -18,19 +18,6 @@ func newExpVarInt(i int64) *expvar.Int {
 	return v
 }
 
-func TestConvienienceFuncs(t *testing.T) {
-	Reset()
-
-	Client().Add("a", 1)
-	require.Equal(t, newExpVarInt(1), Client().Get("a"))
-
-	Error().Add("b", 2)
-	require.Equal(t, newExpVarInt(2), Error().Get("b"))
-
-	Subscription().Add("c", 3)
-	require.Equal(t, newExpVarInt(3), Subscription().Get("c"))
-}
-
 func TestRecordError(t *testing.T) {
 	tests := []struct {
 		err error
@@ -51,4 +38,35 @@ func TestRecordError(t *testing.T) {
 			require.Equal(t, newExpVarInt(1), s.Error.Get(tt.key))
 		})
 	}
+}
+
+func TestConvienienceFuncs(t *testing.T) {
+	Reset()
+
+	Client().Add("a", 1)
+	require.Equal(t, newExpVarInt(1), Client().Get("a"))
+
+	Error().Add("b", 2)
+	require.Equal(t, newExpVarInt(2), Error().Get("b"))
+
+	Subscription().Add("c", 3)
+	require.Equal(t, newExpVarInt(3), Subscription().Get("c"))
+}
+
+func TestMarshalJSON(t *testing.T) {
+	s := NewStats()
+	s.Client.Add("Read", 3)
+	s.Error.Add("ua.StatusBad", 1)
+
+	b, err := s.MarshalJSON()
+	require.NoError(t, err)
+	require.Contains(t, string(b), `"Read":3`)
+	require.Contains(t, string(b), `"ua.StatusBad":1`)
+}
+
+func TestReset(t *testing.T) {
+	s := NewStats()
+	s.Client.Add("x", 1)
+	s.Reset()
+	require.Nil(t, s.Client.Get("x"))
 }

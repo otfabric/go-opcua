@@ -103,6 +103,7 @@ outer:
 				c.logger.Warn("secure channel closed", "secure_channel_id", secureChannelID)
 				break outer
 			} else if msg.Err != nil {
+				c.logger.Info("secure channel message error", "secure_channel_id", secureChannelID, "request_id", msg.RequestID, "error", msg.Err)
 				// A per-request decoding/processing error must not tear down the
 				// whole channel. When the failure can be correlated to a request
 				// (RequestID != 0), return a ServiceFault so the caller fails

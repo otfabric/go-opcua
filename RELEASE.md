@@ -1,5 +1,167 @@
 # go-opcua Releases
 
+## v1.2.0
+
+**Date:** 2026-07-22
+**Previous release:** v1.1.1
+
+### Summary
+
+Minor release focused on **X.509 security hardening**, **server API correctness**, and a large step forward in **test coverage** (50% → 81%).
+
+Highlights:
+- **ApplicationURI SAN verification** — the client now binds the server certificate to the `ApplicationURI` advertised in its `ApplicationDescription`, closing an OPC UA PKI identity gap.
+- **Strict key-usage enforcement** — server certificates that declare a `KeyUsage` extension must include `DigitalSignature` (and `KeyEncipherment` for SignAndEncrypt); verification is now a hard failure instead of a warning.
+- **Server-side X.509 user token validation** — the server validates the `UserTokenSignature` (signature over `serverCertificate || serverNonce`) and calls an application-provided `X509UserValidator` for trust decisions.
+- **Critical server nil-pointer fixes** — 14 distinct nil-pointer panic paths in `server/` were found and fixed; the entire subscription/monitored-item service set now handles unauthenticated or malformed requests without crashing.
+- **`AddObject` / `AddVariable` API fixed** — both methods were silently broken (nil back-reference on every registered node); they now work correctly and are covered by tests.
+- **New documentation** — `API.md` (full public API reference with table of contents) and `INTEROP.md` (compatibility matrix against open62541 and Eclipse Milo).
+- **Coverage** reaches 81%, well above the 75% threshold enforced by `make coverage`.
+
+No breaking changes for correct existing callers. Minor version bump.
+
+### Security hardening
+
+#### Client — ApplicationURI SAN verification (OPC UA Part 6 §6.2.2)
+
+`SecurityFromEndpoint` now stores the server's `ApplicationURI` from the endpoint `ApplicationDescription`. `validateServerCertificate` compares the certificate's URI SANs against this stored value. Trusting the CA alone is insufficient: the URI SAN is the OPC UA identity binding that ties a certificate to a specific application instance.
+
+```go
+// Automatic when using SecurityFromEndpoint — no API change required.
+// InsecureSkipVerify() bypasses this check as before.
+```
+
+#### Client — Strict key-usage validation (OPC UA Part 6 §6.2.4)
+
+Certificates that declare a `KeyUsage` extension are now required to include `DigitalSignature` (and additionally `KeyUsageKeyEncipherment` for `SignAndEncrypt` mode). Previously a missing bit produced a warning; it is now a rejected connection. Certificates that do not declare any `KeyUsage` extension are still accepted for interoperability with legacy deployments.
+
+#### Server — X.509 user token validation
+
+The server now fully validates `X509IdentityToken` presented in `ActivateSession`:
+1. The token certificate must be parseable.
+2. The `UserTokenSignature` (signature over `serverCertificate ‖ serverNonce`) is verified with the token certificate's public key — this prevents certificate-replay attacks.
+3. An application-supplied `X509UserValidator` hook is called for trust-store and policy decisions.
+
+```go
+v := server.X509UserValidator(func(certDER []byte) error {
+    // parse certDER, check trust store, enforce your policy
+    return nil // or ua.StatusBadIdentityTokenRejected
+})
+srv, _ := server.New(
+    server.WithX509UserValidator(v),
+    // ...
+)
+```
+
+### New server API
+
+#### `ListenOn(addr string) Option`
+
+Binds the server to a specific host/port without going through `EndPoint`:
+
+```go
+srv, _ := server.New(server.ListenOn("0.0.0.0:4840"))
+```
+
+#### `UsernameValidator` and `WithUsernameValidator`
+
+Previously an internal type; now a first-class exported type and option:
+
+```go
+v := server.UsernameValidator(func(user, pass string) error {
+    if user != "admin" || pass != secret {
+        return ua.StatusBadUserAccessDenied
+    }
+    return nil
+})
+srv, _ := server.New(server.WithUsernameValidator(v))
+```
+
+#### `X509UserValidator` and `WithX509UserValidator`
+
+New type and option for server-side X.509 user token trust decisions (see Security hardening above).
+
+#### `AllowUsernameOnNone() Option`
+
+Permits username/password authentication on `SecurityModeNone` endpoints (opt-in; disabled by default for safety).
+
+### Bug fixes
+
+#### Server — `AddObject` / `AddVariable` always panicked
+
+Every node registered via `NodeNameSpace.AddNode` had its `ns` back-reference left `nil`. Any subsequent call to `Node.AddObject` or `Node.AddVariable` on that node immediately panicked. Both methods now work correctly:
+- `AddNode` sets `n.ns = as`.
+- `AddVariable` registers the new child node in the namespace (previously it returned the cloned child without inserting it).
+
+#### Server — `AddNamespace` did not inject server reference
+
+`NewNameSpace(name)` creates a `NodeNameSpace` with `srv = nil`. `AddNamespace` now sets `nns.srv = s` on any `*NodeNameSpace` instance that arrives without a server reference, so `Browse`, `ChangeNotification`, and `SetAttribute` work correctly on namespaces registered after construction.
+
+#### Server — `Browse` nil type definition
+
+`NodeNameSpace.Browse` called `td.DataType()` on the result of `as.srv.Node(...)` without a nil check. Any reference pointing to a node that does not exist in the server's address space panicked. The nil case is now handled gracefully.
+
+#### Server — `node.DataType()` nil `ReferenceTypeID`
+
+The method logged a warning about a nil `ReferenceTypeID` but then immediately called `.IntID()` on it in the next statement. The warning is now followed by a `continue`.
+
+#### Server — `nodeset2_import.go` — nil node before `AddRef` (7 sites)
+
+All six node-type sections of `refsImportNodeSet` called `node.AddRef(...)` after a `Warn`-but-no-`continue` nil check, or with no nil check at all. All seven call sites now skip the reference loop when the node cannot be resolved.
+
+#### Server — subscription / monitored-item service nil panics (7 critical paths)
+
+All service handlers that compare session tokens against a nil `Session()` result now guard with `sess == nil`:
+
+| Method | Symptom |
+|---|---|
+| `SetMonitoringMode` | `!ok` check came *after* the nil dereference |
+| `DeleteMonitoredItems` | Missing `continue` after `!ok`; nil `item` used on fallthrough |
+| `CreateMonitoredItems` | `sess` nil, used immediately |
+| `ModifyMonitoredItems` | `sess` nil, used immediately |
+| `SetTriggering` | `sess` nil, used immediately |
+| `DeleteSubscriptions` | `session` nil, used immediately |
+| `CloseSession` | `SubscriptionService` nil before `Start()` |
+
+#### Server — `Subscription.run()` goroutine nil session / channel panic
+
+`CreateSubscription` sets `sub.Session = srv.Session(...)` which returns `nil` for an invalid token. The background `run()` goroutine then panicked on `s.Session.PublishRequests`. Both `Session` and `Channel` are now checked at the start of `run()` with an immediate clean shutdown. `keepalive()` also guards against a nil `Channel`.
+
+#### Server — `ChangeNotification` before `Start()`
+
+`MonitoredItemService` is `nil` until `initHandlers()` is called inside `Start()`. Any call to `ChangeNotification` (or `SetAttribute`, which calls it) during pre-`Start()` namespace population panicked. The method now returns early when `MonitoredItemService == nil`.
+
+#### `uasc.SecureChannel` — new `SecurityPolicyURI()` accessor
+
+The field was private and inaccessible to callers that need to inspect the negotiated policy URI without access to the internal `Config`. A public accessor is now exported.
+
+### Documentation
+
+- **`API.md`** — comprehensive public API reference for the `opcua`, `server`, `ua`, `uasc`, `uacp`, `uapolicy`, `monitor`, and `errors` packages, with a full table of contents.
+- **`INTEROP.md`** — compatibility matrix showing verified behavior against open62541 and Eclipse Milo across all security policies, authentication methods, and service operations.
+
+### Testing
+
+Test coverage increased from ~50% to **81%** (threshold enforced at 75% via `make coverage`).
+
+New test files and significant additions include:
+- `ua/enums_all_values_test.go`, `ua/enums_string_methods_test.go` — 100% branch coverage for all generated enum `FromString` / `String` methods.
+- `ua/extobjs_header_test.go` — `Header` / `SetHeader` for all generated request/response types.
+- `server/server_config_options_test.go` — all server `Option` constructors.
+- `server/channel_broker_test.go`, `server/query_service_test.go` — previously 0% covered.
+- `server/subscription_service_test.go`, `server/monitored_item_service_test.go` — regression tests for all nil-panic fixes.
+- `server/namespace_node_test.go` — `AddObject`, `AddVariable`, `AddNamespace` back-reference, `Browse` nil td, `DataType()` nil ref.
+- `uasc/secure_channel_test.go` — accessors, `conditionLocker`, `mergeChunks`, `notifyMonitor`, `isReconnectTrigger`, `getActiveChannelInstance`.
+- `uacp/conn_test.go` — `minNonZero`, `defaultNetDialer`, live connection accessors.
+- `config_test.go` — `setCertificate` URI extraction, `loadPrivateKey` PEM/DER/PKCS#8 branches.
+- `conformance/` — cross-package coverage of `uasc` and `opcua` root via in-process client/server tests.
+
+### Compatibility
+
+All additions are backward-compatible. The stricter certificate validation (ApplicationURI SAN, key usage) is a security fix; callers with correctly configured certificates are unaffected. `InsecureSkipVerify()` bypasses both new checks. Minor version bump.
+
+---
+
 ## v1.1.1
 
 **Date:** 2026-07-09

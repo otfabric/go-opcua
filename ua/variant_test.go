@@ -1257,3 +1257,22 @@ func TestDecodeInvalidType(t *testing.T) {
 	_, err := v.Decode(b)
 	require.EqualError(t, err, "opcua: unsupported type: id=32")
 }
+
+func TestVariantAs(t *testing.T) {
+	v := MustVariant(int32(42))
+
+	// Success case
+	got, err := VariantAs[int32](v)
+	if err != nil {
+		t.Fatalf("VariantAs int32: %v", err)
+	}
+	if got != 42 {
+		t.Errorf("VariantAs int32 = %v, want 42", got)
+	}
+
+	// Type mismatch
+	_, err = VariantAs[string](v)
+	if err == nil {
+		t.Error("VariantAs string from int32 should fail")
+	}
+}

@@ -5,6 +5,7 @@ package ua
 import (
 	"encoding/base64"
 	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"math"
 	"testing"
@@ -535,5 +536,69 @@ func TestNewNodeIDFromExpandedNodeID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			require.Equal(t, tt.want, NewNodeIDFromExpandedNodeID(tt.args.id))
 		})
+	}
+}
+
+// TestNewNodeIDFromExpandedNodeID_EmptyByteBranches ensures the len==0 branches
+// for bid and Data4 are exercised.
+func TestNewNodeIDFromExpandedNodeID_EmptyByteBranches(t *testing.T) {
+	// GUID node ID with an empty Data4 slice
+	guidID := NewGUIDExpandedNodeID(0, "00000000-0000-0000-0000-000000000000")
+	result := NewNodeIDFromExpandedNodeID(guidID)
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+}
+
+func TestNodeID_URIAndIndexFlags(t *testing.T) {
+	n := NewStringNodeID(1, "test")
+
+	// Initially no flags set
+	if n.URIFlag() {
+		t.Error("URIFlag should be false initially")
+	}
+	if n.IndexFlag() {
+		t.Error("IndexFlag should be false initially")
+	}
+
+	n.SetURIFlag()
+	if !n.URIFlag() {
+		t.Error("URIFlag should be true after SetURIFlag")
+	}
+
+	n.SetIndexFlag()
+	if !n.IndexFlag() {
+		t.Error("IndexFlag should be true after SetIndexFlag")
+	}
+}
+
+func TestNodeID_UnmarshalXML(t *testing.T) {
+	// Valid XML with numeric ID
+	input := `<NodeID>i=1234</NodeID>`
+	var got NodeID
+	if err := xml.Unmarshal([]byte(input), &got); err != nil {
+		t.Fatalf("UnmarshalXML: %v", err)
+	}
+	want := NewNumericNodeID(0, 1234)
+	if !got.Equal(want) {
+		t.Errorf("UnmarshalXML: got %v, want %v", &got, want)
+	}
+
+	// Valid XML with string ID
+	input2 := `<NodeID>s=hello</NodeID>`
+	var got2 NodeID
+	if err := xml.Unmarshal([]byte(input2), &got2); err != nil {
+		t.Fatalf("UnmarshalXML string: %v", err)
+	}
+	want2 := NewStringNodeID(0, "hello")
+	if !got2.Equal(want2) {
+		t.Errorf("UnmarshalXML string: got %v, want %v", &got2, want2)
+	}
+
+	// Invalid numeric ID
+	bad := `<NodeID>i=notanumber</NodeID>`
+	var got3 NodeID
+	if err := xml.Unmarshal([]byte(bad), &got3); err == nil {
+		t.Error("UnmarshalXML with invalid numeric id should fail")
 	}
 }

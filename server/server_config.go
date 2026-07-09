@@ -26,7 +26,9 @@ func PrivateKey(key *rsa.PrivateKey) Option {
 	}
 }
 
-// EndPoint adds an additional endpoint to the server based on the host name and port.
+// EndPoint adds an advertised endpoint to the server based on the host name
+// and port.  The first EndPoint registered is also used as the TCP bind
+// address unless ListenOn is called explicitly.
 func EndPoint(host string, port int) Option {
 	return func(s *serverConfig) error {
 		if s.endpoints == nil {
@@ -34,6 +36,17 @@ func EndPoint(host string, port int) Option {
 		}
 		ep := fmt.Sprintf("opc.tcp://%s:%d", host, port)
 		s.endpoints = append(s.endpoints, ep)
+		return nil
+	}
+}
+
+// ListenOn sets the TCP address the server binds to (e.g. "0.0.0.0:4840").
+// Use this when you want the server to accept connections on all interfaces
+// without advertising "0.0.0.0" as a reachable endpoint URL.  If not set,
+// the server listens on the first EndPoint address.
+func ListenOn(addr string) Option {
+	return func(s *serverConfig) error {
+		s.listenAddr = "opc.tcp://" + addr
 		return nil
 	}
 }
@@ -88,6 +101,59 @@ func EnableSecurity(secPolicy string, secMode ua.MessageSecurityMode) Option {
 		}
 
 		s.enabledSec = append(s.enabledSec, sec)
+		return nil
+	}
+}
+
+// UsernameValidator is a function that validates a username and password.
+// Return nil to accept, or an error (typically ua.StatusBadUserAccessDenied)
+// to reject the credentials.
+type UsernameValidator func(username, password string) error
+
+// WithUsernameValidator registers a username/password validator called during
+// ActivateSession when the client presents a UserNameIdentityToken.
+// EnableAuthMode(ua.UserTokenTypeUserName) must also be called.
+func WithUsernameValidator(v UsernameValidator) Option {
+	return func(s *serverConfig) error {
+		s.usernameValidator = v
+		return nil
+	}
+}
+
+// X509UserValidator validates an X.509 identity token presented by a client
+// during ActivateSession. The certificate is provided as DER-encoded bytes.
+//
+// The server already verifies that the client holds the corresponding private
+// key (via the UserTokenSignature). This callback is responsible for trust
+// decisions: checking the certificate against a configured trust store,
+// verifying revocation status, or applying application-specific policy.
+//
+// Return nil to accept the certificate, or an error to reject it.
+// ua.StatusBadIdentityTokenRejected and ua.StatusBadUserAccessDenied are
+// the appropriate status codes for policy-based rejection.
+type X509UserValidator func(certDER []byte) error
+
+// WithX509UserValidator registers a certificate validator called during
+// ActivateSession when the client presents an X509IdentityToken.
+// EnableAuthMode(ua.UserTokenTypeCertificate) must also be called.
+//
+// If no validator is registered the server rejects all X.509 user tokens
+// (the server still advertises the token type when the auth mode is enabled,
+// but tokens cannot be activated without a configured validator).
+func WithX509UserValidator(v X509UserValidator) Option {
+	return func(s *serverConfig) error {
+		s.x509UserValidator = v
+		return nil
+	}
+}
+
+// AllowUsernameOnNone permits the server to advertise UserName token policies
+// on None/None (unencrypted) endpoints.  The OPC UA specification permits this
+// for test deployments (Part 4 §5.6.3.2).  By default, non-anonymous tokens
+// are only advertised on encrypted endpoints.
+func AllowUsernameOnNone() Option {
+	return func(s *serverConfig) error {
+		s.allowUsernameOnNone = true
 		return nil
 	}
 }

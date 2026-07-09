@@ -4,6 +4,7 @@ package uacp
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"testing"
 	"time"
@@ -11,6 +12,16 @@ import (
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/stretchr/testify/require"
 )
+
+func TestListenerAddrAndEndpoint(t *testing.T) {
+	ep := "opc.tcp://127.0.0.1:4840/foo"
+	ln, err := Listen(context.Background(), ep, nil)
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	require.NotNil(t, ln.Addr())
+	require.Equal(t, ep, ln.Endpoint())
+}
 
 func TestConn(t *testing.T) {
 	t.Run("server exists ", func(t *testing.T) {
@@ -163,4 +174,63 @@ NEXT:
 
 	got = got[:n]
 	require.Equal(t, want, got)
+}
+
+func TestMinNonZero(t *testing.T) {
+	tests := []struct {
+		a, b uint32
+		want uint32
+	}{
+		{0, 0, 0},
+		{0, 5, 5},
+		{5, 0, 5},
+		{3, 7, 3},
+		{7, 3, 3},
+	}
+	for _, tt := range tests {
+		got := minNonZero(tt.a, tt.b)
+		if got != tt.want {
+			t.Errorf("minNonZero(%d, %d) = %d, want %d", tt.a, tt.b, got, tt.want)
+		}
+	}
+}
+
+func TestDefaultNetDialer(t *testing.T) {
+	d := defaultNetDialer()
+	if d == nil {
+		t.Fatal("defaultNetDialer() returned nil")
+	}
+	if d.Timeout != DefaultDialTimeout {
+		t.Errorf("Timeout = %v, want %v", d.Timeout, DefaultDialTimeout)
+	}
+}
+
+func TestConnAccessors(t *testing.T) {
+	ep := "opc.tcp://127.0.0.1:4841/test"
+	ln, err := Listen(context.Background(), ep, nil)
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	doneCh := make(chan *Conn, 1)
+	go func() {
+		c, err := ln.Accept(context.Background())
+		if err == nil {
+			doneCh <- c
+		}
+	}()
+
+	clientConn, err := Dial(context.Background(), ep)
+	require.NoError(t, err)
+	defer func() { _ = clientConn.Close() }()
+
+	serverConn := <-doneCh
+	defer func() { _ = serverConn.Close() }()
+
+	// Exercise the accessor methods on a live connection
+	_ = clientConn.ID()
+	_ = clientConn.Version()
+	_ = clientConn.SendBufSize()
+	_ = clientConn.MaxMessageSize()
+	_ = clientConn.MaxChunkCount()
+	clientConn.SetLogger(slog.Default())
 }

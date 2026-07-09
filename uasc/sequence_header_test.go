@@ -4,6 +4,8 @@ package uasc
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestSequenceHeader(t *testing.T) {
@@ -36,4 +38,10 @@ func TestSequenceHeader(t *testing.T) {
 		},
 	}
 	RunCodecTest(t, cases)
+}
+
+func TestSequenceHeaderString(t *testing.T) {
+	h := NewSequenceHeader(1, 2)
+	require.Contains(t, h.String(), "SequenceNumber: 1")
+	require.Contains(t, h.String(), "RequestID: 2")
 }

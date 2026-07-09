@@ -209,7 +209,15 @@ func (c *channelInstance) signAndEncrypt(m *Message, b []byte) ([]byte, error) {
 }
 
 func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, error) {
-	if c.sc.cfg.SecurityMode == ua.MessageSecurityModeNone {
+	// OPC UA Part 6 §6.7.4: OPN messages (isAsymmetric) are always encrypted and
+	// signed even in Sign mode, to protect the client nonce. The SecurityMode field
+	// starts as None on the server until the first OPN is fully processed, so we
+	// cannot use SecurityMode alone for the early-return decision.
+	//
+	// Use the algo instead: nil means no algo configured (None pre-OPN),
+	// remoteSignatureLength == 0 means the None security policy is active.
+	// Both cases require no crypto.
+	if c.algo == nil || c.algo.RemoteSignatureLength() == 0 {
 		return m.Data, nil
 	}
 

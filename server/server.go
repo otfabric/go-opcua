@@ -76,7 +76,8 @@ type serverConfig struct {
 	certificate    []byte
 	applicationURI string
 
-	endpoints []string
+	endpoints  []string
+	listenAddr string // overrides endpoints[0] for TCP bind
 
 	applicationName  string
 	manufacturerName string
@@ -88,9 +89,12 @@ type serverConfig struct {
 
 	cap ServerCapabilities
 
-	accessController AccessController
-	roleMapper       RoleMapper
-	metrics          ServerMetrics
+	accessController    AccessController
+	roleMapper          RoleMapper
+	usernameValidator   UsernameValidator
+	x509UserValidator   X509UserValidator
+	allowUsernameOnNone bool
+	metrics             ServerMetrics
 
 	logger *slog.Logger
 }
@@ -164,15 +168,20 @@ func New(opts ...Option) (*Server, error) {
 	if cfg.accessController == nil {
 		cfg.accessController = DefaultAccessController{}
 	}
-	url := ""
-	if len(cfg.endpoints) != 0 {
-		url = cfg.endpoints[0]
+	// listenAddr controls where the server binds (TCP).  It defaults to the
+	// first endpoint URL, but can be overridden with ListenOn() so that the
+	// server can listen on 0.0.0.0 without advertising that address.
+	listenURL := ""
+	if cfg.listenAddr != "" {
+		listenURL = cfg.listenAddr
+	} else if len(cfg.endpoints) != 0 {
+		listenURL = cfg.endpoints[0]
 	}
 
 	s := &Server{
-		url:      url,
+		url:      listenURL,
 		cfg:      cfg,
-		cb:       newChannelBroker(cfg.logger, url),
+		cb:       newChannelBroker(cfg.logger, listenURL),
 		sb:       newSessionBroker(cfg.logger),
 		handlers: make(map[uint16]Handler),
 		methods:  make(map[string]MethodHandler),
@@ -244,6 +253,10 @@ func (s *Server) Namespaces() []NameSpace {
 }
 
 func (s *Server) ChangeNotification(n *ua.NodeID) {
+	if s.MonitoredItemService == nil {
+		// Service not yet initialized (called before Start()).
+		return
+	}
 	s.MonitoredItemService.ChangeNotification(n)
 }
 
@@ -272,9 +285,15 @@ func (s *Server) AddNamespace(ns NameSpace) int {
 	ns.SetID(uint16(len(s.namespaces)))
 	s.namespaces = append(s.namespaces, ns)
 
+	// Give NodeNameSpace instances their server back-reference so that
+	// Browse, ChangeNotification and SetAttribute can call s.cfg.logger,
+	// s.Node, etc. without panicking.
+	if nns, ok := ns.(*NodeNameSpace); ok && nns.srv == nil {
+		nns.srv = s
+	}
+
 	if ns.ID() == 0 {
 		return 0
-
 	}
 
 	return len(s.namespaces) - 1
@@ -463,42 +482,59 @@ func (s *Server) initEndpoints() {
 			}
 
 			for _, auth := range s.cfg.enabledAuth {
-				for _, authSec := range s.cfg.enabledSec {
-					if auth.tokenType == ua.UserTokenTypeAnonymous {
-						authSec.secPolicy = "http://opcfoundation.org/UA/SecurityPolicy#None"
-					}
-
-					if auth.tokenType != ua.UserTokenTypeAnonymous && authSec.secPolicy == "http://opcfoundation.org/UA/SecurityPolicy#None" {
-						continue
-					}
-
-					policyID := strings.ToLower(
-						strings.TrimPrefix(auth.tokenType.String(), "UserTokenType") +
-							"_" +
-							strings.TrimPrefix(authSec.secPolicy, "http://opcfoundation.org/UA/SecurityPolicy#"),
-					)
-
-					var dup bool
-					for _, uit := range ep.UserIdentityTokens {
-						if uit.PolicyID == policyID {
-							dup = true
-							break
-						}
-					}
-
-					if dup {
-						continue
-					}
-					tok := &ua.UserTokenPolicy{
-						PolicyID:          policyID,
-						TokenType:         auth.tokenType,
-						IssuedTokenType:   "",
-						IssuerEndpointURL: "",
-						SecurityPolicyURI: authSec.secPolicy,
-					}
-
-					ep.UserIdentityTokens = append(ep.UserIdentityTokens, tok)
+				// Each endpoint's UserIdentityToken policies are scoped to the
+				// endpoint's own security level.  Advertising cross-policy token
+				// policies (e.g. username_basic256sha256 on a None/None endpoint)
+				// confuses clients that try to encrypt the password using the
+				// "wrong" key material for that channel.
+				//
+				// Anonymous always uses SecurityPolicyURI=None.
+				// Non-anonymous tokens use the endpoint's security policy, with
+				// a special exemption: AllowUsernameOnNone lets UserName appear on
+				// None endpoints (password sent plaintext over the unencrypted channel).
+				authSecPolicy := sec.secPolicy
+				if auth.tokenType == ua.UserTokenTypeAnonymous {
+					authSecPolicy = "http://opcfoundation.org/UA/SecurityPolicy#None"
 				}
+
+				if auth.tokenType != ua.UserTokenTypeAnonymous &&
+					authSecPolicy == "http://opcfoundation.org/UA/SecurityPolicy#None" &&
+					!s.cfg.allowUsernameOnNone {
+					continue
+				}
+
+				policyID := strings.ToLower(
+					strings.TrimPrefix(auth.tokenType.String(), "UserTokenType") +
+						"_" +
+						strings.TrimPrefix(authSecPolicy, "http://opcfoundation.org/UA/SecurityPolicy#"),
+				)
+
+				var dup bool
+				for _, uit := range ep.UserIdentityTokens {
+					if uit.PolicyID == policyID {
+						dup = true
+						break
+					}
+				}
+
+				if dup {
+					continue
+				}
+				// Per OPC UA Part 4 §7.36.1: SecurityPolicyURI in the token
+				// policy specifies how the credential is encrypted.  An empty
+				// string means "inherit from the SecureChannel's policy",
+				// which is the most interoperable choice.  Using the explicit
+				// None URI here can confuse some clients (e.g. open62541 v1.5)
+				// that treat the explicit None differently from the empty string.
+				tok := &ua.UserTokenPolicy{
+					PolicyID:          policyID,
+					TokenType:         auth.tokenType,
+					IssuedTokenType:   "",
+					IssuerEndpointURL: "",
+					SecurityPolicyURI: "",
+				}
+
+				ep.UserIdentityTokens = append(ep.UserIdentityTokens, tok)
 			}
 			endpoints = append(endpoints, ep)
 		}

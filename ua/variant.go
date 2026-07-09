@@ -374,7 +374,14 @@ func (m *Variant) Encode() ([]byte, error) {
 
 // encode recursively writes the values to the buffer.
 func (m *Variant) encode(buf *Buffer, val reflect.Value) {
-	if val.Kind() != reflect.Slice || m.Type() == TypeIDByteString {
+	// []byte represents a single ByteString element; stop recursion here so
+	// the whole slice is passed to encodeValue as one unit. Without this
+	// guard a []byte would be iterated byte-by-byte instead of written as a
+	// length-prefixed ByteString. Note: we check the value type, not the
+	// Variant TypeID, so that a [][]byte (array of ByteStrings) still
+	// iterates its outer slice and reaches this guard only at the inner
+	// []byte element.
+	if val.Kind() != reflect.Slice || val.Type() == reflect.TypeOf([]byte{}) {
 		m.encodeValue(buf, val.Interface())
 		return
 	}

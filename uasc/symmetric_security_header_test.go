@@ -30,3 +30,13 @@ func TestSymmetricSecurityHeader(t *testing.T) {
 	}
 	RunCodecTest(t, cases)
 }
+
+func TestSymmetricSecurityHeaderStringAndLen(t *testing.T) {
+	h := NewSymmetricSecurityHeader(0x11223344)
+	if h.String() != "TokenID: 287454020" {
+		t.Fatalf("String: got %q", h.String())
+	}
+	if h.Len() != 4 {
+		t.Fatalf("Len: got %d", h.Len())
+	}
+}

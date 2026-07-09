@@ -252,3 +252,34 @@ func TestMessage(t *testing.T) {
 	}
 	RunCodecTest(t, cases)
 }
+
+func TestMessageAbortCodec(t *testing.T) {
+	ma := &MessageAbort{
+		ErrorCode: 0x80350000,
+		Reason:    "test reason",
+	}
+
+	encoded, err := ma.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+
+	var decoded MessageAbort
+	n, err := decoded.Decode(encoded)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("Decode returned 0 bytes")
+	}
+	if decoded.ErrorCode != ma.ErrorCode {
+		t.Errorf("ErrorCode: got %x, want %x", decoded.ErrorCode, ma.ErrorCode)
+	}
+	if decoded.Reason != ma.Reason {
+		t.Errorf("Reason: got %q, want %q", decoded.Reason, ma.Reason)
+	}
+	got := ma.MessageAbort()
+	if got == "" {
+		t.Error("MessageAbort() returned empty string")
+	}
+}

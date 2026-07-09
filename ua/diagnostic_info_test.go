@@ -132,3 +132,32 @@ func TestDiagnosticInfo(t *testing.T) {
 	}
 	RunCodecTest(t, cases)
 }
+
+func TestDiagnosticInfoUpdateMask(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		d := &DiagnosticInfo{}
+		d.UpdateMask()
+		if d.EncodingMask != 0 {
+			t.Fatalf("want 0, got %d", d.EncodingMask)
+		}
+	})
+	t.Run("all fields", func(t *testing.T) {
+		d := &DiagnosticInfo{
+			SymbolicID:          1,
+			NamespaceURI:        2,
+			Locale:              3,
+			LocalizedText:       4,
+			AdditionalInfo:      "info",
+			InnerStatusCode:     StatusBad,
+			InnerDiagnosticInfo: &DiagnosticInfo{},
+		}
+		d.UpdateMask()
+		wantBits := byte(DiagnosticInfoSymbolicID | DiagnosticInfoNamespaceURI |
+			DiagnosticInfoLocale | DiagnosticInfoLocalizedText |
+			DiagnosticInfoAdditionalInfo | DiagnosticInfoInnerStatusCode |
+			DiagnosticInfoInnerDiagnosticInfo)
+		if d.EncodingMask != wantBits {
+			t.Fatalf("encoding mask: got 0x%02x, want 0x%02x", d.EncodingMask, wantBits)
+		}
+	})
+}
