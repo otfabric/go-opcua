@@ -26,6 +26,11 @@ const (
 	DefaultSendBufSize    = 0xffff
 	DefaultMaxChunkCount  = 512
 	DefaultMaxMessageSize = 2 * MB
+
+	// DefaultDialTimeout is the default timeout for establishing a TCP
+	// connection when using the package-level Dial/DialTCP helpers or a
+	// zero-value Dialer. Set Dialer.Timeout to zero for no timeout.
+	DefaultDialTimeout = 10 * time.Second
 )
 
 var (
@@ -56,6 +61,25 @@ func nextid() uint32 {
 	return atomic.AddUint32(&connid, 1)
 }
 
+// minNonZero returns the smaller of two limits where 0 means "no limit". If one
+// value is 0 the other is returned; if both are 0 the result is 0.
+func minNonZero(a, b uint32) uint32 {
+	switch {
+	case a == 0:
+		return b
+	case b == 0:
+		return a
+	default:
+		return min(a, b)
+	}
+}
+
+// defaultNetDialer returns a net.Dialer with DefaultDialTimeout when no custom
+// dialer is configured.
+func defaultNetDialer() *net.Dialer {
+	return &net.Dialer{Timeout: DefaultDialTimeout}
+}
+
 // Dialer establishes a connection to an endpoint.
 type Dialer struct {
 	// Dialer establishes the TCP connection. Defaults to net.Dialer.
@@ -75,15 +99,14 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 		d.Logger.Debug("connecting", "endpoint", endpoint)
 	}
 
-	_, raddr, err := ResolveEndpoint(ctx, endpoint)
+	_, raddr, err := ParseEndpoint(endpoint)
 	if err != nil {
 		return nil, err
 	}
 
 	dl := d.Dialer
 	if dl == nil {
-		dl = &net.Dialer{}
-
+		dl = defaultNetDialer()
 	}
 
 	c, err := dl.DialContext(ctx, "tcp", raddr.Host)
@@ -107,25 +130,36 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 	return conn, nil
 }
 
-// Dial uses the default dialer to establish a connection to the endpoint.
+// Dial uses the default dialer and DefaultDialTimeout to establish a connection
+// to the endpoint.
 func Dial(ctx context.Context, endpoint string) (*Conn, error) {
-	d := &Dialer{}
-	return d.Dial(ctx, endpoint)
+	return DialWithTimeout(ctx, endpoint, DefaultDialTimeout)
+}
+
+// DialWithTimeout establishes a connection using the given dial timeout. A zero
+// timeout means no limit (beyond any deadline on ctx).
+func DialWithTimeout(ctx context.Context, endpoint string, timeout time.Duration) (*Conn, error) {
+	return (&Dialer{Dialer: &net.Dialer{Timeout: timeout}}).Dial(ctx, endpoint)
 }
 
 // DialTCP establishes a TCP connection to the OPC UA endpoint address only.
-// It parses the endpoint URL (e.g. opc.tcp://host:4840/path), resolves the host,
-// and opens a TCP connection. No OPC UA HEL/ACK or secure channel is performed.
-// The caller must close the returned connection.
+// It parses the endpoint URL (e.g. opc.tcp://host:4840/path) and opens a TCP
+// connection, leaving hostname resolution to net.Dialer. No OPC UA HEL/ACK or
+// secure channel is performed. The caller must close the returned connection.
 // Use this for TCP reachability checks (e.g. "ping" or connection diagnostics)
 // without creating a session or secure channel.
 func DialTCP(ctx context.Context, endpoint string) (net.Conn, error) {
-	_, raddr, err := ResolveEndpoint(ctx, endpoint)
+	return DialTCPWithTimeout(ctx, endpoint, DefaultDialTimeout)
+}
+
+// DialTCPWithTimeout is like DialTCP but uses the given dial timeout. A zero
+// timeout means no limit (beyond any deadline on ctx).
+func DialTCPWithTimeout(ctx context.Context, endpoint string, timeout time.Duration) (net.Conn, error) {
+	_, raddr, err := ParseEndpoint(endpoint)
 	if err != nil {
 		return nil, err
 	}
-	var d net.Dialer
-	return d.DialContext(ctx, "tcp", raddr.Host)
+	return (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", raddr.Host)
 }
 
 // Listener is a OPC UA Connection Protocol network listener.
@@ -146,7 +180,7 @@ func Listen(ctx context.Context, endpoint string, ack *Acknowledge) (*Listener, 
 	if ack == nil {
 		ack = DefaultServerACK
 	}
-	_, laddr, err := ResolveEndpoint(ctx, endpoint)
+	_, laddr, err := ParseEndpoint(endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -362,11 +396,31 @@ func (c *Conn) srvhandshake(endpoint string) error {
 			c.SendError(ua.StatusBadTCPEndpointURLInvalid)
 			return fmt.Errorf("%w: %s", errors.ErrInvalidEndpoint, hel.EndpointURL)
 		}
+
+		// Negotiate buffer sizes to the smaller of what each side supports, so
+		// we never send a chunk larger than the client can receive (which would
+		// otherwise cause the client to drop the connection). c.ack is shared
+		// with the listener, so clone it before mutating per-connection.
+		ack := *c.ack
+		if hel.ReceiveBufSize > 0 {
+			ack.SendBufSize = min(ack.SendBufSize, hel.ReceiveBufSize)
+		}
+		if hel.SendBufSize > 0 {
+			ack.ReceiveBufSize = min(ack.ReceiveBufSize, hel.SendBufSize)
+		}
+		if hel.MaxMessageSize > 0 {
+			ack.MaxMessageSize = minNonZero(ack.MaxMessageSize, hel.MaxMessageSize)
+		}
+		if hel.MaxChunkCount > 0 {
+			ack.MaxChunkCount = minNonZero(ack.MaxChunkCount, hel.MaxChunkCount)
+		}
+		c.ack = &ack
+
 		if err := c.Send("ACKF", c.ack); err != nil {
 			c.SendError(ua.StatusBadTCPInternalError)
 			return err
 		}
-		c.logDebug("received HEL", "conn_id", c.id, "hello", fmt.Sprintf("%#v", hel))
+		c.logDebug("received HEL", "conn_id", c.id, "hello", fmt.Sprintf("%#v", hel), "ack", fmt.Sprintf("%#v", c.ack))
 		return nil
 
 	case "RHEF":

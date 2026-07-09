@@ -3,50 +3,54 @@
 package uacp
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/url"
+	"strconv"
 
 	"github.com/otfabric/go-opcua/errors"
 )
 
 const defaultPort = "4840"
 
-// ResolveEndpoint returns network type, address, and error split from EndpointURL.
+// ParseEndpoint parses and validates an OPC UA endpoint URL without performing
+// DNS resolution. The returned URL has its Host field normalized to host:port
+// form. Hostname resolution is deferred to net.Dialer or net.Listen at
+// connection time so the standard library can apply its own address selection,
+// including IPv4/IPv6 fallback behavior.
 //
-// Expected format of input is "opc.tcp://<addr[:port]/path/to/somewhere"
-func ResolveEndpoint(ctx context.Context, endpoint string) (network string, u *url.URL, err error) {
+// Expected format: "opc.tcp://<host[:port]>/path"
+func ParseEndpoint(endpoint string) (network string, u *url.URL, err error) {
 	u, err = url.Parse(endpoint)
 	if err != nil {
-		return
+		return "", nil, fmt.Errorf("%w: %v", errors.ErrInvalidEndpoint, err)
 	}
 
 	if u.Scheme != "opc.tcp" {
-		err = fmt.Errorf("%w: unsupported scheme %s", errors.ErrInvalidEndpoint, u.Scheme)
-		return
+		return "", nil, fmt.Errorf("%w: unsupported scheme %q", errors.ErrInvalidEndpoint, u.Scheme)
 	}
 
-	network = "tcp"
+	host := u.Hostname()
+	if host == "" {
+		return "", nil, fmt.Errorf("%w: missing host", errors.ErrInvalidEndpoint)
+	}
 
 	port := u.Port()
 	if port == "" {
 		port = defaultPort
+	} else if err := validatePort(port); err != nil {
+		return "", nil, err
 	}
 
-	var resolver net.Resolver
+	u.Host = net.JoinHostPort(host, port)
 
-	addrs, err := resolver.LookupIPAddr(ctx, u.Hostname())
-	if err != nil {
-		return
+	return "tcp", u, nil
+}
+
+func validatePort(port string) error {
+	n, err := strconv.ParseUint(port, 10, 16)
+	if err != nil || n == 0 {
+		return fmt.Errorf("%w: invalid port %q", errors.ErrInvalidEndpoint, port)
 	}
-
-	if len(addrs) == 0 {
-		err = fmt.Errorf("%w: could not resolve address %s", errors.ErrInvalidEndpoint, u.Hostname())
-		return
-	}
-
-	u.Host = net.JoinHostPort(addrs[0].String(), port)
-
-	return
+	return nil
 }

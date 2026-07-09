@@ -136,6 +136,19 @@ func (s *MonitoredItemService) ChangeNotification(n *ua.NodeID) {
 
 }
 
+// nodeExists reports whether the given node id resolves to a node in a
+// registered namespace.
+func (s *MonitoredItemService) nodeExists(nodeid *ua.NodeID) bool {
+	if nodeid == nil {
+		return false
+	}
+	ns, err := s.SubService.srv.Namespace(int(nodeid.Namespace()))
+	if err != nil {
+		return false
+	}
+	return ns.Node(nodeid) != nil
+}
+
 func (s *MonitoredItemService) NextID() uint32 {
 	i := atomic.AddUint32(&s.id, 1)
 	if i == 0 {
@@ -187,6 +200,18 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 	for i := range req.ItemsToCreate {
 		itemreq := req.ItemsToCreate[i]
 		nodeid := itemreq.ItemToMonitor.NodeID
+
+		// Validate the node exists. Reject unknown nodes individually so a
+		// single bad node id does not fail the whole batch (Part 4 §5.12.2).
+		if !s.nodeExists(nodeid) {
+			s.SubService.srv.cfg.logger.Debug("rejecting monitored item for unknown node", "node_id", nodeid, "sub_id", subID)
+			res[i] = &ua.MonitoredItemCreateResult{
+				StatusCode:   ua.StatusBadNodeIDUnknown,
+				FilterResult: ua.NewExtensionObject(nil),
+			}
+			continue
+		}
+
 		item := MonitoredItem{
 			ID:  s.NextID(),
 			Sub: sub,

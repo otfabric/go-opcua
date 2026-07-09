@@ -1033,6 +1033,18 @@ func TestValidateServerCertificate(t *testing.T) {
 			securityMode: ua.MessageSecurityModeSign,
 			cfg:          newConfig(),
 		},
+		{
+			name:         "leaf plus intermediate chain validates with trusted CA",
+			der:          append(serverDER, caDER...),
+			securityMode: ua.MessageSecurityModeSignAndEncrypt,
+			cfg: func() *Config {
+				c := newConfig()
+				c.certValidator.trustedCerts = x509.NewCertPool()
+				c.certValidator.trustedCerts.AddCert(caCert)
+				c.certValidator.trustedCertsList = []*x509.Certificate{caCert}
+				return c
+			}(),
+		},
 	}
 
 	for _, tt := range tests {

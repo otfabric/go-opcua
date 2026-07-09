@@ -60,6 +60,32 @@ func (m *Item) NodeID() *ua.NodeID {
 	return m.nodeID
 }
 
+// ItemError reports that the server rejected the creation of a single monitored
+// item within a batch. Failing items are reported individually so that one bad
+// node ID does not fail the whole batch; the valid items are still monitored.
+// Recover the individual failures with errors.As:
+//
+//	items, err := sub.AddMonitorItems(ctx, reqs...)
+//	var itemErr *monitor.ItemError
+//	if errors.As(err, &itemErr) {
+//		// itemErr.NodeID / itemErr.StatusCode
+//	}
+type ItemError struct {
+	NodeID     *ua.NodeID
+	StatusCode ua.StatusCode
+}
+
+// Error implements the error interface.
+func (e *ItemError) Error() string {
+	return fmt.Sprintf("monitor: monitored item for node %s rejected: %s", e.NodeID, e.StatusCode)
+}
+
+// Unwrap exposes the underlying status code so errors.Is(err, ua.StatusBad...)
+// keeps working against an ItemError.
+func (e *ItemError) Unwrap() error {
+	return e.StatusCode
+}
+
 // Request is a struct to manage a request to monitor a node or modify a monitored node.
 type Request struct {
 	NodeID               *ua.NodeID
@@ -329,9 +355,18 @@ func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([
 		return nil, fmt.Errorf("%w: monitor items response length mismatch", errors.ErrInvalidResponseType)
 	}
 	var monitoredItems []Item
+	var itemErrors []error
 	for i, res := range resp.Results {
 		if res.StatusCode != ua.StatusOK {
-			return nil, res.StatusCode
+			// Report the rejected item individually and drop the handle we
+			// speculatively registered, so the batch still succeeds for the
+			// valid items.
+			delete(s.handles, nodes[i].handle)
+			itemErrors = append(itemErrors, &ItemError{
+				NodeID:     nodes[i].NodeID,
+				StatusCode: res.StatusCode,
+			})
+			continue
 		}
 		mn := Item{
 			id:     res.MonitoredItemID,
@@ -342,7 +377,8 @@ func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([
 		monitoredItems = append(monitoredItems, mn)
 	}
 
-	return monitoredItems, nil
+	// errors.Join returns nil when there are no per-item failures.
+	return monitoredItems, errors.Join(itemErrors...)
 }
 
 // RemoveNodes removes nodes defined by their string representation.

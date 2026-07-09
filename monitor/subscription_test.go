@@ -3,6 +3,7 @@
 package monitor
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/otfabric/go-opcua"
@@ -58,6 +59,17 @@ func TestItemAccessors(t *testing.T) {
 	it := Item{id: 7, nodeID: nid}
 	assert.Equal(t, uint32(7), it.ID())
 	assert.True(t, it.NodeID().Equal(nid))
+}
+
+func TestItemError(t *testing.T) {
+	nid := ua.NewStringNodeID(2, "ghost")
+	err := &ItemError{NodeID: nid, StatusCode: ua.StatusBadNodeIDUnknown}
+	require.Contains(t, err.Error(), "ghost")
+	require.True(t, errors.Is(err, ua.StatusBadNodeIDUnknown))
+
+	var itemErr *ItemError
+	require.True(t, errors.As(err, &itemErr))
+	require.Equal(t, nid.String(), itemErr.NodeID.String())
 }
 
 func TestParseNodeSlice(t *testing.T) {
