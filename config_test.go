@@ -3,6 +3,9 @@
 package opcua
 
 import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -10,14 +13,17 @@ import (
 	"crypto/x509/pkix"
 	"encoding/pem"
 	"fmt"
+	"log/slog"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
 
+	goerrors "github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -340,6 +346,11 @@ func TestOptions(t *testing.T) {
 			cfg: &Config{
 				stateFunc: connStateFunc,
 			},
+		},
+		{
+			name: `WithLogger`,
+			opt:  WithLogger(slog.Default()),
+			cfg:  &Config{},
 		},
 		{
 			name: `Lifetime(10ms)`,
@@ -1058,4 +1069,321 @@ func TestValidateServerCertificate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestValidateServerCertificate_ApplicationURI(t *testing.T) {
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	require.NoError(t, err)
+	caCert, err := x509.ParseCertificate(caDER)
+	require.NoError(t, err)
+
+	serverKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	appURIParsed, _ := url.Parse("urn:example:server")
+	serverTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "Test Server"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		URIs:         []*url.URL{appURIParsed},
+	}
+	serverDER, err := x509.CreateCertificate(rand.Reader, serverTemplate, caTemplate, &serverKey.PublicKey, caKey)
+	require.NoError(t, err)
+
+	trustedConfig := func() *Config {
+		c := newConfig()
+		c.certValidator.trustedCerts = x509.NewCertPool()
+		c.certValidator.trustedCerts.AddCert(caCert)
+		c.certValidator.trustedCertsList = []*x509.Certificate{caCert}
+		return c
+	}
+
+	tests := []struct {
+		name    string
+		cfg     *Config
+		wantErr string
+	}{
+		{
+			name: "matching ApplicationURI passes",
+			cfg: func() *Config {
+				c := trustedConfig()
+				c.certValidator.serverApplicationURI = "urn:example:server"
+				return c
+			}(),
+		},
+		{
+			name: "empty expected URI skips ApplicationURI check",
+			cfg:  trustedConfig(),
+		},
+		{
+			name: "mismatched ApplicationURI fails",
+			cfg: func() *Config {
+				c := trustedConfig()
+				c.certValidator.serverApplicationURI = "urn:other:server"
+				return c
+			}(),
+			wantErr: "does not contain the server ApplicationURI",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.cfg.validateServerCertificate(serverDER, ua.MessageSecurityModeSign)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidateServerCertificate_KeyUsage(t *testing.T) {
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	require.NoError(t, err)
+	caCert, err := x509.ParseCertificate(caDER)
+	require.NoError(t, err)
+
+	serverKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+
+	makeCert := func(usage x509.KeyUsage) []byte {
+		tmpl := &x509.Certificate{
+			SerialNumber: big.NewInt(2),
+			Subject:      pkix.Name{CommonName: "Test Server"},
+			NotBefore:    time.Now().Add(-time.Hour),
+			NotAfter:     time.Now().Add(24 * time.Hour),
+			KeyUsage:     usage,
+		}
+		der, e := x509.CreateCertificate(rand.Reader, tmpl, caTemplate, &serverKey.PublicKey, caKey)
+		require.NoError(t, e)
+		return der
+	}
+
+	trustedConfig := func() *Config {
+		c := newConfig()
+		c.certValidator.trustedCerts = x509.NewCertPool()
+		c.certValidator.trustedCerts.AddCert(caCert)
+		c.certValidator.trustedCertsList = []*x509.Certificate{caCert}
+		return c
+	}
+
+	tests := []struct {
+		name         string
+		der          []byte
+		securityMode ua.MessageSecurityMode
+		wantErr      string
+	}{
+		{
+			name:         "no KeyUsage extension is tolerated",
+			der:          makeCert(0),
+			securityMode: ua.MessageSecurityModeSignAndEncrypt,
+		},
+		{
+			name:         "full usage passes SignAndEncrypt",
+			der:          makeCert(x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment),
+			securityMode: ua.MessageSecurityModeSignAndEncrypt,
+		},
+		{
+			name:         "DigitalSignature only passes Sign",
+			der:          makeCert(x509.KeyUsageDigitalSignature),
+			securityMode: ua.MessageSecurityModeSign,
+		},
+		{
+			name:         "missing KeyEncipherment fails SignAndEncrypt",
+			der:          makeCert(x509.KeyUsageDigitalSignature),
+			securityMode: ua.MessageSecurityModeSignAndEncrypt,
+			wantErr:      "key usage",
+		},
+		{
+			name:         "missing DigitalSignature fails Sign",
+			der:          makeCert(x509.KeyUsageKeyEncipherment),
+			securityMode: ua.MessageSecurityModeSign,
+			wantErr:      "key usage",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := trustedConfig().validateServerCertificate(tt.der, tt.securityMode)
+			if tt.wantErr != "" {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tt.wantErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestConfigOptionSmoke(t *testing.T) {
+	c, err := NewClient("opc.tcp://example.com:4840",
+		WithRetryPolicy(NoRetry()),
+		SkipNamespaceUpdate(),
+		ApplicationName("app"),
+		SessionName("session"),
+		AuthPolicyID("anonymous_none"),
+	)
+	require.NoError(t, err)
+	_ = c.Close(context.Background())
+}
+
+func TestAuthOptionBranches(t *testing.T) {
+	// AuthPolicyID before token creation (defer path)
+	{
+		cfg := newConfig()
+		err := AuthPolicyID("my-policy")(cfg)
+		require.NoError(t, err)
+		require.Equal(t, "my-policy", cfg.session.PendingPolicyID)
+
+		// Now create token - pending should be applied
+		err = AuthAnonymous()(cfg)
+		require.NoError(t, err)
+		require.Equal(t, "my-policy", cfg.session.UserIdentityToken.(*ua.AnonymousIdentityToken).PolicyID)
+	}
+
+	// AuthAnonymous: non-anonymous token already configured → warning, no-op
+	{
+		cfg := newConfig()
+		err := AuthUsername("u", "p")(cfg)
+		require.NoError(t, err)
+		// Now call AuthAnonymous which should warn and leave the username token in place
+		err = AuthAnonymous()(cfg)
+		require.NoError(t, err)
+		_, ok := cfg.session.UserIdentityToken.(*ua.UserNameIdentityToken)
+		require.True(t, ok, "token type should remain UserNameIdentityToken")
+	}
+
+	// AuthUsername: non-username token already configured → warning, no-op
+	{
+		cfg := newConfig()
+		err := AuthAnonymous()(cfg)
+		require.NoError(t, err)
+		err = AuthUsername("u", "p")(cfg)
+		require.NoError(t, err)
+		_, ok := cfg.session.UserIdentityToken.(*ua.AnonymousIdentityToken)
+		require.True(t, ok, "token type should remain AnonymousIdentityToken")
+	}
+
+	// AuthCertificate: non-certificate token already configured → warning
+	{
+		cfg := newConfig()
+		err := AuthAnonymous()(cfg)
+		require.NoError(t, err)
+		err = AuthCertificate([]byte{0x01})(cfg)
+		require.NoError(t, err)
+		_, ok := cfg.session.UserIdentityToken.(*ua.AnonymousIdentityToken)
+		require.True(t, ok, "token type should remain AnonymousIdentityToken")
+	}
+
+	// AuthCertificate: token not yet set → X509IdentityToken created
+	{
+		cfg := newConfig()
+		err := AuthCertificate([]byte{0x01})(cfg)
+		require.NoError(t, err)
+		_, ok := cfg.session.UserIdentityToken.(*ua.X509IdentityToken)
+		require.True(t, ok)
+	}
+
+	// AuthIssuedToken: non-issued token already configured → warning
+	{
+		cfg := newConfig()
+		err := AuthAnonymous()(cfg)
+		require.NoError(t, err)
+		err = AuthIssuedToken([]byte{0x01})(cfg)
+		require.NoError(t, err)
+		_, ok := cfg.session.UserIdentityToken.(*ua.AnonymousIdentityToken)
+		require.True(t, ok, "token type should remain AnonymousIdentityToken")
+	}
+
+	// AuthIssuedToken: token not yet set → IssuedIdentityToken created
+	{
+		cfg := newConfig()
+		err := AuthIssuedToken([]byte("token-data"))(cfg)
+		require.NoError(t, err)
+		tok, ok := cfg.session.UserIdentityToken.(*ua.IssuedIdentityToken)
+		require.True(t, ok)
+		require.Equal(t, []byte("token-data"), tok.TokenData)
+	}
+
+	// applyPendingPolicyID: PendingPolicyID empty → no-op
+	{
+		cfg := newConfig()
+		err := AuthAnonymous()(cfg)
+		require.NoError(t, err)
+		require.Empty(t, cfg.session.PendingPolicyID)
+	}
+}
+
+func TestLoadPrivateKey_PKCS8NonRSA(t *testing.T) {
+	// Generate an ECDSA key (non-RSA PKCS#8) to hit the "!ok" branch
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der})
+	f := filepath.Join(t.TempDir(), "ec.pem")
+	require.NoError(t, os.WriteFile(f, pemBlock, 0o600))
+
+	_, err = loadPrivateKey(f)
+	require.Error(t, err)
+	require.ErrorIs(t, err, goerrors.ErrInvalidPrivateKey)
+}
+
+func TestLoadPrivateKey_UnknownPEMType(t *testing.T) {
+	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("not-a-key")})
+	f := filepath.Join(t.TempDir(), "bad.pem")
+	require.NoError(t, os.WriteFile(f, pemBlock, 0o600))
+
+	_, err := loadPrivateKey(f)
+	require.Error(t, err)
+	require.ErrorIs(t, err, goerrors.ErrInvalidPrivateKey)
+}
+
+func TestSetCertificate_NoURI(t *testing.T) {
+	// Certificate with no URI SAN: setCertificate should succeed without setting ApplicationURI.
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1),
+		Subject:      pkix.Name{CommonName: "no-uri"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(time.Hour),
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	require.NoError(t, err)
+
+	cfg := newConfig()
+	prevURI := cfg.session.ClientDescription.ApplicationURI
+	err = setCertificate(der, cfg)
+	require.NoError(t, err)
+	// ApplicationURI should not be overwritten if cert has no URI SAN.
+	require.Equal(t, prevURI, cfg.session.ClientDescription.ApplicationURI)
 }

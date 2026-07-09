@@ -313,6 +313,7 @@ func (n *Node) DataType() *ua.ExpandedNodeID {
 			r := n.refs[i]
 			if r.ReferenceTypeID == nil {
 				slog.Default().Warn("reference type ID is nil")
+				continue
 			}
 			if r.ReferenceTypeID.IntID() == id.HasTypeDefinition && r.IsForward {
 				return r.NodeID
@@ -370,7 +371,7 @@ func (n *Node) AddVariable(o *Node) *Node {
 	}
 	nn.SetNodeClass(ua.NodeClassVariable)
 	n.refs = append(n.refs, refs.Organizes(nn.id, nn.BrowseName().Name, nn.DisplayName().Text, nn.DataType()))
-	return nn
+	return n.ns.AddNode(nn)
 }
 
 type RefType int

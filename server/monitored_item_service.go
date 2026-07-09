@@ -193,7 +193,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 	}
 
 	sess := s.SubService.srv.Session(req.RequestHeader)
-	if sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+	if sess == nil || sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
 		return nil, errors.New("not your subscription, bro")
 	}
 
@@ -289,7 +289,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
-		if mi.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+		if sess == nil || mi.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
 			results[i] = &ua.MonitoredItemModifyResult{
 				StatusCode: ua.StatusBadSessionIDInvalid,
 			}
@@ -349,15 +349,16 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 	for i := range req.MonitoredItemIDs {
 		id := req.MonitoredItemIDs[i]
 		item, ok := s.Items[id]
-
-		if item.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
-			results[i] = ua.StatusBadSessionIDInvalid
-		}
-
 		if !ok {
 			results[i] = ua.StatusBadMonitoredItemIDInvalid
 			continue
 		}
+
+		if sess == nil || item.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+			results[i] = ua.StatusBadSessionIDInvalid
+			continue
+		}
+
 		item.Mode = req.MonitoringMode
 		results[i] = ua.StatusOK
 	}
@@ -399,7 +400,7 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 	}
 
 	sess := s.SubService.srv.Session(req.RequestHeader)
-	if triggerItem.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+	if sess == nil || triggerItem.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
 		return &ua.SetTriggeringResponse{
 			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadSessionIDInvalid),
 		}, nil
@@ -455,10 +456,12 @@ func (s *MonitoredItemService) DeleteMonitoredItems(ctx context.Context, sc *uas
 		item, ok := s.Items[id]
 		if !ok {
 			results[i] = ua.StatusBadMonitoredItemIDInvalid
+			continue
 		}
 
-		if item.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+		if sess == nil || item.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
 			results[i] = ua.StatusBadSessionIDInvalid
+			continue
 		}
 
 		// this function gets the lock so we need to do it in the background so it can happen after our lock is released.

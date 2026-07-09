@@ -1,0 +1,55 @@
+name: Interop
+run-name: "Interop (${{ github.event_name }}) on ${{ github.ref_name }} by @${{ github.actor }}"
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  open62541:
+    name: OPC UA interop — open62541
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.25.x"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run interop matrix
+        env:
+          # Both images pin to the last release.
+          # Set OPEN62541_IMAGE / MILO_IMAGE in the env to test in-progress :dev builds locally.
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541:v0.2.1
+          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo:v0.2.1
+        run: make interop
+
+      - name: Collect Docker diagnostics
+        if: failure()
+        run: |
+          mkdir -p artifacts
+          docker ps -a > artifacts/docker-ps.txt || true
+          docker images --digests > artifacts/docker-images.txt || true
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-opcua-interop-diagnostics
+          path: artifacts/
+          if-no-files-found: ignore

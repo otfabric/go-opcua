@@ -11,7 +11,6 @@ import (
 	"math/rand"
 	"net"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -23,9 +22,10 @@ import (
 
 // serverCertValidator holds options for server certificate validation.
 type serverCertValidator struct {
-	insecureSkipVerify bool
-	trustedCerts       *x509.CertPool
-	trustedCertsList   []*x509.Certificate
+	insecureSkipVerify   bool
+	trustedCerts         *x509.CertPool
+	trustedCertsList     []*x509.Certificate
+	serverApplicationURI string // expected URI SAN from the server's ApplicationDescription
 }
 
 const (
@@ -313,16 +313,32 @@ func loadPrivateKey(filename string) (*rsa.PrivateKey, error) {
 		return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
 	}
 
-	derBytes := b
-	if strings.HasSuffix(filename, ".pem") {
-		block, _ := pem.Decode(b)
-		if block == nil || block.Type != "RSA PRIVATE KEY" {
-			return nil, fmt.Errorf("%w: failed to decode PEM block", errors.ErrInvalidPrivateKey)
+	// Try PEM decoding regardless of file extension; handles both PKCS#1 and PKCS#8.
+	if block, _ := pem.Decode(b); block != nil {
+		switch block.Type {
+		case "RSA PRIVATE KEY":
+			pk, err := x509.ParsePKCS1PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
+			}
+			return pk, nil
+		case "PRIVATE KEY":
+			key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
+			if err != nil {
+				return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
+			}
+			rsaKey, ok := key.(*rsa.PrivateKey)
+			if !ok {
+				return nil, fmt.Errorf("%w: PKCS#8 key is not RSA", errors.ErrInvalidPrivateKey)
+			}
+			return rsaKey, nil
+		default:
+			return nil, fmt.Errorf("%w: unsupported PEM block type %q", errors.ErrInvalidPrivateKey, block.Type)
 		}
-		derBytes = block.Bytes
 	}
 
-	pk, err := x509.ParsePKCS1PrivateKey(derBytes)
+	// Fall back to raw DER (PKCS#1).
+	pk, err := x509.ParsePKCS1PrivateKey(b)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
 	}
@@ -360,15 +376,16 @@ func loadCertificate(filename string) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %w", errors.ErrInvalidCertificate, err)
 	}
 
-	if !strings.HasSuffix(filename, ".pem") {
-		return b, nil
+	// Try PEM decoding regardless of file extension; handles .crt, .pem, etc.
+	if block, _ := pem.Decode(b); block != nil {
+		if block.Type != "CERTIFICATE" {
+			return nil, fmt.Errorf("%w: PEM block type %q is not CERTIFICATE", errors.ErrInvalidCertificate, block.Type)
+		}
+		return block.Bytes, nil
 	}
 
-	block, _ := pem.Decode(b)
-	if block == nil || block.Type != "CERTIFICATE" {
-		return nil, fmt.Errorf("%w: failed to decode PEM block", errors.ErrInvalidCertificate)
-	}
-	return block.Bytes, nil
+	// No PEM header found; assume DER-encoded.
+	return b, nil
 }
 
 func setCertificate(cert []byte, cfg *Config) error {
@@ -398,6 +415,11 @@ func SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType)
 		cfg.sechan.SecurityMode = ep.SecurityMode
 		cfg.sechan.RemoteCertificate = ep.ServerCertificate
 		cfg.sechan.Thumbprint = uapolicy.Thumbprint(ep.ServerCertificate)
+
+		// Store the server's ApplicationURI for certificate binding verification.
+		if ep.Server != nil && ep.Server.ApplicationURI != "" {
+			cfg.certValidator.serverApplicationURI = ep.Server.ApplicationURI
+		}
 
 		for _, t := range ep.UserIdentityTokens {
 			if t.TokenType != authType {
@@ -685,7 +707,9 @@ func TrustedCertificates(certs ...*x509.Certificate) Option {
 // against the configured trust settings. It checks:
 //   - Trust chain (system CA pool + user-supplied trusted certificates)
 //   - Expiration / not-yet-valid
-//   - Key usage (DigitalSignature, KeyEncipherment)
+//   - Key usage (DigitalSignature; KeyEncipherment also for SignAndEncrypt)
+//   - ApplicationURI binding: the certificate's URI SAN must match the
+//     ApplicationURI advertised by the server (when known via SecurityFromEndpoint)
 //
 // If insecureSkipVerify is set the function returns nil immediately.
 // If securityMode is None, no validation is performed.
@@ -744,12 +768,38 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 		return fmt.Errorf("opcua: server certificate validation failed: %w", err)
 	}
 
-	// Verify key usage bits. OPC UA servers should have DigitalSignature and
-	// KeyEncipherment. We only warn here because many OPC UA test servers
-	// and self-signed certs don't set key usage properly.
-	const requiredUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
-	if cert.KeyUsage != 0 && cert.KeyUsage&requiredUsage != requiredUsage {
-		cfg.logger.Warn("opcua: server certificate missing recommended key usage bits (DigitalSignature, KeyEncipherment)")
+	// Verify key usage bits (OPC UA Part 6 §6.2.4). Only checked when the
+	// certificate explicitly declares a KeyUsage extension; omitting the
+	// extension is tolerated for interoperability with legacy servers that
+	// issue certificates without it.
+	if cert.KeyUsage != 0 {
+		required := x509.KeyUsageDigitalSignature
+		if securityMode == ua.MessageSecurityModeSignAndEncrypt {
+			required |= x509.KeyUsageKeyEncipherment
+		}
+		if cert.KeyUsage&required != required {
+			return fmt.Errorf("opcua: server certificate key usage 0x%x does not include required bits 0x%x",
+				cert.KeyUsage, required)
+		}
+	}
+
+	// Verify the OPC UA ApplicationURI binding (OPC UA Part 6 §6.2.2).
+	// The certificate's URI SAN must match the ApplicationURI the server
+	// advertised in its ApplicationDescription. Trusting the CA alone does
+	// not prove the certificate belongs to the specific OPC UA application we
+	// connected to; the URI SAN is the OPC UA identity binding.
+	if want := cfg.certValidator.serverApplicationURI; want != "" {
+		found := false
+		for _, u := range cert.URIs {
+			if u.String() == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("opcua: server certificate URI SAN %v does not contain the server ApplicationURI %q",
+				cert.URIs, want)
+		}
 	}
 
 	return nil

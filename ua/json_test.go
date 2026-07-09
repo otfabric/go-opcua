@@ -233,3 +233,29 @@ func stringContains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestStatusCodeMarshalJSON_Unknown(t *testing.T) {
+	// unknown status code exercises the fallback branch
+	unknown := StatusCode(0xDEADBEEF)
+	b, err := unknown.MarshalJSON()
+	if err != nil {
+		t.Fatalf("MarshalJSON unknown: %v", err)
+	}
+	if len(b) == 0 {
+		t.Fatal("MarshalJSON returned empty bytes")
+	}
+}
+
+func TestNodeClassName(t *testing.T) {
+	classes := []NodeClass{
+		NodeClassObject, NodeClassVariable, NodeClassMethod,
+		NodeClassObjectType, NodeClassVariableType, NodeClassReferenceType,
+		NodeClassDataType, NodeClassView, NodeClass(99),
+	}
+	for _, nc := range classes {
+		s := nodeClassName(nc)
+		if s == "" {
+			t.Errorf("nodeClassName(%v) returned empty string", nc)
+		}
+	}
+}

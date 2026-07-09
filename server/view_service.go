@@ -217,7 +217,16 @@ func suitableRefType(srv *Server, ref1, ref2 *ua.NodeID, subtypes bool) bool {
 }
 
 func getSubRefs(srv *Server, nid *ua.NodeID) []*ua.NodeID {
-	var refs []*ua.NodeID
+	return getSubRefsVisited(srv, nid, make(map[string]bool))
+}
+
+func getSubRefsVisited(srv *Server, nid *ua.NodeID, visited map[string]bool) []*ua.NodeID {
+	key := nid.String()
+	if visited[key] {
+		return nil
+	}
+	visited[key] = true
+
 	ns, err := srv.Namespace(int(nid.Namespace()))
 	if err != nil {
 		// Namespace lookup failure is non-fatal here; the caller already filtered
@@ -228,10 +237,11 @@ func getSubRefs(srv *Server, nid *ua.NodeID) []*ua.NodeID {
 	if node == nil {
 		return nil
 	}
+	var refs []*ua.NodeID
 	for _, ref := range node.refs {
 		if ref.ReferenceTypeID.Equal(hasSubtype) && ref.IsForward && ref.NodeID != nil {
 			refs = append(refs, ref.NodeID.NodeID)
-			refs = append(refs, getSubRefs(srv, ref.NodeID.NodeID)...)
+			refs = append(refs, getSubRefsVisited(srv, ref.NodeID.NodeID, visited)...)
 		}
 	}
 	return refs

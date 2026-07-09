@@ -338,3 +338,247 @@ func TestNewSecureChannel(t *testing.T) {
 		require.ErrorContains(t, err, "requires a private key")
 	})
 }
+
+func TestSecureChannel_Accessors(t *testing.T) {
+	sc := &SecureChannel{
+		cfg: &Config{
+			SecurityPolicyURI: ua.SecurityPolicyURIBasic256Sha256,
+			SecurityMode:      ua.MessageSecurityModeSign,
+		},
+		endpointURL: "opc.tcp://localhost:4840",
+	}
+
+	if got := sc.SecurityMode(); got != ua.MessageSecurityModeSign {
+		t.Errorf("SecurityMode() = %v, want %v", got, ua.MessageSecurityModeSign)
+	}
+	if got := sc.SecurityPolicyURI(); got != ua.SecurityPolicyURIBasic256Sha256 {
+		t.Errorf("SecurityPolicyURI() = %q, want %q", got, ua.SecurityPolicyURIBasic256Sha256)
+	}
+	if got := sc.LocalEndpoint(); got != "opc.tcp://localhost:4840" {
+		t.Errorf("LocalEndpoint() = %q, want %q", got, "opc.tcp://localhost:4840")
+	}
+}
+
+func TestConditionLocker(t *testing.T) {
+	cl := newConditionLocker()
+
+	// Initially unlocked: waitIfLock should return immediately.
+	cl.waitIfLock()
+
+	// Lock then unlock from a goroutine to verify broadcast wakes up waiter.
+	cl.lock()
+	done := make(chan struct{})
+	go func() {
+		cl.waitIfLock()
+		close(done)
+	}()
+	cl.unlock()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("waitIfLock did not unblock after unlock")
+	}
+}
+
+func TestSecureChannel_TimeNow(t *testing.T) {
+	// With custom time func
+	fixed := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)
+	sc := &SecureChannel{
+		cfg:  &Config{},
+		time: func() time.Time { return fixed },
+	}
+	if got := sc.timeNow(); got != fixed {
+		t.Errorf("timeNow() with custom func = %v, want %v", got, fixed)
+	}
+
+	// Without custom time func - exercises the default time.Now() branch
+	sc2 := &SecureChannel{cfg: &Config{}}
+	t0 := time.Now()
+	got2 := sc2.timeNow()
+	if got2.Before(t0) {
+		t.Errorf("timeNow() without custom func returned past time")
+	}
+}
+
+func TestMergeChunks(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		if got := mergeChunks(nil); got != nil {
+			t.Errorf("mergeChunks(nil) = %v, want nil", got)
+		}
+	})
+	t.Run("single chunk", func(t *testing.T) {
+		data := []byte{1, 2, 3}
+		chunks := []*MessageChunk{{Data: data}}
+		if got := mergeChunks(chunks); string(got) != string(data) {
+			t.Errorf("mergeChunks single = %v, want %v", got, data)
+		}
+	})
+	t.Run("multiple chunks", func(t *testing.T) {
+		mkChunk := func(data []byte, seqnr uint32) *MessageChunk {
+			return &MessageChunk{
+				MessageHeader: &MessageHeader{
+					SequenceHeader: &SequenceHeader{SequenceNumber: seqnr},
+				},
+				Data: data,
+			}
+		}
+		chunks := []*MessageChunk{
+			mkChunk([]byte{1, 2}, 1),
+			mkChunk([]byte{3, 4}, 2),
+		}
+		want := []byte{1, 2, 3, 4}
+		if got := mergeChunks(chunks); string(got) != string(want) {
+			t.Errorf("mergeChunks multiple = %v, want %v", got, want)
+		}
+	})
+	t.Run("duplicate chunk skipped", func(t *testing.T) {
+		mkChunk := func(data []byte, seqnr uint32) *MessageChunk {
+			return &MessageChunk{
+				MessageHeader: &MessageHeader{
+					SequenceHeader: &SequenceHeader{SequenceNumber: seqnr},
+				},
+				Data: data,
+			}
+		}
+		chunks := []*MessageChunk{
+			mkChunk([]byte{1, 2}, 1),
+			mkChunk([]byte{1, 2}, 1), // duplicate
+			mkChunk([]byte{3, 4}, 2),
+		}
+		want := []byte{1, 2, 3, 4}
+		if got := mergeChunks(chunks); string(got) != string(want) {
+			t.Errorf("mergeChunks deduplicated = %v, want %v", got, want)
+		}
+	})
+}
+
+func TestMessageBody_RequestResponse(t *testing.T) {
+	// Test with a request type
+	req := &ua.ReadRequest{}
+	body := MessageBody{body: req}
+	if got := body.Request(); got != req {
+		t.Errorf("Request() = %v, want %v", got, req)
+	}
+	if got := body.Response(); got != nil {
+		t.Errorf("Response() on request should be nil, got %v", got)
+	}
+
+	// Test with a response type
+	resp := &ua.ReadResponse{}
+	body2 := MessageBody{body: resp}
+	if got := body2.Response(); got != resp {
+		t.Errorf("Response() = %v, want %v", got, resp)
+	}
+	if got := body2.Request(); got != nil {
+		t.Errorf("Request() on response should be nil, got %v", got)
+	}
+}
+
+func TestIsReconnectTrigger(t *testing.T) {
+	triggers := []error{
+		ua.StatusBadSecureChannelIDInvalid,
+		ua.StatusBadSessionIDInvalid,
+		ua.StatusBadSubscriptionIDInvalid,
+		ua.StatusBadNoSubscription,
+		ua.StatusBadCertificateInvalid,
+	}
+	for _, err := range triggers {
+		if !isReconnectTrigger(err) {
+			t.Errorf("isReconnectTrigger(%v) = false, want true", err)
+		}
+	}
+
+	if isReconnectTrigger(ua.StatusBadUserAccessDenied) {
+		t.Error("isReconnectTrigger(StatusBadUserAccessDenied) = true, want false")
+	}
+	if isReconnectTrigger(nil) {
+		t.Error("isReconnectTrigger(nil) = true, want false")
+	}
+}
+
+func TestNotifyMonitor(t *testing.T) {
+	sc := &SecureChannel{cfg: &Config{}}
+
+	// Response is nil → should return true (not a reconnect trigger)
+	bodyNoResp := &MessageBody{body: &ua.ReadRequest{}}
+	if !sc.notifyMonitor(bodyNoResp) {
+		t.Error("notifyMonitor with non-response body should return true")
+	}
+
+	// Response present, no error → isReconnectTrigger returns false
+	bodyWithResp := &MessageBody{body: &ua.ReadResponse{}}
+	if sc.notifyMonitor(bodyWithResp) {
+		t.Error("notifyMonitor with response and nil error should return false")
+	}
+
+	// Response present, reconnect trigger error → true
+	bodyWithErr := &MessageBody{body: &ua.ReadResponse{}, Err: ua.StatusBadSessionIDInvalid}
+	if !sc.notifyMonitor(bodyWithErr) {
+		t.Error("notifyMonitor with reconnect trigger error should return true")
+	}
+}
+
+func TestGetActiveChannelInstance_NilReturnsError(t *testing.T) {
+	sc := &SecureChannel{cfg: &Config{}}
+	// No active instance set
+	_, err := sc.getActiveChannelInstance()
+	if err == nil {
+		t.Error("getActiveChannelInstance with nil activeInstance should return error")
+	}
+}
+
+func TestNewSecureChannel_ErrorBranches(t *testing.T) {
+	errCh := make(chan error, 1)
+
+	// nil conn
+	_, err := newSecureChannel("opc.tcp://localhost", nil, &Config{}, client, errCh)
+	if err == nil {
+		t.Error("nil conn should fail")
+	}
+
+	// nil config - need a non-nil conn
+	// We can use a *uacp.Conn pointer cast hack: pass a non-nil but invalid conn
+	// Actually, we can test the switch cases by providing a fake conn that won't be dereferenced at construction time.
+	// newSecureChannel only uses c to store it, so passing a typed nil is not possible.
+	// Use a dummy conn pointer via unsafe, but instead just test config == nil:
+	// We must pass a non-nil conn to reach the cfg check. Unfortunately uacp.Conn has no constructor
+	// for testing, so we skip the nil-conn branch being already tested.
+
+	// nil errCh
+	fakeConn := &uacp.Conn{}
+	_, err = newSecureChannel("opc.tcp://localhost", fakeConn, &Config{}, client, nil)
+	if err == nil {
+		t.Error("nil errCh should fail")
+	}
+
+	// policy None with non-None mode
+	_, err = newSecureChannel("opc.tcp://localhost", fakeConn,
+		&Config{
+			SecurityPolicyURI: ua.SecurityPolicyURINone,
+			SecurityMode:      ua.MessageSecurityModeSign,
+		}, client, errCh)
+	if err == nil {
+		t.Error("None policy with Sign mode should fail")
+	}
+
+	// non-None policy with None mode
+	_, err = newSecureChannel("opc.tcp://localhost", fakeConn,
+		&Config{
+			SecurityPolicyURI: ua.SecurityPolicyURIBasic256Sha256,
+			SecurityMode:      ua.MessageSecurityModeNone,
+		}, client, errCh)
+	if err == nil {
+		t.Error("non-None policy with None mode should fail")
+	}
+
+	// non-None policy with no local key
+	_, err = newSecureChannel("opc.tcp://localhost", fakeConn,
+		&Config{
+			SecurityPolicyURI: ua.SecurityPolicyURIBasic256Sha256,
+			SecurityMode:      ua.MessageSecurityModeSignAndEncrypt,
+			LocalKey:          nil,
+		}, client, errCh)
+	if err == nil {
+		t.Error("non-None policy without local key should fail")
+	}
+}

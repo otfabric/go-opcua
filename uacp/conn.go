@@ -471,10 +471,19 @@ func endpointMatch(clientURL, serverURL string) bool {
 	if !strings.EqualFold(cu.Scheme, su.Scheme) {
 		return false
 	}
-	if !strings.EqualFold(cu.Hostname(), su.Hostname()) {
+	// An unspecified server host is a bind wildcard, not a client-reachable
+	// endpoint hostname. In that case, match the client URL by scheme, path,
+	// and port without requiring the hostname to equal the bind address.
+	serverHost := su.Hostname()
+	serverIP := net.ParseIP(serverHost)
+	serverHostIsWildcard := serverIP != nil && serverIP.IsUnspecified()
+	if !serverHostIsWildcard && !strings.EqualFold(cu.Hostname(), serverHost) {
 		return false
 	}
-	if cu.Path != su.Path {
+	// A server registered without a path (su.Path == "") accepts any client
+	// path, just as an unspecified host accepts any client hostname. A server
+	// that explicitly registers a path requires the client to match it.
+	if su.Path != "" && cu.Path != su.Path {
 		return false
 	}
 	// Accept any client port when the server was configured with port 0.

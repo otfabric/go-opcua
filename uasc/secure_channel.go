@@ -247,6 +247,11 @@ func (s *SecureChannel) SecurityMode() ua.MessageSecurityMode {
 	return s.cfg.SecurityMode
 }
 
+// SecurityPolicyURI returns the security policy URI configured for this channel.
+func (s *SecureChannel) SecurityPolicyURI() string {
+	return s.cfg.SecurityPolicyURI
+}
+
 func (s *SecureChannel) getActiveChannelInstance() (*channelInstance, error) {
 	s.instancesMu.Lock()
 	defer s.instancesMu.Unlock()
@@ -288,6 +293,33 @@ func (s *SecureChannel) dispatcher() {
 
 			if msg.Err != nil {
 				s.cfg.Logger.Debug("error", "channel_id", s.c.ID(), "request_id", msg.RequestID, "error", msg.Err)
+
+				ch, ok := s.popHandler(msg.RequestID)
+				if !ok && msg.RequestID == 0 {
+					// Connection-level error (e.g. OPC UA ERR message from the server)
+					// carries no request ID. Broadcast it to all pending handlers so
+					// callers receive the specific OPC UA status code rather than bare
+					// io.EOF when the disconnected channel fires on the next loop.
+					s.handlersMu.Lock()
+					pending := make(map[uint32]chan *MessageBody, len(s.handlers))
+					for id, hch := range s.handlers {
+						pending[id] = hch
+						delete(s.handlers, id)
+					}
+					s.handlersMu.Unlock()
+					for _, hch := range pending {
+						select {
+						case hch <- msg:
+						default:
+						}
+					}
+				} else if ok {
+					select {
+					case ch <- msg:
+					default:
+					}
+				}
+				continue
 			} else {
 				s.cfg.Logger.Debug("received", "channel_id", s.c.ID(), "request_id", msg.RequestID, "type", fmt.Sprintf("%T", msg.body))
 			}
@@ -489,13 +521,16 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 	// read a full message from the underlying conn.
 	b, err := s.c.Receive()
-	if err == io.EOF || len(b) == 0 {
-		return nil, io.EOF
-	}
+	// Check for a uacp-level error (e.g. an ERR message from the server)
+	// BEFORE the len(b)==0 guard. uacp.Receive returns (nil, *Error) for ERR
+	// messages, so the nil slice would otherwise be misidentified as EOF.
 	// do not wrap this error since it hides conn error
 	var uacperr *uacp.Error
 	if errors.As(err, &uacperr) {
 		return nil, err
+	}
+	if err == io.EOF || len(b) == 0 {
+		return nil, io.EOF
 	}
 	if err != nil {
 		return nil, fmt.Errorf("sechan: read header failed: %w", err)
@@ -545,9 +580,6 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 			}
 
 			s.openingInstance.algo = algo
-
-			// For OpenSecureChannel asymmetric encryption is always used
-			s.cfg.SecurityMode = ua.MessageSecurityModeSignAndEncrypt
 		}
 
 		decryptWith = s.openingInstance
@@ -773,7 +805,7 @@ func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChann
 }
 
 func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Request) error {
-	s.cfg.Logger.Debug("handling OpenSecureChannelRequest")
+	s.cfg.Logger.Info("handling OpenSecureChannelRequest")
 
 	var err error
 

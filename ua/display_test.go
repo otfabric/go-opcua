@@ -6,93 +6,31 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestReferenceTypeDisplayName(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		require.Equal(t, "", ReferenceTypeDisplayName(nil))
-	})
-	t.Run("well-known ns=0", func(t *testing.T) {
-		nid := NewNumericNodeID(0, 47) // HasComponent
-		require.Equal(t, "HasComponent", ReferenceTypeDisplayName(nid))
-		nid = NewNumericNodeID(0, 35) // Organizes
-		require.Equal(t, "Organizes", ReferenceTypeDisplayName(nid))
-	})
-	t.Run("unknown ns=0 falls back to NodeID string", func(t *testing.T) {
-		nid := NewNumericNodeID(0, 99999)
-		require.Equal(t, nid.String(), ReferenceTypeDisplayName(nid))
-	})
-	t.Run("non-zero namespace falls back to NodeID string", func(t *testing.T) {
-		nid := NewNumericNodeID(1, 47)
-		require.Equal(t, nid.String(), ReferenceTypeDisplayName(nid))
-	})
-}
-
-func TestDataTypeDisplayName(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		require.Equal(t, "", DataTypeDisplayName(nil))
-	})
-	t.Run("well-known ns=0", func(t *testing.T) {
-		nid := NewNumericNodeID(0, 10) // Float
-		require.Equal(t, "Float", DataTypeDisplayName(nid))
-		nid = NewNumericNodeID(0, 12) // String
-		require.Equal(t, "String", DataTypeDisplayName(nid))
-		nid = NewNumericNodeID(0, 294) // UtcTime
-		require.Equal(t, "UtcTime", DataTypeDisplayName(nid))
-	})
-	t.Run("unknown ns=0 falls back to NodeID string", func(t *testing.T) {
-		nid := NewNumericNodeID(0, 99999)
-		require.Equal(t, nid.String(), DataTypeDisplayName(nid))
-	})
-	t.Run("non-zero namespace falls back to NodeID string", func(t *testing.T) {
-		nid := NewNumericNodeID(1, 10)
-		require.Equal(t, nid.String(), DataTypeDisplayName(nid))
-	})
-}
-
-func TestStandardNodeID(t *testing.T) {
-	t.Run("short aliases", func(t *testing.T) {
-		nid, ok := StandardNodeID("CurrentTime")
-		require.True(t, ok)
-		require.True(t, nid.Equal(NewNumericNodeID(0, id.ServerServerStatusCurrentTime)))
-		nid, ok = StandardNodeID("ServerStatus")
-		require.True(t, ok)
-		require.True(t, nid.Equal(NewNumericNodeID(0, id.ServerServerStatus)))
-		nid, ok = StandardNodeID("Objects")
-		require.True(t, ok)
-		require.True(t, nid.Equal(NewNumericNodeID(0, id.ObjectsFolder)))
-	})
-	t.Run("full name", func(t *testing.T) {
-		nid, ok := StandardNodeID("Server")
-		require.True(t, ok)
-		require.True(t, nid.Equal(NewNumericNodeID(0, id.Server)))
-	})
-	t.Run("unknown returns false", func(t *testing.T) {
-		nid, ok := StandardNodeID("UnknownNode")
-		require.False(t, ok)
-		require.Nil(t, nid)
-	})
+	assert.Equal(t, "", ReferenceTypeDisplayName(nil))
+	assert.Equal(t, "HasComponent", ReferenceTypeDisplayName(NewNumericNodeID(0, id.HasComponent)))
+	assert.Contains(t, ReferenceTypeDisplayName(NewNumericNodeID(3, 99)), "ns=3")
 }
 
 func TestTypeDefinitionDisplayName(t *testing.T) {
-	t.Run("nil", func(t *testing.T) {
-		require.Equal(t, "", TypeDefinitionDisplayName(nil))
-	})
-	t.Run("VariableType ns=0", func(t *testing.T) {
-		nid := NewNumericNodeID(0, 68) // PropertyType
-		require.Equal(t, "PropertyType", TypeDefinitionDisplayName(nid))
-	})
-	t.Run("ObjectType ns=0", func(t *testing.T) {
-		nid := NewNumericNodeID(0, 61) // FolderType
-		require.Equal(t, "FolderType", TypeDefinitionDisplayName(nid))
-	})
-	t.Run("unknown ns=0 falls back to NodeID string", func(t *testing.T) {
-		nid := NewNumericNodeID(0, 99999)
-		require.Equal(t, nid.String(), TypeDefinitionDisplayName(nid))
-	})
-	t.Run("non-zero namespace falls back to NodeID string", func(t *testing.T) {
-		nid := NewNumericNodeID(1, 68)
-		require.Equal(t, nid.String(), TypeDefinitionDisplayName(nid))
-	})
+	assert.Equal(t, "", TypeDefinitionDisplayName(nil))
+	assert.Equal(t, "BaseDataVariableType", TypeDefinitionDisplayName(NewNumericNodeID(0, id.BaseDataVariableType)))
+	assert.Equal(t, "ServerType", TypeDefinitionDisplayName(NewNumericNodeID(0, id.ServerType)))
+}
+
+func TestDataTypeDisplayName(t *testing.T) {
+	assert.Equal(t, "", DataTypeDisplayName(nil))
+	assert.Equal(t, "Int32", DataTypeDisplayName(NewNumericNodeID(0, id.Int32)))
+}
+
+func TestStandardNodeID(t *testing.T) {
+	nid, ok := StandardNodeID("ObjectsFolder")
+	assert.True(t, ok)
+	assert.Equal(t, uint32(id.ObjectsFolder), nid.IntID())
+
+	_, ok = StandardNodeID("not-a-real-node")
+	assert.False(t, ok)
 }

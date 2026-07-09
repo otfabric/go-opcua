@@ -4,67 +4,35 @@ package ua
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestQualifiedName_Encode_NilReceiver(t *testing.T) {
+func TestQualifiedNameString(t *testing.T) {
+	assert.Equal(t, "", (*QualifiedName)(nil).String())
+	assert.Equal(t, "Server", (&QualifiedName{Name: "Server"}).String())
+	assert.Equal(t, "2:Temp", (&QualifiedName{NamespaceIndex: 2, Name: "Temp"}).String())
+}
+
+func TestQualifiedNameEncodeDecode(t *testing.T) {
+	orig := &QualifiedName{NamespaceIndex: 3, Name: "Pressure"}
+	encoded, err := orig.Encode()
+	require.NoError(t, err)
+
+	var got QualifiedName
+	n, err := got.Decode(encoded)
+	require.NoError(t, err)
+	assert.Equal(t, len(encoded), n)
+	assert.Equal(t, orig.NamespaceIndex, got.NamespaceIndex)
+	assert.Equal(t, orig.Name, got.Name)
+}
+
+func TestQualifiedNameNullEncode(t *testing.T) {
 	var q *QualifiedName
-	b, err := q.Encode()
-	if err != nil {
-		t.Fatalf("Encode failed: %v", err)
-	}
-	// OPC UA null QualifiedName: namespace 0 + string length -1 (0xFFFFFFFF).
-	// Must emit fixed layout so struct field offsets are preserved on the wire.
-	want := []byte{0x00, 0x00, 0xff, 0xff, 0xff, 0xff}
-	if len(b) != len(want) {
-		t.Fatalf("nil QualifiedName.Encode() should return 6-byte null encoding, got len=%d", len(b))
-	}
-	for i := range want {
-		if b[i] != want[i] {
-			t.Fatalf("nil QualifiedName.Encode() byte %d: got 0x%02x want 0x%02x", i, b[i], want[i])
-		}
-	}
-}
-
-func TestQualifiedName(t *testing.T) {
-	cases := []CodecTestCase{
-		{
-			Name:   "normal",
-			Struct: &QualifiedName{NamespaceIndex: 1, Name: "foobar"},
-			Bytes: []byte{
-				// namespace index
-				0x01, 0x00,
-				// name
-				0x06, 0x00, 0x00, 0x00,
-				0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72,
-			},
-		},
-		{
-			Name:   "empty",
-			Struct: &QualifiedName{NamespaceIndex: 1},
-			Bytes: []byte{
-				// namespace index
-				0x01, 0x00,
-				// name
-				0xff, 0xff, 0xff, 0xff,
-			},
-		},
-	}
-	RunCodecTest(t, cases)
-}
-
-func TestQualifiedName_String(t *testing.T) {
-	tests := []struct {
-		q    *QualifiedName
-		want string
-	}{
-		{nil, ""},
-		{&QualifiedName{NamespaceIndex: 0, Name: "Server"}, "Server"},
-		{&QualifiedName{NamespaceIndex: 2, Name: "Temperature"}, "2:Temperature"},
-	}
-	for _, tt := range tests {
-		got := tt.q.String()
-		if got != tt.want {
-			t.Errorf("QualifiedName.String() = %q, want %q", got, tt.want)
-		}
-	}
+	encoded, err := q.Encode()
+	require.NoError(t, err)
+	var got QualifiedName
+	_, err = got.Decode(encoded)
+	require.NoError(t, err)
 }

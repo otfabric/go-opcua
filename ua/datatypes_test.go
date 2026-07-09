@@ -237,3 +237,58 @@ func TestLocalizedText_String(t *testing.T) {
 		}
 	}
 }
+
+func TestDataValueUpdateMask(t *testing.T) {
+	ts := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	t.Run("empty", func(t *testing.T) {
+		dv := &DataValue{}
+		dv.UpdateMask()
+		if dv.EncodingMask != 0 {
+			t.Fatalf("want 0, got %d", dv.EncodingMask)
+		}
+	})
+	t.Run("value only", func(t *testing.T) {
+		dv := &DataValue{Value: MustVariant(int32(1))}
+		dv.UpdateMask()
+		if dv.EncodingMask&DataValueValue == 0 {
+			t.Fatal("DataValueValue bit not set")
+		}
+	})
+	t.Run("all fields", func(t *testing.T) {
+		dv := &DataValue{
+			Value:             MustVariant(int32(1)),
+			Status:            StatusBadUserAccessDenied,
+			SourceTimestamp:   ts,
+			ServerTimestamp:   ts,
+			SourcePicoseconds: 100,
+			ServerPicoseconds: 200,
+		}
+		dv.UpdateMask()
+		wantBits := byte(DataValueValue | DataValueStatusCode |
+			DataValueSourceTimestamp | DataValueServerTimestamp |
+			DataValueSourcePicoseconds | DataValueServerPicoseconds)
+		if dv.EncodingMask != wantBits {
+			t.Fatalf("encoding mask: got 0x%02x, want 0x%02x", dv.EncodingMask, wantBits)
+		}
+	})
+}
+
+func TestXMLElementCodec(t *testing.T) {
+	original := XMLElement("<foo>bar</foo>")
+	b, err := original.Encode()
+	if err != nil {
+		t.Fatalf("Encode: %v", err)
+	}
+	var decoded XMLElement
+	n, err := decoded.Decode(b)
+	if err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+	if n == 0 {
+		t.Fatal("Decode returned 0 bytes consumed")
+	}
+	if decoded != original {
+		t.Fatalf("round-trip: got %q, want %q", decoded, original)
+	}
+}

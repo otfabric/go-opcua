@@ -5,11 +5,13 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/x509"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 	"github.com/otfabric/go-opcua/uasc"
 )
 
@@ -31,7 +33,7 @@ type SessionService struct {
 // CreateSession implements the OPC UA CreateSession service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.2
 func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
+	s.srv.cfg.logger.Info("handling CreateSession request")
 
 	req, err := safeReq[*ua.CreateSessionRequest](r)
 	if err != nil {
@@ -117,12 +119,39 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	}
 	sess.serverNonce = nonce
 
-	// Extract user identity and resolve roles.
+	// Extract user identity, validate credentials, and resolve roles.
 	if req.UserIdentityToken != nil {
 		if token, ok := req.UserIdentityToken.Value.(ua.IdentityToken); ok {
 			sess.identityToken = token
 		}
 	}
+
+	// Validate username/password credentials if the client presented a
+	// UserNameIdentityToken and a validator is configured.
+	if uname, ok := sess.identityToken.(*ua.UserNameIdentityToken); ok {
+		if v := s.srv.cfg.usernameValidator; v != nil {
+			if err := v(uname.UserName, string(uname.Password)); err != nil {
+				s.srv.cfg.logger.Info("ActivateSession username rejected",
+					"username", uname.UserName,
+					"password_len", len(uname.Password),
+					"error", err,
+				)
+				return nil, ua.StatusBadUserAccessDenied
+			}
+			s.srv.cfg.logger.Info("ActivateSession username accepted",
+				"username", uname.UserName,
+				"password_len", len(uname.Password),
+			)
+		}
+	}
+
+	// Validate X.509 identity token (OPC UA Part 4 §5.6.3.3).
+	if x509tok, ok := sess.identityToken.(*ua.X509IdentityToken); ok {
+		if err := s.validateX509UserToken(sc, sess, req, x509tok); err != nil {
+			return nil, err
+		}
+	}
+
 	if rm := s.srv.cfg.roleMapper; rm != nil {
 		sess.roles = rm(sess.identityToken)
 	} else {
@@ -137,6 +166,94 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	}
 
 	return response, nil
+}
+
+// validateX509UserToken verifies an X509IdentityToken presented in ActivateSession.
+//
+// Per OPC UA Part 4 §5.6.3.3:
+//  1. The certificate in the token must be parseable.
+//  2. The UserTokenSignature must be a valid signature over (serverCertificate || serverNonce)
+//     using the private key that corresponds to the token certificate. This proves the
+//     client possesses the key and prevents certificate-replay attacks.
+//  3. The server's configured X509UserValidator is called for trust-store and
+//     application-level policy decisions.
+func (s *SessionService) validateX509UserToken(
+	sc *uasc.SecureChannel,
+	sess *session,
+	req *ua.ActivateSessionRequest,
+	tok *ua.X509IdentityToken,
+) error {
+	if len(tok.CertificateData) == 0 {
+		return ua.StatusBadIdentityTokenInvalid
+	}
+
+	userCert, err := x509.ParseCertificate(tok.CertificateData)
+	if err != nil {
+		s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot parse certificate", "error", err)
+		return ua.StatusBadIdentityTokenInvalid
+	}
+
+	// Verify the UserTokenSignature: signature over (serverCertificate || serverNonce).
+	// This proves the client holds the private key for the presented certificate.
+	if req.UserTokenSignature != nil && len(req.UserTokenSignature.Signature) > 0 {
+		// Determine the security policy for the user token: the token policy may
+		// specify its own URI; fall back to the secure channel policy.
+		policyURI := sc.SecurityPolicyURI()
+		if tok.PolicyID != "" {
+			// Look up the policy URI from the user token policy; if not found, keep
+			// the channel policy.
+			for _, ep := range s.srv.Endpoints() {
+				for _, utp := range ep.UserIdentityTokens {
+					if utp.PolicyID == tok.PolicyID && utp.SecurityPolicyURI != "" {
+						policyURI = utp.SecurityPolicyURI
+					}
+				}
+			}
+		}
+
+		if policyURI != ua.SecurityPolicyURINone {
+			remoteKey, keyErr := uapolicy.PublicKey(tok.CertificateData)
+			if keyErr != nil {
+				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot extract public key", "error", keyErr)
+				return ua.StatusBadIdentityTokenInvalid
+			}
+
+			enc, encErr := uapolicy.Asymmetric(policyURI, nil, remoteKey)
+			if encErr != nil {
+				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot build asymmetric context", "error", encErr)
+				return ua.StatusBadIdentityTokenInvalid
+			}
+
+			// Message is serverCertificate || serverNonce per Part 4 §7.37.
+			message := append(s.srv.cfg.certificate, sess.serverNonce...)
+			if sigErr := enc.VerifySignature(message, req.UserTokenSignature.Signature); sigErr != nil {
+				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: signature verification failed", "error", sigErr)
+				return ua.StatusBadUserSignatureInvalid
+			}
+		}
+	}
+
+	// Delegate trust-store and policy decisions to the configured validator.
+	if v := s.srv.cfg.x509UserValidator; v != nil {
+		if err := v(tok.CertificateData); err != nil {
+			s.srv.cfg.logger.Info("ActivateSession X.509 user token rejected by validator",
+				"subject", userCert.Subject.String(),
+				"error", err,
+			)
+			return ua.StatusBadIdentityTokenRejected
+		}
+		s.srv.cfg.logger.Info("ActivateSession X.509 user token accepted",
+			"subject", userCert.Subject.String(),
+		)
+		return nil
+	}
+
+	// No validator means no configured trust decision: reject to avoid silently
+	// accepting tokens that have not been vetted.
+	s.srv.cfg.logger.Warn("ActivateSession X.509 user token rejected: no X509UserValidator configured",
+		"subject", userCert.Subject.String(),
+	)
+	return ua.StatusBadIdentityTokenRejected
 }
 
 // CloseSession implements the OPC UA CloseSession service.
@@ -158,6 +275,10 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 	// delete all subscriptions associated with the session.
 	if req.DeleteSubscriptions {
 		ss := s.srv.SubscriptionService
+		if ss == nil {
+			// Service not yet initialized (server not yet started).
+			goto respond
+		}
 		ss.Mu.Lock()
 		var toDelete []uint32
 		for id, sub := range ss.Subs {
@@ -170,6 +291,7 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 			ss.DeleteSubscription(id)
 		}
 	}
+respond:
 
 	response := &ua.CloseSessionResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),

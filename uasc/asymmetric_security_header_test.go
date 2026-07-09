@@ -4,6 +4,8 @@ package uasc
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestAsymmetricSecurityHeader(t *testing.T) {
@@ -148,4 +150,10 @@ func TestAsymmetricSecurityHeader(t *testing.T) {
 		},
 	}
 	RunCodecTest(t, cases)
+}
+
+func TestAsymmetricSecurityHeaderStringAndLen(t *testing.T) {
+	h := NewAsymmetricSecurityHeader("policy", []byte{1, 2}, []byte{3})
+	require.Contains(t, h.String(), "policy")
+	require.Greater(t, h.Len(), 12)
 }

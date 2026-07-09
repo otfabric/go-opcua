@@ -204,3 +204,166 @@ func TestNodeNameSpace_DeleteNode(t *testing.T) {
 		assert.Equal(t, ua.StatusBadNodeIDUnknown, sc)
 	})
 }
+
+func TestNodeNameSpace_Root(t *testing.T) {
+	srv := newTestServer()
+	ns, err := srv.Namespace(0)
+	require.NoError(t, err)
+	root := ns.(*NodeNameSpace).Root()
+	require.NotNil(t, root)
+}
+
+func TestNodeNameSpace_ChangeNotification(t *testing.T) {
+	srv := newTestServer()
+	ns := NewNodeNameSpace(srv, "test")
+	n := ns.AddNewVariableNode("x", int32(1))
+	// Should not panic.
+	ns.ChangeNotification(n.ID())
+}
+
+func TestNode_Description(t *testing.T) {
+	srv := newTestServer()
+	ns := NewNodeNameSpace(srv, "test")
+	n := ns.AddNewVariableNode("desc_node", int32(42))
+
+	// Before setting description.
+	d := n.Description()
+	require.NotNil(t, d)
+
+	// After setting description.
+	n.SetDescription("A test node", "en-US")
+	d = n.Description()
+	require.Equal(t, "A test node", d.Text)
+	require.Equal(t, "en-US", d.Locale)
+}
+
+func TestServerNodes_RootNode(t *testing.T) {
+	rn := RootNode()
+	require.NotNil(t, rn)
+}
+
+func TestNode_AddObjectAndVariable(t *testing.T) {
+	srv := newTestServer()
+	ns := NewNodeNameSpace(srv, "test")
+
+	// Create a parent object node and register it in the namespace.
+	parentID := ua.NewStringNodeID(ns.ID(), "parent")
+	parent := NewFolderNode(parentID, "parent")
+	ns.AddNode(parent) // n.ns is now set by AddNode
+
+	// AddObject: add a child object under the parent.
+	childObjID := ua.NewStringNodeID(ns.ID(), "childObj")
+	childObj := NewFolderNode(childObjID, "childObj")
+	result := parent.AddObject(childObj)
+	require.NotNil(t, result, "AddObject should return the added node")
+
+	// The child object should now be retrievable from the namespace.
+	found := ns.Node(childObjID)
+	require.NotNil(t, found, "child object should be in the namespace after AddObject")
+	require.Equal(t, "childObj", found.BrowseName().Name)
+
+	// Parent should now have a reference to the child.
+	hasRef := false
+	for _, ref := range parent.refs {
+		if ref.NodeID != nil && ref.NodeID.NodeID != nil && ref.NodeID.NodeID.StringID() == "childObj" {
+			hasRef = true
+			break
+		}
+	}
+	require.True(t, hasRef, "parent should have a reference to childObj")
+
+	// AddVariable: add a child variable under the parent.
+	childVarID := ua.NewStringNodeID(ns.ID(), "childVar")
+	childVar := NewVariableNode(childVarID, "childVar", int32(42))
+	result2 := parent.AddVariable(childVar)
+	require.NotNil(t, result2, "AddVariable should return the added node")
+
+	// The child variable should now be retrievable from the namespace.
+	found2 := ns.Node(childVarID)
+	require.NotNil(t, found2, "child variable should be in the namespace after AddVariable")
+	require.Equal(t, "childVar", found2.BrowseName().Name)
+}
+
+// TestAddNamespace_SetsServerRef verifies that AddNamespace injects the server
+// back-reference into a NodeNameSpace so that Browse and ChangeNotification
+// do not panic.
+func TestAddNamespace_SetsServerRef(t *testing.T) {
+	srv := newTestServer()
+
+	// Create a namespace WITHOUT using NewNodeNameSpace (no srv).
+	bare := NewNameSpace("urn:test:bare")
+	idx := srv.AddNamespace(bare)
+	require.Greater(t, idx, 0)
+
+	// The srv pointer must have been injected.
+	require.NotNil(t, bare.srv, "AddNamespace must set srv on NodeNameSpace")
+
+	// Browse must not panic now that srv is set.
+	require.NotPanics(t, func() {
+		bare.Browse(&ua.BrowseDescription{
+			NodeID:          ua.NewStringNodeID(bare.ID(), "missing"),
+			BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, 0),
+			IncludeSubtypes: true,
+		})
+	})
+
+	// ChangeNotification must not panic.
+	n := bare.AddNewVariableNode("x", int32(1))
+	require.NotPanics(t, func() {
+		bare.ChangeNotification(n.ID())
+	})
+}
+
+// TestBrowse_NilTypeDefinition_NoPanic verifies that Browse does not panic
+// when a referenced node cannot be resolved (as.srv.Node returns nil).
+func TestBrowse_NilTypeDefinition_NoPanic(t *testing.T) {
+	srv := newTestServer()
+	ns := NewNodeNameSpace(srv, "urn:test:tdnil")
+
+	// Create a node that references a non-existent node ID.
+	n := NewFolderNode(ua.NewStringNodeID(ns.ID(), "root"), "root")
+	// Manually append a reference to a node that doesn't exist in any namespace.
+	n.refs = append(n.refs, &ua.ReferenceDescription{
+		ReferenceTypeID: ua.NewNumericNodeID(0, 47), // HasComponent
+		IsForward:       true,
+		NodeID:          ua.NewExpandedNodeID(ua.NewNumericNodeID(99, 9999), "", 0),
+		BrowseName:      &ua.QualifiedName{Name: "ghost"},
+		DisplayName:     &ua.LocalizedText{Text: "ghost"},
+		NodeClass:       ua.NodeClassVariable,
+		TypeDefinition:  ua.NewNumericExpandedNodeID(0, 62),
+	})
+	ns.AddNode(n)
+
+	require.NotPanics(t, func() {
+		ns.Browse(&ua.BrowseDescription{
+			NodeID:          ua.NewStringNodeID(ns.ID(), "root"),
+			BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, 0),
+			IncludeSubtypes: true,
+			ResultMask:      uint32(ua.BrowseResultMaskAll),
+		})
+	})
+}
+
+// TestDataType_NilReferenceTypeID verifies that DataType() skips (rather than
+// panicking on) a reference whose ReferenceTypeID is nil.
+func TestDataType_NilReferenceTypeID(t *testing.T) {
+	srv := newTestServer()
+	ns := NewNodeNameSpace(srv, "urn:test:nilref")
+	n := NewVariableNode(ua.NewStringNodeID(ns.ID(), "nilref"), "nilref", int32(1))
+	// Inject a reference with a nil ReferenceTypeID.
+	n.refs = append(n.refs, &ua.ReferenceDescription{
+		ReferenceTypeID: nil,
+		IsForward:       true,
+		NodeID:          ua.NewNumericExpandedNodeID(0, 1),
+		BrowseName:      &ua.QualifiedName{Name: "bad"},
+		DisplayName:     &ua.LocalizedText{Text: "bad"},
+		TypeDefinition:  ua.NewNumericExpandedNodeID(0, 62),
+	})
+	ns.AddNode(n)
+
+	require.NotPanics(t, func() {
+		_ = n.DataType()
+	})
+}

@@ -53,7 +53,7 @@ func (s *DiscoveryService) FindServersOnNetwork(ctx context.Context, sc *uasc.Se
 // GetEndpoints implements the OPC UA GetEndpoints service.
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.4.4
 func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
-	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
+	s.srv.cfg.logger.Info("handling GetEndpoints request")
 
 	req, err := safeReq[*ua.GetEndpointsRequest](r)
 	if err != nil {
@@ -67,6 +67,12 @@ func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChan
 		if strings.ToLower(ep.EndpointURL) == requrl {
 			matchingEndpoints = append(matchingEndpoints, ep)
 		}
+	}
+	// OPC UA Part 4 §5.4.4: if no endpoints match the requested URL (or the
+	// URL is empty), return all available endpoints. Many clients send a URL
+	// that differs in path or hostname from the registered endpoint URLs.
+	if len(matchingEndpoints) == 0 {
+		matchingEndpoints = s.srv.endpoints
 	}
 
 	response := &ua.GetEndpointsResponse{

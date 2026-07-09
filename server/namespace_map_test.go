@@ -5,6 +5,7 @@ package server
 import (
 	"testing"
 
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -96,8 +97,77 @@ func TestMapNamespace_TypeMapping(t *testing.T) {
 	}
 }
 
+func TestMapNamespace_Browse(t *testing.T) {
+	srv := newTestServer()
+	ns := NewMapNamespace(srv, "map_ns")
+	ns.SetValue("a", int32(1))
+	ns.SetValue("b", int32(2))
+
+	root := ns.Browse(&ua.BrowseDescription{
+		NodeID:          ua.NewNumericNodeID(0, id.RootFolder),
+		BrowseDirection: ua.BrowseDirectionForward,
+	})
+	require.Equal(t, ua.StatusGood, root.StatusCode)
+	require.Len(t, root.References, 1)
+
+	objects := ns.Browse(&ua.BrowseDescription{
+		NodeID:          ua.NewNumericNodeID(0, id.ObjectsFolder),
+		BrowseDirection: ua.BrowseDirectionForward,
+	})
+	require.Equal(t, ua.StatusGood, objects.StatusCode)
+	require.Len(t, objects.References, 2)
+
+	unknown := ns.Browse(&ua.BrowseDescription{
+		NodeID:          ua.NewNumericNodeID(0, 9999),
+		BrowseDirection: ua.BrowseDirectionForward,
+	})
+	require.Equal(t, ua.StatusGood, unknown.StatusCode)
+	require.Empty(t, unknown.References)
+}
+
 func TestMapNamespace_Name(t *testing.T) {
 	srv := newTestServer()
 	ns := NewMapNamespace(srv, "my_map")
 	assert.Equal(t, "my_map", ns.Name())
+}
+
+func TestMapNamespace_ObjectsRootAndDelete(t *testing.T) {
+	srv := newTestServer()
+	ns := NewMapNamespace(srv, "my_map")
+
+	obj := ns.Objects()
+	require.NotNil(t, obj)
+	require.NotNil(t, ns.Root())
+	require.Same(t, obj, ns.AddNode(obj))
+
+	nid := ua.NewStringNodeID(ns.ID(), "missing")
+	require.Equal(t, ua.StatusBadNodeIDUnknown, ns.DeleteNode(nid))
+	require.Nil(t, ns.Node(nid))
+}
+
+func TestMapNamespace_Attribute_NumericIDs(t *testing.T) {
+	srv := newTestServer()
+	ns := NewMapNamespace(srv, "map_ns_numeric")
+
+	// IntID != 0 but == ObjectsFolder - exercises Objects() read path
+	objFolderNID := ua.NewNumericNodeID(0, 85 /* id.ObjectsFolder */)
+	dv := ns.Attribute(objFolderNID, ua.AttributeIDBrowseName)
+	// May fail with bad attribute, but shouldn't panic.
+	_ = dv
+
+	// IntID != 0 and != ObjectsFolder - exercises BadNodeIDInvalid path
+	unknownNumID := ua.NewNumericNodeID(0, 9999)
+	dv2 := ns.Attribute(unknownNumID, ua.AttributeIDValue)
+	require.Equal(t, ua.StatusBadNodeIDInvalid, dv2.Status)
+}
+
+func TestMapNamespace_Attribute_NodeID(t *testing.T) {
+	srv := newTestServer()
+	ns := NewMapNamespace(srv, "map_ns2")
+	ns.SetValue("n", int32(7))
+	nid := ua.NewStringNodeID(ns.ID(), "n")
+
+	// NodeID attribute
+	dv := ns.Attribute(nid, ua.AttributeIDNodeID)
+	require.Equal(t, ua.StatusOK, dv.Status)
 }

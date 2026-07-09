@@ -56,3 +56,28 @@ func TestVariantString(t *testing.T) {
 		})
 	}
 }
+
+func TestVariantString_MissingScalarTypes(t *testing.T) {
+	tests := []struct {
+		name string
+		v    *Variant
+		want string
+	}{
+		{"XMLElement", MustVariant(XMLElement("<x/>")), "<x/>"},
+		{"ExpandedNodeID", MustVariant(NewTwoByteExpandedNodeID(5)), "i=5"},
+		{"nil ExpandedNodeID", MustVariant((*ExpandedNodeID)(nil)), "null"},
+		{"StatusCode known", MustVariant(StatusOK), "StatusGood"},
+		{"StatusCode unknown", MustVariant(StatusCode(0xDEADBEEF)), "0xDEADBEEF"},
+		{"ByteString", MustVariant([]byte{0xAB, 0xCD}), "abcd"},
+		{"true bool", MustVariant(true), "true"},
+		{"false bool", MustVariant(false), "false"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := tt.v.String()
+			if got != tt.want {
+				t.Errorf("Variant.String() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

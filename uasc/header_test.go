@@ -4,6 +4,8 @@ package uasc
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestHeader(t *testing.T) {
@@ -29,4 +31,10 @@ func TestHeader(t *testing.T) {
 		},
 	}
 	RunCodecTest(t, cases)
+}
+
+func TestHeaderString(t *testing.T) {
+	h := NewHeader(MessageTypeMessage, ChunkTypeFinal, 42)
+	require.Contains(t, h.String(), "MSG")
+	require.Contains(t, h.String(), "SecureChannelID: 42")
 }

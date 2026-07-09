@@ -73,3 +73,17 @@ func TestRequestHeader(t *testing.T) {
 	}
 	RunCodecTest(t, cases)
 }
+
+func TestRequestHeader_HasReturnDiagnostics(t *testing.T) {
+	r := &RequestHeader{ReturnDiagnostics: ServiceLevelSymbolicID | OperationLevelSymbolicID}
+
+	if !r.HasReturnDiagnostics(ServiceLevelSymbolicID) {
+		t.Error("HasReturnDiagnostics: ServiceLevelSymbolicID should be set")
+	}
+	if !r.HasReturnDiagnostics(OperationLevelSymbolicID) {
+		t.Error("HasReturnDiagnostics: OperationLevelSymbolicID should be set")
+	}
+	if r.HasReturnDiagnostics(ServiceLevelLocalizedText) {
+		t.Error("HasReturnDiagnostics: ServiceLevelLocalizedText should not be set")
+	}
+}

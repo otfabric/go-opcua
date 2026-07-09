@@ -97,6 +97,70 @@ func TestParseEndpoint(t *testing.T) {
 	}
 }
 
+func TestEndpointMatch(t *testing.T) {
+	cases := []struct {
+		client string
+		server string
+		match  bool
+	}{
+		// Normal case: identical hostnames.
+		{
+			client: "opc.tcp://localhost:4840/opcua-interop",
+			server: "opc.tcp://localhost:4840/opcua-interop",
+			match:  true,
+		},
+		// Wildcard IPv4: 0.0.0.0 accepts any client hostname.
+		{
+			client: "opc.tcp://localhost:4840/opcua-interop",
+			server: "opc.tcp://0.0.0.0:4840/opcua-interop",
+			match:  true,
+		},
+		// Wildcard IPv6 compressed form: [::] accepts any client hostname.
+		{
+			client: "opc.tcp://127.0.0.1:4840/opcua-interop",
+			server: "opc.tcp://[::]:4840/opcua-interop",
+			match:  true,
+		},
+		// Wildcard IPv6 full form: 0:0:0:0:0:0:0:0 also accepted.
+		{
+			client: "opc.tcp://host.docker.internal:4840/opcua-interop",
+			server: "opc.tcp://[0:0:0:0:0:0:0:0]:4840/opcua-interop",
+			match:  true,
+		},
+		// Path mismatch with wildcard host is still rejected.
+		{
+			client: "opc.tcp://localhost:4840/wrong",
+			server: "opc.tcp://0.0.0.0:4840/opcua-interop",
+			match:  false,
+		},
+		// Port mismatch with wildcard host is rejected.
+		{
+			client: "opc.tcp://localhost:4841/opcua-interop",
+			server: "opc.tcp://0.0.0.0:4840/opcua-interop",
+			match:  false,
+		},
+		// Non-wildcard hostname: different hosts are rejected.
+		{
+			client: "opc.tcp://other-host:4840/opcua-interop",
+			server: "opc.tcp://expected-host:4840/opcua-interop",
+			match:  false,
+		},
+		// Scheme mismatch.
+		{
+			client: "opc.tcp://localhost:4840/path",
+			server: "opc.https://localhost:4840/path",
+			match:  false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.client+"_vs_"+c.server, func(t *testing.T) {
+			got := endpointMatch(c.client, c.server)
+			require.Equal(t, c.match, got)
+		})
+	}
+}
+
 func TestDialTCP(t *testing.T) {
 	t.Run("invalid endpoint returns error", func(t *testing.T) {
 		conn, err := DialTCP(context.Background(), "tcp://127.0.0.1:4840")

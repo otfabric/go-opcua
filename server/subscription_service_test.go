@@ -179,3 +179,77 @@ func TestSubscription_RetransmissionQueue(t *testing.T) {
 		assert.NotNil(t, sub2.getSentMessage(maxRetransmissionQueueSize+5))
 	})
 }
+
+// TestDeleteSubscriptions_NilSession verifies that DeleteSubscriptions does not
+// panic when the server has no session matching the request token.
+func TestDeleteSubscriptions_NilSession(t *testing.T) {
+	srv := newTestServer()
+	svc, sub, _ := newTestSubscription(srv)
+
+	// Build a header with an auth token that doesn't match any live session.
+	badHdr := &ua.RequestHeader{
+		RequestHandle:       99,
+		AuthenticationToken: ua.NewByteStringNodeID(0, []byte("bad-token")),
+	}
+	req := &ua.DeleteSubscriptionsRequest{
+		RequestHeader:   badHdr,
+		SubscriptionIDs: []uint32{sub.ID},
+	}
+
+	require.NotPanics(t, func() {
+		resp, err := svc.DeleteSubscriptions(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		r := resp.(*ua.DeleteSubscriptionsResponse)
+		// Session was nil so the subscription ownership check must reject it.
+		require.Equal(t, ua.StatusBadSessionIDInvalid, r.Results[0])
+	})
+}
+
+// TestSubscription_Run_NilSession verifies that a subscription goroutine with a
+// nil session exits cleanly rather than panicking.
+func TestSubscription_Run_NilSession(t *testing.T) {
+	srv := newTestServer()
+	sub := NewSubscription()
+	sub.srv = srv.SubscriptionService
+	sub.Session = nil // intentionally nil
+	sub.ID = 42
+	sub.RevisedPublishingInterval = 10
+	sub.RevisedLifetimeCount = 3
+	sub.RevisedMaxKeepAliveCount = 2
+	sub.running = true
+
+	srv.SubscriptionService.Mu.Lock()
+	srv.SubscriptionService.Subs[sub.ID] = sub
+	srv.SubscriptionService.Mu.Unlock()
+
+	// run() should return promptly (nil session early-exit) without panicking.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sub.run()
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("sub.run() did not exit within 1s for nil session")
+	}
+}
+
+// TestSubscription_Keepalive_NilChannel verifies that keepalive returns an
+// error rather than panicking when Channel is nil.
+func TestSubscription_Keepalive_NilChannel(t *testing.T) {
+	srv := newTestServer()
+	sess := srv.sb.NewSession()
+	sub := NewSubscription()
+	sub.srv = srv.SubscriptionService
+	sub.Session = sess
+	sub.Channel = nil // intentionally nil
+	sub.ID = 43
+
+	pubreq := PubReq{
+		Req: &ua.PublishRequest{RequestHeader: &ua.RequestHeader{RequestHandle: 1}},
+		ID:  1,
+	}
+	err := sub.keepalive(pubreq)
+	require.Error(t, err, "keepalive with nil channel must return an error, not panic")
+}
