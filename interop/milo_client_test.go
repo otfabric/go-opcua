@@ -11,8 +11,15 @@
 package interop
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // ---------------------------------------------------------------------------
@@ -175,6 +182,309 @@ func TestGoServer_MiloClient_ReadScalarDouble(t *testing.T) {
 
 func TestGoServer_MiloClient_ReadScalarString(t *testing.T) {
 	miloReadScalarFromGoServer(t, "Scalar.String")
+}
+
+// ---------------------------------------------------------------------------
+// Rich scalar reads — Milo client → go server (value assertions)
+// ---------------------------------------------------------------------------
+
+// miloExtractScalarValue parses a single read result item and returns the "value" field.
+func miloExtractScalarValue(t *testing.T, item json.RawMessage) json.RawMessage {
+	t.Helper()
+	var row struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(item, &row); err != nil {
+		t.Fatalf("miloExtractScalarValue unmarshal: %v; raw: %s", err, item)
+	}
+	return row.Value
+}
+
+func TestGoServer_MiloClient_ReadScalarDateTime(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.DateTime")
+	v := strings.Trim(string(miloExtractScalarValue(t, item)), `"`)
+	// Milo formats DateTime via getJavaInstant().toString(): "2024-01-01T00:00:00Z"
+	if !strings.HasPrefix(v, "2024-01-01T00:00:00") {
+		t.Errorf("Scalar.DateTime: got %q, want prefix 2024-01-01T00:00:00", v)
+	}
+	if !strings.HasSuffix(v, "Z") {
+		t.Errorf("Scalar.DateTime: got %q, want UTC suffix Z", v)
+	}
+}
+
+func TestGoServer_MiloClient_ReadScalarGuid(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.Guid")
+	v := strings.Trim(string(miloExtractScalarValue(t, item)), `"`)
+	want := "72962b91-fa75-4ae6-8d28-b404dc7daf63"
+	if strings.ToLower(v) != want {
+		t.Errorf("Scalar.Guid: got %q, want %q", v, want)
+	}
+}
+
+func TestGoServer_MiloClient_ReadScalarByteString(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.ByteString")
+	v := strings.Trim(string(miloExtractScalarValue(t, item)), `"`)
+	decoded, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		t.Fatalf("Scalar.ByteString: base64 decode %q: %v", v, err)
+	}
+	if string(decoded) != "opcua-compat" {
+		t.Errorf("Scalar.ByteString: decoded %q, want %q", decoded, "opcua-compat")
+	}
+}
+
+func TestGoServer_MiloClient_ReadScalarXmlElement(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.XmlElement")
+	v := strings.Trim(string(miloExtractScalarValue(t, item)), `"`)
+	want := "<compat>test</compat>"
+	if v != want {
+		t.Errorf("Scalar.XmlElement: got %q, want %q", v, want)
+	}
+}
+
+func TestGoServer_MiloClient_ReadScalarNodeId(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.NodeId")
+	v := strings.Trim(string(miloExtractScalarValue(t, item)), `"`)
+	want := "i=85"
+	if v != want {
+		t.Errorf("Scalar.NodeId: got %q, want %q", v, want)
+	}
+}
+
+func TestGoServer_MiloClient_ReadScalarQualifiedName(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.QualifiedName")
+	raw := miloExtractScalarValue(t, item)
+	var qn struct {
+		NS   int    `json:"ns"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &qn); err != nil {
+		t.Fatalf("Scalar.QualifiedName: unmarshal %q: %v", raw, err)
+	}
+	if qn.NS != 0 || qn.Name != "Objects" {
+		t.Errorf("Scalar.QualifiedName: got ns=%d name=%q, want ns=0 name=Objects", qn.NS, qn.Name)
+	}
+}
+
+func TestGoServer_MiloClient_ReadScalarLocalizedText(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.LocalizedText")
+	raw := miloExtractScalarValue(t, item)
+	var lt struct {
+		Locale string `json:"locale"`
+		Text   string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &lt); err != nil {
+		t.Fatalf("Scalar.LocalizedText: unmarshal %q: %v", raw, err)
+	}
+	if lt.Locale != "en" {
+		t.Errorf("Scalar.LocalizedText: locale=%q, want %q", lt.Locale, "en")
+	}
+	if lt.Text != "OPC UA Compatibility" {
+		t.Errorf("Scalar.LocalizedText: text=%q, want %q", lt.Text, "OPC UA Compatibility")
+	}
+}
+
+func TestGoServer_MiloClient_ReadScalarStatusCode(t *testing.T) {
+	item := miloReadScalarFromGoServer(t, "Scalar.StatusCode")
+	raw := miloExtractScalarValue(t, item)
+	var sc struct {
+		Name     string `json:"name"`
+		Code     uint32 `json:"code"`
+		Severity string `json:"severity"`
+	}
+	if err := json.Unmarshal(raw, &sc); err != nil {
+		t.Fatalf("Scalar.StatusCode: unmarshal %q: %v", raw, err)
+	}
+	if sc.Code != 0 {
+		t.Errorf("Scalar.StatusCode: code=0x%08X, want 0 (Good)", sc.Code)
+	}
+	if sc.Severity != "Good" {
+		t.Errorf("Scalar.StatusCode: severity=%q, want Good", sc.Severity)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic counter — Milo client → go server
+// ---------------------------------------------------------------------------
+
+// TestGoServer_MiloClient_ReadDynamicCounter reads Dynamic.Counter twice with
+// a 300 ms gap and asserts the second value is strictly greater.
+func TestGoServer_MiloClient_ReadDynamicCounter(t *testing.T) {
+	endpoint := startGoServer(t)
+
+	readCounter := func() int64 {
+		t.Helper()
+		result := runMiloClient(t, endpoint, "read",
+			"--node", "nsu="+interopNamespaceURI+";s=Dynamic.Counter",
+		)
+		if !result.Success {
+			t.Fatalf("read Dynamic.Counter failed: %s", result.ServiceResult)
+		}
+		var items []struct {
+			Value json.RawMessage `json:"value"`
+		}
+		if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+			t.Fatalf("parse Dynamic.Counter result: %v", err)
+		}
+		// Milo returns Int64 as a quoted string.
+		v := strings.Trim(string(items[0].Value), `"`)
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			t.Fatalf("Dynamic.Counter value %q not an integer: %v", v, err)
+		}
+		return n
+	}
+
+	v1 := readCounter()
+	time.Sleep(350 * time.Millisecond)
+	v2 := readCounter()
+
+	if v2 <= v1 {
+		t.Errorf("Dynamic.Counter: second read (%d) ≤ first read (%d)", v2, v1)
+	}
+	t.Logf("Dynamic.Counter: %d → %d (delta %d)", v1, v2, v2-v1)
+}
+
+// ---------------------------------------------------------------------------
+// Browse Scalars folder — Milo client → go server
+// ---------------------------------------------------------------------------
+
+// TestGoServer_MiloClient_BrowseScalarsFolder browses the interop Objects
+// folder and asserts that all rich built-in scalar nodes are present.
+func TestGoServer_MiloClient_BrowseScalarsFolder(t *testing.T) {
+	endpoint := startGoServer(t)
+	result := runMiloClient(t, endpoint, "browse",
+		"--node", "nsu="+interopNamespaceURI+";i=85",
+	)
+	if !result.Success {
+		t.Fatalf("browse interop Objects failed: %s", result.ServiceResult)
+	}
+	names := parseBrowseNames(t, result.Results)
+	for _, want := range []string{
+		"Scalar.DateTime", "Scalar.Guid", "Scalar.ByteString",
+		"Scalar.XmlElement", "Scalar.NodeId", "Scalar.QualifiedName",
+		"Scalar.LocalizedText", "Scalar.StatusCode",
+	} {
+		if !names[want] {
+			t.Errorf("BrowseScalars: expected node %q, got: %v", want, setKeys(names))
+		}
+	}
+	t.Logf("BrowseScalars: %d total nodes, all 8 rich scalar types present", len(names))
+}
+
+// ---------------------------------------------------------------------------
+// Subscription queue semantics — Milo client → go server
+// ---------------------------------------------------------------------------
+
+// miloParseNotificationValues parses integer values from a Milo subscribe result.
+func miloParseNotificationValues(t *testing.T, notifRaw json.RawMessage) []int64 {
+	t.Helper()
+	var notifs []struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(notifRaw, &notifs); err != nil {
+		t.Fatalf("miloParseNotificationValues: %v", err)
+	}
+	vals := make([]int64, 0, len(notifs))
+	for _, n := range notifs {
+		s := strings.Trim(string(n.Value), `"`)
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			continue
+		}
+		vals = append(vals, v)
+	}
+	return vals
+}
+
+// TestGoServer_MiloClient_Subscribe_QueueMultiple subscribes to
+// Dynamic.Counter with QueueSize=5 and verifies that ≥5 queued values arrive.
+func TestGoServer_MiloClient_Subscribe_QueueMultiple(t *testing.T) {
+	endpoint := startGoServer(t)
+	result := runMiloClient(t, endpoint, "subscribe",
+		"--node", "nsu="+interopNamespaceURI+";s=Dynamic.Counter",
+		"--notifications", "5",
+		"--queue-size", "5",
+		"--discard-oldest", "true",
+		"--publishing-interval-ms", "2000",
+		"--sampling-interval-ms", "100",
+		"--timeout-ms", "15000",
+	)
+	if !result.Success {
+		t.Fatalf("subscribe failed: %s error=%s", result.ServiceResult, result.Error)
+	}
+
+	var items []struct {
+		Notifications json.RawMessage `json:"notifications"`
+	}
+	if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+		t.Fatalf("parse subscribe results: %v", err)
+	}
+	vals := miloParseNotificationValues(t, items[0].Notifications)
+	if len(vals) < 5 {
+		t.Errorf("Subscribe QueueMultiple: expected ≥5 notifications, got %d: %v", len(vals), vals)
+	}
+	for i := 1; i < len(vals); i++ {
+		if vals[i] < vals[i-1] {
+			t.Errorf("Subscribe QueueMultiple: discard-oldest violation at index %d: %v", i, vals)
+			break
+		}
+	}
+	t.Logf("Subscribe QueueMultiple: %d queued counter values: %v", len(vals), vals)
+}
+
+// TestGoServer_MiloClient_Subscribe_DiscardOldest verifies discardOldest
+// semantics against the go-opcua server via the Milo adapter client.
+func TestGoServer_MiloClient_Subscribe_DiscardOldest(t *testing.T) {
+	endpoint := startGoServer(t)
+
+	subscribe := func(discardOldest string) []int64 {
+		t.Helper()
+		result := runMiloClient(t, endpoint, "subscribe",
+			"--node", "nsu="+interopNamespaceURI+";s=Dynamic.Counter",
+			"--notifications", "3",
+			"--queue-size", "3",
+			"--discard-oldest", discardOldest,
+			"--publishing-interval-ms", "1500",
+			"--sampling-interval-ms", "100",
+			"--timeout-ms", "12000",
+		)
+		if !result.Success {
+			t.Fatalf("subscribe (discard=%s) failed: %s", discardOldest, result.ServiceResult)
+		}
+		var items []struct {
+			Notifications json.RawMessage `json:"notifications"`
+		}
+		if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+			t.Fatalf("parse results: %v", err)
+		}
+		return miloParseNotificationValues(t, items[0].Notifications)
+	}
+
+	oldest := subscribe("false")
+	newest := subscribe("true")
+
+	t.Logf("discardOldest=false (oldest): %v", oldest)
+	t.Logf("discardOldest=true  (newest): %v", newest)
+
+	if len(oldest) == 0 || len(newest) == 0 {
+		t.Fatal("no notification values received")
+	}
+	for i := 1; i < len(oldest); i++ {
+		if oldest[i] < oldest[i-1] {
+			t.Errorf("discardOldest=false: values not non-decreasing: %v", oldest)
+			break
+		}
+	}
+	for i := 1; i < len(newest); i++ {
+		if newest[i] < newest[i-1] {
+			t.Errorf("discardOldest=true: values not non-decreasing: %v", newest)
+			break
+		}
+	}
+	if len(oldest) > 0 && len(newest) > 0 && oldest[0] > newest[0] {
+		t.Errorf("discardOldest=false first value (%d) > discardOldest=true first value (%d)", oldest[0], newest[0])
+	}
 }
 
 // TestGoServer_MiloClient_Write verifies that the Milo client can write Int32
@@ -755,4 +1065,545 @@ func TestGoServer_MiloClient_Username_InvalidPassword_Rejected(t *testing.T) {
 	if !isIdentityRejectedServiceResult(result.ServiceResult.Name) {
 		t.Errorf("expected identity-rejected service result, got: %s", result.ServiceResult)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Trust validation — Milo client → go server
+// ---------------------------------------------------------------------------
+
+// TestGoServer_MiloClient_TrustedCert_Accepted verifies that the Milo adapter
+// client can connect to the Go server when its certificate is CA-signed.
+func TestGoServer_MiloClient_TrustedCert_Accepted(t *testing.T) {
+	endpoint := startTrustGoServer(t)
+	result := runSecureAdapterClient(t,
+		"MILO_IMAGE", defaultMiloImage,
+		"milo-client", endpoint, "read",
+		"Basic256Sha256", "SignAndEncrypt",
+		"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32",
+	)
+	if !result.Success {
+		t.Fatalf("trusted cert should have been accepted: %s", result.ServiceResult)
+	}
+}
+
+// TestGoServer_MiloClient_UntrustedCert_Rejected verifies that the Go server
+// rejects a Milo adapter client presenting a certificate not in the trust CA.
+func TestGoServer_MiloClient_UntrustedCert_Rejected(t *testing.T) {
+	endpoint := startTrustGoServer(t)
+	result := runSecureAdapterClientResult(t,
+		"MILO_IMAGE", defaultMiloImage,
+		"untrusted", endpoint, "read",
+		"Basic256Sha256", "SignAndEncrypt",
+		"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32",
+	)
+	if result.Success {
+		t.Fatal("untrusted cert should have been rejected but connection succeeded")
+	}
+	if !isUntrustedClientRejected(result) {
+		t.Errorf("expected certificate/channel rejection, got success=%v serviceResult=%s error=%s",
+			result.Success, result.ServiceResult, result.Error)
+	}
+	t.Logf("Milo untrusted cert correctly rejected: serviceResult=%s error=%s", result.ServiceResult, result.Error)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11 — Service Semantics and Error Handling
+// ---------------------------------------------------------------------------
+
+// TestGoServer_MiloClient_BatchWrite verifies per-item WriteResponse.Results
+// (IEC 62541-4 Write Service): Good, BadUserAccessDenied, and BadNodeIdUnknown
+// in a single request.
+func TestGoServer_MiloClient_BatchWrite(t *testing.T) {
+	endpoint := startGoServer(t)
+	result := runMiloClientResult(t, endpoint, "write",
+		"--node", "nsu="+interopNamespaceURI+";s=Access.ReadWrite",
+		"--type", "Int32", "--value", "42",
+		"--node", "nsu="+interopNamespaceURI+";s=Access.ReadOnly",
+		"--type", "String", "--value", "x",
+		"--node", "nsu="+interopNamespaceURI+";s=DoesNotExist",
+		"--type", "Int32", "--value", "1",
+	)
+	items := parseWriteResults(t, result.Results)
+	if len(items) != 3 {
+		t.Fatalf("BatchWrite: expected 3 results, got %d; raw=%s", len(items), result.Results)
+	}
+	if !statusCodeIs(items[0].StatusCode, ua.StatusOK) {
+		t.Errorf("Access.ReadWrite: got %s, want Good", items[0].StatusCode)
+	}
+	if !statusCodeIs(items[1].StatusCode, ua.StatusBadUserAccessDenied) &&
+		!statusCodeNameHas(items[1].StatusCode, "UserAccessDenied") {
+		t.Errorf("Access.ReadOnly: got %s, want BadUserAccessDenied", items[1].StatusCode)
+	}
+	if !statusCodeIs(items[2].StatusCode, ua.StatusBadNodeIDUnknown) &&
+		!statusCodeNameHas(items[2].StatusCode, "NodeIdUnknown") {
+		t.Errorf("DoesNotExist: got %s, want BadNodeIdUnknown", items[2].StatusCode)
+	}
+	t.Logf("BatchWrite per-item: %s | %s | %s", items[0].StatusCode, items[1].StatusCode, items[2].StatusCode)
+}
+
+// TestGoServer_MiloClient_WriteTypeMismatch verifies BadTypeMismatch for
+// incompatible Variant writes (IEC 62541-4 Write Service).
+func TestGoServer_MiloClient_WriteTypeMismatch(t *testing.T) {
+	endpoint := startGoServer(t)
+	cases := []struct {
+		name, node, typ, val string
+	}{
+		{"StringToInt32", "Scalar.Int32", "String", "hello"},
+		{"Int64ToInt32", "Scalar.Int32", "Int64", "99"},
+		{"ArrayToScalar", "Scalar.Int32", "Int32[]", "1,2,3"},
+		{"ScalarToArray", "Array.Int32", "Int32", "7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := runMiloClientResult(t, endpoint, "write",
+				"--node", "nsu="+interopNamespaceURI+";s="+tc.node,
+				"--type", tc.typ, "--value", tc.val,
+			)
+			items := parseWriteResults(t, result.Results)
+			if len(items) == 0 {
+				t.Fatalf("no write results; serviceResult=%s", result.ServiceResult)
+			}
+			if !statusCodeIs(items[0].StatusCode, ua.StatusBadTypeMismatch) &&
+				!statusCodeNameHas(items[0].StatusCode, "TypeMismatch") {
+				t.Errorf("%s: got %s, want BadTypeMismatch", tc.name, items[0].StatusCode)
+			}
+		})
+	}
+}
+
+// TestGoServer_MiloClient_MethodValidation covers Call Service argument
+// and identity failures (IEC 62541-4).
+func TestGoServer_MiloClient_MethodValidation(t *testing.T) {
+	endpoint := startGoServer(t)
+
+	t.Run("TooFewArgs", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.Add",
+		)
+		if result.Success {
+			t.Fatal("Call with too few args succeeded")
+		}
+		if !statusCodeNameHas(result.ServiceResult, "ArgumentsMissing") &&
+			!statusCodeIs(result.ServiceResult, ua.StatusBadArgumentsMissing) {
+			// Per-item status may be in results[0].statusCode
+			var items []struct {
+				StatusCode statusCodeObj `json:"statusCode"`
+			}
+			_ = json.Unmarshal(result.Results, &items)
+			if len(items) == 0 || (!statusCodeNameHas(items[0].StatusCode, "ArgumentsMissing") &&
+				!statusCodeIs(items[0].StatusCode, ua.StatusBadArgumentsMissing)) {
+				t.Errorf("TooFewArgs: serviceResult=%s results=%s", result.ServiceResult, result.Results)
+			}
+		}
+	})
+
+	t.Run("TooManyArgs", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.NoArguments",
+			"--input", "Int32:5",
+		)
+		if result.Success {
+			t.Fatal("Call with too many args succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "TooManyArguments") && !statusCodeIs(sc, ua.StatusBadTooManyArguments) {
+			t.Errorf("TooManyArgs: got %s, want BadTooManyArguments", sc)
+		}
+	})
+
+	t.Run("WrongType", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.Add",
+			"--input", "String:a",
+			"--input", "String:b",
+		)
+		if result.Success {
+			t.Fatal("Call with wrong arg types succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "TypeMismatch") && !statusCodeIs(sc, ua.StatusBadTypeMismatch) {
+			t.Errorf("WrongType: got %s, want BadTypeMismatch", sc)
+		}
+	})
+
+	t.Run("UnknownMethod", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.DoesNotExist",
+		)
+		if result.Success {
+			t.Fatal("Call unknown method succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "MethodInvalid") && !statusCodeIs(sc, ua.StatusBadMethodInvalid) {
+			t.Errorf("UnknownMethod: got %s, want BadMethodInvalid", sc)
+		}
+	})
+
+	t.Run("WrongObject", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Scalars",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.Add",
+			"--input", "Int32:1",
+			"--input", "Int32:2",
+		)
+		if result.Success {
+			t.Fatal("Call with wrong object succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "MethodInvalid") && !statusCodeNameHas(sc, "NodeIdUnknown") &&
+			!statusCodeIs(sc, ua.StatusBadMethodInvalid) && !statusCodeIs(sc, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("WrongObject: got %s, want BadMethodInvalid or BadNodeIdUnknown", sc)
+		}
+	})
+}
+
+// TestGoServer_MiloClient_IndexRange verifies IndexRange on a scalar is
+// rejected with BadIndexRangeInvalid (IEC 62541-4).
+func TestGoServer_MiloClient_IndexRange(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Scalar.Int32")
+
+	resp, err := c.Read(ctx, &ua.ReadRequest{
+		NodesToRead: []*ua.ReadValueID{{
+			NodeID:      nodeID,
+			AttributeID: ua.AttributeIDValue,
+			IndexRange:  "0:1",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Read with IndexRange: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("no read results")
+	}
+	if resp.Results[0].Status != ua.StatusBadIndexRangeInvalid {
+		t.Errorf("IndexRange on scalar: got %v, want BadIndexRangeInvalid", resp.Results[0].Status)
+	}
+
+	wresp, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID:      nodeID,
+			AttributeID: ua.AttributeIDValue,
+			IndexRange:  "0:1",
+			Value: &ua.DataValue{
+				EncodingMask: ua.DataValueValue,
+				Value:        ua.MustVariant(int32(1)),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Write with IndexRange: %v", err)
+	}
+	if len(wresp.Results) == 0 || wresp.Results[0] != ua.StatusBadIndexRangeInvalid {
+		t.Errorf("Write IndexRange: got %v, want BadIndexRangeInvalid", wresp.Results)
+	}
+}
+
+// TestGoServer_MiloClient_IndexRangeSubset verifies one-dimensional IndexRange
+// subset Read/Write via the Milo adapter client.
+func TestGoServer_MiloClient_IndexRangeSubset(t *testing.T) {
+	endpoint := startGoServer(t)
+	arrayNode := "nsu=" + interopNamespaceURI + ";s=Array.Int32"
+
+	t.Run("ReadSubset", func(t *testing.T) {
+		result := runMiloClient(t, endpoint, "read",
+			"--node", arrayNode, "--index-range", "0:1",
+		)
+		if !result.Success {
+			t.Fatalf("IndexRange Read failed: %s", result.ServiceResult)
+		}
+		var items []struct {
+			Value []int32 `json:"value"`
+		}
+		if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+			t.Fatalf("parse: %v raw=%s", err, result.Results)
+		}
+		if len(items[0].Value) != 2 || items[0].Value[0] != 0 || items[0].Value[1] != 1 {
+			t.Errorf("IndexRange 0:1: got %v, want [0,1]", items[0].Value)
+		}
+	})
+
+	t.Run("WriteMerge", func(t *testing.T) {
+		w := runMiloClientResult(t, endpoint, "write",
+			"--node", arrayNode, "--type", "Int32[]", "--value", "90,91",
+			"--index-range", "1:2",
+		)
+		if !w.Success {
+			t.Fatalf("IndexRange Write failed: %s", w.ServiceResult)
+		}
+	})
+
+	t.Run("NoData", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "read",
+			"--node", arrayNode, "--index-range", "100:101",
+		)
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "IndexRangeNoData") && !statusCodeIs(sc, ua.StatusBadIndexRangeNoData) {
+			t.Errorf("out-of-range IndexRange: got %s, want BadIndexRangeNoData", sc)
+		}
+	})
+}
+
+// TestGoServer_MiloClient_TimestampsToReturn verifies TimestampsToReturn via
+// Go client and Milo CLI --timestamps.
+func TestGoServer_MiloClient_TimestampsToReturn(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Scalar.Int32")
+
+	resp, err := c.Read(ctx, &ua.ReadRequest{
+		TimestampsToReturn: ua.TimestampsToReturnNeither,
+		NodesToRead: []*ua.ReadValueID{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Read Neither: %v", err)
+	}
+	if resp.Results[0].EncodingMask&ua.DataValueSourceTimestamp != 0 ||
+		resp.Results[0].EncodingMask&ua.DataValueServerTimestamp != 0 {
+		t.Errorf("Neither: timestamps present mask=%#x", resp.Results[0].EncodingMask)
+	}
+
+	result := runMiloClient(t, endpoint, "read",
+		"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32",
+		"--timestamps", "Neither",
+	)
+	if !result.Success {
+		t.Fatalf("Milo Neither read failed: %s", result.ServiceResult)
+	}
+}
+
+// TestGoServer_MiloClient_WriteEncodingMask verifies BadWriteNotSupported for
+// Status/timestamp Writes.
+func TestGoServer_MiloClient_WriteEncodingMask(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
+
+	ok, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(11))},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("value-only Write: %v", err)
+	}
+	if len(ok.Results) == 0 || ok.Results[0] != ua.StatusOK {
+		t.Errorf("value-only Write: got %v", ok.Results)
+	}
+
+	bad, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{
+				EncodingMask:    ua.DataValueValue | ua.DataValueServerTimestamp,
+				Value:           ua.MustVariant(int32(12)),
+				ServerTimestamp: time.Now(),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("timestamp Write: %v", err)
+	}
+	if len(bad.Results) == 0 || bad.Results[0] != ua.StatusBadWriteNotSupported {
+		t.Errorf("timestamp Write: got %v, want BadWriteNotSupported", bad.Results)
+	}
+}
+
+// TestGoServer_MiloClient_BrowseResultMask verifies ResultMask on the Go server
+// and that the Milo CLI accepts --result-mask.
+func TestGoServer_MiloClient_BrowseResultMask(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	objectsID := ua.NewNumericNodeID(nsIdx, id.ObjectsFolder)
+
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID: objectsID, BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: true,
+			ResultMask:      uint32(ua.BrowseResultMaskBrowseName),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BrowseResultMask: %v", err)
+	}
+	if len(resp.Results) == 0 || len(resp.Results[0].References) == 0 {
+		t.Fatal("no references")
+	}
+	for _, r := range resp.Results[0].References {
+		if r.DisplayName != nil && r.DisplayName.Text != "" {
+			t.Errorf("DisplayName should be cleared")
+		}
+		if r.BrowseName == nil || r.BrowseName.Name == "" {
+			t.Errorf("BrowseName missing")
+		}
+	}
+
+	result := runMiloClient(t, endpoint, "browse",
+		"--node", "nsu="+interopNamespaceURI+";i=85",
+		"--result-mask", "8",
+	)
+	if !result.Success {
+		t.Fatalf("Milo BrowseResultMask failed: %s", result.ServiceResult)
+	}
+}
+
+// TestGoServer_MiloClient_BrowseNextRelease verifies early continuation-point
+// release on the Go server (Milo client exercises BrowseNext separately).
+func TestGoServer_MiloClient_BrowseNextRelease(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	objectsID := ua.NewNumericNodeID(nsIdx, id.ObjectsFolder)
+
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID: objectsID, BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: true, ResultMask: uint32(ua.BrowseResultMaskAll),
+		}},
+		RequestedMaxReferencesPerNode: 2,
+	})
+	if err != nil {
+		t.Fatalf("Browse: %v", err)
+	}
+	cp := resp.Results[0].ContinuationPoint
+	if len(cp) == 0 {
+		t.Fatal("expected non-empty continuation point for BrowseNext release")
+	}
+	if _, err := c.BrowseNext(ctx, &ua.BrowseNextRequest{
+		ContinuationPoints: [][]byte{cp}, ReleaseContinuationPoints: true,
+	}); err != nil {
+		t.Fatalf("release: %v", err)
+	}
+	again, err := c.BrowseNext(ctx, &ua.BrowseNextRequest{
+		ContinuationPoints: [][]byte{cp},
+	})
+	if err != nil {
+		t.Fatalf("after release: %v", err)
+	}
+	if again.Results[0].StatusCode != ua.StatusBadContinuationPointInvalid {
+		t.Errorf("after release: got %v", again.Results[0].StatusCode)
+	}
+}
+
+// TestGoServer_MiloClient_BrowseFiltering verifies NodeClassMask filtering
+// (IEC 62541-4 Browse Service).
+func TestGoServer_MiloClient_BrowseFiltering(t *testing.T) {
+	endpoint := startGoServer(t)
+	// NodeClass Variable = 2
+	result := runMiloClient(t, endpoint, "browse",
+		"--node", "nsu="+interopNamespaceURI+";i=85",
+		"--node-class-mask", "2",
+	)
+	if !result.Success {
+		t.Fatalf("BrowseFiltering failed: %s", result.ServiceResult)
+	}
+	refs := parseBrowseRefs(t, result.Results)
+	if len(refs) == 0 {
+		t.Fatal("BrowseFiltering: expected some Variable references")
+	}
+	for _, r := range refs {
+		if r.NodeClass != "Variable" && r.NodeClass != "NodeClassVariable" {
+			t.Errorf("BrowseFiltering: unexpected NodeClass %q for %q", r.NodeClass, r.BrowseName.Name)
+		}
+	}
+	t.Logf("BrowseFiltering: %d Variable-only references", len(refs))
+}
+
+// TestGoServer_MiloClient_InvalidNodeId verifies identity failures for
+// Read/Write/Browse of unknown nodes (IEC 62541-4).
+func TestGoServer_MiloClient_InvalidNodeId(t *testing.T) {
+	endpoint := startGoServer(t)
+	unknown := "nsu=" + interopNamespaceURI + ";s=DoesNotExist"
+
+	t.Run("Read", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "read", "--node", unknown)
+		if result.Success {
+			t.Fatal("Read unknown NodeId succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "NodeIdUnknown") && !statusCodeIs(sc, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("Read unknown: got %s", sc)
+		}
+	})
+
+	t.Run("Write", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "write",
+			"--node", unknown, "--type", "Int32", "--value", "1",
+		)
+		items := parseWriteResults(t, result.Results)
+		if len(items) == 0 {
+			t.Fatalf("no results: %s", result.ServiceResult)
+		}
+		if !statusCodeNameHas(items[0].StatusCode, "NodeIdUnknown") &&
+			!statusCodeIs(items[0].StatusCode, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("Write unknown: got %s", items[0].StatusCode)
+		}
+	})
+
+	t.Run("Browse", func(t *testing.T) {
+		result := runMiloClientResult(t, endpoint, "browse", "--node", unknown)
+		if result.Success {
+			t.Fatal("Browse unknown NodeId succeeded")
+		}
+		if !statusCodeNameHas(result.ServiceResult, "NodeIdUnknown") &&
+			!statusCodeIs(result.ServiceResult, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("Browse unknown: got %s", result.ServiceResult)
+		}
+	})
 }

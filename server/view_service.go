@@ -184,6 +184,47 @@ func suitableRef(srv *Server, desc *ua.BrowseDescription, ref *ua.ReferenceDescr
 	return true
 }
 
+// applyBrowseResultMask clears ReferenceDescription fields that are not
+// requested by ResultMask (IEC 62541-4 Browse Service). NodeID is always kept.
+// Omitted BrowseName/DisplayName use empty structs so the binary encoder does
+// not panic on nil pointer receivers; clients observe empty/null-equivalent values.
+func applyBrowseResultMask(rf *ua.ReferenceDescription, mask uint32) *ua.ReferenceDescription {
+	if rf == nil {
+		return nil
+	}
+	if mask == uint32(ua.BrowseResultMaskAll) {
+		return rf
+	}
+	out := &ua.ReferenceDescription{NodeID: rf.NodeID}
+	if mask&uint32(ua.BrowseResultMaskReferenceTypeID) != 0 {
+		out.ReferenceTypeID = rf.ReferenceTypeID
+	} else {
+		out.ReferenceTypeID = ua.NewTwoByteNodeID(0)
+	}
+	if mask&uint32(ua.BrowseResultMaskIsForward) != 0 {
+		out.IsForward = rf.IsForward
+	}
+	if mask&uint32(ua.BrowseResultMaskBrowseName) != 0 {
+		out.BrowseName = rf.BrowseName
+	} else {
+		out.BrowseName = &ua.QualifiedName{}
+	}
+	if mask&uint32(ua.BrowseResultMaskDisplayName) != 0 {
+		out.DisplayName = rf.DisplayName
+	} else {
+		out.DisplayName = &ua.LocalizedText{}
+	}
+	if mask&uint32(ua.BrowseResultMaskNodeClass) != 0 {
+		out.NodeClass = rf.NodeClass
+	}
+	if mask&uint32(ua.BrowseResultMaskTypeDefinition) != 0 {
+		out.TypeDefinition = rf.TypeDefinition
+	} else {
+		out.TypeDefinition = ua.NewTwoByteExpandedNodeID(0)
+	}
+	return out
+}
+
 func suitableDirection(bd ua.BrowseDirection, isForward bool) bool {
 	switch {
 	case bd == ua.BrowseDirectionBoth:
@@ -205,15 +246,12 @@ func suitableRefType(srv *Server, ref1, ref2 *ua.NodeID, subtypes bool) bool {
 	if ref1.Equal(ref2) {
 		return true
 	}
-	hasRef2Fn := func(nid *ua.NodeID) bool { return nid.Equal(ref2) }
-	hasSubtypeFn := func(nid *ua.NodeID) bool { return nid.Equal(hasSubtype) }
-	oktypes := getSubRefs(srv, ref1)
-	if !subtypes && slices.ContainsFunc(oktypes, hasSubtypeFn) {
-		for n := slices.IndexFunc(oktypes, hasSubtypeFn); n > 0; {
-			oktypes = slices.Delete(oktypes, n, n+1)
-		}
+	// Part 4: when IncludeSubtypes is false, only the exact ReferenceType matches.
+	if !subtypes {
+		return false
 	}
-	return slices.ContainsFunc(oktypes, hasRef2Fn)
+	oktypes := getSubRefs(srv, ref1)
+	return slices.ContainsFunc(oktypes, func(nid *ua.NodeID) bool { return nid.Equal(ref2) })
 }
 
 func getSubRefs(srv *Server, nid *ua.NodeID) []*ua.NodeID {

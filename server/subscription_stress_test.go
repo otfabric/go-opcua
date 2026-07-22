@@ -24,8 +24,9 @@ func TestChangeNotification_SingleItem(t *testing.T) {
 
 	nodeID := ua.NewStringNodeID(ns.ID(), "rw_int32")
 	item := &MonitoredItem{
-		ID:  1,
-		Sub: sub,
+		ID:   1,
+		Sub:  sub,
+		Mode: ua.MonitoringModeReporting,
 		Req: &ua.MonitoredItemCreateRequest{
 			ItemToMonitor: &ua.ReadValueID{
 				NodeID:      nodeID,
@@ -79,8 +80,9 @@ func TestChangeNotification_MultipleItems(t *testing.T) {
 
 	nodeID := ua.NewStringNodeID(ns.ID(), "rw_int32")
 	item1 := &MonitoredItem{
-		ID:  1,
-		Sub: sub1,
+		ID:   1,
+		Sub:  sub1,
+		Mode: ua.MonitoringModeReporting,
 		Req: &ua.MonitoredItemCreateRequest{
 			ItemToMonitor: &ua.ReadValueID{
 				NodeID:      nodeID,
@@ -90,8 +92,9 @@ func TestChangeNotification_MultipleItems(t *testing.T) {
 		},
 	}
 	item2 := &MonitoredItem{
-		ID:  2,
-		Sub: sub2,
+		ID:   2,
+		Sub:  sub2,
+		Mode: ua.MonitoringModeReporting,
 		Req: &ua.MonitoredItemCreateRequest{
 			ItemToMonitor: &ua.ReadValueID{
 				NodeID:      nodeID,
@@ -136,8 +139,9 @@ func TestChangeNotification_HighThroughput(t *testing.T) {
 
 	nodeID := ua.NewStringNodeID(ns.ID(), "rw_int32")
 	item := &MonitoredItem{
-		ID:  1,
-		Sub: sub,
+		ID:   1,
+		Sub:  sub,
+		Mode: ua.MonitoringModeReporting,
 		Req: &ua.MonitoredItemCreateRequest{
 			ItemToMonitor: &ua.ReadValueID{
 				NodeID:      nodeID,
@@ -276,8 +280,9 @@ func TestMonitoredItemService_DeleteSub(t *testing.T) {
 
 	nodeID := ua.NewStringNodeID(ns.ID(), "rw_int32")
 	item := &MonitoredItem{
-		ID:  1,
-		Sub: sub,
+		ID:   1,
+		Sub:  sub,
+		Mode: ua.MonitoringModeReporting,
 		Req: &ua.MonitoredItemCreateRequest{
 			ItemToMonitor: &ua.ReadValueID{
 				NodeID:      nodeID,

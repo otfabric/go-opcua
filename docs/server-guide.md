@@ -14,12 +14,13 @@
 | **Session** | CreateSession, ActivateSession, CloseSession, Cancel | Fully implemented |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences | Fully implemented |
 | **View** | Browse, BrowseNext, TranslateBrowsePathsToNodeIDs, RegisterNodes, UnregisterNodes | Fully implemented |
-| **Attribute** | Read, Write | Fully implemented |
-| | HistoryRead, HistoryUpdate | Unsupported (`StatusBadHistoryOperationUnsupported`); no history store |
+| **Attribute** | Read, Write | Fully implemented (IndexRange / NumericRange, `TimestampsToReturn`, value-only Write) |
+| | HistoryRead | Raw path via pluggable `HistoryProvider` (`SetHistorian`); modified/aggregates unsupported |
+| | HistoryUpdate | Unsupported (`StatusBadHistoryOperationUnsupported`) |
 | **Method** | Call | Fully implemented |
-| **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented |
-| **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented |
-| **Query** | QueryFirst, QueryNext | Unsupported (`StatusBadServiceUnsupported`) |
+| **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow) |
+| **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
+| **Query** | QueryFirst, QueryNext | Fully implemented |
 
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.
@@ -155,7 +156,7 @@ go func() {
 |---------|--------------|--------------|
 | Node modeling | Full (objects, variables, types, references) | Auto-generated from keys |
 | Methods | Supported via `RegisterMethod` | Not supported |
-| Events | Full support via `EmitEvent` | Basic support |
+| Events | `EmitEvent` + `EmitBaseEvent` (EventFilter) | Basic support |
 | Custom references | Yes | `HasComponent` only |
 | Type system | Complete OPC-UA types | Auto-detected Go types |
 | Memory | Higher (full node graph) | Lower (simple map) |
@@ -289,7 +290,7 @@ s.ChangeNotification(nodeID)
 Emit events to subscribers monitoring a node for events:
 
 ```go
-// Emit an event with field values
+// Raw field list (caller owns SelectClause ordering)
 fields := &ua.EventFieldList{
     EventFields: []*ua.Variant{
         ua.MustVariant("OverTemperature"),
@@ -298,17 +299,53 @@ fields := &ua.EventFieldList{
     },
 }
 s.EmitEvent(nodeID, fields)
+
+// BaseEventType-shaped event — applies each item's EventFilter SelectClauses / OfType
+err := s.EmitBaseEvent(nodeID, &server.BaseEvent{
+    EventID:    []byte{1, 2, 3},
+    EventType:  ua.NewNumericNodeID(0, 2041), // BaseEventType
+    SourceNode: nodeID,
+    SourceName: "Motor",
+    Time:       time.Now().UTC(),
+    Message:    &ua.LocalizedText{Text: "Temperature exceeded 100°C"},
+    Severity:   500,
+})
 ```
+
+### Historical Access (raw)
+
+Attach an in-memory historian (or your own `HistoryProvider`) and record samples:
+
+```go
+h := server.NewHistorian()
+h.EnableNode(nodeID, 1000) // ring buffer capacity; <=0 → default 1000
+s.SetHistorian(h)
+
+// After writing a value (or from your own sampler):
+h.RecordValue(nodeID, dv)
+```
+
+Clients then call HistoryRead with `ReadRawModifiedDetails` (raw only). Modified history,
+aggregates, and historical events are not supported. Continuation points expire after 30s
+(max 100 active). Without `SetHistorian`, HistoryRead reports unsupported / non-historized.
+
+### Monitored-item queues and modes
+
+- `QueueSize` is revised to `max(1, requested)` (cap 100); Overflow InfoBit `0x480` when `QueueSize > 1` and the queue overflows.
+- `DiscardOldest=true` keeps the newest `QueueSize` samples; `false` keeps the oldest `QueueSize-1` plus the newest (e.g. writes `1..5` / QS=3 → `[1,2,5]`).
+- `SetMonitoringMode`: Disabled = no enqueue; Sampling = enqueue only; Reporting = enqueue + Publish.
+- Subscription `TimestampsToReturn` filters DataChange timestamps the same way as Read.
 
 ### Subscription Lifecycle
 
 The server manages subscriptions with these services:
-- **CreateSubscription** — Client creates a subscription with publishing interval
-- **CreateMonitoredItems** — Client adds nodes to watch
-- **Publish** — Server sends notifications when values change
-- **ModifySubscription** — Client adjusts publishing parameters
-- **SetPublishingMode** — Client pauses/resumes a subscription
-- **DeleteSubscriptions** — Client removes subscriptions
+- **CreateSubscription** / **ModifySubscription** — revise publishing interval; enforce `LifetimeCount >= 3 × MaxKeepAliveCount`
+- **CreateMonitoredItems** — client adds nodes (or event notifiers) to watch
+- **Publish** — notifications, keepalives, `MoreNotifications`, ACK / AvailableSequenceNumbers
+- **SetPublishingMode** — pause holds queues; resume delivers queued windows
+- **SetMonitoringMode** — Disabled / Sampling / Reporting per item
+- **Republish** / **TransferSubscriptions** — retransmission and ownership transfer
+- **DeleteSubscriptions** — remove subscriptions; lifetime expiry also removes idle subs
 
 ---
 

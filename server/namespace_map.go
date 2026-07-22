@@ -92,13 +92,13 @@ func (ns *MapNamespace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 		refs := make([]*ua.ReferenceDescription, 1)
 		newid := ua.NewNumericNodeID(ns.id, id.ObjectsFolder)
 		expnewid := ua.NewNumericExpandedNodeID(ns.id, id.ObjectsFolder)
-		refs[0] = &ua.ReferenceDescription{
+		refs[0] = applyBrowseResultMask(&ua.ReferenceDescription{
 			ReferenceTypeID: newid,
 			NodeID:          expnewid,
 			BrowseName:      &ua.QualifiedName{NamespaceIndex: ns.id, Name: "Objects"},
 			DisplayName:     &ua.LocalizedText{EncodingMask: ua.LocalizedTextText, Text: "Objects"},
 			TypeDefinition:  expnewid,
-		}
+		}, bd.ResultMask)
 
 		return &ua.BrowseResult{
 			StatusCode: ua.StatusGood,
@@ -115,7 +115,7 @@ func (ns *MapNamespace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 		refid := ua.NewNumericNodeID(0, id.HasComponent)
 		expnewid := ua.NewStringExpandedNodeID(ns.id, key)
 
-		refs[keyid] = &ua.ReferenceDescription{
+		refs[keyid] = applyBrowseResultMask(&ua.ReferenceDescription{
 			ReferenceTypeID: refid,
 			IsForward:       true,
 			NodeID:          expnewid,
@@ -123,7 +123,7 @@ func (ns *MapNamespace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 			DisplayName:     &ua.LocalizedText{EncodingMask: ua.LocalizedTextText, Text: key},
 			NodeClass:       ua.NodeClassVariable, // when support is added for nested maps, this will be NodeClassObject
 			TypeDefinition:  expnewid,
-		}
+		}, bd.ResultMask)
 		keyid++
 	}
 

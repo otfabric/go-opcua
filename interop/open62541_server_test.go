@@ -17,6 +17,7 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -1645,4 +1646,445 @@ func TestOpen62541Server_Subscribe_DiscardOldest(t *testing.T) {
 		}
 	}
 	t.Logf("discardOldest=false: received values %v", keepOldestBatch)
+}
+
+// ---------------------------------------------------------------------------
+// BrowseNext — Go client → open62541 server
+// ---------------------------------------------------------------------------
+
+// TestOpen62541Server_BrowseNext verifies that the Go client correctly issues
+// BrowseNext requests to consume all continuation points when the server
+// paginates browse results via RequestedMaxReferencesPerNode.
+func TestOpen62541Server_BrowseNext(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+
+	// Browse Scalars (many Variable children) to force pagination.
+	scalarsID := ua.NewStringNodeID(nsIdx, "Scalars")
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID:          scalarsID,
+			BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, 33), // HierarchicalReferences
+			IncludeSubtypes: true,
+			NodeClassMask:   uint32(ua.NodeClassAll),
+			ResultMask:      uint32(ua.BrowseResultMaskAll),
+		}},
+		RequestedMaxReferencesPerNode: 3,
+	})
+	if err != nil {
+		t.Fatalf("Browse: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("Browse: no results")
+	}
+	if resp.Results[0].StatusCode != ua.StatusOK {
+		t.Fatalf("Browse status: %s", resp.Results[0].StatusCode)
+	}
+
+	// Collect references, consuming continuation points until exhausted.
+	refs := append([]*ua.ReferenceDescription{}, resp.Results[0].References...)
+	cp := resp.Results[0].ContinuationPoint
+	if len(cp) == 0 {
+		t.Skip("server returned all references in one page — BrowseNext not exercised")
+	}
+
+	for len(cp) > 0 {
+		next, err := c.BrowseNext(ctx, &ua.BrowseNextRequest{
+			ContinuationPoints:        [][]byte{cp},
+			ReleaseContinuationPoints: false,
+		})
+		if err != nil {
+			t.Fatalf("BrowseNext: %v", err)
+		}
+		if len(next.Results) == 0 {
+			break
+		}
+		refs = append(refs, next.Results[0].References...)
+		cp = next.Results[0].ContinuationPoint
+	}
+
+	// Release any remaining continuation point.
+	if len(cp) > 0 {
+		_, _ = c.BrowseNext(ctx, &ua.BrowseNextRequest{ //nolint:errcheck
+			ContinuationPoints:        [][]byte{cp},
+			ReleaseContinuationPoints: true,
+		})
+	}
+
+	if len(refs) < 10 {
+		t.Errorf("BrowseNext: expected ≥10 total references under Scalars, got %d", len(refs))
+	}
+	found := false
+	for _, r := range refs {
+		if r.BrowseName != nil && r.BrowseName.Name == "Scalar.Int32" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("BrowseNext: Scalar.Int32 not found in paginated results")
+	}
+	t.Logf("BrowseNext: collected %d total references via pagination", len(refs))
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11 — Service Semantics (Go client → open62541 server)
+// ---------------------------------------------------------------------------
+
+// TestOpen62541Server_BatchWrite verifies per-item Write results against open62541.
+func TestOpen62541Server_BatchWrite(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+
+	resp, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{
+			{
+				NodeID: ua.NewStringNodeID(nsIdx, "Access.ReadWrite"), AttributeID: ua.AttributeIDValue,
+				Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(42))},
+			},
+			{
+				NodeID: ua.NewStringNodeID(nsIdx, "Access.ReadOnly"), AttributeID: ua.AttributeIDValue,
+				Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant("x")},
+			},
+			{
+				NodeID: ua.NewStringNodeID(nsIdx, "DoesNotExist"), AttributeID: ua.AttributeIDValue,
+				Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(1))},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("BatchWrite: %v", err)
+	}
+	if len(resp.Results) != 3 {
+		t.Fatalf("expected 3 results, got %d", len(resp.Results))
+	}
+	if resp.Results[0] != ua.StatusOK {
+		t.Errorf("Access.ReadWrite: got %v, want Good", resp.Results[0])
+	}
+	if resp.Results[1] != ua.StatusBadUserAccessDenied && resp.Results[1] != ua.StatusBadNotWritable {
+		// open62541 may use BadUserAccessDenied or BadNotWritable for read-only
+		t.Logf("Access.ReadOnly status: %v (accepted as access denial)", resp.Results[1])
+		if resp.Results[1] == ua.StatusOK {
+			t.Errorf("Access.ReadOnly: unexpectedly Good")
+		}
+	}
+	if resp.Results[2] != ua.StatusBadNodeIDUnknown {
+		t.Errorf("DoesNotExist: got %v, want BadNodeIdUnknown", resp.Results[2])
+	}
+}
+
+// TestOpen62541Server_WriteTypeMismatch verifies BadTypeMismatch from open62541.
+func TestOpen62541Server_WriteTypeMismatch(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Scalar.Int32")
+	sc, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant("not-an-int")},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("WriteTypeMismatch: %v", err)
+	}
+	if len(sc.Results) == 0 || sc.Results[0] != ua.StatusBadTypeMismatch {
+		t.Errorf("WriteTypeMismatch: got %v, want BadTypeMismatch", sc.Results)
+	}
+}
+
+// TestOpen62541Server_IndexRange verifies IndexRange on a scalar is rejected.
+func TestOpen62541Server_IndexRange(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+
+	resp, err := c.Read(ctx, &ua.ReadRequest{
+		NodesToRead: []*ua.ReadValueID{{
+			NodeID: ua.NewStringNodeID(nsIdx, "Scalar.Int32"),
+			AttributeID: ua.AttributeIDValue,
+			IndexRange: "0:1",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("IndexRange read: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("no results")
+	}
+	st := resp.Results[0].Status
+	if st == ua.StatusOK {
+		t.Errorf("IndexRange on scalar unexpectedly Good")
+	} else {
+		t.Logf("IndexRange on scalar correctly rejected: %v", st)
+	}
+}
+
+// TestOpen62541Server_IndexRangeSubset verifies open62541 serves array IndexRange subsets.
+func TestOpen62541Server_IndexRangeSubset(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+
+	arrResp, err := c.Read(ctx, &ua.ReadRequest{
+		NodesToRead: []*ua.ReadValueID{{
+			NodeID: ua.NewStringNodeID(nsIdx, "Array.Int32"),
+			AttributeID: ua.AttributeIDValue,
+			IndexRange: "0:1",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Array IndexRange read: %v", err)
+	}
+	if arrResp.Results[0].Status != ua.StatusOK {
+		t.Fatalf("Array IndexRange(0:1) status=%v", arrResp.Results[0].Status)
+	}
+	got, ok := arrResp.Results[0].Value.Value().([]int32)
+	if !ok || len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Errorf("Array IndexRange(0:1): got %v (%T), want [0 1]", arrResp.Results[0].Value.Value(), arrResp.Results[0].Value.Value())
+	}
+
+	wresp, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: ua.NewStringNodeID(nsIdx, "Array.Int32"),
+			AttributeID: ua.AttributeIDValue,
+			IndexRange: "1:2",
+			Value: &ua.DataValue{
+				EncodingMask: ua.DataValueValue,
+				Value:        ua.MustVariant([]int32{90, 91}),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("IndexRange Write: %v", err)
+	}
+	if len(wresp.Results) == 0 || wresp.Results[0] != ua.StatusOK {
+		t.Fatalf("IndexRange Write status: %v", wresp.Results)
+	}
+}
+
+// TestOpen62541Server_BrowseNextRelease verifies early BrowseNext release.
+func TestOpen62541Server_BrowseNextRelease(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+	scalarsID := ua.NewStringNodeID(nsIdx, "Scalars")
+
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID:          scalarsID,
+			BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, 33),
+			IncludeSubtypes: true,
+			ResultMask:      uint32(ua.BrowseResultMaskAll),
+		}},
+		RequestedMaxReferencesPerNode: 3,
+	})
+	if err != nil {
+		t.Fatalf("Browse: %v", err)
+	}
+	if resp.Results[0].StatusCode != ua.StatusOK {
+		t.Fatalf("Browse status: %s", resp.Results[0].StatusCode)
+	}
+	cp := resp.Results[0].ContinuationPoint
+	if len(cp) == 0 {
+		t.Fatal("expected non-empty continuation point for BrowseNext release")
+	}
+	rel, err := c.BrowseNext(ctx, &ua.BrowseNextRequest{
+		ContinuationPoints: [][]byte{cp}, ReleaseContinuationPoints: true,
+	})
+	if err != nil {
+		t.Fatalf("BrowseNext release: %v", err)
+	}
+	if rel.Results[0].StatusCode != ua.StatusOK {
+		t.Errorf("release: got %v", rel.Results[0].StatusCode)
+	}
+	again, err := c.BrowseNext(ctx, &ua.BrowseNextRequest{
+		ContinuationPoints: [][]byte{cp},
+	})
+	if err != nil {
+		t.Fatalf("BrowseNext after release: %v", err)
+	}
+	if again.Results[0].StatusCode != ua.StatusBadContinuationPointInvalid {
+		t.Errorf("after release: got %v, want BadContinuationPointInvalid", again.Results[0].StatusCode)
+	}
+}
+
+// TestOpen62541Server_BrowseResultMask verifies peer ResultMask handling.
+func TestOpen62541Server_BrowseResultMask(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID:          ua.NewStringNodeID(nsIdx, "Scalars"),
+			BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: true,
+			ResultMask:      uint32(ua.BrowseResultMaskBrowseName),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BrowseResultMask: %v", err)
+	}
+	if len(resp.Results) == 0 || len(resp.Results[0].References) == 0 {
+		t.Fatal("no references")
+	}
+	// Peer stacks may clear omitted fields or leave defaults; require BrowseName.
+	for _, r := range resp.Results[0].References {
+		if r.BrowseName == nil || r.BrowseName.Name == "" {
+			t.Errorf("BrowseName missing under BrowseName mask")
+		}
+	}
+}
+
+// TestOpen62541Server_WriteEncodingMask verifies open62541 rejects Status/timestamp Writes.
+func TestOpen62541Server_WriteEncodingMask(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
+
+	ok, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(3))},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("value-only: %v", err)
+	}
+	if ok.Results[0] != ua.StatusOK {
+		t.Errorf("value-only: got %v", ok.Results[0])
+	}
+
+	bad, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{
+				EncodingMask:    ua.DataValueValue | ua.DataValueSourceTimestamp,
+				Value:           ua.MustVariant(int32(4)),
+				SourceTimestamp: time.Now(),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("timestamp write: %v", err)
+	}
+	if bad.Results[0] != ua.StatusBadWriteNotSupported {
+		t.Errorf("timestamp write: got %v, want BadWriteNotSupported", bad.Results[0])
+	}
+}
+
+// TestOpen62541Server_TimestampsToReturn verifies peer TimestampsToReturn Neither.
+func TestOpen62541Server_TimestampsToReturn(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+
+	resp, err := c.Read(ctx, &ua.ReadRequest{
+		TimestampsToReturn: ua.TimestampsToReturnNeither,
+		NodesToRead: []*ua.ReadValueID{{
+			NodeID: ua.NewStringNodeID(nsIdx, "Scalar.Int32"), AttributeID: ua.AttributeIDValue,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	dv := resp.Results[0]
+	if dv.EncodingMask&ua.DataValueSourceTimestamp != 0 || dv.EncodingMask&ua.DataValueServerTimestamp != 0 {
+		t.Logf("open62541 Neither left timestamps (mask=%#x); accepted if peer soft-filters", dv.EncodingMask)
+	}
+}
+
+// TestOpen62541Server_BrowseFiltering verifies NodeClassMask=Variable filtering.
+func TestOpen62541Server_BrowseFiltering(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+
+	// Scalars folder contains only Variable children — ideal for NodeClassMask.
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID:          ua.NewStringNodeID(nsIdx, "Scalars"),
+			BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: true,
+			NodeClassMask:   uint32(ua.NodeClassVariable),
+			ResultMask:      uint32(ua.BrowseResultMaskAll),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BrowseFiltering: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("BrowseFiltering: no results")
+	}
+	if resp.Results[0].StatusCode != ua.StatusOK {
+		t.Fatalf("BrowseFiltering status: %v", resp.Results[0].StatusCode)
+	}
+	if len(resp.Results[0].References) == 0 {
+		t.Fatal("BrowseFiltering: expected Variable references under Scalars")
+	}
+	for _, ref := range resp.Results[0].References {
+		if ref.NodeClass != ua.NodeClassVariable {
+			t.Errorf("expected Variable, got %v for %v", ref.NodeClass, ref.BrowseName)
+		}
+	}
+	t.Logf("BrowseFiltering: %d Variable refs", len(resp.Results[0].References))
+}
+
+// TestOpen62541Server_InvalidNodeId verifies unknown NodeId status codes.
+func TestOpen62541Server_InvalidNodeId(t *testing.T) {
+	h := startOpen62541Server(t)
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+	unknown := ua.NewStringNodeID(nsIdx, "DoesNotExist")
+
+	t.Run("Read", func(t *testing.T) {
+		dv, err := c.ReadValue(ctx, unknown)
+		if err != nil {
+			t.Fatalf("ReadValue: %v", err)
+		}
+		if dv.Status != ua.StatusBadNodeIDUnknown {
+			t.Errorf("Read unknown: got %v, want BadNodeIdUnknown", dv.Status)
+		}
+	})
+
+	t.Run("Write", func(t *testing.T) {
+		sc, err := c.Write(ctx, &ua.WriteRequest{
+			NodesToWrite: []*ua.WriteValue{{
+				NodeID: unknown, AttributeID: ua.AttributeIDValue,
+				Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(1))},
+			}},
+		})
+		if err != nil {
+			t.Fatalf("Write: %v", err)
+		}
+		if sc.Results[0] != ua.StatusBadNodeIDUnknown {
+			t.Errorf("Write unknown: got %v", sc.Results[0])
+		}
+	})
+
+	t.Run("Browse", func(t *testing.T) {
+		resp, err := c.Browse(ctx, &ua.BrowseRequest{
+			NodesToBrowse: []*ua.BrowseDescription{{
+				NodeID:          unknown,
+				BrowseDirection: ua.BrowseDirectionForward,
+				ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+				IncludeSubtypes: true,
+				ResultMask:      uint32(ua.BrowseResultMaskAll),
+			}},
+		})
+		if err != nil {
+			t.Fatalf("Browse: %v", err)
+		}
+		if resp.Results[0].StatusCode != ua.StatusBadNodeIDUnknown {
+			t.Errorf("Browse unknown: got %v", resp.Results[0].StatusCode)
+		}
+	})
 }

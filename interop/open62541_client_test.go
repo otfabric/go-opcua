@@ -10,8 +10,15 @@
 package interop
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
+
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // ---------------------------------------------------------------------------
@@ -174,6 +181,322 @@ func TestGoServer_Open62541Client_ReadScalarDouble(t *testing.T) {
 
 func TestGoServer_Open62541Client_ReadScalarString(t *testing.T) {
 	readScalarFromGoServer(t, "Scalar.String")
+}
+
+// ---------------------------------------------------------------------------
+// Rich scalar reads — open62541 client → go server (value assertions)
+// ---------------------------------------------------------------------------
+
+// extractScalarValue parses a single read result item and returns the "value" field.
+func extractScalarValue(t *testing.T, item json.RawMessage) json.RawMessage {
+	t.Helper()
+	var row struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(item, &row); err != nil {
+		t.Fatalf("extractScalarValue unmarshal: %v; raw: %s", err, item)
+	}
+	return row.Value
+}
+
+func TestGoServer_Open62541Client_ReadScalarDateTime(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.DateTime")
+	v := strings.Trim(string(extractScalarValue(t, item)), `"`)
+	// open62541 formats DateTime as YYYY-MM-DDTHH:MM:SS.mmmZ
+	if !strings.HasPrefix(v, "2024-01-01T00:00:00") {
+		t.Errorf("Scalar.DateTime: got %q, want prefix 2024-01-01T00:00:00", v)
+	}
+	if !strings.HasSuffix(v, "Z") {
+		t.Errorf("Scalar.DateTime: got %q, want UTC suffix Z", v)
+	}
+}
+
+func TestGoServer_Open62541Client_ReadScalarGuid(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.Guid")
+	v := strings.Trim(string(extractScalarValue(t, item)), `"`)
+	// open62541 formats GUID in lowercase hex: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+	want := "72962b91-fa75-4ae6-8d28-b404dc7daf63"
+	if strings.ToLower(v) != want {
+		t.Errorf("Scalar.Guid: got %q, want %q", v, want)
+	}
+}
+
+func TestGoServer_Open62541Client_ReadScalarByteString(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.ByteString")
+	v := strings.Trim(string(extractScalarValue(t, item)), `"`)
+	// "opcua-compat" base64-encoded
+	decoded, err := base64.StdEncoding.DecodeString(v)
+	if err != nil {
+		t.Fatalf("Scalar.ByteString: base64 decode %q: %v", v, err)
+	}
+	if string(decoded) != "opcua-compat" {
+		t.Errorf("Scalar.ByteString: decoded %q, want %q", decoded, "opcua-compat")
+	}
+}
+
+func TestGoServer_Open62541Client_ReadScalarXmlElement(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.XmlElement")
+	v := strings.Trim(string(extractScalarValue(t, item)), `"`)
+	want := "<compat>test</compat>"
+	if v != want {
+		t.Errorf("Scalar.XmlElement: got %q, want %q", v, want)
+	}
+}
+
+func TestGoServer_Open62541Client_ReadScalarNodeId(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.NodeId")
+	v := strings.Trim(string(extractScalarValue(t, item)), `"`)
+	// ns=0 numeric NodeId: open62541 omits the ns prefix
+	want := "i=85"
+	if v != want {
+		t.Errorf("Scalar.NodeId: got %q, want %q", v, want)
+	}
+}
+
+func TestGoServer_Open62541Client_ReadScalarQualifiedName(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.QualifiedName")
+	raw := extractScalarValue(t, item)
+	var qn struct {
+		NS   int    `json:"ns"`
+		Name string `json:"name"`
+	}
+	if err := json.Unmarshal(raw, &qn); err != nil {
+		t.Fatalf("Scalar.QualifiedName: unmarshal %q: %v", raw, err)
+	}
+	if qn.NS != 0 || qn.Name != "Objects" {
+		t.Errorf("Scalar.QualifiedName: got ns=%d name=%q, want ns=0 name=Objects", qn.NS, qn.Name)
+	}
+}
+
+func TestGoServer_Open62541Client_ReadScalarLocalizedText(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.LocalizedText")
+	raw := extractScalarValue(t, item)
+	var lt struct {
+		Locale string `json:"locale"`
+		Text   string `json:"text"`
+	}
+	if err := json.Unmarshal(raw, &lt); err != nil {
+		t.Fatalf("Scalar.LocalizedText: unmarshal %q: %v", raw, err)
+	}
+	if lt.Locale != "en" {
+		t.Errorf("Scalar.LocalizedText: locale=%q, want %q", lt.Locale, "en")
+	}
+	if lt.Text != "OPC UA Compatibility" {
+		t.Errorf("Scalar.LocalizedText: text=%q, want %q", lt.Text, "OPC UA Compatibility")
+	}
+}
+
+func TestGoServer_Open62541Client_ReadScalarStatusCode(t *testing.T) {
+	item := readScalarFromGoServer(t, "Scalar.StatusCode")
+	raw := extractScalarValue(t, item)
+	var sc struct {
+		Name     string `json:"name"`
+		Code     uint32 `json:"code"`
+		Severity string `json:"severity"`
+	}
+	if err := json.Unmarshal(raw, &sc); err != nil {
+		t.Fatalf("Scalar.StatusCode: unmarshal %q: %v", raw, err)
+	}
+	if sc.Code != 0 {
+		t.Errorf("Scalar.StatusCode: code=0x%08X, want 0 (Good)", sc.Code)
+	}
+	if sc.Severity != "Good" {
+		t.Errorf("Scalar.StatusCode: severity=%q, want Good", sc.Severity)
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Dynamic counter — open62541 client → go server
+// ---------------------------------------------------------------------------
+
+// TestGoServer_Open62541Client_ReadDynamicCounter reads Dynamic.Counter twice
+// with a 300 ms gap and asserts the second value is strictly greater, proving
+// the Go server invokes the dynamic value provider on each read.
+func TestGoServer_Open62541Client_ReadDynamicCounter(t *testing.T) {
+	endpoint := startGoServer(t)
+
+	readCounter := func() int64 {
+		t.Helper()
+		result := runOpen62541Client(t, endpoint, "read",
+			"--node", "nsu="+interopNamespaceURI+";s=Dynamic.Counter",
+		)
+		if !result.Success {
+			t.Fatalf("read Dynamic.Counter failed: %s", result.ServiceResult)
+		}
+		var items []struct {
+			Value json.RawMessage `json:"value"`
+		}
+		if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+			t.Fatalf("parse Dynamic.Counter result: %v", err)
+		}
+		// Int64 is returned as a quoted string by open62541.
+		v := strings.Trim(string(items[0].Value), `"`)
+		n, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			t.Fatalf("Dynamic.Counter value %q not an integer: %v", v, err)
+		}
+		return n
+	}
+
+	v1 := readCounter()
+	time.Sleep(350 * time.Millisecond)
+	v2 := readCounter()
+
+	if v2 <= v1 {
+		t.Errorf("Dynamic.Counter: second read (%d) ≤ first read (%d); counter did not advance", v2, v1)
+	}
+	t.Logf("Dynamic.Counter: %d → %d (delta %d)", v1, v2, v2-v1)
+}
+
+// ---------------------------------------------------------------------------
+// Browse Scalars folder — open62541 client → go server
+// ---------------------------------------------------------------------------
+
+// TestGoServer_Open62541Client_BrowseScalarsFolder browses the interop Objects
+// folder and asserts that all rich built-in scalar nodes are present, not only
+// the primitive numeric types covered by BrowseObjectsNodes.
+func TestGoServer_Open62541Client_BrowseScalarsFolder(t *testing.T) {
+	endpoint := startGoServer(t)
+	result := runOpen62541Client(t, endpoint, "browse",
+		"--node", "nsu="+interopNamespaceURI+";i=85",
+	)
+	if !result.Success {
+		t.Fatalf("browse interop Objects failed: %s", result.ServiceResult)
+	}
+	names := parseBrowseNames(t, result.Results)
+	for _, want := range []string{
+		"Scalar.DateTime", "Scalar.Guid", "Scalar.ByteString",
+		"Scalar.XmlElement", "Scalar.NodeId", "Scalar.QualifiedName",
+		"Scalar.LocalizedText", "Scalar.StatusCode",
+	} {
+		if !names[want] {
+			t.Errorf("BrowseScalars: expected node %q, got: %v", want, setKeys(names))
+		}
+	}
+	t.Logf("BrowseScalars: %d total nodes, all 8 rich scalar types present", len(names))
+}
+
+// ---------------------------------------------------------------------------
+// Subscription queue semantics — open62541 client → go server
+// ---------------------------------------------------------------------------
+
+// parseNotificationValues parses the integer counter values from a subscribe
+// result's notifications array. Int64 values appear as quoted strings.
+func parseNotificationValues(t *testing.T, notifRaw json.RawMessage) []int64 {
+	t.Helper()
+	var notifs []struct {
+		Value json.RawMessage `json:"value"`
+	}
+	if err := json.Unmarshal(notifRaw, &notifs); err != nil {
+		t.Fatalf("parseNotificationValues: %v", err)
+	}
+	vals := make([]int64, 0, len(notifs))
+	for _, n := range notifs {
+		s := strings.Trim(string(n.Value), `"`)
+		v, err := strconv.ParseInt(s, 10, 64)
+		if err != nil {
+			continue
+		}
+		vals = append(vals, v)
+	}
+	return vals
+}
+
+// TestGoServer_Open62541Client_Subscribe_QueueMultiple subscribes to
+// Dynamic.Counter with QueueSize=5 and a fast sampling rate, then verifies
+// that more than one queued value is delivered in a single publish cycle.
+func TestGoServer_Open62541Client_Subscribe_QueueMultiple(t *testing.T) {
+	endpoint := startGoServer(t)
+	result := runOpen62541Client(t, endpoint, "subscribe",
+		"--node", "nsu="+interopNamespaceURI+";s=Dynamic.Counter",
+		"--notifications", "5",
+		"--queue-size", "5",
+		"--discard-oldest", "true",
+		"--publishing-interval-ms", "2000",
+		"--sampling-interval-ms", "100",
+		"--timeout-ms", "15000",
+	)
+	if !result.Success {
+		t.Fatalf("subscribe failed: %s error=%s", result.ServiceResult, result.Error)
+	}
+
+	var items []struct {
+		Notifications json.RawMessage `json:"notifications"`
+	}
+	if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+		t.Fatalf("parse subscribe results: %v", err)
+	}
+	vals := parseNotificationValues(t, items[0].Notifications)
+	if len(vals) < 5 {
+		t.Errorf("Subscribe QueueMultiple: expected ≥5 notifications, got %d: %v", len(vals), vals)
+	}
+	for i := 1; i < len(vals); i++ {
+		if vals[i] < vals[i-1] {
+			t.Errorf("Subscribe QueueMultiple: discard-oldest violation at index %d: %v", i, vals)
+			break
+		}
+	}
+	t.Logf("Subscribe QueueMultiple: %d queued counter values: %v", len(vals), vals)
+}
+
+// TestGoServer_Open62541Client_Subscribe_DiscardOldest subscribes with
+// discardOldest=false (keep oldest) and verifies the delivered values start
+// lower than those seen with discardOldest=true.
+func TestGoServer_Open62541Client_Subscribe_DiscardOldest(t *testing.T) {
+	endpoint := startGoServer(t)
+
+	subscribe := func(discardOldest string) []int64 {
+		t.Helper()
+		result := runOpen62541Client(t, endpoint, "subscribe",
+			"--node", "nsu="+interopNamespaceURI+";s=Dynamic.Counter",
+			"--notifications", "3",
+			"--queue-size", "3",
+			"--discard-oldest", discardOldest,
+			"--publishing-interval-ms", "1500",
+			"--sampling-interval-ms", "100",
+			"--timeout-ms", "12000",
+		)
+		if !result.Success {
+			t.Fatalf("subscribe (discard=%s) failed: %s", discardOldest, result.ServiceResult)
+		}
+		var items []struct {
+			Notifications json.RawMessage `json:"notifications"`
+		}
+		if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+			t.Fatalf("parse results: %v", err)
+		}
+		return parseNotificationValues(t, items[0].Notifications)
+	}
+
+	// discardOldest=false retains the OLDEST queued values (low counter values).
+	// discardOldest=true retains the NEWEST (high counter values).
+	oldest := subscribe("false")
+	newest := subscribe("true")
+
+	t.Logf("discardOldest=false (oldest): %v", oldest)
+	t.Logf("discardOldest=true  (newest): %v", newest)
+
+	if len(oldest) == 0 || len(newest) == 0 {
+		t.Fatal("no notification values received")
+	}
+	// When oldest values are retained they must be monotonically non-decreasing.
+	for i := 1; i < len(oldest); i++ {
+		if oldest[i] < oldest[i-1] {
+			t.Errorf("discardOldest=false: values not non-decreasing: %v", oldest)
+			break
+		}
+	}
+	// When newest values are retained they must be monotonically non-decreasing.
+	for i := 1; i < len(newest); i++ {
+		if newest[i] < newest[i-1] {
+			t.Errorf("discardOldest=true: values not non-decreasing: %v", newest)
+			break
+		}
+	}
+	// The oldest-retained first value should be ≤ the newest-retained first value.
+	if len(oldest) > 0 && len(newest) > 0 && oldest[0] > newest[0] {
+		t.Errorf("discardOldest=false first value (%d) > discardOldest=true first value (%d); queue semantics reversed", oldest[0], newest[0])
+	}
 }
 
 // TestGoServer_Open62541Client_Write verifies that the open62541 client can
@@ -763,4 +1086,657 @@ func TestGoServer_Open62541Client_Username_InvalidPassword_Rejected(t *testing.T
 	if !isIdentityRejectedServiceResult(result.ServiceResult.Name) {
 		t.Errorf("expected identity-rejected service result, got: %s", result.ServiceResult)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Trust validation — open62541 client → go server
+// ---------------------------------------------------------------------------
+
+// TestGoServer_Open62541Client_TrustedCert_Accepted verifies that the open62541
+// adapter client can connect to the Go server when its certificate is signed by
+// the configured CA (the "trusted" path of the certificate trust check).
+func TestGoServer_Open62541Client_TrustedCert_Accepted(t *testing.T) {
+	endpoint := startTrustGoServer(t)
+	result := runSecureAdapterClient(t,
+		"OPEN62541_IMAGE", defaultOpen62541Image,
+		"open62541-client", endpoint, "read",
+		"Basic256Sha256", "SignAndEncrypt",
+		"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32",
+	)
+	if !result.Success {
+		t.Fatalf("trusted cert should have been accepted: %s", result.ServiceResult)
+	}
+}
+
+// TestGoServer_Open62541Client_UntrustedCert_Rejected verifies that the Go
+// server rejects an open62541 adapter client that presents a certificate NOT
+// signed by the server's configured trust CA.
+func TestGoServer_Open62541Client_UntrustedCert_Rejected(t *testing.T) {
+	endpoint := startTrustGoServer(t)
+	result := runSecureAdapterClientResult(t,
+		"OPEN62541_IMAGE", defaultOpen62541Image,
+		"untrusted", endpoint, "read",
+		"Basic256Sha256", "SignAndEncrypt",
+		"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32",
+	)
+	if result.Success {
+		t.Fatal("untrusted cert should have been rejected but connection succeeded")
+	}
+	if !isUntrustedClientRejected(result) {
+		t.Errorf("expected certificate/channel rejection, got success=%v serviceResult=%s error=%s",
+			result.Success, result.ServiceResult, result.Error)
+	}
+	t.Logf("open62541 untrusted cert correctly rejected: serviceResult=%s error=%s", result.ServiceResult, result.Error)
+}
+
+// ---------------------------------------------------------------------------
+// Phase 11 — Service Semantics and Error Handling
+// ---------------------------------------------------------------------------
+
+// TestGoServer_Open62541Client_BatchWrite verifies per-item WriteResponse.Results
+// (IEC 62541-4 Write Service): Good, BadUserAccessDenied, and BadNodeIdUnknown
+// in a single request.
+func TestGoServer_Open62541Client_BatchWrite(t *testing.T) {
+	endpoint := startGoServer(t)
+	result := runOpen62541ClientResult(t, endpoint, "write",
+		"--node", "nsu="+interopNamespaceURI+";s=Access.ReadWrite",
+		"--type", "Int32", "--value", "42",
+		"--node", "nsu="+interopNamespaceURI+";s=Access.ReadOnly",
+		"--type", "String", "--value", "x",
+		"--node", "nsu="+interopNamespaceURI+";s=DoesNotExist",
+		"--type", "Int32", "--value", "1",
+	)
+	items := parseWriteResults(t, result.Results)
+	if len(items) != 3 {
+		t.Fatalf("BatchWrite: expected 3 results, got %d; raw=%s", len(items), result.Results)
+	}
+	if !statusCodeIs(items[0].StatusCode, ua.StatusOK) {
+		t.Errorf("Access.ReadWrite: got %s, want Good", items[0].StatusCode)
+	}
+	if !statusCodeIs(items[1].StatusCode, ua.StatusBadUserAccessDenied) &&
+		!statusCodeNameHas(items[1].StatusCode, "UserAccessDenied") {
+		t.Errorf("Access.ReadOnly: got %s, want BadUserAccessDenied", items[1].StatusCode)
+	}
+	if !statusCodeIs(items[2].StatusCode, ua.StatusBadNodeIDUnknown) &&
+		!statusCodeNameHas(items[2].StatusCode, "NodeIdUnknown") {
+		t.Errorf("DoesNotExist: got %s, want BadNodeIdUnknown", items[2].StatusCode)
+	}
+	t.Logf("BatchWrite per-item: %s | %s | %s", items[0].StatusCode, items[1].StatusCode, items[2].StatusCode)
+}
+
+// TestGoServer_Open62541Client_WriteTypeMismatch verifies BadTypeMismatch for
+// incompatible Variant writes (IEC 62541-4 Write Service).
+func TestGoServer_Open62541Client_WriteTypeMismatch(t *testing.T) {
+	endpoint := startGoServer(t)
+	cases := []struct {
+		name, node, typ, val string
+	}{
+		{"StringToInt32", "Scalar.Int32", "String", "hello"},
+		{"Int64ToInt32", "Scalar.Int32", "Int64", "99"},
+		{"ArrayToScalar", "Scalar.Int32", "Int32[]", "1,2,3"},
+		{"ScalarToArray", "Array.Int32", "Int32", "7"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := runOpen62541ClientResult(t, endpoint, "write",
+				"--node", "nsu="+interopNamespaceURI+";s="+tc.node,
+				"--type", tc.typ, "--value", tc.val,
+			)
+			items := parseWriteResults(t, result.Results)
+			if len(items) == 0 {
+				t.Fatalf("no write results; serviceResult=%s", result.ServiceResult)
+			}
+			if !statusCodeIs(items[0].StatusCode, ua.StatusBadTypeMismatch) &&
+				!statusCodeNameHas(items[0].StatusCode, "TypeMismatch") {
+				t.Errorf("%s: got %s, want BadTypeMismatch", tc.name, items[0].StatusCode)
+			}
+		})
+	}
+}
+
+// TestGoServer_Open62541Client_MethodValidation covers Call Service argument
+// and identity failures (IEC 62541-4).
+func TestGoServer_Open62541Client_MethodValidation(t *testing.T) {
+	endpoint := startGoServer(t)
+
+	t.Run("TooFewArgs", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.Add",
+		)
+		if result.Success {
+			t.Fatal("Call with too few args succeeded")
+		}
+		if !statusCodeNameHas(result.ServiceResult, "ArgumentsMissing") &&
+			!statusCodeIs(result.ServiceResult, ua.StatusBadArgumentsMissing) {
+			// Per-item status may be in results[0].statusCode
+			var items []struct {
+				StatusCode statusCodeObj `json:"statusCode"`
+			}
+			_ = json.Unmarshal(result.Results, &items)
+			if len(items) == 0 || (!statusCodeNameHas(items[0].StatusCode, "ArgumentsMissing") &&
+				!statusCodeIs(items[0].StatusCode, ua.StatusBadArgumentsMissing)) {
+				t.Errorf("TooFewArgs: serviceResult=%s results=%s", result.ServiceResult, result.Results)
+			}
+		}
+	})
+
+	t.Run("TooManyArgs", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.NoArguments",
+			"--input", "Int32:5",
+		)
+		if result.Success {
+			t.Fatal("Call with too many args succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "TooManyArguments") && !statusCodeIs(sc, ua.StatusBadTooManyArguments) {
+			t.Errorf("TooManyArgs: got %s, want BadTooManyArguments", sc)
+		}
+	})
+
+	t.Run("WrongType", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.Add",
+			"--input", "String:a",
+			"--input", "String:b",
+		)
+		if result.Success {
+			t.Fatal("Call with wrong arg types succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "TypeMismatch") && !statusCodeIs(sc, ua.StatusBadTypeMismatch) {
+			t.Errorf("WrongType: got %s, want BadTypeMismatch", sc)
+		}
+	})
+
+	t.Run("UnknownMethod", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Methods",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.DoesNotExist",
+		)
+		if result.Success {
+			t.Fatal("Call unknown method succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "MethodInvalid") && !statusCodeIs(sc, ua.StatusBadMethodInvalid) {
+			t.Errorf("UnknownMethod: got %s, want BadMethodInvalid", sc)
+		}
+	})
+
+	t.Run("WrongObject", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "call",
+			"--object", "nsu="+interopNamespaceURI+";s=Scalars",
+			"--method", "nsu="+interopNamespaceURI+";s=Methods.Add",
+			"--input", "Int32:1",
+			"--input", "Int32:2",
+		)
+		if result.Success {
+			t.Fatal("Call with wrong object succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "MethodInvalid") && !statusCodeNameHas(sc, "NodeIdUnknown") &&
+			!statusCodeIs(sc, ua.StatusBadMethodInvalid) && !statusCodeIs(sc, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("WrongObject: got %s, want BadMethodInvalid or BadNodeIdUnknown", sc)
+		}
+	})
+}
+
+// TestGoServer_Open62541Client_IndexRange verifies IndexRange on a scalar is
+// rejected with BadIndexRangeInvalid (IEC 62541-4).
+func TestGoServer_Open62541Client_IndexRange(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Scalar.Int32")
+
+	resp, err := c.Read(ctx, &ua.ReadRequest{
+		NodesToRead: []*ua.ReadValueID{{
+			NodeID:      nodeID,
+			AttributeID: ua.AttributeIDValue,
+			IndexRange:  "0:1",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Read with IndexRange: %v", err)
+	}
+	if len(resp.Results) == 0 {
+		t.Fatal("no read results")
+	}
+	if resp.Results[0].Status != ua.StatusBadIndexRangeInvalid {
+		t.Errorf("IndexRange on scalar: got %v, want BadIndexRangeInvalid", resp.Results[0].Status)
+	}
+
+	wresp, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID:      nodeID,
+			AttributeID: ua.AttributeIDValue,
+			IndexRange:  "0:1",
+			Value: &ua.DataValue{
+				EncodingMask: ua.DataValueValue,
+				Value:        ua.MustVariant(int32(1)),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Write with IndexRange: %v", err)
+	}
+	if len(wresp.Results) == 0 || wresp.Results[0] != ua.StatusBadIndexRangeInvalid {
+		t.Errorf("Write IndexRange: got %v, want BadIndexRangeInvalid", wresp.Results)
+	}
+}
+
+// TestGoServer_Open62541Client_IndexRangeSubset verifies one-dimensional
+// IndexRange subset Read/Write against the Go server (IEC 62541-4 NumericRange).
+func TestGoServer_Open62541Client_IndexRangeSubset(t *testing.T) {
+	endpoint := startGoServer(t)
+	arrayNode := "nsu=" + interopNamespaceURI + ";s=Array.Int32"
+
+	t.Run("ReadSubset", func(t *testing.T) {
+		result := runOpen62541Client(t, endpoint, "read",
+			"--node", arrayNode, "--index-range", "0:1",
+		)
+		if !result.Success {
+			t.Fatalf("IndexRange Read failed: %s", result.ServiceResult)
+		}
+		var items []struct {
+			Value []int32 `json:"value"`
+		}
+		if err := json.Unmarshal(result.Results, &items); err != nil || len(items) == 0 {
+			t.Fatalf("parse: %v raw=%s", err, result.Results)
+		}
+		if len(items[0].Value) != 2 || items[0].Value[0] != 0 || items[0].Value[1] != 1 {
+			t.Errorf("IndexRange 0:1: got %v, want [0,1]", items[0].Value)
+		}
+	})
+
+	t.Run("WriteMerge", func(t *testing.T) {
+		w := runOpen62541ClientResult(t, endpoint, "write",
+			"--node", arrayNode, "--type", "Int32[]", "--value", "90,91",
+			"--index-range", "1:2",
+		)
+		if !w.Success {
+			t.Fatalf("IndexRange Write failed: %s", w.ServiceResult)
+		}
+		c := dialClient(t, endpoint)
+		ctx, nsIdx := findNS(t, c)
+		resp, err := c.Read(ctx, &ua.ReadRequest{
+			NodesToRead: []*ua.ReadValueID{{
+				NodeID: ua.NewStringNodeID(nsIdx, "Array.Int32"), AttributeID: ua.AttributeIDValue,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("read-back: %v", err)
+		}
+		got, ok := resp.Results[0].Value.Value().([]int32)
+		if !ok {
+			t.Fatalf("unexpected type %T", resp.Results[0].Value.Value())
+		}
+		if got[1] != 90 || got[2] != 91 {
+			t.Errorf("after IndexRange write: got %v, want indices 1:2 = 90,91", got)
+		}
+	})
+
+	t.Run("NoData", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "read",
+			"--node", arrayNode, "--index-range", "100:101",
+		)
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "IndexRangeNoData") && !statusCodeIs(sc, ua.StatusBadIndexRangeNoData) {
+			t.Errorf("out-of-range IndexRange: got %s, want BadIndexRangeNoData", sc)
+		}
+	})
+
+	t.Run("DataMismatch", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "write",
+			"--node", arrayNode, "--type", "Int32[]", "--value", "1",
+			"--index-range", "0:1",
+		)
+		items := parseWriteResults(t, result.Results)
+		if len(items) == 0 {
+			t.Fatalf("no write results: %s", result.ServiceResult)
+		}
+		if !statusCodeNameHas(items[0].StatusCode, "IndexRangeDataMismatch") &&
+			!statusCodeIs(items[0].StatusCode, ua.StatusBadIndexRangeDataMismatch) {
+			t.Errorf("size mismatch: got %s, want BadIndexRangeDataMismatch", items[0].StatusCode)
+		}
+	})
+}
+
+// TestGoServer_Open62541Client_TimestampsToReturn verifies TimestampsToReturn
+// filtering on Read (Go client → Go server; open62541 CLI exercises Neither).
+func TestGoServer_Open62541Client_TimestampsToReturn(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Scalar.Int32")
+
+	cases := []struct {
+		name string
+		ts   ua.TimestampsToReturn
+		want func(*testing.T, *ua.DataValue)
+	}{
+		{"Neither", ua.TimestampsToReturnNeither, func(t *testing.T, dv *ua.DataValue) {
+			if dv.EncodingMask&ua.DataValueSourceTimestamp != 0 || dv.EncodingMask&ua.DataValueServerTimestamp != 0 {
+				t.Errorf("Neither: timestamps still present mask=%#x", dv.EncodingMask)
+			}
+		}},
+		{"Source", ua.TimestampsToReturnSource, func(t *testing.T, dv *ua.DataValue) {
+			if dv.EncodingMask&ua.DataValueServerTimestamp != 0 {
+				t.Errorf("Source: server timestamp still present")
+			}
+		}},
+		{"Server", ua.TimestampsToReturnServer, func(t *testing.T, dv *ua.DataValue) {
+			if dv.EncodingMask&ua.DataValueSourceTimestamp != 0 {
+				t.Errorf("Server: source timestamp still present")
+			}
+			if dv.EncodingMask&ua.DataValueServerTimestamp == 0 {
+				t.Errorf("Server: missing server timestamp")
+			}
+		}},
+		{"Both", ua.TimestampsToReturnBoth, func(t *testing.T, dv *ua.DataValue) {
+			if dv.EncodingMask&ua.DataValueServerTimestamp == 0 {
+				t.Errorf("Both: missing server timestamp")
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := c.Read(ctx, &ua.ReadRequest{
+				TimestampsToReturn: tc.ts,
+				NodesToRead: []*ua.ReadValueID{{
+					NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+				}},
+			})
+			if err != nil {
+				t.Fatalf("Read: %v", err)
+			}
+			tc.want(t, resp.Results[0])
+		})
+	}
+
+	// Adapter CLI path (Neither).
+	result := runOpen62541Client(t, endpoint, "read",
+		"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32",
+		"--timestamps", "Neither",
+	)
+	if !result.Success {
+		t.Fatalf("adapter Neither read failed: %s", result.ServiceResult)
+	}
+}
+
+// TestGoServer_Open62541Client_WriteEncodingMask verifies value-only Writes
+// succeed and Status/timestamp Writes return BadWriteNotSupported.
+func TestGoServer_Open62541Client_WriteEncodingMask(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
+
+	ok, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(7))},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("value-only Write: %v", err)
+	}
+	if len(ok.Results) == 0 || ok.Results[0] != ua.StatusOK {
+		t.Errorf("value-only Write: got %v, want Good", ok.Results)
+	}
+
+	bad, err := c.Write(ctx, &ua.WriteRequest{
+		NodesToWrite: []*ua.WriteValue{{
+			NodeID: nodeID, AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{
+				EncodingMask:    ua.DataValueValue | ua.DataValueStatusCode | ua.DataValueSourceTimestamp,
+				Value:           ua.MustVariant(int32(8)),
+				Status:          ua.StatusOK,
+				SourceTimestamp: time.Now(),
+			},
+		}},
+	})
+	if err != nil {
+		t.Fatalf("status/timestamp Write: %v", err)
+	}
+	if len(bad.Results) == 0 || bad.Results[0] != ua.StatusBadWriteNotSupported {
+		t.Errorf("status/timestamp Write: got %v, want BadWriteNotSupported", bad.Results)
+	}
+}
+
+// TestGoServer_Open62541Client_BrowseResultMask verifies ResultMask clears
+// omitted ReferenceDescription fields.
+func TestGoServer_Open62541Client_BrowseResultMask(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	objectsID := ua.NewNumericNodeID(nsIdx, id.ObjectsFolder)
+
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID: objectsID, BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: true,
+			ResultMask:      uint32(ua.BrowseResultMaskBrowseName),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("BrowseResultMask: %v", err)
+	}
+	if len(resp.Results) == 0 || len(resp.Results[0].References) == 0 {
+		t.Fatal("BrowseResultMask: no references")
+	}
+	for _, r := range resp.Results[0].References {
+		if r.BrowseName == nil || r.BrowseName.Name == "" {
+			t.Errorf("BrowseName missing under BrowseName mask")
+		}
+		if r.DisplayName != nil && r.DisplayName.Text != "" {
+			t.Errorf("DisplayName should be cleared, got %+v", r.DisplayName)
+		}
+		if r.ReferenceTypeID != nil && r.ReferenceTypeID.IntID() != 0 {
+			t.Errorf("ReferenceTypeId should be null/0, got %v", r.ReferenceTypeID)
+		}
+		if r.NodeClass != 0 {
+			t.Errorf("NodeClass should be zero, got %v", r.NodeClass)
+		}
+	}
+
+	// Adapter CLI accepts --result-mask.
+	result := runOpen62541Client(t, endpoint, "browse",
+		"--node", "nsu="+interopNamespaceURI+";i=85",
+		"--result-mask", "8",
+	)
+	if !result.Success {
+		t.Fatalf("adapter BrowseResultMask failed: %s", result.ServiceResult)
+	}
+}
+
+// TestGoServer_Open62541Client_BrowseNextRelease verifies early continuation
+// point release on the Go server.
+func TestGoServer_Open62541Client_BrowseNextRelease(t *testing.T) {
+	endpoint := startGoServer(t)
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	objectsID := ua.NewNumericNodeID(nsIdx, id.ObjectsFolder)
+
+	resp, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID: objectsID, BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: true, ResultMask: uint32(ua.BrowseResultMaskAll),
+		}},
+		RequestedMaxReferencesPerNode: 2,
+	})
+	if err != nil {
+		t.Fatalf("Browse: %v", err)
+	}
+	cp := resp.Results[0].ContinuationPoint
+	if len(cp) == 0 {
+		t.Fatal("expected non-empty continuation point for BrowseNext release")
+	}
+	rel, err := c.BrowseNext(ctx, &ua.BrowseNextRequest{
+		ContinuationPoints: [][]byte{cp}, ReleaseContinuationPoints: true,
+	})
+	if err != nil {
+		t.Fatalf("BrowseNext release: %v", err)
+	}
+	if rel.Results[0].StatusCode != ua.StatusOK {
+		t.Errorf("release: got %v, want Good", rel.Results[0].StatusCode)
+	}
+	again, err := c.BrowseNext(ctx, &ua.BrowseNextRequest{
+		ContinuationPoints: [][]byte{cp}, ReleaseContinuationPoints: false,
+	})
+	if err != nil {
+		t.Fatalf("BrowseNext after release: %v", err)
+	}
+	if again.Results[0].StatusCode != ua.StatusBadContinuationPointInvalid {
+		t.Errorf("after release: got %v, want BadContinuationPointInvalid", again.Results[0].StatusCode)
+	}
+}
+
+// TestGoServer_Open62541Client_BrowseFiltering verifies NodeClassMask and
+// IncludeSubtypes=false filtering (IEC 62541-4 Browse Service).
+func TestGoServer_Open62541Client_BrowseFiltering(t *testing.T) {
+	endpoint := startGoServer(t)
+	// NodeClass Variable = 2
+	result := runOpen62541Client(t, endpoint, "browse",
+		"--node", "nsu="+interopNamespaceURI+";i=85",
+		"--node-class-mask", "2",
+	)
+	if !result.Success {
+		t.Fatalf("BrowseFiltering failed: %s", result.ServiceResult)
+	}
+	refs := parseBrowseRefs(t, result.Results)
+	if len(refs) == 0 {
+		t.Fatal("BrowseFiltering: expected some Variable references")
+	}
+	for _, r := range refs {
+		if r.NodeClass != "Variable" && r.NodeClass != "NodeClassVariable" {
+			t.Errorf("BrowseFiltering: unexpected NodeClass %q for %q", r.NodeClass, r.BrowseName.Name)
+		}
+	}
+	t.Logf("BrowseFiltering: %d Variable-only references", len(refs))
+
+	// IncludeSubtypes=false must not expand HierarchicalReferences to subtypes
+	// (interop Objects children are HasComponent, a subtype of HierarchicalReferences).
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	objectsID := ua.NewNumericNodeID(nsIdx, id.ObjectsFolder)
+	withSub, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID: objectsID, BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: true, ResultMask: uint32(ua.BrowseResultMaskAll),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("IncludeSubtypes=true: %v", err)
+	}
+	withoutSub, err := c.Browse(ctx, &ua.BrowseRequest{
+		NodesToBrowse: []*ua.BrowseDescription{{
+			NodeID: objectsID, BrowseDirection: ua.BrowseDirectionForward,
+			ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+			IncludeSubtypes: false, ResultMask: uint32(ua.BrowseResultMaskAll),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("IncludeSubtypes=false: %v", err)
+	}
+	if len(withSub.Results[0].References) == 0 {
+		t.Fatal("IncludeSubtypes=true: expected HasComponent children under Objects")
+	}
+	if len(withoutSub.Results[0].References) != 0 {
+		t.Errorf("IncludeSubtypes=false: expected 0 exact HierarchicalReferences matches, got %d",
+			len(withoutSub.Results[0].References))
+	}
+	t.Logf("IncludeSubtypes: true=%d refs, false=%d refs",
+		len(withSub.Results[0].References), len(withoutSub.Results[0].References))
+}
+
+// TestGoServer_Open62541Client_InvalidNodeId verifies identity failures for
+// Read/Write/Browse of unknown nodes (IEC 62541-4).
+func TestGoServer_Open62541Client_InvalidNodeId(t *testing.T) {
+	endpoint := startGoServer(t)
+	unknown := "nsu=" + interopNamespaceURI + ";s=DoesNotExist"
+
+	t.Run("Read", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "read", "--node", unknown)
+		if result.Success {
+			t.Fatal("Read unknown NodeId succeeded")
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		_ = json.Unmarshal(result.Results, &items)
+		sc := result.ServiceResult
+		if len(items) > 0 {
+			sc = items[0].StatusCode
+		}
+		if !statusCodeNameHas(sc, "NodeIdUnknown") && !statusCodeIs(sc, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("Read unknown: got %s", sc)
+		}
+	})
+
+	t.Run("Write", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "write",
+			"--node", unknown, "--type", "Int32", "--value", "1",
+		)
+		items := parseWriteResults(t, result.Results)
+		if len(items) == 0 {
+			t.Fatalf("no results: %s", result.ServiceResult)
+		}
+		if !statusCodeNameHas(items[0].StatusCode, "NodeIdUnknown") &&
+			!statusCodeIs(items[0].StatusCode, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("Write unknown: got %s", items[0].StatusCode)
+		}
+	})
+
+	t.Run("Browse", func(t *testing.T) {
+		result := runOpen62541ClientResult(t, endpoint, "browse", "--node", unknown)
+		if result.Success {
+			t.Fatal("Browse unknown NodeId succeeded")
+		}
+		if !statusCodeNameHas(result.ServiceResult, "NodeIdUnknown") &&
+			!statusCodeIs(result.ServiceResult, ua.StatusBadNodeIDUnknown) {
+			t.Errorf("Browse unknown: got %s", result.ServiceResult)
+		}
+	})
 }

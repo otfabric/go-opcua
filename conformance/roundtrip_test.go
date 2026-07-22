@@ -123,11 +123,8 @@ func TestRoundTrip_DateTime(t *testing.T) {
 }
 
 // TestRoundTrip_TypeMismatchOnRewrite documents the server's type-match check:
-// once a node holds a typed value, a write with a different Go type is rejected.
-//
-// NOTE: the namespace layer collapses the underlying StatusBadTypeMismatch into
-// StatusBadAttributeIDInvalid, so callers cannot distinguish a type mismatch
-// from a genuinely invalid attribute. See the conformance suite report.
+// once a node holds a typed value, a write with a different Go type is rejected
+// with StatusBadTypeMismatch (IEC 62541-4 Write Service).
 func TestRoundTrip_TypeMismatchOnRewrite(t *testing.T) {
 	c, f, ctx := setup(t)
 
@@ -137,7 +134,7 @@ func TestRoundTrip_TypeMismatchOnRewrite(t *testing.T) {
 		Value:        ua.MustVariant("not an int"),
 	})
 	require.NoError(t, err)
-	require.NotEqual(t, ua.StatusOK, status)
+	require.Equal(t, ua.StatusBadTypeMismatch, status)
 
 	// The original value must be intact.
 	dv, err := c.ReadValue(ctx, f.Int32)

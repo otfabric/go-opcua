@@ -33,10 +33,11 @@ jobs:
 
       - name: Run interop matrix
         env:
-          # Both images pin to the last release.
+          # Digest-pinned opcua-interop v0.4.0 multi-arch indexes:
+          # https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0
           # Set OPEN62541_IMAGE / MILO_IMAGE in the env to test in-progress :dev builds locally.
-          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541:v0.2.1
-          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo:v0.2.1
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:c3bf9c6b740948449e52080021a716def08db913eb3ba0b08e397f60cbd29061
+          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:eb204edd8a715e071118fae89650c114687bd97e31be24819da8ba5295cce844
         run: make interop
 
       - name: Collect Docker diagnostics

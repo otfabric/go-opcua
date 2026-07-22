@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -83,6 +84,25 @@ func TestSubscriptionService_Republish(t *testing.T) {
 
 		repResp := resp.(*ua.RepublishResponse)
 		assert.Equal(t, ua.StatusBadSubscriptionIDInvalid, repResp.ResponseHeader.ServiceResult)
+	})
+
+	t.Run("republish after ACK returns not available", func(t *testing.T) {
+		msg := &ua.NotificationMessage{SequenceNumber: 8, PublishTime: time.Now()}
+		sub.storeSentMessage(msg)
+		results := svc.ackPublishAcknowledgements([]*ua.SubscriptionAcknowledgement{
+			{SubscriptionID: sub.ID, SequenceNumber: 8},
+		})
+		require.Equal(t, []ua.StatusCode{ua.StatusOK}, results)
+
+		req := &ua.RepublishRequest{
+			RequestHeader:            hdr,
+			SubscriptionID:           sub.ID,
+			RetransmitSequenceNumber: 8,
+		}
+		resp, err := svc.Republish(context.Background(), nil, req, 4)
+		require.NoError(t, err)
+		repResp := resp.(*ua.RepublishResponse)
+		assert.Equal(t, ua.StatusBadMessageNotAvailable, repResp.ResponseHeader.ServiceResult)
 	})
 
 	t.Run("wrong request type", func(t *testing.T) {
@@ -252,4 +272,63 @@ func TestSubscription_Keepalive_NilChannel(t *testing.T) {
 	}
 	err := sub.keepalive(pubreq)
 	require.Error(t, err, "keepalive with nil channel must return an error, not panic")
+}
+
+func TestAckPublishAcknowledgements(t *testing.T) {
+	srv := newTestServer()
+	svc, sub, _ := newTestSubscription(srv)
+
+	msg := &ua.NotificationMessage{SequenceNumber: 7}
+	sub.storeSentMessage(msg)
+	require.Contains(t, sub.availableSequenceNumbers(), uint32(7))
+
+	results := svc.ackPublishAcknowledgements([]*ua.SubscriptionAcknowledgement{
+		{SubscriptionID: sub.ID, SequenceNumber: 7},
+		{SubscriptionID: sub.ID, SequenceNumber: 99},
+		{SubscriptionID: 999, SequenceNumber: 1},
+	})
+	require.Equal(t, []ua.StatusCode{
+		ua.StatusOK,
+		ua.StatusBadSequenceNumberUnknown,
+		ua.StatusBadSubscriptionIDInvalid,
+	}, results)
+	require.NotContains(t, sub.availableSequenceNumbers(), uint32(7))
+}
+
+func TestSubscription_LifetimeExpiry(t *testing.T) {
+	srv := newTestServer()
+	sess := srv.sb.NewSession()
+	sub := NewSubscription()
+	sub.srv = srv.SubscriptionService
+	sub.Session = sess
+	// Non-nil Channel passes the run() guard; with an empty PublishRequests
+	// queue the lifetime path never calls SendResponse.
+	sub.Channel = &uasc.SecureChannel{}
+	sub.ID = 77
+	sub.RevisedPublishingInterval = 20
+	sub.RevisedLifetimeCount = 3
+	sub.RevisedMaxKeepAliveCount = 1
+	sub.publishingEnabled = true
+	sub.running = true
+
+	srv.SubscriptionService.Mu.Lock()
+	srv.SubscriptionService.Subs[sub.ID] = sub
+	srv.SubscriptionService.Mu.Unlock()
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		sub.run()
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("subscription did not expire within 3s")
+	}
+
+	srv.SubscriptionService.Mu.Lock()
+	_, stillThere := srv.SubscriptionService.Subs[sub.ID]
+	srv.SubscriptionService.Mu.Unlock()
+	require.False(t, stillThere, "expired subscription must be removed")
 }

@@ -19,10 +19,10 @@ Requires **Go 1.25** or later.
 
 otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or build your own:
 
-- **Client** — connect, browse, read, write, subscribe, call methods, read history
-- **Server** — host namespaces, expose variables, handle methods, emit events
-- **Security** — six encryption policies, certificate and username/password authentication, server certificate validation with `TrustedCertificates()` and `InsecureSkipVerify()` options; **certificate chains** (leaf + intermediate) supported on connect
-- **Subscriptions** — data-change and event monitoring with automatic publishing
+- **Client** — connect, browse, read/write (including IndexRange), subscribe, call methods, read history
+- **Server** — host namespaces, expose variables, handle methods, emit events (`EmitBaseEvent`), optional raw HistoryRead via `HistoryProvider`
+- **Security** — six encryption policies, certificate and username/password authentication, server certificate validation with `TrustedCertificates()` and `InsecureSkipVerify()` options; **certificate chains** (leaf + intermediate) supported on connect; optional client-cert trust list at OpenSecureChannel
+- **Subscriptions** — data-change and event monitoring with Part 4 queues, lifecycle, Republish/Transfer on the go-opcua server
 - **Retry & Reconnect** — exponential backoff and automatic session recovery
 - **Metrics** — pluggable instrumentation for request/response/error tracking
 - **Logging** — structured logging via `*slog.Logger`; library is slog-native internally
@@ -159,8 +159,8 @@ func main() {
 | **Writing** | Single/batch writes, any attribute, `WriteValue`, `WriteAttribute` |
 | **Browsing** | Forward/inverse/both, continuation points, `BrowseAll`, `Walk` / `WalkLimit` (depth-limited), `WalkLimitDedup`, `BrowseWithDepth` (client-side recursive, returns slice) |
 | **Path resolution** | `NodeFromPath`, `NodeFromPathInNamespace`, `NodeFromQualifiedPath` (ns:name), `Node.TranslateBrowsePathInNamespaceToNodeID` (TranslateBrowsePathsToNodeIDs). Symbolic node names: `ua.StandardNodeID("CurrentTime")`, `id.NodeIDByName(name)` |
-| **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder API |
-| **Monitoring** | `monitor` package: callback/channel subscriptions; batch add with per-item `ItemError` on partial failure |
+| **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder `Timestamps`; Part 4 queue / lifecycle semantics on go-opcua servers |
+| **Monitoring** | `monitor` package: callback/channel subscriptions; batch add with per-item `ItemError`; zero-value `MonitoringMode` defaults to Reporting |
 | **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |
 | **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` |
@@ -176,15 +176,16 @@ func main() {
 | Area | Capabilities |
 |------|-------------|
 | **Namespaces** | Custom `NameSpace` interface, `NodeNameSpace` in-memory implementation |
-| **Services** | Read, Write, Browse, BrowseNext, TranslateBrowsePaths, Call |
+| **Services** | Read, Write, HistoryRead (raw via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences |
-| **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode |
-| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; per-item rejection for unknown nodes in a batch |
+| **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode; revise clamps, `MoreNotifications`, Publish ACK |
+| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; per-item rejection for unknown nodes |
 | **View** | RegisterNodes, UnregisterNodes |
 | **Query** | QueryFirst, QueryNext with full ContentFilter evaluation (all 18 operators, 3-valued logic), type/subtype matching, and continuation points |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel |
 | **Methods** | Register handlers via `RegisterMethod`, argument introspection |
-| **Events** | `EmitEvent` to push event notifications to subscribers |
+| **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + EventFilter SelectClauses / OfType) |
+| **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` (`SetHistorian`, `EnableNode`, `RecordValue`) |
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
 | **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML` |
 | **Security** | Same encryption policies as client (server-side) |
@@ -205,7 +206,7 @@ func main() {
 | | Cancel | — | Yes |
 | **Attribute** | Read | Yes | Yes |
 | | Write | Yes | Yes |
-| | HistoryRead | Yes | — |
+| | HistoryRead | Yes | Yes (raw via `HistoryProvider`; modified/aggregates unsupported) |
 | | HistoryUpdate | Yes | — |
 | **View** | Browse | Yes | Yes |
 | | BrowseNext | Yes | Yes |

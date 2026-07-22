@@ -37,18 +37,23 @@ type channelBroker struct {
 	// get funneled into for handling
 	msgChan chan *uasc.MessageBody
 	logger  *slog.Logger
+
+	// clientCertificateValidator is copied onto each new SecureChannel Config
+	// so untrusted client certs can be rejected at OpenSecureChannel.
+	clientCertificateValidator ClientCertificateValidator
 }
 
-func newChannelBroker(l *slog.Logger, endpointURL string) *channelBroker {
+func newChannelBroker(l *slog.Logger, endpointURL string, clientCertValidator ClientCertificateValidator) *channelBroker {
 	rng := mrand.New(mrand.NewSource(time.Now().UnixNano()))
 	return &channelBroker{
-		endpoints:       make(map[string]*ua.EndpointDescription),
-		endpointURL:     endpointURL,
-		s:               make(map[uint32]*uasc.SecureChannel),
-		msgChan:         make(chan *uasc.MessageBody),
-		secureChannelID: uint32(rng.Int31()),
-		secureTokenID:   uint32(rng.Int31()),
-		logger:          l,
+		endpoints:                  make(map[string]*ua.EndpointDescription),
+		endpointURL:                endpointURL,
+		s:                          make(map[uint32]*uasc.SecureChannel),
+		msgChan:                    make(chan *uasc.MessageBody),
+		secureChannelID:            uint32(rng.Int31()),
+		secureTokenID:              uint32(rng.Int31()),
+		logger:                     l,
+		clientCertificateValidator: clientCertValidator,
 	}
 }
 
@@ -61,6 +66,7 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 	cfg.Certificate = localCert
 	cfg.LocalKey = localKey
 	cfg.Logger = c.logger
+	cfg.ClientCertificateValidator = c.clientCertificateValidator
 
 	c.mu.Lock()
 	c.secureChannelID++

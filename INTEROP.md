@@ -39,12 +39,12 @@ OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:dev \
 MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev \
 make interop
 
-# Run against published v0.2.1 release images (default)
+# Run against published v0.4.0 release images (default)
 make interop
 
 # CI — digest pinned (update interop.yml after each release)
-OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:v0.2.1 \
-MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:v0.2.1 \
+OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:c3bf9c6b740948449e52080021a716def08db913eb3ba0b08e397f60cbd29061 \
+MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:eb204edd8a715e071118fae89650c114687bd97e31be24819da8ba5295cce844 \
 make interop
 ```
 
@@ -70,8 +70,8 @@ go test -tags=interop -v ./interop/...
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPEN62541_IMAGE` | open62541 adapter image | `ghcr.io/otfabric/opcua-interop-open62541:v0.2.1` |
-| `MILO_IMAGE` | Milo (Java) adapter image | `ghcr.io/otfabric/opcua-interop-milo:v0.2.1` |
+| `OPEN62541_IMAGE` | open62541 adapter image | digest-pinned `v0.4.0` (see defaults in `harness_test.go`) |
+| `MILO_IMAGE` | Milo (Java) adapter image | digest-pinned `v0.4.0` (see defaults in `harness_test.go`) |
 | `OPCUA_INTEROP_FIXTURE_DIR` | Path to fixture directory containing `baseline.json` | `testdata/` |
 | `OPCUA_INTEROP_PKI_DIR` | Root of test PKI tree | `../../opcua-interop/certs/test-pki` |
 
@@ -109,14 +109,14 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Scalar read — Float | ✓ | ✓ |
 | Scalar read — Double | ✓ | ✓ |
 | Scalar read — String (Unicode) | ✓ | ✓ |
-| Scalar read — DateTime | ✓ | — |
-| Scalar read — Guid | ✓ | — |
-| Scalar read — ByteString | ✓ | — |
-| Scalar read — XmlElement | ✓ | — |
-| Scalar read — NodeId | ✓ | — |
-| Scalar read — QualifiedName | ✓ | — |
-| Scalar read — LocalizedText | ✓ | — |
-| Scalar read — StatusCode | ✓ | — |
+| Scalar read — DateTime | ✓ | ✓ |
+| Scalar read — Guid | ✓ | ✓ |
+| Scalar read — ByteString | ✓ | ✓ |
+| Scalar read — XmlElement | ✓ | ✓ |
+| Scalar read — NodeId | ✓ | ✓ |
+| Scalar read — QualifiedName | ✓ | ✓ |
+| Scalar read — LocalizedText | ✓ | ✓ |
+| Scalar read — StatusCode | ✓ | ✓ |
 | Array read — Int32 | ✓ | ✓ |
 | Array read — Empty | ✓ | ✓ |
 | Array read — String | ✓ | ✓ |
@@ -128,7 +128,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Write and read-back — Boolean | ✓ | ✓ |
 | Write and read-back — Float | ✓ | ✓ |
 | Write and read-back — String | ✓ | ✓ |
-| Dynamic counter read | ✓ | — |
+| Dynamic counter read | ✓ | ✓ |
 | Batch Read (4 scalars in one request) | ✓ | ✓ |
 | Method call — Add (Int32) | ✓ | ✓ |
 | Method call — Multiply (Double) | ✓ | ✓ |
@@ -139,23 +139,40 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Subscription — Dynamic.Counter | ✓ | ✓ |
 | Subscription — Dynamic.Toggle (bool alternation) | ✓ | ✓ |
 | Subscription — Dynamic.Ramp (float64 sawtooth) | ✓ | ✓ |
-| Subscription queue size > 1 (batch delivery) | ✓ | — |
-| Subscription discard-oldest=false (keep-oldest) | ✓ | — |
+| Subscription queue size > 1 (batch delivery) | ✓ | ✓ |
+| Subscription discard-oldest=false (keep-oldest) | ✓ | ✓ |
 | DataValue source + server timestamp | ✓ | ✓ |
 | DataValue Uncertain status code | ✓ | ✓ |
 | Access.ReadOnly write rejection | ✓ | ✓ |
 | Access.WriteOnly read rejection | ✓ | ✓ |
-| Browse interop namespace (top-level folders) | ✓ | — |
-| Browse Scalars folder (variable node list) | ✓ | — |
-| Browse interop Objects folder (node name check) | — | ✓ |
-| Browse with BrowseNext pagination | — | ✓ |
+| Browse interop namespace (top-level folders) | ✓ | ✓ |
+| Browse Scalars folder (variable node list) | ✓ | ✓ |
+| Browse interop Objects folder (node name check) | ✓ | ✓ |
+| Browse with BrowseNext pagination | ✓ | ✓ |
 | Basic256Sha256 / Sign | ✓ | ✓ |
 | Basic256Sha256 / SignAndEncrypt | ✓ | ✓ |
 | Aes128_Sha256_RsaOaep / SignAndEncrypt | ✓ | ✓ |
 | Aes256_Sha256_RsaPss / SignAndEncrypt | ✓ | ✓ |
-| Untrusted cert rejection | ✓ | n/a |
+| Trusted cert accepted | ✓ | ✓ |
+| Untrusted cert rejection | ✓ | ✓ |
 | Username / valid credentials | ✓ | ✓ |
 | Username / invalid credentials | ✓ | ✓ |
+| Batch Write (per-item StatusCodes) | ✓ | ✓ |
+| Write type mismatch → BadTypeMismatch | ✓ | ✓ |
+| Method validation (count/type/identity) | — | ✓ |
+| IndexRange unsupported rejected | ✓ | ✓ |
+| IndexRange subset Read/Write (1D + matrix) | ✓ | ✓ |
+| Exact QueueSize / DiscardOldest windows | ✓ | ✓* |
+| Subscription TimestampsToReturn | ✓ | ✓* |
+| TimestampsToReturn honored (Read) | ✓ | ✓* |
+| Write EncodingMask / BadWriteNotSupported | ✓ | ✓* |
+| Browse ResultMask | ✓ | ✓ |
+| BrowseNext early release | ✓ | ✓ |
+| Untrusted cert rejected at SecureChannel | ✓ | ✓ |
+| Browse filtering (NodeClassMask / IncludeSubtypes) | ✓ | ✓ |
+| Invalid NodeId service results | ✓ | ✓ |
+
+\* Go-client-driven against Go server always; adapter reverse only where CLI exposes the control (`--queue-size`, `--discard-oldest`, `--timestamps` on subscribe).
 
 ### go-opcua client ↔ Milo
 
@@ -176,14 +193,14 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Scalar read — Float | ✓ | ✓ |
 | Scalar read — Double | ✓ | ✓ |
 | Scalar read — String (Unicode) | ✓ | ✓ |
-| Scalar read — DateTime | ✓ | — |
-| Scalar read — Guid | ✓ | — |
-| Scalar read — ByteString | ✓ | — |
-| Scalar read — XmlElement | ✓ | — |
-| Scalar read — NodeId | ✓ | — |
-| Scalar read — QualifiedName | ✓ | — |
-| Scalar read — LocalizedText | ✓ | — |
-| Scalar read — StatusCode | ✓ | — |
+| Scalar read — DateTime | ✓ | ✓ |
+| Scalar read — Guid | ✓ | ✓ |
+| Scalar read — ByteString | ✓ | ✓ |
+| Scalar read — XmlElement | ✓ | ✓ |
+| Scalar read — NodeId | ✓ | ✓ |
+| Scalar read — QualifiedName | ✓ | ✓ |
+| Scalar read — LocalizedText | ✓ | ✓ |
+| Scalar read — StatusCode | ✓ | ✓ |
 | Array read — Int32 | ✓ | ✓ |
 | Array read — Empty | ✓ | ✓ |
 | Array read — String | ✓ | ✓ |
@@ -195,7 +212,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Write and read-back — Boolean | ✓ | ✓ |
 | Write and read-back — Float | ✓ | ✓ |
 | Write and read-back — String | ✓ | ✓ |
-| Dynamic counter read | ✓ | — |
+| Dynamic counter read | ✓ | ✓ |
 | Batch Read (4 scalars in one request) | ✓ | ✓ |
 | Method call — Add (Int32) | ✓ | ✓ |
 | Method call — Multiply (Double) | ✓ | ✓ |
@@ -206,23 +223,40 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Subscription — Dynamic.Counter | ✓ | ✓ |
 | Subscription — Dynamic.Toggle (bool alternation) | ✓ | ✓ |
 | Subscription — Dynamic.Ramp (float64 sawtooth) | ✓ | ✓ |
-| Subscription queue size > 1 (batch delivery) | ✓ | — |
-| Subscription discard-oldest=false (keep-oldest) | ✓ | — |
+| Subscription queue size > 1 (batch delivery) | ✓ | ✓ |
+| Subscription discard-oldest=false (keep-oldest) | ✓ | ✓ |
 | DataValue source + server timestamp | ✓ | ✓ |
 | DataValue Uncertain status code | ✓ | ✓ |
 | Access.ReadOnly write rejection | ✓ | ✓ |
 | Access.WriteOnly read rejection | ✓ | ✓ |
-| Browse interop namespace (top-level folders) | ✓ | — |
-| Browse Scalars folder (variable node list) | ✓ | — |
-| Browse interop Objects folder (node name check) | — | ✓ |
-| Browse with BrowseNext pagination | — | ✓ |
+| Browse interop namespace (top-level folders) | ✓ | ✓ |
+| Browse Scalars folder (variable node list) | ✓ | ✓ |
+| Browse interop Objects folder (node name check) | ✓ | ✓ |
+| Browse with BrowseNext pagination | ✓ | ✓ |
 | Basic256Sha256 / Sign | ✓ | ✓ |
 | Basic256Sha256 / SignAndEncrypt | ✓ | ✓ |
 | Aes128_Sha256_RsaOaep / SignAndEncrypt | ✓ | ✓ |
 | Aes256_Sha256_RsaPss / SignAndEncrypt | ✓ | ✓ |
-| Untrusted cert rejection | ✓ | n/a |
+| Trusted cert accepted | ✓ | ✓ |
+| Untrusted cert rejection | ✓ | ✓ |
 | Username / valid credentials | ✓ | ✓ |
 | Username / invalid credentials | ✓ | ✓ |
+| Batch Write (per-item StatusCodes) | ✓ | ✓ |
+| Write type mismatch → BadTypeMismatch | ✓ | ✓ |
+| Method validation (count/type/identity) | — | ✓ |
+| IndexRange unsupported rejected | ✓ | ✓ |
+| IndexRange subset Read/Write (1D + matrix) | ✓ | ✓ |
+| Exact QueueSize / DiscardOldest windows | ✓ | ✓* |
+| Subscription TimestampsToReturn | ✓ | ✓* |
+| TimestampsToReturn honored (Read) | ✓ | ✓* |
+| Write EncodingMask / BadWriteNotSupported | ✓ | ✓* |
+| Browse ResultMask | ✓ | ✓ |
+| BrowseNext early release | ✓ | ✓ |
+| Untrusted cert rejected at SecureChannel | ✓ | ✓ |
+| Browse filtering (NodeClassMask / IncludeSubtypes) | ✓ | ✓ |
+| Invalid NodeId service results | ✓ | ✓ |
+
+\* Go-client-driven against Go server always; adapter reverse only where CLI exposes the control (`--queue-size`, `--discard-oldest`, `--timestamps` on subscribe).
 
 ---
 
@@ -232,11 +266,44 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 
 ## Current status
 
-Phase 9 complete: **212 tests, 0 skips, 0 failures** (adapter images v0.2.1).
+Phases 12–17 ship in go-opcua **v1.3.0**. Adapter images are pinned to
+[opcua-interop v0.4.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0) (digest-pinned below).
+
+The interop suite has **318** tests (`go test -tags=interop ./interop/...`).
+
+**Phases 12–14 are four-direction peer-complete** against open62541 and Milo (where the adapter CLI exposes the control).
+
+**Phases 15–17 are implemented end-to-end and verified Go client ↔ Go server; independent peer interoperability remains deferred** (EventFilter / Republish / Transfer / HistoryRead adapter CLI not yet shipped).
 
 | Image | Tag |
 |-------|-----|
-| `ghcr.io/otfabric/opcua-interop-open62541` | `v0.2.1` |
-| `ghcr.io/otfabric/opcua-interop-milo` | `v0.2.1` |
+| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.4.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0) / `@sha256:c3bf9c6b…d29061` |
+| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.4.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0) / `@sha256:eb204edd…cce844` |
 
 > **Local dev images:** Use `OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:dev` and `MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev` when testing local adapter changes. The defaults pin to a released version for reproducibility.
+
+### Phases 12–14 — peer-verified (v0.4.0)
+
+- IndexRange subsets, Read `TimestampsToReturn`, Write EncodingMask, Browse ResultMask / BrowseNext release, SecureChannel trust
+- Exact `QueueSize` / `DiscardOldest` windows + subscription `TimestampsToReturn`
+- `subscribe` — `subscriptionId` + revised CreateSubscription fields
+- `subscription-lifecycle` — scenarios `revise`, `publishing-mode`, `monitoring-mode`, `delete`
+- Go↔Go lifecycle tests in `interop/phase13_test.go` / `phase14_test.go` + adapter reverse in `phase14_adapter_test.go`
+
+### Phases 15–17 — Go↔Go only (peer pending)
+
+| Capability | Go→Go | Peer |
+|-----------|:---:|:---:|
+| Event subscription — EventFilter / OfType / EmitBaseEvent | ✓ | pending |
+| Event subscription — invalid filter rejection | ✓ | pending |
+| Republish — available / missing / invalid | ✓ | pending |
+| TransferSubscriptions — ownership / invalid | ✓ | pending |
+| ACK removes sequence from available | ✓ | pending |
+| HistoryRead — raw / continuation / modified reject / non-historized | ✓ | pending |
+
+### Adapter interop gaps (next peer-closure phase)
+
+- `subscribe --event` — event subscription with EventFilter (open62541 + Milo)
+- `history-read --raw` — HistoryRead with ReadRawModifiedDetails (open62541 + Milo)
+- `republish` — Republish service call (open62541 + Milo)
+- `transfer` — TransferSubscriptions service call (open62541 + Milo)

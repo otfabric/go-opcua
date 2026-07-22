@@ -14,8 +14,8 @@
 //
 // Environment variables (all optional):
 //
-//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: ghcr.io/otfabric/opcua-interop-open62541:v0.2.1)
-//	MILO_IMAGE                 Docker image for the Milo adapter      (default: ghcr.io/otfabric/opcua-interop-milo:v0.2.1)
+//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: digest-pinned v0.4.0)
+//	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest-pinned v0.4.0)
 //	OPCUA_INTEROP_FIXTURE_DIR  Directory containing baseline.json     (default: testdata)
 //	OPCUA_INTEROP_PKI_DIR      Root of the test PKI tree              (default: ../../opcua-interop/certs/test-pki)
 package interop
@@ -53,8 +53,10 @@ import (
 const (
 	// Default images: use released tags so CI is reproducible without env overrides.
 	// Override with OPEN62541_IMAGE / MILO_IMAGE for local :dev builds.
-	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541:v0.2.1"
-	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo:v0.2.1"
+	// Digest-pinned multi-arch indexes for opcua-interop v0.4.0:
+	// https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0
+	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:c3bf9c6b740948449e52080021a716def08db913eb3ba0b08e397f60cbd29061"
+	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:eb204edd8a715e071118fae89650c114687bd97e31be24819da8ba5295cce844"
 	defaultFixtureDir     = "testdata"
 
 	interopNamespaceURI = "urn:otfabric:opcua-interop:model"
@@ -242,6 +244,51 @@ func parseBrowseNames(t *testing.T, raw json.RawMessage) map[string]bool {
 		names[it.BrowseName.Name] = true
 	}
 	return names
+}
+
+// writeResultItem is one per-item entry from an adapter write results array.
+type writeResultItem struct {
+	NodeID     string        `json:"nodeId"`
+	StatusCode statusCodeObj `json:"statusCode"`
+}
+
+// parseWriteResults unmarshals the write results array from an adapterResult.
+func parseWriteResults(t *testing.T, raw json.RawMessage) []writeResultItem {
+	t.Helper()
+	var items []writeResultItem
+	if err := json.Unmarshal(raw, &items); err != nil {
+		t.Fatalf("parseWriteResults: %v; raw: %s", err, raw)
+	}
+	return items
+}
+
+// statusCodeIs reports whether the adapter status matches the expected OPC UA code.
+func statusCodeIs(sr statusCodeObj, want ua.StatusCode) bool {
+	return sr.Code == uint32(want)
+}
+
+// statusCodeNameHas reports whether the symbolic name contains substr (adapters
+// may or may not prefix with "Status").
+func statusCodeNameHas(sr statusCodeObj, substr string) bool {
+	return strings.Contains(sr.Name, substr)
+}
+
+// browseRef is one reference from an adapter browse results array.
+type browseRef struct {
+	BrowseName struct {
+		Name string `json:"name"`
+	} `json:"browseName"`
+	NodeClass string `json:"nodeClass"`
+}
+
+// parseBrowseRefs unmarshals browse results including NodeClass.
+func parseBrowseRefs(t *testing.T, raw json.RawMessage) []browseRef {
+	t.Helper()
+	var items []browseRef
+	if err := json.Unmarshal(raw, &items); err != nil {
+		t.Fatalf("parseBrowseRefs: %v; raw: %s", err, raw)
+	}
+	return items
 }
 
 // setKeys returns the sorted keys of a string→bool map for error messages.
@@ -1400,4 +1447,180 @@ func runSecureAdapterClient(t *testing.T, imageEnvVar, defaultImage, clientPKINa
 		t.Fatalf("parse secure adapter client output: %v\nraw: %s", err, raw)
 	}
 	return result
+}
+
+// runSecureAdapterClientResult is like runSecureAdapterClient but does not
+// fatal when the adapter exits non-zero. It parses the JSON output regardless
+// of exit status and returns the result. Use for negative tests expecting
+// connection or service failure.
+func runSecureAdapterClientResult(t *testing.T, imageEnvVar, defaultImage, clientPKIName, endpoint, subcmd, policy, mode string, extraArgs ...string) adapterResult {
+	t.Helper()
+
+	pki := pkiDir(t)
+	certFile := filepath.Join(pki, clientPKIName, "cert.crt")
+	keyFile := filepath.Join(pki, clientPKIName, "cert.key")
+	caCert := filepath.Join(pki, "ca", "ca.crt")
+
+	for _, f := range []string{certFile, keyFile, caCert} {
+		if _, err := os.Stat(f); err != nil {
+			t.Skipf("adapter client PKI file missing (%s): run certs/generate.sh first", f)
+		}
+	}
+
+	image := getEnvOr(imageEnvVar, defaultImage)
+	dockerEndpoint := strings.ReplaceAll(endpoint, "localhost", "host.docker.internal")
+
+	cmdArgs := []string{"run", "--rm",
+		"--add-host=host.docker.internal:host-gateway",
+		"-v", certFile + ":/certs/cert.crt:ro",
+		"-v", keyFile + ":/certs/cert.key:ro",
+		"-v", caCert + ":/certs/ca.crt:ro",
+		image,
+		"client", subcmd,
+		"--endpoint", dockerEndpoint,
+		"--certificate", "/certs/cert.crt",
+		"--private-key", "/certs/cert.key",
+		"--trust-list", "/certs/ca.crt",
+		"--security-policy", policy,
+		"--security-mode", mode,
+	}
+	cmdArgs = append(cmdArgs, extraArgs...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
+	cmd.Stderr = os.Stderr
+
+	// Do not fatal on non-zero exit — the adapter may exit non-zero when the
+	// server rejects the connection.  Attempt to parse whatever JSON was produced.
+	raw, _ := cmd.Output()
+	if len(raw) == 0 {
+		t.Logf("runSecureAdapterClientResult: no output from adapter")
+		return adapterResult{}
+	}
+	result, err := parseAdapterOutput(raw)
+	if err != nil {
+		t.Logf("runSecureAdapterClientResult: parse failed: %v\nraw: %s", err, raw)
+		return adapterResult{}
+	}
+	return result
+}
+
+// loadCACertDER reads the CA certificate from the test PKI and returns DER bytes.
+func loadCACertDER(t *testing.T) []byte {
+	t.Helper()
+	pki := pkiDir(t)
+	caPath := filepath.Join(pki, "ca", "ca.crt")
+	raw, err := os.ReadFile(caPath)
+	if err != nil {
+		t.Skipf("CA cert missing (%s): run certs/generate.sh first", caPath)
+	}
+	block, _ := pem.Decode(raw)
+	if block == nil {
+		t.Fatalf("CA cert %s: not PEM", caPath)
+	}
+	return block.Bytes
+}
+
+// startTrustGoServer starts a secure go-opcua server configured with
+// WithClientCertificateTrustList using the test PKI CA certificate, so only
+// adapter clients whose certificates are signed by that CA are accepted.
+// Returns the endpoint URL.
+func startTrustGoServer(t *testing.T) string {
+	t.Helper()
+
+	certDER := loadGoServerCert(t)
+	privateKey := loadGoServerKey(t)
+	caDER := loadCACertDER(t)
+
+	port := freePort(t)
+	s, err := server.New(
+		server.ListenOn(fmt.Sprintf("0.0.0.0:%d", port)),
+		server.EndPoint("host.docker.internal", port),
+		server.Certificate(certDER),
+		server.PrivateKey(privateKey),
+		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
+		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
+		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		server.WithClientCertificateTrustList(caDER),
+	)
+	if err != nil {
+		t.Fatalf("startTrustGoServer: server.New: %v", err)
+	}
+
+	ns := server.NewNodeNameSpace(s, interopNamespaceURI)
+	s.AddNamespace(ns)
+	objs := ns.Objects()
+	addVar := func(name string, val interface{}) {
+		n := ns.AddNewVariableStringNode(name, val)
+		objs.AddRef(n, server.RefTypeIDHasComponent, true)
+	}
+	addVar("Scalar.Int32", int32(42))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(func() {
+		cancel()
+		s.Close()
+	})
+
+	go func() {
+		if err := s.Start(ctx); err != nil && ctx.Err() == nil {
+			t.Logf("startTrustGoServer: server exited: %v", err)
+		}
+	}()
+
+	addr := fmt.Sprintf("localhost:%d", port)
+	deadline := time.Now().Add(serverReadyTimeout)
+	for time.Now().Before(deadline) {
+		if conn, err := net.Dial("tcp", addr); err == nil {
+			conn.Close()
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	return fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath)
+}
+
+// isCertRejectedServiceResult returns true if the adapter-result service
+// result name indicates certificate-based rejection. Phase 12 rejects at
+// OpenSecureChannel, so adapters may also surface channel-closed statuses.
+func isCertRejectedServiceResult(sr statusCodeObj) bool {
+	for _, suffix := range []string{
+		"CertificateUntrusted",
+		"CertificateInvalid",
+		"SecurityChecksFailed",
+		"BadSecurity",
+		"SecureChannelClosed",
+		"SecureChannelIdInvalid",
+		"ConnectionClosed",
+		"TcpInternalError",
+		"Certificate",
+	} {
+		if strings.Contains(sr.Name, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// isUntrustedClientRejected reports whether an adapter client failed in a way
+// consistent with OpenSecureChannel certificate rejection. Some stacks surface
+// a certificate StatusCode; others fail at transport with Success=false and a
+// non-certificate serviceResult (or empty JSON after the channel drops).
+func isUntrustedClientRejected(r adapterResult) bool {
+	if r.Success {
+		return false
+	}
+	if isCertRejectedServiceResult(r.ServiceResult) {
+		return true
+	}
+	// Channel dropped before a useful serviceResult was recorded.
+	if len(r.Error) > 0 && string(r.Error) != "null" {
+		return true
+	}
+	// Empty/zero result from a non-zero docker exit (parse may yield Good defaults).
+	return r.ServiceResult.Code == 0 && r.Operation != ""
 }

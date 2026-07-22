@@ -69,6 +69,12 @@ type Server struct {
 
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
+
+	// eventItems tracks event-monitored-item filter state.
+	eventItems *eventItemRegistry
+
+	// historian provides optional HistoryRead support (nil = unsupported).
+	historian HistoryProvider
 }
 
 type serverConfig struct {
@@ -89,12 +95,13 @@ type serverConfig struct {
 
 	cap ServerCapabilities
 
-	accessController    AccessController
-	roleMapper          RoleMapper
-	usernameValidator   UsernameValidator
-	x509UserValidator   X509UserValidator
-	allowUsernameOnNone bool
-	metrics             ServerMetrics
+	accessController           AccessController
+	roleMapper                 RoleMapper
+	usernameValidator          UsernameValidator
+	x509UserValidator          X509UserValidator
+	clientCertificateValidator ClientCertificateValidator
+	allowUsernameOnNone        bool
+	metrics                    ServerMetrics
 
 	logger *slog.Logger
 }
@@ -179,12 +186,13 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	s := &Server{
-		url:      listenURL,
-		cfg:      cfg,
-		cb:       newChannelBroker(cfg.logger, listenURL),
-		sb:       newSessionBroker(cfg.logger),
-		handlers: make(map[uint16]Handler),
-		methods:  make(map[string]MethodHandler),
+		url:        listenURL,
+		cfg:        cfg,
+		cb:         newChannelBroker(cfg.logger, listenURL, cfg.clientCertificateValidator),
+		sb:         newSessionBroker(cfg.logger),
+		handlers:   make(map[uint16]Handler),
+		methods:    make(map[string]MethodHandler),
+		eventItems: newEventItemRegistry(),
 		namespaces: []NameSpace{
 			NewNameSpace("http://opcfoundation.org/UA/"), // ns:0
 		},
@@ -231,6 +239,51 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+// newServerNoNS creates a Server with all cfg/cb/sb fields initialized but with
+// an empty namespaces slice.  It is used by the test helper to avoid re-running
+// the expensive nodeset import for every test; the caller is responsible for
+// installing a pre-populated ns-0 NodeNameSpace.
+func newServerNoNS(opts ...Option) (*Server, error) {
+	cfg := &serverConfig{
+		cap:              capabilities,
+		applicationName:  "GOPCUA",
+		manufacturerName: "otfabric",
+		productName:      "otfabric OPC/UA Server",
+		softwareVersion:  "0.0.0-dev",
+		logger:           slog.Default(),
+	}
+	for _, opt := range opts {
+		if err := opt(cfg); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.accessController == nil {
+		cfg.accessController = DefaultAccessController{}
+	}
+	listenURL := ""
+	if cfg.listenAddr != "" {
+		listenURL = cfg.listenAddr
+	} else if len(cfg.endpoints) != 0 {
+		listenURL = cfg.endpoints[0]
+	}
+
+	return &Server{
+		url:        listenURL,
+		cfg:        cfg,
+		cb:         newChannelBroker(cfg.logger, listenURL, cfg.clientCertificateValidator),
+		sb:         newSessionBroker(cfg.logger),
+		handlers:   make(map[uint16]Handler),
+		methods:    make(map[string]MethodHandler),
+		namespaces: nil, // caller fills this in
+		status: &ua.ServerStatusDataType{
+			StartTime:      time.Now(),
+			CurrentTime:    time.Now(),
+			State:          ua.ServerStateSuspended,
+			ShutdownReason: &ua.LocalizedText{},
+		},
+	}, nil
 }
 
 func (s *Server) Session(hdr *ua.RequestHeader) *session {
@@ -346,7 +399,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.setServerState(ua.ServerStateRunning)
 
 	if s.cb == nil {
-		s.cb = newChannelBroker(s.cfg.logger, s.url)
+		s.cb = newChannelBroker(s.cfg.logger, s.url, s.cfg.clientCertificateValidator)
 	}
 
 	mctx, cancel := context.WithCancel(ctx)

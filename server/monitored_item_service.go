@@ -101,6 +101,100 @@ func (s *MonitoredItemService) DeleteSub(id uint32) {
 	}
 }
 
+const maxMonitoredItemQueueSize = 100
+
+func reviseQueueSize(requested uint32) uint32 {
+	if requested == 0 {
+		return 1
+	}
+	if requested > maxMonitoredItemQueueSize {
+		return maxMonitoredItemQueueSize
+	}
+	return requested
+}
+
+// enqueue applies Part 4 MonitoringParameters queue semantics.
+// Caller must hold s.Mu.
+func (item *MonitoredItem) enqueue(n *ua.MonitoredItemNotification) {
+	if item.queueSize <= 1 {
+		item.queue = item.queue[:0]
+		item.queue = append(item.queue, n)
+		return
+	}
+	if len(item.queue) < int(item.queueSize) {
+		item.queue = append(item.queue, n)
+		return
+	}
+	// Queue full — apply discard policy and set Overflow InfoBit.
+	if item.discardOldest {
+		item.queue = append(item.queue[1:], n)
+		if item.queue[0].Value != nil {
+			item.queue[0].Value.Status = item.queue[0].Value.Status.WithOverflow()
+			item.queue[0].Value.EncodingMask |= ua.DataValueStatusCode
+		}
+	} else {
+		item.queue[len(item.queue)-1] = n
+		if n.Value != nil {
+			n.Value.Status = n.Value.Status.WithOverflow()
+			n.Value.EncodingMask |= ua.DataValueStatusCode
+		}
+	}
+}
+
+// DrainQueuedNotifications removes and returns queued notifications for
+// Reporting-mode items of the subscription, in monitored-item registration
+// order. Same ClientHandle may appear multiple times when QueueSize > 1.
+//
+// max limits how many notifications are returned in this Publish (0 = unlimited).
+// more is true when Reporting queues still hold samples after this drain.
+func (s *MonitoredItemService) DrainQueuedNotifications(subID uint32, max uint32) (out []*ua.MonitoredItemNotification, more bool) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	items := s.Subs[subID]
+	limit := int(max)
+	unlimited := max == 0
+	for _, item := range items {
+		if item == nil || item.Mode != ua.MonitoringModeReporting || len(item.queue) == 0 {
+			continue
+		}
+		for len(item.queue) > 0 {
+			if !unlimited && len(out) >= limit {
+				more = true
+				return out, more
+			}
+			out = append(out, item.queue[0])
+			item.queue = item.queue[1:]
+		}
+	}
+	return out, false
+}
+
+// PendingQueuedNotifications reports whether any monitored item for subID
+// currently has queued notifications (any MonitoringMode).
+func (s *MonitoredItemService) PendingQueuedNotifications(subID uint32) bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	for _, item := range s.Subs[subID] {
+		if item != nil && len(item.queue) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// PendingReportableNotifications reports whether any Reporting-mode item for
+// subID currently has queued notifications ready for Publish.
+func (s *MonitoredItemService) PendingReportableNotifications(subID uint32) bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	for _, item := range s.Subs[subID] {
+		if item != nil && item.Mode == ua.MonitoringModeReporting && len(item.queue) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *MonitoredItemService) ChangeNotification(n *ua.NodeID) {
 
 	s.Mu.Lock()
@@ -119,6 +213,10 @@ func (s *MonitoredItemService) ChangeNotification(n *ua.NodeID) {
 		if item == nil {
 			continue
 		}
+		// Disabled: do not sample or enqueue (Part 4 §5.12.1.3).
+		if item.Mode == ua.MonitoringModeDisabled {
+			continue
+		}
 		val := new(ua.MonitoredItemNotification)
 		val.ClientHandle = item.Req.RequestedParameters.ClientHandle
 		if err != nil {
@@ -126,12 +224,31 @@ func (s *MonitoredItemService) ChangeNotification(n *ua.NodeID) {
 			val.Value = &ua.DataValue{}
 			val.Value.Status = ua.StatusBad
 			val.Value.EncodingMask |= ua.DataValueStatusCode
-			item.Sub.NotifyChannel <- val
+			item.enqueue(val)
+			if item.Mode == ua.MonitoringModeReporting {
+				select {
+				case item.Sub.NotifyChannel <- val:
+				default:
+				}
+			}
 			continue
 		}
 		dv := ns.Attribute(n, item.Req.ItemToMonitor.AttributeID)
+		if dv != nil {
+			// Copy so timestamp filtering / overflow bits do not mutate the node store.
+			cp := *dv
+			dv = &cp
+			_ = ua.ApplyTimestampsToReturn(dv, item.timestampsToReturn)
+		}
 		val.Value = dv
-		item.Sub.NotifyChannel <- val
+		item.enqueue(val)
+		// Sampling queues without waking Publish; Reporting wakes the publish loop.
+		if item.Mode == ua.MonitoringModeReporting {
+			select {
+			case item.Sub.NotifyChannel <- val:
+			default:
+			}
+		}
 	}
 
 }
@@ -162,9 +279,14 @@ type MonitoredItem struct {
 	Sub *Subscription
 	Req *ua.MonitoredItemCreateRequest
 
-	// Mode is stored but not yet enforced during notification delivery.
-	// TODO(server): filter notifications based on MonitoringMode (Part 4 §5.12.1.3)
+	// Mode controls sampling and Publish delivery (Part 4 §5.12.1.3):
+	// Disabled = no enqueue; Sampling = enqueue only; Reporting = enqueue + Publish.
 	Mode ua.MonitoringMode
+
+	queueSize          uint32
+	discardOldest      bool
+	timestampsToReturn ua.TimestampsToReturn
+	queue              []*ua.MonitoredItemNotification
 }
 
 // CreateMonitoredItems implements the OPC UA CreateMonitoredItems service.
@@ -197,6 +319,22 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		return nil, errors.New("not your subscription, bro")
 	}
 
+	ts := req.TimestampsToReturn
+	if sc := ua.ApplyTimestampsToReturn(&ua.DataValue{}, ts); sc != ua.StatusOK {
+		return &ua.CreateMonitoredItemsResponse{
+			ResponseHeader: &ua.ResponseHeader{
+				Timestamp:          time.Now(),
+				RequestHandle:      req.RequestHeader.RequestHandle,
+				ServiceResult:      sc,
+				ServiceDiagnostics: &ua.DiagnosticInfo{},
+				StringTable:        []string{},
+				AdditionalHeader:   ua.NewExtensionObject(nil),
+			},
+			Results:         res,
+			DiagnosticInfos: []*ua.DiagnosticInfo{},
+		}, nil
+	}
+
 	for i := range req.ItemsToCreate {
 		itemreq := req.ItemsToCreate[i]
 		nodeid := itemreq.ItemToMonitor.NodeID
@@ -212,10 +350,55 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
+		qsize := uint32(1)
+		discardOldest := true
+		if itemreq.RequestedParameters != nil {
+			qsize = reviseQueueSize(itemreq.RequestedParameters.QueueSize)
+			discardOldest = itemreq.RequestedParameters.DiscardOldest
+		}
+
 		item := MonitoredItem{
-			ID:  s.NextID(),
-			Sub: sub,
-			Req: itemreq,
+			ID:                 s.NextID(),
+			Sub:                sub,
+			Req:                itemreq,
+			Mode:               itemreq.MonitoringMode,
+			queueSize:          qsize,
+			discardOldest:      discardOldest,
+			timestampsToReturn: ts,
+			queue:              make([]*ua.MonitoredItemNotification, 0, qsize),
+		}
+
+		// Check for event monitoring (AttributeIDEventNotifier with EventFilter).
+		isEventItem := itemreq.ItemToMonitor.AttributeID == ua.AttributeIDEventNotifier
+		var filterResult *ua.ExtensionObject
+		if isEventItem {
+			var ef *ua.EventFilter
+			if itemreq.RequestedParameters != nil && itemreq.RequestedParameters.Filter != nil {
+				if filter, ok := itemreq.RequestedParameters.Filter.Value.(*ua.EventFilter); ok {
+					ef = filter
+				} else if filter, ok := itemreq.RequestedParameters.Filter.Value.(ua.EventFilter); ok {
+					ef = &filter
+				}
+			}
+			if ef == nil {
+				res[i] = &ua.MonitoredItemCreateResult{
+					StatusCode:   ua.StatusBadEventFilterInvalid,
+					FilterResult: ua.NewExtensionObject(nil),
+				}
+				continue
+			}
+			emi, efr, sc := validateEventFilter(ef)
+			if sc != ua.StatusOK {
+				res[i] = &ua.MonitoredItemCreateResult{
+					StatusCode:   sc,
+					FilterResult: ua.NewExtensionObject(nil),
+				}
+				continue
+			}
+			s.SubService.srv.eventItems.register(item.ID, emi)
+			filterResult = ua.NewExtensionObject(efr)
+		} else {
+			filterResult = ua.NewExtensionObject(nil)
 		}
 
 		// book keeping of the new item
@@ -232,18 +415,18 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		}
 		s.Subs[item.Sub.ID] = append(list, &item)
 
-		s.SubService.srv.cfg.logger.Debug("adding monitored item", "node_id", nodeid.String(), "sub_id", subID, "item_id", item.ID, "client_handle", itemreq.RequestedParameters.ClientHandle)
+		s.SubService.srv.cfg.logger.Debug("adding monitored item", "node_id", nodeid.String(), "sub_id", subID, "item_id", item.ID, "client_handle", itemreq.RequestedParameters.ClientHandle, "queue_size", qsize)
 		res[i] = &ua.MonitoredItemCreateResult{
 			StatusCode:              ua.StatusOK,
 			MonitoredItemID:         item.ID,
 			RevisedSamplingInterval: sub.RevisedPublishingInterval,
-			RevisedQueueSize:        1,
-			FilterResult:            ua.NewExtensionObject(nil),
+			RevisedQueueSize:        qsize,
+			FilterResult:            filterResult,
 		}
-		// do an initial update for the nodeids in the background.
-		// These lock the mutex so we can't do them inline here.
-		// This will cause them to happen once we unlock.
-		go s.ChangeNotification(nodeid)
+		// For data items, do an initial update for the nodeids in the background.
+		if !isEventItem {
+			go s.ChangeNotification(nodeid)
+		}
 
 	}
 
@@ -299,13 +482,23 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 		// Update the monitored item's parameters.
 		if item.RequestedParameters != nil {
 			mi.Req.RequestedParameters = item.RequestedParameters
+			mi.queueSize = reviseQueueSize(item.RequestedParameters.QueueSize)
+			mi.discardOldest = item.RequestedParameters.DiscardOldest
+			if len(mi.queue) > int(mi.queueSize) {
+				// Keep the newest samples when shrinking the queue.
+				mi.queue = mi.queue[len(mi.queue)-int(mi.queueSize):]
+			}
+		}
+		if req.TimestampsToReturn != ua.TimestampsToReturnInvalid {
+			if sc := ua.ApplyTimestampsToReturn(&ua.DataValue{}, req.TimestampsToReturn); sc == ua.StatusOK {
+				mi.timestampsToReturn = req.TimestampsToReturn
+			}
 		}
 
 		revisedSampling := float64(0)
-		revisedQueue := uint32(0)
+		revisedQueue := mi.queueSize
 		if item.RequestedParameters != nil {
 			revisedSampling = item.RequestedParameters.SamplingInterval
-			revisedQueue = item.RequestedParameters.QueueSize
 		}
 
 		results[i] = &ua.MonitoredItemModifyResult{
@@ -359,7 +552,19 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 			continue
 		}
 
+		prev := item.Mode
 		item.Mode = req.MonitoringMode
+		if req.MonitoringMode == ua.MonitoringModeDisabled {
+			item.queue = item.queue[:0]
+		} else if prev != ua.MonitoringModeReporting && req.MonitoringMode == ua.MonitoringModeReporting {
+			// Wake Publish so already-queued Sampling samples can be delivered.
+			if len(item.queue) > 0 && item.Sub != nil {
+				select {
+				case item.Sub.NotifyChannel <- &ua.MonitoredItemNotification{}:
+				default:
+				}
+			}
+		}
 		results[i] = ua.StatusOK
 	}
 
