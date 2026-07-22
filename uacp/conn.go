@@ -178,7 +178,13 @@ type Listener struct {
 // If the Port field of laddr is 0, a port number is automatically chosen.
 func Listen(ctx context.Context, endpoint string, ack *Acknowledge) (*Listener, error) {
 	if ack == nil {
-		ack = DefaultServerACK
+		a := *DefaultServerACK
+		ack = &a
+	} else {
+		// Clone so the caller can reuse/mutate their template without affecting
+		// an already-running listener.
+		a := *ack
+		ack = &a
 	}
 	_, laddr, err := ParseEndpoint(endpoint)
 	if err != nil {
@@ -206,9 +212,12 @@ func (l *Listener) Accept(ctx context.Context) (*Conn, error) {
 	if err != nil {
 		return nil, err
 	}
-	conn := &Conn{TCPConn: c, id: nextid(), ack: l.ack}
+	// Clone listener ACK; srvhandshake also clones before negotiating, but
+	// the initial HEL receive must use a per-connection copy.
+	ackCopy := *l.ack
+	conn := &Conn{TCPConn: c, id: nextid(), ack: &ackCopy}
 	conn.bufPool.New = func() any {
-		b := make([]byte, l.ack.ReceiveBufSize)
+		b := make([]byte, ackCopy.ReceiveBufSize)
 		return &b
 	}
 	if err := conn.srvhandshake(l.endpoint); err != nil {
@@ -250,9 +259,12 @@ func NewConn(c *net.TCPConn, ack *Acknowledge) (*Conn, error) {
 	if ack == nil {
 		ack = DefaultClientACK
 	}
-	conn := &Conn{TCPConn: c, id: nextid(), ack: ack}
+	// Always clone: DefaultClientACK / caller templates must not be mutated by
+	// handshake negotiation or shared across concurrent connections.
+	ackCopy := *ack
+	conn := &Conn{TCPConn: c, id: nextid(), ack: &ackCopy}
 	conn.bufPool.New = func() any {
-		b := make([]byte, ack.ReceiveBufSize)
+		b := make([]byte, ackCopy.ReceiveBufSize)
 		return &b
 	}
 	return conn, nil

@@ -57,6 +57,17 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 	sess.serverNonce = nonce
 	sess.remoteCertificate = req.ClientCertificate
 
+	// Validate the client's application certificate against the server's
+	// configured trust store (OPC UA Part 4 §5.6.3). Skip validation when no
+	// validator is configured (the secure channel still enforces message
+	// integrity; this is an additional application-level trust check).
+	if s.srv.cfg.clientCertificateValidator != nil && len(req.ClientCertificate) > 0 {
+		if err := s.srv.cfg.clientCertificateValidator(req.ClientCertificate); err != nil {
+			s.srv.cfg.logger.Warn("client certificate rejected", "error", err)
+			return nil, err
+		}
+	}
+
 	sig, alg, err := sc.NewSessionSignature(req.ClientCertificate, req.ClientNonce)
 	if err != nil {
 		s.srv.cfg.logger.Warn("error creating session signature")
@@ -266,7 +277,12 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 		return nil, err
 	}
 
-	err = s.srv.sb.Close(req.RequestHeader.AuthenticationToken)
+	authToken := req.RequestHeader.AuthenticationToken
+	if s.srv.historyCPs != nil && authToken != nil {
+		s.srv.historyCPs.releaseSession(authToken.String())
+	}
+
+	err = s.srv.sb.Close(authToken)
 	if err != nil {
 		return nil, ua.StatusBadSessionIDInvalid
 	}

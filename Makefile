@@ -8,7 +8,7 @@ TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ 
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/
 
-.PHONY: help all test coverage cover lint lint-ci fmt vet integration selfintegration interop examples test-race install-py-opcua gen check-gen
+.PHONY: help all test test-norace coverage cover lint lint-ci fmt vet verify integration selfintegration interop examples test-race install-py-opcua gen check-gen coverage-ledger
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -16,6 +16,10 @@ help: ## Show this help
 all: ## Format, test, integration tests, and build examples
 	@echo "Running all: fmt, test, integration, selfintegration, examples"
 	@$(MAKE) fmt test integration selfintegration examples
+
+test-norace: ## Run unit tests without race detector
+	@echo "Running unit tests"
+	@go test -count=1 ./...
 
 test: ## Run unit tests with race detector
 	@echo "Running unit tests (race detector)"
@@ -37,17 +41,22 @@ vet: ## Run go vet on project packages
 	@echo "Running go vet"
 	@go vet ./...
 
-integration: ## Run integration tests (Python client vs Go server)
-	@echo "Running integration tests (Python client vs Go server)"
+# Core local/CI gate: unit, race, vet, and interop (requires Docker + pinned images).
+verify: vet test-norace test interop ## go vet + unit + race + interop
+
+integration: ## Run integration tests (Go client vs FreeOpcUa Python server)
+	@echo "Running integration tests (Go client vs FreeOpcUa Python server)"
 	@go test -count=1 -race -v -tags=integration ./tests/python...
 
-selfintegration: ## Run integration tests (Go client vs in-process server)
-	@echo "Running integration tests (Go client vs in-process server)"
+selfintegration: ## Run integration tests (Go client vs in-process Go server)
+	@echo "Running integration tests (Go client vs in-process Go server)"
 	@go test -count=1 -race -v -tags=integration ./tests/go...
 
 interop: ## Run interop tests against opcua-interop adapter images (-tags=interop)
 	@echo "Running interop tests (open62541 + Milo adapter images)"
-	@go test -tags=interop -v -timeout 600s ./interop/...
+	# Suite is ~10m locally / slower on CI GHA runners; keep headroom under the
+	# workflow job timeout-minutes (45). Do not use 600s — it flakes at the edge.
+	@go test -count=1 -tags=interop -timeout 45m ./interop/...
 
 examples: ## Build all examples into build/
 	@echo "Building examples"
@@ -79,6 +88,11 @@ gen: ## Regenerate code (stringer, go generate)
 	@echo "Regenerating code"
 	@go generate ./...
 
+coverage-ledger: ## Validate and regenerate interop/COVERAGE.md from coverage.json
+	@echo "Rendering interop coverage ledger"
+	@go run ./internal/cmd/render-interop-coverage
+	@go test -count=1 ./interop -run TestCoverageManifestValid
+
 check-gen: gen ## Verify generated files are up to date
 	@echo "Checking for generation drift"
 	@if ! git diff --quiet; then \
@@ -87,4 +101,4 @@ check-gen: gen ## Verify generated files are up to date
 		exit 1; \
 	fi
 
-check: fmt lint lint-ci vet test coverage ## Run lint + vet + test
+check: fmt lint lint-ci verify coverage ## Run lint + vet + unit/race/interop + coverage

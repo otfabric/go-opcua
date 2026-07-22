@@ -11,10 +11,12 @@ __pycache__/
 .vscode/
 .idea/
 
-# Ignore coverage files
+# Ignore coverage files (keep interop coverage ledger tracked)
 cover.*
-coverage.*
+/coverage.*
 *.out
+!interop/coverage.json
+!interop/COVERAGE.md
 
 # Certificates
 *.pem

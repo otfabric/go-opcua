@@ -334,7 +334,11 @@ func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([
 		nodes[i].handle = handle
 
 		request := opcua.NewMonitoredItemCreateRequestWithDefaults(node.NodeID, ua.AttributeIDValue, handle)
-		request.MonitoringMode = node.MonitoringMode
+		// Zero-value Request.MonitoringMode means "use default" (Reporting).
+		// Explicit Disabled must be set via SetMonitoringMode after create.
+		if node.MonitoringMode != ua.MonitoringModeDisabled {
+			request.MonitoringMode = node.MonitoringMode
+		}
 
 		if node.MonitoringParameters != nil {
 			request.RequestedParameters = node.MonitoringParameters

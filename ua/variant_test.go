@@ -552,6 +552,19 @@ func TestArray(t *testing.T) {
 		_, err := Decode(b, MustVariant([]uint32{0}))
 		require.ErrorIs(t, err, StatusBadEncodingLimitsExceeded)
 	})
+	t.Run("length negative not null", func(t *testing.T) {
+		// Array length < -1 must not reach reflect.MakeSlice (fuzz regression).
+		b := []byte{
+			// variant encoding mask (Boolean | ArrayValues)
+			0x81,
+			// array length = -604241920 (0xdc303030)
+			0x30, 0x30, 0x30, 0xdc,
+		}
+
+		v := new(Variant)
+		_, err := v.Decode(b)
+		require.ErrorIs(t, err, StatusBadEncodingLimitsExceeded)
+	})
 	t.Run("dimensions length negative", func(t *testing.T) {
 		b := []byte{
 			// variant encoding mask

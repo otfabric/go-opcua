@@ -255,7 +255,8 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 			typeDefinition = td.DataType()
 		}
 
-		rf := &ua.ReferenceDescription{
+		isTypeDef := r.ReferenceTypeID != nil && r.ReferenceTypeID.IntID() == id.HasTypeDefinition && r.IsForward
+		rf := applyBrowseResultMask(&ua.ReferenceDescription{
 			ReferenceTypeID: r.ReferenceTypeID,
 			IsForward:       r.IsForward,
 			NodeID:          r.NodeID,
@@ -263,9 +264,9 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 			DisplayName:     r.DisplayName,
 			NodeClass:       r.NodeClass,
 			TypeDefinition:  typeDefinition,
-		}
+		}, bd.ResultMask)
 
-		if rf.ReferenceTypeID.IntID() == id.HasTypeDefinition && rf.IsForward {
+		if isTypeDef {
 			// this one has to be first!
 			refs = append([]*ua.ReferenceDescription{rf}, refs...)
 		} else {
@@ -299,6 +300,11 @@ func (as *NodeNameSpace) SetAttribute(id *ua.NodeID, attr ua.AttributeID, val *u
 
 	err := n.SetAttribute(attr, val)
 	if err != nil {
+		// Propagate StatusCode errors (e.g. BadTypeMismatch) so clients see
+		// the Part 4 status rather than a collapsed BadAttributeIDInvalid.
+		if sc, ok := err.(ua.StatusCode); ok {
+			return sc
+		}
 		return ua.StatusBadAttributeIDInvalid
 	}
 	as.srv.ChangeNotification(id)

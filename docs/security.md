@@ -356,7 +356,22 @@ c, _ := opcua.NewClient(endpoint,
 |-------|-------------|
 | **Trust chain** | Certificate must chain to a trusted root (system pool + supplied certs) |
 | **Expiration** | Rejects expired or not-yet-valid certificates |
-| **Key usage** | Warns if DigitalSignature / KeyEncipherment bits are missing |
+| **Key usage** | Rejects certificates that declare `KeyUsage` without `DigitalSignature` (and `KeyEncipherment` for SignAndEncrypt) |
+| **ApplicationURI SAN** | When using `SecurityFromEndpoint`, URI SANs must match the endpoint `ApplicationDescription` |
+
+### Validating Client Certificates (server)
+
+Reject untrusted client application certificates at **OpenSecureChannel** (CreateSession is still checked as defense-in-depth):
+
+```go
+caDER, _ := os.ReadFile("client-ca.der")
+s, _ := server.New(
+    server.WithClientCertificateTrustList(caDER),
+    // ...
+)
+```
+
+Untrusted clients receive `BadCertificateUntrusted`.
 
 ### Skipping Validation (Development Only)
 
@@ -386,6 +401,7 @@ c, _ := opcua.NewClient(endpoint,
 - [ ] Always pair username/password auth with encryption
 - [ ] Set file permissions on private keys (`0600`)
 - [ ] Validate server certificates with `TrustedCertificates()` or use `InsecureSkipVerify()` explicitly
+- [ ] On servers, configure `WithClientCertificateTrustList` when accepting encrypted client connections
 - [ ] Implement `AccessController` for fine-grained server authorization
 - [ ] Monitor certificate expiration dates
 - [ ] Rotate certificates on a regular schedule

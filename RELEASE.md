@@ -1,5 +1,179 @@
 # go-opcua Releases
 
+## v1.3.0
+
+**Date:** 2026-07-25
+**Previous release:** v1.2.0
+
+### Summary
+
+Minor release focused on **Part 4 correctness** for Read/Write/Browse, **subscription and monitored-item semantics**, **event subscriptions**, **subscription recovery**, and **historical access** — with matching public APIs and a large expansion of open62541 / Milo interop coverage ([opcua-interop v0.5.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0)). Also absorbs race-detector test timeout fixes that were prepared as an unreleased v1.2.1 patch.
+
+Highlights:
+- **IndexRange** on array and matrix Values, with Part 4 status codes and helpers in `ua`
+- **Monitored-item queues** that honor `QueueSize`, `DiscardOldest`, and the Overflow InfoBit
+- **Subscription lifecycle** — revise clamps, monitoring/publishing modes, `MoreNotifications`, Publish ACK, delete and lifetime expiry
+- **Events** — `EventFilter` (SelectClauses / OfType / comparison WhereClauses), `EmitBaseEvent` with custom `Fields`
+- **Republish / TransferSubscriptions** on server and client (`Client.Republish`, `Client.TransferSubscriptions`) plus `WithSubscriptionRecoveryHandler`
+- **HistoryRead / HistoryUpdate** via pluggable `HistoryProvider`; default `*Historian` also covers update/delete/at-time/modified/processed aggregates
+- **Interop evidence ledger** — **199** verified / **316** total rows; **376** interop test functions against digest-pinned adapter images
+- **Public API freeze** for the v1.3.0 surface (see [`docs/api-freeze-review.md`](docs/api-freeze-review.md)); Query / NodeManagement / A&C stay out of scope
+- **Server test suite under `-race`** no longer times out in CI (nodeset import cache + Query subtype recursion guard)
+
+No intentional breaking changes for correct callers. Servers that previously ignored queue or monitoring-mode parameters now follow Part 4 — notification batches may differ.
+
+### Read, Write, and Browse
+
+- **IndexRange / NumericRange** — 1D (`"i"`, `"i:j"`) and multi-dimensional (`"a:b,c:d"`) Value Read/Write; ByteString IndexRange slices bytes. Scalar + IndexRange → `BadIndexRangeInvalid`; empty/out-of-range → `BadIndexRangeNoData`; write size mismatch → `BadIndexRangeDataMismatch`.
+- **TimestampsToReturn** — Read and DataChange notifications honor Source / Server / Both / Neither; invalid enum → `BadTimestampsToReturnInvalid`.
+- **Write EncodingMask** — value-only Writes succeed; status and/or timestamp bits → `BadWriteNotSupported`.
+- **Browse ResultMask** — omitted fields are cleared on `ReferenceDescription`s (`NodeID` always kept).
+- **BrowseNext** — early `ReleaseContinuationPoints` invalidates the token (`BadContinuationPointInvalid`).
+- **Client certificate trust** — `WithClientCertificateTrustList` is enforced at `OpenSecureChannel` (CreateSession retained as defense-in-depth).
+
+### Subscriptions and monitored items
+
+- **QueueSize** revised to `max(1, requested)` (cap 100), returned as `RevisedQueueSize`.
+- **DiscardOldest** — `true` keeps the newest `QueueSize` samples; `false` keeps the oldest `QueueSize-1` plus the newest (e.g. writes `1..5` / QS=3 → `[1,2,5]`).
+- **Overflow** — InfoBit `0x480` when `QueueSize > 1` and the queue overflows; queues are per-item.
+- **SetMonitoringMode** — Disabled (no enqueue) / Sampling (enqueue only) / Reporting (Publish).
+- **SetPublishingMode** — disable holds queues; re-enable delivers the queued window.
+- **Create/ModifySubscription revise** — publishing interval clamped; `RevisedLifetimeCount >= 3 × RevisedMaxKeepAliveCount`.
+- **MoreNotifications** — honors `MaxNotificationsPerPublish` with partial drain.
+- **Publish ACK** — Results + AvailableSequenceNumbers; keepalives do not fabricate DataChange.
+- **Delete / lifetime expiry** — second delete → `BadSubscriptionIdInvalid` / `BadMonitoredItemIdInvalid`; idle lifetime removes the subscription.
+- **monitor package** — zero-value `Request.MonitoringMode` means Reporting (use `SetMonitoringMode` for Disabled/Sampling).
+
+### Events
+
+- Event monitored items accept `EventFilter` SelectClauses and WhereClause operators (`OfType`, comparisons, `And`/`Or`/`Not`); invalid filters are rejected.
+- `EmitBaseEvent` delivers a `BaseEventType`-shaped event (optional custom `Fields`) and applies each item’s filter.
+- `EmitEvent` remains for raw `EventFieldList` delivery.
+- `ModifyMonitoredItems` can update a live EventFilter.
+- Event queues are bounded (max 50). Alarms/Conditions, historical events, and shelving are not included.
+
+### Subscription recovery
+
+- **Server Republish / TransferSubscriptions** — returns available sequences; missing → `BadMessageNotAvailable`; transfer reassigns session/channel under lock.
+- **Client helpers** — `Client.Republish` (protocol response only; does not mutate notify channels) and `Client.TransferSubscriptions`.
+- **`WithSubscriptionRecoveryHandler`** — observes Transfer → Republish → Recreate outcomes during `AutoReconnect`.
+- ACK removes sequences from the retransmission set.
+- `SendInitialValues` is accepted but currently a no-op. Durable subscriptions are not included.
+
+### Historical Access
+
+- Pluggable `HistoryProvider`; default in-memory `*Historian` (per-node ring buffer, default 1000 samples, process-lifetime only).
+- Raw `ReadRawModifiedDetails` with session-bound continuation points (30s TTL, max 100 active).
+- Optional interfaces on the same provider (implemented by `*Historian`): UpdateData, DeleteRawModified (`isDeleteModified=false`), DeleteAtTime, ReadAtTime, ReadModified, ReadProcessed (Average/Minimum/Maximum/Count).
+- `returnBounds` is accepted but bounding/interpolation is not implemented for raw reads. Historical events are not included. HistoryRead stays unsupported until `SetHistorian` is configured.
+
+### New and changed public APIs
+
+#### `ua` — NumericRange and timestamp helpers
+
+```go
+type NumericRange struct {
+    Start int // inclusive
+    End   int // inclusive
+}
+
+func ParseNumericRange(s string) (NumericRange, error)
+func ParseNumericRanges(s string) ([]NumericRange, error)
+func SliceVariantRead(v *Variant, rangeStr string) (*Variant, StatusCode)
+func MergeVariantWrite(current *Variant, rangeStr string, newVal *Variant) (*Variant, StatusCode)
+func ApplyTimestampsToReturn(dv *DataValue, ts TimestampsToReturn) StatusCode
+```
+
+Used by the server for Value IndexRange and timestamp filtering; safe to call directly.
+
+#### `opcua` — client recovery helpers
+
+```go
+func (c *Client) Republish(ctx context.Context, subscriptionID, sequenceNumber uint32) (*ua.RepublishResponse, error)
+func (c *Client) TransferSubscriptions(ctx context.Context, subscriptionIDs []uint32, sendInitialValues bool) (*ua.TransferSubscriptionsResponse, error)
+func WithSubscriptionRecoveryHandler(f func(SubscriptionRecoveryEvent)) Option
+```
+
+#### `server` — BaseEvent emission
+
+```go
+type BaseEvent struct {
+    EventID    []byte
+    EventType  *ua.NodeID
+    SourceNode *ua.NodeID
+    SourceName string
+    Time       interface{} // time.Time
+    Message    *ua.LocalizedText
+    Severity   uint16
+    Fields     map[string]*ua.Variant // custom SelectClause fields
+}
+
+func (s *Server) EmitBaseEvent(nodeID *ua.NodeID, event *BaseEvent) error
+```
+
+#### `server` — HistoryProvider / Historian
+
+```go
+type HistoryProvider interface {
+    ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error)
+    ReleaseContinuation(continuationPoint []byte)
+}
+
+// Optional capabilities (type-assert; *Historian implements all):
+// HistoryDataUpdater, RawHistoryDeleter, AtTimeHistoryDeleter,
+// AtTimeHistoryReader, ModifiedHistoryReader, ProcessedHistoryReader
+
+func NewHistorian() *Historian
+func (h *Historian) EnableNode(nodeID *ua.NodeID, maxSamples int)
+func (h *Historian) RecordValue(nodeID *ua.NodeID, dv *ua.DataValue)
+func (h *Historian) IsEnabled(nodeID *ua.NodeID) bool
+func (s *Server) SetHistorian(h HistoryProvider)
+```
+
+### Interoperability
+
+Verified four-direction against open62541 and Milo for IndexRange, timestamps, Browse ResultMask / BrowseNext release, queue windows, subscription timestamps, and subscription lifecycle (revise / publishing-mode / monitoring-mode / delete). Write EncodingMask is verified in three directions; Go→Milo is `unsupported` (Milo soft-accepts). Peer capability rows on [opcua-interop v0.5.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0) include:
+
+- `discovery.find-servers` / `translate.browse-path` — all applicable directions
+- `event.subscription` / decode / select / `of-type` / `severity-threshold` — all four (as applicable)
+- `history.read.raw` — all four; `history.read.continuation` — open62541→Go and Milo→Go
+- `subscription.server.republish` / `transfer` — open62541→Go and Milo→Go
+- `subscription.client.republish` / `transfer` — Go→open62541 and Go→Milo
+- `subscription.recovery.reconnect` — Go→open62541 and Go→Milo (`recreated`)
+
+| Image | Pin |
+|-------|-----|
+| open62541 | `ghcr.io/otfabric/opcua-interop-open62541@sha256:53c7a184ca9769bab87c6b5335c01322925411894368644913133c0812999283` |
+| Milo | `ghcr.io/otfabric/opcua-interop-milo@sha256:c462f45a5e9b9ce8878788b97c77973832b23861e7ae5d0c6642279f798c15cf` |
+
+Digests are fix-forwarded on the same `v0.5.0` tag when opcua-interop requirements change (no RC / `v0.5.1` pins). See [INTEROP.md](INTEROP.md) and [`interop/COVERAGE.md`](interop/COVERAGE.md) for the full matrix. Docs updated in `API.md`, `README.md`, and `docs/*`.
+
+### Bug fixes and test infrastructure
+
+Absorbed from the skipped v1.2.1 patch:
+
+- **`server` tests: nodeset import cached across tests** — `newTestServer()` was calling `New()` (full built-in XML nodeset import, ~0.4 s each under `-race`) for every server-package test case, exceeding the 120 s CI per-package timeout. A `sync.Once` cache (`warmNS0Cache`) imports once per test binary; later servers copy the cached nodes in microseconds. Server package time under `-race`: **>120 s → ~11 s**.
+- **`getSubRefs` infinite recursion guard** — `HasSubtype` expansion for `QueryFirst`/`QueryNext` could loop on the cyclic built-in type hierarchy. A `visited` map (`getSubRefsVisited`) prevents re-traversal; individual query tests now run in <50 ms instead of 41+ s.
+- **`newServerNoNS()`** (package-private) — lightweight `Server` constructor that skips nodeset import; used by the test helper.
+
+Additional hardening in this release:
+
+- **`DefaultDialer` / UACP ACK cloning** — `ReceiveBufferSize` / `SendBufferSize` / related options no longer mutate the shared `uacp.DefaultClientACK` (previously poisoned later HEL/ACK handshakes with `message too large: 57 > 5 bytes`). `NewConn` / `Listen` / `Accept` also clone ACK templates per connection.
+- **`Variant.Decode` array-length guard** — negative lengths other than `-1` (null array) return `BadEncodingLimitsExceeded` instead of panicking in `reflect.MakeSlice` (fuzz regression corpus retained).
+- **Ephemeral listen port (`:0`)** — `uacp.ParseEndpoint` accepts port `0`; `Server.Start` rewrites listen/endpoint URLs to the OS-assigned port and exposes `Server.Port()`. Interop Go servers bind `:0` instead of `freePort()` pick-then-release, eliminating `address already in use` flakes under load.
+- **Fuzz targets expanded** — `ua` (Variant, NodeID, ExtensionObject, ParseNodeID, NumericRange, EventFilter, ContentFilter, DecodeService, common binary shapes), `uasc` headers, `uacp` Hello/Header.
+- **Lifecycle / recovery stress** — concurrent Close+subscribe, cancel-during-publish, event+data-change together, blocking recovery-handler contract, history continuation-point session close under `-race`, sequence-number rollover.
+- **Interop ledger tooling** — `go generate ./interop` renders [`interop/COVERAGE.md`](interop/COVERAGE.md) / [`interop/GAPS.md`](interop/GAPS.md) from `capabilities.json` + `coverage.json`.
+- **Make targets** — `make verify` runs `go vet`, unit, race, and interop; `make check` includes fmt/lint/verify/coverage.
+
+### Known limitations
+
+- Broad EventFilter WhereClause surface and custom event emission are **deferred**; C→ history continuation is **deferred**
+- `write.encoding-mask` Go→Milo is **unsupported** (strict `BadWriteNotSupported` claim)
+- No Alarms/Conditions, historical events, durable subscriptions, or full bounding/interpolation for raw HistoryRead `returnBounds`
+
+---
+
 ## v1.2.0
 
 **Date:** 2026-07-22

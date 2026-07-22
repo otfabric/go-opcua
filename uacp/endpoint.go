@@ -48,8 +48,9 @@ func ParseEndpoint(endpoint string) (network string, u *url.URL, err error) {
 }
 
 func validatePort(port string) error {
-	n, err := strconv.ParseUint(port, 10, 16)
-	if err != nil || n == 0 {
+	// Port 0 is valid for Listen (OS-assigned ephemeral bind). Dialing :0 is
+	// unused by clients and fails at the kernel.
+	if _, err := strconv.ParseUint(port, 10, 16); err != nil {
 		return fmt.Errorf("%w: invalid port %q", errors.ErrInvalidEndpoint, port)
 	}
 	return nil

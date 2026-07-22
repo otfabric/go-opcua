@@ -310,7 +310,7 @@ Two namespace implementations are provided:
 | **Complexity** | Rich (references, types) | Simple (auto-generated) |
 | **Best for** | Enterprise, complex models | IoT, sensor data |
 | **Methods** | Full support | Not supported |
-| **Events** | Full support | Basic support |
+| **Events** | `EmitEvent` + `EmitBaseEvent` (EventFilter) | Basic support |
 
 Each namespace implements the `NameSpace` interface:
 

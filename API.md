@@ -38,6 +38,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [SubscriptionBuilder](#subscriptionbuilder)
   - [Session](#session)
   - [ConnState](#connstate)
+  - [Subscription recovery](#subscription-recovery)
   - [RetryPolicy](#retrypolicy)
   - [ClientMetrics](#clientmetrics)
   - [Discovery (standalone functions)](#discovery-standalone-functions)
@@ -47,12 +48,14 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Constants](#constants)
 - [Package `ua`](#package-ua)
   - [Variant](#variant)
+  - [ExtensionObject](#extensionobject)
   - [TypeID](#typeid)
   - [NodeID](#nodeid)
   - [ExpandedNodeID](#expandednodeid)
   - [QualifiedName](#qualifiedname)
   - [LocalizedText](#localizedtext)
   - [DataValue](#datavalue)
+  - [NumericRange](#numericrange)
   - [StatusCode](#statuscode)
   - [DiagnosticInfo](#diagnosticinfo)
   - [EventFilterBuilder](#eventfilterbuilder)
@@ -68,11 +71,16 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [NameSpace (interface)](#namespace-interface)
   - [Node (server-side)](#node-server-side)
   - [AccessController](#accesscontroller)
+  - [Authentication validators](#authentication-validators)
   - [EventEmitter](#eventemitter)
+  - [Alarms & Conditions (deferred)](#alarms--conditions-deferred)
+  - [Registered Custom DataTypes](#registered-custom-datatypes)
+  - [HistoryProvider](#historyprovider)
   - [ServerMetrics](#servermetrics)
 - [Package `monitor`](#package-monitor)
   - [NodeMonitor](#nodemonitor)
   - [Subscription (monitor)](#subscription-monitor)
+  - [Request and Item](#request-and-item)
   - [DataChangeMessage](#datachangemessage)
   - [Types](#types)
 - [Package `errors`](#package-errors)
@@ -115,6 +123,9 @@ func (c *Client) State() ConnState
 ```
 
 `Connect` establishes a secure channel **and** creates/activates a session.
+When `AutoReconnect` is enabled (default), `Connect` also starts a background
+goroutine that recovers the session and subscriptions after a disconnect — see
+[Subscription recovery](#subscription-recovery).
 `Dial` establishes a secure channel only (no session; TCP + HEL/ACK + OpenSecureChannel).
 For TCP-only reachability checks (e.g. connection diagnostics or "ping" without creating a session), use [uacp.DialTCP](uacp package); the CLI can infer TCP failure from connection errors if that helper is not used.
 `Close` tears down session, secure channel, and TCP connection.
@@ -292,8 +303,14 @@ func (c *Client) GetEndpoints(ctx context.Context) (*ua.GetEndpointsResponse, er
 func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, notifyCh chan<- *PublishNotificationData) (*Subscription, error)
 func (c *Client) SubscriptionIDs() []uint32
 func (c *Client) SetPublishingMode(ctx context.Context, publishingEnabled bool, subscriptionIDs ...uint32) (*ua.SetPublishingModeResponse, error)
+func (c *Client) Republish(ctx context.Context, subscriptionID, sequenceNumber uint32) (*ua.RepublishResponse, error)
+func (c *Client) TransferSubscriptions(ctx context.Context, subscriptionIDs []uint32, sendInitialValues bool) (*ua.TransferSubscriptionsResponse, error)
 func (c *Client) NewSubscription() *SubscriptionBuilder
 ```
+
+`Subscribe` is the ergonomic CreateSubscription path and returns a live `*Subscription`, not `*ua.CreateSubscriptionResponse`. Callers that need the raw protocol response should use `Client.Send` with `ua.CreateSubscriptionRequest`. Mutation APIs on `*Subscription` (`Monitor`, `Unmonitor`, `Modify*`, `Set*`) and `Client.Republish` / `TransferSubscriptions` return full `ua.*Response` values.
+
+`Republish` returns the protocol response without mutating subscription delivery state — callers must handle the returned notification themselves. Automatic reconnect recovery (when `AutoReconnect(true)`, the default) separately runs Transfer → Republish → Recreate and may dispatch recovered notifications through the normal subscription pipeline; see [Subscription recovery](#subscription-recovery). Manual `Republish` / `TransferSubscriptions` do not emit `SubscriptionRecoveryEvent`s.
 
 If the server closes the connection during CreateSubscription, the returned error may wrap `io.EOF` with a message suggesting the server may not support subscriptions; use `errors.Is(err, io.EOF)` to detect it.
 
@@ -362,7 +379,6 @@ type NodeSummary struct {
 func (n *Node) Children(ctx context.Context, refs uint32, mask ua.NodeClass) ([]*Node, error)
 func (n *Node) ReferencedNodes(ctx context.Context, refs uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) ([]*Node, error)
 func (n *Node) References(ctx context.Context, refs uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) ([]*ua.ReferenceDescription, error)
-func (n *Node) Browse(ctx context.Context, refs uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) ([]*ua.ReferenceDescription, error)
 func (n *Node) BrowseAll(ctx context.Context, refs uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) iter.Seq2[*ua.ReferenceDescription, error]
 ```
 
@@ -436,11 +452,21 @@ type Subscription struct {
 func (s *Subscription) Cancel(ctx context.Context) error
 func (s *Subscription) ModifySubscription(ctx context.Context, params SubscriptionParameters) (*ua.ModifySubscriptionResponse, error)
 func (s *Subscription) SetPublishingMode(ctx context.Context, publishingEnabled bool) (*ua.SetPublishingModeResponse, error)
-func (s *Subscription) Monitor(ctx context.Context, ts ua.TimestampsToReturn, items ...*ua.MonitoredItemCreateRequest) ([]*ua.MonitoredItemCreateResult, error)
-func (s *Subscription) Unmonitor(ctx context.Context, ids ...uint32) ([]ua.StatusCode, error)
+func (s *Subscription) Monitor(ctx context.Context, ts ua.TimestampsToReturn, items ...*ua.MonitoredItemCreateRequest) (*ua.CreateMonitoredItemsResponse, error)
+func (s *Subscription) Unmonitor(ctx context.Context, monitoredItemIDs ...uint32) (*ua.DeleteMonitoredItemsResponse, error)
+func (s *Subscription) ModifyMonitoredItems(ctx context.Context, ts ua.TimestampsToReturn, items ...*ua.MonitoredItemModifyRequest) (*ua.ModifyMonitoredItemsResponse, error)
+func (s *Subscription) SetMonitoringMode(ctx context.Context, monitoringMode ua.MonitoringMode, monitoredItemIDs ...uint32) (*ua.SetMonitoringModeResponse, error)
+func (s *Subscription) SetTriggering(ctx context.Context, triggeringItemID uint32, add, remove []uint32) (*ua.SetTriggeringResponse, error)
+func (s *Subscription) Stats(ctx context.Context) (*ua.SubscriptionDiagnosticsDataType, error)
 ```
 
 If the server closes the connection during CreateMonitoredItems (e.g. it does not support event or alarm subscriptions), the error may wrap `io.EOF` with a message suggesting that; use `errors.Is(err, io.EOF)` to detect it.
+
+`Monitor` returns the full server response; individual item results are in `Response.Results`. `ModifyMonitoredItems` adjusts parameters (e.g. sampling interval) on already-monitored items. `SetMonitoringMode` enables or disables sampling for a set of items. `SetTriggering` links items so that one item's data change triggers publishing of dependent items. `Stats` returns the server's subscription diagnostics for this subscription.
+
+**Server queue semantics (v1.3.0+):** `RequestedParameters.QueueSize` is revised to `max(1, requested)` (capped at 100) and returned as `RevisedQueueSize`. When the queue overflows and `QueueSize > 1`, the DataValue Overflow InfoBit is set (`StatusCode` `0x480`). With `DiscardOldest=true`, the newest `QueueSize` samples are kept; with `false`, the oldest `QueueSize-1` samples plus the newest are kept (Part 4 — e.g. writes `1..5` / QS=3 → `[1,2,5]`). `SubscriptionBuilder.Timestamps` is applied to DataChange notifications (same enum as Read).
+
+**IndexRange:** one-dimensional (`"i"`, `"i:j"`) and multidimensional (`"a:b,c:d"`) NumericRange are supported for Value Read/Write via `ua.SliceVariantRead` / `ua.MergeVariantWrite`. Dimension count must match the array; scalar ByteString IndexRange slices bytes.
 
 #### SubscriptionParameters
 
@@ -487,12 +513,24 @@ func (b *SubscriptionBuilder) Start(ctx context.Context) (*Subscription, chan *P
 
 `Start` calls `Subscribe` then `Monitor`; if the server closes the connection during either step, the returned error may wrap `io.EOF` with a message suggesting the server may not support subscriptions or event/alarm monitoring.
 
-Example:
+Example (data change):
 
 ```go
 sub, notifyCh, err := client.NewSubscription().
     Interval(500 * time.Millisecond).
     Monitor(ua.MustParseNodeID("ns=2;s=Temperature")).
+    Start(ctx)
+```
+
+Example (events):
+
+```go
+filter := ua.NewEventFilter().
+    Select("EventType", "SourceName", "Message", "Severity", "Time").
+    Where(ua.OfType(ua.NewNumericNodeID(0, id.BaseEventType))).
+    Build()
+sub, notifyCh, err := client.NewSubscription().
+    MonitorEvents(filter, ua.MustParseNodeID("ns=2;s=Events.Source")).
     Start(ctx)
 ```
 
@@ -525,6 +563,59 @@ Connection state of a client.
 func WithConnStateHandler(f func(ConnState)) Option
 func WithConnStateChan(ch chan<- ConnState) Option
 ```
+
+For per-subscription reconnect recovery outcomes, see [Subscription recovery](#subscription-recovery).
+
+---
+
+### Subscription recovery
+
+When `AutoReconnect` is enabled (default), a lost connection triggers background
+recovery that attempts, per subscription:
+
+1. **TransferSubscriptions** onto the new session
+2. **Republish** of available sequence numbers
+3. **Recreate** the subscription if transfer fails
+
+Applications observe the result via `WithSubscriptionRecoveryHandler`:
+
+```go
+func WithSubscriptionRecoveryHandler(f func(SubscriptionRecoveryEvent)) Option
+```
+
+The handler is called synchronously from the reconnect goroutine and must not
+block — a slow handler stalls recovery for every remaining subscription. Prefer
+enqueueing work (channel / goroutine) and returning immediately. The handler is
+invoked once per subscription after each recovery attempt.
+
+```go
+type SubscriptionRecoveryOutcome string
+
+const (
+    SubscriptionRecoveryTransferred      SubscriptionRecoveryOutcome = "transferred"
+    SubscriptionRecoveryRepublished      SubscriptionRecoveryOutcome = "republished"
+    SubscriptionRecoveryRecreated        SubscriptionRecoveryOutcome = "recreated"
+    SubscriptionRecoveryPartial          SubscriptionRecoveryOutcome = "partially_recovered"
+    SubscriptionRecoveryUnrecoverableGap SubscriptionRecoveryOutcome = "unrecoverable_gap"
+)
+
+type SubscriptionRecoveryEvent struct {
+    SubscriptionID           uint32
+    Outcome                  SubscriptionRecoveryOutcome
+    AvailableSequenceNumbers []uint32 // empty when recreated / transfer failed
+    Detail                   string   // never empty; suitable for logging
+}
+```
+
+| Outcome | Meaning |
+|---------|---------|
+| `SubscriptionRecoveryTransferred` | Transfer succeeded; nothing needed to republish |
+| `SubscriptionRecoveryRepublished` | Transfer succeeded and buffered notifications were republished |
+| `SubscriptionRecoveryRecreated` | Transfer failed; a new subscription was created |
+| `SubscriptionRecoveryPartial` | Some sequence numbers republished; a gap remains |
+| `SubscriptionRecoveryUnrecoverableGap` | Expected next sequence is absent from the server retransmission buffer; notifications are permanently lost |
+
+Manual `Client.Republish` / `Client.TransferSubscriptions` do not emit these events.
 
 ---
 
@@ -618,7 +709,7 @@ All option functions return `Option` and are passed to `NewClient`:
 |----------|-------------|
 | `ApplicationName(s string)` | Application name in session |
 | `ApplicationURI(s string)` | Application URI |
-| `AutoReconnect(b bool)` | Enable/disable auto reconnect |
+| `AutoReconnect(b bool)` | Enable/disable auto reconnect (default `true`). When enabled, reconnect runs Transfer → Republish → Recreate and may emit [SubscriptionRecoveryEvent](#subscription-recovery) |
 | `ReconnectInterval(d time.Duration)` | Interval between reconnect attempts |
 | `Lifetime(d time.Duration)` | Secure channel lifetime |
 | `Locales(locale ...string)` | Preferred locales |
@@ -629,13 +720,30 @@ All option functions return `Option` and are passed to `NewClient`:
 | `SecurityMode(m ua.MessageSecurityMode)` | Security mode |
 | `SecurityModeString(s string)` | Security mode by name |
 | `SecurityPolicy(s string)` | Security policy URI |
+| `SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType)` | Derive security mode, policy, and auth token type from a discovered endpoint |
 | `SessionName(s string)` | Session name |
 | `SessionTimeout(d time.Duration)` | Session timeout |
 | `SkipNamespaceUpdate()` | Skip automatic namespace table update on connect |
-| `PrivateKey(key *rsa.PrivateKey)` | RSA private key |
+| `Certificate(cert []byte)` | Client application certificate (DER) |
+| `CertificateFile(filename string)` | Load client application certificate from file |
+| `PrivateKey(key *rsa.PrivateKey)` | RSA private key for the client certificate |
 | `PrivateKeyFile(filename string)` | Load private key from file |
+| `AuthAnonymous()` | Use anonymous identity token (default) |
+| `AuthUsername(user, pass string)` | Username/password identity token |
+| `AuthCertificate(cert []byte)` | X.509 user certificate identity token (DER) |
+| `AuthPrivateKey(key *rsa.PrivateKey)` | Private key for the X.509 user certificate |
+| `AuthIssuedToken(tokenData []byte)` | Issued (e.g. JWT/SAML) identity token |
+| `AuthPolicyID(policy string)` | Override the UserTokenPolicy ID used during ActivateSession |
+| `DialTimeout(d time.Duration)` | TCP + HEL/ACK handshake timeout (default `DefaultDialTimeout`) |
+| `Dialer(d *uacp.Dialer)` | Custom UACP dialer (e.g. to set `ClientACK` parameters) |
+| `RequestTimeout(t time.Duration)` | Per-request timeout |
+| `MaxMessageSize(n uint32)` | Maximum OPC UA message size in bytes |
+| `MaxChunkCount(n uint32)` | Maximum number of chunks per message |
+| `ReceiveBufferSize(n uint32)` | TCP receive buffer size |
+| `SendBufferSize(n uint32)` | TCP send buffer size |
 | `WithConnStateHandler(f func(ConnState))` | Connection state callback |
 | `WithConnStateChan(ch chan<- ConnState)` | Connection state channel |
+| `WithSubscriptionRecoveryHandler(f func(SubscriptionRecoveryEvent))` | Per-subscription reconnect recovery callback (must not block; see [Subscription recovery](#subscription-recovery)) |
 | `WithMetrics(m ClientMetrics)` | Metrics handler |
 | `WithRetryPolicy(p RetryPolicy)` | Retry policy |
 | `WithLogger(l *slog.Logger)` | Logger (`*slog.Logger`; defaults to `slog.Default()`) |
@@ -695,6 +803,20 @@ func (v *Variant) Encode() ([]byte, error)
 ```
 
 `ParseVariant` parses a string into a typed variant (used by CLI tools).
+
+### ExtensionObject
+
+Register application-defined structure types so they encode/decode as OPC UA
+`ExtensionObject` values (Variable Value, method arguments, etc.):
+
+```go
+func RegisterExtensionObject(typeID *NodeID, v interface{})
+```
+
+Call once per type (typically from `init()`), passing a zero value of the Go
+type. Unknown `ExtensionObject` bodies are preserved as opaque bytes (dynamic
+structure decoding is not implemented). See also
+[Registered Custom DataTypes](#registered-custom-datatypes).
 
 ### TypeID
 
@@ -848,6 +970,31 @@ Encoding mask constants: `DataValueValue`, `DataValueStatusCode`,
 
 ---
 
+### NumericRange
+
+Helpers for OPC UA IndexRange / NumericRange on Variants (used by server Read/Write and available to callers).
+
+```go
+type NumericRange struct {
+    Start int // inclusive
+    End   int // inclusive
+}
+
+func ParseNumericRange(s string) (NumericRange, error)
+func ParseNumericRanges(s string) ([]NumericRange, error)
+func (r NumericRange) Len() int
+
+func SliceVariantRead(v *Variant, rangeStr string) (*Variant, StatusCode)
+func MergeVariantWrite(current *Variant, rangeStr string, newVal *Variant) (*Variant, StatusCode)
+func ApplyTimestampsToReturn(dv *DataValue, ts TimestampsToReturn) StatusCode
+```
+
+`ParseNumericRange` accepts `"i"` or `"i:j"`. `ParseNumericRanges` accepts comma-separated dimensions (`"a:b,c:d"`).
+
+`SliceVariantRead` / `MergeVariantWrite` return Part 4 status codes (`BadIndexRangeInvalid`, `BadIndexRangeNoData`, `BadIndexRangeDataMismatch`, …). `ApplyTimestampsToReturn` filters or synthesizes DataValue timestamp fields for Read and monitored-item delivery; invalid enum → `BadTimestampsToReturnInvalid`.
+
+---
+
 ### StatusCode
 
 32-bit OPC-UA status code.
@@ -948,6 +1095,12 @@ func (f *FieldOperand) LessThanOrEqual(value interface{}) *ContentFilterElement
 func (f *FieldOperand) Like(value string) *ContentFilterElement
 func OfType(typeNodeID *NodeID) *ContentFilterElement
 ```
+
+There are no fluent helpers for compound `And` / `Or` / `Not` operators. Build
+those as `*ContentFilterElement` values with the corresponding
+`FilterOperator*` constants and pass them to `Where`. The Go server evaluates
+`And`, `Or`, and `Not` in EventFilter WhereClauses; peer stacks may support a
+subset.
 
 Example:
 
@@ -1067,6 +1220,21 @@ const (
 )
 ```
 
+#### PerformUpdateType
+
+Used by HistoryUpdate `UpdateDataDetails` / `HistoryDataUpdater.UpdateData`:
+
+```go
+type PerformUpdateType uint32
+
+const (
+    PerformUpdateTypeInsert  PerformUpdateType = 1
+    PerformUpdateTypeReplace PerformUpdateType = 2
+    PerformUpdateTypeUpdate  PerformUpdateType = 3
+    PerformUpdateTypeRemove  PerformUpdateType = 4
+)
+```
+
 #### Security policy URIs
 
 ```go
@@ -1132,6 +1300,10 @@ specification. Key pairs include:
 | `AddReferencesRequest` | `AddReferencesResponse` |
 | `DeleteReferencesRequest` | `DeleteReferencesResponse` |
 | `SetPublishingModeRequest` | `SetPublishingModeResponse` |
+| `SetMonitoringModeRequest` | `SetMonitoringModeResponse` |
+| `ModifyMonitoredItemsRequest` | `ModifyMonitoredItemsResponse` |
+| `RepublishRequest` | `RepublishResponse` |
+| `TransferSubscriptionsRequest` | `TransferSubscriptionsResponse` |
 | `HistoryUpdateRequest` | `HistoryUpdateResponse` |
 
 ---
@@ -1276,10 +1448,15 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 | Function | Description |
 |----------|-------------|
 | `EndPoint(host string, port int)` | Listen address |
+| `ListenOn(addr string)` | Override the TCP bind address (e.g. `"0.0.0.0:4840"`) |
 | `Certificate(cert []byte)` | Server certificate (DER) |
 | `PrivateKey(key *rsa.PrivateKey)` | Server private key |
 | `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate) |
 | `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate) |
+| `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only |
+| `WithUsernameValidator(v UsernameValidator)` | Callback `func(username, password string) error` called during `ActivateSession` for `UserNameIdentityToken` |
+| `WithX509UserValidator(v X509UserValidator)` | Callback `func(certDER []byte) error` called during `ActivateSession` for `X509IdentityToken`; must also call `EnableAuthMode(ua.UserTokenTypeCertificate)` |
+| `WithClientCertificateTrustList(caCertDER ...[]byte)` | Verify the client application certificate (DER) at `OpenSecureChannel` (and again at `CreateSession`) against the provided CA pool; rejects untrusted certs with `BadCertificateUntrusted` |
 | `ServerName(name string)` | Application name |
 | `ManufacturerName(s string)` | Manufacturer name |
 | `ProductName(s string)` | Product name |
@@ -1287,6 +1464,7 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 | `SetLogger(l *slog.Logger)` | Logger (`*slog.Logger`; defaults to `slog.Default()`) |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithAccessController(ac AccessController)` | Access controller |
+| `WithRoleMapper(rm RoleMapper)` | Maps a session to a `ua.UserRole`; used by the default access controller |
 
 ---
 
@@ -1394,6 +1572,28 @@ type DefaultAccessController struct{}  // allows all operations
 
 ---
 
+### Authentication validators
+
+```go
+// UsernameValidator is called during ActivateSession for UserNameIdentityToken.
+// Return nil to accept, or an error (e.g. ua.StatusBadUserAccessDenied) to reject.
+type UsernameValidator func(username, password string) error
+
+// X509UserValidator is called during ActivateSession for X509IdentityToken.
+// certDER is the DER-encoded client user certificate.
+// Return nil to accept, or ua.StatusBadIdentityTokenRejected to reject.
+type X509UserValidator func(certDER []byte) error
+
+// ClientCertificateValidator is called during OpenSecureChannel (and again
+// during CreateSession) to verify the client's application certificate
+// against the server's trust store.
+// Return nil to accept, or ua.StatusBadCertificateUntrusted to reject.
+// Configured via WithClientCertificateTrustList.
+type ClientCertificateValidator func(certDER []byte) error
+```
+
+---
+
 ### EventEmitter
 
 ```go
@@ -1402,7 +1602,179 @@ type EventEmitter interface {
 }
 
 func (s *Server) EmitEvent(nodeID *ua.NodeID, fields *ua.EventFieldList) error
+func (s *Server) EmitBaseEvent(nodeID *ua.NodeID, event *BaseEvent) error
 ```
+
+```go
+type BaseEvent struct {
+    EventID    []byte
+    EventType  *ua.NodeID
+    SourceNode *ua.NodeID
+    SourceName string
+    Time       interface{} // time.Time
+    Message    *ua.LocalizedText
+    Severity   uint16
+    // Fields holds user-defined event properties resolved by name via SelectClauses.
+    // Example: Fields: map[string]*ua.Variant{"AlarmLevel": ua.MustVariant(int32(3))}
+    Fields     map[string]*ua.Variant
+}
+```
+
+`EmitEvent` delivers a pre-built `EventFieldList` to event-monitored items.
+`EmitBaseEvent` delivers a `BaseEventType`-shaped event, applying each item's full
+EventFilter — including `OfType`, `Equals`, `GreaterThan(OrEqual)`, `LessThan(OrEqual)`,
+`And`, `Or`, and `Not` WhereClause operators — before selecting and delivering fields.
+
+**Custom event subtypes:** Register any `NodeClassObjectType` node in the server
+address space (any namespace) and pass its NodeID as the `OfType` operand. The server
+validates and accepts it in `CreateMonitoredItems`. Emit events with `EventType` set to
+that NodeID; the `eventTypeMatches` hierarchy walk correctly routes them.
+
+**Custom event fields:** Populate `BaseEvent.Fields` with a `map[string]*ua.Variant`.
+Any `SelectClause` BrowsePath name that matches a key in `Fields` resolves to that value.
+Unknown field names resolve to null (as per Part 4).
+
+**Monitored-item modification:** `ModifyMonitoredItems` re-validates and applies an
+updated `EventFilter` to an existing event item when a new filter is supplied.
+
+Peer EventFilter / event-subscription interoperability against opcua-interop v0.5.0:
+`event.subscription`, SelectClauses, OfType, and severity-threshold filters are
+verified in all applicable directions. Broad WhereClause and custom emission remain
+deferred. Go↔Go covered.
+
+---
+
+### Alarms & Conditions (deferred)
+
+Full Alarms & Conditions (Part 9) state machines, Acknowledge/Confirm methods,
+and alarm catalogs are not implemented. The library exposes the standard type
+NodeId and an explicit capability probe so applications and coverage tooling
+can treat A&C as optional / deferred:
+
+```go
+var AcknowledgeableConditionTypeNodeID = ua.NewNumericNodeID(0, id.AcknowledgeableConditionType)
+
+func AlarmsConditionsSupported() bool // always false in the current library
+```
+
+---
+
+### Registered Custom DataTypes
+
+Go types can be encoded as OPC UA `ExtensionObject` values and round-tripped through the
+server without any NodeSet2 XML. Register a Go type once (typically in `init()`) with:
+
+```go
+ua.RegisterExtensionObject(dataTypeNodeID, new(MyStruct))
+```
+
+After registration the codec automatically encodes/decodes `*MyStruct` values inside any
+`ExtensionObject`, including Variable read/write and method in/out arguments.
+
+**Fixture package** – `internal/testutil/customtypes` provides four fixture types:
+
+| Type | Description |
+|---|---|
+| `MyEnum` | `int32` enumeration (Off/Idle/Running) |
+| `FlatStruct` | Flat structure with float32, int32, and string scalar fields |
+| `ArrayStruct` | Structure with a `Name` string and `Values []int32` array field |
+| `NestedStruct` | Structure embedding a `FlatStruct` with an additional `bool` field |
+
+All four are registered in `init()` against DataType NodeIDs in namespace 2 (IDs 3001-3004).
+
+**Server nodes** – `customtypes.AddNodes(ns, parent)` adds one writable Variable node per
+type under `parent` and returns a `map[string]*ua.NodeID`. `customtypes.AddMethodNode(srv,
+ns, parent)` adds a `ProcessFlat` method that accepts a `FlatStruct` argument and returns
+an `ArrayStruct`, exercising the codec through the method call path.
+
+**Tests** – `conformance/customtypes_test.go` (Go↔Go, no peer adapter) verifies:
+- Read of each custom type decodes to the correct Go struct value.
+- Write of a `FlatStruct` round-trips through the server and reads back correctly.
+- Method call with `FlatStruct` input returns the expected `ArrayStruct` output.
+
+**Dynamic structure decoding** – not implemented (deferred). Unknown `ExtensionObject`
+bodies are preserved opaquely and passed through as raw bytes.
+
+---
+
+### HistoryProvider
+
+Baseline server-facing HistoryRead surface. Optional capabilities are discovered
+via type assertion on the same value; missing interfaces return
+`BadHistoryOperationUnsupported` from the History services.
+
+```go
+type HistoryProvider interface {
+    ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error)
+    ReleaseContinuation(continuationPoint []byte)
+}
+
+type HistoryDataUpdater interface {
+    UpdateData(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+}
+
+type RawHistoryDeleter interface {
+    DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, startTime, endTime time.Time) *ua.HistoryUpdateResult
+}
+
+type AtTimeHistoryDeleter interface {
+    DeleteAtTime(nodeID *ua.NodeID, reqTimes []time.Time) *ua.HistoryUpdateResult
+}
+
+// Default *Historian: for each requested time, return the nearest previous
+// sample (or exact match); otherwise a DataValue with StatusBadNoData.
+type AtTimeHistoryReader interface {
+    ReadAtTime(nodeID *ua.NodeID, reqTimes []time.Time, useSimpleBounds bool) (*ua.HistoryReadResult, error)
+}
+
+type ModifiedHistoryReader interface {
+    ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+}
+
+type ProcessedHistoryReader interface {
+    ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
+}
+
+type Historian struct { /* in-memory implementation */ }
+
+func NewHistorian() *Historian
+func (h *Historian) EnableNode(nodeID *ua.NodeID, maxSamples int)
+func (h *Historian) RecordValue(nodeID *ua.NodeID, dv *ua.DataValue)
+func (h *Historian) IsEnabled(nodeID *ua.NodeID) bool
+
+// *Historian implements HistoryProvider plus all optional interfaces above:
+func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error)
+func (h *Historian) ReleaseContinuation(continuationPoint []byte)
+func (h *Historian) UpdateData(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, startTime, endTime time.Time) *ua.HistoryUpdateResult
+func (h *Historian) DeleteAtTime(nodeID *ua.NodeID, reqTimes []time.Time) *ua.HistoryUpdateResult
+func (h *Historian) ReadAtTime(nodeID *ua.NodeID, reqTimes []time.Time, useSimpleBounds bool) (*ua.HistoryReadResult, error)
+func (h *Historian) ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
+
+func (s *Server) SetHistorian(h HistoryProvider)
+```
+
+Default `*Historian` is process-lifetime only with a per-node ring buffer
+(default 1000 samples when `maxSamples <= 0`). Continuations are session-bound
+opaque ByteStrings owned by the server (expire after 30s; max 100 active).
+
+Supported by default `*Historian`:
+- UpdateData Insert / Replace / Update semantics
+- DeleteRawModified with `isDeleteModified=false`; `true` → `BadHistoryOperationUnsupported`
+- DeleteAtTime
+- ReadAtTime (nearest previous)
+- ReadModified
+- ReadProcessed aggregates Average / Minimum / Maximum / Count
+
+Limitations:
+- `returnBounds` is accepted and stored on continuation points, but interpolated /
+  bounding values are not implemented for raw reads
+- Without `SetHistorian`, HistoryRead returns unsupported / non-historized results
+
+Peer HistoryRead raw interoperability: all four directions verified
+(`history.read.raw`) against opcua-interop v0.5.0; continuation points verified
+open62541→Go and Milo→Go. Go↔Go covered.
 
 ---
 
@@ -1438,16 +1810,29 @@ func (m *NodeMonitor) ChanSubscribe(ctx context.Context, params *opcua.Subscript
 
 ```go
 func (s *Subscription) Unsubscribe(ctx context.Context) error
+func (s *Subscription) Subscribed() int
+func (s *Subscription) SubscriptionID() uint32
 func (s *Subscription) AddNodes(ctx context.Context, nodes ...string) error
 func (s *Subscription) AddNodeIDs(ctx context.Context, nodes ...*ua.NodeID) error
 func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([]Item, error)
-func (s *Subscription) RemoveNodes(ctx context.Context, nodeIDs ...*ua.NodeID) error
-func (s *Subscription) RemoveNodeByHandle(handle uint32) error
+func (s *Subscription) RemoveNodes(ctx context.Context, nodes ...string) error
+func (s *Subscription) RemoveNodeIDs(ctx context.Context, nodes ...*ua.NodeID) error
+func (s *Subscription) RemoveMonitorItems(ctx context.Context, items ...Item) error
+func (s *Subscription) Modify(ctx context.Context, params *opcua.SubscriptionParameters) error
+func (s *Subscription) ModifyMonitorItems(ctx context.Context, nodes ...Request) error
+func (s *Subscription) SetMonitoringMode(ctx context.Context, monitoringMode ua.MonitoringMode, items ...Item) error
+func (s *Subscription) SetMonitoringModeForNodes(ctx context.Context, monitoringMode ua.MonitoringMode, nodes ...string) error
+func (s *Subscription) SetMonitoringModeForNodeIDs(ctx context.Context, monitoringMode ua.MonitoringMode, nodes ...*ua.NodeID) error
+func (s *Subscription) Stats(ctx context.Context) (*ua.SubscriptionDiagnosticsDataType, error)
 func (s *Subscription) Delivered() uint64
 func (s *Subscription) Dropped() uint64
 ```
 
 `AddMonitorItems` succeeds for valid nodes in a batch even when some items are rejected. Per-item failures are returned as `*ItemError` values joined into the error (recover with `errors.As`). `errors.Is(err, ua.StatusBad…)` works via `ItemError.Unwrap`.
+
+Zero-value `Request.MonitoringMode` (`MonitoringModeDisabled` = 0) means **use default Reporting** — it does not create a Disabled item. Call `SetMonitoringMode` after create to disable sampling/reporting.
+
+`RemoveNodes` removes by string node ID; `RemoveNodeIDs` by `*ua.NodeID`; `RemoveMonitorItems` by `Item` handle (as returned by `AddMonitorItems`).
 
 ```go
 type ItemError struct {
@@ -1456,6 +1841,22 @@ type ItemError struct {
 }
 func (e *ItemError) Error() string
 func (e *ItemError) Unwrap() error
+```
+
+### Request and Item
+
+```go
+// Request describes a node to monitor or modify.
+type Request struct {
+    NodeID               *ua.NodeID
+    MonitoringMode       ua.MonitoringMode // zero = Reporting default
+    MonitoringParameters *ua.MonitoringParameters
+}
+
+// Item is a handle to an active monitored item returned by AddMonitorItems.
+type Item struct{ /* opaque */ }
+func (m *Item) ID() uint32       // server-assigned MonitoredItemID
+func (m *Item) NodeID() *ua.NodeID
 ```
 
 ### DataChangeMessage
@@ -1471,8 +1872,17 @@ type DataChangeMessage struct {
 ### Types
 
 ```go
-type ErrHandler func(err error)
-type MsgHandler func(msg *DataChangeMessage)
+// ErrHandler is called when a transport or subscription error occurs.
+type ErrHandler func(c *opcua.Client, sub *Subscription, err error)
+
+// MsgHandler is called for each incoming data-change notification.
+type MsgHandler func(sub *Subscription, msg *DataChangeMessage)
+```
+
+`DefaultCallbackBufferLen` controls the internal channel buffer size for `ChanSubscribe`:
+
+```go
+var DefaultCallbackBufferLen = 8192
 ```
 
 ---
@@ -1653,7 +2063,7 @@ func (c *Conn) SendError(code ua.StatusCode)
 ```go
 type Dialer struct {
     Dialer    *net.Dialer
-    ClientACK *ClientACK
+    ClientACK *Acknowledge
     Logger    *slog.Logger
 }
 
@@ -1711,7 +2121,7 @@ Secure conversation layer.
 ### SecureChannel
 
 ```go
-func NewSecureChannel(endpoint string, conn *uacp.Conn, cfg *Config, errCh chan error) (*SecureChannel, error)
+func NewSecureChannel(endpoint string, conn *uacp.Conn, cfg *Config, errCh chan<- error) (*SecureChannel, error)
 ```
 
 ```go

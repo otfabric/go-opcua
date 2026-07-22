@@ -118,51 +118,94 @@ func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
 	return sub.recreateCreate(ctx)
 }
 
-// transferSubscriptions ask the server to transfer the given subscriptions
-// of the previous session to the current one.
-func (c *Client) transferSubscriptions(ctx context.Context, ids []uint32) (*ua.TransferSubscriptionsResponse, error) {
-	req := &ua.TransferSubscriptionsRequest{
-		SubscriptionIDs:   ids,
-		SendInitialValues: false,
-	}
+// Republish requests retransmission of a notification message for a subscription.
+//
+// The response is returned to the caller without mutating subscription delivery
+// state or inserting into notification channels. Automatic reconnect recovery
+// uses a separate internal path that may dispatch recovered notifications.
+//
+// Part 4, Section 5.13.6.
+func (c *Client) Republish(ctx context.Context, subscriptionID, sequenceNumber uint32) (*ua.RepublishResponse, error) {
+	stats.Client().Add("Republish", 1)
 
+	req := &ua.RepublishRequest{
+		SubscriptionID:           subscriptionID,
+		RetransmitSequenceNumber: sequenceNumber,
+	}
+	return send[ua.RepublishResponse](ctx, c, req)
+}
+
+// TransferSubscriptions asks the server to transfer the given subscriptions
+// to the current session. Returns the full TransferSubscriptionsResponse,
+// including per-subscription TransferResults.
+//
+// Part 4, Section 5.13.7.
+func (c *Client) TransferSubscriptions(ctx context.Context, subscriptionIDs []uint32, sendInitialValues bool) (*ua.TransferSubscriptionsResponse, error) {
+	stats.Client().Add("TransferSubscriptions", 1)
+
+	req := &ua.TransferSubscriptionsRequest{
+		SubscriptionIDs:   subscriptionIDs,
+		SendInitialValues: sendInitialValues,
+	}
 	return send[ua.TransferSubscriptionsResponse](ctx, c, req)
 }
 
+// transferSubscriptions is used by reconnect to transfer subscriptions of the
+// previous session to the current one without sending initial values.
+func (c *Client) transferSubscriptions(ctx context.Context, ids []uint32) (*ua.TransferSubscriptionsResponse, error) {
+	return c.TransferSubscriptions(ctx, ids, false)
+}
+
 // republishSubscriptions sends republish requests for the given subscription id.
-func (c *Client) republishSubscription(ctx context.Context, id uint32, availableSeq []uint32) error {
+// It returns the republishResult so the caller can emit a SubscriptionRecoveryEvent.
+func (c *Client) republishSubscription(ctx context.Context, id uint32, availableSeq []uint32) (republishResult, error) {
 	c.subMux.RLock()
 	sub := c.subs[id]
 	c.subMux.RUnlock()
 
 	if sub == nil {
-		return fmt.Errorf("%w: id=%d", errors.ErrInvalidSubscriptionID, id)
+		return republishResult{}, fmt.Errorf("%w: id=%d", errors.ErrInvalidSubscriptionID, id)
 	}
 
 	c.cfg.logger.Debug("republishing subscription", "sub_id", sub.SubscriptionID)
-	if err := c.sendRepublishRequests(ctx, sub, availableSeq); err != nil {
+	rr, err := c.sendRepublishRequests(ctx, sub, availableSeq)
+	if err != nil {
 		switch {
 		case errors.Is(err, ua.StatusBadSessionIDInvalid):
-			return nil
+			return rr, nil
 		case errors.Is(err, ua.StatusBadSubscriptionIDInvalid):
 			c.cfg.logger.Debug("republish failed, subscription invalid", "sub_id", sub.SubscriptionID)
-			return fmt.Errorf("%w: subscription %d is invalid", errors.ErrInvalidSubscriptionID, sub.SubscriptionID)
+			return rr, fmt.Errorf("%w: subscription %d is invalid", errors.ErrInvalidSubscriptionID, sub.SubscriptionID)
 		default:
-			return err
+			return rr, err
 		}
 	}
-	return nil
+	return rr, nil
+}
+
+// republishResult carries the outcome of a sendRepublishRequests call so the
+// caller can emit a structured SubscriptionRecoveryEvent.
+type republishResult struct {
+	// gapDetected is true when the client's expected next sequence number was
+	// absent from the server's retransmission buffer (unrecoverable data loss).
+	gapDetected bool
+	// republishedCount is the number of notifications successfully recovered.
+	republishedCount int
 }
 
 // sendRepublishRequests sends republish requests for the given subscription
 // until it gets a BadMessageNotAvailable which implies that there are no
-// more messages to restore.
-func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, availableSeq []uint32) error {
+// more messages to restore. It returns a republishResult describing what
+// happened so the caller can surface a SubscriptionRecoveryEvent.
+func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, availableSeq []uint32) (republishResult, error) {
+	var result republishResult
+
 	// If our expected next sequence number isn't in the server's retransmission queue
 	// some notifications may have been lost. We log a warning and continue rather than
 	// failing because data loss during reconnection is expected per Part 4 §6.5.
 	if len(availableSeq) > 0 && !slices.Contains(availableSeq, sub.nextSeq) {
 		c.cfg.logger.Warn("next sequence number not in retransmission buffer", "sub_id", sub.SubscriptionID, "next_seq", sub.nextSeq, "available_seq", availableSeq)
+		result.gapDetected = true
 	}
 
 	for {
@@ -176,13 +219,13 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 		s := c.Session()
 		if s == nil {
 			c.cfg.logger.Debug("republishing subscription aborted", "sub_id", req.SubscriptionID)
-			return ua.StatusBadSessionClosed
+			return result, ua.StatusBadSessionClosed
 		}
 
 		sc := c.SecureChannel()
 		if sc == nil {
 			c.cfg.logger.Debug("republishing subscription aborted", "sub_id", req.SubscriptionID)
-			return ua.StatusBadNotConnected
+			return result, ua.StatusBadNotConnected
 		}
 
 		c.cfg.logger.Debug("republish request", "request", req)
@@ -195,11 +238,11 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 		switch {
 		case err == ua.StatusBadMessageNotAvailable:
 			c.cfg.logger.Debug("republishing subscription OK", "sub_id", req.SubscriptionID)
-			return nil
+			return result, nil
 
 		case err != nil:
 			c.cfg.logger.Debug("republishing subscription failed", "sub_id", req.SubscriptionID, "error", err)
-			return err
+			return result, err
 
 		default:
 			status := ua.StatusBad
@@ -209,7 +252,7 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 
 			if status != ua.StatusOK {
 				c.cfg.logger.Debug("republishing subscription failed", "sub_id", req.SubscriptionID, "status", status)
-				return status
+				return result, status
 			}
 
 			// Process the republished notification and advance sequence number
@@ -217,11 +260,12 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 				c.notifySubscription(ctx, sub, res.NotificationMessage)
 				sub.lastSeq = res.NotificationMessage.SequenceNumber
 				sub.nextSeq = sub.lastSeq + 1
+				result.republishedCount++
 				c.cfg.logger.Debug("republished notification", "seq_num", res.NotificationMessage.SequenceNumber, "sub_id", sub.SubscriptionID)
 
 				if len(availableSeq) > 0 && !slices.Contains(availableSeq, sub.nextSeq) {
 					c.cfg.logger.Debug("republishing subscription complete", "sub_id", sub.SubscriptionID)
-					return nil
+					return result, nil
 				}
 			}
 		}

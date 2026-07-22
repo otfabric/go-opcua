@@ -10,15 +10,15 @@
 |-------------|---------------|--------|
 | **Discovery** | `GetEndpoints`, `FindServers`, `FindServersOnNetwork` | Fully implemented |
 | **Session** | Automatic via `Connect` / `Close` | Fully implemented |
-| **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented |
-| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadEvents`, `HistoryUpdateData`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented |
-| **Browse** | `Browse`, `BrowseNext` | Fully implemented |
+| **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented (`IndexRange`, `TimestampsToReturn`) |
+| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryUpdateData`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, … | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed + update/delete) |
+| **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
 | **Method** | `Call`, `CallMethod` | Fully implemented |
-| **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode` | Fully implemented |
-| **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented |
-| **Query** | `QueryFirst`, `QueryNext` | API present; server-dependent |
+| **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
+| **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
+| **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
 
 For services not wrapped by a dedicated method, use `Client.Send(req, resp)` directly.
 
@@ -471,14 +471,17 @@ for msg := range notifyCh {
 Builder options:
 - `Interval(d)` — Publishing interval (how often the server sends notifications to the client)
 - `SamplingInterval(d)` — Requested sampling interval for monitored items (how often the server samples each node). Independent of publishing interval. If not set, server uses fastest practical rate.
-- `LifetimeCount(n)` — Lifetime count
+- `LifetimeCount(n)` — Lifetime count (go-opcua servers revise so `LifetimeCount >= 3 × MaxKeepAliveCount`)
 - `MaxKeepAliveCount(n)` — Max keep-alive count
-- `MaxNotificationsPerPublish(n)` — Max notifications per publish
+- `MaxNotificationsPerPublish(n)` — Max notifications per publish (`MoreNotifications` when more remain)
 - `Priority(p)` — Subscription priority
 - `Monitor(nodeIDs...)` — Add nodes for data change monitoring
-- `MonitorItems(items...)` — Add custom monitored item requests
+- `MonitorItems(items...)` — Add custom monitored item requests (set `QueueSize` / `DiscardOldest` here)
+- `MonitorEvents(filter, nodeIDs...)` — Event notifier monitoring with an `EventFilter`
 - `NotifyChannel(ch)` — Use a custom notification channel
-- `Timestamps(ts)` — Timestamps to return
+- `Timestamps(ts)` — Timestamps to return on DataChange notifications (same enum as Read)
+
+Against go-opcua servers (v1.3.0+), monitored-item queues follow Part 4: Overflow InfoBit when `QueueSize > 1` and the queue overflows; `DiscardOldest=false` keeps the oldest `QueueSize-1` samples plus the newest.
 
 If the server closes the connection during `Subscribe` (CreateSubscription) or `Monitor` (CreateMonitoredItems)—for example when the server does not support event or alarm subscriptions—the returned error wraps `io.EOF` with a message suggesting that limitation. Use `errors.Is(err, io.EOF)` to detect it. This applies both to `Start()` (which calls both) and to direct `Subscribe`/`Monitor` calls.
 
@@ -554,6 +557,8 @@ sub, err := m.Subscribe(ctx, &opcua.SubscriptionParameters{
 )
 ```
 
+`AddMonitorItems` with a zero-value `monitor.Request.MonitoringMode` defaults to **Reporting**. To disable an item, call `SetMonitoringMode` after create.
+
 ---
 
 ## Calling Methods
@@ -628,6 +633,22 @@ c, _ := opcua.NewClient("opc.tcp://server:4840",
 | `Disconnected` | Lost connection (auto-reconnect will trigger) |
 | `Reconnecting` | Recovery in progress |
 
+With `AutoReconnect(true)` (default), reconnect runs Transfer → Republish → Recreate
+per subscription. Observe outcomes with `WithSubscriptionRecoveryHandler`:
+
+```go
+opcua.WithSubscriptionRecoveryHandler(func(ev opcua.SubscriptionRecoveryEvent) {
+    log.Printf("sub %d: %s (%s)", ev.SubscriptionID, ev.Outcome, ev.Detail)
+})
+```
+
+Manual protocol helpers (do not mutate subscription notify channels):
+
+```go
+resp, err := c.Republish(ctx, subscriptionID, sequenceNumber)
+tr, err := c.TransferSubscriptions(ctx, []uint32{subscriptionID}, false)
+```
+
 ---
 
 ## Session Management
@@ -652,6 +673,35 @@ err = c2.ActivateSession(ctx, session)
 ```
 
 This is useful for failover scenarios or migrating between connections.
+
+---
+
+## Historical Access
+
+High-level helpers page raw history for you:
+
+```go
+// Single page
+values, err := c.ReadHistory(ctx, nodeID, start, end, 100)
+
+// All pages via Go 1.23 iterator
+for dv, err := range c.ReadHistoryAll(ctx, nodeID, start, end) {
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(dv.SourceTimestamp, dv.Value.Value())
+}
+```
+
+Low-level `HistoryReadRawModified` / `HistoryReadProcessed` / `HistoryReadAtTime` and the
+HistoryUpdate helpers accept full details and continuation points. Against go-opcua servers
+with the default `*Historian`, raw/modified/at-time/processed and data update/delete paths
+are available after `SetHistorian` + `EnableNode`. Historical **events** remain unsupported.
+Peer-proven history is raw HistoryRead in all four directions on opcua-interop v0.5.0
+(`history.read.raw`); continuation points are verified open62541→Go and Milo→Go.
+
+IndexRange on current Values uses the same NumericRange grammar as servers:
+`"i"`, `"i:j"`, or multi-dimensional `"a:b,c:d"` via `ReadItem.IndexRange` / `ReadMulti`.
 
 ---
 

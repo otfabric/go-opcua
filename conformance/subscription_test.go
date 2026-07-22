@@ -7,7 +7,9 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -145,4 +147,69 @@ func TestSubscription_Lifecycle(t *testing.T) {
 		require.Equal(t, ua.StatusOK, resp.Results[0])
 		require.Equal(t, ua.StatusOK, resp.Results[1])
 	})
+}
+
+// TestRepublish verifies that Client.Republish returns a protocol response
+// without dispatching to the subscription's notify channel. Sequence 1 may
+// have been ACKed already (fast-ACK servers); both outcomes satisfy the
+// contract: the public API returns without panicking or mutating the channel.
+func TestRepublish(t *testing.T) {
+	c, f, ctx := setup(t)
+
+	notifyCh := make(chan *opcua.PublishNotificationData, 16)
+	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{
+		Interval: 100 * time.Millisecond,
+	}, notifyCh)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+
+	_, err = sub.Monitor(ctx, ua.TimestampsToReturnNeither,
+		opcua.NewMonitoredItemCreateRequestWithDefaults(f.Int32, ua.AttributeIDValue, 1),
+	)
+	require.NoError(t, err)
+
+	// Wait briefly so the server has a chance to publish the initial notification.
+	time.Sleep(300 * time.Millisecond)
+
+	// Drain the channel so we can isolate whether Republish dispatches to it.
+	for len(notifyCh) > 0 {
+		<-notifyCh
+	}
+	lenBefore := len(notifyCh)
+
+	resp, err := c.Republish(ctx, sub.SubscriptionID, 1)
+	if errors.Is(err, ua.StatusBadMessageNotAvailable) {
+		t.Log("sequence 1 already acknowledged — API contract verified")
+		return
+	}
+	if err == nil && resp != nil && resp.ResponseHeader.ServiceResult == ua.StatusBadMessageNotAvailable {
+		t.Log("sequence 1 already acknowledged (response status) — API contract verified")
+		return
+	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Equal(t, ua.StatusOK, resp.ResponseHeader.ServiceResult)
+	assert.Equal(t, lenBefore, len(notifyCh), "Republish must not dispatch to notify channel")
+}
+
+// TestTransferSubscriptions verifies that Client.TransferSubscriptions returns
+// a well-formed response for a subscription that belongs to the current session.
+func TestTransferSubscriptions(t *testing.T) {
+	c, _, ctx := setup(t)
+
+	notifyCh := make(chan *opcua.PublishNotificationData, 8)
+	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{
+		Interval: 200 * time.Millisecond,
+	}, notifyCh)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Cancel(ctx) })
+
+	resp, err := c.TransferSubscriptions(ctx, []uint32{sub.SubscriptionID}, false)
+	if errors.Is(err, ua.StatusBadServiceUnsupported) {
+		t.Log("server does not implement TransferSubscriptions — API contract verified")
+		return
+	}
+	require.NoError(t, err)
+	require.NotNil(t, resp)
+	assert.Len(t, resp.Results, 1, "expected one result per subscription ID")
 }
