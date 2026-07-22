@@ -157,7 +157,9 @@ func (m *Variant) Decode(b []byte) (int, error) {
 
 	// read flattened array elements
 	n := int(m.arrayLength)
-	if n > MaxVariantArrayLength {
+	// -1 means a null array; any other negative length is malformed.
+	// Cap positive lengths to avoid huge allocations / MakeSlice panics.
+	if n < -1 || n > MaxVariantArrayLength {
 		return buf.Pos(), StatusBadEncodingLimitsExceeded
 	}
 

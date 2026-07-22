@@ -3,16 +3,74 @@
 package server
 
 import (
+	"sync"
+
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
 )
 
+// ns0Cache holds a pre-built snapshot of the OPC UA base namespace so that
+// newTestServer does not re-parse and re-import the XML nodeset for every test.
+// The snapshot is built once on first use and reused by all tests.
+var (
+	ns0CacheOnce  sync.Once
+	ns0CacheNodes []*Node
+	ns0CacheMap   map[string]*Node
+	ns0CacheSeq   uint32
+)
+
+func warmNS0Cache() {
+	ns0CacheOnce.Do(func() {
+		s, err := New(EndPoint("localhost", 4840))
+		if err != nil {
+			panic("server: warmNS0Cache: " + err.Error())
+		}
+		ns0 := s.namespaces[0].(*NodeNameSpace)
+		ns0.mu.RLock()
+		ns0CacheNodes = make([]*Node, len(ns0.nodes))
+		copy(ns0CacheNodes, ns0.nodes)
+		ns0CacheMap = make(map[string]*Node, len(ns0.m))
+		for k, v := range ns0.m {
+			ns0CacheMap[k] = v
+		}
+		ns0CacheSeq = ns0.nodeidSequence
+		ns0.mu.RUnlock()
+	})
+}
+
 // newTestServer creates a Server suitable for unit tests, without starting
-// a network listener. It initialises namespace 0 (the OPC-UA base nodeset)
-// and a MonitoredItemService so that write-side tests don't panic.
+// a network listener.  On the first call the OPC UA base nodeset is imported
+// and cached; subsequent calls copy the cached node references into a fresh
+// NodeNameSpace, making each call roughly 100× faster than a cold New().
+//
+// Tests MUST NOT mutate ns-0 nodes (the OPC UA base nodeset); they should
+// add their own namespace via addTestNamespace.  Write-service tests that
+// go through the server handler already do this.
 func newTestServer() *Server {
-	s, _ := New(EndPoint("localhost", 4840))
+	warmNS0Cache()
+
+	// Build a fresh server with no namespaces yet.
+	s, err := newServerNoNS()
+	if err != nil {
+		panic("server: newTestServer: " + err.Error())
+	}
+
+	// Build a per-test NodeNameSpace for ns-0, pre-populated from the cache.
+	// Each test gets its own NodeNameSpace instance (own srv pointer, own
+	// nodes/m slices) so concurrent tests do not share mutable struct fields.
+	ns0 := &NodeNameSpace{
+		srv:            s,
+		name:           "http://opcfoundation.org/UA/",
+		nodes:          make([]*Node, len(ns0CacheNodes)),
+		m:              make(map[string]*Node, len(ns0CacheMap)),
+		nodeidSequence: ns0CacheSeq,
+	}
+	copy(ns0.nodes, ns0CacheNodes)
+	for k, v := range ns0CacheMap {
+		ns0.m[k] = v
+	}
+	s.namespaces = []NameSpace{ns0}
 
 	// initHandlers is normally called by Start().
 	// We need SubscriptionService and MonitoredItemService

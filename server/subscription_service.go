@@ -61,14 +61,22 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 
 	s.srv.cfg.logger.Info("new subscription", "sub_id", newsubid, "remote_addr", sc.RemoteAddr())
 
+	pi, lifetime, keepalive := reviseSubscriptionParams(
+		req.RequestedPublishingInterval,
+		req.RequestedLifetimeCount,
+		req.RequestedMaxKeepAliveCount,
+	)
+
 	sub := NewSubscription()
 	sub.srv = s
 	sub.Session = s.srv.Session(r.Header())
 	sub.Channel = sc
 	sub.ID = newsubid
-	sub.RevisedPublishingInterval = req.RequestedPublishingInterval
-	sub.RevisedLifetimeCount = req.RequestedLifetimeCount
-	sub.RevisedMaxKeepAliveCount = req.RequestedMaxKeepAliveCount
+	sub.RevisedPublishingInterval = pi
+	sub.RevisedLifetimeCount = lifetime
+	sub.RevisedMaxKeepAliveCount = keepalive
+	sub.MaxNotificationsPerPublish = req.MaxNotificationsPerPublish
+	sub.Priority = req.Priority
 	sub.publishingEnabled = req.PublishingEnabled
 
 	s.Subs[newsubid] = sub
@@ -85,9 +93,9 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 			AdditionalHeader:   ua.NewExtensionObject(nil),
 		},
 		SubscriptionID:            uint32(newsubid),
-		RevisedPublishingInterval: req.RequestedPublishingInterval,
-		RevisedLifetimeCount:      req.RequestedLifetimeCount,
-		RevisedMaxKeepAliveCount:  req.RequestedMaxKeepAliveCount,
+		RevisedPublishingInterval: pi,
+		RevisedLifetimeCount:      lifetime,
+		RevisedMaxKeepAliveCount:  keepalive,
 	}
 	return resp, nil
 }
@@ -134,10 +142,25 @@ func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.S
 		}, nil
 	}
 
-	// Send the modify request to the subscription's background goroutine.
+	pi, lifetime, keepalive := reviseSubscriptionParams(
+		req.RequestedPublishingInterval,
+		req.RequestedLifetimeCount,
+		req.RequestedMaxKeepAliveCount,
+	)
+	// Apply revised values on the modify request so the subscription goroutine
+	// stores the same numbers we return to the client.
+	req.RequestedPublishingInterval = pi
+	req.RequestedLifetimeCount = lifetime
+	req.RequestedMaxKeepAliveCount = keepalive
+
 	select {
 	case sub.ModifyChannel <- req:
 	default:
+		// Apply synchronously if the modify channel is full.
+		sub.Update(req)
+		if sub.T != nil {
+			sub.T.Reset(time.Millisecond * time.Duration(sub.RevisedPublishingInterval))
+		}
 	}
 
 	return &ua.ModifySubscriptionResponse{
@@ -149,9 +172,9 @@ func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.S
 			StringTable:        []string{},
 			AdditionalHeader:   ua.NewExtensionObject(nil),
 		},
-		RevisedPublishingInterval: req.RequestedPublishingInterval,
-		RevisedLifetimeCount:      req.RequestedLifetimeCount,
-		RevisedMaxKeepAliveCount:  req.RequestedMaxKeepAliveCount,
+		RevisedPublishingInterval: pi,
+		RevisedLifetimeCount:      lifetime,
+		RevisedMaxKeepAliveCount:  keepalive,
 	}, nil
 }
 
@@ -384,14 +407,16 @@ type PubReq struct {
 // MonitoredItems will send updates on the NotifyChannel to let the background task know that
 // an event has occurred that needs to be published.
 type Subscription struct {
-	srv                       *SubscriptionService
-	Session                   *session
-	ID                        uint32
-	RevisedPublishingInterval float64
-	RevisedLifetimeCount      uint32
-	RevisedMaxKeepAliveCount  uint32
-	Channel                   *uasc.SecureChannel
-	SequenceID                uint32
+	srv                        *SubscriptionService
+	Session                    *session
+	ID                         uint32
+	RevisedPublishingInterval  float64
+	RevisedLifetimeCount       uint32
+	RevisedMaxKeepAliveCount   uint32
+	MaxNotificationsPerPublish uint32
+	Priority                   uint8
+	Channel                    *uasc.SecureChannel
+	SequenceID                 uint32
 	//SeqNums                   map[uint32]struct{}
 	T *time.Ticker
 
@@ -411,6 +436,46 @@ type Subscription struct {
 	shutdown          chan struct{}
 }
 
+// Subscription parameter revision policy (Part 4 §5.13.2). Peers may choose
+// different numbers; this stack enforces a stable, documented clamp and the
+// LifetimeCount ≥ 3 × MaxKeepAliveCount constraint.
+const (
+	minPublishingIntervalMS = 10.0
+	maxPublishingIntervalMS = 3_600_000.0 // 1 hour
+	minKeepAliveCount       = uint32(1)
+	maxKeepAliveCount       = uint32(10_000)
+	minLifetimeCount        = uint32(3)
+	maxLifetimeCount        = uint32(100_000)
+)
+
+// reviseSubscriptionParams clamps publishing interval / keepalive / lifetime
+// and enforces RevisedLifetimeCount >= 3 × RevisedMaxKeepAliveCount.
+func reviseSubscriptionParams(pi float64, lifetime, keepalive uint32) (float64, uint32, uint32) {
+	if pi < minPublishingIntervalMS {
+		pi = minPublishingIntervalMS
+	}
+	if pi > maxPublishingIntervalMS {
+		pi = maxPublishingIntervalMS
+	}
+	if keepalive < minKeepAliveCount {
+		keepalive = minKeepAliveCount
+	}
+	if keepalive > maxKeepAliveCount {
+		keepalive = maxKeepAliveCount
+	}
+	if lifetime < minLifetimeCount {
+		lifetime = minLifetimeCount
+	}
+	if lifetime > maxLifetimeCount {
+		lifetime = maxLifetimeCount
+	}
+	minLife := keepalive * 3
+	if lifetime < minLife {
+		lifetime = minLife
+	}
+	return pi, lifetime, keepalive
+}
+
 func NewSubscription() *Subscription {
 	return &Subscription{
 		//SeqNums:       map[uint32]struct{}{},
@@ -426,6 +491,39 @@ func (s *Subscription) Update(req *ua.ModifySubscriptionRequest) {
 	s.RevisedPublishingInterval = req.RequestedPublishingInterval
 	s.RevisedLifetimeCount = req.RequestedLifetimeCount
 	s.RevisedMaxKeepAliveCount = req.RequestedMaxKeepAliveCount
+	s.MaxNotificationsPerPublish = req.MaxNotificationsPerPublish
+	s.Priority = req.Priority
+}
+
+// ackPublishAcknowledgements applies Publish SubscriptionAcknowledgements for
+// this session's subscriptions and returns per-ack StatusCodes.
+func (s *SubscriptionService) ackPublishAcknowledgements(acks []*ua.SubscriptionAcknowledgement) []ua.StatusCode {
+	if len(acks) == 0 {
+		return []ua.StatusCode{}
+	}
+	results := make([]ua.StatusCode, len(acks))
+	for i, ack := range acks {
+		if ack == nil {
+			results[i] = ua.StatusBadSubscriptionIDInvalid
+			continue
+		}
+		s.Mu.Lock()
+		sub, ok := s.Subs[ack.SubscriptionID]
+		s.Mu.Unlock()
+		if !ok || sub == nil {
+			results[i] = ua.StatusBadSubscriptionIDInvalid
+			continue
+		}
+		sub.Mu.Lock()
+		if _, exists := sub.sentMessages[ack.SequenceNumber]; exists {
+			delete(sub.sentMessages, ack.SequenceNumber)
+			results[i] = ua.StatusOK
+		} else {
+			results[i] = ua.StatusBadSequenceNumberUnknown
+		}
+		sub.Mu.Unlock()
+	}
+	return results
 }
 
 // maxRetransmissionQueueSize is the maximum number of notification messages kept for Republish.
@@ -472,16 +570,26 @@ func (s *Subscription) Start() {
 
 }
 
+// sessionChannel returns the current session and secure channel under Mu.
+// TransferSubscriptions may reassign these fields concurrently with run().
+func (s *Subscription) sessionChannel() (*session, *uasc.SecureChannel) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	return s.Session, s.Channel
+}
+
 func (s *Subscription) keepalive(pubreq PubReq) error {
-	if s.Channel == nil {
+	_, ch := s.sessionChannel()
+	if ch == nil {
 		return fmt.Errorf("subscription %d has no channel", s.ID)
 	}
-	eo := make([]*ua.ExtensionObject, 0)
+	ackResults := s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements)
 
+	// Keepalive: empty NotificationData, next sequence number (not consumed).
 	msg := ua.NotificationMessage{
-		SequenceNumber:   s.SequenceID + 1, // not sure why but ua expert wants the next sequence number on keepalives.
+		SequenceNumber:   s.SequenceID + 1,
 		PublishTime:      time.Now(),
-		NotificationData: eo,
+		NotificationData: []*ua.ExtensionObject{},
 	}
 
 	response := &ua.PublishResponse{
@@ -496,11 +604,11 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 		SubscriptionID:           s.ID,
 		MoreNotifications:        false,
 		NotificationMessage:      &msg,
-		AvailableSequenceNumbers: []uint32{}, // an empty array indicates that we don't support retransmission of messages
-		Results:                  []ua.StatusCode{},
+		AvailableSequenceNumbers: s.availableSequenceNumbers(),
+		Results:                  ackResults,
 		DiagnosticInfos:          []*ua.DiagnosticInfo{},
 	}
-	err := s.Channel.SendResponseWithContext(context.Background(), pubreq.ID, response)
+	err := ch.SendResponseWithContext(context.Background(), pubreq.ID, response)
 	if err != nil {
 		return err
 	}
@@ -518,12 +626,14 @@ func (s *Subscription) run() {
 	}()
 
 	// A subscription created with an invalid session token will have a nil
-	// Session.  Fail fast rather than panicking inside the select.
-	if s.Session == nil {
+	// Session. Fail fast rather than panicking inside the select.
+	// Session/Channel may be reassigned by TransferSubscriptions under Mu.
+	sess, ch := s.sessionChannel()
+	if sess == nil {
 		s.srv.srv.cfg.logger.Warn("subscription has no session, shutting down", "sub_id", s.ID)
 		return
 	}
-	if s.Channel == nil {
+	if ch == nil {
 		s.srv.srv.cfg.logger.Warn("subscription has no channel, shutting down", "sub_id", s.ID)
 		return
 	}
@@ -547,9 +657,17 @@ func (s *Subscription) run() {
 	//
 	// In L0 and L2, If we get to the lifetime count without a publish request, we'll kill the subscription.
 	for {
-		// we don't need to do anything if we don't have at least one thing to publish so lets get that first
-		publishQueue := make(map[uint32]*ua.MonitoredItemNotification)
+		// Refresh session/channel each loop so TransferSubscriptions takes effect.
+		sess, ch = s.sessionChannel()
+		if sess == nil || ch == nil {
+			s.srv.srv.cfg.logger.Warn("subscription lost session/channel, shutting down", "sub_id", s.ID)
+			return
+		}
+
+		// NotifyChannel wakes are ignored for payload; real samples live in
+		// per-monitored-item queues (Part 4 QueueSize / DiscardOldest).
 		var eventQueue []*ua.EventFieldList
+		pendingData := false
 
 		// Collect notifications until our publication interval is ready
 	L0:
@@ -557,8 +675,8 @@ func (s *Subscription) run() {
 			select {
 			case <-s.shutdown:
 				return
-			case newNotification := <-s.NotifyChannel:
-				publishQueue[newNotification.ClientHandle] = newNotification
+			case <-s.NotifyChannel:
+				pendingData = true
 			case evt := <-s.EventNotifyChannel:
 				eventQueue = append(eventQueue, evt)
 			case <-s.T.C:
@@ -566,14 +684,13 @@ func (s *Subscription) run() {
 				enabled := s.publishingEnabled
 				s.Mu.Unlock()
 
-				if (len(publishQueue) == 0 && len(eventQueue) == 0) || !enabled {
-					// nothing to publish, increment the keepalive counter and send a keepalive if it
-					// has been enough intervals.
+				hasQueued := pendingData || s.srv.srv.MonitoredItemService.PendingReportableNotifications(s.ID)
+				if (!hasQueued && len(eventQueue) == 0) || !enabled {
 					keepaliveCounter++
 					if keepaliveCounter > int(s.RevisedMaxKeepAliveCount) {
 						keepaliveCounter = 0
 						select {
-						case pubreq := <-s.Session.PublishRequests:
+						case pubreq := <-sess.PublishRequests:
 							err := s.keepalive(pubreq)
 							if err != nil {
 								s.srv.srv.cfg.logger.Warn("problem sending keepalive", "sub_id", s.ID, "error", err)
@@ -589,31 +706,27 @@ func (s *Subscription) run() {
 					}
 					continue // nothing to publish this interval
 				}
-				// we have things to publish so we'll break out to do that.
 				break L0
 			case update := <-s.ModifyChannel:
-				s.Update(update) // Reset the ticker to the new publishing interval.
+				s.Update(update)
 				s.T.Reset(time.Millisecond * time.Duration(s.RevisedPublishingInterval))
 			}
 		}
 		var pubreq PubReq
 
-		// now we need to continue to collect notifications until we've got a publish request
 	L2:
 		for {
 			select {
 			case <-s.shutdown:
 				return
-			case pubreq = <-s.Session.PublishRequests:
-				// once we get a publish request, we should move on to publish them back
+			case pubreq = <-sess.PublishRequests:
 				break L2
-			case newNotification := <-s.NotifyChannel:
-				publishQueue[newNotification.ClientHandle] = newNotification
+			case <-s.NotifyChannel:
+				pendingData = true
 			case evt := <-s.EventNotifyChannel:
 				eventQueue = append(eventQueue, evt)
 
 			case <-s.T.C:
-				// we had another tick without a publish request.
 				lifetimeCounter++
 				if lifetimeCounter > int(s.RevisedLifetimeCount) {
 					s.srv.srv.cfg.logger.Warn("subscription timed out", "sub_id", s.ID)
@@ -624,26 +737,21 @@ func (s *Subscription) run() {
 		lifetimeCounter = 0
 		keepaliveCounter = 0
 
+		ackResults := s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements)
+
 		s.SequenceID++
 		if s.SequenceID == 0 {
-			// per the spec, the sequence ID cannot be 0
 			s.SequenceID = 1
 		}
 		s.srv.srv.cfg.logger.Debug("got publish request", "sub_id", s.ID, "sequence_id", s.SequenceID)
-		// then get all the tags and send them back to the client
 
-		//for x := range pubreq.Req.SubscriptionAcknowledgements {
-		//a := pubreq.Req.SubscriptionAcknowledgements[x]
-		//delete(s.SeqNums, a.SequenceNumber)
-		//}
+		s.Mu.Lock()
+		maxNotif := s.MaxNotificationsPerPublish
+		s.Mu.Unlock()
+		finalItems, moreData := s.srv.srv.MonitoredItemService.DrainQueuedNotifications(s.ID, maxNotif)
 
-		finalItems := make([]*ua.MonitoredItemNotification, len(publishQueue))
-		i := 0
-		for k := range publishQueue {
-			finalItems[i] = publishQueue[k]
-			i++
-		}
-
+		// Events currently drain fully in one Publish (event overflow is Phase 15).
+		moreEvents := false
 		eo := make([]*ua.ExtensionObject, 0, 2)
 		if len(finalItems) > 0 {
 			dcn := ua.DataChangeNotification{
@@ -661,6 +769,7 @@ func (s *Subscription) run() {
 			enlEO := ua.NewExtensionObject(&enl)
 			enlEO.UpdateMask()
 			eo = append(eo, enlEO)
+			eventQueue = nil
 		}
 
 		msg := ua.NotificationMessage{
@@ -680,20 +789,34 @@ func (s *Subscription) run() {
 				AdditionalHeader:   ua.NewExtensionObject(nil),
 			},
 			SubscriptionID:           s.ID,
-			MoreNotifications:        false,
+			MoreNotifications:        moreData || moreEvents,
 			NotificationMessage:      &msg,
 			AvailableSequenceNumbers: s.availableSequenceNumbers(),
-			Results:                  []ua.StatusCode{},
+			Results:                  ackResults,
 			DiagnosticInfos:          []*ua.DiagnosticInfo{},
 		}
-		err := s.Channel.SendResponseWithContext(context.Background(), pubreq.ID, response)
+		// Re-read channel in case TransferSubscriptions reassigned it.
+		_, ch = s.sessionChannel()
+		if ch == nil {
+			s.srv.srv.cfg.logger.Warn("subscription has no channel after transfer, shutting down", "sub_id", s.ID)
+			return
+		}
+		err := ch.SendResponseWithContext(context.Background(), pubreq.ID, response)
 		if err != nil {
 			s.srv.srv.cfg.logger.Error("problem sending channel response", "error", err)
 			s.srv.srv.cfg.logger.Error("killing subscription", "sub_id", s.ID)
 			return
 		}
-		s.srv.srv.cfg.logger.Debug("published items", "count", len(publishQueue), "sub_id", s.ID)
-		// wait till we've got a publish request.
+		s.srv.srv.cfg.logger.Debug("published items", "count", len(finalItems), "more", moreData, "sub_id", s.ID)
+
+		// If MoreNotifications is set, wake the loop so the next interval can
+		// publish remaining queued samples without waiting for a new write.
+		if moreData || moreEvents {
+			select {
+			case s.NotifyChannel <- &ua.MonitoredItemNotification{}:
+			default:
+			}
+		}
 	}
 }
 

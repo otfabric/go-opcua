@@ -63,11 +63,15 @@ func TestParseEndpoint(t *testing.T) {
 			nil,
 			"opcua: invalid endpoint: missing host",
 		},
-		{ // Invalid, zero port
+		{ // Port 0 is allowed (OS-assigned bind for Listen)
 			"opc.tcp://host:0/path",
+			"tcp",
+			&url.URL{
+				Scheme: "opc.tcp",
+				Host:   "host:0",
+				Path:   "/path",
+			},
 			"",
-			nil,
-			`opcua: invalid endpoint: invalid port "0"`,
 		},
 		{ // Invalid, port out of range
 			"opc.tcp://host:70000/path",

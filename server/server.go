@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -69,6 +70,15 @@ type Server struct {
 
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
+
+	// eventItems tracks event-monitored-item filter state.
+	eventItems *eventItemRegistry
+
+	// historian provides optional HistoryRead support (nil = unsupported).
+	historian HistoryProvider
+
+	// historyCPs binds opaque HistoryRead continuation points to sessions.
+	historyCPs *historyCPRegistry
 }
 
 type serverConfig struct {
@@ -89,12 +99,13 @@ type serverConfig struct {
 
 	cap ServerCapabilities
 
-	accessController    AccessController
-	roleMapper          RoleMapper
-	usernameValidator   UsernameValidator
-	x509UserValidator   X509UserValidator
-	allowUsernameOnNone bool
-	metrics             ServerMetrics
+	accessController           AccessController
+	roleMapper                 RoleMapper
+	usernameValidator          UsernameValidator
+	x509UserValidator          X509UserValidator
+	clientCertificateValidator ClientCertificateValidator
+	allowUsernameOnNone        bool
+	metrics                    ServerMetrics
 
 	logger *slog.Logger
 }
@@ -179,12 +190,14 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	s := &Server{
-		url:      listenURL,
-		cfg:      cfg,
-		cb:       newChannelBroker(cfg.logger, listenURL),
-		sb:       newSessionBroker(cfg.logger),
-		handlers: make(map[uint16]Handler),
-		methods:  make(map[string]MethodHandler),
+		url:        listenURL,
+		cfg:        cfg,
+		cb:         newChannelBroker(cfg.logger, listenURL, cfg.clientCertificateValidator),
+		sb:         newSessionBroker(cfg.logger),
+		handlers:   make(map[uint16]Handler),
+		methods:    make(map[string]MethodHandler),
+		eventItems: newEventItemRegistry(),
+		historyCPs: newHistoryCPRegistry(nil),
 		namespaces: []NameSpace{
 			NewNameSpace("http://opcfoundation.org/UA/"), // ns:0
 		},
@@ -231,6 +244,53 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	return s, nil
+}
+
+// newServerNoNS creates a Server with all cfg/cb/sb fields initialized but with
+// an empty namespaces slice.  It is used by the test helper to avoid re-running
+// the expensive nodeset import for every test; the caller is responsible for
+// installing a pre-populated ns-0 NodeNameSpace.
+func newServerNoNS(opts ...Option) (*Server, error) {
+	cfg := &serverConfig{
+		cap:              capabilities,
+		applicationName:  "GOPCUA",
+		manufacturerName: "otfabric",
+		productName:      "otfabric OPC/UA Server",
+		softwareVersion:  "0.0.0-dev",
+		logger:           slog.Default(),
+	}
+	for _, opt := range opts {
+		if err := opt(cfg); err != nil {
+			return nil, err
+		}
+	}
+	if cfg.accessController == nil {
+		cfg.accessController = DefaultAccessController{}
+	}
+	listenURL := ""
+	if cfg.listenAddr != "" {
+		listenURL = cfg.listenAddr
+	} else if len(cfg.endpoints) != 0 {
+		listenURL = cfg.endpoints[0]
+	}
+
+	return &Server{
+		url:        listenURL,
+		cfg:        cfg,
+		cb:         newChannelBroker(cfg.logger, listenURL, cfg.clientCertificateValidator),
+		sb:         newSessionBroker(cfg.logger),
+		handlers:   make(map[uint16]Handler),
+		methods:    make(map[string]MethodHandler),
+		eventItems: newEventItemRegistry(),
+		historyCPs: newHistoryCPRegistry(nil),
+		namespaces: nil, // caller fills this in
+		status: &ua.ServerStatusDataType{
+			StartTime:      time.Now(),
+			CurrentTime:    time.Now(),
+			State:          ua.ServerStateSuspended,
+			ShutdownReason: &ua.LocalizedText{},
+		},
+	}, nil
 }
 
 func (s *Server) Session(hdr *ua.RequestHeader) *session {
@@ -320,6 +380,60 @@ func (s *Server) URLs() []string {
 	return s.cfg.endpoints
 }
 
+// Port returns the TCP port the server is bound to after [Server.Start], or 0
+// if the server is not listening. Useful when ListenOn used port 0.
+func (s *Server) Port() int {
+	if s == nil || s.l == nil {
+		return 0
+	}
+	tcp, ok := s.l.Addr().(*net.TCPAddr)
+	if !ok || tcp == nil {
+		return 0
+	}
+	return tcp.Port
+}
+
+// applyBoundPort rewrites listen and endpoint URLs that used port 0 (or were
+// missing a port) to the concrete OS-assigned port.
+func (s *Server) applyBoundPort(port int) {
+	if port <= 0 {
+		return
+	}
+	s.url = rewriteOPCURLPort(s.url, port)
+	if s.cfg.listenAddr != "" {
+		s.cfg.listenAddr = rewriteOPCURLPort(s.cfg.listenAddr, port)
+	}
+	for i, ep := range s.cfg.endpoints {
+		s.cfg.endpoints[i] = rewriteOPCURLPort(ep, port)
+	}
+}
+
+func rewriteOPCURLPort(raw string, port int) string {
+	if raw == "" || port <= 0 {
+		return raw
+	}
+	prefix := ""
+	rest := raw
+	if i := strings.Index(raw, "://"); i >= 0 {
+		prefix = raw[:i+3]
+		rest = raw[i+3:]
+	}
+	path := ""
+	if j := strings.IndexByte(rest, '/'); j >= 0 {
+		path = rest[j:]
+		rest = rest[:j]
+	}
+	h, p, err := net.SplitHostPort(rest)
+	if err != nil {
+		// No port present (e.g. "opc.tcp://localhost").
+		return prefix + net.JoinHostPort(rest, strconv.Itoa(port)) + path
+	}
+	if p != "0" && p != "" {
+		return raw // already concrete
+	}
+	return prefix + net.JoinHostPort(h, strconv.Itoa(port)) + path
+}
+
 // Start initializes and starts a Server listening on addr
 // If s was not initialized with NewServer(), addr defaults
 // to localhost:0 to let the OS select a random port.
@@ -340,13 +454,20 @@ func (s *Server) Start(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	// When ListenOn/EndPoint used port 0, rewrite advertised URLs with the OS-assigned port
+	// before building EndpointDescriptions (avoids freePort TOCTOU races in tests).
+	if tcp, ok := s.l.Addr().(*net.TCPAddr); ok {
+		s.applyBoundPort(tcp.Port)
+	}
 	s.cfg.logger.Info("started listening", "urls", s.URLs())
 
 	s.initEndpoints()
 	s.setServerState(ua.ServerStateRunning)
 
 	if s.cb == nil {
-		s.cb = newChannelBroker(s.cfg.logger, s.url)
+		s.cb = newChannelBroker(s.cfg.logger, s.url, s.cfg.clientCertificateValidator)
+	} else {
+		s.cb.endpointURL = s.url
 	}
 
 	mctx, cancel := context.WithCancel(ctx)

@@ -99,6 +99,52 @@
       "typeDefinition": "i=61"
     },
     {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Events",
+      "browseName": "1:Events",
+      "displayName": "Events",
+      "description": "Event notifier sources for BaseEvent interoperability.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Events.Source",
+      "browseName": "1:Events.Source",
+      "displayName": "Event Source",
+      "description": "Emits deterministic BaseEvent notifications (Severity=500, Message=peer-event).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Events",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=58"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=History",
+      "browseName": "1:History",
+      "displayName": "History",
+      "description": "Historized variables with fixed raw samples (gate-compliant).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=History.Temperature",
+      "browseName": "1:History.Temperature",
+      "displayName": "Temperature (Historical)",
+      "description": "Fixed raw history samples at 5s intervals from 2026-07-24T10:00:00Z.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=History",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "HistoryRead"
+      ],
+      "initialValue": 22.5
+    },
+    {
       "nodeClass": "Variable",
       "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Scalar.Boolean",
       "browseName": "1:Scalar.Boolean",

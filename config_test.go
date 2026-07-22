@@ -792,10 +792,11 @@ func TestOptions(t *testing.T) {
 			name: `DialTimeout(5s)`,
 			opt:  DialTimeout(5 * time.Second),
 			cfg: &Config{
-				dialer: &uacp.Dialer{
-					Dialer:    &net.Dialer{Timeout: 5 * time.Second},
-					ClientACK: uacp.DefaultClientACK,
-				},
+				dialer: func() *uacp.Dialer {
+					d := DefaultDialer()
+					d.Dialer.Timeout = 5 * time.Second
+					return d
+				}(),
 			},
 		},
 		{
@@ -917,6 +918,16 @@ func TestOptions(t *testing.T) {
 			require.Equal(t, tt.cfg, cfg)
 		})
 	}
+}
+
+// TestReceiveBufferSize_DoesNotMutateDefaultClientACK guards against options
+// mutating the shared uacp.DefaultClientACK (which previously broke later
+// HEL/ACK handshakes with "message too large: 57 > 5 bytes").
+func TestReceiveBufferSize_DoesNotMutateDefaultClientACK(t *testing.T) {
+	before := *uacp.DefaultClientACK
+	_, err := ApplyConfig(ReceiveBufferSize(5), SendBufferSize(7), MaxMessageSize(9), MaxChunkCount(11))
+	require.NoError(t, err)
+	require.Equal(t, before, *uacp.DefaultClientACK)
 }
 
 func TestValidateServerCertificate(t *testing.T) {

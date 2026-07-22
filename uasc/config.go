@@ -83,6 +83,13 @@ type Config struct {
 	// Logger is the logger for protocol-level messages.
 	// If nil, logging is disabled.
 	Logger *slog.Logger
+
+	// ClientCertificateValidator, when set on a server SecureChannel, is
+	// invoked during OpenSecureChannel after the peer certificate is known.
+	// Return nil to accept; return a ua.StatusCode (typically
+	// StatusBadCertificateUntrusted) to reject the channel open.
+	// Nil means no application-certificate trust check at channel open.
+	ClientCertificateValidator func(certDER []byte) error
 }
 
 // SessionConfig is a set of common configurations used in Session.

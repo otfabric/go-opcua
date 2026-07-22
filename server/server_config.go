@@ -147,6 +147,58 @@ func WithX509UserValidator(v X509UserValidator) Option {
 	}
 }
 
+// ClientCertificateValidator validates the application certificate presented
+// by a connecting client during OpenSecureChannel (and again at CreateSession
+// as defense-in-depth). The certificate is provided as DER-encoded bytes.
+//
+// Return nil to accept the client, or a ua.StatusCode error to reject it.
+// ua.StatusBadCertificateUntrusted is the appropriate code when the certificate
+// is not in the server's configured trust store.
+//
+// When no validator is registered, the server accepts any application certificate
+// (the secure channel still enforces message security; this validator controls
+// trust-store based application-level access control).
+type ClientCertificateValidator func(certDER []byte) error
+
+// WithClientCertificateTrustList configures the server to verify connecting
+// clients' application certificates against the provided CA certificate pool.
+// Clients that present a certificate not signed by one of the provided CA
+// certificates are rejected with BadCertificateUntrusted at OpenSecureChannel
+// (CreateSession retains the same check as defense-in-depth).
+//
+// Each caCertDER is a DER-encoded X.509 CA certificate.
+// Passing an empty list configures a server that rejects all client certificates.
+func WithClientCertificateTrustList(caCertDER ...[]byte) Option {
+	return func(s *serverConfig) error {
+		pool := x509.NewCertPool()
+		for _, der := range caCertDER {
+			cert, err := x509.ParseCertificate(der)
+			if err != nil {
+				return fmt.Errorf("WithClientCertificateTrustList: %w", err)
+			}
+			pool.AddCert(cert)
+		}
+		s.clientCertificateValidator = func(certDER []byte) error {
+			if len(certDER) == 0 {
+				return nil // no certificate presented; non-certificate channel
+			}
+			cert, err := x509.ParseCertificate(certDER)
+			if err != nil {
+				return ua.StatusBadCertificateInvalid
+			}
+			opts := x509.VerifyOptions{
+				Roots:     pool,
+				KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+			}
+			if _, err := cert.Verify(opts); err != nil {
+				return ua.StatusBadCertificateUntrusted
+			}
+			return nil
+		}
+		return nil
+	}
+}
+
 // AllowUsernameOnNone permits the server to advertise UserName token policies
 // on None/None (unencrypted) endpoints.  The OPC UA specification permits this
 // for test deployments (Part 4 §5.6.3.2).  By default, non-anonymous tokens

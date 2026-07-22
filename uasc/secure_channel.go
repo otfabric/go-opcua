@@ -828,6 +828,33 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 	s.cfg.Lifetime = req.RequestedLifetime
 	s.cfg.SecurityMode = req.SecurityMode
 
+	// Reject untrusted client application certificates at channel open
+	// (OPC UA application authentication), before issuing a SecurityToken.
+	if s.cfg.ClientCertificateValidator != nil &&
+		s.cfg.SecurityMode != ua.MessageSecurityModeNone &&
+		len(s.cfg.RemoteCertificate) > 0 {
+		if verr := s.cfg.ClientCertificateValidator(s.cfg.RemoteCertificate); verr != nil {
+			sc := ua.StatusBadCertificateUntrusted
+			if status, ok := verr.(ua.StatusCode); ok {
+				sc = status
+			}
+			s.cfg.Logger.Warn("client certificate rejected at OpenSecureChannel", "error", verr)
+			fault := &ua.ServiceFault{
+				ResponseHeader: &ua.ResponseHeader{
+					Timestamp:          s.timeNow(),
+					RequestHandle:      req.RequestHeader.RequestHandle,
+					ServiceResult:      sc,
+					ServiceDiagnostics: &ua.DiagnosticInfo{},
+					StringTable:        []string{},
+					AdditionalHeader:   ua.NewExtensionObject(nil),
+				},
+			}
+			ctx := context.Background()
+			_ = s.sendResponseWithContext(ctx, s.openingInstance, reqID, fault)
+			return sc
+		}
+	}
+
 	// I had to do the encryption setup in the chunk decoding logic because you have to
 	// decrypt the thing before you even know you have an open message.
 	// so this is redundant.

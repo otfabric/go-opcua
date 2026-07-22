@@ -23,7 +23,7 @@ func TestFaultHeader_StatusCodeError(t *testing.T) {
 }
 
 func TestNewChannelBroker(t *testing.T) {
-	b := newChannelBroker(nil, "opc.tcp://localhost:4840")
+	b := newChannelBroker(nil, "opc.tcp://localhost:4840", nil)
 	require.NotNil(t, b)
 	require.Equal(t, "opc.tcp://localhost:4840", b.endpointURL)
 }
