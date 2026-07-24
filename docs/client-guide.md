@@ -11,12 +11,12 @@
 | **Discovery** | `GetEndpoints`, `FindServers`, `FindServersOnNetwork` | Fully implemented |
 | **Session** | Automatic via `Connect` / `Close` | Fully implemented |
 | **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented (`IndexRange`, `TimestampsToReturn`) |
-| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadEvents`, `HistoryUpdateData`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented (server-dependent; go-opcua servers support raw HistoryRead when a `HistoryProvider` is set) |
+| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryUpdateData`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, … | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed + update/delete) |
 | **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
 | **Method** | `Call`, `CallMethod` | Fully implemented |
-| **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode` | Fully implemented (revise / Publish ACK / lifecycle on go-opcua servers) |
+| **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
 
@@ -633,6 +633,22 @@ c, _ := opcua.NewClient("opc.tcp://server:4840",
 | `Disconnected` | Lost connection (auto-reconnect will trigger) |
 | `Reconnecting` | Recovery in progress |
 
+With `AutoReconnect(true)` (default), reconnect runs Transfer → Republish → Recreate
+per subscription. Observe outcomes with `WithSubscriptionRecoveryHandler`:
+
+```go
+opcua.WithSubscriptionRecoveryHandler(func(ev opcua.SubscriptionRecoveryEvent) {
+    log.Printf("sub %d: %s (%s)", ev.SubscriptionID, ev.Outcome, ev.Detail)
+})
+```
+
+Manual protocol helpers (do not mutate subscription notify channels):
+
+```go
+resp, err := c.Republish(ctx, subscriptionID, sequenceNumber)
+tr, err := c.TransferSubscriptions(ctx, []uint32{subscriptionID}, false)
+```
+
 ---
 
 ## Session Management
@@ -677,9 +693,11 @@ for dv, err := range c.ReadHistoryAll(ctx, nodeID, start, end) {
 }
 ```
 
-Low-level `HistoryReadRawModified` accepts full `ReadRawModifiedDetails` and continuation points.
-Against go-opcua servers (v1.3.0+), raw HistoryRead works when the server has called `SetHistorian` and
-`EnableNode` for the target; modified/aggregate/event history remain unsupported.
+Low-level `HistoryReadRawModified` / `HistoryReadProcessed` / `HistoryReadAtTime` and the
+HistoryUpdate helpers accept full details and continuation points. Against go-opcua servers
+with the default `*Historian`, raw/modified/at-time/processed and data update/delete paths
+are available after `SetHistorian` + `EnableNode`. Historical **events** remain unsupported.
+Peer-proven history is currently raw HistoryRead (open62541→Go and Milo→Go on opcua-interop v0.5.0).
 
 IndexRange on current Values uses the same NumericRange grammar as servers:
 `"i"`, `"i:j"`, or multi-dimensional `"a:b,c:d"` via `ReadItem.IndexRange` / `ReadMulti`.

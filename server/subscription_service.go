@@ -570,8 +570,17 @@ func (s *Subscription) Start() {
 
 }
 
+// sessionChannel returns the current session and secure channel under Mu.
+// TransferSubscriptions may reassign these fields concurrently with run().
+func (s *Subscription) sessionChannel() (*session, *uasc.SecureChannel) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	return s.Session, s.Channel
+}
+
 func (s *Subscription) keepalive(pubreq PubReq) error {
-	if s.Channel == nil {
+	_, ch := s.sessionChannel()
+	if ch == nil {
 		return fmt.Errorf("subscription %d has no channel", s.ID)
 	}
 	ackResults := s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements)
@@ -599,7 +608,7 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 		Results:                  ackResults,
 		DiagnosticInfos:          []*ua.DiagnosticInfo{},
 	}
-	err := s.Channel.SendResponseWithContext(context.Background(), pubreq.ID, response)
+	err := ch.SendResponseWithContext(context.Background(), pubreq.ID, response)
 	if err != nil {
 		return err
 	}
@@ -617,12 +626,14 @@ func (s *Subscription) run() {
 	}()
 
 	// A subscription created with an invalid session token will have a nil
-	// Session.  Fail fast rather than panicking inside the select.
-	if s.Session == nil {
+	// Session. Fail fast rather than panicking inside the select.
+	// Session/Channel may be reassigned by TransferSubscriptions under Mu.
+	sess, ch := s.sessionChannel()
+	if sess == nil {
 		s.srv.srv.cfg.logger.Warn("subscription has no session, shutting down", "sub_id", s.ID)
 		return
 	}
-	if s.Channel == nil {
+	if ch == nil {
 		s.srv.srv.cfg.logger.Warn("subscription has no channel, shutting down", "sub_id", s.ID)
 		return
 	}
@@ -646,6 +657,13 @@ func (s *Subscription) run() {
 	//
 	// In L0 and L2, If we get to the lifetime count without a publish request, we'll kill the subscription.
 	for {
+		// Refresh session/channel each loop so TransferSubscriptions takes effect.
+		sess, ch = s.sessionChannel()
+		if sess == nil || ch == nil {
+			s.srv.srv.cfg.logger.Warn("subscription lost session/channel, shutting down", "sub_id", s.ID)
+			return
+		}
+
 		// NotifyChannel wakes are ignored for payload; real samples live in
 		// per-monitored-item queues (Part 4 QueueSize / DiscardOldest).
 		var eventQueue []*ua.EventFieldList
@@ -672,7 +690,7 @@ func (s *Subscription) run() {
 					if keepaliveCounter > int(s.RevisedMaxKeepAliveCount) {
 						keepaliveCounter = 0
 						select {
-						case pubreq := <-s.Session.PublishRequests:
+						case pubreq := <-sess.PublishRequests:
 							err := s.keepalive(pubreq)
 							if err != nil {
 								s.srv.srv.cfg.logger.Warn("problem sending keepalive", "sub_id", s.ID, "error", err)
@@ -701,7 +719,7 @@ func (s *Subscription) run() {
 			select {
 			case <-s.shutdown:
 				return
-			case pubreq = <-s.Session.PublishRequests:
+			case pubreq = <-sess.PublishRequests:
 				break L2
 			case <-s.NotifyChannel:
 				pendingData = true
@@ -777,7 +795,13 @@ func (s *Subscription) run() {
 			Results:                  ackResults,
 			DiagnosticInfos:          []*ua.DiagnosticInfo{},
 		}
-		err := s.Channel.SendResponseWithContext(context.Background(), pubreq.ID, response)
+		// Re-read channel in case TransferSubscriptions reassigned it.
+		_, ch = s.sessionChannel()
+		if ch == nil {
+			s.srv.srv.cfg.logger.Warn("subscription has no channel after transfer, shutting down", "sub_id", s.ID)
+			return
+		}
+		err := ch.SendResponseWithContext(context.Background(), pubreq.ID, response)
 		if err != nil {
 			s.srv.srv.cfg.logger.Error("problem sending channel response", "error", err)
 			s.srv.srv.cfg.logger.Error("killing subscription", "sub_id", s.ID)

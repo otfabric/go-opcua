@@ -12,13 +12,6 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 )
 
-// HistoryProvider is the server-facing HistoryRead surface. The default
-// implementation is [*Historian] (in-memory, process-lifetime only).
-type HistoryProvider interface {
-	ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error)
-	ReleaseContinuation(continuationPoint []byte)
-}
-
 // Historian is the default in-memory HistoryProvider.
 //
 // Retention is bounded: each EnableNode call sets a per-node ring buffer
@@ -30,6 +23,9 @@ type Historian struct {
 
 	// continuations stores active continuation points.
 	continuations map[string]*historyContinuation
+
+	// modifications records HistoryUpdate changes for ReadModified.
+	modifications map[string][]historyModification
 }
 
 // Compile-time check that *Historian implements HistoryProvider.
@@ -260,4 +256,9 @@ func generateContinuationPoint() []byte {
 // BadHistoryOperationUnsupported).
 func (s *Server) SetHistorian(h HistoryProvider) {
 	s.historian = h
+	if h == nil {
+		s.historyCPs = newHistoryCPRegistry(nil)
+		return
+	}
+	s.historyCPs = newHistoryCPRegistry(h.ReleaseContinuation)
 }

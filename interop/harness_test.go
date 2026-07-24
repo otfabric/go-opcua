@@ -14,8 +14,8 @@
 //
 // Environment variables (all optional):
 //
-//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: digest-pinned v0.4.0)
-//	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest-pinned v0.4.0)
+//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: digest-pinned v0.5.0)
+//	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest-pinned v0.5.0)
 //	OPCUA_INTEROP_FIXTURE_DIR  Directory containing baseline.json     (default: testdata)
 //	OPCUA_INTEROP_PKI_DIR      Root of the test PKI tree              (default: ../../opcua-interop/certs/test-pki)
 package interop
@@ -51,12 +51,17 @@ import (
 // ---------------------------------------------------------------------------
 
 const (
-	// Default images: use released tags so CI is reproducible without env overrides.
-	// Override with OPEN62541_IMAGE / MILO_IMAGE for local :dev builds.
-	// Digest-pinned multi-arch indexes for opcua-interop v0.4.0:
-	// https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0
-	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:c3bf9c6b740948449e52080021a716def08db913eb3ba0b08e397f60cbd29061"
-	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:eb204edd8a715e071118fae89650c114687bd97e31be24819da8ba5295cce844"
+	// Single source of truth for the pinned opcua-interop release.
+	// Keep INTEROP.md, coverage.json evidence versions, and CI workflow env in sync.
+	// Digests are GHCR multi-arch indexes from the current v0.5.0 publication:
+	// https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0
+	// https://github.com/otfabric/opcua-interop/actions/runs/30127189340
+	// When opcua-interop republishes v0.5.0, update these digests in lockstep
+	// (harness defaults, interop.yml, INTEROP.md). Do not introduce v0.5.1/RC pins.
+	interopVersion = "v0.5.0"
+
+	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:d9650e1b63fd0df1c840335d1951c848437530de0670c279ef905440a3bc77d6"
+	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:af502530b7043763220474d6dcf0deef62215e0b3c112cc8eab9849ec1d4e321"
 	defaultFixtureDir     = "testdata"
 
 	interopNamespaceURI = "urn:otfabric:opcua-interop:model"
@@ -66,6 +71,10 @@ const (
 	clientTimeout      = 30 * time.Second
 	dialTimeout        = 10 * time.Second
 )
+
+// Ensure the constant is referenced so unused-const tooling stays quiet until
+// pin updates consume it in docs/validation helpers.
+var _ = interopVersion
 
 // ---------------------------------------------------------------------------
 // Environment helpers
@@ -200,7 +209,7 @@ func startMiloServer(t *testing.T) *serverHandle {
 }
 
 // ---------------------------------------------------------------------------
-// Adapter client JSON result types (Phase 4 contract, schema v1.0)
+// Adapter client JSON result types (opcua-interop contract, schema v1.0)
 // ---------------------------------------------------------------------------
 
 // adapterResult is the canonical output envelope emitted by every adapter client command.
@@ -1585,8 +1594,8 @@ func startTrustGoServer(t *testing.T) string {
 }
 
 // isCertRejectedServiceResult returns true if the adapter-result service
-// result name indicates certificate-based rejection. Phase 12 rejects at
-// OpenSecureChannel, so adapters may also surface channel-closed statuses.
+// result name indicates certificate-based rejection. Untrusted-cert tests
+// reject at OpenSecureChannel, so adapters may also surface channel-closed statuses.
 func isCertRejectedServiceResult(sr statusCodeObj) bool {
 	for _, suffix := range []string{
 		"CertificateUntrusted",

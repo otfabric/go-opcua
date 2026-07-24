@@ -15,8 +15,8 @@
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences | Fully implemented |
 | **View** | Browse, BrowseNext, TranslateBrowsePathsToNodeIDs, RegisterNodes, UnregisterNodes | Fully implemented |
 | **Attribute** | Read, Write | Fully implemented (IndexRange / NumericRange, `TimestampsToReturn`, value-only Write) |
-| | HistoryRead | Raw path via pluggable `HistoryProvider` (`SetHistorian`); modified/aggregates unsupported |
-| | HistoryUpdate | Unsupported (`StatusBadHistoryOperationUnsupported`) |
+| | HistoryRead | Via pluggable `HistoryProvider` (`SetHistorian`); default `*Historian` supports raw, modified, at-time, and processed aggregates |
+| | HistoryUpdate | Via optional historian interfaces (`HistoryDataUpdater` / deleters); default `*Historian` supports UpdateData and raw/at-time deletes |
 | **Method** | Call | Fully implemented |
 | **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow) |
 | **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
@@ -325,9 +325,11 @@ s.SetHistorian(h)
 h.RecordValue(nodeID, dv)
 ```
 
-Clients then call HistoryRead with `ReadRawModifiedDetails` (raw only). Modified history,
-aggregates, and historical events are not supported. Continuation points expire after 30s
-(max 100 active). Without `SetHistorian`, HistoryRead reports unsupported / non-historized.
+Clients then call HistoryRead / HistoryUpdate against the provider. Default `*Historian`
+supports raw, modified, at-time, and processed aggregates (Average/Minimum/Maximum/Count),
+plus UpdateData and raw/at-time deletes. Continuations are session-bound (30s TTL, max 100).
+`returnBounds` is accepted but bounding/interpolation is not implemented. Historical events
+are not supported. Without `SetHistorian`, HistoryRead reports unsupported / non-historized.
 
 ### Monitored-item queues and modes
 

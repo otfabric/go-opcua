@@ -129,12 +129,22 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 		return nil, err
 	}
 
+	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
+	sessionAuth := ""
+	if sess != nil && sess.AuthTokenID != nil {
+		sessionAuth = sess.AuthTokenID.String()
+	}
+
 	// If ReleaseContinuationPoints is set, just release them.
 	if req.ReleaseContinuationPoints && s.srv.historian != nil {
 		results := make([]*ua.HistoryReadResult, len(req.NodesToRead))
 		for i, n := range req.NodesToRead {
 			if len(n.ContinuationPoint) > 0 {
-				s.srv.historian.ReleaseContinuation(n.ContinuationPoint)
+				if s.srv.historyCPs != nil {
+					s.srv.historyCPs.release(n.ContinuationPoint)
+				} else {
+					s.srv.historian.ReleaseContinuation(n.ContinuationPoint)
+				}
 			}
 			results[i] = &ua.HistoryReadResult{StatusCode: ua.StatusOK}
 		}
@@ -145,62 +155,38 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 		}, nil
 	}
 
-	// Extract ReadRawModifiedDetails from the HistoryReadDetails extension object.
-	var rawDetails *ua.ReadRawModifiedDetails
-	if req.HistoryReadDetails != nil && req.HistoryReadDetails.Value != nil {
-		switch v := req.HistoryReadDetails.Value.(type) {
-		case *ua.ReadRawModifiedDetails:
-			rawDetails = v
-		case ua.ReadRawModifiedDetails:
-			rawDetails = &v
-		}
+	if s.srv.historian == nil {
+		return unsupportedHistoryRead(req), nil
 	}
 
-	// Reject modified history (IsReadModified=true).
-	if rawDetails != nil && rawDetails.IsReadModified {
-		results := make([]*ua.HistoryReadResult, len(req.NodesToRead))
-		for i := range req.NodesToRead {
-			results[i] = &ua.HistoryReadResult{
-				StatusCode: ua.StatusBadHistoryOperationInvalid,
-			}
-		}
-		return &ua.HistoryReadResponse{
-			ResponseHeader:  responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
-			Results:         results,
-			DiagnosticInfos: []*ua.DiagnosticInfo{},
-		}, nil
-	}
-
-	// If no historian is configured, return unsupported.
-	if s.srv.historian == nil || rawDetails == nil {
-		results := make([]*ua.HistoryReadResult, len(req.NodesToRead))
-		for i := range req.NodesToRead {
-			results[i] = &ua.HistoryReadResult{
-				StatusCode: ua.StatusBadHistoryOperationUnsupported,
-			}
-		}
-		return &ua.HistoryReadResponse{
-			ResponseHeader:  responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
-			Results:         results,
-			DiagnosticInfos: []*ua.DiagnosticInfo{},
-		}, nil
+	details := any(nil)
+	if req.HistoryReadDetails != nil {
+		details = req.HistoryReadDetails.Value
 	}
 
 	results := make([]*ua.HistoryReadResult, len(req.NodesToRead))
 	for i, n := range req.NodesToRead {
-		result, err := s.srv.historian.ReadRaw(
-			n.NodeID,
-			rawDetails.StartTime,
-			rawDetails.EndTime,
-			rawDetails.NumValuesPerNode,
-			rawDetails.ReturnBounds,
-			n.ContinuationPoint,
-		)
-		if err != nil {
-			results[i] = &ua.HistoryReadResult{
-				StatusCode: ua.StatusBadInternalError,
+		providerCP := n.ContinuationPoint
+		if len(providerCP) > 0 && s.srv.historyCPs != nil {
+			var st ua.StatusCode
+			providerCP, st = s.srv.historyCPs.resolve(sessionAuth, providerCP)
+			if st != ua.StatusOK {
+				results[i] = &ua.HistoryReadResult{StatusCode: st}
+				continue
 			}
+		}
+
+		result, err := s.dispatchHistoryRead(details, n.NodeID, providerCP)
+		if err != nil {
+			results[i] = &ua.HistoryReadResult{StatusCode: ua.StatusBadInternalError}
 			continue
+		}
+		if result == nil {
+			results[i] = &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
+			continue
+		}
+		if len(result.ContinuationPoint) > 0 && s.srv.historyCPs != nil {
+			result.ContinuationPoint = s.srv.historyCPs.bind(sessionAuth, result.ContinuationPoint)
 		}
 		results[i] = result
 	}
@@ -210,6 +196,75 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 		Results:         results,
 		DiagnosticInfos: []*ua.DiagnosticInfo{},
 	}, nil
+}
+
+func unsupportedHistoryRead(req *ua.HistoryReadRequest) *ua.HistoryReadResponse {
+	results := make([]*ua.HistoryReadResult, len(req.NodesToRead))
+	for i := range req.NodesToRead {
+		results[i] = &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
+	}
+	return &ua.HistoryReadResponse{
+		ResponseHeader:  responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
+		Results:         results,
+		DiagnosticInfos: []*ua.DiagnosticInfo{},
+	}
+}
+
+func (s *AttributeService) dispatchHistoryRead(details any, nodeID *ua.NodeID, continuationPoint []byte) (*ua.HistoryReadResult, error) {
+	switch v := details.(type) {
+	case *ua.ReadRawModifiedDetails:
+		return s.readRawModified(v, nodeID, continuationPoint)
+	case ua.ReadRawModifiedDetails:
+		return s.readRawModified(&v, nodeID, continuationPoint)
+	case *ua.ReadAtTimeDetails:
+		reader, ok := s.srv.historian.(AtTimeHistoryReader)
+		if !ok {
+			return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
+		}
+		return reader.ReadAtTime(nodeID, v.ReqTimes, v.UseSimpleBounds)
+	case ua.ReadAtTimeDetails:
+		reader, ok := s.srv.historian.(AtTimeHistoryReader)
+		if !ok {
+			return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
+		}
+		return reader.ReadAtTime(nodeID, v.ReqTimes, v.UseSimpleBounds)
+	case *ua.ReadProcessedDetails:
+		return s.readProcessed(v, nodeID)
+	case ua.ReadProcessedDetails:
+		return s.readProcessed(&v, nodeID)
+	default:
+		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
+	}
+}
+
+func (s *AttributeService) readRawModified(details *ua.ReadRawModifiedDetails, nodeID *ua.NodeID, continuationPoint []byte) (*ua.HistoryReadResult, error) {
+	if details.IsReadModified {
+		reader, ok := s.srv.historian.(ModifiedHistoryReader)
+		if !ok {
+			return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
+		}
+		return reader.ReadModified(nodeID, details.StartTime, details.EndTime, details.NumValuesPerNode, continuationPoint)
+	}
+	return s.srv.historian.ReadRaw(
+		nodeID,
+		details.StartTime,
+		details.EndTime,
+		details.NumValuesPerNode,
+		details.ReturnBounds,
+		continuationPoint,
+	)
+}
+
+func (s *AttributeService) readProcessed(details *ua.ReadProcessedDetails, nodeID *ua.NodeID) (*ua.HistoryReadResult, error) {
+	reader, ok := s.srv.historian.(ProcessedHistoryReader)
+	if !ok {
+		return &ua.HistoryReadResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}, nil
+	}
+	var agg *ua.NodeID
+	if len(details.AggregateType) > 0 {
+		agg = details.AggregateType[0]
+	}
+	return reader.ReadProcessed(nodeID, details.StartTime, details.EndTime, details.ProcessingInterval, agg, details.AggregateConfiguration)
 }
 
 // Write implements the OPC UA Write service.
@@ -305,13 +360,9 @@ func (s *AttributeService) HistoryUpdate(ctx context.Context, sc *uasc.SecureCha
 		return nil, err
 	}
 
-	// This server does not maintain a historical data store.
-	// Return BadHistoryOperationUnsupported for each update detail.
 	results := make([]*ua.HistoryUpdateResult, len(req.HistoryUpdateDetails))
-	for i := range req.HistoryUpdateDetails {
-		results[i] = &ua.HistoryUpdateResult{
-			StatusCode: ua.StatusBadHistoryOperationUnsupported,
-		}
+	for i, detailEO := range req.HistoryUpdateDetails {
+		results[i] = s.dispatchHistoryUpdate(detailEO)
 	}
 
 	return &ua.HistoryUpdateResponse{
@@ -319,4 +370,51 @@ func (s *AttributeService) HistoryUpdate(ctx context.Context, sc *uasc.SecureCha
 		Results:         results,
 		DiagnosticInfos: []*ua.DiagnosticInfo{},
 	}, nil
+}
+
+func (s *AttributeService) dispatchHistoryUpdate(detailEO *ua.ExtensionObject) *ua.HistoryUpdateResult {
+	unsupported := &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
+	if detailEO == nil || detailEO.Value == nil || s.srv.historian == nil {
+		return unsupported
+	}
+	switch v := detailEO.Value.(type) {
+	case *ua.UpdateDataDetails:
+		updater, ok := s.srv.historian.(HistoryDataUpdater)
+		if !ok {
+			return unsupported
+		}
+		return updater.UpdateData(v.NodeID, v.PerformInsertReplace, v.UpdateValues)
+	case ua.UpdateDataDetails:
+		updater, ok := s.srv.historian.(HistoryDataUpdater)
+		if !ok {
+			return unsupported
+		}
+		return updater.UpdateData(v.NodeID, v.PerformInsertReplace, v.UpdateValues)
+	case *ua.DeleteRawModifiedDetails:
+		deleter, ok := s.srv.historian.(RawHistoryDeleter)
+		if !ok {
+			return unsupported
+		}
+		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
+	case ua.DeleteRawModifiedDetails:
+		deleter, ok := s.srv.historian.(RawHistoryDeleter)
+		if !ok {
+			return unsupported
+		}
+		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
+	case *ua.DeleteAtTimeDetails:
+		deleter, ok := s.srv.historian.(AtTimeHistoryDeleter)
+		if !ok {
+			return unsupported
+		}
+		return deleter.DeleteAtTime(v.NodeID, v.ReqTimes)
+	case ua.DeleteAtTimeDetails:
+		deleter, ok := s.srv.historian.(AtTimeHistoryDeleter)
+		if !ok {
+			return unsupported
+		}
+		return deleter.DeleteAtTime(v.NodeID, v.ReqTimes)
+	default:
+		return unsupported
+	}
 }

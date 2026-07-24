@@ -19,11 +19,11 @@ Requires **Go 1.25** or later.
 
 otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or build your own:
 
-- **Client** — connect, browse, read/write (including IndexRange), subscribe, call methods, read history
-- **Server** — host namespaces, expose variables, handle methods, emit events (`EmitBaseEvent`), optional raw HistoryRead via `HistoryProvider`
+- **Client** — connect, browse, read/write (including IndexRange), subscribe, call methods, read/update history, Republish/TransferSubscriptions
+- **Server** — host namespaces, expose variables, handle methods, emit events (`EmitBaseEvent`), pluggable `HistoryProvider` (default `*Historian` covers raw + optional update/delete/at-time/modified/processed)
 - **Security** — six encryption policies, certificate and username/password authentication, server certificate validation with `TrustedCertificates()` and `InsecureSkipVerify()` options; **certificate chains** (leaf + intermediate) supported on connect; optional client-cert trust list at OpenSecureChannel
-- **Subscriptions** — data-change and event monitoring with Part 4 queues, lifecycle, Republish/Transfer on the go-opcua server
-- **Retry & Reconnect** — exponential backoff and automatic session recovery
+- **Subscriptions** — data-change and event monitoring with Part 4 queues, lifecycle, Republish/Transfer on server and client; `WithSubscriptionRecoveryHandler` for reconnect outcomes
+- **Retry & Reconnect** — exponential backoff and automatic session / subscription recovery
 - **Metrics** — pluggable instrumentation for request/response/error tracking
 - **Logging** — structured logging via `*slog.Logger`; library is slog-native internally
 
@@ -176,7 +176,7 @@ func main() {
 | Area | Capabilities |
 |------|-------------|
 | **Namespaces** | Custom `NameSpace` interface, `NodeNameSpace` in-memory implementation |
-| **Services** | Read, Write, HistoryRead (raw via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
+| **Services** | Read, Write, HistoryRead/HistoryUpdate (via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences |
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode; revise clamps, `MoreNotifications`, Publish ACK |
 | **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; per-item rejection for unknown nodes |
@@ -184,8 +184,8 @@ func main() {
 | **Query** | QueryFirst, QueryNext with full ContentFilter evaluation (all 18 operators, 3-valued logic), type/subtype matching, and continuation points |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel |
 | **Methods** | Register handlers via `RegisterMethod`, argument introspection |
-| **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + EventFilter SelectClauses / OfType) |
-| **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` (`SetHistorian`, `EnableNode`, `RecordValue`) |
+| **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + custom `Fields` + EventFilter SelectClauses / WhereClause) |
+| **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces |
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
 | **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML` |
 | **Security** | Same encryption policies as client (server-side) |
@@ -206,8 +206,8 @@ func main() {
 | | Cancel | — | Yes |
 | **Attribute** | Read | Yes | Yes |
 | | Write | Yes | Yes |
-| | HistoryRead | Yes | Yes (raw via `HistoryProvider`; modified/aggregates unsupported) |
-| | HistoryUpdate | Yes | — |
+| | HistoryRead | Yes | Yes (via `HistoryProvider`; default `*Historian` supports raw/modified/at-time/processed) |
+| | HistoryUpdate | Yes | Yes (when historian implements optional updater/deleter interfaces; default `*Historian` does) |
 | **View** | Browse | Yes | Yes |
 | | BrowseNext | Yes | Yes |
 | | TranslateBrowsePathsToNodeIDs | Yes | Yes |
@@ -229,8 +229,8 @@ func main() {
 | | ModifySubscription | Yes | Yes |
 | | SetPublishingMode | Yes | Yes |
 | | Publish | Yes | Yes |
-| | Republish | — | Yes |
-| | TransferSubscriptions | — | Yes |
+| | Republish | Yes | Yes |
+| | TransferSubscriptions | Yes | Yes |
 | | DeleteSubscriptions | Yes | Yes |
 
 **—** = API present but server returns `StatusBadServiceUnsupported`, or client has no dedicated helper (use `Client.Send`).

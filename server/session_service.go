@@ -277,7 +277,12 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 		return nil, err
 	}
 
-	err = s.srv.sb.Close(req.RequestHeader.AuthenticationToken)
+	authToken := req.RequestHeader.AuthenticationToken
+	if s.srv.historyCPs != nil && authToken != nil {
+		s.srv.historyCPs.releaseSession(authToken.String())
+	}
+
+	err = s.srv.sb.Close(authToken)
 	if err != nil {
 		return nil, ua.StatusBadSessionIDInvalid
 	}

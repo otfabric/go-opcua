@@ -2,23 +2,18 @@
 
 // SPDX-License-Identifier: MIT
 
+// Go↔Go subscription lifecycle companions (revise, publishing mode, triggering, delete).
+// COVERAGE.md: subscriptions / subscription.lifecycle.*
+
 package interop
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/ua"
 )
-
-func phase14Ctx(t *testing.T) context.Context {
-	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
-	t.Cleanup(cancel)
-	return ctx
-}
 
 func collectHandleValuesAcross(t *testing.T, notifyCh <-chan *opcua.PublishNotificationData, handle uint32, minCount int, timeout time.Duration) []int32 {
 	t.Helper()
@@ -69,11 +64,11 @@ func expectNoDataChange(t *testing.T, notifyCh <-chan *opcua.PublishNotification
 }
 
 // TestGoServer_SubscriptionReviseParams verifies Create/Modify revise clamps
-// and LifetimeCount >= 3 × MaxKeepAliveCount (Phase 14A).
+// and LifetimeCount >= 3 × MaxKeepAliveCount.
 func TestGoServer_SubscriptionReviseParams(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 
 	notifyCh := make(chan *opcua.PublishNotificationData, 8)
 	sub, _, err := c.NewSubscription().
@@ -117,12 +112,12 @@ func TestGoServer_SubscriptionReviseParams(t *testing.T) {
 }
 
 // TestGoServer_MonitoringModeLifecycle verifies Disabled/Sampling/Reporting
-// enqueue and Publish semantics (Phase 14B).
+// enqueue and Publish semantics.
 func TestGoServer_MonitoringModeLifecycle(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 42)
@@ -205,12 +200,12 @@ func TestGoServer_MonitoringModeLifecycle(t *testing.T) {
 }
 
 // TestGoServer_PublishingModeQueueWindow verifies disable → write → enable
-// delivers the Phase 13 exact window (Phase 14C).
+// delivers the exact queue window.
 func TestGoServer_PublishingModeQueueWindow(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 7)
@@ -266,12 +261,12 @@ func TestGoServer_PublishingModeQueueWindow(t *testing.T) {
 }
 
 // TestGoServer_ModifyMonitoredItemsLifecycle verifies queue resize, DiscardOldest
-// flip, and ID/ClientHandle stability (Phase 14D).
+// flip, and ID/ClientHandle stability.
 func TestGoServer_ModifyMonitoredItemsLifecycle(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 9)
@@ -369,12 +364,12 @@ func TestGoServer_ModifyMonitoredItemsLifecycle(t *testing.T) {
 }
 
 // TestGoServer_MoreNotificationsPartialDrain verifies MaxNotificationsPerPublish
-// splits a queue across Publish responses (Phase 14E).
+// splits a queue across Publish responses.
 func TestGoServer_MoreNotificationsPartialDrain(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 8)
@@ -415,12 +410,12 @@ func TestGoServer_MoreNotificationsPartialDrain(t *testing.T) {
 }
 
 // TestGoServer_IdleNoFabricatedDataChange verifies idle periods do not invent
-// DataChange notifications (Phase 14E keepalive hygiene).
+// DataChange notifications.
 func TestGoServer_IdleNoFabricatedDataChange(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 1)
@@ -445,12 +440,12 @@ func TestGoServer_IdleNoFabricatedDataChange(t *testing.T) {
 }
 
 // TestGoServer_DeleteSubscriptionLifecycle verifies delete + second-delete
-// status and sibling isolation (Phase 14F).
+// status and sibling isolation.
 func TestGoServer_DeleteSubscriptionLifecycle(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 3)
@@ -511,12 +506,12 @@ func TestGoServer_DeleteSubscriptionLifecycle(t *testing.T) {
 }
 
 // TestGoServer_DeleteMonitoredItems verifies Unmonitor + second delete status
-// (Phase 14F).
+// .
 func TestGoServer_DeleteMonitoredItems(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
-	ctx := phase14Ctx(t)
+	ctx := shortTestCtx(t)
 	nodeID := ua.NewStringNodeID(nsIdx, "Access.ReadWrite")
 
 	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 5)

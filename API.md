@@ -38,6 +38,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [SubscriptionBuilder](#subscriptionbuilder)
   - [Session](#session)
   - [ConnState](#connstate)
+  - [Subscription recovery](#subscription-recovery)
   - [RetryPolicy](#retrypolicy)
   - [ClientMetrics](#clientmetrics)
   - [Discovery (standalone functions)](#discovery-standalone-functions)
@@ -47,6 +48,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Constants](#constants)
 - [Package `ua`](#package-ua)
   - [Variant](#variant)
+  - [ExtensionObject](#extensionobject)
   - [TypeID](#typeid)
   - [NodeID](#nodeid)
   - [ExpandedNodeID](#expandednodeid)
@@ -71,6 +73,8 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [AccessController](#accesscontroller)
   - [Authentication validators](#authentication-validators)
   - [EventEmitter](#eventemitter)
+  - [Alarms & Conditions (deferred)](#alarms--conditions-deferred)
+  - [Registered Custom DataTypes](#registered-custom-datatypes)
   - [HistoryProvider](#historyprovider)
   - [ServerMetrics](#servermetrics)
 - [Package `monitor`](#package-monitor)
@@ -119,6 +123,9 @@ func (c *Client) State() ConnState
 ```
 
 `Connect` establishes a secure channel **and** creates/activates a session.
+When `AutoReconnect` is enabled (default), `Connect` also starts a background
+goroutine that recovers the session and subscriptions after a disconnect — see
+[Subscription recovery](#subscription-recovery).
 `Dial` establishes a secure channel only (no session; TCP + HEL/ACK + OpenSecureChannel).
 For TCP-only reachability checks (e.g. connection diagnostics or "ping" without creating a session), use [uacp.DialTCP](uacp package); the CLI can infer TCP failure from connection errors if that helper is not used.
 `Close` tears down session, secure channel, and TCP connection.
@@ -296,8 +303,12 @@ func (c *Client) GetEndpoints(ctx context.Context) (*ua.GetEndpointsResponse, er
 func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, notifyCh chan<- *PublishNotificationData) (*Subscription, error)
 func (c *Client) SubscriptionIDs() []uint32
 func (c *Client) SetPublishingMode(ctx context.Context, publishingEnabled bool, subscriptionIDs ...uint32) (*ua.SetPublishingModeResponse, error)
+func (c *Client) Republish(ctx context.Context, subscriptionID, sequenceNumber uint32) (*ua.RepublishResponse, error)
+func (c *Client) TransferSubscriptions(ctx context.Context, subscriptionIDs []uint32, sendInitialValues bool) (*ua.TransferSubscriptionsResponse, error)
 func (c *Client) NewSubscription() *SubscriptionBuilder
 ```
+
+`Republish` returns the protocol response without mutating subscription delivery state — callers must handle the returned notification themselves. Automatic reconnect recovery (when `AutoReconnect(true)`, the default) separately runs Transfer → Republish → Recreate and may dispatch recovered notifications through the normal subscription pipeline; see [Subscription recovery](#subscription-recovery).
 
 If the server closes the connection during CreateSubscription, the returned error may wrap `io.EOF` with a message suggesting the server may not support subscriptions; use `errors.Is(err, io.EOF)` to detect it.
 
@@ -500,12 +511,24 @@ func (b *SubscriptionBuilder) Start(ctx context.Context) (*Subscription, chan *P
 
 `Start` calls `Subscribe` then `Monitor`; if the server closes the connection during either step, the returned error may wrap `io.EOF` with a message suggesting the server may not support subscriptions or event/alarm monitoring.
 
-Example:
+Example (data change):
 
 ```go
 sub, notifyCh, err := client.NewSubscription().
     Interval(500 * time.Millisecond).
     Monitor(ua.MustParseNodeID("ns=2;s=Temperature")).
+    Start(ctx)
+```
+
+Example (events):
+
+```go
+filter := ua.NewEventFilter().
+    Select("EventType", "SourceName", "Message", "Severity", "Time").
+    Where(ua.OfType(ua.NewNumericNodeID(0, id.BaseEventType))).
+    Build()
+sub, notifyCh, err := client.NewSubscription().
+    MonitorEvents(filter, ua.MustParseNodeID("ns=2;s=Events.Source")).
     Start(ctx)
 ```
 
@@ -538,6 +561,57 @@ Connection state of a client.
 func WithConnStateHandler(f func(ConnState)) Option
 func WithConnStateChan(ch chan<- ConnState) Option
 ```
+
+For per-subscription reconnect recovery outcomes, see [Subscription recovery](#subscription-recovery).
+
+---
+
+### Subscription recovery
+
+When `AutoReconnect` is enabled (default), a lost connection triggers background
+recovery that attempts, per subscription:
+
+1. **TransferSubscriptions** onto the new session
+2. **Republish** of available sequence numbers
+3. **Recreate** the subscription if transfer fails
+
+Applications observe the result via `WithSubscriptionRecoveryHandler`:
+
+```go
+func WithSubscriptionRecoveryHandler(f func(SubscriptionRecoveryEvent)) Option
+```
+
+The handler is called synchronously from the reconnect goroutine and must not
+block. It is invoked once per subscription after each recovery attempt.
+
+```go
+type SubscriptionRecoveryOutcome string
+
+const (
+    SubscriptionRecoveryTransferred      SubscriptionRecoveryOutcome = "transferred"
+    SubscriptionRecoveryRepublished      SubscriptionRecoveryOutcome = "republished"
+    SubscriptionRecoveryRecreated        SubscriptionRecoveryOutcome = "recreated"
+    SubscriptionRecoveryPartial          SubscriptionRecoveryOutcome = "partially_recovered"
+    SubscriptionRecoveryUnrecoverableGap SubscriptionRecoveryOutcome = "unrecoverable_gap"
+)
+
+type SubscriptionRecoveryEvent struct {
+    SubscriptionID           uint32
+    Outcome                  SubscriptionRecoveryOutcome
+    AvailableSequenceNumbers []uint32 // empty when recreated / transfer failed
+    Detail                   string   // never empty; suitable for logging
+}
+```
+
+| Outcome | Meaning |
+|---------|---------|
+| `SubscriptionRecoveryTransferred` | Transfer succeeded; nothing needed to republish |
+| `SubscriptionRecoveryRepublished` | Transfer succeeded and buffered notifications were republished |
+| `SubscriptionRecoveryRecreated` | Transfer failed; a new subscription was created |
+| `SubscriptionRecoveryPartial` | Some sequence numbers republished; a gap remains |
+| `SubscriptionRecoveryUnrecoverableGap` | Expected next sequence is absent from the server retransmission buffer; notifications are permanently lost |
+
+Manual `Client.Republish` / `Client.TransferSubscriptions` do not emit these events.
 
 ---
 
@@ -631,7 +705,7 @@ All option functions return `Option` and are passed to `NewClient`:
 |----------|-------------|
 | `ApplicationName(s string)` | Application name in session |
 | `ApplicationURI(s string)` | Application URI |
-| `AutoReconnect(b bool)` | Enable/disable auto reconnect |
+| `AutoReconnect(b bool)` | Enable/disable auto reconnect (default `true`). When enabled, reconnect runs Transfer → Republish → Recreate and may emit [SubscriptionRecoveryEvent](#subscription-recovery) |
 | `ReconnectInterval(d time.Duration)` | Interval between reconnect attempts |
 | `Lifetime(d time.Duration)` | Secure channel lifetime |
 | `Locales(locale ...string)` | Preferred locales |
@@ -665,6 +739,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `SendBufferSize(n uint32)` | TCP send buffer size |
 | `WithConnStateHandler(f func(ConnState))` | Connection state callback |
 | `WithConnStateChan(ch chan<- ConnState)` | Connection state channel |
+| `WithSubscriptionRecoveryHandler(f func(SubscriptionRecoveryEvent))` | Per-subscription reconnect recovery callback (must not block; see [Subscription recovery](#subscription-recovery)) |
 | `WithMetrics(m ClientMetrics)` | Metrics handler |
 | `WithRetryPolicy(p RetryPolicy)` | Retry policy |
 | `WithLogger(l *slog.Logger)` | Logger (`*slog.Logger`; defaults to `slog.Default()`) |
@@ -724,6 +799,20 @@ func (v *Variant) Encode() ([]byte, error)
 ```
 
 `ParseVariant` parses a string into a typed variant (used by CLI tools).
+
+### ExtensionObject
+
+Register application-defined structure types so they encode/decode as OPC UA
+`ExtensionObject` values (Variable Value, method arguments, etc.):
+
+```go
+func RegisterExtensionObject(typeID *NodeID, v interface{})
+```
+
+Call once per type (typically from `init()`), passing a zero value of the Go
+type. Unknown `ExtensionObject` bodies are preserved as opaque bytes (dynamic
+structure decoding is not implemented). See also
+[Registered Custom DataTypes](#registered-custom-datatypes).
 
 ### TypeID
 
@@ -1003,6 +1092,12 @@ func (f *FieldOperand) Like(value string) *ContentFilterElement
 func OfType(typeNodeID *NodeID) *ContentFilterElement
 ```
 
+There are no fluent helpers for compound `And` / `Or` / `Not` operators. Build
+those as `*ContentFilterElement` values with the corresponding
+`FilterOperator*` constants and pass them to `Where`. The Go server evaluates
+`And`, `Or`, and `Not` in EventFilter WhereClauses; peer stacks may support a
+subset.
+
 Example:
 
 ```go
@@ -1121,6 +1216,21 @@ const (
 )
 ```
 
+#### PerformUpdateType
+
+Used by HistoryUpdate `UpdateDataDetails` / `HistoryDataUpdater.UpdateData`:
+
+```go
+type PerformUpdateType uint32
+
+const (
+    PerformUpdateTypeInsert  PerformUpdateType = 1
+    PerformUpdateTypeReplace PerformUpdateType = 2
+    PerformUpdateTypeUpdate  PerformUpdateType = 3
+    PerformUpdateTypeRemove  PerformUpdateType = 4
+)
+```
+
 #### Security policy URIs
 
 ```go
@@ -1186,6 +1296,10 @@ specification. Key pairs include:
 | `AddReferencesRequest` | `AddReferencesResponse` |
 | `DeleteReferencesRequest` | `DeleteReferencesResponse` |
 | `SetPublishingModeRequest` | `SetPublishingModeResponse` |
+| `SetMonitoringModeRequest` | `SetMonitoringModeResponse` |
+| `ModifyMonitoredItemsRequest` | `ModifyMonitoredItemsResponse` |
+| `RepublishRequest` | `RepublishResponse` |
+| `TransferSubscriptionsRequest` | `TransferSubscriptionsResponse` |
 | `HistoryUpdateRequest` | `HistoryUpdateResponse` |
 
 ---
@@ -1496,22 +1610,124 @@ type BaseEvent struct {
     Time       interface{} // time.Time
     Message    *ua.LocalizedText
     Severity   uint16
+    // Fields holds user-defined event properties resolved by name via SelectClauses.
+    // Example: Fields: map[string]*ua.Variant{"AlarmLevel": ua.MustVariant(int32(3))}
+    Fields     map[string]*ua.Variant
 }
 ```
 
 `EmitEvent` delivers a pre-built `EventFieldList` to event-monitored items.
-`EmitBaseEvent` (v1.3.0+) delivers a `BaseEventType`-shaped event to event-monitored
-items on `nodeID`, applying each item's EventFilter SelectClauses / OfType WhereClause.
-Peer interoperability of EventFilter wire encoding is not yet verified (Go↔Go covered).
+`EmitBaseEvent` delivers a `BaseEventType`-shaped event, applying each item's full
+EventFilter — including `OfType`, `Equals`, `GreaterThan(OrEqual)`, `LessThan(OrEqual)`,
+`And`, `Or`, and `Not` WhereClause operators — before selecting and delivering fields.
+
+**Custom event subtypes:** Register any `NodeClassObjectType` node in the server
+address space (any namespace) and pass its NodeID as the `OfType` operand. The server
+validates and accepts it in `CreateMonitoredItems`. Emit events with `EventType` set to
+that NodeID; the `eventTypeMatches` hierarchy walk correctly routes them.
+
+**Custom event fields:** Populate `BaseEvent.Fields` with a `map[string]*ua.Variant`.
+Any `SelectClause` BrowsePath name that matches a key in `Fields` resolves to that value.
+Unknown field names resolve to null (as per Part 4).
+
+**Monitored-item modification:** `ModifyMonitoredItems` re-validates and applies an
+updated `EventFilter` to an existing event item when a new filter is supplied.
+
+Peer EventFilter / event-subscription interoperability: open62541→Go and
+Milo→Go verified (`event.subscription`) against opcua-interop v0.5.0.
+Go↔Go covered.
+
+---
+
+### Alarms & Conditions (deferred)
+
+Full Alarms & Conditions (Part 9) state machines, Acknowledge/Confirm methods,
+and alarm catalogs are not implemented. The library exposes the standard type
+NodeId and an explicit capability probe so applications and coverage tooling
+can treat A&C as optional / deferred:
+
+```go
+var AcknowledgeableConditionTypeNodeID = ua.NewNumericNodeID(0, id.AcknowledgeableConditionType)
+
+func AlarmsConditionsSupported() bool // always false in the current library
+```
+
+---
+
+### Registered Custom DataTypes
+
+Go types can be encoded as OPC UA `ExtensionObject` values and round-tripped through the
+server without any NodeSet2 XML. Register a Go type once (typically in `init()`) with:
+
+```go
+ua.RegisterExtensionObject(dataTypeNodeID, new(MyStruct))
+```
+
+After registration the codec automatically encodes/decodes `*MyStruct` values inside any
+`ExtensionObject`, including Variable read/write and method in/out arguments.
+
+**Fixture package** – `internal/testutil/customtypes` provides four fixture types:
+
+| Type | Description |
+|---|---|
+| `MyEnum` | `int32` enumeration (Off/Idle/Running) |
+| `FlatStruct` | Flat structure with float32, int32, and string scalar fields |
+| `ArrayStruct` | Structure with a `Name` string and `Values []int32` array field |
+| `NestedStruct` | Structure embedding a `FlatStruct` with an additional `bool` field |
+
+All four are registered in `init()` against DataType NodeIDs in namespace 2 (IDs 3001-3004).
+
+**Server nodes** – `customtypes.AddNodes(ns, parent)` adds one writable Variable node per
+type under `parent` and returns a `map[string]*ua.NodeID`. `customtypes.AddMethodNode(srv,
+ns, parent)` adds a `ProcessFlat` method that accepts a `FlatStruct` argument and returns
+an `ArrayStruct`, exercising the codec through the method call path.
+
+**Tests** – `conformance/customtypes_test.go` (Go↔Go, no peer adapter) verifies:
+- Read of each custom type decodes to the correct Go struct value.
+- Write of a `FlatStruct` round-trips through the server and reads back correctly.
+- Method call with `FlatStruct` input returns the expected `ArrayStruct` output.
+
+**Dynamic structure decoding** – not implemented (deferred). Unknown `ExtensionObject`
+bodies are preserved opaquely and passed through as raw bytes.
 
 ---
 
 ### HistoryProvider
 
+Baseline server-facing HistoryRead surface. Optional capabilities are discovered
+via type assertion on the same value; missing interfaces return
+`BadHistoryOperationUnsupported` from the History services.
+
 ```go
 type HistoryProvider interface {
     ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error)
     ReleaseContinuation(continuationPoint []byte)
+}
+
+type HistoryDataUpdater interface {
+    UpdateData(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+}
+
+type RawHistoryDeleter interface {
+    DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, startTime, endTime time.Time) *ua.HistoryUpdateResult
+}
+
+type AtTimeHistoryDeleter interface {
+    DeleteAtTime(nodeID *ua.NodeID, reqTimes []time.Time) *ua.HistoryUpdateResult
+}
+
+// Default *Historian: for each requested time, return the nearest previous
+// sample (or exact match); otherwise a DataValue with StatusBadNoData.
+type AtTimeHistoryReader interface {
+    ReadAtTime(nodeID *ua.NodeID, reqTimes []time.Time, useSimpleBounds bool) (*ua.HistoryReadResult, error)
+}
+
+type ModifiedHistoryReader interface {
+    ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+}
+
+type ProcessedHistoryReader interface {
+    ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
 }
 
 type Historian struct { /* in-memory implementation */ }
@@ -1521,14 +1737,38 @@ func (h *Historian) EnableNode(nodeID *ua.NodeID, maxSamples int)
 func (h *Historian) RecordValue(nodeID *ua.NodeID, dv *ua.DataValue)
 func (h *Historian) IsEnabled(nodeID *ua.NodeID) bool
 
+// *Historian implements HistoryProvider plus all optional interfaces above:
+func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, returnBounds bool, continuationPoint []byte) (*ua.HistoryReadResult, error)
+func (h *Historian) ReleaseContinuation(continuationPoint []byte)
+func (h *Historian) UpdateData(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, startTime, endTime time.Time) *ua.HistoryUpdateResult
+func (h *Historian) DeleteAtTime(nodeID *ua.NodeID, reqTimes []time.Time) *ua.HistoryUpdateResult
+func (h *Historian) ReadAtTime(nodeID *ua.NodeID, reqTimes []time.Time, useSimpleBounds bool) (*ua.HistoryReadResult, error)
+func (h *Historian) ReadModified(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
+
 func (s *Server) SetHistorian(h HistoryProvider)
 ```
 
-Default `*Historian` (v1.3.0+) is process-lifetime only with a per-node ring buffer
-(default 1000 samples when `maxSamples <= 0`). Continuation points expire after
-30s (max 100 active). Without `SetHistorian`, HistoryRead returns unsupported /
-non-historized results. Peer HistoryRead interoperability is not yet verified
-(Go↔Go covered).
+Default `*Historian` is process-lifetime only with a per-node ring buffer
+(default 1000 samples when `maxSamples <= 0`). Continuations are session-bound
+opaque ByteStrings owned by the server (expire after 30s; max 100 active).
+
+Supported by default `*Historian`:
+- UpdateData Insert / Replace / Update semantics
+- DeleteRawModified with `isDeleteModified=false`; `true` → `BadHistoryOperationUnsupported`
+- DeleteAtTime
+- ReadAtTime (nearest previous)
+- ReadModified
+- ReadProcessed aggregates Average / Minimum / Maximum / Count
+
+Limitations:
+- `returnBounds` is accepted and stored on continuation points, but interpolated /
+  bounding values are not implemented for raw reads
+- Without `SetHistorian`, HistoryRead returns unsupported / non-historized results
+
+Peer HistoryRead raw interoperability: open62541→Go and Milo→Go verified
+(`history.read.raw`). Go↔Go covered.
 
 ---
 

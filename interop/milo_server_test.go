@@ -1648,7 +1648,7 @@ func TestMiloServer_BrowseNext(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 11 — Service Semantics (Go client → Milo server)
+// Service semantics (Go client → Milo server)
 // ---------------------------------------------------------------------------
 
 // TestMiloServer_BatchWrite verifies per-item Write results against Milo.
@@ -1722,9 +1722,9 @@ func TestMiloServer_IndexRange(t *testing.T) {
 
 	resp, err := c.Read(ctx, &ua.ReadRequest{
 		NodesToRead: []*ua.ReadValueID{{
-			NodeID: ua.NewStringNodeID(nsIdx, "Scalar.Int32"),
+			NodeID:      ua.NewStringNodeID(nsIdx, "Scalar.Int32"),
 			AttributeID: ua.AttributeIDValue,
-			IndexRange: "0:1",
+			IndexRange:  "0:1",
 		}},
 	})
 	if err != nil {
@@ -1749,9 +1749,9 @@ func TestMiloServer_IndexRangeSubset(t *testing.T) {
 
 	arrResp, err := c.Read(ctx, &ua.ReadRequest{
 		NodesToRead: []*ua.ReadValueID{{
-			NodeID: ua.NewStringNodeID(nsIdx, "Array.Int32"),
+			NodeID:      ua.NewStringNodeID(nsIdx, "Array.Int32"),
 			AttributeID: ua.AttributeIDValue,
-			IndexRange: "0:1",
+			IndexRange:  "0:1",
 		}},
 	})
 	if err != nil {

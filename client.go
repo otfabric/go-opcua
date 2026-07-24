@@ -143,6 +143,10 @@ type Client struct {
 	// stateFunc is an optional func for connection state changes. May be nil.
 	stateFunc func(ConnState)
 
+	// recoveryFunc is an optional func called after each subscription recovery
+	// attempt during automatic reconnect. May be nil.
+	recoveryFunc func(SubscriptionRecoveryEvent)
+
 	// list of cached atomicNamespaces on the server
 	atomicNamespaces atomic.Value // []string
 
@@ -171,15 +175,16 @@ func NewClient(endpoint string, opts ...Option) (*Client, error) {
 	cfg.sechan.Logger = cfg.logger
 
 	c := Client{
-		endpointURL: endpoint,
-		cfg:         cfg,
-		sechanErr:   make(chan error, 1),
-		subs:        make(map[uint32]*Subscription),
-		pendingAcks: make([]*ua.SubscriptionAcknowledgement, 0),
-		pausech:     make(chan struct{}, 2),
-		resumech:    make(chan struct{}, 2),
-		stateCh:     cfg.stateCh,
-		stateFunc:   cfg.stateFunc,
+		endpointURL:  endpoint,
+		cfg:          cfg,
+		sechanErr:    make(chan error, 1),
+		subs:         make(map[uint32]*Subscription),
+		pendingAcks:  make([]*ua.SubscriptionAcknowledgement, 0),
+		pausech:      make(chan struct{}, 2),
+		resumech:     make(chan struct{}, 2),
+		stateCh:      cfg.stateCh,
+		stateFunc:    cfg.stateFunc,
+		recoveryFunc: cfg.recoveryFunc,
 	}
 	c.pauseSubscriptions(context.Background())
 	c.setPublishTimeout(uasc.MaxTimeout)
@@ -520,9 +525,36 @@ func (c *Client) monitor(ctx context.Context) {
 
 						activeSubs = 0
 						for _, subID := range subsToRepublish {
-							if err := c.republishSubscription(ctx, subID, availableSeqs[subID]); err != nil {
+							avail := availableSeqs[subID]
+							rr, err := c.republishSubscription(ctx, subID, avail)
+							if err != nil {
 								c.cfg.logger.Debug("monitor: republish of subscription failed", "sub_id", subID)
 								subsToRecreate = append(subsToRecreate, subID)
+								// Recovery event emitted below when recreating.
+							} else {
+								// Determine outcome for this transferred subscription.
+								var outcome SubscriptionRecoveryOutcome
+								var detail string
+								switch {
+								case rr.gapDetected && rr.republishedCount > 0:
+									outcome = SubscriptionRecoveryPartial
+									detail = fmt.Sprintf("transferred with gap: %d notifications recovered, next sequence number was missing from retransmission buffer", rr.republishedCount)
+								case rr.gapDetected:
+									outcome = SubscriptionRecoveryUnrecoverableGap
+									detail = "transferred but next sequence number not in server retransmission buffer; notifications permanently lost"
+								case rr.republishedCount > 0:
+									outcome = SubscriptionRecoveryRepublished
+									detail = fmt.Sprintf("transferred and %d notifications recovered via Republish", rr.republishedCount)
+								default:
+									outcome = SubscriptionRecoveryTransferred
+									detail = "transferred successfully; no buffered notifications to recover"
+								}
+								c.notifyRecovery(SubscriptionRecoveryEvent{
+									SubscriptionID:           subID,
+									Outcome:                  outcome,
+									AvailableSequenceNumbers: avail,
+									Detail:                   detail,
+								})
 							}
 							activeSubs++
 						}
@@ -532,6 +564,11 @@ func (c *Client) monitor(ctx context.Context) {
 								c.cfg.logger.Debug("monitor: recreate subscriptions failed", "error", err)
 								continue
 							}
+							c.notifyRecovery(SubscriptionRecoveryEvent{
+								SubscriptionID: subID,
+								Outcome:        SubscriptionRecoveryRecreated,
+								Detail:         "subscription recreated as new; previous notification history lost",
+							})
 							activeSubs++
 						}
 
@@ -670,6 +707,14 @@ func (c *Client) setState(ctx context.Context, s ConnState) {
 	n := new(expvar.Int)
 	n.Set(int64(s))
 	stats.Client().Set("State", n)
+}
+
+// notifyRecovery delivers a SubscriptionRecoveryEvent to the registered
+// handler, if any. It is called synchronously from the reconnect goroutine.
+func (c *Client) notifyRecovery(ev SubscriptionRecoveryEvent) {
+	if c.recoveryFunc != nil {
+		c.recoveryFunc(ev)
+	}
 }
 
 // Namespaces returns the currently cached list of namespaces.

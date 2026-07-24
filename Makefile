@@ -8,7 +8,7 @@ TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ 
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/
 
-.PHONY: help all test coverage cover lint lint-ci fmt vet integration selfintegration interop examples test-race install-py-opcua gen check-gen
+.PHONY: help all test coverage cover lint lint-ci fmt vet integration selfintegration interop examples test-race install-py-opcua gen check-gen coverage-ledger
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -78,6 +78,11 @@ install-py-opcua: ## Install Python opcua package (for integration tests)
 gen: ## Regenerate code (stringer, go generate)
 	@echo "Regenerating code"
 	@go generate ./...
+
+coverage-ledger: ## Validate and regenerate interop/COVERAGE.md from coverage.json
+	@echo "Rendering interop coverage ledger"
+	@go run ./internal/cmd/render-interop-coverage
+	@go test -count=1 ./interop -run TestCoverageManifestValid
 
 check-gen: gen ## Verify generated files are up to date
 	@echo "Checking for generation drift"

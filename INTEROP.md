@@ -6,25 +6,47 @@ New adapter commands or fixture capabilities are requested from `opcua-interop` 
 
 ## Architecture
 
+The suite uses a dual layout that mirrors [`interop/COVERAGE.md`](interop/COVERAGE.md):
+
+1. **Peer-direction baseline** — four large files mirrored across stacks; each maps to one ledger direction column (C→O, C→M, O→S, M→S).
+2. **Capability companions** — smaller files grouped by COVERAGE.md section. `*_test.go` is Go↔Go semantics; `*_peer_test.go` is peer evidence that can earn ✅.
+
 ```
 opcua-interop
   open62541 adapter image   (C, native OPC UA stack)
   milo adapter image        (Java/JVM OPC UA stack)
          |
     go-opcua/interop/
-      harness_test.go                 lifecycle helpers, server/client helpers
-      open62541_server_test.go        TestOpen62541Server_*           (go client ← open62541 server)
-      open62541_client_test.go        TestGoServer_Open62541Client_*  (open62541 client → go server)
-      milo_server_test.go             TestMiloServer_*                (go client ← Milo server)
-      milo_client_test.go             TestGoServer_MiloClient_*       (Milo client → go server)
+      # Infrastructure
+      harness_test.go                      container lifecycle, dial helpers, fixture PKI
+      helpers_test.go                      shared Go↔Go / peer helpers
+      coverage_validate_test.go            ledger integrity (no docker)
+
+      # Peer-direction baseline (COVERAGE directions)
+      open62541_server_test.go             TestOpen62541Server_*           (C→O)
+      open62541_client_test.go             TestGoServer_Open62541Client_*  (O→S)
+      milo_server_test.go                  TestMiloServer_*                (C→M)
+      milo_client_test.go                  TestGoServer_MiloClient_*       (M→S)
+
+      # Capability companions (COVERAGE sections)
+      events_test.go / events_peer_test.go
+      history_test.go / history_peer_test.go
+      subscription_lifecycle_test.go / subscription_lifecycle_peer_test.go
+      subscription_recovery_test.go / subscription_recovery_peer_test.go
+      monitored_item_queue_test.go         subscriptions (queue windows)
+      subscription_timestamps_test.go      subscriptions (TimestampsToReturn)
+      index_range_test.go                  attribute (IndexRange edges)
+      browse_mask_test.go                  browse (ResultMask bits)
 ```
 
-Each test:
-1. Starts the adapter container with `docker run` (server tests) or runs the client container (client tests).
-2. Waits for the server ready file (`/run/opcua-interop/ready`) via `docker exec`.
-3. Exercises the `go-opcua` API under test, or parses the adapter client's JSON output.
-4. Asserts results.
-5. Tears the container down.
+Peer tests:
+1. Start the adapter container with `docker run` (server tests) or run the client container (client tests).
+2. Wait for the server ready file (`/run/opcua-interop/ready`) via `docker exec`.
+3. Exercise the `go-opcua` API under test, or parse the adapter client's JSON output.
+4. Assert results.
+5. Tear the container down.
+
+Go↔Go companions skip docker and exercise deeper semantics that peers do not yet cover. They never earn a ledger ✅.
 
 No pre-running containers. No manual steps. Tests are gated behind `-tags=interop`.
 
@@ -39,12 +61,12 @@ OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:dev \
 MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev \
 make interop
 
-# Run against published v0.4.0 release images (default)
+# Run against published v0.5.0 release images (default)
 make interop
 
 # CI — digest pinned (update interop.yml after each release)
-OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:c3bf9c6b740948449e52080021a716def08db913eb3ba0b08e397f60cbd29061 \
-MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:eb204edd8a715e071118fae89650c114687bd97e31be24819da8ba5295cce844 \
+OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:d9650e1b63fd0df1c840335d1951c848437530de0670c279ef905440a3bc77d6 \
+MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:af502530b7043763220474d6dcf0deef62215e0b3c112cc8eab9849ec1d4e321 \
 make interop
 ```
 
@@ -70,23 +92,31 @@ go test -tags=interop -v ./interop/...
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPEN62541_IMAGE` | open62541 adapter image | digest-pinned `v0.4.0` (see defaults in `harness_test.go`) |
-| `MILO_IMAGE` | Milo (Java) adapter image | digest-pinned `v0.4.0` (see defaults in `harness_test.go`) |
+| `OPEN62541_IMAGE` | open62541 adapter image | digest-pinned `v0.5.0` (see defaults in `harness_test.go`) |
+| `MILO_IMAGE` | Milo (Java) adapter image | digest-pinned `v0.5.0` (see defaults in `harness_test.go`) |
 | `OPCUA_INTEROP_FIXTURE_DIR` | Path to fixture directory containing `baseline.json` | `testdata/` |
 | `OPCUA_INTEROP_PKI_DIR` | Root of test PKI tree | `../../opcua-interop/certs/test-pki` |
+| `OPCUA_INTEROP_REQUIRE_CAPABILITIES` | Fail (instead of skip) when a peer image lacks a required client op | unset (skip) |
 
 ## Test naming
 
-| Prefix | Go role | Adapter counterpart |
-|--------|---------|---------------------|
-| `TestOpen62541Server_` | OPC UA client | open62541 server |
-| `TestGoServer_Open62541Client_` | OPC UA server | open62541 client |
-| `TestMiloServer_` | OPC UA client | Milo server |
-| `TestGoServer_MiloClient_` | OPC UA server | Milo client |
+| Prefix | Go role | Adapter counterpart | Ledger direction |
+|--------|---------|---------------------|------------------|
+| `TestOpen62541Server_` | OPC UA client | open62541 server | C→O |
+| `TestGoServer_Open62541Client_` | OPC UA server | open62541 client | O→S |
+| `TestMiloServer_` | OPC UA client | Milo server | C→M |
+| `TestGoServer_MiloClient_` | OPC UA server | Milo client | M→S |
+| `TestGoServer_` (no peer infix) | OPC UA server + client | none (Go↔Go) | companion only |
+
+Verified peer evidence names in `coverage.json` must exist as `func Test…` in `interop/*_test.go` (`TestCoverageManifestValid` enforces this).
 
 ---
 
 ## OPC UA compatibility matrix
+
+The directional ledger ([`interop/COVERAGE.md`](interop/COVERAGE.md)) is authoritative for peer ✅.
+The human-readable tables below summarize the peer-direction baseline surface.
+Capability companions for `events`, `history`, and subscription recovery are tracked only in the ledger (and in the Go↔Go companion files).
 
 Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limitation
 
@@ -266,44 +296,67 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 
 ## Current status
 
-Phases 12–17 ship in go-opcua **v1.3.0**. Adapter images are pinned to
-[opcua-interop v0.4.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0) (digest-pinned below).
+The directional compatibility ledger is the source of truth:
 
-The interop suite has **318** tests (`go test -tags=interop ./interop/...`).
+- [`interop/COVERAGE.md`](interop/COVERAGE.md) (generated)
+- [`interop/coverage.json`](interop/coverage.json) + [`interop/capabilities.json`](interop/capabilities.json)
 
-**Phases 12–14 are four-direction peer-complete** against open62541 and Milo (where the adapter CLI exposes the control).
+Regenerate with `go generate ./interop`. Go↔Go companions never earn a verified checkmark.
 
-**Phases 15–17 are implemented end-to-end and verified Go client ↔ Go server; independent peer interoperability remains deferred** (EventFilter / Republish / Transfer / HistoryRead adapter CLI not yet shipped).
+Adapter images are pinned to [opcua-interop v0.5.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0) (digest-pinned below; current digests from [actions run #30127189340](https://github.com/otfabric/opcua-interop/actions/runs/30127189340)). v0.5.0 adds `event-subscribe`, `history-read`, `republish`, and `transfer-subscriptions` (`adapter.version` `0.5.0`). When opcua-interop requirements change, Bart republishes the **same** `v0.5.0` tag/images and go-opcua digests are updated — no `v0.5.1` / RC pins. Peer capability companions use `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` in CI so missing ops fail rather than skip.
 
 | Image | Tag |
 |-------|-----|
-| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.4.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0) / `@sha256:c3bf9c6b…d29061` |
-| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.4.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0) / `@sha256:eb204edd…cce844` |
+| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.5.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0) / `@sha256:d9650e1b…bc77d6` |
+| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.5.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0) / `@sha256:af502530…d4e321` |
 
-> **Local dev images:** Use `OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:dev` and `MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev` when testing local adapter changes. The defaults pin to a released version for reproducibility.
+> **Local dev images:** Override `OPEN62541_IMAGE` / `MILO_IMAGE` when testing unreleased adapter builds.
 
-### Phases 12–14 — peer-verified (v0.4.0)
+**Interop claim rule:** only security policy / identity-token modes with positive and negative peer tests in the ledger are claimed interoperable. Implemented-but-unverified modes (for example issued tokens) stay labelled accordingly.
 
-- IndexRange subsets, Read `TimestampsToReturn`, Write EncodingMask, Browse ResultMask / BrowseNext release, SecureChannel trust
-- Exact `QueueSize` / `DiscardOldest` windows + subscription `TimestampsToReturn`
-- `subscribe` — `subscriptionId` + revised CreateSubscription fields
-- `subscription-lifecycle` — scenarios `revise`, `publishing-mode`, `monitoring-mode`, `delete`
-- Go↔Go lifecycle tests in `interop/phase13_test.go` / `phase14_test.go` + adapter reverse in `phase14_adapter_test.go`
+### Peer rows verified on v0.5.0
 
-### Phases 15–17 — Go↔Go only (peer pending)
+| Capability | Directions | Evidence file |
+|---|---|---|
+| `event.subscription` | O→S, M→S | `events_peer_test.go` |
+| `history.read.raw` | O→S, M→S | `history_peer_test.go` |
+| `subscription.server.republish` | O→S | `subscription_recovery_peer_test.go` |
+| `subscription.server.transfer` | M→S | `subscription_recovery_peer_test.go` |
+| `subscription.client.republish` | C→O | `subscription_recovery_peer_test.go` |
 
-| Capability | Go→Go | Peer |
-|-----------|:---:|:---:|
-| Event subscription — EventFilter / OfType / EmitBaseEvent | ✓ | pending |
-| Event subscription — invalid filter rejection | ✓ | pending |
-| Republish — available / missing / invalid | ✓ | pending |
-| TransferSubscriptions — ownership / invalid | ✓ | pending |
-| ACK removes sequence from available | ✓ | pending |
-| HistoryRead — raw / continuation / modified reject / non-historized | ✓ | pending |
+### Unverified / deferred (see COVERAGE.md)
 
-### Adapter interop gaps (next peer-closure phase)
+Broader event-filter, full raw-history edges, and custom-type peer rows remain `unverified` until dedicated tests prove them. Optional profiles (A&C, LDS/GDS, dynamic custom-type decode) are `deferred`.
 
-- `subscribe --event` — event subscription with EventFilter (open62541 + Milo)
-- `history-read --raw` — HistoryRead with ReadRawModifiedDetails (open62541 + Milo)
-- `republish` — Republish service call (open62541 + Milo)
-- `transfer` — TransferSubscriptions service call (open62541 + Milo)
+#### events — Go↔Go companions
+
+All tests in `interop/events_test.go` exercise a Go server + Go client with no peer adapter:
+
+| Test | What it covers |
+|---|---|
+| `TestGoServer_EventSubscription_BasicLifecycle` | CreateMonitoredItems + EmitBaseEvent + Publish delivery |
+| `TestGoServer_EventFilter_InvalidReject` | Rejection of missing/empty filter; lenient acceptance of unsupported Where ops |
+| `TestGoServer_EventMultipleEmissions` | Five events delivered in severity order |
+| `TestGoServer_CustomEventSubtype` | User-defined `ObjectType` node accepted as `OfType` operand; non-matching type suppressed |
+| `TestGoServer_WhereClause_SeverityFilter` | `GreaterThanOrEqual` WhereClause operator filters events by `Severity` |
+| `TestGoServer_CustomEventFields` | User fields from `BaseEvent.Fields` selected by name and delivered |
+| `TestGoServer_ModifyMonitoredItem_EventFilter` | ModifyMonitoredItems updates the live event filter; post-modify filter enforced |
+
+Peer event **subscription** is verified on opcua-interop v0.5.0 (`event.subscription` O→S and M→S). Broader EventFilter peer rows (SelectClauses / OfType / Where / emission) remain unverified in the ledger.
+
+#### custom-types — Go↔Go companions
+
+Tests in `conformance/customtypes_test.go` exercise a Go server + Go client:
+
+- `TestCustomTypes_FlatStruct_Read` – flat struct decodes to correct Go struct.
+- `TestCustomTypes_FlatStruct_Write` – write round-trip persists through the server.
+- `TestCustomTypes_ArrayStruct_Read` – struct with `[]int32` array field decodes correctly.
+- `TestCustomTypes_NestedStruct_Read` – nested struct (embedded `FlatStruct`) decodes correctly.
+- `TestCustomTypes_Enum_Read` – int32 enumeration decodes to the correct Go value.
+- `TestCustomTypes_Method_RoundTrip` – method call with `FlatStruct` input returns `ArrayStruct` output.
+
+Peer (Milo/open62541) custom-type interop is not yet verified (`custom.types.registered` remains unverified; `custom.types.dynamic-decode` is deferred).
+
+#### custom-types — dynamic structure decoding
+
+Deferred. Unknown `ExtensionObject` bodies are preserved opaquely as raw bytes and not decoded dynamically.

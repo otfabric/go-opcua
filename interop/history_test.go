@@ -2,6 +2,9 @@
 
 // SPDX-License-Identifier: MIT
 
+// Go↔Go HistoryRead companions (raw, continuation, modified).
+// COVERAGE.md: history (companion only — peer evidence lives in history_peer_test.go)
+
 package interop
 
 import (
@@ -90,7 +93,7 @@ func startGoServerWithHistory(t *testing.T) (string, *server.Server, *server.His
 	return fmt.Sprintf("opc.tcp://localhost:%d", port), s, hist
 }
 
-// TestGoServer_HistoryReadRaw verifies basic HistoryRead with ReadRawModifiedDetails (Phase 17).
+// TestGoServer_HistoryReadRaw verifies basic HistoryRead with ReadRawModifiedDetails.
 func TestGoServer_HistoryReadRaw(t *testing.T) {
 	endpoint, _, _ := startGoServerWithHistory(t)
 	c := dialClient(t, endpoint)
@@ -152,7 +155,7 @@ func TestGoServer_HistoryReadRaw(t *testing.T) {
 	}
 }
 
-// TestGoServer_HistoryReadWithContinuation verifies continuation point pagination (Phase 17).
+// TestGoServer_HistoryReadWithContinuation verifies continuation point pagination.
 func TestGoServer_HistoryReadWithContinuation(t *testing.T) {
 	endpoint, _, _ := startGoServerWithHistory(t)
 	c := dialClient(t, endpoint)
@@ -219,20 +222,30 @@ func TestGoServer_HistoryReadWithContinuation(t *testing.T) {
 	t.Logf("collected %d historical values via continuation points", len(allValues))
 }
 
-// TestGoServer_HistoryReadModifiedRejected verifies IsReadModified=true is rejected (Phase 17).
-func TestGoServer_HistoryReadModifiedRejected(t *testing.T) {
-	endpoint, _, _ := startGoServerWithHistory(t)
+// TestGoServer_HistoryReadModified verifies IsReadModified=true via the default
+// *Historian ModifiedHistoryReader.
+func TestGoServer_HistoryReadModified(t *testing.T) {
+	endpoint, _, hist := startGoServerWithHistory(t)
 	c := dialClient(t, endpoint)
 	_, nsIdx := findNS(t, c)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	histNodeID := ua.NewStringNodeID(nsIdx, "History.Temperature")
+	baseTime := time.Date(2026, 7, 24, 10, 0, 0, 0, time.UTC)
+	upd := hist.UpdateData(histNodeID, ua.PerformUpdateTypeReplace, []*ua.DataValue{{
+		EncodingMask:    ua.DataValueValue | ua.DataValueSourceTimestamp,
+		Value:           ua.MustVariant(float64(99)),
+		SourceTimestamp: baseTime,
+	}})
+	if upd.StatusCode != ua.StatusOK || len(upd.OperationResults) == 0 || upd.OperationResults[0] != ua.StatusOK {
+		t.Fatalf("UpdateData replace: %+v", upd)
+	}
 
 	details := &ua.ReadRawModifiedDetails{
 		IsReadModified:   true,
-		StartTime:        time.Now().Add(-1 * time.Hour),
-		EndTime:          time.Now(),
+		StartTime:        baseTime.Add(-time.Second),
+		EndTime:          baseTime.Add(time.Hour),
 		NumValuesPerNode: 10,
 	}
 
@@ -251,14 +264,17 @@ func TestGoServer_HistoryReadModifiedRejected(t *testing.T) {
 	if err != nil {
 		t.Fatalf("HistoryRead: %v", err)
 	}
-
-	if resp.Results[0].StatusCode != ua.StatusBadHistoryOperationInvalid {
-		t.Fatalf("status=%v, want BadHistoryOperationInvalid", resp.Results[0].StatusCode)
+	if resp.Results[0].StatusCode != ua.StatusOK {
+		t.Fatalf("status=%v, want StatusOK", resp.Results[0].StatusCode)
+	}
+	mod, ok := resp.Results[0].HistoryData.Value.(*ua.HistoryModifiedData)
+	if !ok || mod == nil || len(mod.DataValues) == 0 {
+		t.Fatalf("expected HistoryModifiedData with values, got %#v", resp.Results[0].HistoryData)
 	}
 }
 
 // TestGoServer_HistoryReadNonHistorizedNode verifies that reading history from a
-// non-historized node returns BadHistoryOperationUnsupported (Phase 17).
+// non-historized node returns BadHistoryOperationUnsupported.
 func TestGoServer_HistoryReadNonHistorizedNode(t *testing.T) {
 	endpoint, _, _ := startGoServerWithHistory(t)
 	c := dialClient(t, endpoint)
@@ -297,7 +313,7 @@ func TestGoServer_HistoryReadNonHistorizedNode(t *testing.T) {
 	}
 }
 
-// TestGoServer_HistoryRecordAndRead verifies recording new samples and immediately reading them back (Phase 17).
+// TestGoServer_HistoryRecordAndRead verifies recording new samples and immediately reading them back.
 func TestGoServer_HistoryRecordAndRead(t *testing.T) {
 	endpoint, _, hist := startGoServerWithHistory(t)
 	c := dialClient(t, endpoint)

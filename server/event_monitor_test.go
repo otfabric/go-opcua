@@ -16,7 +16,8 @@ func TestValidateEventFilter_Valid(t *testing.T) {
 		Where(ua.OfType(ua.NewNumericNodeID(0, id.BaseEventType))).
 		Build()
 
-	emi, result, sc := validateEventFilter(filter)
+	var s *Server
+	emi, result, sc := s.validateEventFilter(filter)
 	if sc != ua.StatusOK {
 		t.Fatalf("validateEventFilter status=%v", sc)
 	}
@@ -43,29 +44,32 @@ func TestValidateEventFilter_Valid(t *testing.T) {
 }
 
 func TestValidateEventFilter_NilFilter(t *testing.T) {
-	_, _, sc := validateEventFilter(nil)
+	var s *Server
+	_, _, sc := s.validateEventFilter(nil)
 	if sc != ua.StatusBadEventFilterInvalid {
 		t.Fatalf("status=%v, want BadEventFilterInvalid", sc)
 	}
 }
 
 func TestValidateEventFilter_EmptySelect(t *testing.T) {
+	var s *Server
 	filter := &ua.EventFilter{
 		SelectClauses: []*ua.SimpleAttributeOperand{},
 		WhereClause:   &ua.ContentFilter{},
 	}
-	_, _, sc := validateEventFilter(filter)
+	_, _, sc := s.validateEventFilter(filter)
 	if sc != ua.StatusBadEventFilterInvalid {
 		t.Fatalf("status=%v, want BadEventFilterInvalid", sc)
 	}
 }
 
 func TestValidateEventFilter_NoWhere(t *testing.T) {
+	var s *Server
 	filter := ua.NewEventFilter().
 		Select("EventId", "Severity").
 		Build()
 
-	emi, _, sc := validateEventFilter(filter)
+	emi, _, sc := s.validateEventFilter(filter)
 	if sc != ua.StatusOK {
 		t.Fatalf("status=%v", sc)
 	}
@@ -75,12 +79,27 @@ func TestValidateEventFilter_NoWhere(t *testing.T) {
 }
 
 func TestValidateEventFilter_UnsupportedOperator(t *testing.T) {
-	filter := ua.NewEventFilter().
-		Select("Severity").
-		Where(ua.Field("Severity").GreaterThan(uint16(100))).
-		Build()
+	var s *Server
+	// Like (6) is not yet implemented — should be accepted at creation with
+	// BadFilterOperatorUnsupported on the element, not fail the whole filter.
+	filter := &ua.EventFilter{
+		SelectClauses: []*ua.SimpleAttributeOperand{
+			{BrowsePath: []*ua.QualifiedName{{Name: "Severity"}}},
+		},
+		WhereClause: &ua.ContentFilter{
+			Elements: []*ua.ContentFilterElement{
+				{
+					FilterOperator: ua.FilterOperatorLike,
+					FilterOperands: []*ua.ExtensionObject{
+						ua.NewExtensionObject(&ua.LiteralOperand{Value: ua.MustVariant("*")}),
+						ua.NewExtensionObject(&ua.LiteralOperand{Value: ua.MustVariant("foo*")}),
+					},
+				},
+			},
+		},
+	}
 
-	_, result, sc := validateEventFilter(filter)
+	_, result, sc := s.validateEventFilter(filter)
 	if sc != ua.StatusOK {
 		t.Fatalf("status=%v (should succeed with unsupported where on individual elements)", sc)
 	}
@@ -97,12 +116,14 @@ func TestValidateEventFilter_UnsupportedOperator(t *testing.T) {
 }
 
 func TestValidateEventFilter_UnknownEventType(t *testing.T) {
+	// A real server is needed so isKnownEventType can reject the unknown ns=0 ID.
+	s := newTestServer()
 	filter := ua.NewEventFilter().
 		Select("Severity").
 		Where(ua.OfType(ua.NewNumericNodeID(0, 99999))).
 		Build()
 
-	_, result, sc := validateEventFilter(filter)
+	_, result, sc := s.validateEventFilter(filter)
 	if sc != ua.StatusOK {
 		t.Fatalf("status=%v", sc)
 	}
@@ -148,23 +169,24 @@ func TestSelectEventFields(t *testing.T) {
 }
 
 func TestEventTypeMatches(t *testing.T) {
+	var s *Server
 	base := ua.NewNumericNodeID(0, id.BaseEventType)
 	audit := ua.NewNumericNodeID(0, id.AuditEventType)
 	system := ua.NewNumericNodeID(0, id.SystemEventType)
 
 	// BaseEventType matches everything.
-	if !eventTypeMatches(audit, base) {
+	if !s.eventTypeMatches(audit, base) {
 		t.Error("audit should match BaseEventType filter")
 	}
-	if !eventTypeMatches(system, base) {
+	if !s.eventTypeMatches(system, base) {
 		t.Error("system should match BaseEventType filter")
 	}
 	// Exact match.
-	if !eventTypeMatches(audit, audit) {
+	if !s.eventTypeMatches(audit, audit) {
 		t.Error("audit should match audit")
 	}
-	// Non-base filter only matches same type.
-	if eventTypeMatches(system, audit) {
+	// Non-base filter only matches same type (nil server → no hierarchy walk).
+	if s.eventTypeMatches(system, audit) {
 		t.Error("system should not match audit filter")
 	}
 }

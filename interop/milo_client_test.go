@@ -1107,7 +1107,7 @@ func TestGoServer_MiloClient_UntrustedCert_Rejected(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 11 — Service Semantics and Error Handling
+// Service semantics and error handling
 // ---------------------------------------------------------------------------
 
 // TestGoServer_MiloClient_BatchWrite verifies per-item WriteResponse.Results

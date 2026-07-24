@@ -2,12 +2,15 @@
 
 // SPDX-License-Identifier: MIT
 
+// Go↔Go Republish / TransferSubscriptions companions.
+// COVERAGE.md: subscriptions / subscription.*.republish, subscription.*.transfer
+// (companion only — peer evidence lives in subscription_recovery_peer_test.go)
+
 package interop
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 	"time"
 
@@ -16,7 +19,7 @@ import (
 )
 
 // TestGoServer_RepublishAvailableSequence verifies that Republish returns a
-// previously sent notification message (Phase 16).
+// previously sent notification message.
 func TestGoServer_RepublishAvailableSequence(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
@@ -49,25 +52,12 @@ func TestGoServer_RepublishAvailableSequence(t *testing.T) {
 
 	// At this point the server's subscription should have stored at least seq=1 and seq=2.
 	// Republish seq=1 (the initial value notification).
-	var repubResp *ua.RepublishResponse
-	err = c.Send(ctx, &ua.RepublishRequest{
-		SubscriptionID:           sub.SubscriptionID,
-		RetransmitSequenceNumber: 1,
-	}, func(r ua.Response) error {
-		repubResp = r.(*ua.RepublishResponse)
-		return nil
-	})
+	repubResp, err := c.Republish(ctx, sub.SubscriptionID, 1)
 	if err != nil {
 		// If the seq was already ACKed, we might get BadMessageNotAvailable.
 		if errors.Is(err, ua.StatusBadMessageNotAvailable) {
 			t.Log("seq 1 already acknowledged, trying seq 2")
-			err = c.Send(ctx, &ua.RepublishRequest{
-				SubscriptionID:           sub.SubscriptionID,
-				RetransmitSequenceNumber: 2,
-			}, func(r ua.Response) error {
-				repubResp = r.(*ua.RepublishResponse)
-				return nil
-			})
+			repubResp, err = c.Republish(ctx, sub.SubscriptionID, 2)
 			if err != nil {
 				t.Skipf("all sequences already acknowledged: %v", err)
 			}
@@ -87,7 +77,7 @@ func TestGoServer_RepublishAvailableSequence(t *testing.T) {
 }
 
 // TestGoServer_RepublishMissingSequence verifies that Republish returns
-// BadMessageNotAvailable for an unknown sequence number (Phase 16).
+// BadMessageNotAvailable for an unknown sequence number.
 func TestGoServer_RepublishMissingSequence(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
@@ -104,14 +94,7 @@ func TestGoServer_RepublishMissingSequence(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = sub.Cancel(ctx) })
 
-	var repubResp *ua.RepublishResponse
-	err = c.Send(ctx, &ua.RepublishRequest{
-		SubscriptionID:           sub.SubscriptionID,
-		RetransmitSequenceNumber: 0xDEADBEEF,
-	}, func(r ua.Response) error {
-		repubResp = r.(*ua.RepublishResponse)
-		return nil
-	})
+	repubResp, err := c.Republish(ctx, sub.SubscriptionID, 0xDEADBEEF)
 	// The client may surface the non-OK service result as an error.
 	if err != nil {
 		if errors.Is(err, ua.StatusBadMessageNotAvailable) {
@@ -125,21 +108,14 @@ func TestGoServer_RepublishMissingSequence(t *testing.T) {
 }
 
 // TestGoServer_RepublishInvalidSubscription verifies that Republish returns
-// BadSubscriptionIDInvalid for an unknown subscription (Phase 16).
+// BadSubscriptionIDInvalid for an unknown subscription.
 func TestGoServer_RepublishInvalidSubscription(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	var repubResp *ua.RepublishResponse
-	err := c.Send(ctx, &ua.RepublishRequest{
-		SubscriptionID:           0xFFFFFFFF,
-		RetransmitSequenceNumber: 1,
-	}, func(r ua.Response) error {
-		repubResp = r.(*ua.RepublishResponse)
-		return nil
-	})
+	repubResp, err := c.Republish(ctx, 0xFFFFFFFF, 1)
 	if err != nil {
 		if errors.Is(err, ua.StatusBadSubscriptionIDInvalid) {
 			return // pass
@@ -152,7 +128,7 @@ func TestGoServer_RepublishInvalidSubscription(t *testing.T) {
 }
 
 // TestGoServer_TransferSubscription verifies TransferSubscriptions ownership
-// reassignment and AvailableSequenceNumbers (Phase 16).
+// reassignment and AvailableSequenceNumbers.
 func TestGoServer_TransferSubscription(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
@@ -181,14 +157,7 @@ func TestGoServer_TransferSubscription(t *testing.T) {
 	_ = collectDataChange(t, notifyCh, 1, 5*time.Second)
 
 	// Transfer the subscription to itself (same session, same channel).
-	var transferResp *ua.TransferSubscriptionsResponse
-	err = c.Send(ctx, &ua.TransferSubscriptionsRequest{
-		SubscriptionIDs:   []uint32{sub.SubscriptionID},
-		SendInitialValues: false,
-	}, func(r ua.Response) error {
-		transferResp = r.(*ua.TransferSubscriptionsResponse)
-		return nil
-	})
+	transferResp, err := c.TransferSubscriptions(ctx, []uint32{sub.SubscriptionID}, false)
 	if err != nil {
 		t.Fatalf("TransferSubscriptions: %v", err)
 	}
@@ -202,21 +171,14 @@ func TestGoServer_TransferSubscription(t *testing.T) {
 }
 
 // TestGoServer_TransferSubscriptionInvalid verifies TransferSubscriptions with
-// an unknown subscription ID returns BadSubscriptionIDInvalid (Phase 16).
+// an unknown subscription ID returns BadSubscriptionIDInvalid.
 func TestGoServer_TransferSubscriptionInvalid(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	var transferResp *ua.TransferSubscriptionsResponse
-	err := c.Send(ctx, &ua.TransferSubscriptionsRequest{
-		SubscriptionIDs:   []uint32{0xBEEF},
-		SendInitialValues: false,
-	}, func(r ua.Response) error {
-		transferResp = r.(*ua.TransferSubscriptionsResponse)
-		return nil
-	})
+	transferResp, err := c.TransferSubscriptions(ctx, []uint32{0xBEEF}, false)
 	if err != nil {
 		t.Fatalf("TransferSubscriptions: %v", err)
 	}
@@ -229,7 +191,7 @@ func TestGoServer_TransferSubscriptionInvalid(t *testing.T) {
 }
 
 // TestGoServer_ACKRemovesFromAvailable verifies that acknowledging a sequence
-// number removes it from AvailableSequenceNumbers (Phase 16/14 integration).
+// number removes it from AvailableSequenceNumbers.
 func TestGoServer_ACKRemovesFromAvailable(t *testing.T) {
 	endpoint := startGoServer(t)
 	c := dialClient(t, endpoint)
@@ -282,5 +244,4 @@ func TestGoServer_ACKRemovesFromAvailable(t *testing.T) {
 		t.Skip("no available sequences to verify ACK removal")
 	}
 
-	_ = fmt.Sprintf("phase16 ACK test helper")
 }

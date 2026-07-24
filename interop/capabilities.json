@@ -1,0 +1,840 @@
+{
+  "capabilities": [
+    {
+      "id": "session.connect",
+      "title": "Connect / disconnect",
+      "profile": "session",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "session.namespace",
+      "title": "Namespace discovery",
+      "profile": "session",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "discovery.endpoints",
+      "title": "GetEndpoints",
+      "profile": "discovery",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "discovery.find-servers",
+      "title": "FindServers",
+      "profile": "discovery",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "discovery.find-servers-on-network",
+      "title": "FindServersOnNetwork",
+      "profile": "discovery",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "discovery.lds-registration",
+      "title": "LDS registration",
+      "profile": "discovery",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "browse.objects",
+      "title": "Browse Objects folder",
+      "profile": "browse",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "browse.namespace",
+      "title": "Browse interop namespace",
+      "profile": "browse",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "browse.scalars-folder",
+      "title": "Browse Scalars folder",
+      "profile": "browse",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "browse.next",
+      "title": "BrowseNext pagination",
+      "profile": "browse",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "browse.next-release",
+      "title": "BrowseNext early release",
+      "profile": "browse",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "browse.result-mask",
+      "title": "Browse ResultMask",
+      "profile": "browse",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "browse.filtering",
+      "title": "Browse NodeClassMask / IncludeSubtypes",
+      "profile": "browse",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "read.scalar",
+      "title": "Read scalar values",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "read.array",
+      "title": "Read array values",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "read.batch",
+      "title": "Batch Read",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "read.dynamic",
+      "title": "Dynamic counter read",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "read.timestamps",
+      "title": "Read TimestampsToReturn",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "read.index-range",
+      "title": "IndexRange Read/Write",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "read.invalid-node",
+      "title": "Invalid NodeId service results",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "write.value",
+      "title": "Write and read-back",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "write.batch",
+      "title": "Batch Write per-item StatusCodes",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "write.type-mismatch",
+      "title": "Write type mismatch",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "write.encoding-mask",
+      "title": "Write EncodingMask / BadWriteNotSupported",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "datavalue.timestamps",
+      "title": "DataValue source + server timestamp",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "datavalue.uncertain",
+      "title": "DataValue Uncertain status",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "access.read-only",
+      "title": "Access.ReadOnly write rejection",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "access.write-only",
+      "title": "Access.WriteOnly read rejection",
+      "profile": "attribute",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "method.call",
+      "title": "Method call",
+      "profile": "method",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "method.validation",
+      "title": "Method argument validation",
+      "profile": "method",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.data-change",
+      "title": "Subscription data-change",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.queue-window",
+      "title": "Exact QueueSize / DiscardOldest windows",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.timestamps",
+      "title": "Subscription TimestampsToReturn",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.lifecycle.revise",
+      "title": "Subscription lifecycle revise",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.lifecycle.delete",
+      "title": "Subscription lifecycle delete",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.client.republish",
+      "title": "Client Republish helper",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "subscription.server.republish",
+      "title": "Server Republish handler",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.client.transfer",
+      "title": "Client TransferSubscriptions helper",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "subscription.server.transfer",
+      "title": "Server TransferSubscriptions handler",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "subscription.recovery.reconnect",
+      "title": "Automatic subscription recovery",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "event.subscription",
+      "title": "Event subscription create",
+      "profile": "events",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "event.filter.select-clauses",
+      "title": "EventFilter SelectClauses",
+      "profile": "events",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "event.filter.of-type",
+      "title": "EventFilter OfType",
+      "profile": "events",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "event.filter.where-clause",
+      "title": "EventFilter WhereClause",
+      "profile": "events",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "event.notification.decode",
+      "title": "Event notification decode",
+      "profile": "events",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "event.emission.base",
+      "title": "BaseEvent emission",
+      "profile": "events",
+      "applicableDirections": [
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "event.emission.custom",
+      "title": "Custom event emission",
+      "profile": "events",
+      "applicableDirections": [
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "event.queue-overflow",
+      "title": "Event queue overflow",
+      "profile": "events",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.raw",
+      "title": "HistoryRead raw",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.continuation",
+      "title": "HistoryRead continuation points",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.modified",
+      "title": "HistoryRead modified",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.at-time",
+      "title": "HistoryRead at-time",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.processed",
+      "title": "HistoryRead processed",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.events",
+      "title": "HistoryRead events",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.update.data",
+      "title": "HistoryUpdate data",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.update.events",
+      "title": "HistoryUpdate events",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.delete",
+      "title": "History delete",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.basic256sha256.sign",
+      "title": "Basic256Sha256 / Sign",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.basic256sha256.sign-encrypt",
+      "title": "Basic256Sha256 / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.aes128.sign-encrypt",
+      "title": "Aes128_Sha256_RsaOaep / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.aes256.sign-encrypt",
+      "title": "Aes256_Sha256_RsaPss / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.cert.untrusted",
+      "title": "Untrusted cert rejection",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.cert.trusted",
+      "title": "Trusted cert accepted",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.username.valid",
+      "title": "Username valid credentials",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.username.invalid",
+      "title": "Username invalid credentials",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.issued-token",
+      "title": "Issued identity token",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.cert.chains",
+      "title": "Intermediate certificate chains",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.cert.crl",
+      "title": "Certificate revocation (CRL)",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.channel.renewal",
+      "title": "SecureChannel renewal under subscription",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "query.first",
+      "title": "QueryFirst",
+      "profile": "query",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "query.next",
+      "title": "QueryNext",
+      "profile": "query",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "nodemgmt.add-nodes",
+      "title": "AddNodes",
+      "profile": "node-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "nodemgmt.delete-nodes",
+      "title": "DeleteNodes",
+      "profile": "node-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "translate.browse-path",
+      "title": "TranslateBrowsePathsToNodeIDs",
+      "profile": "view",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "custom.types.registered",
+      "title": "Registered custom DataTypes",
+      "profile": "custom-types",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "custom.types.dynamic",
+      "title": "Dynamic structure decoding",
+      "profile": "custom-types",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "alarms.acknowledgeable",
+      "title": "AcknowledgeableConditionType",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "nodeset2.import",
+      "title": "NodeSet2 import peer model",
+      "profile": "information-model",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    }
+  ]
+}

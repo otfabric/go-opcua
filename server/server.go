@@ -75,6 +75,9 @@ type Server struct {
 
 	// historian provides optional HistoryRead support (nil = unsupported).
 	historian HistoryProvider
+
+	// historyCPs binds opaque HistoryRead continuation points to sessions.
+	historyCPs *historyCPRegistry
 }
 
 type serverConfig struct {
@@ -193,6 +196,7 @@ func New(opts ...Option) (*Server, error) {
 		handlers:   make(map[uint16]Handler),
 		methods:    make(map[string]MethodHandler),
 		eventItems: newEventItemRegistry(),
+		historyCPs: newHistoryCPRegistry(nil),
 		namespaces: []NameSpace{
 			NewNameSpace("http://opcfoundation.org/UA/"), // ns:0
 		},
@@ -276,6 +280,8 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 		sb:         newSessionBroker(cfg.logger),
 		handlers:   make(map[uint16]Handler),
 		methods:    make(map[string]MethodHandler),
+		eventItems: newEventItemRegistry(),
+		historyCPs: newHistoryCPRegistry(nil),
 		namespaces: nil, // caller fills this in
 		status: &ua.ServerStatusDataType{
 			StartTime:      time.Now(),

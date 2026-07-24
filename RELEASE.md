@@ -7,16 +7,16 @@
 
 ### Summary
 
-Minor release focused on **Part 4 correctness** for Read/Write/Browse, **subscription and monitored-item semantics**, **event subscriptions**, **subscription recovery**, and **raw historical access** — with matching public APIs and a large expansion of open62541 / Milo interop coverage ([opcua-interop v0.4.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0)). Also absorbs race-detector test timeout fixes that were prepared as an unreleased v1.2.1 patch.
+Minor release focused on **Part 4 correctness** for Read/Write/Browse, **subscription and monitored-item semantics**, **event subscriptions**, **subscription recovery**, and **historical access** — with matching public APIs and a large expansion of open62541 / Milo interop coverage ([opcua-interop v0.5.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0)). Also absorbs race-detector test timeout fixes that were prepared as an unreleased v1.2.1 patch.
 
 Highlights:
 - **IndexRange** on array and matrix Values, with Part 4 status codes and helpers in `ua`
 - **Monitored-item queues** that honor `QueueSize`, `DiscardOldest`, and the Overflow InfoBit
 - **Subscription lifecycle** — revise clamps, monitoring/publishing modes, `MoreNotifications`, Publish ACK, delete and lifetime expiry
-- **Events** — `EventFilter` (SelectClauses / OfType) and `server.EmitBaseEvent`
-- **Republish / TransferSubscriptions** on the server
-- **Raw HistoryRead** via pluggable `HistoryProvider` / in-memory `*Historian`
-- **318** interop tests against digest-pinned adapter images
+- **Events** — `EventFilter` (SelectClauses / OfType / comparison WhereClauses), `EmitBaseEvent` with custom `Fields`
+- **Republish / TransferSubscriptions** on server and client (`Client.Republish`, `Client.TransferSubscriptions`) plus `WithSubscriptionRecoveryHandler`
+- **HistoryRead / HistoryUpdate** via pluggable `HistoryProvider`; default `*Historian` also covers update/delete/at-time/modified/processed aggregates
+- **~330** interop tests against digest-pinned adapter images
 - **Server test suite under `-race`** no longer times out in CI (nodeset import cache + Query subtype recursion guard)
 
 No intentional breaking changes for correct callers. Servers that previously ignored queue or monitoring-mode parameters now follow Part 4 — notification batches may differ.
@@ -45,24 +45,26 @@ No intentional breaking changes for correct callers. Servers that previously ign
 
 ### Events
 
-- Event monitored items accept `EventFilter` SelectClauses and OfType WhereClause; invalid filters are rejected.
-- `EmitBaseEvent` delivers a `BaseEventType`-shaped event and applies each item’s filter.
+- Event monitored items accept `EventFilter` SelectClauses and WhereClause operators (`OfType`, comparisons, `And`/`Or`/`Not`); invalid filters are rejected.
+- `EmitBaseEvent` delivers a `BaseEventType`-shaped event (optional custom `Fields`) and applies each item’s filter.
 - `EmitEvent` remains for raw `EventFieldList` delivery.
+- `ModifyMonitoredItems` can update a live EventFilter.
 - Event queues are bounded (max 50). Alarms/Conditions, historical events, and shelving are not included.
 
 ### Subscription recovery
 
-- **Republish** — returns available sequences; missing → `BadMessageNotAvailable`.
-- **TransferSubscriptions** — transfers ownership and reports AvailableSequenceNumbers.
+- **Server Republish / TransferSubscriptions** — returns available sequences; missing → `BadMessageNotAvailable`; transfer reassigns session/channel under lock.
+- **Client helpers** — `Client.Republish` (protocol response only; does not mutate notify channels) and `Client.TransferSubscriptions`.
+- **`WithSubscriptionRecoveryHandler`** — observes Transfer → Republish → Recreate outcomes during `AutoReconnect`.
 - ACK removes sequences from the retransmission set.
 - `SendInitialValues` is accepted but currently a no-op. Durable subscriptions are not included.
 
-### Historical Access (raw)
+### Historical Access
 
 - Pluggable `HistoryProvider`; default in-memory `*Historian` (per-node ring buffer, default 1000 samples, process-lifetime only).
-- Raw `ReadRawModifiedDetails` with continuation points (30s TTL, max 100 active).
-- Modified history rejected; non-historized / invalid continuation return per-node StatusCodes.
-- Aggregates, modified history, and historical events are not included. HistoryRead stays unsupported until `SetHistorian` is configured.
+- Raw `ReadRawModifiedDetails` with session-bound continuation points (30s TTL, max 100 active).
+- Optional interfaces on the same provider (implemented by `*Historian`): UpdateData, DeleteRawModified (`isDeleteModified=false`), DeleteAtTime, ReadAtTime, ReadModified, ReadProcessed (Average/Minimum/Maximum/Count).
+- `returnBounds` is accepted but bounding/interpolation is not implemented for raw reads. Historical events are not included. HistoryRead stays unsupported until `SetHistorian` is configured.
 
 ### New and changed public APIs
 
@@ -83,6 +85,14 @@ func ApplyTimestampsToReturn(dv *DataValue, ts TimestampsToReturn) StatusCode
 
 Used by the server for Value IndexRange and timestamp filtering; safe to call directly.
 
+#### `opcua` — client recovery helpers
+
+```go
+func (c *Client) Republish(ctx context.Context, subscriptionID, sequenceNumber uint32) (*ua.RepublishResponse, error)
+func (c *Client) TransferSubscriptions(ctx context.Context, subscriptionIDs []uint32, sendInitialValues bool) (*ua.TransferSubscriptionsResponse, error)
+func WithSubscriptionRecoveryHandler(f func(SubscriptionRecoveryEvent)) Option
+```
+
 #### `server` — BaseEvent emission
 
 ```go
@@ -94,6 +104,7 @@ type BaseEvent struct {
     Time       interface{} // time.Time
     Message    *ua.LocalizedText
     Severity   uint16
+    Fields     map[string]*ua.Variant // custom SelectClause fields
 }
 
 func (s *Server) EmitBaseEvent(nodeID *ua.NodeID, event *BaseEvent) error
@@ -107,6 +118,10 @@ type HistoryProvider interface {
     ReleaseContinuation(continuationPoint []byte)
 }
 
+// Optional capabilities (type-assert; *Historian implements all):
+// HistoryDataUpdater, RawHistoryDeleter, AtTimeHistoryDeleter,
+// AtTimeHistoryReader, ModifiedHistoryReader, ProcessedHistoryReader
+
 func NewHistorian() *Historian
 func (h *Historian) EnableNode(nodeID *ua.NodeID, maxSamples int)
 func (h *Historian) RecordValue(nodeID *ua.NodeID, dv *ua.DataValue)
@@ -116,16 +131,20 @@ func (s *Server) SetHistorian(h HistoryProvider)
 
 ### Interoperability
 
-Verified four-direction against open62541 and Milo for IndexRange, timestamps, Write EncodingMask, Browse ResultMask / BrowseNext release, queue windows, subscription timestamps, and subscription lifecycle (revise / publishing-mode / monitoring-mode / delete), using [opcua-interop v0.4.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.4.0).
+Verified four-direction against open62541 and Milo for IndexRange, timestamps, Write EncodingMask, Browse ResultMask / BrowseNext release, queue windows, subscription timestamps, and subscription lifecycle (revise / publishing-mode / monitoring-mode / delete), plus peer capability rows on [opcua-interop v0.5.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0):
 
-Events, Republish, TransferSubscriptions, and HistoryRead are implemented and covered Go client ↔ Go server; independent peer coverage for those services is not in v0.4.0 yet.
+- `event.subscription` — open62541→Go and Milo→Go
+- `history.read.raw` — open62541→Go and Milo→Go
+- `subscription.server.republish` — open62541→Go
+- `subscription.server.transfer` — Milo→Go
+- `subscription.client.republish` — Go→open62541
 
 | Image | Pin |
 |-------|-----|
-| open62541 | `ghcr.io/otfabric/opcua-interop-open62541@sha256:c3bf9c6b740948449e52080021a716def08db913eb3ba0b08e397f60cbd29061` |
-| Milo | `ghcr.io/otfabric/opcua-interop-milo@sha256:eb204edd8a715e071118fae89650c114687bd97e31be24819da8ba5295cce844` |
+| open62541 | `ghcr.io/otfabric/opcua-interop-open62541@sha256:d9650e1b63fd0df1c840335d1951c848437530de0670c279ef905440a3bc77d6` |
+| Milo | `ghcr.io/otfabric/opcua-interop-milo@sha256:af502530b7043763220474d6dcf0deef62215e0b3c112cc8eab9849ec1d4e321` |
 
-See [INTEROP.md](INTEROP.md) for the full matrix. Docs updated in `API.md`, `README.md`, and `docs/*`.
+Digests are fix-forwarded on the same `v0.5.0` tag when opcua-interop requirements change (no RC / `v0.5.1` pins). See [INTEROP.md](INTEROP.md) and [`interop/COVERAGE.md`](interop/COVERAGE.md) for the full matrix. Docs updated in `API.md`, `README.md`, and `docs/*`.
 
 ### Bug fixes and test infrastructure
 
@@ -137,8 +156,8 @@ Absorbed from the skipped v1.2.1 patch:
 
 ### Known limitations
 
-- No peer-adapter CLI yet for EventFilter subscribe, Republish, TransferSubscriptions, or HistoryRead
-- No Alarms/Conditions, aggregates, modified history, historical events, or durable subscriptions
+- Broader EventFilter peer rows (SelectClauses / OfType / Where) and history edges beyond raw O→S/M→S remain unverified in the ledger
+- No Alarms/Conditions, historical events, durable subscriptions, or full bounding/interpolation for raw HistoryRead `returnBounds`
 
 ---
 

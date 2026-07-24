@@ -69,6 +69,7 @@ type Config struct {
 	logger              *slog.Logger
 	stateCh             chan<- ConnState
 	stateFunc           func(ConnState)
+	recoveryFunc        func(SubscriptionRecoveryEvent)
 	metrics             ClientMetrics
 	retryPolicy         RetryPolicy
 	skipNamespaceUpdate bool
@@ -657,6 +658,23 @@ func WithConnStateHandler(h func(ConnState)) Option {
 func WithConnStateChan(ch chan<- ConnState) Option {
 	return func(cfg *Config) error {
 		cfg.stateCh = ch
+		return nil
+	}
+}
+
+// WithSubscriptionRecoveryHandler sets a callback that is invoked once per
+// subscription after each automatic reconnect recovery attempt.
+//
+// The handler is called synchronously from the reconnect goroutine and must
+// not block. It receives a [SubscriptionRecoveryEvent] describing the outcome
+// for each subscription: whether it was transferred, republished, recreated,
+// partially recovered, or lost due to an unrecoverable gap.
+//
+// This mirrors the [WithConnStateHandler] pattern and is the recommended way
+// to implement observability for subscription recovery without polling.
+func WithSubscriptionRecoveryHandler(h func(SubscriptionRecoveryEvent)) Option {
+	return func(cfg *Config) error {
+		cfg.recoveryFunc = h
 		return nil
 	}
 }

@@ -1730,7 +1730,7 @@ func TestOpen62541Server_BrowseNext(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Phase 11 — Service Semantics (Go client → open62541 server)
+// Service semantics (Go client → open62541 server)
 // ---------------------------------------------------------------------------
 
 // TestOpen62541Server_BatchWrite verifies per-item Write results against open62541.
@@ -1804,9 +1804,9 @@ func TestOpen62541Server_IndexRange(t *testing.T) {
 
 	resp, err := c.Read(ctx, &ua.ReadRequest{
 		NodesToRead: []*ua.ReadValueID{{
-			NodeID: ua.NewStringNodeID(nsIdx, "Scalar.Int32"),
+			NodeID:      ua.NewStringNodeID(nsIdx, "Scalar.Int32"),
 			AttributeID: ua.AttributeIDValue,
-			IndexRange: "0:1",
+			IndexRange:  "0:1",
 		}},
 	})
 	if err != nil {
@@ -1831,9 +1831,9 @@ func TestOpen62541Server_IndexRangeSubset(t *testing.T) {
 
 	arrResp, err := c.Read(ctx, &ua.ReadRequest{
 		NodesToRead: []*ua.ReadValueID{{
-			NodeID: ua.NewStringNodeID(nsIdx, "Array.Int32"),
+			NodeID:      ua.NewStringNodeID(nsIdx, "Array.Int32"),
 			AttributeID: ua.AttributeIDValue,
-			IndexRange: "0:1",
+			IndexRange:  "0:1",
 		}},
 	})
 	if err != nil {
@@ -1849,9 +1849,9 @@ func TestOpen62541Server_IndexRangeSubset(t *testing.T) {
 
 	wresp, err := c.Write(ctx, &ua.WriteRequest{
 		NodesToWrite: []*ua.WriteValue{{
-			NodeID: ua.NewStringNodeID(nsIdx, "Array.Int32"),
+			NodeID:      ua.NewStringNodeID(nsIdx, "Array.Int32"),
 			AttributeID: ua.AttributeIDValue,
-			IndexRange: "1:2",
+			IndexRange:  "1:2",
 			Value: &ua.DataValue{
 				EncodingMask: ua.DataValueValue,
 				Value:        ua.MustVariant([]int32{90, 91}),

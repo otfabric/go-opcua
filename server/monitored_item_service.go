@@ -315,8 +315,21 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 	}
 
 	sess := s.SubService.srv.Session(req.RequestHeader)
-	if sess == nil || sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
-		return nil, errors.New("not your subscription, bro")
+	if sess == nil || sub.Session == nil || sub.Session.AuthTokenID == nil ||
+		sess.AuthTokenID == nil || !sub.Session.AuthTokenID.Equal(sess.AuthTokenID) {
+		// Wrong/missing session must not become BadUnexpectedError via a plain error.
+		return &ua.CreateMonitoredItemsResponse{
+			ResponseHeader: &ua.ResponseHeader{
+				Timestamp:          time.Now(),
+				RequestHandle:      req.RequestHeader.RequestHandle,
+				ServiceResult:      ua.StatusBadSubscriptionIDInvalid,
+				ServiceDiagnostics: &ua.DiagnosticInfo{},
+				StringTable:        []string{},
+				AdditionalHeader:   ua.NewExtensionObject(nil),
+			},
+			Results:         res,
+			DiagnosticInfos: []*ua.DiagnosticInfo{},
+		}, nil
 	}
 
 	ts := req.TimestampsToReturn
@@ -387,7 +400,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 				}
 				continue
 			}
-			emi, efr, sc := validateEventFilter(ef)
+			emi, efr, sc := s.SubService.srv.validateEventFilter(ef)
 			if sc != ua.StatusOK {
 				res[i] = &ua.MonitoredItemCreateResult{
 					StatusCode:   sc,
@@ -487,6 +500,24 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			if len(mi.queue) > int(mi.queueSize) {
 				// Keep the newest samples when shrinking the queue.
 				mi.queue = mi.queue[len(mi.queue)-int(mi.queueSize):]
+			}
+			// Re-validate and update event filter when the item monitors events.
+			if mi.Req.ItemToMonitor != nil &&
+				mi.Req.ItemToMonitor.AttributeID == ua.AttributeIDEventNotifier &&
+				item.RequestedParameters.Filter != nil {
+				var ef *ua.EventFilter
+				switch fv := item.RequestedParameters.Filter.Value.(type) {
+				case *ua.EventFilter:
+					ef = fv
+				case ua.EventFilter:
+					ef = &fv
+				}
+				if ef != nil {
+					srv := s.SubService.srv
+					if emi, _, sc := srv.validateEventFilter(ef); sc == ua.StatusOK && emi != nil {
+						srv.eventItems.register(mi.ID, emi)
+					}
+				}
 			}
 		}
 		if req.TimestampsToReturn != ua.TimestampsToReturnInvalid {

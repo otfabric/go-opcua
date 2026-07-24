@@ -2,6 +2,9 @@
 
 // SPDX-License-Identifier: MIT
 
+// Peer subscription lifecycle tests (O→S / M→S).
+// COVERAGE.md: subscriptions / subscription.lifecycle.revise, subscription.lifecycle.delete
+
 package interop
 
 import (
@@ -76,7 +79,7 @@ func assertSubscribeRevisedFields(t *testing.T, result adapterResult) {
 }
 
 // TestGoServer_Open62541Client_SubscribeRevisedFields verifies subscribe JSON
-// includes CreateSubscription revised parameters (Phase 14A / v0.4.0).
+// includes CreateSubscription revised parameters.
 func TestGoServer_Open62541Client_SubscribeRevisedFields(t *testing.T) {
 	endpoint := startGoServer(t)
 	result := runOpen62541ClientResult(t, endpoint, "subscribe",
@@ -89,7 +92,7 @@ func TestGoServer_Open62541Client_SubscribeRevisedFields(t *testing.T) {
 }
 
 // TestGoServer_MiloClient_SubscribeRevisedFields verifies Milo subscribe JSON
-// includes CreateSubscription revised parameters (Phase 14A / v0.4.0).
+// includes CreateSubscription revised parameters.
 func TestGoServer_MiloClient_SubscribeRevisedFields(t *testing.T) {
 	endpoint := startGoServer(t)
 	result := runMiloClientResult(t, endpoint, "subscribe",
