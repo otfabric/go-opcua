@@ -443,3 +443,127 @@ func TestAttributeService_HistoryWithHistorian(t *testing.T) {
 		assert.Equal(t, ua.StatusBadHistoryOperationUnsupported, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
 	})
 }
+
+func TestAttributeService_Read_IndexRangeAndTimestamps(t *testing.T) {
+	srv := newTestServer()
+	ns, obj := addTestNamespace(srv)
+	arr := ns.AddNewVariableStringNode("rw_array", []int32{10, 20, 30, 40})
+	obj.AddRef(arr, id.HasComponent, true)
+	svc := &AttributeService{srv: srv}
+	nid := ua.NewStringNodeID(ns.ID(), "rw_array")
+
+	t.Run("index range slice", func(t *testing.T) {
+		req := &ua.ReadRequest{
+			RequestHeader:      reqHeader(),
+			TimestampsToReturn: ua.TimestampsToReturnBoth,
+			NodesToRead: []*ua.ReadValueID{{
+				NodeID:      nid,
+				AttributeID: ua.AttributeIDValue,
+				IndexRange:  "0:1",
+			}},
+		}
+		resp, err := svc.Read(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		rr := resp.(*ua.ReadResponse)
+		require.Len(t, rr.Results, 1)
+		assert.Equal(t, ua.StatusOK, rr.Results[0].Status)
+		assert.Equal(t, []int32{10, 20}, rr.Results[0].Value.Value())
+	})
+
+	t.Run("index range on non-value attribute", func(t *testing.T) {
+		req := &ua.ReadRequest{
+			RequestHeader: reqHeader(),
+			NodesToRead: []*ua.ReadValueID{{
+				NodeID:      nid,
+				AttributeID: ua.AttributeIDBrowseName,
+				IndexRange:  "0:1",
+			}},
+		}
+		resp, err := svc.Read(context.Background(), nil, req, 2)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusBadIndexRangeInvalid, resp.(*ua.ReadResponse).Results[0].Status)
+	})
+
+	t.Run("invalid timestamps to return", func(t *testing.T) {
+		req := &ua.ReadRequest{
+			RequestHeader:      reqHeader(),
+			TimestampsToReturn: ua.TimestampsToReturnInvalid,
+			NodesToRead: []*ua.ReadValueID{{
+				NodeID:      nid,
+				AttributeID: ua.AttributeIDValue,
+			}},
+		}
+		resp, err := svc.Read(context.Background(), nil, req, 3)
+		require.NoError(t, err)
+		rr := resp.(*ua.ReadResponse)
+		assert.Equal(t, ua.StatusBadTimestampsToReturnInvalid, rr.ResponseHeader.ServiceResult)
+		assert.Empty(t, rr.Results)
+	})
+}
+
+func TestAttributeService_Write_IndexRangeAndEncodingMask(t *testing.T) {
+	srv := newTestServer()
+	ns, obj := addTestNamespace(srv)
+	arr := ns.AddNewVariableStringNode("rw_array2", []int32{1, 2, 3})
+	obj.AddRef(arr, id.HasComponent, true)
+	svc := &AttributeService{srv: srv}
+	nid := ua.NewStringNodeID(ns.ID(), "rw_array2")
+
+	t.Run("index range merge", func(t *testing.T) {
+		req := &ua.WriteRequest{
+			RequestHeader: reqHeader(),
+			NodesToWrite: []*ua.WriteValue{{
+				NodeID:      nid,
+				AttributeID: ua.AttributeIDValue,
+				IndexRange:  "1:1",
+				Value: &ua.DataValue{
+					EncodingMask: ua.DataValueValue,
+					Value:        ua.MustVariant([]int32{99}),
+				},
+			}},
+		}
+		resp, err := svc.Write(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusOK, resp.(*ua.WriteResponse).Results[0])
+
+		readResp, err := svc.Read(context.Background(), nil, &ua.ReadRequest{
+			RequestHeader: reqHeader(),
+			NodesToRead:   []*ua.ReadValueID{{NodeID: nid, AttributeID: ua.AttributeIDValue}},
+		}, 2)
+		require.NoError(t, err)
+		assert.Equal(t, []int32{1, 99, 3}, readResp.(*ua.ReadResponse).Results[0].Value.Value())
+	})
+
+	t.Run("unsupported encoding mask", func(t *testing.T) {
+		req := &ua.WriteRequest{
+			RequestHeader: reqHeader(),
+			NodesToWrite: []*ua.WriteValue{{
+				NodeID:      ua.NewStringNodeID(ns.ID(), "rw_int32"),
+				AttributeID: ua.AttributeIDValue,
+				Value: &ua.DataValue{
+					EncodingMask: ua.DataValueValue | ua.DataValueStatusCode,
+					Value:        ua.MustVariant(int32(1)),
+					Status:       ua.StatusOK,
+				},
+			}},
+		}
+		resp, err := svc.Write(context.Background(), nil, req, 3)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusBadWriteNotSupported, resp.(*ua.WriteResponse).Results[0])
+	})
+
+	t.Run("index range without value", func(t *testing.T) {
+		req := &ua.WriteRequest{
+			RequestHeader: reqHeader(),
+			NodesToWrite: []*ua.WriteValue{{
+				NodeID:      nid,
+				AttributeID: ua.AttributeIDValue,
+				IndexRange:  "0:0",
+				Value:       nil,
+			}},
+		}
+		resp, err := svc.Write(context.Background(), nil, req, 4)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusBadIndexRangeInvalid, resp.(*ua.WriteResponse).Results[0])
+	})
+}

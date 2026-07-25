@@ -1,5 +1,43 @@
 # go-opcua Releases
 
+## v1.4.0
+
+**Date:** 2026-07-30
+**Previous release:** v1.3.1
+
+### Summary
+
+Minor release: make logging silent by default (no longer delegates to `slog.Default()`), document the dual error model and lifecycle/observability contracts, and ship subscription/session correctness fixes that were staged ahead of the release.
+
+### Added
+
+- **ERRORS.md** — Go sentinel errors vs wire `ua.StatusCode`.
+- **OBSERVABILITY.md** — silent slog default and metrics callback semantics.
+- Client guide / API sections for lifecycle and concurrency.
+- **Makefile `vuln`** — `govulncheck ./...`, included in `make check`.
+- Unit tests for `discardHandler` (`Handle` / `WithAttrs` / `WithGroup`) on client and server, plus `WithSlogLogger(nil)`.
+- **`uasc.NewCryptoChannel`** — construct a crypto-only `SecureChannel` for session/user-token helper tests (not for Open/SendRequest).
+- **`export_test.go`** — testing helpers for subscription recreate paths (`TestingRecreateSubscription`, `TestingRecreateDelete`, `TestingRecreateCreate`).
+- Deeper coverage for subscription notify/publish/recreate, server session service, history continuation, attribute service, and secure-channel crypto helpers.
+
+### Changed
+
+- **Default logger** — client (`newConfig`) and server (`New` / `newServerNoNS`) use a discard `slog.Handler` (`Enabled` always false). `WithLogger(nil)`, `SetLogger(nil)`, and `WithSlogLogger(nil)` restore that silent default.
+- **API.md** / **README** — document silent logging; link ERRORS and OBSERVABILITY guides.
+- **README** — note Go 1.25 floor tracks `go.mod` / CI and codegen tooling.
+- **golang.org/x/sys** — bump indirect `v0.42.0` → `v0.44.0` (fixes [GO-2026-5024](https://pkg.go.dev/vuln/GO-2026-5024); Windows-only, not called by this module).
+
+### Fixed
+
+- **Server session timeout clamps** — `sessionTimeoutMin` / `Max` / `Default` are now proper `time.Duration` values (`100ms` / `30m` / `60s`). Previously they were bare integers compared against `time.Duration`, so the floor was effectively ~100ns rather than 100ms.
+- **Subscription recreate** — after a successful standalone `recreateSubscription`, call `resumeSubscriptions` so the publish loop is not left permanently paused when the last subscription was forgotten during recreate.
+
+### Compatibility
+
+Behavioural change: applications that relied on the previous default of writing through `slog.Default()` must pass an explicit logger via `WithLogger` / `SetLogger`. Protocol behaviour is otherwise unchanged aside from the session-timeout clamp and subscription-recreate resume fixes above.
+
+---
+
 ## v1.3.1
 
 **Date:** 2026-07-25

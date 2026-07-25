@@ -130,6 +130,16 @@ goroutine that recovers the session and subscriptions after a disconnect — see
 For TCP-only reachability checks (e.g. connection diagnostics or "ping" without creating a session), use [uacp.DialTCP](uacp package); the CLI can infer TCP failure from connection errors if that helper is not used.
 `Close` tears down session, secure channel, and TCP connection.
 
+#### Lifecycle and concurrency
+
+- The caller owns the `*Client`: create with `NewClient`, `Connect` when ready, `Close` when finished.
+- After `Close`, do not reuse the client; create a new one.
+- A single `*Client` is safe for concurrent use from multiple goroutines for ordinary service calls (reads, writes, browse, method calls) once connected. Race tests cover concurrent reads and subscription create/cancel.
+- Subscription notification delivery and recovery handlers run on library goroutines; handlers must not block (see `WithSubscriptionRecoveryHandler`).
+- Auto-reconnect (default on) may recreate sessions and subscriptions after disconnect; observe `ConnState` / recovery events if your application needs to react.
+
+Errors: [ERRORS.md](ERRORS.md). Observability: [OBSERVABILITY.md](OBSERVABILITY.md).
+
 #### Session management
 
 ```go
@@ -693,10 +703,12 @@ func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.E
 
 ### Logger
 
-Logging uses `*slog.Logger` from the standard library. The default logger is `slog.Default()`.
+Logging uses `*slog.Logger` from the standard library. **Logging is disabled by
+default** (silent discard handler). Pass `WithLogger` to enable output.
+See [OBSERVABILITY.md](OBSERVABILITY.md).
 
 ```go
-func WithLogger(l *slog.Logger) Option
+func WithLogger(l *slog.Logger) Option // nil restores silent default
 ```
 
 ---
@@ -746,7 +758,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `WithSubscriptionRecoveryHandler(f func(SubscriptionRecoveryEvent))` | Per-subscription reconnect recovery callback (must not block; see [Subscription recovery](#subscription-recovery)) |
 | `WithMetrics(m ClientMetrics)` | Metrics handler |
 | `WithRetryPolicy(p RetryPolicy)` | Retry policy |
-| `WithLogger(l *slog.Logger)` | Logger (`*slog.Logger`; defaults to `slog.Default()`) |
+| `WithLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE) |
 | `TrustedCertificates(certs ...*x509.Certificate)` | Add CA/self-signed certs to the trust pool |
 
@@ -1461,7 +1473,7 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 | `ManufacturerName(s string)` | Manufacturer name |
 | `ProductName(s string)` | Product name |
 | `SoftwareVersion(s string)` | Software version string |
-| `SetLogger(l *slog.Logger)` | Logger (`*slog.Logger`; defaults to `slog.Default()`) |
+| `SetLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithAccessController(ac AccessController)` | Access controller |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session to a `ua.UserRole`; used by the default access controller |

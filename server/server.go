@@ -169,7 +169,7 @@ func New(opts ...Option) (*Server, error) {
 		manufacturerName: "otfabric",               // override with the ManufacturerName option
 		productName:      "otfabric OPC/UA Server", // override with the ProductName option
 		softwareVersion:  "0.0.0-dev",              // override with the SoftwareVersion option
-		logger:           slog.Default(),
+		logger:           silentLogger(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {
@@ -257,7 +257,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 		manufacturerName: "otfabric",
 		productName:      "otfabric OPC/UA Server",
 		softwareVersion:  "0.0.0-dev",
-		logger:           slog.Default(),
+		logger:           silentLogger(),
 	}
 	for _, opt := range opts {
 		if err := opt(cfg); err != nil {

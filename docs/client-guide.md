@@ -705,24 +705,43 @@ IndexRange on current Values uses the same NumericRange grammar as servers:
 
 ---
 
+## Lifecycle and concurrency
+
+- Own the client: `NewClient` → `Connect` → use → `Close`. Do not reuse after `Close`.
+- One connected `*Client` is safe for concurrent ordinary service calls (see race tests).
+- Subscription and recovery callbacks run on library goroutines and must not block.
+- Auto-reconnect is enabled by default; watch `ConnState` / recovery handlers if the app must react to session rebuilds.
+
+Internals (atomics, mutexes) are described in [architecture.md](architecture.md). Caller-facing contracts are also summarized in [API.md](../API.md).
+
 ## Error Handling
 
-The library provides sentinel errors for common failure modes:
+OPC-UA exposes **Go errors** (connection/session/config) and **wire `ua.StatusCode`**
+(per-item service outcomes). They are not interchangeable — see the canonical guide
+[ERRORS.md](../ERRORS.md).
 
 ```go
-import "github.com/otfabric/go-opcua/errors"
+import (
+    "errors"
 
-// Check for specific errors
-if errors.Is(err, errors.ErrTimeout) {
-    // Handle timeout
-}
-if errors.Is(err, errors.ErrNotConnected) {
-    // Handle disconnection
+    opcuaerrors "github.com/otfabric/go-opcua/errors"
+    "github.com/otfabric/go-opcua/ua"
+)
+
+if err := c.Connect(ctx); err != nil {
+    if errors.Is(err, opcuaerrors.ErrNotConnected) {
+        // Handle disconnection / connect failure
+    }
+    return err
 }
 
-// Status codes from the server
+dv, err := c.ReadValue(ctx, nodeID)
+if err != nil {
+    return err // client/transport failure
+}
 if dv.Status != ua.StatusOK {
-    fmt.Println("Server returned:", dv.Status)
+    // Server item status — not the same as a Go sentinel
+    return dv.Status
 }
 ```
 

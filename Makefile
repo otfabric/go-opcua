@@ -8,7 +8,7 @@ TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ 
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/
 
-.PHONY: help all test test-norace coverage cover lint lint-ci fmt vet verify integration selfintegration interop examples test-race install-py-opcua gen check-gen coverage-ledger
+.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop examples test-race install-py-opcua gen check-gen coverage-ledger
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -32,6 +32,10 @@ lint: ## Run staticcheck
 lint-ci: ## Run golangci-lint
 	@echo "Running golangci-lint"
 	@golangci-lint run ./...
+
+vuln: ## Run govulncheck
+	@echo "Running govulncheck"
+	@govulncheck ./...
 
 fmt: ## Format Go code with go fmt
 	@echo "Running go fmt"
@@ -101,4 +105,4 @@ check-gen: gen ## Verify generated files are up to date
 		exit 1; \
 	fi
 
-check: fmt lint lint-ci verify coverage ## Run lint + vet + unit/race/interop + coverage
+check: fmt lint lint-ci vuln verify coverage ## Run lint + vet + vuln + unit/race/interop + coverage

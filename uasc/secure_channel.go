@@ -183,6 +183,16 @@ func NewSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, errCh chan<- e
 	return newSecureChannel(endpoint, c, cfg, client, errCh)
 }
 
+// NewCryptoChannel returns a SecureChannel that can exercise the session and
+// user-token cryptographic helpers without an underlying UACP connection.
+// It must not be used for Open/SendRequest.
+func NewCryptoChannel(cfg *Config) *SecureChannel {
+	if cfg == nil {
+		panic("uasc: NewCryptoChannel: cfg is nil")
+	}
+	return &SecureChannel{cfg: cfg}
+}
+
 func NewServerSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, errCh chan<- error, secureChannelID, sequenceNumber, securityTokenID uint32) (*SecureChannel, error) {
 	s, err := newSecureChannel(endpoint, c, cfg, server, errCh)
 	if err != nil {

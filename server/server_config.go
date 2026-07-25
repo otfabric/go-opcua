@@ -267,16 +267,27 @@ func SoftwareVersion(name string) Option {
 }
 
 // SetLogger sets the logger for the server.
+// By default logging is disabled (silent discard handler).
+// Pass nil to restore the silent default.
 func SetLogger(l *slog.Logger) Option {
 	return func(s *serverConfig) error {
+		if l == nil {
+			s.logger = silentLogger()
+			return nil
+		}
 		s.logger = l
 		return nil
 	}
 }
 
 // WithSlogLogger sets the logger from an slog.Logger.
+// Pass nil to restore the silent default.
 func WithSlogLogger(l *slog.Logger) Option {
 	return func(s *serverConfig) error {
+		if l == nil {
+			s.logger = silentLogger()
+			return nil
+		}
 		s.logger = l
 		return nil
 	}

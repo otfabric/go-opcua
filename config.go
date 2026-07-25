@@ -93,7 +93,7 @@ func newConfig() *Config {
 		dialer:  DefaultDialer(),
 		sechan:  DefaultClientConfig(),
 		session: DefaultSessionConfig(),
-		logger:  slog.Default(),
+		logger:  silentLogger(),
 	}
 }
 
@@ -128,9 +128,14 @@ func WithRetryPolicy(p RetryPolicy) Option {
 }
 
 // WithLogger sets the logger for the client.
-// By default, the library delegates to slog.Default().
+// By default logging is disabled (silent discard handler).
+// Pass nil to restore the silent default.
 func WithLogger(l *slog.Logger) Option {
 	return func(cfg *Config) error {
+		if l == nil {
+			cfg.logger = silentLogger()
+			return nil
+		}
 		cfg.logger = l
 		return nil
 	}
