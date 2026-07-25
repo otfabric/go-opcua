@@ -13,7 +13,7 @@ A pure Go implementation of the OPC-UA Binary Protocol, providing both **client*
 go get github.com/otfabric/go-opcua
 ```
 
-Requires **Go 1.25** or later.
+Requires **Go 1.25** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/tools` used for code generation).
 
 ## Table of contents
 
@@ -43,7 +43,8 @@ otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or
 - **Subscriptions** — data-change and event monitoring with Part 4 queues, lifecycle, Republish/Transfer on server and client; `WithSubscriptionRecoveryHandler` for reconnect outcomes
 - **Retry & Reconnect** — exponential backoff and automatic session / subscription recovery
 - **Metrics** — pluggable instrumentation for request/response/error tracking
-- **Logging** — structured logging via `*slog.Logger`; library is slog-native internally
+- **Logging** — structured `*slog.Logger`; **silent by default** (opt in with `WithLogger` / `SetLogger`)
+- **Metrics** — pluggable client/server service callbacks (`WithMetrics`)
 
 For full API details see [API.md](API.md).
 
@@ -55,6 +56,8 @@ For full API details see [API.md](API.md).
 | [Server Guide](docs/server-guide.md) | Building servers, namespaces, custom nodes, methods, events, access control |
 | [Security Guide](docs/security.md) | Certificates, encryption policies, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
+| [Errors](ERRORS.md) | Go sentinels vs wire `ua.StatusCode` |
+| [Observability](OBSERVABILITY.md) | Silent slog default and metrics callbacks |
 | [Interop](INTEROP.md) | Cross-stack testing vs open62541 / Milo; fixture layout, pins, local iteration |
 | [API Reference](API.md) | Complete reference for all public types and functions |
 

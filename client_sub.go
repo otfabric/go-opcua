@@ -114,8 +114,15 @@ func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
 	}
 
 	_ = sub.recreateDelete(ctx)
+	// forgetSubscription pauses the publish loop when this was the last
+	// subscription. Resume after a successful recreate so standalone callers
+	// (outside the reconnect path) do not leave publishing permanently paused.
 	c.forgetSubscriptionNeedsSubMuxLock(ctx, id)
-	return sub.recreateCreate(ctx)
+	if err := sub.recreateCreate(ctx); err != nil {
+		return err
+	}
+	c.resumeSubscriptions(ctx)
+	return nil
 }
 
 // Republish requests retransmission of a notification message for a subscription.
@@ -576,7 +583,15 @@ func (c *Client) handleNotificationNeedsSubMuxLock(sub *Subscription, res *ua.Pu
 	})
 }
 
+// publishRequestFn, when non-nil, replaces sendPublishRequest. Used by unit tests
+// to exercise the publish() error switch without a live SecureChannel.
+var publishRequestFn func(ctx context.Context, c *Client) (*ua.PublishResponse, error)
+
 func (c *Client) sendPublishRequest(ctx context.Context) (*ua.PublishResponse, error) {
+	if publishRequestFn != nil {
+		return publishRequestFn(ctx, c)
+	}
+
 	c.subMux.RLock()
 	req := &ua.PublishRequest{
 		SubscriptionAcknowledgements: c.pendingAcks,
