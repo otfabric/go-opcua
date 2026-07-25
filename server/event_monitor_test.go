@@ -215,3 +215,235 @@ func TestEventItemRegistry(t *testing.T) {
 		t.Error("expected nil after unregister")
 	}
 }
+
+func sampleBaseEvent(severity uint16) *BaseEvent {
+	return &BaseEvent{
+		EventID:    []byte("evt-1"),
+		EventType:  ua.NewNumericNodeID(0, id.BaseEventType),
+		SourceNode: ua.NewStringNodeID(2, "src"),
+		SourceName: "Source",
+		Time:       time.Date(2026, 7, 24, 12, 0, 0, 0, time.UTC),
+		Message:    ua.NewLocalizedText("msg"),
+		Severity:   severity,
+		Fields:     map[string]*ua.Variant{"AlarmLevel": ua.MustVariant(int32(3))},
+	}
+}
+
+func TestEvalEventFilter_NilAndEmpty(t *testing.T) {
+	srv := newTestServer()
+	ev := sampleBaseEvent(100)
+	if !srv.evalEventFilter(ev, nil) {
+		t.Fatal("nil clause should pass")
+	}
+	if !srv.evalEventFilter(ev, &ua.ContentFilter{}) {
+		t.Fatal("empty clause should pass")
+	}
+}
+
+func TestEvalEventFilter_Operators(t *testing.T) {
+	srv := newTestServer()
+	ev := sampleBaseEvent(500)
+
+	severity := saoOp(ua.AttributeIDValue, &ua.QualifiedName{Name: "Severity"})
+	cases := []struct {
+		name     string
+		clause   *ua.ContentFilter
+		wantPass bool
+	}{
+		{
+			name: "OfType BaseEventType",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				ua.OfType(ua.NewNumericNodeID(0, id.BaseEventType)),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "Equals Severity",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorEquals, severity, lit(ua.MustVariant(uint16(500)))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "GreaterThan",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorGreaterThan, severity, lit(ua.MustVariant(uint16(100)))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "LessThan fail",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorLessThan, severity, lit(ua.MustVariant(uint16(100)))),
+			}},
+			wantPass: false,
+		},
+		{
+			name: "GreaterThanOrEqual",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorGreaterThanOrEqual, severity, lit(ua.MustVariant(uint16(500)))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "LessThanOrEqual",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorLessThanOrEqual, severity, lit(ua.MustVariant(uint16(500)))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "And",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorAnd, elemOp(1), elemOp(2)),
+				cfe(ua.FilterOperatorGreaterThan, severity, lit(ua.MustVariant(uint16(100)))),
+				cfe(ua.FilterOperatorLessThan, severity, lit(ua.MustVariant(uint16(900)))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "Or",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorOr, elemOp(1), elemOp(2)),
+				cfe(ua.FilterOperatorEquals, severity, lit(ua.MustVariant(uint16(1)))),
+				cfe(ua.FilterOperatorEquals, severity, lit(ua.MustVariant(uint16(500)))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "Not",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorNot, elemOp(1)),
+				cfe(ua.FilterOperatorEquals, severity, lit(ua.MustVariant(uint16(1)))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "unsupported operator passthrough",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorLike, lit(ua.MustVariant("a")), lit(ua.MustVariant("a*"))),
+			}},
+			wantPass: true,
+		},
+		{
+			name: "custom field Equals",
+			clause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+				cfe(ua.FilterOperatorEquals,
+					saoOp(ua.AttributeIDValue, &ua.QualifiedName{Name: "AlarmLevel"}),
+					lit(ua.MustVariant(int32(3)))),
+			}},
+			wantPass: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := srv.evalEventFilter(ev, tc.clause); got != tc.wantPass {
+				t.Fatalf("pass=%v, want %v", got, tc.wantPass)
+			}
+		})
+	}
+}
+
+func TestEvalEventFilter_CycleAndBadIndex(t *testing.T) {
+	srv := newTestServer()
+	ev := sampleBaseEvent(10)
+	// ElementOperand pointing at self → NULL → treated as pass-through (!= false).
+	clause := &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+		cfe(ua.FilterOperatorEquals, elemOp(0), lit(ua.MustVariant(int32(1)))),
+	}}
+	if !srv.evalEventFilter(ev, clause) {
+		t.Fatal("cyclic filter should not reject (NULL ≠ false)")
+	}
+	// Out-of-range element index → NULL → pass.
+	clause = &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+		cfe(ua.FilterOperatorNot, elemOp(99)),
+	}}
+	if !srv.evalEventFilter(ev, clause) {
+		t.Fatal("bad index should not reject")
+	}
+}
+
+func TestEmitBaseEvent_FiltersAndDelivery(t *testing.T) {
+	srv := newTestServer()
+	ns, _ := addTestNamespace(srv)
+	nodeID := ua.NewStringNodeID(ns.ID(), "rw_int32")
+
+	sub := NewSubscription()
+	sub.srv = srv.SubscriptionService
+	sub.ID = 1
+
+	item := &MonitoredItem{
+		ID:   1,
+		Sub:  sub,
+		Mode: ua.MonitoringModeReporting,
+		Req: &ua.MonitoredItemCreateRequest{
+			ItemToMonitor:       &ua.ReadValueID{NodeID: nodeID},
+			RequestedParameters: &ua.MonitoringParameters{ClientHandle: 42},
+		},
+	}
+	srv.MonitoredItemService.Mu.Lock()
+	srv.MonitoredItemService.Nodes[nodeID.String()] = []*MonitoredItem{item}
+	srv.MonitoredItemService.Mu.Unlock()
+
+	severity := saoOp(ua.AttributeIDValue, &ua.QualifiedName{Name: "Severity"})
+	emi := &EventMonitoredItem{
+		SelectClauses: []*ua.SimpleAttributeOperand{
+			{BrowsePath: []*ua.QualifiedName{{Name: "Severity"}}},
+			{BrowsePath: []*ua.QualifiedName{{Name: "SourceName"}}},
+		},
+		OfTypeNodeID: ua.NewNumericNodeID(0, id.BaseEventType),
+		WhereClause: &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+			cfe(ua.FilterOperatorGreaterThan, severity, lit(ua.MustVariant(uint16(100)))),
+		}},
+	}
+	srv.eventItems.register(item.ID, emi)
+
+	// Below threshold → filtered out.
+	if err := srv.EmitBaseEvent(nodeID, sampleBaseEvent(50)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-sub.EventNotifyChannel:
+		t.Fatal("low-severity event should be filtered")
+	default:
+	}
+
+	// Above threshold → delivered with selected fields.
+	if err := srv.EmitBaseEvent(nodeID, sampleBaseEvent(200)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case evt := <-sub.EventNotifyChannel:
+		if evt.ClientHandle != 42 {
+			t.Fatalf("ClientHandle=%d", evt.ClientHandle)
+		}
+		if len(evt.EventFields) != 2 {
+			t.Fatalf("fields=%d", len(evt.EventFields))
+		}
+		if v, _ := evt.EventFields[0].Value().(uint16); v != 200 {
+			t.Fatalf("Severity=%v", evt.EventFields[0].Value())
+		}
+	default:
+		t.Fatal("expected delivered event")
+	}
+
+	// Disabled monitoring mode skips delivery.
+	item.Mode = ua.MonitoringModeDisabled
+	if err := srv.EmitBaseEvent(nodeID, sampleBaseEvent(200)); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-sub.EventNotifyChannel:
+		t.Fatal("disabled item should not receive events")
+	default:
+	}
+
+	// No monitored items / nil service are no-ops.
+	if err := srv.EmitBaseEvent(ua.NewStringNodeID(ns.ID(), "missing"), sampleBaseEvent(200)); err != nil {
+		t.Fatal(err)
+	}
+	srv.MonitoredItemService = nil
+	if err := srv.EmitBaseEvent(nodeID, sampleBaseEvent(200)); err != nil {
+		t.Fatal(err)
+	}
+}

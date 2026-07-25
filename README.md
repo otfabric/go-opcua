@@ -323,7 +323,7 @@ go-opcua is continuously interoperability-tested in all applicable client/server
 
 - **Verify gate**: `make verify` — `go vet`, unit tests, race tests, and interop (`make vet`, `make test-norace`, `make test`, `make interop`).
 - **Unit tests**: `make test-norace` (`go test -count=1 ./...`), `make test` (same with `-race`).
-- **Coverage**: `make coverage` writes `coverage.out`; `make cover` opens the report.
+- **Coverage**: `make coverage` writes `coverage.out` for core library packages (80% gate); CI passes the same `COVER_PKGS` list as `coverpkg` to the shared workflow so Codecov matches. `make cover` opens the report.
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
 - **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541, Milo). See [INTEROP.md](INTEROP.md).
 - **Fuzz tests**: `ua/fuzz_test.go`, `uasc/fuzz_test.go`, `uacp/fuzz_test.go`.
