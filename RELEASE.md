@@ -1,5 +1,37 @@
 # go-opcua Releases
 
+## v1.3.1
+
+**Date:** 2026-07-25
+**Previous release:** v1.3.0
+
+### Summary
+
+Patch release raising the **core-library coverage gate to 80%** and aligning Codecov with the local `make coverage` metric. No public API or protocol behaviour changes.
+
+Highlights:
+- **`make coverage` threshold 75% → 80%** — measured with `-coverpkg` over `COVER_PKGS` (unit + conformance)
+- **Codecov aligned** — CI passes the same `COVER_PKGS` list as `coverpkg` to [`go-ci.yml@v2`](https://github.com/otfabric/.github/blob/v2/.github/workflows/go-ci.yml) ([otfabric/.github v2.0.2](https://github.com/otfabric/.github/releases/tag/v2.0.2))
+- **Unit-test depth** for event WhereClause evaluation, `EmitBaseEvent`, HistoryRead/Update dispatch, historian delete/modified/aggregates, client certificate trust-list option, and package-level discovery helpers
+- **`codecov.yml`** — project target 80%; ignore `examples/`, `cmd/`, `tests/`, `interop/`, `internal/testutil/`
+
+### Testing and CI
+
+- `server/event_monitor_test.go` — `evalEventFilter` operators (`OfType`, comparisons, `And`/`Or`/`Not`), cyclic/null passthrough, `EmitBaseEvent` delivery/filtering/disabled mode
+- `server/attribute_service_test.go` — HistoryRead (raw / modified / at-time / processed / release CP) and HistoryUpdate (update / delete raw / delete at-time) with `SetHistorian`
+- `server/historian_ext_test.go` — `DeleteRawModified`, `ReadModified`, Min/Max/Count aggregates
+- `server/server_config_options_test.go` — `WithClientCertificateTrustList`
+- `discovery_helpers_test.go` — package-level `FindServers` / `GetEndpoints` / `FindServersOnNetwork`
+- `server/alarms_scaffold_test.go` — `AlarmsConditionsSupported` probe
+- `.github/workflows/ci.yml` — `coverpkg` matches Makefile `COVER_PKGS`
+- `codecov.yml` — status target and ignore paths
+
+### Compatibility
+
+No intentional breaking changes. Library behaviour is unchanged; only tests, coverage gates, and CI/Codecov configuration.
+
+---
+
 ## v1.3.0
 
 **Date:** 2026-07-25

@@ -1,0 +1,19 @@
+# Codecov configuration for go-opcua.
+# Project coverage is produced by `make coverage` (COVER_PKGS + conformance).
+coverage:
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 1%
+    patch:
+      default:
+        target: 70%
+
+ignore:
+  - "examples/**"
+  - "cmd/**"
+  - "internal/cmd/**"
+  - "tests/**"
+  - "interop/**"
+  - "internal/testutil/**"

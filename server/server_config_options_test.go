@@ -107,3 +107,20 @@ func TestServerOption_WithRoleMapper(t *testing.T) {
 	_ = srv.cfg.roleMapper(nil)
 	require.True(t, called)
 }
+
+func TestServerOption_WithClientCertificateTrustList(t *testing.T) {
+	_, caDER := genTestKeyAndCert(t)
+	srv, err := New(WithClientCertificateTrustList(caDER))
+	require.NoError(t, err)
+	require.NotNil(t, srv.cfg.clientCertificateValidator)
+
+	// Empty client cert is allowed (non-certificate channel).
+	require.NoError(t, srv.cfg.clientCertificateValidator(nil))
+
+	// Self-signed leaf not under the CA pool is rejected.
+	_, leafDER := genTestKeyAndCert(t)
+	require.Error(t, srv.cfg.clientCertificateValidator(leafDER))
+
+	_, err = New(WithClientCertificateTrustList([]byte("not-a-cert")))
+	require.Error(t, err)
+}

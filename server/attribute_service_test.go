@@ -5,7 +5,9 @@ package server
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -301,5 +303,143 @@ func TestAttributeService_HistoryUpdate(t *testing.T) {
 	t.Run("wrong request type", func(t *testing.T) {
 		_, err := svc.HistoryUpdate(context.Background(), nil, &ua.ReadRequest{RequestHeader: reqHeader()}, 1)
 		assert.Error(t, err)
+	})
+}
+
+func TestAttributeService_HistoryWithHistorian(t *testing.T) {
+	srv := newTestServer()
+	svc := &AttributeService{srv: srv}
+	h := NewHistorian()
+	nodeID := ua.NewStringNodeID(2, "Hist.Svc")
+	h.EnableNode(nodeID, 100)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 4; i++ {
+		h.RecordValue(nodeID, &ua.DataValue{
+			EncodingMask:    ua.DataValueValue | ua.DataValueSourceTimestamp,
+			Value:           ua.MustVariant(float64(i)),
+			SourceTimestamp: base.Add(time.Duration(i) * time.Second),
+		})
+	}
+	srv.SetHistorian(h)
+
+	t.Run("read raw", func(t *testing.T) {
+		req := &ua.HistoryReadRequest{
+			RequestHeader: reqHeader(),
+			HistoryReadDetails: ua.NewExtensionObject(&ua.ReadRawModifiedDetails{
+				StartTime:        base,
+				EndTime:          base.Add(10 * time.Second),
+				NumValuesPerNode: 10,
+			}),
+			NodesToRead: []*ua.HistoryReadValueID{{NodeID: nodeID}},
+		}
+		resp, err := svc.HistoryRead(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		hist := resp.(*ua.HistoryReadResponse)
+		require.Len(t, hist.Results, 1)
+		assert.Equal(t, ua.StatusOK, hist.Results[0].StatusCode)
+	})
+
+	t.Run("read modified", func(t *testing.T) {
+		_ = h.UpdateData(nodeID, ua.PerformUpdateTypeReplace, []*ua.DataValue{{
+			EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp, Value: ua.MustVariant(float64(99)), SourceTimestamp: base,
+		}})
+		req := &ua.HistoryReadRequest{
+			RequestHeader: reqHeader(),
+			HistoryReadDetails: ua.NewExtensionObject(&ua.ReadRawModifiedDetails{
+				IsReadModified: true,
+				StartTime:      base,
+				EndTime:        base.Add(time.Second),
+			}),
+			NodesToRead: []*ua.HistoryReadValueID{{NodeID: nodeID}},
+		}
+		resp, err := svc.HistoryRead(context.Background(), nil, req, 2)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusOK, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
+	})
+
+	t.Run("read at time", func(t *testing.T) {
+		req := &ua.HistoryReadRequest{
+			RequestHeader: reqHeader(),
+			HistoryReadDetails: ua.NewExtensionObject(&ua.ReadAtTimeDetails{
+				ReqTimes: []time.Time{base.Add(1500 * time.Millisecond)},
+			}),
+			NodesToRead: []*ua.HistoryReadValueID{{NodeID: nodeID}},
+		}
+		resp, err := svc.HistoryRead(context.Background(), nil, req, 3)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusOK, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
+	})
+
+	t.Run("read processed", func(t *testing.T) {
+		req := &ua.HistoryReadRequest{
+			RequestHeader: reqHeader(),
+			HistoryReadDetails: ua.NewExtensionObject(&ua.ReadProcessedDetails{
+				StartTime:          base,
+				EndTime:            base.Add(4 * time.Second),
+				ProcessingInterval: 2000,
+				AggregateType:      []*ua.NodeID{ua.NewNumericNodeID(0, id.AggregateFunctionAverage)},
+			}),
+			NodesToRead: []*ua.HistoryReadValueID{{NodeID: nodeID}},
+		}
+		resp, err := svc.HistoryRead(context.Background(), nil, req, 4)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusOK, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
+	})
+
+	t.Run("release continuation points", func(t *testing.T) {
+		req := &ua.HistoryReadRequest{
+			RequestHeader:             reqHeader(),
+			ReleaseContinuationPoints: true,
+			NodesToRead: []*ua.HistoryReadValueID{
+				{NodeID: nodeID, ContinuationPoint: []byte("unused")},
+			},
+		}
+		resp, err := svc.HistoryRead(context.Background(), nil, req, 5)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusOK, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
+	})
+
+	t.Run("update data / delete raw / delete at time", func(t *testing.T) {
+		req := &ua.HistoryUpdateRequest{
+			RequestHeader: reqHeader(),
+			HistoryUpdateDetails: []*ua.ExtensionObject{
+				ua.NewExtensionObject(&ua.UpdateDataDetails{
+					NodeID:              nodeID,
+					PerformInsertReplace: ua.PerformUpdateTypeUpdate,
+					UpdateValues: []*ua.DataValue{{
+						EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp,
+						Value:        ua.MustVariant(float64(7)),
+						SourceTimestamp: base.Add(10 * time.Second),
+					}},
+				}),
+				ua.NewExtensionObject(&ua.DeleteRawModifiedDetails{
+					NodeID:    nodeID,
+					StartTime: base.Add(10 * time.Second),
+					EndTime:   base.Add(10 * time.Second),
+				}),
+				ua.NewExtensionObject(&ua.DeleteAtTimeDetails{
+					NodeID:   nodeID,
+					ReqTimes: []time.Time{base},
+				}),
+			},
+		}
+		resp, err := svc.HistoryUpdate(context.Background(), nil, req, 6)
+		require.NoError(t, err)
+		hist := resp.(*ua.HistoryUpdateResponse)
+		require.Len(t, hist.Results, 3)
+		for i, r := range hist.Results {
+			assert.Equal(t, ua.StatusOK, r.StatusCode, "result %d", i)
+		}
+	})
+
+	t.Run("unsupported details type", func(t *testing.T) {
+		req := &ua.HistoryReadRequest{
+			RequestHeader:     reqHeader(),
+			HistoryReadDetails: ua.NewExtensionObject(&ua.ReadEventDetails{}),
+			NodesToRead:       []*ua.HistoryReadValueID{{NodeID: nodeID}},
+		}
+		resp, err := svc.HistoryRead(context.Background(), nil, req, 7)
+		require.NoError(t, err)
+		assert.Equal(t, ua.StatusBadHistoryOperationUnsupported, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
 	})
 }
