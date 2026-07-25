@@ -115,6 +115,110 @@ func TestHistorian_DeleteAtTime(t *testing.T) {
 	}
 }
 
+func TestHistorian_DeleteRawModified(t *testing.T) {
+	h := NewHistorian()
+	nodeID := ua.NewStringNodeID(2, "Hist.DelRaw")
+	h.EnableNode(nodeID, 100)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i := 0; i < 5; i++ {
+		h.RecordValue(nodeID, &ua.DataValue{
+			EncodingMask:    ua.DataValueValue | ua.DataValueSourceTimestamp,
+			Value:           ua.MustVariant(float64(i)),
+			SourceTimestamp: base.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	if st := h.DeleteRawModified(nodeID, true, base, base.Add(10*time.Second)).StatusCode; st != ua.StatusBadHistoryOperationUnsupported {
+		t.Fatalf("modified-only delete: %v", st)
+	}
+	if st := h.DeleteRawModified(ua.NewStringNodeID(2, "missing"), false, base, base.Add(time.Second)).StatusCode; st != ua.StatusBadHistoryOperationUnsupported {
+		t.Fatalf("unknown node: %v", st)
+	}
+
+	// Reverse range (start > end) still deletes the inclusive window.
+	res := h.DeleteRawModified(nodeID, false, base.Add(3*time.Second), base.Add(time.Second))
+	if res.StatusCode != ua.StatusOK {
+		t.Fatalf("delete range: %v", res.StatusCode)
+	}
+	raw, err := h.ReadRaw(nodeID, time.Time{}, time.Time{}, 0, false, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hd := raw.HistoryData.Value.(*ua.HistoryData)
+	// Samples at t=0 and t=4 remain (deleted inclusive [1s, 3s]).
+	if len(hd.DataValues) != 2 {
+		t.Fatalf("remaining=%d, want 2", len(hd.DataValues))
+	}
+}
+
+func TestHistorian_ReadModified(t *testing.T) {
+	h := NewHistorian()
+	nodeID := ua.NewStringNodeID(2, "Hist.Mod")
+	h.EnableNode(nodeID, 100)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	h.RecordValue(nodeID, &ua.DataValue{
+		EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp, Value: ua.MustVariant(float64(1)), SourceTimestamp: base,
+	})
+	_ = h.UpdateData(nodeID, ua.PerformUpdateTypeInsert, []*ua.DataValue{{
+		EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp, Value: ua.MustVariant(float64(2)), SourceTimestamp: base.Add(time.Second),
+	}})
+	_ = h.UpdateData(nodeID, ua.PerformUpdateTypeReplace, []*ua.DataValue{{
+		EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp, Value: ua.MustVariant(float64(9)), SourceTimestamp: base,
+	}})
+
+	if st, _ := h.ReadModified(nodeID, time.Time{}, time.Time{}, 0, []byte("cp")); st.StatusCode != ua.StatusBadContinuationPointInvalid {
+		t.Fatalf("bad CP: %v", st.StatusCode)
+	}
+	if st, _ := h.ReadModified(ua.NewStringNodeID(2, "x"), time.Time{}, time.Time{}, 0, nil); st.StatusCode != ua.StatusBadHistoryOperationUnsupported {
+		t.Fatalf("unknown node: %v", st.StatusCode)
+	}
+
+	res, err := h.ReadModified(nodeID, base, base.Add(2*time.Second), 1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	md := res.HistoryData.Value.(*ua.HistoryModifiedData)
+	if len(md.DataValues) != 1 || len(md.ModificationInfos) != 1 {
+		t.Fatalf("values=%d infos=%d", len(md.DataValues), len(md.ModificationInfos))
+	}
+}
+
+func TestHistorian_ReadProcessed_MinMaxCount(t *testing.T) {
+	h := NewHistorian()
+	nodeID := ua.NewStringNodeID(2, "Hist.MinMax")
+	h.EnableNode(nodeID, 100)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	for i, v := range []any{float32(1), int32(5), int64(3), uint32(9), float64(2)} {
+		h.RecordValue(nodeID, &ua.DataValue{
+			EncodingMask:    ua.DataValueValue | ua.DataValueSourceTimestamp,
+			Value:           ua.MustVariant(v),
+			SourceTimestamp: base.Add(time.Duration(i) * time.Second),
+		})
+	}
+
+	end := base.Add(5 * time.Second)
+	for _, agg := range []uint32{id.AggregateFunctionMinimum, id.AggregateFunctionMaximum, id.AggregateFunctionCount} {
+		res, err := h.ReadProcessed(nodeID, base, end, 5000, ua.NewNumericNodeID(0, agg), nil)
+		if err != nil {
+			t.Fatalf("agg %d: %v", agg, err)
+		}
+		if res.StatusCode != ua.StatusOK {
+			t.Fatalf("agg %d status=%v", agg, res.StatusCode)
+		}
+		hd := res.HistoryData.Value.(*ua.HistoryData)
+		if len(hd.DataValues) == 0 || hd.DataValues[0].Status != ua.StatusOK {
+			t.Fatalf("agg %d empty/bad result", agg)
+		}
+	}
+
+	if st, _ := h.ReadProcessed(nodeID, base, end, 1000, ua.NewNumericNodeID(0, 99999), nil); st.StatusCode != ua.StatusBadHistoryOperationUnsupported {
+		t.Fatalf("unsupported agg: %v", st.StatusCode)
+	}
+	if st, _ := h.ReadProcessed(nodeID, end, base, 1000, ua.NewNumericNodeID(0, id.AggregateFunctionCount), nil); st.StatusCode != ua.StatusBadHistoryOperationInvalid {
+		t.Fatalf("invalid window: %v", st.StatusCode)
+	}
+}
+
 func TestHistoryCPRegistry_SessionBound(t *testing.T) {
 	released := 0
 	reg := newHistoryCPRegistry(func([]byte) { released++ })

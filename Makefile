@@ -74,7 +74,7 @@ coverage: ## Run tests with coverage on core library only (writes coverage.out)
 		-coverpkg=$(COVER_PKGS) $(COVER_TEST_PKGS)
 	@pct=$$(go tool cover -func=coverage.out | awk '/^total:/ {gsub(/%/,""); print $$3}'); \
 	echo "Total coverage: $$pct%"; \
-	awk -v p="$$pct" 'BEGIN { if (p+0 < 75) { printf "ERROR: coverage %.1f%% is below 75%% threshold\n", p; exit 1 } }'
+	awk -v p="$$pct" 'BEGIN { if (p+0 < 80) { printf "ERROR: coverage %.1f%% is below 80%% threshold\n", p; exit 1 } }'
 
 cover: coverage ## Open coverage report in browser
 	@echo "Opening coverage report"
