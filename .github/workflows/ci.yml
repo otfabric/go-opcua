@@ -17,6 +17,9 @@ jobs:
     with:
       codecov-name: go-opcua
       go-versions: '["1.25","1.26"]'
+      # Match Makefile COVER_PKGS so Codecov uses the same merged metric as
+      # `make coverage` (conformance hits count toward core packages).
+      coverpkg: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats
     secrets: inherit
 
   gen-drift:
