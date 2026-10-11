@@ -56,7 +56,7 @@ func newSink(t *testing.T, echo bool) *sink {
 }
 
 func (s *sink) serve(c net.Conn) {
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	buf := make([]byte, 4096)
 	for {
 		n, err := c.Read(buf)
@@ -503,7 +503,7 @@ func requireReset(t *testing.T, p *ChaosProxy, what string) {
 	if err != nil {
 		return
 	}
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	_ = c.SetReadDeadline(time.Now().Add(proxyWait))
 	if _, err := c.Read(make([]byte, 1)); err == nil {
 		t.Fatalf("read succeeded on %s", what)

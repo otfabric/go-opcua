@@ -104,7 +104,7 @@ func TestListenerAcceptNotBlockedBySilentPeer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer silent.Close()
+	defer func() { _ = silent.Close() }()
 
 	type result struct {
 		c   *Conn
@@ -123,7 +123,7 @@ func TestListenerAcceptNotBlockedBySilentPeer(t *testing.T) {
 	go func() {
 		c, err := Dial(context.Background(), "opc.tcp://"+addr)
 		if err == nil {
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 		}
 		dialed <- err
 	}()
@@ -133,7 +133,7 @@ func TestListenerAcceptNotBlockedBySilentPeer(t *testing.T) {
 		if r.err != nil {
 			t.Fatalf("Accept: %v", r.err)
 		}
-		defer r.c.Close()
+		defer func() { _ = r.c.Close() }()
 	case <-time.After(30 * time.Second):
 		t.Fatal("Accept is blocked by a connection that never sent a HEL")
 	}

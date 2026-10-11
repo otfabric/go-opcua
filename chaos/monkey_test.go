@@ -153,10 +153,10 @@ func (s *scenario) start() {
 // get a generous deadline; some get a deadline that expires mid-request and
 // some are cancelled from another goroutine while in flight.
 func opContext(rng *rand.Rand) (context.Context, context.CancelFunc) {
-	switch r := rng.Intn(10); {
-	case r == 0:
+	switch rng.Intn(10) {
+	case 0:
 		return context.WithTimeout(context.Background(), time.Duration(1+rng.Intn(30))*time.Millisecond)
-	case r == 1:
+	case 1:
 		ctx, cancel := context.WithCancel(context.Background())
 		t := time.AfterFunc(time.Duration(rng.Intn(20000))*time.Microsecond, cancel)
 		return ctx, func() { t.Stop(); cancel() }

@@ -642,7 +642,7 @@ func (s *SecureChannel) verifyAndDecrypt(m *MessageChunk, b []byte, instance *ch
 	// known tokens (newest first) for peers that do not rotate TokenIds.
 	if m.SymmetricSecurityHeader != nil {
 		for i := len(instances) - 1; i >= 0; i-- {
-			if instances[i].securityTokenID != m.SymmetricSecurityHeader.TokenID {
+			if instances[i].securityTokenID != m.TokenID {
 				continue
 			}
 			if verified, err = instances[i].verifyAndDecrypt(m, b); err == nil {
@@ -652,7 +652,7 @@ func (s *SecureChannel) verifyAndDecrypt(m *MessageChunk, b []byte, instance *ch
 	}
 
 	for i := len(instances) - 1; i >= 0; i-- {
-		if m.SymmetricSecurityHeader != nil && instances[i].securityTokenID == m.SymmetricSecurityHeader.TokenID {
+		if m.SymmetricSecurityHeader != nil && instances[i].securityTokenID == m.TokenID {
 			continue
 		}
 		if verified, err = instances[i].verifyAndDecrypt(m, b); err == nil {

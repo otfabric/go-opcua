@@ -145,7 +145,7 @@ func sendRawAttack(addr, endpoint string, a rawAttack, rng *rand.Rand, linger ti
 		}
 		conn = c
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
 	for _, b := range a.payload(rng) {

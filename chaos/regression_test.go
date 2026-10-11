@@ -168,7 +168,7 @@ func TestRegressionIdleConnectionDoesNotBlockAccept(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer idle.Close()
+		defer func() { _ = idle.Close() }()
 	}
 
 	done := make(chan error, 1)
