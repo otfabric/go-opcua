@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -151,5 +152,53 @@ func TestNextSubscriptionIDSkipsIDsInUse(t *testing.T) {
 	ss.Subs[1] = NewSubscription()
 	if id := ss.nextSubscriptionID(); id == 0 || id == ^uint32(0) || id == 1 {
 		t.Fatalf("after wrap-around got id %d", id)
+	}
+}
+
+// A subscription whose lifetime expires must tell the client with a
+// StatusChangeNotification (Part 4 §5.13.1.1). There is normally no Publish
+// request to answer at that moment, so the notification waits on the session
+// and is the first thing the next Publish request gets.
+func TestExpiredSubscriptionIsAnnouncedOnNextPublish(t *testing.T) {
+	s := newTestServer()
+	ss := s.SubscriptionService
+	sess := s.sb.NewSession()
+	sess.activated.Store(true)
+
+	sub := NewSubscription()
+	sub.srv = ss
+	sub.ID = 42
+	sub.SequenceID = 6
+	sub.Session = sess
+
+	sub.announceExpiry(sess)
+
+	req := &ua.PublishRequest{
+		RequestHeader:                &ua.RequestHeader{RequestHandle: 9, AuthenticationToken: sess.AuthTokenID},
+		SubscriptionAcknowledgements: []*ua.SubscriptionAcknowledgement{},
+	}
+	resp, err := ss.Publish(context.Background(), nil, req, 1)
+	if err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+	pub, ok := resp.(*ua.PublishResponse)
+	if !ok {
+		t.Fatalf("Publish returned %T, want an immediate PublishResponse", resp)
+	}
+	if pub.SubscriptionID != 42 || pub.NotificationMessage.SequenceNumber != 7 {
+		t.Errorf("response for subscription %d with sequence number %d, want 42 and 7", pub.SubscriptionID, pub.NotificationMessage.SequenceNumber)
+	}
+	if len(pub.NotificationMessage.NotificationData) != 1 {
+		t.Fatalf("%d notifications, want 1", len(pub.NotificationMessage.NotificationData))
+	}
+	sc, ok := pub.NotificationMessage.NotificationData[0].Value.(*ua.StatusChangeNotification)
+	if !ok || sc.Status != ua.StatusBadTimeout {
+		t.Fatalf("notification %#v, want StatusChangeNotification(BadTimeout)", pub.NotificationMessage.NotificationData[0].Value)
+	}
+
+	// It is announced once. With no subscription left the next Publish gets
+	// BadNoSubscription.
+	if _, err := ss.Publish(context.Background(), nil, req, 2); err != ua.StatusBadNoSubscription {
+		t.Fatalf("second Publish: %v, want BadNoSubscription", err)
 	}
 }

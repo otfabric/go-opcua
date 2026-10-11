@@ -5,6 +5,7 @@ package conformance
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log/slog"
 	"strings"
 	"sync"
@@ -592,6 +593,52 @@ func TestTransport_LimitsEnforced(t *testing.T) {
 		_, err := c.ReadValue(ctx, f.ByteString)
 		require.ErrorIs(t, err, errors.ErrTooManyChunks)
 	})
+}
+
+// TestTransport_BackPressureNeverDropsRequests runs many concurrent requests
+// over one channel against a server that allows only a single request of a
+// channel to be in flight. The limit must only slow the client down: every
+// request still gets its own, correct response.
+func TestTransport_BackPressureNeverDropsRequests(t *testing.T) {
+	srv, url := newServer(t, server.WithMaxPendingResponses(1))
+	f := testutil.AddFixture(t, srv)
+	ctx := context.Background()
+	c := newClient(t, url)
+
+	nodes := []*ua.NodeID{f.Int16, f.Int32, f.Int64, f.Uint16, f.Uint32, f.Uint64, f.Double, f.String}
+	want := []any{int16(-1234), int32(42), int64(-9_000_000_000), uint16(4321), uint32(4242), uint64(9_000_000_000), 3.14159, "hello"}
+
+	const workers, rounds = 32, 10
+	errs := make(chan error, workers)
+	for w := 0; w < workers; w++ {
+		go func(w int) {
+			for r := 0; r < rounds; r++ {
+				i := (w + r) % len(nodes)
+				dv, err := c.ReadValue(ctx, nodes[i])
+				if err != nil {
+					errs <- fmt.Errorf("worker %d round %d: %w", w, r, err)
+					return
+				}
+				if dv.Value.Value() != want[i] {
+					errs <- fmt.Errorf("worker %d round %d: node %s returned %v, want %v", w, r, nodes[i], dv.Value.Value(), want[i])
+					return
+				}
+			}
+			errs <- nil
+		}(w)
+	}
+	for w := 0; w < workers; w++ {
+		require.NoError(t, <-errs)
+	}
+
+	// Parked Publish requests do not count against the limit: a subscription
+	// keeps delivering while ordinary requests continue.
+	sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32).Start(ctx)
+	require.NoError(t, err)
+	defer func() { _ = sub.Cancel(ctx) }()
+	awaitValue(t, ch, 0, int32(42))
+	writeInt32(t, c, f.Int32, 43)
+	awaitValue(t, ch, 0, int32(43))
 }
 
 // TestTransport_RequestTooLargeForServer verifies a request exceeding the

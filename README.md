@@ -1,4 +1,4 @@
-# otfabric/go-opcua — OPC-UA library for Go
+# go-opcua — OPC UA Client and Server Library for Go (Golang)
 
 [![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/otfabric/go-opcua.svg)](https://pkg.go.dev/github.com/otfabric/go-opcua)
@@ -7,7 +7,17 @@
 [![Codecov](https://codecov.io/gh/otfabric/go-opcua/graph/badge.svg)](https://codecov.io/gh/otfabric/go-opcua)
 [![Release](https://img.shields.io/github/v/release/otfabric/go-opcua?label=release)](https://github.com/otfabric/go-opcua/releases)
 
-A pure Go implementation of the OPC-UA Binary Protocol, providing both **client** and **server** capabilities. No C dependencies, no CGo — just Go.
+**go-opcua is a pure Go implementation of OPC Unified Architecture
+(OPC UA), providing comprehensive client and server capabilities
+for industrial automation, SCADA, industrial IoT (IIoT), and
+Industry 4.0 applications.**
+
+Connect to OPC UA servers, browse address spaces, read and write
+values, subscribe to data changes and events, call methods, and
+access historical data.
+
+Build OPC UA servers with custom namespaces, variables, methods,
+subscriptions, events, access control, and historical data support.
 
 ```sh
 go get github.com/otfabric/go-opcua
@@ -17,34 +27,50 @@ Requires **Go 1.25** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
 
 ## Table of contents
 
-- [Overview](#overview)
-- [Documentation](#documentation)
-- [Quickstart](#quickstart)
-  - [Read a value](#read-a-value)
-  - [Subscribe to changes](#subscribe-to-changes)
-  - [Browse the address space](#browse-the-address-space)
-  - [Run a server](#run-a-server)
-- [Client Features](#client-features)
-- [Server Features](#server-features)
-- [Service Support Matrix](#service-support-matrix)
-- [Package Structure](#package-structure)
-- [Examples](#examples)
-- [Testing and production readiness](#testing-and-production-readiness)
-- [Protocol Support](#protocol-support)
-- [License](#license)
+- [go-opcua — OPC UA Client and Server Library for Go (Golang)](#go-opcua--opc-ua-client-and-server-library-for-go-golang)
+  - [Table of contents](#table-of-contents)
+  - [Overview](#overview)
+  - [Documentation](#documentation)
+  - [Quickstart](#quickstart)
+    - [Read a value](#read-a-value)
+    - [Subscribe to changes](#subscribe-to-changes)
+    - [Browse the address space](#browse-the-address-space)
+    - [Run a server](#run-a-server)
+  - [Client Features](#client-features)
+  - [Server Features](#server-features)
+  - [Service Support Matrix](#service-support-matrix)
+  - [Package Structure](#package-structure)
+  - [Examples](#examples)
+  - [Testing and production readiness](#testing-and-production-readiness)
+  - [Protocol Support](#protocol-support)
+  - [License](#license)
 
 ## Overview
 
-otfabric/go-opcua gives you everything needed to interact with OPC-UA servers or build your own:
+**go-opcua** gives you everything needed to interact with OPC-UA servers or build your own.
 
-- **Client** — connect, browse, read/write (including IndexRange), subscribe, call methods, read/update history, Republish/TransferSubscriptions
-- **Server** — host namespaces, expose variables, handle methods, emit events (`EmitBaseEvent`), pluggable `HistoryProvider` (default `*Historian` covers raw + optional update/delete/at-time/modified/processed)
-- **Security** — six encryption policies, certificate and username/password authentication, server certificate validation with `TrustedCertificates()` and `InsecureSkipVerify()` options; **certificate chains** (leaf + intermediate) supported on connect; optional client-cert trust list at OpenSecureChannel
-- **Subscriptions** — data-change and event monitoring with Part 4 queues, lifecycle, Republish/Transfer on server and client; `WithSubscriptionRecoveryHandler` for reconnect outcomes
-- **Retry & Reconnect** — exponential backoff and automatic session / subscription recovery
-- **Metrics** — pluggable instrumentation for request/response/error tracking
-- **Logging** — structured `*slog.Logger`; **silent by default** (opt in with `WithLogger` / `SetLogger`)
-- **Metrics** — pluggable client/server service callbacks (`WithMetrics`)
+- **Client and server** — Full OPC UA client and server implementations
+  using OPC UA Binary over UA-TCP.
+- **Pure Go** — No CGO or native C library dependencies.
+- **Secure communication** — OPC UA message signing, encryption,
+  X.509 certificates, and multiple authentication mechanisms.
+- **Data access** — Read, write, browse, and manage OPC UA nodes.
+- **Subscriptions** — Real-time data-change notifications,
+  monitored items, events, and subscription management.
+- **Historical data** — Historical reads, updates, and
+  pluggable server-side history providers.
+- **Method calls** — Invoke OPC UA methods or expose custom
+  methods from your server.
+- **Resilience** — Automatic reconnect, retry policies,
+  and subscription recovery.
+- **Observability** — Structured logging and pluggable metrics.
+- **Interoperability tested** — Independently tested against
+  open62541 (C) and Eclipse Milo (Java).
+
+Built for developers integrating PLCs, industrial gateways,
+SCADA systems, and industrial IoT applications.
+
+**MIT licensed · Pure Go · Client + Server · No CGO**
 
 For full API details see [API.md](API.md).
 
@@ -326,7 +352,7 @@ go-opcua is continuously interoperability-tested in all applicable client/server
 
 - **Verify gate**: `make verify` — `go vet`, unit tests, race tests, and interop (`make vet`, `make test-norace`, `make test`, `make interop`).
 - **Unit tests**: `make test-norace` (`go test -count=1 ./...`), `make test` (same with `-race`).
-- **Coverage**: `make coverage` writes `coverage.out` for core library packages (80% gate); CI passes the same `COVER_PKGS` list as `coverpkg` to the shared workflow so Codecov matches. `make cover` opens the report.
+- **Coverage**: `make coverage` writes `coverage.out` for core library packages (90% gate); CI passes the same `COVER_PKGS` list as `coverpkg` to the shared workflow so Codecov matches. `make cover` opens the report.
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
 - **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541, Milo). See [INTEROP.md](INTEROP.md).
 - **Fuzz tests**: `ua/fuzz_test.go`, `uasc/fuzz_test.go`, `uacp/fuzz_test.go`.
