@@ -26,7 +26,7 @@ func (e *env) connectDirect(opts ...opcua.Option) *opcua.Client {
 	all := append([]opcua.Option{
 		opcua.SecurityMode(ua.MessageSecurityModeNone),
 		opcua.AutoReconnect(false),
-		opcua.RequestTimeout(60 * time.Second),
+		opcua.RequestTimeout(30 * time.Second),
 	}, opts...)
 	c, err := opcua.NewClient("opc.tcp://"+e.directAddr(), all...)
 	if err != nil {

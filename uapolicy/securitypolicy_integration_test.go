@@ -22,7 +22,7 @@ func TestAsymmetricLookup_AllPolicies(t *testing.T) {
 	remoteKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	for _, uri := range SupportedPolicies() {
+	for _, uri := range rsaTestPolicies() {
 		t.Run(uri, func(t *testing.T) {
 			algo, err := Asymmetric(uri, localKey, &remoteKey.PublicKey)
 			require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestSymmetricLookup_AllPolicies(t *testing.T) {
 	remoteKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	for _, uri := range SupportedPolicies() {
+	for _, uri := range rsaTestPolicies() {
 		t.Run(uri, func(t *testing.T) {
 			// Get nonce length from asymmetric first.
 			asym, err := Asymmetric(uri, localKey, &remoteKey.PublicKey)
@@ -87,7 +87,7 @@ func TestSymmetric_UnsupportedPolicy(t *testing.T) {
 
 // TestSymmetric_NilNonces verifies that non-None policies require nonces.
 func TestSymmetric_NilNonces(t *testing.T) {
-	for _, uri := range SupportedPolicies() {
+	for _, uri := range rsaTestPolicies() {
 		if uri == ua.SecurityPolicyURINone {
 			continue
 		}
@@ -115,7 +115,7 @@ func TestAsymmetricNonceCrossValidation(t *testing.T) {
 	remoteKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
-	for _, uri := range SupportedPolicies() {
+	for _, uri := range rsaTestPolicies() {
 		if uri == ua.SecurityPolicyURINone {
 			continue
 		}
@@ -172,7 +172,7 @@ func TestSymmetricRoundTrip_AllPolicies(t *testing.T) {
 	_, err = rand.Read(payload)
 	require.NoError(t, err)
 
-	for _, uri := range SupportedPolicies() {
+	for _, uri := range rsaTestPolicies() {
 		t.Run(uri, func(t *testing.T) {
 			asym, err := Asymmetric(uri, localKey, &remoteKey.PublicKey)
 			require.NoError(t, err)

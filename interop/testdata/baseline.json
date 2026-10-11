@@ -944,6 +944,57 @@
         "CurrentRead"
       ],
       "initialValue": "baseline"
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Analog",
+      "browseName": "1:Analog",
+      "displayName": "Analog",
+      "description": "AnalogItemType variables with an EURange property (DataChangeFilter deadband tests).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=61"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Analog.Level",
+      "browseName": "1:Analog.Level",
+      "displayName": "Level",
+      "description": "AnalogItem ramp: Double 0.0 to 100.0 in steps of 2.0 every 100 ms, then resets. EURange 0..100.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Analog",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=2368",
+      "dataType": "Double",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead"
+      ],
+      "initialValue": 0.0,
+      "euRange": {
+        "low": 0.0,
+        "high": 100.0
+      }
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=Analog.Setpoint",
+      "browseName": "1:Analog.Setpoint",
+      "displayName": "Setpoint",
+      "description": "Writable AnalogItem (static). EURange 0..100. Lets a client drive deadband filters deterministically.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Analog",
+      "referenceType": "Organizes",
+      "typeDefinition": "i=2368",
+      "dataType": "Double",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 50.0,
+      "euRange": {
+        "low": 0.0,
+        "high": 100.0
+      }
     }
   ],
   "behaviors": [
@@ -964,6 +1015,15 @@
       "kind": "ramp",
       "initial": 0.0,
       "increment": 1.0,
+      "minimum": 0.0,
+      "maximum": 100.0,
+      "intervalMs": 100
+    },
+    {
+      "target": "nsu=urn:otfabric:opcua-interop:model;s=Analog.Level",
+      "kind": "ramp",
+      "initial": 0.0,
+      "increment": 2.0,
       "minimum": 0.0,
       "maximum": 100.0,
       "intervalMs": 100
@@ -1002,6 +1062,46 @@
     },
     {
       "securityPolicy": "Aes256_Sha256_RsaPss",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_nistP256",
+      "securityMode": "Sign"
+    },
+    {
+      "securityPolicy": "ECC_nistP256",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_nistP384",
+      "securityMode": "Sign"
+    },
+    {
+      "securityPolicy": "ECC_nistP384",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_brainpoolP256r1",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_brainpoolP384r1",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_curve25519",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_curve448",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_nistP256_AesGcm",
+      "securityMode": "SignAndEncrypt"
+    },
+    {
+      "securityPolicy": "ECC_nistP256_ChaChaPoly",
       "securityMode": "SignAndEncrypt"
     }
   ]

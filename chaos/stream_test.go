@@ -56,6 +56,21 @@ func streamParams() *opcua.SubscriptionParameters {
 	}
 }
 
+// faultStreamParams are the parameters of the long-lived subscriptions of the
+// scenarios that inject faults. A fault can orphan a subscription on the
+// server (the client recreates what it cannot recover), and the server keeps
+// an orphan for its lifetime: 6 s here, so that the server is drained well
+// inside settleLimit after the clients are gone. A subscription that expires
+// because the faults kept its client away for longer is recreated by the
+// client like any other lost one.
+func faultStreamParams() *opcua.SubscriptionParameters {
+	return &opcua.SubscriptionParameters{
+		Interval:          20 * time.Millisecond,
+		MaxKeepAliveCount: 5,
+		LifetimeCount:     300,
+	}
+}
+
 // shortLivedParams are for subscriptions that fault-injecting scenarios
 // abandon on purpose (clients closed while unreachable): the server reclaims
 // them after 2s. Nothing is asserted about their delivery.

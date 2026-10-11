@@ -3,6 +3,7 @@
 package opcua
 
 import (
+	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -74,6 +75,10 @@ type Config struct {
 	retryPolicy         RetryPolicy
 	skipNamespaceUpdate bool
 	certValidator       serverCertValidator
+
+	// reverse is set when the client waits for the server to connect
+	// (reverse connect) instead of connecting to it.
+	reverse *reverseConfig
 }
 
 func DefaultDialer() *uacp.Dialer {
@@ -293,15 +298,49 @@ func SessionTimeout(d time.Duration) Option {
 }
 
 // PrivateKey sets the RSA private key in the secure channel configuration.
+//
+// For the key of an ECC application instance certificate use
+// PrivateKeySigner.
 func PrivateKey(key *rsa.PrivateKey) Option {
 	return func(cfg *Config) error {
 		cfg.sechan.LocalKey = key
+		cfg.sechan.LocalPrivateKey = nil
 		return nil
 	}
 }
 
-// PrivateKeyFile sets the RSA private key in the secure channel configuration
-// from a PEM or DER encoded file.
+// PrivateKeySigner sets the private key of the client's application instance
+// certificate. It accepts every supported key type: an *rsa.PrivateKey for
+// the RSA security policies, an ECDSA key (P-256 or P-384) for the ECC
+// security policies ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm and
+// ECC_nistP256_ChaChaPoly, and an Ed25519 key for ECC_curve25519.
+//
+// An ECC key only has to sign, so it may be any crypto.Signer with an ECDSA
+// or Ed25519 public key, for example a key held in an HSM. An RSA key also
+// decrypts and must be an *rsa.PrivateKey.
+func PrivateKeySigner(key crypto.Signer) Option {
+	return func(cfg *Config) error {
+		setLocalKey(cfg, key)
+		return nil
+	}
+}
+
+// setLocalKey stores the application instance key. An RSA key goes where it
+// always went, so code that reads the RSA field keeps working.
+func setLocalKey(cfg *Config, key crypto.Signer) {
+	cfg.sechan.LocalKey, cfg.sechan.LocalPrivateKey = nil, nil
+	switch k := key.(type) {
+	case nil:
+	case *rsa.PrivateKey:
+		cfg.sechan.LocalKey = k
+	default:
+		cfg.sechan.LocalPrivateKey = key
+	}
+}
+
+// PrivateKeyFile sets the private key in the secure channel configuration
+// from a PEM or DER encoded file. The key is an RSA key (PKCS #1 or PKCS #8)
+// an ECDSA key (PKCS #8 or SEC 1 "EC PRIVATE KEY") or an Ed25519 key (PKCS #8).
 func PrivateKeyFile(filename string) Option {
 	return func(cfg *Config) error {
 		if filename == "" {
@@ -311,47 +350,17 @@ func PrivateKeyFile(filename string) Option {
 		if err != nil {
 			return err
 		}
-		cfg.sechan.LocalKey = key
+		setLocalKey(cfg, key)
 		return nil
 	}
 }
 
-func loadPrivateKey(filename string) (*rsa.PrivateKey, error) {
+func loadPrivateKey(filename string) (crypto.Signer, error) {
 	b, err := os.ReadFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
 	}
-
-	// Try PEM decoding regardless of file extension; handles both PKCS#1 and PKCS#8.
-	if block, _ := pem.Decode(b); block != nil {
-		switch block.Type {
-		case "RSA PRIVATE KEY":
-			pk, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-			if err != nil {
-				return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
-			}
-			return pk, nil
-		case "PRIVATE KEY":
-			key, err := x509.ParsePKCS8PrivateKey(block.Bytes)
-			if err != nil {
-				return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
-			}
-			rsaKey, ok := key.(*rsa.PrivateKey)
-			if !ok {
-				return nil, fmt.Errorf("%w: PKCS#8 key is not RSA", errors.ErrInvalidPrivateKey)
-			}
-			return rsaKey, nil
-		default:
-			return nil, fmt.Errorf("%w: unsupported PEM block type %q", errors.ErrInvalidPrivateKey, block.Type)
-		}
-	}
-
-	// Fall back to raw DER (PKCS#1).
-	pk, err := x509.ParsePKCS1PrivateKey(b)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
-	}
-	return pk, nil
+	return uapolicy.ParsePrivateKey(b)
 }
 
 // Certificate sets the client X509 certificate in the secure channel configuration.
@@ -552,9 +561,31 @@ func AuthCertificate(cert []byte) Option {
 // AuthPrivateKey sets the client's authentication RSA private key
 // Note: PolicyID still needs to be set outside of this method, typically through
 // the SecurityFromEndpoint() Option.
+//
+// For the key of an ECC user certificate use AuthPrivateKeySigner.
 func AuthPrivateKey(key *rsa.PrivateKey) Option {
 	return func(cfg *Config) error {
 		cfg.sechan.UserKey = key
+		cfg.sechan.UserPrivateKey = nil
+		return nil
+	}
+}
+
+// AuthPrivateKeySigner sets the private key of the user certificate given
+// with AuthCertificate. It accepts every supported key type: an
+// *rsa.PrivateKey, or a crypto.Signer with an ECDSA or Ed25519 public key when
+// the user token is protected with an ECC security policy (Ed25519 for
+// ECC_curve25519, ECDSA for the others).
+func AuthPrivateKeySigner(key crypto.Signer) Option {
+	return func(cfg *Config) error {
+		cfg.sechan.UserKey, cfg.sechan.UserPrivateKey = nil, nil
+		switch k := key.(type) {
+		case nil:
+		case *rsa.PrivateKey:
+			cfg.sechan.UserKey = k
+		default:
+			cfg.sechan.UserPrivateKey = key
+		}
 		return nil
 	}
 }
@@ -800,12 +831,16 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 	// issue certificates without it.
 	if cert.KeyUsage != 0 {
 		required := x509.KeyUsageDigitalSignature
-		if securityMode == ua.MessageSecurityModeSignAndEncrypt {
+		// keyEncipherment is what an RSA key needs to encrypt the
+		// OpenSecureChannel messages and user token secrets. An ECC key
+		// cannot encipher anything: the ECC policies agree on keys with
+		// ephemeral keys and use the certificate for signatures only.
+		if _, isRSA := cert.PublicKey.(*rsa.PublicKey); isRSA && securityMode == ua.MessageSecurityModeSignAndEncrypt {
 			required |= x509.KeyUsageKeyEncipherment
 		}
 		if cert.KeyUsage&required != required {
 			return fmt.Errorf("opcua: server certificate key usage 0x%x does not include required bits 0x%x",
-				cert.KeyUsage, required)
+				uint(cert.KeyUsage), uint(required))
 		}
 	}
 

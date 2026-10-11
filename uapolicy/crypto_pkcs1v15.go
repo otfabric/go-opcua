@@ -41,7 +41,8 @@ func (s *PKCS1v15) Decrypt(src []byte) ([]byte, error) {
 			end = len(src)
 		}
 
-		p, err := rsa.DecryptPKCS1v15(rng, s.PrivateKey, src[start:end])
+		//lint:ignore SA1019 required by SecurityPolicy Basic128Rsa15
+		p, err := rsa.DecryptPKCS1v15(rng, s.PrivateKey, src[start:end]) //nolint:staticcheck // SA1019: required by SecurityPolicy Basic128Rsa15
 		if err != nil {
 			return nil, err
 		}
@@ -72,7 +73,11 @@ func (s *PKCS1v15) Encrypt(src []byte) ([]byte, error) {
 			end = len(src)
 		}
 
-		c, err := rsa.EncryptPKCS1v15(rng, s.PublicKey, src[start:end])
+		// RSA PKCS #1 v1.5 encryption is what the (deprecated, off by
+		// default) SecurityPolicy Basic128Rsa15 specifies; there is no
+		// substitute within that policy.
+		//lint:ignore SA1019 required by SecurityPolicy Basic128Rsa15
+		c, err := rsa.EncryptPKCS1v15(rng, s.PublicKey, src[start:end]) //nolint:staticcheck // SA1019: required by SecurityPolicy Basic128Rsa15
 		if err != nil {
 			return nil, err
 		}

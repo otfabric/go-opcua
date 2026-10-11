@@ -6,7 +6,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -18,7 +18,7 @@
       "status": "verified",
       "test": "TestMiloServer_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -30,7 +30,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -42,7 +42,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -54,7 +54,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -66,7 +66,7 @@
       "status": "verified",
       "test": "TestMiloServer_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -78,7 +78,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -90,7 +90,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -122,7 +122,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -134,7 +134,7 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -146,7 +146,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -158,7 +158,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -170,7 +170,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseInteropNamespace",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -182,7 +182,7 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseInteropNamespace",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -194,7 +194,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseObjectsNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -206,7 +206,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseObjectsNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -218,7 +218,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -230,7 +230,7 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -242,7 +242,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -254,7 +254,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -266,7 +266,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -278,7 +278,7 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -290,7 +290,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -302,7 +302,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -314,7 +314,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -326,7 +326,7 @@
       "status": "verified",
       "test": "TestMiloServer_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -338,7 +338,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -350,7 +350,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -362,7 +362,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -374,7 +374,7 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -386,7 +386,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -398,7 +398,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -410,7 +410,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -422,7 +422,7 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -434,7 +434,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -446,7 +446,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -498,7 +498,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -510,7 +510,7 @@
       "status": "verified",
       "test": "TestMiloServer_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -522,7 +522,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -534,7 +534,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -546,7 +546,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -558,7 +558,7 @@
       "status": "verified",
       "test": "TestMiloServer_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -570,7 +570,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -582,7 +582,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -594,7 +594,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -606,7 +606,7 @@
       "status": "verified",
       "test": "TestMiloServer_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -618,7 +618,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -630,7 +630,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -642,7 +642,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -654,7 +654,7 @@
       "status": "verified",
       "test": "TestMiloServer_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -666,7 +666,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -678,7 +678,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -687,42 +687,106 @@
     {
       "capability": "discovery.find-servers-on-network",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.find-servers-on-network/go-client-to-open62541-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "discovery.find-servers-on-network",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "test": "TestMiloServer_DiscoveryServerUnsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with Bad_ServiceUnsupported (pinned by TestMiloServer_DiscoveryServerUnsupported)"
     },
     {
       "capability": "discovery.find-servers-on-network",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.find-servers-on-network/open62541-client-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "discovery.find-servers-on-network",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.find-servers-on-network/milo-client-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "discovery.lds-registration",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestOpen62541LDS_GoServerRegisters",
+      "case": "coverage/discovery.lds-registration/go-server-to-open62541-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "discovery.lds-registration",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "test": "TestMiloServer_DiscoveryServerUnsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with Bad_ServiceUnsupported (pinned by TestMiloServer_DiscoveryServerUnsupported)"
     },
     {
       "capability": "discovery.lds-registration",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoLDS_Open62541ServerRegisters",
+      "case": "coverage/discovery.lds-registration/open62541-server-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "discovery.lds-registration",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoLDS_MiloServerRegisters",
+      "case": "coverage/discovery.lds-registration/milo-server-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "event.emission.base",
@@ -740,7 +804,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventEmissionBase",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -752,7 +816,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventEmissionBase",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -784,7 +848,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -796,7 +860,7 @@
       "status": "verified",
       "test": "TestMiloServer_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -808,7 +872,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -820,7 +884,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -832,7 +896,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -844,7 +908,7 @@
       "status": "verified",
       "test": "TestMiloServer_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -856,7 +920,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -868,7 +932,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -880,7 +944,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -892,7 +956,7 @@
       "status": "verified",
       "test": "TestMiloServer_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -904,7 +968,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -916,7 +980,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -928,7 +992,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventFilterWhereClause",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -941,7 +1005,7 @@
       "status": "verified",
       "test": "TestMiloServer_EventFilterWhereClause",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -964,7 +1028,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventNotificationDecode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -976,7 +1040,7 @@
       "status": "verified",
       "test": "TestMiloServer_EventNotificationDecode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -998,7 +1062,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventQueueOverflow",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1010,7 +1074,7 @@
       "status": "verified",
       "test": "TestMiloServer_EventQueueOverflow",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1032,7 +1096,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventSubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1044,7 +1108,7 @@
       "status": "verified",
       "test": "TestMiloServer_EventSubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1056,7 +1120,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventSubscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1068,7 +1132,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventSubscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1120,7 +1184,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_HistoryReadContinuation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1132,7 +1196,7 @@
       "status": "verified",
       "test": "TestMiloServer_HistoryReadContinuation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1145,7 +1209,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_HistoryReadContinuation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1157,7 +1221,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_HistoryReadContinuation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1229,7 +1293,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1241,7 +1305,7 @@
       "status": "verified",
       "test": "TestMiloServer_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1253,7 +1317,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1265,7 +1329,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1317,7 +1381,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_CallMethodAdd",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1329,7 +1393,7 @@
       "status": "verified",
       "test": "TestMiloServer_CallMethodAdd",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1341,7 +1405,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_CallMethod",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1353,7 +1417,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_CallMethod",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1365,7 +1429,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1377,7 +1441,7 @@
       "status": "verified",
       "test": "TestMiloServer_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1389,7 +1453,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1401,7 +1465,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1413,7 +1477,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_AddNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1425,7 +1489,7 @@
       "status": "unsupported",
       "test": "TestMiloServer_NodeManagementUnsupported",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1438,7 +1502,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_AddNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1450,7 +1514,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_AddNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1462,7 +1526,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_DeleteNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1474,7 +1538,7 @@
       "status": "unsupported",
       "test": "TestMiloServer_NodeManagementUnsupported",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1487,7 +1551,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_DeleteNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1499,7 +1563,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_DeleteNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1571,7 +1635,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1583,7 +1647,7 @@
       "status": "verified",
       "test": "TestMiloServer_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1595,7 +1659,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1607,7 +1671,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1619,7 +1683,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1631,7 +1695,7 @@
       "status": "verified",
       "test": "TestMiloServer_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1643,7 +1707,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1655,7 +1719,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1667,7 +1731,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1679,7 +1743,7 @@
       "status": "verified",
       "test": "TestMiloServer_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1691,7 +1755,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1703,7 +1767,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1715,7 +1779,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1727,7 +1791,7 @@
       "status": "verified",
       "test": "TestMiloServer_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1739,7 +1803,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1751,7 +1815,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1763,7 +1827,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1775,7 +1839,7 @@
       "status": "verified",
       "test": "TestMiloServer_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1787,7 +1851,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1799,7 +1863,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1811,7 +1875,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1823,7 +1887,7 @@
       "status": "verified",
       "test": "TestMiloServer_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1835,7 +1899,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1847,7 +1911,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1859,7 +1923,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1871,7 +1935,7 @@
       "status": "verified",
       "test": "TestMiloServer_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1883,7 +1947,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1895,7 +1959,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1907,7 +1971,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1919,7 +1983,7 @@
       "status": "verified",
       "test": "TestMiloServer_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1931,7 +1995,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1943,7 +2007,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1955,7 +2019,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1967,7 +2031,7 @@
       "status": "verified",
       "test": "TestMiloServer_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -1979,7 +2043,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -1991,7 +2055,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2003,7 +2067,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2015,7 +2079,7 @@
       "status": "verified",
       "test": "TestMiloServer_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2027,7 +2091,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2039,7 +2103,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2051,7 +2115,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2063,7 +2127,7 @@
       "status": "verified",
       "test": "TestMiloServer_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2075,7 +2139,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2087,7 +2151,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2139,7 +2203,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2151,7 +2215,7 @@
       "status": "verified",
       "test": "TestMiloServer_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2163,7 +2227,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2175,7 +2239,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2187,7 +2251,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2199,7 +2263,7 @@
       "status": "verified",
       "test": "TestMiloServer_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2211,7 +2275,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2223,7 +2287,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2235,7 +2299,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_SecureChannelRenewal",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2247,7 +2311,7 @@
       "status": "verified",
       "test": "TestMiloServer_SecureChannelRenewal",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2259,7 +2323,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SecureChannelRenewal",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2271,7 +2335,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SecureChannelRenewal",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2303,7 +2367,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2315,7 +2379,7 @@
       "status": "verified",
       "test": "TestMiloServer_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2327,7 +2391,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2339,7 +2403,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2351,7 +2415,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2363,7 +2427,7 @@
       "status": "verified",
       "test": "TestMiloServer_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2375,7 +2439,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2387,7 +2451,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2399,7 +2463,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2411,7 +2475,7 @@
       "status": "verified",
       "test": "TestMiloServer_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2423,7 +2487,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2435,7 +2499,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2447,7 +2511,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2459,7 +2523,7 @@
       "status": "verified",
       "test": "TestMiloServer_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2471,7 +2535,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2483,7 +2547,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2495,7 +2559,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ClientRepublish",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2507,7 +2571,7 @@
       "status": "verified",
       "test": "TestMiloServer_ClientRepublish",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2529,7 +2593,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ClientTransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2541,7 +2605,7 @@
       "status": "verified",
       "test": "TestMiloServer_ClientTransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2563,7 +2627,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2575,7 +2639,7 @@
       "status": "verified",
       "test": "TestMiloServer_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2587,7 +2651,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2599,7 +2663,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2621,7 +2685,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_Delete",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2633,7 +2697,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscriptionLifecycle_Delete",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2655,7 +2719,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_Revise",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2667,7 +2731,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscriptionLifecycle_Revise",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2679,7 +2743,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2691,7 +2755,7 @@
       "status": "verified",
       "test": "TestMiloServer_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2703,7 +2767,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2715,7 +2779,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2727,7 +2791,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_SubscriptionRecoveryReconnect",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2739,7 +2803,7 @@
       "status": "verified",
       "test": "TestMiloServer_SubscriptionRecoveryReconnect",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2771,7 +2835,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Republish",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2783,7 +2847,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Republish",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2805,7 +2869,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2817,7 +2881,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2829,7 +2893,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_SubscribeTimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2841,7 +2905,7 @@
       "status": "verified",
       "test": "TestMiloServer_SubscribeTimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2853,7 +2917,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscribeTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2865,7 +2929,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscribeTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2877,7 +2941,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2889,7 +2953,7 @@
       "status": "verified",
       "test": "TestMiloServer_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2901,7 +2965,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2913,7 +2977,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2925,7 +2989,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2937,7 +3001,7 @@
       "status": "verified",
       "test": "TestMiloServer_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2949,7 +3013,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2961,7 +3025,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2973,7 +3037,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -2985,7 +3049,7 @@
       "status": "unsupported",
       "test": "TestMiloServer_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -2998,7 +3062,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3010,7 +3074,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3022,7 +3086,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3034,7 +3098,7 @@
       "status": "verified",
       "test": "TestMiloServer_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3046,7 +3110,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3058,7 +3122,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3070,7 +3134,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_WriteAndReadBack",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3082,7 +3146,7 @@
       "status": "verified",
       "test": "TestMiloServer_WriteAndReadBack",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3094,7 +3158,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Write",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3106,7 +3170,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Write",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3118,7 +3182,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_RegisterNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3130,7 +3194,7 @@
       "status": "verified",
       "test": "TestMiloServer_RegisterNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3142,7 +3206,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_RegisterNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3154,7 +3218,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_RegisterNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3166,7 +3230,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ModifySubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3178,7 +3242,7 @@
       "status": "verified",
       "test": "TestMiloServer_ModifySubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3200,7 +3264,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ModifyMonitoredItems",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3212,7 +3276,7 @@
       "status": "verified",
       "test": "TestMiloServer_ModifyMonitoredItems",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3234,7 +3298,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_SetMonitoringMode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3246,7 +3310,7 @@
       "status": "verified",
       "test": "TestMiloServer_SetMonitoringMode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3258,7 +3322,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_MonitoringMode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3270,7 +3334,7 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscriptionLifecycle_MonitoringMode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3282,7 +3346,7 @@
       "status": "verified",
       "test": "TestOpen62541Server_ModifySubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3294,7 +3358,7 @@
       "status": "verified",
       "test": "TestMiloServer_ModifySubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -3306,7 +3370,7 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_PublishingMode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -3318,12 +3382,2265 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscriptionLifecycle_PublishingMode",
       "fixture": "baseline",
-      "interopVersion": "v0.6.0",
+      "interopVersion": "v0.7.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       }
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_DataChangeFilter",
+      "case": "coverage/monitoreditem.deadband/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.deadband/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_Deadband",
+      "case": "coverage/monitoreditem.deadband/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_Deadband",
+      "case": "coverage/monitoreditem.deadband/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_DataChangeFilter",
+      "case": "coverage/monitoreditem.percent-deadband/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.percent-deadband/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_PercentDeadband",
+      "case": "coverage/monitoreditem.percent-deadband/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_PercentDeadband",
+      "case": "coverage/monitoreditem.percent-deadband/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_DataChangeFilter",
+      "case": "coverage/monitoreditem.trigger/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.trigger/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_Trigger",
+      "case": "coverage/monitoreditem.trigger/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_Trigger",
+      "case": "coverage/monitoreditem.trigger/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_DataChangeFilter",
+      "case": "coverage/monitoreditem.sampling-interval/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.sampling-interval/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_SamplingInterval",
+      "case": "coverage/monitoreditem.sampling-interval/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_PeerClient_SamplingInterval",
+      "case": "coverage/monitoreditem.sampling-interval/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-nistp256.sign/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-nistp256.sign/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-nistp256.sign-encrypt/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-nistp256.sign-encrypt/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp256.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp256.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp256.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp256.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp256.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp256.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp256.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp256.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-nistp384.sign/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-nistp384.sign/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-nistp384.sign-encrypt/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-nistp384.sign-encrypt/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp384.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp384.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp384.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp384.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp384.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp384.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp384.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp384.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-nistp256-aesgcm.sign-encrypt/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-nistp256-aesgcm.sign-encrypt/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Write",
+      "case": "coverage/security.ecc-nistp256-aesgcm.write/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Write",
+      "case": "coverage/security.ecc-nistp256-aesgcm.write/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp256-aesgcm.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp256-aesgcm.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-aesgcm.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-aesgcm.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-aesgcm.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-aesgcm.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp256-aesgcm.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp256-aesgcm.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-nistp256-chachapoly.sign-encrypt/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-nistp256-chachapoly.sign-encrypt/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Write",
+      "case": "coverage/security.ecc-nistp256-chachapoly.write/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Write",
+      "case": "coverage/security.ecc-nistp256-chachapoly.write/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp256-chachapoly.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-nistp256-chachapoly.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-chachapoly.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-chachapoly.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-chachapoly.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-nistp256-chachapoly.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp256-chachapoly.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-nistp256-chachapoly.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-curve25519.sign-encrypt/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-curve25519.sign-encrypt/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Write",
+      "case": "coverage/security.ecc-curve25519.write/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Write",
+      "case": "coverage/security.ecc-curve25519.write/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-curve25519.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-curve25519.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-curve25519.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-curve25519.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-curve25519.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-curve25519.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-curve25519.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-curve25519.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_UnimplementedPolicies",
+      "case": "coverage/security.ecc.unimplemented-policy/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_UnimplementedPolicies",
+      "case": "coverage/security.ecc.unimplemented-policy/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ReverseConnect",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no ReverseHello in its transports (MessageType knows only Hello / Acknowledge / Error); the Milo adapter refuses --reverse-connect and has no --reverse-listen"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ReverseConnect_Read",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no ReverseHello in its transports (MessageType knows only Hello / Acknowledge / Error); the Milo adapter refuses --reverse-connect and has no --reverse-listen"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ReverseConnect",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no ReverseHello in its transports (MessageType knows only Hello / Acknowledge / Error); the Milo adapter refuses --reverse-connect and has no --reverse-listen"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ReverseConnect_Subscribe",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no ReverseHello in its transports (MessageType knows only Hello / Acknowledge / Error); the Milo adapter refuses --reverse-connect and has no --reverse-listen"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ReverseConnect_Secure",
+      "case": "coverage/transport.reverse-connect.secure/go-client-to-open62541-server/{Basic256Sha256,ECC_nistP256,ECC_nistP384}",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no ReverseHello in its transports (MessageType knows only Hello / Acknowledge / Error); the Milo adapter refuses --reverse-connect and has no --reverse-listen"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ReverseConnect_Secure",
+      "case": "coverage/transport.reverse-connect.secure/open62541-client-to-go-server/{Basic256Sha256,ECC_nistP256,ECC_nistP384}",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no ReverseHello in its transports (MessageType knows only Hello / Acknowledge / Error); the Milo adapter refuses --reverse-connect and has no --reverse-listen"
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_Open62541Decodes",
+      "case": "variant/*/json",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_MiloDecodes",
+      "case": "variant/*/json",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_Open62541Encodes_GoDecodes",
+      "case": "json",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_MiloEncodes_GoDecodes",
+      "case": "json",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_Open62541Decodes",
+      "case": "datavalue/*/json",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestCodec_GoEncodes_MiloDecodes",
+      "case": "datavalue/*/json (asserts the rejection)",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 does not decode a JSON DataValue with the Variant members inlined (the Part 6 1.05 form go-opcua and open62541 emit); it nests the Variant in a \"Value\" object"
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_Open62541Encodes_GoDecodes",
+      "case": "dataValueJson",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_MiloEncodes_GoDecodes",
+      "case": "dataValueJson (Variant nested)",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_Open62541Decodes",
+      "case": "variant/*/xml (open62541 gap: XmlElement)",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_MiloDecodes",
+      "case": "variant/*/xml",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_Open62541Encodes_GoDecodes",
+      "case": "xml (open62541 gap: matrix)",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_MiloEncodes_GoDecodes",
+      "case": "xml",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestCodec_GoEncodes_Open62541Decodes",
+      "case": "datavalue/*/xml (asserts the rejection)",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 does not implement DataValue in the XML encoding (BadNotImplemented; codec.xmlEncodeUnsupported / xmlDecodeUnsupported)"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_MiloDecodes",
+      "case": "datavalue/*/xml (timestamps to the millisecond: Milo XML decoder)",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestCodec_Open62541Encodes_GoDecodes",
+      "case": "dataValueXml (asserts the missing document)",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 does not implement DataValue in the XML encoding (BadNotImplemented; codec.xmlEncodeUnsupported / xmlDecodeUnsupported)"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_MiloEncodes_GoDecodes",
+      "case": "dataValueXml",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "go-client-to-open62541-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "go-client-to-milo-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_Open62541Client_RegisterServer",
+      "case": "coverage/discovery.register-server/open62541-client-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_MiloClient_RegisterServer",
+      "case": "coverage/discovery.register-server/milo-client-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541LDS_GoServerRegisters",
+      "case": "coverage/discovery.lds-registration/go-server-to-open62541-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestMiloServer_DiscoveryServerUnsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with Bad_ServiceUnsupported (pinned by TestMiloServer_DiscoveryServerUnsupported)"
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.register-server2.mdns/open62541-client-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.register-server2.mdns/milo-client-to-go-lds",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.multicast/go-lds-discovers-open62541",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no mDNS (multicast extension); the Milo adapter refuses --mdns-name"
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.multicast/open62541-lds-discovers-go",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.7.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no mDNS (multicast extension); the Milo adapter refuses --mdns-name"
     }
   ],
-  "interopVersion": "v0.6.0"
+  "interopVersion": "v0.7.0"
 }

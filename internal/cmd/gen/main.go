@@ -46,6 +46,7 @@ var generatedFiles = []string{
 	"ua/server_capabilities_gen.go",
 	"ua/service_gen.go",
 	"ua/status_gen.go",
+	"ua/typeinfo_gen.go",
 }
 
 // generators lists the generators to run, in dependency order.

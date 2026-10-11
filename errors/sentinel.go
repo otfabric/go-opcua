@@ -69,6 +69,11 @@ var (
 	ErrInvalidState       = errors.New("opcua: invalid state")
 	ErrDuplicateHandler   = errors.New("opcua: duplicate handler registration")
 	ErrUnknownService     = errors.New("opcua: unknown service")
+
+	// ErrReverseHelloRejected reports that a ReverseHello message was
+	// refused: its ServerUri or EndpointUrl is not what the client expects,
+	// or does not match the server certificate the client is configured with.
+	ErrReverseHelloRejected = errors.New("opcua: reverse hello rejected")
 )
 
 // Node ID errors.

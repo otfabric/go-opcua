@@ -28,11 +28,11 @@ func (s *DiscoveryService) FindServers(ctx context.Context, sc *uasc.SecureChann
 		return nil, err
 	}
 
+	// The server itself, followed by the servers registered with it if it
+	// is a Local Discovery Server.
 	response := &ua.FindServersResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
-		Servers: []*ua.ApplicationDescription{
-			s.srv.Endpoints()[0].Server,
-		},
+		Servers:        s.srv.disc.findServers(req),
 	}
 
 	return response, nil
@@ -47,7 +47,16 @@ func (s *DiscoveryService) FindServersOnNetwork(ctx context.Context, sc *uasc.Se
 	if err != nil {
 		return nil, err
 	}
-	return serviceUnsupported(req.RequestHeader), nil
+	// The service belongs to the multicast extension (WithMulticastDiscovery).
+	if !s.srv.cfg.multicast.enabled {
+		return serviceUnsupported(req.RequestHeader), nil
+	}
+	resetTime, servers := s.srv.disc.findServersOnNetwork(req)
+	return &ua.FindServersOnNetworkResponse{
+		ResponseHeader:       responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
+		LastCounterResetTime: resetTime,
+		Servers:              servers,
+	}, nil
 }
 
 // GetEndpoints implements the OPC UA GetEndpoints service.
@@ -92,7 +101,15 @@ func (s *DiscoveryService) RegisterServer(ctx context.Context, sc *uasc.SecureCh
 	if err != nil {
 		return nil, err
 	}
-	return serviceUnsupported(req.RequestHeader), nil
+	// Only a Local Discovery Server (WithLocalDiscoveryServer) accepts
+	// registrations.
+	status, _ := s.srv.disc.register(sc, req.Server, nil)
+	if status != ua.StatusOK {
+		return &ua.ServiceFault{ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, status)}, nil
+	}
+	return &ua.RegisterServerResponse{
+		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
+	}, nil
 }
 
 // RegisterServer2 implements the OPC UA RegisterServer2 service.
@@ -104,5 +121,12 @@ func (s *DiscoveryService) RegisterServer2(ctx context.Context, sc *uasc.SecureC
 	if err != nil {
 		return nil, err
 	}
-	return serviceUnsupported(req.RequestHeader), nil
+	status, results := s.srv.disc.register(sc, req.Server, req.DiscoveryConfiguration)
+	if status != ua.StatusOK {
+		return &ua.ServiceFault{ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, status)}, nil
+	}
+	return &ua.RegisterServer2Response{
+		ResponseHeader:       responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
+		ConfigurationResults: results,
+	}, nil
 }

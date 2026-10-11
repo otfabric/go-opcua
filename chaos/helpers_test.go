@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	stderrors "errors"
+	"flag"
 	"fmt"
 	"io"
 	"log/slog"
@@ -47,13 +48,57 @@ const (
 
 	// opLimit bounds every single client operation. An operation that has not
 	// returned (with success or an error) after this long is a deadlock.
-	opLimit = 90 * time.Second
+	opLimit = 45 * time.Second
 
 	// settleLimit bounds every "eventually" condition (reconnect, resource
-	// release, goroutine exit). It is deliberately generous: the suite runs
-	// under the race detector on shared, loaded machines.
-	settleLimit = 90 * time.Second
+	// release, goroutine exit). It is generous (what it waits for takes a
+	// few seconds at most, also under the race detector on a loaded
+	// machine) but it is a budget, too: CI gives the package 120 s, and a
+	// scenario that fails has to fail with its diagnosis inside that time
+	// instead of running into the timeout of the test binary.
+	settleLimit = 30 * time.Second
+
+	// budgetReserve is what the waits leave of the time the test binary may
+	// run (-timeout): time for the tests to report and clean up. minWait is
+	// the least any wait gets.
+	budgetReserve = 15 * time.Second
+	minWait       = 3 * time.Second
 )
+
+// binaryStart is when this test binary started, binaryDeadline when its
+// -timeout expires (zero without one).
+var (
+	binaryStart    = time.Now()
+	deadlineOnce   sync.Once
+	binaryDeadline time.Time
+)
+
+// withinBudget cuts a wait so that it ends budgetReserve before the test
+// binary runs into its -timeout. Several waits that fail one after the other
+// (a scenario that is stuck fails its recovery check, then the checks after
+// it) would otherwise add up to more than CI gives the package, and the
+// diagnosis of the first one would be lost in the timeout panic of the
+// binary. Healthy tests never get near the deadline and are not affected.
+func withinBudget(limit time.Duration) time.Duration {
+	deadlineOnce.Do(func() {
+		if f := flag.Lookup("test.timeout"); f != nil {
+			if d, err := time.ParseDuration(f.Value.String()); err == nil && d > 0 {
+				binaryDeadline = binaryStart.Add(d - budgetReserve)
+			}
+		}
+	})
+	if binaryDeadline.IsZero() {
+		return limit
+	}
+	left := time.Until(binaryDeadline)
+	if left < minWait {
+		left = minWait
+	}
+	if limit > left {
+		return left
+	}
+	return limit
+}
 
 var processSeed = time.Now().UnixNano()
 
@@ -364,7 +409,7 @@ func (e *env) clientOptions(rec *stateRecorder, extra ...opcua.Option) []opcua.O
 		// Fault-free tests must never fail because the machine is slow, so
 		// the default request timeout only guards against a hang. Scenarios
 		// that inject faults pass a short timeout instead.
-		opcua.RequestTimeout(60 * time.Second),
+		opcua.RequestTimeout(30 * time.Second),
 		opcua.ReconnectInterval(50 * time.Millisecond),
 		opcua.AutoReconnect(true),
 	}
@@ -433,7 +478,7 @@ func (e *env) requireServerDrained(limit time.Duration) {
 		return last == testhook.ServerResources{}
 	})
 	if !ok {
-		e.t.Errorf("server did not release client resources within %v: %+v", limit, last)
+		e.t.Errorf("server did not release client resources within %v: %+v; sessions: %v", limit, last, testhook.ServerSessionsOf(e.server()))
 	}
 }
 
@@ -548,7 +593,11 @@ func countLeaves(refs []*ua.ReferenceDescription) int {
 }
 
 // eventually polls cond until it returns true or limit expires.
+//
+// A wait never runs past the time budget of the test binary, see
+// withinBudget.
 func eventually(limit time.Duration, cond func() bool) bool {
+	limit = withinBudget(limit)
 	deadline := time.Now().Add(limit)
 	for wait := 5 * time.Millisecond; ; {
 		if cond() {
@@ -571,7 +620,7 @@ func waitGroupTimeout(wg *sync.WaitGroup, limit time.Duration) bool {
 	select {
 	case <-done:
 		return true
-	case <-time.After(limit):
+	case <-time.After(withinBudget(limit)):
 		return false
 	}
 }

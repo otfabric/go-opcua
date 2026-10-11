@@ -48,7 +48,14 @@ func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, 
 		Priority:                    params.Priority,
 	}
 
-	res, err := send[ua.CreateSubscriptionResponse](ctx, c, req)
+	// Until the subscription is registered below, a Publish response for it
+	// is a response for a subscription the client does not know yet. It must
+	// not be taken for one that was left behind, see
+	// orphanSubscriptionNeedsSubMuxLock.
+	c.subCreating.Add(1)
+	defer c.subCreating.Add(-1)
+
+	res, err := c.createSubscription(ctx, req)
 	if err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("connection closed while creating subscription (server may not support subscriptions): %w", err)
@@ -94,6 +101,59 @@ func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, 
 	// It never blocks, see setPublishPaused.
 	c.setPublishPaused(false)
 	return sub, nil
+}
+
+// createSubscription sends a CreateSubscription request.
+//
+// A request that fails says nothing about what the server did: it may have
+// created the subscription and the response got lost with the connection, or
+// the caller gave up waiting for it. Such a subscription belongs to the
+// session, so it lives on when the client reconnects and takes the session up
+// again, kept alive by the Publish requests for the other subscriptions, and
+// nobody knows its id. The failure is counted so that the subscription is
+// deleted when it shows up in a Publish response, see
+// orphanSubscriptionNeedsSubMuxLock.
+func (c *Client) createSubscription(ctx context.Context, req *ua.CreateSubscriptionRequest) (*ua.CreateSubscriptionResponse, error) {
+	res, err := send[ua.CreateSubscriptionResponse](ctx, c, req)
+	if err != nil {
+		c.subCreatesLost.Add(1)
+	}
+	return res, err
+}
+
+// orphanSubscriptionNeedsSubMuxLock reports whether a Publish response for a subscription
+// the client does not know is to be answered by deleting that subscription:
+// a CreateSubscription request failed without telling whether the server
+// created the subscription, and no subscription is being created right now
+// whose first notification could have overtaken its registration.
+//
+// It must be called with subMux held, which orders it with the registration
+// of the subscriptions.
+func (c *Client) orphanSubscriptionNeedsSubMuxLock() bool {
+	return c.subCreatesLost.Load() > 0 && c.subCreating.Load() == 0
+}
+
+// deleteOrphanSubscription deletes a subscription of the session that the
+// client does not know. Failing is fine: the subscription shows up again
+// with its next keep-alive message.
+func (c *Client) deleteOrphanSubscription(ctx context.Context, id uint32) {
+	res, err := send[ua.DeleteSubscriptionsResponse](ctx, c, &ua.DeleteSubscriptionsRequest{SubscriptionIDs: []uint32{id}})
+	if err != nil {
+		c.cfg.logger.Debug("publish: deleting unknown subscription failed", "sub_id", id, "error", err)
+		return
+	}
+	if len(res.Results) != 1 || res.Results[0] != ua.StatusOK {
+		// Not there any more: it was a subscription the caller cancelled.
+		return
+	}
+	c.cfg.logger.Warn("publish: deleted a subscription that a failed CreateSubscription request left behind", "sub_id", id)
+	// One request left at most one subscription behind.
+	for {
+		n := c.subCreatesLost.Load()
+		if n <= 0 || c.subCreatesLost.CompareAndSwap(n, n-1) {
+			return
+		}
+	}
 }
 
 // SubscriptionIDs gets a list of subscriptionIDs.
@@ -340,7 +400,72 @@ func (c *Client) registerSubscriptionNeedsSubMuxLock(sub *Subscription) error {
 	}
 
 	c.subs[sub.id()] = sub
+	sub.lastActivity.Store(time.Now().UnixNano())
 	return nil
+}
+
+// silentSubscriptionFloor is the shortest time without a message after which
+// a subscription counts as silent, see markSilentSubscriptions.
+const silentSubscriptionFloor = 5 * time.Second
+
+// touchSubscriptions restarts the silence clock of every subscription. It is
+// called when publishing (re)starts: what a subscription did not receive
+// while nothing was received at all says nothing about it.
+func (c *Client) touchSubscriptions() {
+	now := time.Now().UnixNano()
+	c.lastPublishResponse.Store(now)
+	c.subMux.RLock()
+	defer c.subMux.RUnlock()
+	for _, sub := range c.subs {
+		sub.lastActivity.Store(now)
+	}
+}
+
+// markSilentSubscriptions marks the subscriptions for recreation that the
+// server has stopped serving, and returns how many it marked.
+//
+// A server sends a message for every subscription at least once per
+// keep-alive interval (Part 4 §5.13.1.1). A subscription for which nothing
+// has arrived for three such intervals (and at least
+// silentSubscriptionFloor), while Publish responses for other subscriptions
+// of the session did keep arriving all that time, does not exist on the
+// server any more, or not in this session: it was deleted behind the
+// client's back, or it stayed behind in a session the client has left. No
+// error ever tells; without this check the client would report Connected
+// with a subscription that never delivers again.
+//
+// The silence is measured against the last Publish response of any
+// subscription, not against the clock: while the publish loop is paused,
+// blocked by a consumer that does not read, or the connection is slow,
+// nothing arrives for anybody and no subscription is singled out.
+func (c *Client) markSilentSubscriptions() int {
+	last := c.lastPublishResponse.Load()
+	marked := 0
+	c.subMux.Lock()
+	defer c.subMux.Unlock()
+	for _, sub := range c.subs {
+		if sub.needsRecreate {
+			continue
+		}
+		sub.paramsMu.Lock()
+		limit := 3 * time.Duration(sub.RevisedMaxKeepAliveCount) * sub.RevisedPublishingInterval
+		sub.paramsMu.Unlock()
+		if limit < silentSubscriptionFloor {
+			limit = silentSubscriptionFloor
+		}
+		seen := sub.lastActivity.Load()
+		if seen == 0 {
+			// registered without a time stamp: count from now
+			sub.lastActivity.Store(time.Now().UnixNano())
+			continue
+		}
+		if time.Duration(last-seen) > limit {
+			c.cfg.logger.Warn("subscription is silent although others are served, scheduling its recreation", "sub_id", sub.id(), "silent_for", limit)
+			sub.needsRecreate = true
+			marked++
+		}
+	}
+	return marked
 }
 
 // forgetSubscriptionOf removes sub from the client and returns the id it was
@@ -587,9 +712,18 @@ func (c *Client) publish(ctx context.Context) error {
 
 	// send the next publish request
 	// note that res contains data even if an error was returned
+	session := c.Session()
 	res, err := c.sendPublishRequest(ctx)
 	stats.RecordError(err)
 	switch {
+	case err != nil && session != c.Session() && staleSessionError(err):
+		// The request was sent in a session the client has left in the
+		// meantime (the application activated another one, or the reconnect
+		// logic replaced it), and the server says that this session is
+		// gone. That is no news and says nothing about the session the
+		// client has now: carry on publishing there. Returning the error
+		// would pause the publish loop, and nothing would resume it.
+		c.cfg.logger.Debug("publish: error for a session the client has left, ignoring", "error", err)
 	case err == io.EOF:
 		c.cfg.logger.Debug("publish: eof: pausing publish loop")
 		return err
@@ -640,16 +774,40 @@ func (c *Client) publish(ctx context.Context) error {
 		return err
 
 	default:
-		c.deliverPublishResponse(ctx, res)
+		if orphan := c.deliverPublishResponse(ctx, res); orphan != 0 {
+			c.deleteOrphanSubscription(ctx, orphan)
+		}
 	}
 
 	return nil
 }
 
+// staleSessionError reports whether err is how a server answers a request of
+// a session that was closed or is not known (any more).
+func staleSessionError(err error) bool {
+	return errors.Is(err, ua.StatusBadSessionClosed) ||
+		errors.Is(err, ua.StatusBadSessionIDInvalid) ||
+		errors.Is(err, ua.StatusBadSessionNotActivated)
+}
+
 // deliverPublishResponse processes a successful PublishResponse: it updates
 // the acknowledgement and sequence number bookkeeping and hands the
 // notification to its subscription.
-func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResponse) {
+//
+// It returns the id of the subscription of the response if that is one a
+// failed CreateSubscription request left behind on the server, which the
+// caller is to delete, and 0 otherwise.
+func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResponse) (orphan uint32) {
+	// For markSilentSubscriptions: a response arrived, and it was for this
+	// subscription.
+	now := time.Now().UnixNano()
+	c.lastPublishResponse.Store(now)
+	c.subMux.RLock()
+	if sub, ok := c.subs[res.SubscriptionID]; ok {
+		sub.lastActivity.Store(now)
+	}
+	c.subMux.RUnlock()
+
 	// deliverMu orders this delivery with the republishing done by the
 	// reconnect logic, which delivers to the same subscriptions.
 	c.deliverMu.Lock()
@@ -662,7 +820,7 @@ func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResp
 	// after newer ones. It has not been acknowledged, so the server keeps it.
 	if c.publishRecoveryInProgress() {
 		c.cfg.logger.Debug("publish: response arrived during recovery, leaving it to republish", "sub_id", res.SubscriptionID)
-		return
+		return 0
 	}
 
 	c.subMux.Lock()
@@ -671,11 +829,32 @@ func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResp
 
 	sub, ok := c.subs[res.SubscriptionID]
 	if !ok {
+		isOrphan := c.orphanSubscriptionNeedsSubMuxLock()
 		c.subMux.Unlock()
 		// Subscription may have been deleted between PublishRequest and PublishResponse.
 		// Returning is correct — the warning log is sufficient.
 		c.cfg.logger.Debug("publish: unknown subscription", "sub_id", res.SubscriptionID)
-		return
+		if isOrphan {
+			return res.SubscriptionID
+		}
+		return 0
+	}
+
+	// The notification message the subscription delivered last, once more.
+	// The recovery republishes from the subscription's next sequence number
+	// while a Publish response with the same message, sent before the
+	// recovery began, waits for deliverMu above. When the recovery is over
+	// by the time it gets its turn, the check above lets it pass: without
+	// this one the consumer would receive the message twice, the second
+	// time after newer values. It is acknowledged again and dropped.
+	if msg := res.NotificationMessage; len(msg.NotificationData) > 0 && sub.lastSeq != 0 && msg.SequenceNumber == sub.lastSeq {
+		c.pendingAcks = append(c.pendingAcks, &ua.SubscriptionAcknowledgement{
+			SubscriptionID: res.SubscriptionID,
+			SequenceNumber: msg.SequenceNumber,
+		})
+		c.subMux.Unlock()
+		c.cfg.logger.Debug("publish: notification message was delivered already, dropping it", "sub_id", res.SubscriptionID, "seq_num", msg.SequenceNumber)
+		return 0
 	}
 
 	// handle the publish response for a specific subscription
@@ -699,6 +878,7 @@ func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResp
 		c.cfg.logger.Debug("publish: subscription ended on the server, scheduling its recreation", "sub_id", res.SubscriptionID)
 		c.requestSubscriptionRecovery()
 	}
+	return 0
 }
 
 // subscriptionEnded reports whether a notification message carries a
@@ -728,6 +908,15 @@ func (c *Client) requestSubscriptionRecovery() {
 	case c.subRecoverCh <- struct{}{}:
 	default:
 	}
+}
+
+// recreateSubscriptionLater marks sub for recreation and wakes the connection
+// monitor to do it. It never blocks on the network.
+func (c *Client) recreateSubscriptionLater(sub *Subscription) {
+	c.subMux.Lock()
+	sub.needsRecreate = true
+	c.subMux.Unlock()
+	c.requestSubscriptionRecovery()
 }
 
 // markSubscriptionsBroken marks every registered subscription as gone on the

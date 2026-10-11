@@ -927,7 +927,7 @@ func TestOpen62541Server_UntrustedCert_Rejected(t *testing.T) {
 
 	for _, f := range []string{untrustedCert, untrustedKey} {
 		if _, err := os.Stat(f); err != nil {
-			t.Skipf("untrusted cert not found (%s): run certs/generate.sh first", f)
+			capabilityUnavailable(t, "untrusted cert not found (%s): run certs/generate.sh first", f)
 		}
 	}
 

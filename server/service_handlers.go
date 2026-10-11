@@ -245,20 +245,6 @@ func logPanic(l *slog.Logger, what string, r any, args ...any) {
 	l.Error("recovered from panic while "+what, args...)
 }
 
-// goSafe runs fn in a new goroutine. A panic in it (typically in application
-// supplied code such as a value function) is logged instead of ending the
-// process.
-func (s *Server) goSafe(what string, fn func()) {
-	go func() {
-		defer func() {
-			if r := recover(); r != nil {
-				logPanic(s.cfg.logger, what, r)
-			}
-		}()
-		fn()
-	}()
-}
-
 // checkSession enforces the session state machine of Part 4 §5.6: apart from
 // the Discovery services and the services that establish a session, every
 // service is only available within a session that has been activated.

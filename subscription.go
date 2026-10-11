@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -45,6 +46,7 @@ type Subscription struct {
 	params                    *SubscriptionParameters
 	paramsMu                  sync.Mutex
 	items                     map[uint32]*monitoredItem
+	nextItemID                uint32 // see stableItemIDNeedsLock; guarded by itemsMu
 	itemsMu                   sync.Mutex
 	lastSeq                   uint32
 	nextSeq                   uint32
@@ -59,6 +61,11 @@ type Subscription struct {
 	// reconnect failed. The next recovery then recreates it instead of
 	// trying to transfer and republish it. Guarded by Client.subMux.
 	needsRecreate bool
+
+	// lastActivity is when the server last sent a message for the
+	// subscription (unix nanoseconds), or when the client last had reason
+	// to start counting anew. See Client.markSilentSubscriptions.
+	lastActivity atomic.Int64
 
 	// cancelled is closed by Cancel. It releases a notification that is
 	// being handed to Notifs: the consumer of a cancelled subscription
@@ -88,6 +95,56 @@ type monitoredItem struct {
 	req *ua.MonitoredItemCreateRequest
 	res *ua.MonitoredItemCreateResult
 	ts  ua.TimestampsToReturn
+
+	// serverID is the id the server currently knows the item by. The key of
+	// Subscription.items is the id the caller was given by Monitor; the two
+	// are the same until the subscription is recreated after a reconnect,
+	// when the server assigns new ids. See [Subscription.Monitor].
+	serverID uint32
+}
+
+// stableItemIDNeedsLock returns the id under which a new monitored item is
+// handed to the caller: the server's id, unless that id already denotes
+// another item of this subscription (possible once a recreation has given the
+// existing items new server ids), in which case an unused one is chosen.
+// itemsMu must be held.
+func (s *Subscription) stableItemIDNeedsLock(serverID uint32) uint32 {
+	if _, taken := s.items[serverID]; !taken {
+		return serverID
+	}
+	for {
+		s.nextItemID++
+		if s.nextItemID == 0 {
+			continue
+		}
+		id := s.nextItemID | 1<<31 // away from the small ids servers hand out
+		if _, taken := s.items[id]; !taken {
+			return id
+		}
+	}
+}
+
+// serverItemIDNeedsLock translates an id held by the caller into the id the
+// server knows the item by. An id that denotes no item is passed through, so
+// the server reports it as invalid. itemsMu must be held.
+func (s *Subscription) serverItemIDNeedsLock(id uint32) uint32 {
+	if item, ok := s.items[id]; ok {
+		return item.serverID
+	}
+	return id
+}
+
+func (s *Subscription) serverItemIDs(ids []uint32) []uint32 {
+	if ids == nil {
+		return nil
+	}
+	out := make([]uint32, len(ids))
+	s.itemsMu.Lock()
+	for i, id := range ids {
+		out[i] = s.serverItemIDNeedsLock(id)
+	}
+	s.itemsMu.Unlock()
+	return out
 }
 
 // NewMonitoredItemCreateRequestWithDefaults creates a MonitoredItemCreateRequest
@@ -112,6 +169,29 @@ func NewMonitoredItemCreateRequestWithDefaults(nodeID *ua.NodeID, attributeID ua
 			SamplingInterval: 0.0,
 		},
 	}
+}
+
+// NewDataChangeFilter returns a DataChangeFilter (Part 4 §7.22.2) wrapped for
+// use as [ua.MonitoringParameters].Filter of a monitored item on the Value
+// attribute:
+//
+//	req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 1)
+//	req.RequestedParameters.Filter = opcua.NewDataChangeFilter(
+//	    ua.DataChangeTriggerStatusValue, ua.DeadbandTypeAbsolute, 0.5)
+//
+// trigger selects what counts as a change (status only, status or value, or
+// status, value or source timestamp). deadbandType and deadbandValue suppress
+// value changes that stay within the deadband of the last reported value:
+// [ua.DeadbandTypeAbsolute] takes the absolute change, [ua.DeadbandTypePercent]
+// a percentage (0–100) of the node's EURange, and [ua.DeadbandTypeNone]
+// ignores deadbandValue. A deadband needs a numeric variable; the server
+// answers the item with a Bad status when it cannot apply the filter.
+func NewDataChangeFilter(trigger ua.DataChangeTrigger, deadbandType ua.DeadbandType, deadbandValue float64) *ua.ExtensionObject {
+	return ua.NewExtensionObject(&ua.DataChangeFilter{
+		Trigger:       trigger,
+		DeadbandType:  uint32(deadbandType),
+		DeadbandValue: deadbandValue,
+	})
 }
 
 // PublishNotificationData contains a notification received from a subscription.
@@ -165,6 +245,10 @@ func (s *Subscription) delete(ctx context.Context, id uint32) error {
 	switch {
 	case err != nil:
 		return err
+	case len(res.Results) != 1:
+		// The number of results is the server's to get right; a response
+		// with another number must not take the application down.
+		return ua.StatusBadUnknownResponse
 	case res.Results[0] == ua.StatusOK:
 		s.itemsMu.Lock()
 		s.items = make(map[uint32]*monitoredItem)
@@ -211,6 +295,13 @@ func (s *Subscription) ModifySubscription(ctx context.Context, params Subscripti
 // If the server closes the connection (e.g. because it does not support event or alarm
 // subscriptions), the returned error wraps io.EOF with a message suggesting that the
 // server may not support event or alarm subscriptions; callers can use errors.Is(err, io.EOF).
+//
+// The MonitoredItemID of each result stays valid for the life of the
+// subscription: [Subscription.Unmonitor], [Subscription.ModifyMonitoredItems],
+// [Subscription.SetMonitoringMode] and [Subscription.SetTriggering] accept it
+// even after the subscription was recreated on the server following a
+// reconnect, when the server knows the item by a new id. For that reason the
+// id can differ from the one on the wire.
 func (s *Subscription) Monitor(ctx context.Context, ts ua.TimestampsToReturn, items ...*ua.MonitoredItemCreateRequest) (*ua.CreateMonitoredItemsResponse, error) {
 	stats.Subscription().Add("Monitor", 1)
 	stats.Subscription().Add("MonitoredItems", int64(len(items)))
@@ -230,6 +321,13 @@ func (s *Subscription) Monitor(ctx context.Context, ts ua.TimestampsToReturn, it
 		return nil, err
 	}
 
+	// One result per item: anything else is not an answer to this request.
+	// (Indexing the results of a short response panicked, with the lock on
+	// the items held.)
+	if len(res.Results) != len(items) {
+		return nil, fmt.Errorf("opcua: %d results for %d monitored items: %w", len(res.Results), len(items), ua.StatusBadUnknownResponse)
+	}
+
 	// store monitored items
 	s.itemsMu.Lock()
 	for i, item := range items {
@@ -241,13 +339,26 @@ func (s *Subscription) Monitor(ctx context.Context, ts ua.TimestampsToReturn, it
 		if result == nil || result.StatusCode != ua.StatusOK {
 			continue
 		}
-		s.items[result.MonitoredItemID] = &monitoredItem{
-			req: item,
-			res: result,
-			ts:  ts,
+		serverID := result.MonitoredItemID
+		id := s.stableItemIDNeedsLock(serverID)
+		result.MonitoredItemID = id
+		s.items[id] = &monitoredItem{
+			req:      item,
+			res:      result,
+			ts:       ts,
+			serverID: serverID,
 		}
 	}
 	s.itemsMu.Unlock()
+
+	// The subscription was recreated (after a reconnect, or because the
+	// server had dropped it) while the request was on its way: the items
+	// were created in the subscription that no longer exists, and the
+	// recreation may have run before they were stored above. Have it done
+	// again with them, or they would never report.
+	if s.id() != req.SubscriptionID {
+		s.c.recreateSubscriptionLater(s)
+	}
 
 	return res, err
 }
@@ -257,7 +368,7 @@ func (s *Subscription) Unmonitor(ctx context.Context, monitoredItemIDs ...uint32
 	stats.Subscription().Add("UnmonitoredItems", int64(len(monitoredItemIDs)))
 
 	req := &ua.DeleteMonitoredItemsRequest{
-		MonitoredItemIDs: monitoredItemIDs,
+		MonitoredItemIDs: s.serverItemIDs(monitoredItemIDs),
 		SubscriptionID:   s.id(),
 	}
 
@@ -295,10 +406,21 @@ func (s *Subscription) ModifyMonitoredItems(ctx context.Context, ts ua.Timestamp
 		return nil, err
 	}
 
+	// The request goes out with the ids the server knows; the caller's
+	// requests are not changed.
+	onWire := make([]*ua.MonitoredItemModifyRequest, len(items))
+	s.itemsMu.Lock()
+	for i, item := range items {
+		cp := *item
+		cp.MonitoredItemID = s.serverItemIDNeedsLock(item.MonitoredItemID)
+		onWire[i] = &cp
+	}
+	s.itemsMu.Unlock()
+
 	req := &ua.ModifyMonitoredItemsRequest{
 		SubscriptionID:     s.id(),
 		TimestampsToReturn: ts,
-		ItemsToModify:      items,
+		ItemsToModify:      onWire,
 	}
 	var res *ua.ModifyMonitoredItemsResponse
 
@@ -314,8 +436,15 @@ func (s *Subscription) ModifyMonitoredItems(ctx context.Context, ts ua.Timestamp
 			continue
 		}
 
-		id := req.ItemsToModify[i].MonitoredItemID
+		if i >= len(items) {
+			break
+		}
+		id := items[i].MonitoredItemID
 		item := s.items[id]
+		if item == nil {
+			// Unmonitor removed the item while the request was in flight.
+			continue
+		}
 		item.ts = req.TimestampsToReturn
 		item.req.RequestedParameters = req.ItemsToModify[i].RequestedParameters
 		item.res.StatusCode = res.StatusCode
@@ -349,7 +478,7 @@ func (s *Subscription) SetMonitoringMode(ctx context.Context, monitoringMode ua.
 	req := &ua.SetMonitoringModeRequest{
 		SubscriptionID:   s.id(),
 		MonitoringMode:   monitoringMode,
-		MonitoredItemIDs: monitoredItemIDs,
+		MonitoredItemIDs: s.serverItemIDs(monitoredItemIDs),
 	}
 	var res *ua.SetMonitoringModeResponse
 	res, err = send[ua.SetMonitoringModeResponse](ctx, s.c, req)
@@ -357,21 +486,39 @@ func (s *Subscription) SetMonitoringMode(ctx context.Context, monitoringMode ua.
 		return nil, err
 	}
 
+	// Remember the mode: it is part of what the subscription monitors, so an
+	// item that was disabled (or set to sampling) must come back that way
+	// when the subscription is recreated after a reconnect, not in the mode
+	// it was created with. The stored request is copied because it belongs
+	// to the caller of Monitor.
+	s.itemsMu.Lock()
+	for i, id := range monitoredItemIDs {
+		if i >= len(res.Results) || res.Results[i] != ua.StatusOK {
+			continue
+		}
+		if item, ok := s.items[id]; ok && item.req != nil && item.req.MonitoringMode != monitoringMode {
+			cp := *item.req
+			cp.MonitoringMode = monitoringMode
+			item.req = &cp
+		}
+	}
+	s.itemsMu.Unlock()
+
 	return res, nil
 }
 
 // SetTriggering sends a request to the server to add and/or remove triggering links from a triggering item.
-// To add links from a triggering item to an item to report provide the server assigned ID(s) in the `add` argument.
-// To remove links from a triggering item to an item to report provide the server assigned ID(s) in the `remove` argument.
+// To add links from a triggering item to an item to report provide the ID(s) returned by Monitor in the `add` argument.
+// To remove links from a triggering item to an item to report provide the ID(s) returned by Monitor in the `remove` argument.
 func (s *Subscription) SetTriggering(ctx context.Context, triggeringItemID uint32, add, remove []uint32) (*ua.SetTriggeringResponse, error) {
 	stats.Subscription().Add("SetTriggering", 1)
 
 	// Part 4, 5.12.5.2 SetTriggering Service Parameters
 	req := &ua.SetTriggeringRequest{
 		SubscriptionID:   s.id(),
-		TriggeringItemID: triggeringItemID,
-		LinksToAdd:       add,
-		LinksToRemove:    remove,
+		TriggeringItemID: s.serverItemIDs([]uint32{triggeringItemID})[0],
+		LinksToAdd:       s.serverItemIDs(add),
+		LinksToRemove:    s.serverItemIDs(remove),
 	}
 
 	return send[ua.SetTriggeringResponse](ctx, s.c, req)
@@ -503,7 +650,7 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 		MaxNotificationsPerPublish:  params.MaxNotificationsPerPublish,
 		Priority:                    params.Priority,
 	}
-	res, err := send[ua.CreateSubscriptionResponse](ctx, s.c, req)
+	res, err := s.c.createSubscription(ctx, req)
 	if err != nil {
 		s.c.cfg.logger.Debug("recreateCreate: failed to recreate subscription", "sub_id", s.id())
 		return err
@@ -531,10 +678,14 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 
 	// Sort by timestamp to return
 	itemsByTimestamps := make(map[ua.TimestampsToReturn][]*ua.MonitoredItemCreateRequest)
+	// idsByTimestamps holds, in the same order, the ids the caller knows the
+	// items by. They are kept: only the server's ids change.
+	idsByTimestamps := make(map[ua.TimestampsToReturn][]uint32)
 	s.itemsMu.Lock()
 	previous := s.items
-	for _, mi := range s.items {
+	for id, mi := range s.items {
 		itemsByTimestamps[mi.ts] = append(itemsByTimestamps[mi.ts], mi.req)
+		idsByTimestamps[mi.ts] = append(idsByTimestamps[mi.ts], id)
 	}
 	s.items = make(map[uint32]*monitoredItem, len(s.items))
 	s.itemsMu.Unlock()
@@ -565,18 +716,29 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 			return err
 		}
 
+		if len(res.Results) != len(items) {
+			return fmt.Errorf("opcua: %d results for %d monitored items: %w", len(res.Results), len(items), ua.StatusBadUnknownResponse)
+		}
 		for _, result := range res.Results {
+			if result == nil {
+				return ua.StatusBadUnknownResponse
+			}
 			if status := result.StatusCode; status != ua.StatusOK {
 				return status
 			}
 		}
 
+		ids := idsByTimestamps[ts]
 		s.itemsMu.Lock()
 		for i, item := range items {
-			s.items[res.Results[i].MonitoredItemID] = &monitoredItem{
-				req: item,
-				res: res.Results[i],
-				ts:  ts,
+			result := res.Results[i]
+			serverID := result.MonitoredItemID
+			result.MonitoredItemID = ids[i]
+			s.items[ids[i]] = &monitoredItem{
+				req:      item,
+				res:      result,
+				ts:       ts,
+				serverID: serverID,
 			}
 		}
 		s.itemsMu.Unlock()

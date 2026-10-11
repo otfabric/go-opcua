@@ -40,6 +40,61 @@ func main() {
 	writeServiceRegister(ExtObjects(dict))
 	writeExtObjects(ExtObjects(dict))
 	writeRegisterExtObjects(filterByBinaryEncoding(ExtObjects(dict), nodeIDSet))
+	writeTypeInfo(Enums(dict), ExtObjects(dict), loadNodeIDValues(nodeids))
+}
+
+// loadNodeIDValues reads NodeIds.csv and returns the numeric identifier of
+// every symbol.
+func loadNodeIDValues(filename string) map[string]string {
+	f, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("Error reading %s: %v", filename, err)
+	}
+	defer func() { _ = f.Close() }()
+
+	rows, err := csv.NewReader(f).ReadAll()
+	if err != nil {
+		log.Fatalf("Error parsing %s: %v", filename, err)
+	}
+
+	ids := make(map[string]string, len(rows))
+	for _, row := range rows {
+		ids[row[0]] = row[1]
+	}
+	return ids
+}
+
+// writeTypeInfo generates the metadata the JSON and XML DataEncodings need on
+// top of the Go types: the names the specification uses for types, fields and
+// enumeration values (the Go identifiers are reformatted, e.g. NodeId ->
+// NodeID) and the DataType / encoding NodeIds of every structure.
+func writeTypeInfo(enums, objs []Type, ids map[string]string) {
+	nodeID := func(name string) string {
+		if v := ids[name]; v != "" {
+			return v
+		}
+		return "0"
+	}
+	var b bytes.Buffer
+	b.WriteString("import \"reflect\"\n\nfunc init() {\n")
+	for _, o := range objs {
+		fmt.Fprintf(&b, "registerStructType(new(%s), %q, %s, %s, %s, %s", o.Name, o.OrigName,
+			nodeID(o.OrigName), nodeID(o.OrigName+"_Encoding_DefaultBinary"),
+			nodeID(o.OrigName+"_Encoding_DefaultXml"), nodeID(o.OrigName+"_Encoding_DefaultJson"))
+		for _, f := range o.Fields {
+			fmt.Fprintf(&b, ", %q", f.OrigName)
+		}
+		b.WriteString(")\n")
+	}
+	for _, e := range enums {
+		fmt.Fprintf(&b, "registerEnumType(reflect.TypeOf(%s(0)), %q, %v, []enumValue{", e.Name, e.OrigName, e.IsOptionSet)
+		for _, v := range e.Values {
+			fmt.Fprintf(&b, "{%q, %d},", v.ShortName, v.Value)
+		}
+		b.WriteString("})\n")
+	}
+	b.WriteString("}\n")
+	write(b.Bytes(), path.Join(out, "typeinfo_gen.go"))
 }
 
 // loadNodeIDs reads NodeIds.csv and returns a set of all identifier names.
@@ -148,8 +203,10 @@ func Enums(dict *TypeDictionary) []Type {
 			continue
 		}
 		e := Type{
-			Name: goname.Format(t.Name),
-			Kind: KindEnum,
+			Name:        goname.Format(t.Name),
+			OrigName:    t.Name,
+			IsOptionSet: t.IsOptionSet,
+			Kind:        KindEnum,
 		}
 
 		switch {
@@ -196,9 +253,10 @@ func ExtObjects(dict *TypeDictionary) []Type {
 		}
 
 		o := Type{
-			Name: goname.Format(t.Name),
-			Kind: KindExtensionObject,
-			Base: baseType,
+			Name:     goname.Format(t.Name),
+			OrigName: t.Name,
+			Kind:     KindExtensionObject,
+			Base:     baseType,
 		}
 
 		for _, f := range t.Fields {
@@ -209,8 +267,9 @@ func ExtObjects(dict *TypeDictionary) []Type {
 			}
 
 			of := Field{
-				Name: goname.Format(f.Name),
-				Type: goFieldType(f),
+				Name:     goname.Format(f.Name),
+				OrigName: f.Name,
+				Type:     goFieldType(f),
 			}
 			if of.Name == "AttributeID" {
 				of.Type = "AttributeID"
@@ -238,6 +297,12 @@ const (
 type Type struct {
 	// Name is the Go name of the OPC/UA type.
 	Name string
+
+	// OrigName is the name of the type in the specification.
+	OrigName string
+
+	// IsOptionSet marks enumerations whose values are bit flags.
+	IsOptionSet bool
 
 	// Type is the Go type of the OPC/UA type.
 	Type string
@@ -271,7 +336,9 @@ type Value struct {
 
 type Field struct {
 	Name string
-	Type string
+	// OrigName is the name of the field in the specification.
+	OrigName string
+	Type     string
 }
 
 func FormatTypes(w io.Writer, types []Type) error {

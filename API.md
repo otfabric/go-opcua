@@ -42,6 +42,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [RetryPolicy](#retrypolicy)
   - [ClientMetrics](#clientmetrics)
   - [Discovery (standalone functions)](#discovery-standalone-functions)
+  - [Reverse connect (client)](#reverse-connect-client)
   - [Logger](#logger)
   - [Configuration Options](#configuration-options)
   - [Helper](#helper)
@@ -65,9 +66,11 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Notification types](#notification-types)
   - [Display name and endpoint helpers](#display-name-and-endpoint-helpers)
   - [Buffer](#buffer)
+  - [JSON and XML DataEncoding](#json-and-xml-dataencoding)
 - [Package `server`](#package-server)
   - [Server](#server)
   - [Server configuration options](#server-configuration-options)
+  - [Reverse connect (server)](#reverse-connect-server)
   - [NameSpace (interface)](#namespace-interface)
   - [Node (server-side)](#node-server-side)
   - [AccessController](#accesscontroller)
@@ -91,6 +94,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Conn](#conn)
   - [Dialer](#dialer)
   - [Listener](#listener)
+  - [Reverse connect (transport)](#reverse-connect-transport)
 - [Package `uapolicy`](#package-uapolicy)
 - [Package `uasc`](#package-uasc)
   - [SecureChannel](#securechannel)
@@ -303,9 +307,18 @@ func (c *Client) NodeFromQualifiedPath(ctx context.Context, path string) (*Node,
 
 ```go
 func (c *Client) FindServers(ctx context.Context) (*ua.FindServersResponse, error)
+func (c *Client) FindServersWithFilter(ctx context.Context, localeIDs, serverURIs []string) (*ua.FindServersResponse, error)
 func (c *Client) FindServersOnNetwork(ctx context.Context) (*ua.FindServersOnNetworkResponse, error)
+func (c *Client) FindServersOnNetworkWithFilter(ctx context.Context, startingRecordID, maxRecordsToReturn uint32, capabilityFilter []string) (*ua.FindServersOnNetworkResponse, error)
 func (c *Client) GetEndpoints(ctx context.Context) (*ua.GetEndpointsResponse, error)
+func (c *Client) RegisterServer(ctx context.Context, server *ua.RegisteredServer) (*ua.RegisterServerResponse, error)
+func (c *Client) RegisterServer2(ctx context.Context, server *ua.RegisteredServer, configurations ...any) (*ua.RegisterServer2Response, error)
 ```
+
+The discovery services need a SecureChannel but no session: `Dial` is enough.
+`RegisterServer` registers, renews or (`IsOnline` false) removes a server at a
+discovery server; `RegisterServer2` adds discovery configurations, typically a
+`*ua.MdnsDiscoveryConfiguration`, and returns one result per configuration.
 
 #### Subscriptions
 
@@ -514,6 +527,7 @@ func (b *SubscriptionBuilder) MaxNotificationsPerPublish(n uint32) *Subscription
 func (b *SubscriptionBuilder) Priority(p uint8) *SubscriptionBuilder
 func (b *SubscriptionBuilder) Timestamps(ts ua.TimestampsToReturn) *SubscriptionBuilder
 func (b *SubscriptionBuilder) SamplingInterval(d time.Duration) *SubscriptionBuilder  // requested sampling interval for Monitor/MonitorEvents items (ms on wire)
+func (b *SubscriptionBuilder) DataChangeFilter(trigger ua.DataChangeTrigger, deadbandType ua.DeadbandType, deadbandValue float64) *SubscriptionBuilder  // filter for the items added by subsequent Monitor calls
 func (b *SubscriptionBuilder) NotifyChannel(ch chan *PublishNotificationData) *SubscriptionBuilder
 func (b *SubscriptionBuilder) Monitor(nodeIDs ...*ua.NodeID) *SubscriptionBuilder
 func (b *SubscriptionBuilder) MonitorItems(items ...*ua.MonitoredItemCreateRequest) *SubscriptionBuilder
@@ -697,7 +711,60 @@ func WithMetrics(m ClientMetrics) Option
 func FindServers(ctx context.Context, endpoint string, opts ...Option) ([]*ua.ApplicationDescription, error)
 func FindServersOnNetwork(ctx context.Context, endpoint string, opts ...Option) ([]*ua.ServerOnNetwork, error)
 func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.EndpointDescription, error)
+
+const DiscoveryPort = 4840
+func DiscoveryURL(host string) string
+func DiscoverServers(ctx context.Context, host string, opts ...Option) (*DiscoveryResult, error)
+
+type DiscoveryResult struct {
+    DiscoveryServerURL   string
+    Servers              []*ua.ApplicationDescription // FindServers
+    ServersOnNetwork     []*ua.ServerOnNetwork        // FindServersOnNetwork; nil without the multicast extension
+    LastCounterResetTime time.Time
+    MulticastSupported   bool
+}
 ```
+
+The helpers accept [`ReverseConnect`](#reverse-connect-client) and then run
+over a connection the server opened.
+
+---
+
+### Reverse connect (client)
+
+OPC UA reverse connect (Part 6 §7.1.3): the client listens and the server
+opens the connection, announcing itself with a ReverseHello message. See the
+[client guide](docs/client-guide.md#reverse-connect) and
+[Security](docs/security.md#reverse-connect).
+
+```go
+func ReverseConnect(listenAddr string, opts ...ReverseConnectOption) Option
+func ReverseConnectListener(l *uacp.ReverseListener, opts ...ReverseConnectOption) Option
+
+type ReverseConnectOption func(*reverseConfig)
+
+func ReverseServerURI(uri string) ReverseConnectOption
+```
+
+- `ReverseConnect` makes the client listen on `listenAddr` (`"host:port"` or
+  `"opc.tcp://host:port"`) from the first `Connect`/`Dial` until `Close`.
+- `ReverseConnectListener` takes the connection from a shared listener
+  (`uacp.ListenReverse`), which is not closed by `Client.Close`. One listener
+  serves any number of servers and clients.
+- `ReverseServerURI` accepts only the server announcing that ApplicationUri.
+- The announced EndpointUrl must denote the endpoint URL passed to
+  `NewClient`; a client created with `""` accepts and uses any.
+- A server failing these checks is refused and the client keeps waiting. With
+  security, the ServerUri must also be the ApplicationUri of the configured
+  server certificate, otherwise `Connect` fails. Both wrap
+  `errors.ErrReverseHelloRejected`.
+- Waiting is bounded by the context and by `DialTimeout`. `AutoReconnect`
+  goes back to waiting after a connection loss.
+
+`DiscoveryURL` returns the well-known URL of the Local Discovery Server of a
+host (`opc.tcp://<host>:4840`; a port or a complete URL is kept).
+`DiscoverServers` queries it with FindServers and FindServersOnNetwork; a
+discovery server without the multicast extension is not an error.
 
 ---
 
@@ -739,15 +806,19 @@ All option functions return `Option` and are passed to `NewClient`:
 | `Certificate(cert []byte)` | Client application certificate (DER) |
 | `CertificateFile(filename string)` | Load client application certificate from file |
 | `PrivateKey(key *rsa.PrivateKey)` | RSA private key for the client certificate |
-| `PrivateKeyFile(filename string)` | Load private key from file |
+| `PrivateKeySigner(key crypto.Signer)` | Private key for the client certificate of any supported type: `*rsa.PrivateKey`, or an ECDSA or Ed25519 key (any `crypto.Signer`, e.g. an HSM) for the ECC policies |
+| `PrivateKeyFile(filename string)` | Load an RSA, ECDSA or Ed25519 private key from a PEM or DER file (PKCS #1, PKCS #8, SEC 1) |
 | `AuthAnonymous()` | Use anonymous identity token (default) |
 | `AuthUsername(user, pass string)` | Username/password identity token |
 | `AuthCertificate(cert []byte)` | X.509 user certificate identity token (DER) |
 | `AuthPrivateKey(key *rsa.PrivateKey)` | Private key for the X.509 user certificate |
+| `AuthPrivateKeySigner(key crypto.Signer)` | Private key for the X.509 user certificate of any supported type (RSA or ECDSA) |
 | `AuthIssuedToken(tokenData []byte)` | Issued (e.g. JWT/SAML) identity token |
 | `AuthPolicyID(policy string)` | Override the UserTokenPolicy ID used during ActivateSession |
-| `DialTimeout(d time.Duration)` | TCP + HEL/ACK handshake timeout (default `DefaultDialTimeout`) |
+| `DialTimeout(d time.Duration)` | TCP + HEL/ACK handshake timeout (default `DefaultDialTimeout`); with reverse connect, how long to wait for the server |
 | `Dialer(d *uacp.Dialer)` | Custom UACP dialer (e.g. to set `ClientACK` parameters) |
+| `ReverseConnect(listenAddr string, opts ...ReverseConnectOption)` | Wait for the server to connect instead of dialling it; see [Reverse connect (client)](#reverse-connect-client) |
+| `ReverseConnectListener(l *uacp.ReverseListener, opts ...ReverseConnectOption)` | Reverse connect through a shared listener |
 | `RequestTimeout(t time.Duration)` | Per-request timeout |
 | `MaxMessageSize(n uint32)` | Maximum OPC UA message size in bytes |
 | `MaxChunkCount(n uint32)` | Maximum number of chunks per message |
@@ -768,7 +839,13 @@ Server certificates may be presented as a **DER chain** (leaf followed by interm
 
 ```go
 func NewMonitoredItemCreateRequestWithDefaults(nodeID *ua.NodeID, attributeID ua.AttributeID, clientHandle uint32) *ua.MonitoredItemCreateRequest
+
+// NewDataChangeFilter returns a DataChangeFilter ready to be assigned to
+// MonitoringParameters.Filter (create or modify) of an item on the Value attribute.
+func NewDataChangeFilter(trigger ua.DataChangeTrigger, deadbandType ua.DeadbandType, deadbandValue float64) *ua.ExtensionObject
 ```
+
+**Server data-change semantics (v1.6.0+):** the go-opcua server applies the `DataChangeFilter` of a monitored item: triggers `Status`, `StatusValue` (the default without a filter) and `StatusValueTimestamp`; `DeadbandTypeAbsolute` on numeric scalars and arrays; `DeadbandTypePercent` on variables with an `EURange` property. Unusable filters are rejected per item (`BadFilterNotAllowed`, `BadMonitoredItemFilterUnsupported`, `BadDeadbandFilterInvalid`, `BadMonitoredItemFilterInvalid`). `SamplingInterval` is revised (0 stays 0 = every change, negative = publishing interval, otherwise 1 ms – 1 h) and an item is sampled at most once per interval. `ItemToMonitor.IndexRange` restricts both what is reported and what triggers. See [docs/server-guide.md](docs/server-guide.md).
 
 ---
 
@@ -1332,6 +1409,14 @@ These are the concrete types delivered in `PublishNotificationData.Value`.
 
 ---
 
+### Endpoint selection for a client certificate
+
+```go
+func SelectEndpoint(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error)
+```
+
+`opcua.SelectEndpoint` returns the endpoint with the highest security level that the client can use with its application instance certificate (DER) and that matches `policy` and `mode` (`""` / `ua.MessageSecurityModeInvalid` match anything). Unlike `ua.SelectEndpoint` it leaves out endpoints with a security policy the library does not implement and secured endpoints whose policy does not fit the key type of the certificate (RSA vs. ECC, and the curve); with an empty certificate only unsecured endpoints remain. Endpoints the server gives the same security level are ranked by `uapolicy.SecurityLevel`, which puts the AEAD policies first.
+
 ### Display name and endpoint helpers
 
 ```go
@@ -1391,6 +1476,82 @@ func (b *Buffer) Len() int
 func (b *Buffer) Error() error
 ```
 
+### JSON and XML DataEncoding
+
+The OPC UA JSON (Part 6 §5.4) and XML (Part 6 §5.3) DataEncodings of values.
+These are encodings of data - for tooling, gateways, PubSub-style payloads
+and NodeSet2 values - not a transport: the wire stays UA-TCP with the binary
+encoding. See [JSON and XML Data Encodings](docs/encodings.md) for the forms,
+examples and the interoperability notes.
+
+```go
+func EncodeJSON(v interface{}, opts ...CodecOption) ([]byte, error)
+func DecodeJSON(data []byte, v interface{}, opts ...CodecOption) error
+func EncodeXML(v interface{}, opts ...CodecOption) ([]byte, error)
+func DecodeXML(data []byte, v interface{}, opts ...CodecOption) error
+```
+
+`v` is a value of a built-in type (`bool`, `int32`, `string`, `time.Time`,
+`[]byte`, `*NodeID`, `*Variant`, `*DataValue`, `*ExtensionObject`, ...), a
+pointer to a generated or registered structure, an enumeration, or a slice of
+these; the decoders take a non-nil pointer to it. Errors wrap a `StatusCode`
+(`StatusBadDecodingError`, `StatusBadEncodingLimitsExceeded`,
+`StatusBadEncodingError`).
+
+`EncodeJSON` is unrelated to `encoding/json`: `json.Marshal` on the types of
+this package keeps using their `MarshalJSON` methods, a display format that is
+unchanged.
+
+```go
+type JSONForm int
+
+const (
+    JSONCompact             JSONForm = iota // 1.05.04 Compact (default; what open62541 1.5 reads and writes)
+    JSONVerbose                             // 1.05.04 Verbose
+    JSONLegacyReversible                    // 1.04 reversible
+    JSONLegacyNonReversible                 // 1.04 non-reversible, encode only
+)
+```
+
+`DecodeJSON` accepts Compact, Verbose and the 1.04 reversible form without
+being told which one it is given.
+
+```go
+type CodecOption func(*codecOptions)
+
+func WithJSONForm(f JSONForm) CodecOption        // form written by EncodeJSON
+func WithNamespaceArray(uris []string) CodecOption // write/read namespace URIs instead of indexes
+func WithServerArray(uris []string) CodecOption    // same for the ServerIndex of an ExpandedNodeId
+func WithIndent(indent string) CodecOption         // pretty-print
+func WithMaxDepth(n int) CodecOption               // nesting limit, default DefaultCodecMaxDepth (100)
+func WithMaxArrayLength(n int) CodecOption         // Variant array limit, default MaxVariantArrayLength
+func WithXMLRootName(name string) CodecOption      // name of the outermost XML element
+func WithoutXMLNamespace() CodecOption             // omit the xmlns declaration
+
+const XMLTypesNamespace = "http://opcfoundation.org/UA/2008/02/Types.xsd"
+const DefaultCodecMaxDepth = 100
+```
+
+Custom structures registered with `RegisterExtensionObject` work as they are
+(fields are named after the Go fields or their `opcua:"Name"` tag).
+`RegisterDataTypeInfo` adds the NodeIds JSON and XML use to identify the
+structure, which makes the documents portable to other stacks:
+
+```go
+type DataTypeInfo struct {
+    Name           string  // DataType name; XML element name of the structure
+    DataTypeID     *NodeID // JSON UaTypeId
+    XMLEncodingID  *NodeID // XML ExtensionObject TypeId
+    JSONEncodingID *NodeID // accepted when decoding
+}
+
+func RegisterDataTypeInfo(v interface{}, info DataTypeInfo)
+```
+
+`StatusCodeDesc` (the values of `StatusCodes`) has a `Symbol` field with the
+name of the code in the specification (`"BadNodeIdUnknown"`), which is the
+`Symbol` of a StatusCode in the Verbose JSON form.
+
 ---
 
 ## Package `server`
@@ -1442,6 +1603,10 @@ func (s *Server) ImportNodeSetXML(data []byte) error
 
 Parses OPC UA NodeSet2 XML data and imports nodes, references, and namespaces
 into the server's address space. Use this to load custom information models.
+For `UAVariable` elements the `<Value>` (the OPC UA XML DataEncoding, decoded
+with `ua.DecodeXML`), `DataType`, `ValueRank`, `ArrayDimensions`,
+`AccessLevel` and `UserAccessLevel` are applied; see the
+[Server Guide](docs/server-guide.md#nodeset2-import) for the defaults.
 
 #### Info
 
@@ -1451,6 +1616,9 @@ func (s *Server) URLs() []string
 func (s *Server) Status() *ua.ServerStatusDataType
 func (s *Server) Node(nid *ua.NodeID) *Node
 func (s *Server) ChangeNotification(n *ua.NodeID)
+func (s *Server) Port() int
+func (s *Server) RegisteredServers() []*ua.RegisteredServer // Local Discovery Server: the registered servers
+func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discovery: the ServerOnNetwork table
 ```
 
 ---
@@ -1462,8 +1630,9 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 | `EndPoint(host string, port int)` | Listen address |
 | `ListenOn(addr string)` | Override the TCP bind address (e.g. `"0.0.0.0:4840"`) |
 | `Certificate(cert []byte)` | Server certificate (DER) |
-| `PrivateKey(key *rsa.PrivateKey)` | Server private key |
-| `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate) |
+| `PrivateKey(key *rsa.PrivateKey)` | Server private key (RSA) |
+| `ApplicationIdentity(cert []byte, key crypto.Signer)` | Add an application instance certificate with its key; repeat per key type (RSA, ECDSA P-256, ECDSA P-384). The server uses, and each endpoint advertises, the certificate that fits the security policy |
+| `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate). An ECC policy needs a matching `ApplicationIdentity` |
 | `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate) |
 | `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only |
 | `WithUsernameValidator(v UsernameValidator)` | Callback `func(username, password string) error` called during `ActivateSession` for `UserNameIdentityToken` |
@@ -1477,6 +1646,103 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithAccessController(ac AccessController)` | Access controller |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session to a `ua.UserRole`; used by the default access controller |
+| `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
+| `WithReverseConnect(clientURL string, opts ...ReverseConnectOption)` | Open reverse connections to the client listening at `clientURL`; see [Reverse connect (server)](#reverse-connect-server) |
+
+---
+
+### Reverse connect (server)
+
+The server connects to a listening client, announces itself with ReverseHello
+(ServerUri = its ApplicationUri, EndpointUrl = the endpoint to use) and serves
+the connection like an accepted one. See the
+[server guide](docs/server-guide.md#reverse-connect).
+
+```go
+func (s *Server) AddReverseConnect(clientURL string, opts ...ReverseConnectOption) (*ReverseConnect, error)
+func (s *Server) ReverseConnects() []*ReverseConnect
+
+type ReverseConnect struct { ... }
+
+func (rc *ReverseConnect) ClientURL() string
+func (rc *ReverseConnect) State() ReverseConnectState
+func (rc *ReverseConnect) Connections() int // connections the client has in use
+func (rc *ReverseConnect) Err() error       // why the last attempt failed, or nil
+func (rc *ReverseConnect) Close() error     // remove the target, close its connections
+```
+
+`clientURL` is `"opc.tcp://host:port"`. A target added before `Start` (or
+configured with `WithReverseConnect`) becomes active when the server starts;
+`Server.Close` stops all targets.
+
+```go
+type ReverseConnectState int
+
+const (
+    ReverseConnectConnecting ReverseConnectState = iota // opening a connection
+    ReverseConnectWaiting                               // announced, not used by the client yet
+    ReverseConnectConnected                             // at least one connection in use
+    ReverseConnectBackoff                               // last attempt failed, waiting to retry
+    ReverseConnectClosed                                // target removed or server closed
+)
+
+func (s ReverseConnectState) String() string
+```
+
+| Option | Description |
+|--------|-------------|
+| `ReverseConnectEndpointURL(url string)` | EndpointUrl announced to the client (default: the first `EndPoint`) |
+| `ReverseConnectRetryInterval(initial, max time.Duration)` | Delay before the first retry and the bound it doubles up to (defaults `DefaultReverseConnectRetryInterval` = 500 ms, `DefaultReverseConnectMaxRetryInterval` = 15 s) |
+| `ReverseConnectMaxConnections(n int)` | Connections of the target that may be in use at a time (default `DefaultReverseConnectMaxConnections` = 8) |
+| `WithLocalDiscoveryServer(opts ...LDSOption)` | Local Discovery Server: accept RegisterServer / RegisterServer2 and return the registered servers from FindServers |
+| `WithDiscoveryRegistration(discoveryServerURL string, opts ...RegistrationOption)` | Register with a discovery server in the background, renew, retry and unregister on `Close`; repeatable |
+| `WithMulticastDiscovery(opts ...MulticastOption)` | mDNS: announce the server, discover others, answer FindServersOnNetwork |
+
+#### Discovery options
+
+| `LDSOption` | Description |
+|-------------|-------------|
+| `LDSRegistrationTimeout(d time.Duration)` | Lifetime of a registration that is not renewed (default `DefaultRegistrationTimeout`, one hour; `<= 0` disables) |
+| `LDSAllowInsecureRegistration()` | Accept registrations on channels without security (tests, lab) |
+| `LDSSkipServerURICheck()` | Do not require the `ServerUri` to be the application URI of the channel's certificate |
+| `LDSMaxRegisteredServers(n int)` | Bound of the table (default 1024) |
+| `LDSApplicationType(t ua.ApplicationType)` | ApplicationType reported by the server, e.g. `ua.ApplicationTypeDiscoveryServer` |
+| `LDSRegistrationCallback(fn func(server *ua.RegisteredServer))` | Called for every accepted registration and unregistration |
+
+| `RegistrationOption` | Description |
+|----------------------|-------------|
+| `RegisterInterval(d time.Duration)` | Renewal interval (default `DefaultRegisterInterval`, 10 minutes) |
+| `RegisterRequestTimeout(d time.Duration)` | Bound of one attempt and of the unregistration on `Close` (default 10 s) |
+| `RegisterBackoff(minDelay, maxDelay time.Duration)` | Retry delay after a failure (default 1 s doubling to 1 min) |
+| `RegisterInsecure()` | Allow a channel without security (a secured endpoint is still preferred) |
+| `RegisterSecurity(policy string, mode ua.MessageSecurityMode)` | Pin policy and mode instead of the most secure endpoint |
+| `RegisterCertificateValidator(fn func(certDER []byte) error)` | Trust decision for the discovery server's certificate (default: accept) |
+| `RegisterDiscoveryURLs(urls ...string)` | Discovery URLs to register instead of the endpoint URLs |
+| `RegisterMdnsServerName(name string)` | mDNS server name sent with RegisterServer2 |
+| `RegisterServerCapabilities(caps ...string)` | Capabilities sent with RegisterServer2 (default `NA`) |
+| `RegisterSemaphoreFile(path string)` | Semaphore file path of the registration |
+| `RegisterEventHandler(fn func(RegistrationEvent))` | Called after every attempt |
+
+```go
+type RegistrationEvent struct {
+    DiscoveryServerURL   string
+    Service              string // "RegisterServer2" or "RegisterServer"
+    Online               bool   // false: the unregistration on Close
+    SecurityPolicyURI    string
+    SecurityMode         ua.MessageSecurityMode
+    ConfigurationResults []ua.StatusCode
+    Err                  error
+}
+```
+
+| `MulticastOption` | Description |
+|-------------------|-------------|
+| `MulticastServerName(name string)` | mDNS server name; the instance is `<name>-<hostname>` (default: the application name) |
+| `MulticastCapabilities(caps ...string)` | `caps` of the TXT record (default `LDS` for a discovery server, else `NA`) |
+| `MulticastInterfaces(names ...string)` | Restrict mDNS to these interfaces |
+| `MulticastHostname(hostname string)` | Host name to announce (default: the machine's) |
+| `MulticastIPv4Only()` | Do not use IPv6 |
+| `MulticastMaxServersOnNetwork(n int)` | Bound of the discovered servers (default 1024) |
 
 ---
 
@@ -1993,6 +2259,10 @@ var (
     ErrInvalidState       = errors.New("opcua: invalid state")
     ErrDuplicateHandler   = errors.New("opcua: duplicate handler registration")
     ErrUnknownService     = errors.New("opcua: unknown service")
+
+    // a ReverseHello was refused: unexpected ServerUri or EndpointUrl, or a
+    // ServerUri that is not the ApplicationUri of the server certificate
+    ErrReverseHelloRejected = errors.New("opcua: reverse hello rejected")
 )
 ```
 
@@ -2065,6 +2335,7 @@ func (c *Conn) MaxMessageSize() uint32
 func (c *Conn) MaxChunkCount() uint32
 func (c *Conn) SetLogger(l *slog.Logger)
 func (c *Conn) Handshake(ctx context.Context, endpoint string) error
+func (c *Conn) AcceptHello(ctx context.Context, endpoint string) error
 func (c *Conn) Receive() ([]byte, error)
 func (c *Conn) Send(typ string, msg interface{}) error
 func (c *Conn) SendError(code ua.StatusCode)
@@ -2106,6 +2377,67 @@ func (l *Listener) Addr() net.Addr
 func (l *Listener) Endpoint() string
 ```
 
+A `Listener` answers a ReverseHello message with `BadTcpMessageTypeInvalid`: a
+server never receives one.
+
+### Reverse connect (transport)
+
+Reverse connect (Part 6 §7.1.3) swaps the TCP roles: the server dials, the
+client listens. Applications normally use `server.WithReverseConnect` and
+`opcua.ReverseConnect`; these are the building blocks.
+
+Server side:
+
+```go
+type ReverseDialer struct {
+    Dialer *net.Dialer  // default: DefaultDialTimeout
+    ACK    *Acknowledge // default: DefaultServerACK
+    Logger *slog.Logger
+}
+
+func (d *ReverseDialer) Dial(ctx context.Context, clientURL string, rhe *ReverseHello) (*Conn, error)
+func (c *Conn) AcceptHello(ctx context.Context, endpoint string) error
+```
+
+`Dial` connects to the client and sends the ReverseHello message.
+`AcceptHello` then waits, until `ctx` is done, for the client's Hello, checks
+its endpoint URL and answers with Acknowledge.
+
+Client side:
+
+```go
+type ReverseListenerConfig struct {
+    Filter        func(*ReverseHello) error // admit or refuse a server; nil admits all
+    HelloTimeout  time.Duration             // default DefaultReverseHelloTimeout (10 s)
+    MaxHandshakes int                       // default DefaultMaxReverseHandshakes (16)
+    MaxPending    int                       // default DefaultMaxPendingReverse (16)
+    Logger        *slog.Logger
+}
+
+func ListenReverse(ctx context.Context, addr string, cfg *ReverseListenerConfig) (*ReverseListener, error)
+func NewReverseListener(l net.Listener, cfg *ReverseListenerConfig) *ReverseListener
+
+func (l *ReverseListener) Accept(ctx context.Context, match func(*ReverseHello) error) (*net.TCPConn, *ReverseHello, error)
+func (l *ReverseListener) Pending() int
+func (l *ReverseListener) Addr() net.Addr
+func (l *ReverseListener) Close() error
+
+func (d *Dialer) AcceptReverse(ctx context.Context, l *ReverseListener, endpoint string, match func(*ReverseHello) error) (*Conn, *ReverseHello, error)
+```
+
+- `ListenReverse` takes `"host:port"` or `"opc.tcp://host:port"`;
+  `NewReverseListener` wraps a TCP listener of the caller.
+- The listener reads one ReverseHello per connection, of at most 8208 bytes
+  (`MaxReverseHelloURILength` = 4096 per string), within `HelloTimeout`.
+  Anything else is answered with an Error message and closed.
+- `Accept` returns the most recent pending connection whose ReverseHello
+  satisfies `match` (nil: any), or waits for one. Connections nobody waits for
+  stay pending, up to `MaxPending`; a newer connection of the same server
+  replaces the older, and a pending connection the server closes is dropped.
+- `AcceptReverse` is the reverse-connect counterpart of `Dial`: `Accept` plus
+  the HEL/ACK handshake, bounded by the dial timeout. The Hello names the
+  announced EndpointUrl (`endpoint` if the server announced none).
+
 ---
 
 ## Package `uapolicy`
@@ -2121,8 +2453,69 @@ Returns all supported security policy URIs:
 - `http://opcfoundation.org/UA/SecurityPolicy#Basic128Rsa15`
 - `http://opcfoundation.org/UA/SecurityPolicy#Basic256`
 - `http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256`
-- `http://opcfoundation.org/UA/SecurityPolicy#Aes128Sha256RsaOaep`
-- `http://opcfoundation.org/UA/SecurityPolicy#Aes256Sha256RsaPss`
+- `http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep`
+- `http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP384`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_AesGcm`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_ChaChaPoly`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_curve25519`
+
+The `ua` package has a constant for each (`ua.SecurityPolicyURIECCNistP256AesGcm`, `ua.SecurityPolicyURIECCNistP256ChaChaPoly`, `ua.SecurityPolicyURIECCCurve25519`, ...) and the short names `ECCNistP256AesGcm`, `ECCNistP256ChaChaPoly` and `ECCCurve25519` in `ua.SecurityPolicyURIs`; the spelling of the specification (`ECC_nistP256_AesGcm`, ...) works everywhere a policy is named.
+
+```go
+func SecurityLevel(policy string, mode ua.MessageSecurityMode) uint8
+func IsSupported(uri string) bool // the policy is implemented (one of SupportedPolicies)
+func IsECC(uri string) bool
+func IsAEAD(uri string) bool                    // authenticated encryption: the three policies of OPC UA 1.05.07
+func SecureChannelEnhancements(uri string) bool // ChannelThumbprint, key chaining, channel bound signatures
+func LegacySequenceNumbers(uri string) bool
+
+// Algorithms
+func Asymmetric(uri string, localKey *rsa.PrivateKey, remoteKey *rsa.PublicKey) (*EncryptionAlgorithm, error)
+func AsymmetricKeys(uri string, localKey crypto.PrivateKey, remoteKey crypto.PublicKey) (*EncryptionAlgorithm, error)
+func Symmetric(uri string, localNonce, remoteNonce []byte) (*EncryptionAlgorithm, error) // RSA policies
+func (e *EncryptionAlgorithm) SignOnly() bool
+
+// Authenticated encryption (AES-GCM, ChaCha20-Poly1305): one call secures a chunk
+func (e *EncryptionAlgorithm) AEAD() bool
+func (e *EncryptionAlgorithm) SealChunk(chunk []byte, headerLength int, tokenID, lastSequenceNumber uint32, encrypt bool) ([]byte, error)
+func (e *EncryptionAlgorithm) OpenChunk(chunk []byte, headerLength int, tokenID, lastSequenceNumber uint32, encrypted bool) ([]byte, error)
+
+// Key negotiation of one OpenSecureChannel exchange, for every policy
+type Role int // RoleClient, RoleServer
+func NewKeyExchange(uri string, role Role) (*KeyExchange, error)
+func (k *KeyExchange) Nonce() []byte
+func (k *KeyExchange) Symmetric(remoteNonce []byte) (*EncryptionAlgorithm, error)
+func (k *KeyExchange) SymmetricChained(remoteNonce, chain []byte) (algo *EncryptionAlgorithm, next []byte, err error)
+
+// Certificates and keys
+func CertificatePublicKey(cert []byte) (crypto.PublicKey, error)
+func PublicKey(cert []byte) (*rsa.PublicKey, error)
+func Thumbprint(cert []byte) []byte
+func CheckCertificate(uri string, cert []byte) error
+func CheckPublicKey(uri string, key crypto.PublicKey) error
+func CertificateHash(uri string, cert []byte) ([]byte, error) // in channel bound signatures
+func KeyMatchesCertificate(key crypto.Signer, cert []byte) bool
+func ParsePrivateKey(data []byte) (crypto.Signer, error)
+
+// ECC: ephemeral keys and the EccEncryptedSecret of user identity tokens
+func NewEphemeralKey(uri string) (*EphemeralKey, error)
+func (k *EphemeralKey) PolicyURI() string
+func (k *EphemeralKey) PublicKey() []byte
+func (k *EphemeralKey) DecryptSecret(data []byte, signerKey func(certificate []byte) (crypto.PublicKey, error)) (*Secret, error)
+func EncryptSecret(uri string, signingKey crypto.PrivateKey, signingCertificate, receiverPublicKey, nonce, secret []byte, signingTime time.Time) ([]byte, error)
+```
+
+`AsymmetricKeys` is the key-type independent form of `Asymmetric`: RSA policies take `*rsa.PrivateKey` / `*rsa.PublicKey`, the ECC policies a `crypto.Signer` with an ECDSA public key and an `*ecdsa.PublicKey`, and `ECC_curve25519` a `crypto.Signer` with an `ed25519.PublicKey` and an `ed25519.PublicKey`. The asymmetric algorithm of an ECC policy is `SignOnly`: OpenSecureChannel messages are signed, not encrypted. `ECDSA` and `EdDSA` are the signature algorithms themselves.
+
+A `KeyExchange` creates the nonce a side sends in OpenSecureChannel and, given the peer's nonce, the symmetric algorithm of the new SecurityToken. For RSA policies the nonce is random and the keys come from P_SHA; for ECC policies the nonce is an ephemeral public key and the keys come from HKDF over the ECDH shared secret. `Symmetric` alone cannot serve the ECC policies and returns an error for them.
+
+The symmetric algorithm of `ECC_nistP256_AesGcm`, `ECC_nistP256_ChaChaPoly` and `ECC_curve25519` is an AEAD cipher (`AEAD()` is true). It has no separate `Encrypt` and `Signature` (they fail); `SealChunk` and `OpenChunk` secure a whole message chunk: the header stays readable and is authenticated, the rest is encrypted in `SignAndEncrypt` mode, and a 16 byte tag is appended. The nonce is the derived IV masked with the TokenId and the sequence number of the previous chunk; `SealChunk` fails rather than use a nonce twice under a key, `OpenChunk` returns `ErrInvalidCiphertext` for anything that was modified, truncated, replayed or secured with other keys.
+
+`SymmetricChained` is `Symmetric` for a channel with `SecureChannelEnhancements`: it takes the value the previous exchange on the channel returned (nil for the first one) and returns the one for the next renewal. The value is key material and must stay secret. For all other policies it is ignored and nil.
+
+`CheckCertificate` reports whether a certificate's key can be used with a policy (RSA for the RSA policies; P-256 or P-384 for `ECC_nistP256`, `ECC_nistP256_AesGcm` and `ECC_nistP256_ChaChaPoly`; P-384 for `ECC_nistP384`; Ed25519 for `ECC_curve25519`).
 
 ---
 
@@ -2134,6 +2527,7 @@ Secure conversation layer.
 
 ```go
 func NewSecureChannel(endpoint string, conn *uacp.Conn, cfg *Config, errCh chan<- error) (*SecureChannel, error)
+func (s *SecureChannel) RemoteCertificate() []byte // DER certificate of the peer; nil without security
 ```
 
 ```go
@@ -2145,7 +2539,35 @@ func (s *SecureChannel) VerifySessionSignature(serverCert []byte, nonce []byte, 
 func (s *SecureChannel) NewSessionSignature(serverCert []byte, nonce []byte) (sig []byte, alg string, err error)
 func (s *SecureChannel) NewUserTokenSignature(authPolicyURI string, serverCert []byte, serverNonce []byte) ([]byte, string, error)
 func (s *SecureChannel) EncryptUserPassword(authPolicyURI string, password string, serverCert []byte, serverNonce []byte) ([]byte, string, error)
+
+// ECC policies
+func (s *SecureChannel) UserTokenPolicyIsECC(policyURI string) bool
+func (s *SecureChannel) EncryptUserSecret(policyURI string, secret, serverEphemeralKey, nonce []byte) ([]byte, error)
+func (s *SecureChannel) NewEphemeralKeySignature(policyURI string, publicKey []byte) ([]byte, error)
+func (s *SecureChannel) VerifyEphemeralKeySignature(policyURI string, certificate, publicKey, signature []byte) error
+func (s *SecureChannel) LocalCertificate() []byte
+func (s *SecureChannel) RemoteCertificate() []byte
+func DecryptUserSecret(key *uapolicy.EphemeralKey, data, signerCertificate, nonce []byte) ([]byte, error)
+
+// Session signatures, channel bound where the policy has SecureChannelEnhancements
+func (s *SecureChannel) ChannelThumbprint() []byte
+func (s *SecureChannel) NewCreateSessionSignature(clientCertificate, clientNonce, serverNonce []byte) ([]byte, string, error)
+func (s *SecureChannel) VerifyCreateSessionSignature(serverCertificate, clientNonce, serverNonce, signature []byte) error
+func (s *SecureChannel) NewActivateSessionSignature(serverCertificate, serverNonce, clientNonce []byte) ([]byte, string, error)
+func (s *SecureChannel) VerifyActivateSessionSignature(clientCertificate, serverNonce, clientNonce, signature []byte) error
+func (s *SecureChannel) NewSessionUserTokenSignature(policyURI string, serverCertificate, serverNonce, clientNonce []byte) ([]byte, string, error)
+func (s *SecureChannel) VerifySessionUserTokenSignature(policyURI string, userCertificate, serverCertificate, serverNonce, clientNonce, signature []byte) error
+
+// Ephemeral key exchange in the AdditionalHeader of CreateSession / ActivateSession
+func NewECDHPolicyHeader(policyURI string) *ua.ExtensionObject
+func NewECDHKeyHeader(policyURI string, key *ua.EphemeralKeyType) *ua.ExtensionObject
+func ECDHPolicyFromHeader(header *ua.ExtensionObject) (string, bool)
+func ECDHKeyFromHeader(header *ua.ExtensionObject) (*ua.EphemeralKeyType, error)
 ```
+
+With an ECC security policy the password of a user name token and the data of an issued token are protected with an `EccEncryptedSecret` (`EncryptUserSecret` / `DecryptUserSecret`) instead of `EncryptUserPassword`. The client asks for the server's ephemeral key with an `ECDHPolicyUri` entry in the request's `AdditionalHeader`; the server returns it, signed, as `ECDHKey`. `opcua.Client` and `server.Server` do all of this themselves.
+
+`NewCreateSessionSignature`, `NewActivateSessionSignature` and `NewSessionUserTokenSignature` (with their `Verify` counterparts) create the signatures of CreateSession and ActivateSession for every policy. For the policies with `SecureChannelEnhancements` (`ECC_nistP256_AesGcm`, `ECC_nistP256_ChaChaPoly`) the signed data is bound to the channel: `ChannelThumbprint | nonce | certificate hashes | nonce` (Part 4 §6.1.8), with the `ChannelThumbprint` being the signature of the first OpenSecureChannel response. For all other policies they are the classic `certificate | nonce` signatures of `NewSessionSignature`, `VerifySessionSignature` and `NewUserTokenSignature`, which remain for those policies.
 
 ### Config
 
@@ -2154,7 +2576,11 @@ type Config struct {
     SecurityPolicyURI string
     SecurityMode      ua.MessageSecurityMode
     Certificate       []byte
-    LocalKey          *rsa.PrivateKey
+    LocalKey          *rsa.PrivateKey   // RSA key of Certificate
+    LocalPrivateKey   crypto.Signer     // key of Certificate, any type; takes precedence over LocalKey
+    UserKey           *rsa.PrivateKey   // RSA key of the X.509 user certificate
+    UserPrivateKey    crypto.Signer     // key of the X.509 user certificate, any type
+    LocalIdentity     func(securityPolicyURI string) (certificate []byte, key crypto.Signer, err error) // server: certificate per policy
     RemoteCertificate []byte
     Lifetime          uint32          // milliseconds
     RequestTimeout    time.Duration

@@ -29,12 +29,27 @@ type MonitoredItemService struct {
 	Subs map[uint32][]*MonitoredItem
 
 	id uint32
+
+	// due holds the items whose next sample was postponed to the end of
+	// their sampling interval, and sampler is the one timer that serves
+	// them; see monitored_item_filter.go. Guarded by Mu.
+	due       map[uint32]*MonitoredItem
+	sampler   *time.Timer
+	samplerAt time.Time
+	// samplerRuns is the number of sampler callbacks in flight (for tests).
+	samplerRuns atomic.Int32
 }
 
 // DeleteMonitoredItem removes all references to a specific monitored item by ID.
 func (s *MonitoredItemService) DeleteMonitoredItem(id uint32) {
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
+	s.deleteMonitoredItemNeedsLock(id)
+}
+
+// deleteMonitoredItemNeedsLock is DeleteMonitoredItem for callers that hold
+// s.Mu.
+func (s *MonitoredItemService) deleteMonitoredItemNeedsLock(id uint32) {
 	item, ok := s.Items[id]
 	if !ok {
 		// id does not exist.
@@ -55,6 +70,9 @@ func (s *MonitoredItemService) DeleteMonitoredItem(id uint32) {
 	// we've got to go backwards because we're deleting from the slice as we go.
 	// I'm guessing this loop is less efficient than slices.DeleteFunc but it's what we've got.
 	delete(s.Items, id)
+	// A postponed sample dies with the item, and the sampler timer with the
+	// last postponed sample.
+	s.cancelDeferredSample(item)
 	for i := len(s.Nodes[nodeid]) - 1; i >= 0; i-- {
 		n := s.Nodes[nodeid][i]
 		if n == nil {
@@ -194,62 +212,52 @@ func (s *MonitoredItemService) PendingReportableNotifications(subID uint32) bool
 	return false
 }
 
+// ChangeNotification tells the service that the node changed. Every enabled
+// data item on the node is sampled, subject to its sampling interval, and the
+// sample is queued when the item's DataChangeFilter lets it through; see
+// monitored_item_filter.go.
 func (s *MonitoredItemService) ChangeNotification(n *ua.NodeID) {
-
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	items, ok := s.Nodes[n.String()]
-
 	if !ok {
 		// this node isn't monitored - don't have to do anything.
 		return
 	}
 
-	ns, err := s.SubService.srv.Namespace(int(n.Namespace()))
-
+	now := time.Now()
 	for i := range items {
 		item := items[i]
-		if item == nil {
+		// Event items are fed by EmitEvent, not by data changes.
+		if item == nil || item.isEvent {
 			continue
 		}
 		// Disabled: do not sample or enqueue (Part 4 §5.12.1.3).
 		if item.Mode == ua.MonitoringModeDisabled {
 			continue
 		}
-		val := new(ua.MonitoredItemNotification)
-		val.ClientHandle = item.Req.RequestedParameters.ClientHandle
-		if err != nil {
-			s.SubService.srv.cfg.logger.Warn("error getting namespace", "namespace", n.Namespace(), "error", err)
-			val.Value = &ua.DataValue{}
-			val.Value.Status = ua.StatusBad
-			val.Value.EncodingMask |= ua.DataValueStatusCode
-			item.enqueue(val)
-			if item.Mode == ua.MonitoringModeReporting {
-				select {
-				case item.Sub.NotifyChannel <- val:
-				default:
-				}
-			}
-			continue
-		}
-		dv := ns.Attribute(n, item.Req.ItemToMonitor.AttributeID)
-		if dv != nil {
-			// Copy so timestamp filtering / overflow bits do not mutate the node store.
-			cp := *dv
-			dv = &cp
-			_ = ua.ApplyTimestampsToReturn(dv, item.timestampsToReturn)
-		}
-		val.Value = dv
-		item.enqueue(val)
-		// Sampling queues without waking Publish; Reporting wakes the publish loop.
-		if item.Mode == ua.MonitoringModeReporting {
-			select {
-			case item.Sub.NotifyChannel <- val:
-			default:
+		if item.samplingInterval > 0 {
+			// At most one sample per sampling interval: a change inside the
+			// current interval is picked up when the interval ends.
+			if due := item.lastSampled.Add(item.samplingInterval); now.Before(due) {
+				s.deferSample(item, due)
+				continue
 			}
 		}
+		s.sampleItem(item, now, false)
 	}
+}
 
+// sampleInitial queues the first value of a newly created item. Only that
+// item is sampled: its siblings on the same node have nothing new to report.
+// Caller must hold s.Mu.
+func (s *MonitoredItemService) sampleInitial(item *MonitoredItem) {
+	defer func() {
+		if r := recover(); r != nil {
+			logPanic(s.SubService.srv.cfg.logger, "sampling the initial value of a monitored item", r)
+		}
+	}()
+	s.sampleItem(item, time.Now(), true)
 }
 
 // nodeExists reports whether the given node id resolves to a node in a
@@ -296,6 +304,17 @@ type MonitoredItem struct {
 	discardOldest      bool
 	timestampsToReturn ua.TimestampsToReturn
 	queue              []*ua.MonitoredItemNotification
+
+	// isEvent marks an item on the EventNotifier attribute.
+	isEvent bool
+	// Data-change sampling state, see monitored_item_filter.go.
+	filter           dataChangeFilter
+	indexRange       string
+	samplingInterval time.Duration // 0 = exception based
+	lastSampled      time.Time
+	sampleDue        time.Time // non-zero while a postponed sample is pending
+	last             sampleState
+	hasLast          bool
 }
 
 // CreateMonitoredItems implements the OPC UA CreateMonitoredItems service.
@@ -378,11 +397,38 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
-		qsize := uint32(1)
-		discardOldest := true
-		if itemreq.RequestedParameters != nil {
-			qsize = reviseQueueSize(itemreq.RequestedParameters.QueueSize)
-			discardOldest = itemreq.RequestedParameters.DiscardOldest
+		if itemreq.RequestedParameters == nil {
+			itemreq.RequestedParameters = &ua.MonitoringParameters{DiscardOldest: true}
+		}
+		qsize := reviseQueueSize(itemreq.RequestedParameters.QueueSize)
+		discardOldest := itemreq.RequestedParameters.DiscardOldest
+		isEventItem := itemreq.ItemToMonitor.AttributeID == ua.AttributeIDEventNotifier
+
+		// Data items: validate the IndexRange and the DataChangeFilter and
+		// revise the sampling interval before anything is registered.
+		// Events are not sampled (Part 4 §5.13.1.2), their interval is 0.
+		filter := defaultDataChangeFilter()
+		samplingMS := 0.0
+		if !isEventItem {
+			if r := itemreq.ItemToMonitor.IndexRange; r != "" {
+				if _, err := ua.ParseNumericRanges(r); err != nil {
+					res[i] = &ua.MonitoredItemCreateResult{
+						StatusCode:   ua.StatusBadIndexRangeInvalid,
+						FilterResult: ua.NewExtensionObject(nil),
+					}
+					continue
+				}
+			}
+			var st ua.StatusCode
+			if filter, st = s.parseDataChangeFilter(itemreq.ItemToMonitor, itemreq.RequestedParameters.Filter); st != ua.StatusOK {
+				res[i] = &ua.MonitoredItemCreateResult{
+					StatusCode:   st,
+					FilterResult: ua.NewExtensionObject(nil),
+				}
+				continue
+			}
+			samplingMS = reviseSamplingInterval(itemreq.RequestedParameters.SamplingInterval,
+				float64(pubInterval)/float64(time.Millisecond))
 		}
 
 		item := MonitoredItem{
@@ -394,10 +440,13 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			discardOldest:      discardOldest,
 			timestampsToReturn: ts,
 			queue:              make([]*ua.MonitoredItemNotification, 0, qsize),
+			isEvent:            isEventItem,
+			filter:             filter,
+			indexRange:         itemreq.ItemToMonitor.IndexRange,
+			samplingInterval:   time.Duration(samplingMS * float64(time.Millisecond)),
 		}
 
 		// Check for event monitoring (AttributeIDEventNotifier with EventFilter).
-		isEventItem := itemreq.ItemToMonitor.AttributeID == ua.AttributeIDEventNotifier
 		var filterResult *ua.ExtensionObject
 		if isEventItem {
 			var ef *ua.EventFilter
@@ -447,13 +496,13 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		res[i] = &ua.MonitoredItemCreateResult{
 			StatusCode:              ua.StatusOK,
 			MonitoredItemID:         item.ID,
-			RevisedSamplingInterval: float64(pubInterval) / float64(time.Millisecond),
+			RevisedSamplingInterval: samplingMS,
 			RevisedQueueSize:        qsize,
 			FilterResult:            filterResult,
 		}
-		// For data items, do an initial update for the nodeids in the background.
-		if !isEventItem {
-			s.SubService.srv.goSafe("sampling the initial value of a monitored item", func() { s.ChangeNotification(nodeid) })
+		// A data item reports its current value first (Part 4 §5.13.1.1).
+		if !isEventItem && item.Mode != ua.MonitoringModeDisabled {
+			s.sampleInitial(&item)
 		}
 
 	}
@@ -507,6 +556,33 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
+		// A data item gets its new filter validated first: an item whose
+		// filter is rejected keeps all its current parameters.
+		revisedSampling := float64(mi.samplingInterval) / float64(time.Millisecond)
+		if item.RequestedParameters != nil && !mi.isEvent {
+			filter, st := s.parseDataChangeFilter(mi.Req.ItemToMonitor, item.RequestedParameters.Filter)
+			if st != ua.StatusOK {
+				results[i] = &ua.MonitoredItemModifyResult{
+					StatusCode:   st,
+					FilterResult: ua.NewExtensionObject(nil),
+				}
+				continue
+			}
+			// The new filter and sampling interval apply to the samples
+			// taken from now on; the last queued value stays the reference.
+			mi.filter = filter
+			pubInterval, _, _ := mi.Sub.timing()
+			revisedSampling = reviseSamplingInterval(item.RequestedParameters.SamplingInterval,
+				float64(pubInterval)/float64(time.Millisecond))
+			mi.samplingInterval = time.Duration(revisedSampling * float64(time.Millisecond))
+			// A sample that was postponed under the old interval becomes
+			// due under the new one.
+			if !mi.sampleDue.IsZero() {
+				mi.sampleDue = mi.lastSampled.Add(mi.samplingInterval)
+				s.armSampler(mi.sampleDue)
+			}
+		}
+
 		// Update the monitored item's parameters.
 		if item.RequestedParameters != nil {
 			mi.Req.RequestedParameters = item.RequestedParameters
@@ -517,9 +593,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 				mi.queue = mi.queue[len(mi.queue)-int(mi.queueSize):]
 			}
 			// Re-validate and update event filter when the item monitors events.
-			if mi.Req.ItemToMonitor != nil &&
-				mi.Req.ItemToMonitor.AttributeID == ua.AttributeIDEventNotifier &&
-				item.RequestedParameters.Filter != nil {
+			if mi.isEvent && item.RequestedParameters.Filter != nil {
 				var ef *ua.EventFilter
 				switch fv := item.RequestedParameters.Filter.Value.(type) {
 				case *ua.EventFilter:
@@ -541,16 +615,10 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			}
 		}
 
-		revisedSampling := float64(0)
-		revisedQueue := mi.queueSize
-		if item.RequestedParameters != nil {
-			revisedSampling = item.RequestedParameters.SamplingInterval
-		}
-
 		results[i] = &ua.MonitoredItemModifyResult{
 			StatusCode:              ua.StatusOK,
 			RevisedSamplingInterval: revisedSampling,
-			RevisedQueueSize:        revisedQueue,
+			RevisedQueueSize:        mi.queueSize,
 			FilterResult:            ua.NewExtensionObject(nil),
 		}
 	}
@@ -602,6 +670,11 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 		item.Mode = req.MonitoringMode
 		if req.MonitoringMode == ua.MonitoringModeDisabled {
 			item.queue = item.queue[:0]
+			// Nothing is cached while disabled: the first change after the
+			// item is enabled again is reported whatever the filter.
+			item.hasLast = false
+			// A disabled item is not sampled, so nothing stays postponed.
+			s.cancelDeferredSample(item)
 		} else if prev != ua.MonitoringModeReporting && req.MonitoringMode == ua.MonitoringModeReporting {
 			// Wake Publish so already-queued Sampling samples can be delivered.
 			if len(item.queue) > 0 && item.Sub != nil {
@@ -715,8 +788,10 @@ func (s *MonitoredItemService) DeleteMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
-		// this function gets the lock so we need to do it in the background so it can happen after our lock is released.
-		s.SubService.srv.goSafe("deleting a monitored item", func() { s.DeleteMonitoredItem(id) })
+		// The item is gone when the response is sent: a second delete of the
+		// same id answers BadMonitoredItemIdInvalid, and nothing is sampled
+		// for it any more.
+		s.deleteMonitoredItemNeedsLock(id)
 		results[i] = ua.StatusOK
 	}
 

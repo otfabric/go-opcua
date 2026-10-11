@@ -2,14 +2,17 @@
 
 // Package uapolicy implements the encryption, decryption, signing,
 // and signature verifying algorithms for Security Policy profiles as
-// defined in Part 7 of the OPC-UA specifications (version 1.04)
+// defined in Part 7 of the OPC-UA specifications (version 1.04, and the ECC
+// policies of version 1.05)
 package uapolicy
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"fmt"
 	"io"
+	"reflect"
 	"sort"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -27,21 +30,83 @@ func SupportedPolicies() []string {
 	return uris
 }
 
+// IsSupported reports whether the security policy with the given URI is
+// implemented.
+func IsSupported(uri string) bool {
+	_, ok := policies[uri]
+	return ok
+}
+
 // Asymmetric returns the asymmetric encryption algorithm for the given security policy.
+//
+// It takes RSA keys and is kept for compatibility; AsymmetricKeys accepts the
+// keys of every supported policy, including the ECC ones.
 func Asymmetric(uri string, localKey *rsa.PrivateKey, remoteKey *rsa.PublicKey) (*EncryptionAlgorithm, error) {
+	var (
+		local  crypto.PrivateKey
+		remote crypto.PublicKey
+	)
+	if localKey != nil {
+		local = localKey
+	}
+	if remoteKey != nil {
+		remote = remoteKey
+	}
+	return AsymmetricKeys(uri, local, remote)
+}
+
+// AsymmetricKeys returns the asymmetric algorithm for the given security
+// policy: the algorithm that secures OpenSecureChannel messages and creates
+// and verifies the signatures of CreateSession and ActivateSession.
+//
+// localKey is the private key of the local application instance (or user)
+// certificate and remoteKey the public key of the peer's certificate. Either
+// may be nil when only the other direction is needed. The key types must match
+// the policy: RSA policies need an *rsa.PrivateKey and an *rsa.PublicKey, the
+// ECC policies a crypto.Signer with an *ecdsa.PublicKey on a curve the policy
+// permits and an *ecdsa.PublicKey, and ECC_curve25519 a crypto.Signer with an
+// ed25519.PublicKey and an ed25519.PublicKey.
+func AsymmetricKeys(uri string, localKey crypto.PrivateKey, remoteKey crypto.PublicKey) (*EncryptionAlgorithm, error) {
 	p, ok := policies[uri]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", errors.ErrUnsupportedSecurityPolicy, uri)
 	}
-
+	if isNilKey(localKey) {
+		localKey = nil
+	}
+	if isNilKey(remoteKey) {
+		remoteKey = nil
+	}
 	return p.asymmetric(localKey, remoteKey)
 }
 
+// isNilKey reports whether key is nil or a typed nil pointer, which callers
+// holding an unset *rsa.PrivateKey field pass without noticing.
+func isNilKey(key any) bool {
+	if key == nil {
+		return true
+	}
+	v := reflect.ValueOf(key)
+	switch v.Kind() {
+	case reflect.Pointer, reflect.Interface, reflect.Slice, reflect.Map:
+		return v.IsNil()
+	default:
+		return false
+	}
+}
+
 // Symmetric returns the symmetric encryption algorithm for the given security policy.
+//
+// The keys are derived from the two nonces, which is how the RSA policies
+// work. The ECC policies derive them from a key agreement instead: use a
+// KeyExchange, which handles both families.
 func Symmetric(uri string, localNonce, remoteNonce []byte) (*EncryptionAlgorithm, error) {
 	p, ok := policies[uri]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", errors.ErrUnsupportedSecurityPolicy, uri)
+	}
+	if p.ecc != nil {
+		return nil, fmt.Errorf("%w: %s derives its keys from a key agreement, use a KeyExchange", errors.ErrInvalidSecurityConfig, uri)
 	}
 
 	if uri != ua.SecurityPolicyURINone && (localNonce == nil || remoteNonce == nil) {
@@ -49,6 +114,106 @@ func Symmetric(uri string, localNonce, remoteNonce []byte) (*EncryptionAlgorithm
 	}
 
 	return p.symmetric(localNonce, remoteNonce)
+}
+
+// Role is the side of a SecureChannel an application is on.
+type Role int
+
+const (
+	// RoleClient is the side that sends the OpenSecureChannel request.
+	RoleClient Role = iota
+	// RoleServer is the side that answers it.
+	RoleServer
+)
+
+// KeyExchange is one side of the key negotiation of an OpenSecureChannel
+// exchange. It creates the nonce the side sends and, once the peer's nonce is
+// known, the symmetric algorithm that secures the messages of the new
+// SecurityToken.
+//
+// For the RSA policies the nonce is random data and the keys are derived from
+// both nonces with P_SHA. For the ECC policies the nonce is an ephemeral
+// public key and the keys are derived with HKDF from the Diffie-Hellman
+// shared secret (Part 6 §6.8.1).
+//
+// A KeyExchange is used for exactly one OpenSecureChannel exchange: opening a
+// channel and every renewal create a new one, and with it new ephemeral keys.
+type KeyExchange struct {
+	uri       string
+	policy    policy
+	role      Role
+	nonce     []byte
+	ephemeral *EphemeralKey
+}
+
+// NewKeyExchange starts the key negotiation for the security policy.
+func NewKeyExchange(uri string, role Role) (*KeyExchange, error) {
+	p, ok := policies[uri]
+	if !ok {
+		return nil, fmt.Errorf("%w: %s", errors.ErrUnsupportedSecurityPolicy, uri)
+	}
+	k := &KeyExchange{uri: uri, policy: p, role: role}
+
+	if p.ecc != nil {
+		eph, err := NewEphemeralKey(uri)
+		if err != nil {
+			return nil, err
+		}
+		k.ephemeral = eph
+		k.nonce = eph.PublicKey()
+		return k, nil
+	}
+
+	// The nonce length is a property of the asymmetric algorithm.
+	asym, err := p.asymmetric(nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	if k.nonce, err = asym.MakeNonce(); err != nil {
+		return nil, err
+	}
+	return k, nil
+}
+
+// Nonce returns the nonce to send to the peer: the ClientNonce of the
+// OpenSecureChannel request or the ServerNonce of the response.
+func (k *KeyExchange) Nonce() []byte {
+	return k.nonce
+}
+
+// Symmetric completes the negotiation with the nonce received from the peer
+// and returns the symmetric algorithm for the new SecurityToken.
+//
+// For an ECC policy the peer's nonce is validated as a public key on the
+// curve of the policy; an invalid key fails the negotiation.
+//
+// It is SymmetricChained for the first exchange of a channel. A renewal of a
+// channel whose policy has SecureChannelEnhancements needs SymmetricChained.
+func (k *KeyExchange) Symmetric(remoteNonce []byte) (*EncryptionAlgorithm, error) {
+	algo, _, err := k.SymmetricChained(remoteNonce, nil)
+	return algo, err
+}
+
+// SymmetricChained completes the negotiation like Symmetric and links the new
+// keys to the previous ones of the channel.
+//
+// chain is the value the previous exchange on the same SecureChannel returned,
+// or nil for the exchange that opens the channel. The result is the value for
+// the next renewal. For the security policies with SecureChannelEnhancements
+// it is key material: the keys of a renewed SecurityToken are derived from the
+// new shared secret combined with that of every earlier exchange (Part 6
+// §6.8.1), so both sides must pass the values in step. The value is secret; it
+// must not be logged. For every other policy chain is ignored and the result
+// is nil.
+func (k *KeyExchange) SymmetricChained(remoteNonce, chain []byte) (algo *EncryptionAlgorithm, next []byte, err error) {
+	if k.policy.ecc != nil {
+		return k.policy.ecc.symmetricKeys(k.ephemeral, remoteNonce, k.role, chain)
+	}
+	if k.uri != ua.SecurityPolicyURINone && (k.nonce == nil || remoteNonce == nil) {
+		return nil, nil, fmt.Errorf("%w: both nonces required", errors.ErrInvalidSecurityConfig)
+	}
+	algo, err = k.policy.symmetric(k.nonce, remoteNonce)
+	return algo, nil, err
 }
 
 // EncryptionAlgorithm wraps the functions used to return the various
@@ -74,6 +239,21 @@ type EncryptionAlgorithm struct {
 	remoteSignatureLength int
 	encryptionURI         string
 	signatureURI          string
+
+	// signOnly is set for asymmetric algorithms that cannot encrypt (ECC).
+	signOnly bool
+
+	// aead is set for symmetric algorithms with authenticated encryption.
+	// See ecc_aead.go.
+	aead *chunkAEAD
+}
+
+// SignOnly reports whether the algorithm signs but never encrypts, whatever
+// the MessageSecurityMode. That is the case for the asymmetric algorithm of
+// the ECC policies: their OpenSecureChannel messages are signed, not
+// encrypted and not padded.
+func (e *EncryptionAlgorithm) SignOnly() bool {
+	return e.signOnly
 }
 
 // BlockSize returns the underlying encryption algorithm's blocksize.
@@ -170,17 +350,64 @@ func (e *EncryptionAlgorithm) SignatureURI() string {
 }
 
 var policies = map[string]policy{
-	ua.SecurityPolicyURINone:                {newNoneAsymmetric, newNoneSymmetric},
-	ua.SecurityPolicyURIBasic128Rsa15:       {newBasic128Rsa15Asymmetric, newBasic128Rsa15Symmetric},
-	ua.SecurityPolicyURIBasic256:            {newBasic256Asymmetric, newBasic256Symmetric},
-	ua.SecurityPolicyURIBasic256Sha256:      {newBasic256Rsa256Asymmetric, newBasic256Rsa256Symmetric},
-	ua.SecurityPolicyURIAes128Sha256RsaOaep: {newAes128Sha256RsaOaepAsymmetric, newAes128Sha256RsaOaepSymmetric},
-	ua.SecurityPolicyURIAes256Sha256RsaPss:  {newAes256Sha256RsaPssAsymmetric, newAes256Sha256RsaPssSymmetric},
+	ua.SecurityPolicyURINone:                {asymmetric: rsaAsymmetric(newNoneAsymmetric), symmetric: newNoneSymmetric},
+	ua.SecurityPolicyURIBasic128Rsa15:       {asymmetric: rsaAsymmetric(newBasic128Rsa15Asymmetric), symmetric: newBasic128Rsa15Symmetric},
+	ua.SecurityPolicyURIBasic256:            {asymmetric: rsaAsymmetric(newBasic256Asymmetric), symmetric: newBasic256Symmetric},
+	ua.SecurityPolicyURIBasic256Sha256:      {asymmetric: rsaAsymmetric(newBasic256Rsa256Asymmetric), symmetric: newBasic256Rsa256Symmetric},
+	ua.SecurityPolicyURIAes128Sha256RsaOaep: {asymmetric: rsaAsymmetric(newAes128Sha256RsaOaepAsymmetric), symmetric: newAes128Sha256RsaOaepSymmetric},
+	ua.SecurityPolicyURIAes256Sha256RsaPss:  {asymmetric: rsaAsymmetric(newAes256Sha256RsaPssAsymmetric), symmetric: newAes256Sha256RsaPssSymmetric},
 }
 
+func init() {
+	for uri, p := range eccPolicies {
+		policies[uri] = policy{asymmetric: p.asymmetric, ecc: p}
+	}
+}
+
+// policy is one security policy: the constructors of its algorithms.
 type policy struct {
-	asymmetric func(localKey *rsa.PrivateKey, remoteKey *rsa.PublicKey) (*EncryptionAlgorithm, error)
-	symmetric  func(localNonce []byte, remoteNonce []byte) (*EncryptionAlgorithm, error)
+	// asymmetric creates the asymmetric algorithm for a pair of application
+	// instance keys. Either key may be nil.
+	asymmetric func(localKey crypto.PrivateKey, remoteKey crypto.PublicKey) (*EncryptionAlgorithm, error)
+
+	// symmetric derives the symmetric algorithm from the two nonces of an
+	// OpenSecureChannel exchange. It is nil for the ECC policies.
+	symmetric func(localNonce []byte, remoteNonce []byte) (*EncryptionAlgorithm, error)
+
+	// ecc is set for the ECC policies, which derive the symmetric algorithm
+	// from an ephemeral key agreement.
+	ecc *eccPolicy
+}
+
+// rsaAsymmetric adapts the constructor of an RSA policy, which needs the
+// concrete RSA key types, to the key-type independent signature of the policy
+// table.
+func rsaAsymmetric(f func(*rsa.PrivateKey, *rsa.PublicKey) (*EncryptionAlgorithm, error)) func(crypto.PrivateKey, crypto.PublicKey) (*EncryptionAlgorithm, error) {
+	return func(localKey crypto.PrivateKey, remoteKey crypto.PublicKey) (*EncryptionAlgorithm, error) {
+		var (
+			local  *rsa.PrivateKey
+			remote *rsa.PublicKey
+			ok     bool
+		)
+		if localKey != nil {
+			if local, ok = localKey.(*rsa.PrivateKey); !ok {
+				return nil, fmt.Errorf("%w: local key: need an RSA key, got %s", errors.ErrInvalidSecurityConfig, describePrivateKey(localKey))
+			}
+		}
+		if remoteKey != nil {
+			if remote, ok = remoteKey.(*rsa.PublicKey); !ok {
+				return nil, fmt.Errorf("%w: remote key: need an RSA key, got %s", errors.ErrInvalidSecurityConfig, describeKey(remoteKey))
+			}
+		}
+		return f(local, remote)
+	}
+}
+
+func describePrivateKey(key crypto.PrivateKey) string {
+	if s, ok := key.(crypto.Signer); ok {
+		return describeKey(s.Public())
+	}
+	return fmt.Sprintf("%T", key)
 }
 
 // SecurityLevel returns the recommended security level for endpoints
@@ -193,6 +420,21 @@ var securityLevels = map[string][4]uint8{
 	ua.SecurityPolicyURIBasic256Sha256:      {00, 00, 32, 33},
 	ua.SecurityPolicyURIAes128Sha256RsaOaep: {00, 00, 42, 43},
 	ua.SecurityPolicyURIAes256Sha256RsaPss:  {00, 00, 52, 53},
+	// The ECC policies rank above the RSA ones: every SecurityToken is
+	// negotiated with fresh ephemeral keys (forward secrecy), which no RSA
+	// policy offers.
+	ua.SecurityPolicyURIECCNistP256: {00, 00, 62, 63},
+	ua.SecurityPolicyURIECCNistP384: {00, 00, 72, 73},
+	// The policies of OPC UA 1.05.07 rank above those: authenticated
+	// encryption instead of HMAC plus AES-CBC, and, for the nistP256 ones,
+	// keys and session signatures that are bound to the channel. The numbers
+	// continue the scheme (a decade per policy, Sign below SignAndEncrypt);
+	// within the group the order is by what the policy adds: AES-GCM, then
+	// ChaCha20-Poly1305 (a 256 bit key, constant time without hardware
+	// support), then Curve25519 with Ed25519 certificates.
+	ua.SecurityPolicyURIECCNistP256AesGcm:     {00, 00, 82, 83},
+	ua.SecurityPolicyURIECCNistP256ChaChaPoly: {00, 00, 92, 93},
+	ua.SecurityPolicyURIECCCurve25519:         {00, 00, 102, 103},
 }
 
 func SecurityLevel(policy string, mode ua.MessageSecurityMode) uint8 {

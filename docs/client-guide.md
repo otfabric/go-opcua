@@ -8,7 +8,7 @@
 
 | Service Set | Client Methods | Status |
 |-------------|---------------|--------|
-| **Discovery** | `GetEndpoints`, `FindServers`, `FindServersOnNetwork` | Fully implemented |
+| **Discovery** | `GetEndpoints`, `FindServers`, `FindServersWithFilter`, `FindServersOnNetwork`, `FindServersOnNetworkWithFilter`, `RegisterServer`, `RegisterServer2`, `DiscoverServers` | Fully implemented |
 | **Session** | Automatic via `Connect` / `Close` | Fully implemented |
 | **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented (`IndexRange`, `TimestampsToReturn`) |
 | **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryUpdateData`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, … | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed + update/delete) |
@@ -95,6 +95,168 @@ c, _ := opcua.NewClient(ep.EndpointURL,
 )
 ```
 
+### Reverse Connect
+
+When the client cannot reach the server (the server sits behind a firewall
+or NAT) but the server can reach the client, let the server open the
+connection. With `ReverseConnect` the client listens instead of dialling; the
+server connects, announces itself with a ReverseHello message, and from then
+on the connection is used like any other (OPC UA Part 6 §7.1.3).
+
+```go
+c, _ := opcua.NewClient("opc.tcp://plc-17:4840", // the endpoint URL the server announces
+    opcua.ReverseConnect("0.0.0.0:4841",         // where this client listens
+        opcua.ReverseServerURI("urn:acme:plc-17")), // the server's ApplicationUri
+    opcua.DialTimeout(60*time.Second),           // how long to wait for the server
+)
+if err := c.Connect(ctx); err != nil { // returns once the server has connected
+    log.Fatal(err)
+}
+defer c.Close(ctx)
+```
+
+The server must be configured with the address the client listens on; for a
+go-opcua server see `server.WithReverseConnect` in the
+[server guide](server-guide.md#reverse-connect).
+
+What the client checks, and what it does with it:
+
+- **ServerUri**: with `ReverseServerURI` only the server announcing that
+  ApplicationUri is accepted. Without it any server is.
+- **EndpointUrl**: it must denote the endpoint URL given to `NewClient`
+  (host names compare case-insensitively, the port defaults to 4840, a
+  trailing slash is ignored). Create the client with `""` to accept whatever
+  the server announces and use that. This is the usual choice when the
+  server's own idea of its address means nothing on the client's network.
+- A server that fails a check is answered with an Error message and
+  disconnected; the client keeps waiting for the right one. If it gives up,
+  the error wraps `errors.ErrReverseHelloRejected` and says what was refused.
+- With a security mode other than None, the announced ServerUri must be the
+  ApplicationUri of the server certificate the client is configured with.
+  See [Security](security.md#reverse-connect).
+
+Waiting is bounded by the context passed to `Connect` and by `DialTimeout`
+(default 10 s). Servers retry a reverse connection at an interval (open62541:
+every 15 s by default), so choose a timeout that covers it. With
+`AutoReconnect` the client goes back to waiting after a connection loss and
+restores the session and the subscriptions exactly as for an outgoing
+connection. `Close` stops the listener.
+
+`GetEndpoints`, `FindServers` and `FindServersOnNetwork` take the same option
+and then run over a reverse connection too:
+
+```go
+reverse := opcua.ReverseConnect("0.0.0.0:4841", opcua.ReverseServerURI("urn:acme:plc-17"))
+endpoints, err := opcua.GetEndpoints(ctx, "", reverse, opcua.DialTimeout(60*time.Second))
+ep := opcua.SelectEndpoint(endpoints, "Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt)
+c, _ := opcua.NewClient("", reverse, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous) /* ... */)
+```
+
+#### One listener for several servers
+
+A listener can be shared: create it once and give every client the ServerUri
+of its server. Each incoming connection goes to the client that expects it; a
+connection nobody is waiting for is kept until a client asks for it (servers
+keep one idle connection open for that purpose).
+
+```go
+l, err := uacp.ListenReverse(ctx, "0.0.0.0:4841", &uacp.ReverseListenerConfig{
+    // optional: admit only known servers
+    Filter: func(rhe *uacp.ReverseHello) error {
+        if !known[rhe.ServerURI] {
+            return ua.StatusBadServerURIInvalid
+        }
+        return nil
+    },
+})
+defer l.Close() // after the clients; Client.Close does not close a shared listener
+
+a, _ := opcua.NewClient("", opcua.ReverseConnectListener(l, opcua.ReverseServerURI("urn:acme:plc-17")))
+b, _ := opcua.NewClient("", opcua.ReverseConnectListener(l, opcua.ReverseServerURI("urn:acme:plc-18")))
+```
+
+`ReverseListenerConfig` also bounds what an unauthenticated peer can make the
+listener hold: `HelloTimeout` (time to deliver the ReverseHello, default 10 s),
+`MaxHandshakes` (connections that have not announced themselves yet, default
+16) and `MaxPending` (announced connections waiting for a client, default 16).
+Use `uacp.NewReverseListener` to wrap a TCP `net.Listener` of your own.
+
+### Discovery servers
+
+A Local Discovery Server (LDS) listens on the well-known port 4840 of a
+machine and knows the servers registered with it. `DiscoverServers` asks it
+for everything it knows:
+
+```go
+res, err := opcua.DiscoverServers(ctx, "plant-gateway") // opc.tcp://plant-gateway:4840
+if err != nil {
+    log.Fatal(err)
+}
+for _, app := range res.Servers { // FindServers: the LDS and its registered servers
+    fmt.Println(app.ApplicationURI, app.DiscoveryURLs)
+}
+if res.MulticastSupported { // FindServersOnNetwork: found with mDNS
+    for _, s := range res.ServersOnNetwork {
+        fmt.Println(s.RecordID, s.ServerName, s.DiscoveryURL, s.ServerCapabilities)
+    }
+}
+```
+
+`host` may also be `host:port` or a complete `opc.tcp://` URL;
+`opcua.DiscoveryURL(host)` shows what is queried. A discovery server without
+the multicast extension is not an error: `MulticastSupported` is false.
+
+The services with all their parameters are client methods. They need a
+SecureChannel but no session, so `Dial` is enough:
+
+```go
+c, _ := opcua.NewClient(opcua.DiscoveryURL("plant-gateway"))
+if err := c.Dial(ctx); err != nil {
+    log.Fatal(err)
+}
+defer c.Close(ctx)
+
+// only these servers, names in German where available
+found, err := c.FindServersWithFilter(ctx, []string{"de"}, []string{"urn:factory:press7"})
+
+// servers with historical data, 100 records at a time
+var next uint32
+for {
+    page, err := c.FindServersOnNetworkWithFilter(ctx, next, 100, []string{"HD"})
+    if err != nil || len(page.Servers) == 0 {
+        break
+    }
+    // ... use page.Servers; start over if page.LastCounterResetTime changes
+    next = page.Servers[len(page.Servers)-1].RecordID + 1
+}
+```
+
+A discovered server is connected to through one of its discovery URLs:
+`GetEndpoints` there, then `NewClient` with the chosen endpoint. The URL of a
+server found with mDNS carries a `.local` host name, which the client machine
+must be able to resolve.
+
+**Registering a server.** `RegisterServer` and `RegisterServer2` register a
+server with the discovery server, renew its registration and
+(`IsOnline: false`) remove it:
+
+```go
+resp, err := c.RegisterServer2(ctx, &ua.RegisteredServer{
+    ServerURI:     "urn:factory:press7",
+    ServerNames:   []*ua.LocalizedText{ua.NewLocalizedText("Press 7")},
+    ServerType:    ua.ApplicationTypeServer,
+    DiscoveryURLs: []string{"opc.tcp://press7:4841"},
+    IsOnline:      true,
+}, &ua.MdnsDiscoveryConfiguration{MdnsServerName: "Press 7", ServerCapabilities: []string{"DA"}})
+// resp.ConfigurationResults[0] is BadNotSupported if the discovery server has no mDNS
+```
+
+A discovery server normally only accepts this on a secured channel opened
+with the certificate of the server that is being registered, and the
+registration expires unless it is renewed (every 10 minutes is customary). A
+go-opcua server does all of it by itself: see
+`server.WithDiscoveryRegistration` in the [server guide](server-guide.md#discovery).
+
 ### Connection diagnostics (ping)
 
 To test connectivity at different layers:
@@ -127,6 +289,9 @@ A "ping" or connection-test command can run these steps in order and report whic
 | `SecurityFromEndpoint(ep, auth)` | Auto-configure from discovered endpoint |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE, dev only) |
 | `TrustedCertificates(certs...)` | Add CA/self-signed certs to trust pool |
+| `ReverseConnect(listenAddr, opts...)` | Wait for the server to connect instead of dialling it ([reverse connect](#reverse-connect)) |
+| `ReverseConnectListener(l, opts...)` | Reverse connect through a shared `*uacp.ReverseListener` |
+| `DialTimeout(d)` | Time allowed to establish the connection, or to wait for a reverse connection |
 
 ---
 
@@ -471,6 +636,7 @@ for msg := range notifyCh {
 Builder options:
 - `Interval(d)` — Publishing interval (how often the server sends notifications to the client)
 - `SamplingInterval(d)` — Requested sampling interval for monitored items (how often the server samples each node). Independent of publishing interval. If not set, server uses fastest practical rate.
+- `DataChangeFilter(trigger, deadbandType, deadbandValue)` — Data-change filter for the items added by the `Monitor` calls that follow (see [Data-change filters](#data-change-filters))
 - `LifetimeCount(n)` — Lifetime count (go-opcua servers revise so `LifetimeCount >= 3 × MaxKeepAliveCount`)
 - `MaxKeepAliveCount(n)` — Max keep-alive count
 - `MaxNotificationsPerPublish(n)` — Max notifications per publish (`MoreNotifications` when more remain)
@@ -484,6 +650,49 @@ Builder options:
 Against go-opcua servers (v1.3.0+), monitored-item queues follow Part 4: Overflow InfoBit when `QueueSize > 1` and the queue overflows; `DiscardOldest=false` keeps the oldest `QueueSize-1` samples plus the newest.
 
 If the server closes the connection during `Subscribe` (CreateSubscription) or `Monitor` (CreateMonitoredItems)—for example when the server does not support event or alarm subscriptions—the returned error wraps `io.EOF` with a message suggesting that limitation. Use `errors.Is(err, io.EOF)` to detect it. This applies both to `Start()` (which calls both) and to direct `Subscribe`/`Monitor` calls.
+
+### Data-change filters
+
+A `DataChangeFilter` tells the server which changes to report. The trigger
+selects what counts as a change; the deadband suppresses value changes that
+stay close to the last reported value.
+
+```go
+// Report the node only when it moved by more than 0.5.
+sub, notifs, err := c.NewSubscription().
+    Interval(250 * time.Millisecond).
+    DataChangeFilter(ua.DataChangeTriggerStatusValue, ua.DeadbandTypeAbsolute, 0.5).
+    Monitor(nodeID).
+    Start(ctx)
+```
+
+For a hand-built request, or with the `monitor` package, use
+`opcua.NewDataChangeFilter`:
+
+```go
+req := opcua.NewMonitoredItemCreateRequestWithDefaults(nodeID, ua.AttributeIDValue, 1)
+req.RequestedParameters.Filter = opcua.NewDataChangeFilter(
+    ua.DataChangeTriggerStatusValueTimestamp, ua.DeadbandTypeNone, 0)
+
+res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, req)
+// res.Results[0].StatusCode tells whether the server accepted the filter.
+```
+
+| Parameter | Values |
+|-----------|--------|
+| Trigger | `ua.DataChangeTriggerStatus` (status only), `ua.DataChangeTriggerStatusValue` (status or value; the default without a filter), `ua.DataChangeTriggerStatusValueTimestamp` (also the source timestamp) |
+| Deadband type | `ua.DeadbandTypeNone`, `ua.DeadbandTypeAbsolute` (absolute change), `ua.DeadbandTypePercent` (percentage, 0–100, of the node's `EURange`) |
+
+A deadband needs a numeric variable, and a percent deadband one with an
+`EURange` property. A server that cannot apply the filter rejects that item
+with a Bad status (`BadFilterNotAllowed`, `BadMonitoredItemFilterUnsupported`,
+`BadDeadbandFilterInvalid`, `BadMonitoredItemFilterInvalid`) in the per-item
+result; the other items of the request are created normally. go-opcua servers
+(v1.6.0+) apply triggers, deadbands, the sampling interval and a monitored
+item's `IndexRange`; earlier versions reported every change.
+
+To change the filter of a live item, send the new one with
+`Subscription.ModifyMonitoredItems`.
 
 ### Manual Subscription
 

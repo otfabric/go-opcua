@@ -32,7 +32,14 @@ type channelInstance struct {
 	securityTokenID uint32
 	sequenceNumber  uint32
 	algo            *uapolicy.EncryptionAlgorithm
-	maxBodySize     uint32
+
+	// zeroBasedSeq selects the sequence number rules of the security
+	// policies without LegacySequenceNumbers (ECC): the first number is 0 and
+	// the numbers wrap to 0 after UInt32.MaxValue (Part 6 §6.7.2.4).
+	// seqStarted records that the first number has been handed out.
+	zeroBasedSeq bool
+	seqStarted   bool
+	maxBodySize  uint32
 
 	// expiry retires the token; expired is set once a client token has
 	// outlived its grace period. Both are guarded by
@@ -55,6 +62,16 @@ func newChannelInstance(sc *SecureChannel) *channelInstance {
 
 func (c *channelInstance) nextSequenceNumber() uint32 {
 	// lock must be held
+	if c.zeroBasedSeq {
+		if !c.seqStarted {
+			c.seqStarted = true
+			c.sequenceNumber = 0
+			return 0
+		}
+		c.sequenceNumber++ // wraps to 0 after UInt32.MaxValue
+		return c.sequenceNumber
+	}
+
 	c.sequenceNumber++
 	if c.sequenceNumber > math.MaxUint32-1023 {
 		c.sequenceNumber = 1
@@ -76,6 +93,13 @@ func (c *channelInstance) newRequestMessage(req ua.Request, reqID uint32, authTo
 		AuthenticationToken: authToken,
 		Timestamp:           c.sc.timeNow(),
 		RequestHandle:       reqID, // client-assigned; reusing reqID for simple correlation
+	}
+
+	// The header is created here, but a service may have data of its own
+	// for it: CreateSession and ActivateSession use the AdditionalHeader to
+	// ask for the ephemeral key of an ECC security policy.
+	if prev := req.Header(); prev != nil && prev.AdditionalHeader != nil {
+		reqHdr.AdditionalHeader = prev.AdditionalHeader
 	}
 
 	if timeout > 0 && timeout < c.sc.cfg.RequestTimeout {
@@ -142,16 +166,29 @@ func (c *channelInstance) SetMaximumBodySize(chunkSize int) {
 	headerSize := 12
 	symmetricAlgorithmHeader := 4
 
-	// this is the formula proposed by OPCUA - source node-opcua
-	maxBodySize :=
-		c.algo.PlaintextBlockSize()*
-			((chunkSize-headerSize-symmetricAlgorithmHeader-c.algo.SignatureLength()-1)/c.algo.BlockSize()) -
-			sequenceHeaderSize
+	// What follows the headers is encrypted in whole cipher blocks, so only
+	// as many blocks as fit the chunk can be used. They hold the sequence
+	// header, the body, the padding and the signature. signAndEncrypt pads
+	// with at least one byte besides the padding size (two size bytes for
+	// keys above 2048 bits), so reserve those: a body that left room for the
+	// padding size only would be padded by a whole block and the chunk would
+	// no longer fit the send buffer of the connection.
+	//
+	// The formula used before (from node-opcua) took the signature and one
+	// padding byte off before rounding down to whole blocks. Whenever the
+	// signature length is a multiple of the block size, which it is for all
+	// policies, that leaves the padding out of the calculation: with a send
+	// buffer of 65535 bytes every full chunk was 65536 bytes long.
+	padding := 2
+	if c.algo.RemoteSignatureLength() > 256 {
+		padding = 3
+	}
+	blocks := (chunkSize - headerSize - symmetricAlgorithmHeader) / c.algo.BlockSize()
+	maxBodySize := c.algo.PlaintextBlockSize()*blocks - sequenceHeaderSize - c.algo.SignatureLength() - padding
+	if maxBodySize < 0 {
+		maxBodySize = 0
+	}
 	c.maxBodySize = uint32(maxBodySize)
-
-	// this is the formula proposed by ERN - source node-opcua
-	// maxBlock := (chunkSize - headerSize) / c.algo.BlockSize()
-	// c.maxBodySize = c.algo.PlaintextBlockSize()*maxBlock - sequenceHeaderSize - c.algo.SignatureLength() - 1
 }
 
 // signAndEncrypt encrypts the message bytes stored in b and returns the
@@ -173,8 +210,21 @@ func (c *channelInstance) signAndEncrypt(m *Message, b []byte) ([]byte, error) {
 		headerLength = 12 + m.SymmetricSecurityHeader.Len()
 	}
 
+	// Authenticated encryption has a chunk layout of its own.
+	if !isAsymmetric && c.algo.AEAD() {
+		return c.sealChunk(m, b, headerLength)
+	}
+
+	// OpenSecureChannel messages are encrypted whatever the security mode,
+	// unless the policy has no asymmetric encryption (ECC): then they are
+	// signed only and carry no padding.
+	encrypted := c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt || isAsymmetric
+	if isAsymmetric && c.algo.SignOnly() {
+		encrypted = false
+	}
+
 	var encryptedLength int
-	if c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt || isAsymmetric {
+	if encrypted {
 		plaintextBlockSize := c.algo.PlaintextBlockSize()
 		extraPadding := c.algo.RemoteSignatureLength() > 256
 		paddingBytes := 1
@@ -198,14 +248,21 @@ func (c *channelInstance) signAndEncrypt(m *Message, b []byte) ([]byte, error) {
 	binary.LittleEndian.PutUint32(b[4:], uint32(headerLength+encryptedLength))
 	m.MessageSize = uint32(headerLength + encryptedLength)
 
-	signature, err := c.algo.Signature(b)
+	signed := b
+	if isAsymmetric {
+		signed = c.sc.binding.signedData(c.sc, b)
+	}
+	signature, err := c.algo.Signature(signed)
 	if err != nil {
 		return nil, ua.StatusBadSecurityChecksFailed
+	}
+	if isAsymmetric {
+		c.sc.binding.sent(c.sc, signature)
 	}
 
 	b = append(b, signature...)
 	p := b[headerLength:]
-	if c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt || isAsymmetric {
+	if encrypted {
 		p, err = c.algo.Encrypt(p)
 		if err != nil {
 			return nil, ua.StatusBadSecurityChecksFailed
@@ -223,11 +280,17 @@ func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, e
 	// Use the algo instead: nil means no algo configured (None pre-OPN),
 	// remoteSignatureLength == 0 means the None security policy is active.
 	// Both cases require no crypto.
-	if c.algo == nil || c.algo.RemoteSignatureLength() == 0 {
+	if c.algo == nil || (c.algo.RemoteSignatureLength() == 0 && !c.algo.SignOnly()) {
 		return m.Data, nil
 	}
 
 	isAsymmetric := m.AsymmetricSecurityHeader != nil
+
+	// See signAndEncrypt: ECC OpenSecureChannel messages are signed only.
+	encrypted := c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt || isAsymmetric
+	if isAsymmetric && c.algo.SignOnly() {
+		encrypted = false
+	}
 
 	headerLength := 12
 
@@ -237,10 +300,14 @@ func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, e
 		headerLength += m.SymmetricSecurityHeader.Len()
 	}
 
+	if !isAsymmetric && c.algo.AEAD() {
+		return c.openChunk(m, r, headerLength)
+	}
+
 	b := make([]byte, len(r))
 	copy(b, r)
 
-	if c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt || isAsymmetric {
+	if encrypted {
 		p, err := c.algo.Decrypt(b[headerLength:])
 		if err != nil {
 			return nil, ua.StatusBadSecurityChecksFailed
@@ -248,15 +315,29 @@ func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, e
 		b = append(b[:headerLength], p...)
 	}
 
-	signature := b[len(b)-c.algo.RemoteSignatureLength():]
-	messageToVerify := b[:len(b)-c.algo.RemoteSignatureLength()]
-
-	if err := c.algo.VerifySignature(messageToVerify, signature); err != nil {
+	// A signature is required. Without a key to verify it with there is
+	// nothing to trust, and a chunk too short to hold one is malformed.
+	sigLen := c.algo.RemoteSignatureLength()
+	if sigLen == 0 || len(b) < headerLength+sigLen {
 		return nil, ua.StatusBadSecurityChecksFailed
 	}
 
+	signature := b[len(b)-sigLen:]
+	messageToVerify := b[:len(b)-sigLen]
+
+	verified := messageToVerify
+	if isAsymmetric {
+		verified = c.sc.binding.verifiedData(c.sc, messageToVerify)
+	}
+	if err := c.algo.VerifySignature(verified, signature); err != nil {
+		return nil, ua.StatusBadSecurityChecksFailed
+	}
+	if isAsymmetric {
+		c.sc.binding.received(c.sc, signature)
+	}
+
 	var paddingLength int
-	if c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt || isAsymmetric {
+	if encrypted {
 		paddingLength = int(messageToVerify[len(messageToVerify)-1])
 		if c.algo.SignatureLength() > 256 {
 			paddingLength <<= 8
@@ -269,4 +350,42 @@ func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, e
 	b = messageToVerify[headerLength : len(messageToVerify)-paddingLength]
 
 	return b, nil
+}
+
+// sealChunk secures a symmetric chunk of a security policy with authenticated
+// encryption (Part 6 §6.7.2): no padding, and a tag in place of the signature.
+// The nonce is made from the TokenId and the sequence number of the chunk
+// sent before this one; see uapolicy.EncryptionAlgorithm.SealChunk.
+func (c *channelInstance) sealChunk(m *Message, b []byte, headerLength int) ([]byte, error) {
+	if len(b) < headerLength+8 {
+		return nil, ua.StatusBadSecurityChecksFailed
+	}
+	size := uint32(len(b) + c.algo.SignatureLength())
+	binary.LittleEndian.PutUint32(b[4:], size)
+	m.MessageSize = size
+
+	tokenID := binary.LittleEndian.Uint32(b[headerLength-4:])
+	// Sequence numbers of these policies are contiguous and wrap at
+	// UInt32.MaxValue, so the previous number is always one less.
+	lastSequenceNumber := binary.LittleEndian.Uint32(b[headerLength:]) - 1
+
+	encrypt := c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt
+	out, err := c.algo.SealChunk(b, headerLength, tokenID, lastSequenceNumber, encrypt)
+	if err != nil {
+		c.sc.cfg.Logger.Warn("cannot secure message chunk", "error", err)
+		return nil, ua.StatusBadSecurityChecksFailed
+	}
+	return out, nil
+}
+
+// openChunk is the reverse of sealChunk. The nonce needs the sequence number
+// of the chunk received before this one, which the channel keeps: the number
+// of the chunk itself is encrypted.
+func (c *channelInstance) openChunk(m *MessageChunk, r []byte, headerLength int) ([]byte, error) {
+	encrypted := c.sc.cfg.SecurityMode == ua.MessageSecurityModeSignAndEncrypt
+	out, err := c.algo.OpenChunk(r, headerLength, m.TokenID, c.sc.lastReceivedSequenceNumber.Load(), encrypted)
+	if err != nil {
+		return nil, ua.StatusBadSecurityChecksFailed
+	}
+	return out[headerLength:], nil
 }

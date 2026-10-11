@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"math"
+	"strconv"
 
 	"github.com/otfabric/go-opcua/errors"
 )
@@ -294,44 +295,26 @@ func (n *NodeID) String() string {
 		return ""
 	}
 
+	// The string is the key of every node lookup of the server: it is put
+	// together without fmt.
+	var kind byte
+	var id string
 	switch n.Type() {
-	case NodeIDTypeTwoByte:
-
-		return fmt.Sprintf("i=%d", n.nid)
-
-	case NodeIDTypeFourByte:
-		if n.ns == 0 {
-			return fmt.Sprintf("i=%d", n.nid)
-		}
-		return fmt.Sprintf("ns=%d;i=%d", n.ns, n.nid)
-
-	case NodeIDTypeNumeric:
-		if n.ns == 0 {
-			return fmt.Sprintf("i=%d", n.nid)
-		}
-		return fmt.Sprintf("ns=%d;i=%d", n.ns, n.nid)
-
+	case NodeIDTypeTwoByte, NodeIDTypeFourByte, NodeIDTypeNumeric:
+		kind, id = 'i', strconv.FormatUint(uint64(n.nid), 10)
 	case NodeIDTypeString:
-		if n.ns == 0 {
-			return fmt.Sprintf("s=%s", n.StringID())
-		}
-		return fmt.Sprintf("ns=%d;s=%s", n.ns, n.StringID())
-
+		kind, id = 's', n.StringID()
 	case NodeIDTypeGUID:
-		if n.ns == 0 {
-			return fmt.Sprintf("g=%s", n.StringID())
-		}
-		return fmt.Sprintf("ns=%d;g=%s", n.ns, n.StringID())
-
+		kind, id = 'g', n.StringID()
 	case NodeIDTypeByteString:
-		if n.ns == 0 {
-			return fmt.Sprintf("b=%s", n.StringID())
-		}
-		return fmt.Sprintf("ns=%d;b=%s", n.ns, n.StringID())
-
+		kind, id = 'b', n.StringID()
 	default:
 		panic(fmt.Sprintf("invalid node id type: %d", n.Type()))
 	}
+	if n.ns == 0 {
+		return string(kind) + "=" + id
+	}
+	return "ns=" + strconv.FormatUint(uint64(n.ns), 10) + ";" + string(kind) + "=" + id
 }
 
 func (n *NodeID) Decode(b []byte) (int, error) {

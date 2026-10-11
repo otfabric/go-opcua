@@ -4,8 +4,7 @@ package uasc
 
 import (
 	"context"
-	"crypto/rand"
-	"crypto/rsa"
+	"crypto"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -102,11 +101,18 @@ type SecureChannel struct {
 	// token is being replaced.
 	sendGate sync.RWMutex
 
-	// openDone is signalled by open() when it finishes processing an
-	// OpenSecureChannelResponse. The dispatcher waits on this channel
-	// after forwarding an OpenSecureChannelResponse so that no new
-	// messages are read while the channel's crypto state is being updated.
-	openDone chan struct{}
+	// openWaitCh is closed by the open() call that sent request openWaitID
+	// when it returns. The dispatcher waits for it after forwarding the
+	// OpenSecureChannelResponse to that request, so that no new messages
+	// are read while the channel's crypto state is being updated. It is
+	// nil while no open() is waiting for a response.
+	//
+	// The wait belongs to one request: an open() that ended without a
+	// response (timeout, cancellation) must not release the dispatcher
+	// early when the response of a later open() arrives.
+	openWaitMu sync.Mutex
+	openWaitID uint32
+	openWaitCh chan struct{}
 
 	// handles maps requestIDs to response channels
 	handlers   map[uint32]chan *MessageBody
@@ -119,8 +125,13 @@ type SecureChannel struct {
 	// openingInstance is a temporary var that allows the dispatcher know how to handle a open channel request
 	// note: we only allow a single "open" request in flight at any point in time. The mutex is held for the entire
 	// duration of the "open" request.
-	openingInstance *channelInstance
-	openingMu       sync.Mutex
+	//
+	// On a client open() sets and clears it while the dispatcher looks at
+	// it for every OpenSecureChannel message it receives, solicited or
+	// not: both go through opening() and setOpening().
+	openingInstance   *channelInstance
+	openingMu         sync.Mutex
+	openingInstanceMu sync.Mutex
 
 	// errorCh receive dispatcher errors
 	errch chan<- error
@@ -149,6 +160,28 @@ type SecureChannel struct {
 
 	// kind indicates whether this is a server or a client channel.
 	kind channelKind
+
+	// peerCert is the certificate a client opened this (server) channel
+	// with. It is kept apart from cfg so that it can be read while the
+	// channel is in use.
+	peerCert atomic.Pointer[[]byte]
+
+	// lastReceivedSequenceNumber is the sequence number of the chunk that
+	// was received last. The policies with authenticated encryption need it
+	// to open the next chunk.
+	lastReceivedSequenceNumber atomic.Uint32
+
+	// receivedAny is set once the first chunk has been received: from then
+	// on the sequence numbers of a secured channel have to be contiguous.
+	// Only the goroutine that reads the chunks uses it.
+	receivedAny bool
+
+	// binding and keyChain are the state of the SecureChannelEnhancements
+	// of OPC UA 1.05.07 (see channel_binding.go). keyChain is the key
+	// material the next renewal is chained to; only the goroutine that
+	// handles OpenSecureChannel messages uses it.
+	binding  channelBinding
+	keyChain []byte
 
 	closeOnce sync.Once
 }
@@ -199,8 +232,15 @@ func newSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, kind channelKi
 		return nil, fmt.Errorf("%w: policy '%s' cannot be used with '%s'", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI, cfg.SecurityMode)
 	case cfg.SecurityPolicyURI != ua.SecurityPolicyURINone && (cfg.SecurityMode != ua.MessageSecurityModeSignAndEncrypt && cfg.SecurityMode != ua.MessageSecurityModeSign):
 		return nil, fmt.Errorf("%w: policy '%s' can only be used with '%s' or '%s'", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI, ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt)
-	case cfg.SecurityPolicyURI != ua.SecurityPolicyURINone && cfg.LocalKey == nil:
+	case cfg.SecurityPolicyURI != ua.SecurityPolicyURINone && cfg.localKey() == nil:
 		return nil, fmt.Errorf("%w: policy '%s' requires a private key", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI)
+	}
+	// A client names its policy up front. Refuse one that is not implemented
+	// here, by name: otherwise the first thing to fail is whatever the policy
+	// needs and this library cannot do, such as parsing a server certificate
+	// with a brainpool or Ed448 key ("x509: unsupported elliptic curve").
+	if kind == client && !uapolicy.IsSupported(cfg.SecurityPolicyURI) {
+		return nil, fmt.Errorf("%w: %s", errors.ErrUnsupportedSecurityPolicy, cfg.SecurityPolicyURI)
 	}
 
 	s := &SecureChannel{
@@ -209,7 +249,6 @@ func newSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, kind channelKi
 		cfg:          cfg,
 		requestID:    cfg.RequestIDSeed,
 		kind:         kind,
-		openDone:     make(chan struct{}, 1),
 		errch:        errCh,
 		closing:      make(chan struct{}),
 		disconnected: make(chan struct{}),
@@ -228,6 +267,17 @@ func (s *SecureChannel) RemoteAddr() net.Addr {
 // SecurityMode returns the message security mode configured for this channel.
 func (s *SecureChannel) SecurityMode() ua.MessageSecurityMode {
 	return s.cfg.SecurityMode
+}
+
+// RemoteCertificate returns the DER encoded application instance certificate
+// of the peer: on a server channel the certificate the client opened the
+// channel with, on a client channel the configured server certificate. It is
+// nil for a channel without security.
+func (s *SecureChannel) RemoteCertificate() []byte {
+	if p := s.peerCert.Load(); p != nil {
+		return *p
+	}
+	return s.cfg.RemoteCertificate
 }
 
 // SecurityPolicyURI returns the security policy URI configured for this channel.
@@ -330,13 +380,15 @@ func (s *SecureChannel) dispatcher() {
 			}
 
 			if isOpenResp {
-				// Wait for open() to signal that it has finished updating
-				// the channel's crypto state. Use a timeout to avoid a
-				// permanent deadlock if the handler never signals.
-				select {
-				case <-s.openDone:
-				case <-s.closing:
-					return
+				// Wait for the open() that sent this request to finish
+				// updating the channel's crypto state. If it is gone
+				// already there is nothing to wait for.
+				if done := s.openWait(msg.RequestID); done != nil {
+					select {
+					case <-done:
+					case <-s.closing:
+						return
+					}
 				}
 			}
 		}
@@ -501,6 +553,31 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 	}
 }
 
+// opening returns the channel instance an OpenSecureChannel exchange is in
+// progress for, or nil.
+func (s *SecureChannel) opening() *channelInstance {
+	s.openingInstanceMu.Lock()
+	defer s.openingInstanceMu.Unlock()
+	return s.openingInstance
+}
+
+func (s *SecureChannel) setOpening(instance *channelInstance) {
+	s.openingInstanceMu.Lock()
+	s.openingInstance = instance
+	s.openingInstanceMu.Unlock()
+}
+
+// openWait returns the channel that is closed when the open() call that sent
+// request reqID returns, or nil if that call is not waiting any more.
+func (s *SecureChannel) openWait(reqID uint32) <-chan struct{} {
+	s.openWaitMu.Lock()
+	defer s.openWaitMu.Unlock()
+	if s.openWaitCh == nil || s.openWaitID != reqID {
+		return nil
+	}
+	return s.openWaitCh
+}
+
 func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 	// read a full message from the underlying conn.
 	b, err := s.c.Receive()
@@ -511,6 +588,11 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 	var uacperr *uacp.Error
 	if errors.As(err, &uacperr) {
 		return nil, err
+	}
+	// A chunk the transport refused for its size is a protocol violation of
+	// the peer, not the end of the stream: say so instead of reporting EOF.
+	if errors.Is(err, errors.ErrMessageTooLarge) || errors.Is(err, errors.ErrMessageTooSmall) {
+		return nil, fmt.Errorf("sechan: read chunk failed: %w", err)
 	}
 	if err == io.EOF || len(b) == 0 {
 		return nil, io.EOF
@@ -547,17 +629,21 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 			return nil, ua.StatusBadDecodingError // correct per Part 6 §6.7.2
 		}
 
-		if s.openingInstance == nil {
+		opening := s.opening()
+		if opening == nil {
 			return nil, fmt.Errorf("%w: openingInstance is nil", errors.ErrInvalidState)
 		}
 
+		renewal := false
 		if s.kind == server {
 			renewing, err := s.beginServerRenewal(m)
 			if err != nil {
 				return nil, err
 			}
 			if renewing != nil {
-				s.openingInstance = renewing
+				s.setOpening(renewing)
+				opening = renewing
+				renewal = true
 			}
 		}
 
@@ -572,32 +658,63 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 			if m.SecurityPolicyURI != s.cfg.SecurityPolicyURI {
 				return nil, ua.StatusBadSecurityPolicyRejected
 			}
-			decryptWith = s.openingInstance
+			decryptWith = opening
 			break
 		}
 
-		s.cfg.SecurityPolicyURI = m.SecurityPolicyURI
+		// A renewal keeps the policy and the certificates of the channel
+		// (beginServerRenewal has verified that it asks for the same). The
+		// channel is in use then: the session services read its policy and
+		// peer certificate from other goroutines, so they are only stored
+		// when the channel is opened.
+		//
+		// The security policy decides how the sequence numbers of the
+		// channel run. A renewal continues the numbering of the channel.
+		if !renewal {
+			s.cfg.SecurityPolicyURI = m.SecurityPolicyURI
+			opening.zeroBasedSeq = !uapolicy.LegacySequenceNumbers(m.SecurityPolicyURI)
+			opening.seqStarted = false
+		}
 		if m.SecurityPolicyURI != ua.SecurityPolicyURINone {
-			s.cfg.RemoteCertificate = m.SenderCertificate
-			// Record the client's certificate thumbprint so the OPN response we
-			// send back carries a correct ReceiverCertificateThumbprint. Strict
-			// clients (UaExpert, Prosys) reject encrypted channels otherwise.
-			s.cfg.Thumbprint = uapolicy.Thumbprint(m.SenderCertificate)
+			// A server with certificates of several key types answers with
+			// the one that fits the policy the client asks for.
+			if !renewal && s.cfg.LocalIdentity != nil {
+				cert, key, err := s.cfg.LocalIdentity(m.SecurityPolicyURI)
+				if err != nil {
+					s.cfg.Logger.Warn("no application instance certificate for the security policy", "channel_id", s.c.ID(), "policy", m.SecurityPolicyURI, "error", err)
+					s.c.SendError(ua.StatusBadSecurityPolicyRejected)
+					return nil, ua.StatusBadSecurityPolicyRejected
+				}
+				s.cfg.Certificate = cert
+				s.cfg.LocalPrivateKey = key
+			}
+			if !renewal {
+				s.cfg.RemoteCertificate = m.SenderCertificate
+				peer := m.SenderCertificate
+				s.peerCert.Store(&peer)
+				// Record the client's certificate thumbprint so the OPN response we
+				// send back carries a correct ReceiverCertificateThumbprint. Strict
+				// clients (UaExpert, Prosys) reject encrypted channels otherwise.
+				s.cfg.Thumbprint = uapolicy.Thumbprint(m.SenderCertificate)
+			}
 			s.cfg.Logger.Debug("setting securityPolicy", "channel_id", s.c.ID(), "policy", m.SecurityPolicyURI)
 
-			remoteKey, err := uapolicy.PublicKey(s.cfg.RemoteCertificate)
+			remoteKey, err := uapolicy.CertificatePublicKey(s.cfg.RemoteCertificate)
 			if err != nil {
 				return nil, err
 			}
-			algo, err := uapolicy.Asymmetric(s.cfg.SecurityPolicyURI, s.openingInstance.sc.cfg.LocalKey, remoteKey)
+			// This is also where a certificate of the wrong key type for the
+			// policy is turned away: an RSA certificate on an ECC policy, or
+			// a curve the policy does not permit.
+			algo, err := uapolicy.AsymmetricKeys(s.cfg.SecurityPolicyURI, s.cfg.localKey(), remoteKey)
 			if err != nil {
 				return nil, err
 			}
 
-			s.openingInstance.algo = algo
+			opening.algo = algo
 		}
 
-		decryptWith = s.openingInstance
+		decryptWith = opening
 	case "CLO":
 		return nil, io.EOF
 	case "MSG":
@@ -617,8 +734,45 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 		return nil, fmt.Errorf("sechan: decode sequence header failed: %w", err)
 	}
 	m.Data = m.Data[n:]
+	if err := s.checkSequenceNumber(m.SequenceNumber); err != nil {
+		return nil, err
+	}
+	s.receivedAny = true
+	s.lastReceivedSequenceNumber.Store(m.SequenceNumber)
 
 	return m, nil
+}
+
+// checkSequenceNumber verifies that a chunk which passed the security checks
+// is the one that follows the chunk received before it (Part 6 §6.7.2.4).
+//
+// The signature of a chunk does not tell whether the chunk was seen before,
+// whether one before it is missing, or whether it is out of order: without
+// this check an attacker on the path can repeat a request and have it
+// executed again, or take a chunk out of a multi-chunk message. The policies
+// with authenticated encryption derive the nonce of a chunk from the
+// sequence number expected for it, so they reject such a chunk already; for
+// all other secured channels this is the check.
+//
+// A channel without security has no protection against any of this, and its
+// sequence numbers are not verified: peers that do not keep them contiguous
+// keep working.
+func (s *SecureChannel) checkSequenceNumber(got uint32) error {
+	if !s.receivedAny || s.cfg.SecurityMode == ua.MessageSecurityModeNone {
+		return nil
+	}
+	last := s.lastReceivedSequenceNumber.Load()
+	if got == last+1 {
+		// For the ECC policies this includes the wrap from UInt32.MaxValue
+		// to 0.
+		return nil
+	}
+	// The original rules let the sender wrap anywhere in the last 1024
+	// numbers, to a number below 1024.
+	if uapolicy.LegacySequenceNumbers(s.cfg.SecurityPolicyURI) && last >= math.MaxUint32-1024 && got < 1024 {
+		return nil
+	}
+	return fmt.Errorf("sechan: sequence number %d after %d: %w", got, last, ua.StatusBadSequenceNumberInvalid)
 }
 
 // verifyAndDecrypt verifies and optionally decrypts a message. if `instance` is given, then it will only use that
@@ -694,26 +848,29 @@ func (s *SecureChannel) Open(ctx context.Context) error {
 func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, requestType ua.SecurityTokenRequestType) error {
 	s.cfg.Logger.Debug("opening secure channel")
 
-	// Signal the dispatcher that open() has finished processing the
+	// Tell the dispatcher that open() has finished processing the
 	// OpenSecureChannelResponse, allowing it to resume reading messages.
+	done := make(chan struct{})
 	defer func() {
-		select {
-		case s.openDone <- struct{}{}:
-		default:
+		s.openWaitMu.Lock()
+		if s.openWaitCh == done {
+			s.openWaitCh = nil
 		}
+		s.openWaitMu.Unlock()
+		close(done)
 	}()
 
 	s.openingMu.Lock()
 	defer s.openingMu.Unlock()
 
-	if s.openingInstance != nil {
+	if s.opening() != nil {
 		return fmt.Errorf("%w: openingInstance must be nil when opening a new secure channel", errors.ErrInvalidState)
 	}
 
 	var (
 		err       error
-		localKey  *rsa.PrivateKey
-		remoteKey *rsa.PublicKey
+		localKey  crypto.PrivateKey
+		remoteKey crypto.PublicKey
 	)
 
 	s.startDispatcher.Do(func() {
@@ -726,22 +883,28 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 	// The default value of the encryption algorithm method is the
 	// SecurityModeNone so no additional work is required for that case
 	if s.cfg.SecurityMode != ua.MessageSecurityModeNone {
-		localKey = s.cfg.LocalKey
+		localKey = s.cfg.localKey()
 		var err error
-		if remoteKey, err = uapolicy.PublicKey(s.cfg.RemoteCertificate); err != nil {
+		if remoteKey, err = uapolicy.CertificatePublicKey(s.cfg.RemoteCertificate); err != nil {
 			return err
 		}
 	}
 
-	algo, err := uapolicy.Asymmetric(s.cfg.SecurityPolicyURI, localKey, remoteKey)
+	algo, err := uapolicy.AsymmetricKeys(s.cfg.SecurityPolicyURI, localKey, remoteKey)
 	if err != nil {
 		return err
 	}
 
-	s.openingInstance = newChannelInstance(s)
-	// s.openingInstance.secureChannelID = s.secureChannelID
-	// s.openingInstance.sequenceNumber = s.sequenceNumber
-	// s.openingInstance.securityTokenID = s.securityTokenID
+	// The client's half of the key negotiation: a random nonce for the RSA
+	// policies, a fresh ephemeral public key for the ECC ones. Renewals
+	// negotiate from scratch.
+	kx, err := uapolicy.NewKeyExchange(s.cfg.SecurityPolicyURI, uapolicy.RoleClient)
+	if err != nil {
+		return err
+	}
+
+	opening := newChannelInstance(s)
+	opening.zeroBasedSeq = !uapolicy.LegacySequenceNumbers(s.cfg.SecurityPolicyURI)
 
 	if requestType == ua.SecurityTokenRequestTypeRenew {
 		// Safe: renew() holds the write side of sendGate, so no request is
@@ -749,48 +912,47 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 		// Snapshot the current sequence number and bump the source so
 		// the value is never reused if the old instance is briefly active
 		// during the OpenSecureChannel round-trip.
-		s.openingInstance.sequenceNumber = instance.sequenceNumber
+		opening.sequenceNumber = instance.sequenceNumber
+		opening.seqStarted = instance.seqStarted
 		instance.sequenceNumber++
-		s.openingInstance.secureChannelID = instance.secureChannelID
+		opening.secureChannelID = instance.secureChannelID
 	}
+	opening.algo = algo
+	opening.SetMaximumBodySize(int(s.c.SendBufSize()))
+	s.setOpening(opening)
 
 	// trigger cleanup after we are all done
 	defer func() {
-		if s.openingInstance == nil || s.openingInstance.state != channelActive {
+		if opening.state != channelActive {
 			s.cfg.Logger.Warn("failed to open a new secure channel", "channel_id", s.c.ID())
 		}
-		s.openingInstance = nil
+		s.setOpening(nil)
 	}()
 
 	reqID := s.nextRequestID()
-
-	s.openingInstance.algo = algo
-	s.openingInstance.SetMaximumBodySize(int(s.c.SendBufSize()))
-
-	localNonce, err := algo.MakeNonce()
-	if err != nil {
-		return err
-	}
+	s.openWaitMu.Lock()
+	s.openWaitID, s.openWaitCh = reqID, done
+	s.openWaitMu.Unlock()
 
 	req := &ua.OpenSecureChannelRequest{
 		ClientProtocolVersion: 0,
 		RequestType:           requestType,
 		SecurityMode:          s.cfg.SecurityMode,
-		ClientNonce:           localNonce,
+		ClientNonce:           kx.Nonce(),
 		RequestedLifetime:     s.cfg.Lifetime,
 	}
 
-	return s.sendRequestWithTimeout(ctx, req, reqID, s.openingInstance, nil, s.cfg.RequestTimeout, func(v ua.Response) error {
+	return s.sendRequestWithTimeout(ctx, req, reqID, opening, nil, s.cfg.RequestTimeout, func(v ua.Response) error {
 		s.cfg.Logger.Debug("handling OpenSecureChannelResponse")
 		resp, ok := v.(*ua.OpenSecureChannelResponse)
 		if !ok {
 			return fmt.Errorf("%w: got %T", errors.ErrInvalidResponseType, v)
 		}
-		return s.handleOpenSecureChannelResponse(resp, localNonce, s.openingInstance)
+		return s.handleOpenSecureChannelResponse(resp, kx, opening)
 	})
 }
 
-func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChannelResponse, localNonce []byte, instance *channelInstance) (err error) {
+func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChannelResponse, kx *uapolicy.KeyExchange, instance *channelInstance) (err error) {
 	s.cfg.Logger.Debug("handling OpenSecureChannelResponse")
 	instance.state = channelActive
 	instance.secureChannelID = resp.SecurityToken.ChannelID
@@ -803,9 +965,16 @@ func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChann
 		instance.revisedLifetime = time.Millisecond * time.Duration(s.cfg.Lifetime)
 	}
 
-	if instance.algo, err = uapolicy.Symmetric(s.cfg.SecurityPolicyURI, localNonce, resp.ServerNonce); err != nil {
-		return err
+	// For an ECC policy this validates the server's ephemeral public key and
+	// runs the key agreement.
+	// A renewal on a channel with SecureChannelEnhancements chains the new
+	// keys to the ones in use.
+	algo, keyChain, err := kx.SymmetricChained(resp.ServerNonce, s.keyChain)
+	if err != nil {
+		return fmt.Errorf("%w: %w", ua.StatusBadNonceInvalid, err)
 	}
+	instance.algo = algo
+	s.keyChain = keyChain
 
 	instance.SetMaximumBodySize(int(s.c.SendBufSize()))
 
@@ -849,11 +1018,17 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 
 	revisedLifetime := s.reviseLifetime(req.RequestedLifetime)
 	s.cfg.Lifetime = revisedLifetime
-	// On a renewal the channel is in use: other goroutines read the security
-	// mode while they send responses. The mode of an open channel does not
-	// change, so only store it when it actually differs (the initial open).
-	if s.cfg.SecurityMode != req.SecurityMode {
-		s.cfg.SecurityMode = req.SecurityMode
+	// The security mode is chosen when the channel is opened and holds for
+	// its whole life. A renewal that asks for another mode is refused: taking
+	// it over would let whoever can send a renewal weaken (or change) the
+	// protection of a channel that sessions are already bound to. Other
+	// goroutines read the mode while they send responses, so it is written
+	// only on the initial open, before the channel is in use.
+	if err := s.acceptSecurityMode(req.SecurityMode); err != nil {
+		s.cfg.Logger.Warn("OpenSecureChannel renewal with a different security mode refused",
+			"channel_id", s.c.ID(), "mode", s.cfg.SecurityMode, "requested", req.SecurityMode)
+		s.c.SendError(ua.StatusBadSecurityModeRejected)
+		return err
 	}
 
 	// Reject untrusted client application certificates at channel open
@@ -881,8 +1056,8 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 	// decrypt the thing before you even know you have an open message.
 	// so this is redundant.
 	var (
-		localKey  *rsa.PrivateKey
-		remoteKey *rsa.PublicKey
+		localKey  crypto.PrivateKey
+		remoteKey crypto.PublicKey
 	)
 
 	// Set the encryption methods to Asymmetric with the appropriate
@@ -891,16 +1066,31 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 	// The default value of the encryption algorithm method is the
 	// SecurityModeNone so no additional work is required for that case
 	if s.cfg.SecurityMode != ua.MessageSecurityModeNone {
-		localKey = s.cfg.LocalKey
+		localKey = s.cfg.localKey()
 		var err error
-		if remoteKey, err = uapolicy.PublicKey(s.cfg.RemoteCertificate); err != nil {
+		if remoteKey, err = uapolicy.CertificatePublicKey(s.cfg.RemoteCertificate); err != nil {
 			return err
 		}
 	}
 
-	algo, err := uapolicy.Asymmetric(s.cfg.SecurityPolicyURI, localKey, remoteKey)
+	algo, err := uapolicy.AsymmetricKeys(s.cfg.SecurityPolicyURI, localKey, remoteKey)
 	if err != nil {
 		return err
+	}
+
+	// The server's half of the key negotiation. It is completed before the
+	// response goes out: with an ECC policy the ClientNonce is an ephemeral
+	// public key, and one that is not a valid point on the curve of the
+	// policy must not get a SecurityToken.
+	kx, err := uapolicy.NewKeyExchange(s.cfg.SecurityPolicyURI, uapolicy.RoleServer)
+	if err != nil {
+		return err
+	}
+	symmetric, keyChain, err := kx.SymmetricChained(req.ClientNonce, s.keyChain)
+	if err != nil {
+		s.cfg.Logger.Warn("OpenSecureChannel rejected: invalid client nonce", "channel_id", s.c.ID(), "error", err)
+		s.c.SendError(ua.StatusBadNonceInvalid)
+		return ua.StatusBadNonceInvalid
 	}
 
 	instance := s.openingInstance
@@ -917,12 +1107,11 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 		defer outgoing.Unlock()
 		instance.securityTokenID = outgoing.securityTokenID + 1
 		instance.sequenceNumber = outgoing.sequenceNumber
+		instance.zeroBasedSeq = outgoing.zeroBasedSeq
+		instance.seqStarted = outgoing.seqStarted
 	}
 
-	nonce := make([]byte, instance.algo.NonceLength())
-	if _, err := rand.Read(nonce); err != nil {
-		return err
-	}
+	nonce := kx.Nonce()
 	resp := &ua.OpenSecureChannelResponse{
 		ResponseHeader: &ua.ResponseHeader{
 			Timestamp:          s.timeNow(),
@@ -946,10 +1135,8 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 		return err
 	}
 
-	instance.algo, err = uapolicy.Symmetric(s.cfg.SecurityPolicyURI, nonce, req.ClientNonce)
-	if err != nil {
-		return err
-	}
+	instance.algo = symmetric
+	s.keyChain = keyChain
 
 	// Now that the symmetric algorithm is known, compute the maximum body size
 	// per chunk from the negotiated send buffer so large responses (e.g. a
@@ -1045,14 +1232,7 @@ func (s *SecureChannel) awaitResponse(ctx context.Context, reqID uint32, ch <-ch
 	timer := time.NewTimer(timeout + timeoutLeniency)
 	defer timer.Stop()
 
-	select {
-	case <-ctx.Done():
-		s.popHandler(reqID)
-		return ctx.Err()
-	case <-s.disconnected:
-		s.popHandler(reqID)
-		return io.EOF
-	case msg := <-ch:
+	deliver := func(msg *MessageBody) error {
 		if msg.Err != nil {
 			if msg.Response() != nil {
 				_ = h(msg.Response()) // ignore result because msg.Err takes precedence
@@ -1060,7 +1240,40 @@ func (s *SecureChannel) awaitResponse(ctx context.Context, reqID uint32, ch <-ch
 			return msg.Err
 		}
 		return h(msg.Response())
+	}
+	// A response that has already been dispatched wins over the other
+	// outcomes. In particular, when the peer answers with an Error message and
+	// closes the connection, the dispatcher hands the error to the handler and
+	// then closes s.disconnected: both cases are ready at once and select
+	// would pick either, turning the peer's status code into a bare io.EOF.
+	delivered := func() (error, bool) {
+		select {
+		case msg := <-ch:
+			return deliver(msg), true
+		default:
+			return nil, false
+		}
+	}
+
+	select {
+	case msg := <-ch:
+		return deliver(msg)
+	case <-ctx.Done():
+		if err, ok := delivered(); ok {
+			return err
+		}
+		s.popHandler(reqID)
+		return ctx.Err()
+	case <-s.disconnected:
+		if err, ok := delivered(); ok {
+			return err
+		}
+		s.popHandler(reqID)
+		return io.EOF
 	case <-timer.C:
+		if err, ok := delivered(); ok {
+			return err
+		}
 		s.popHandler(reqID)
 		return ua.StatusBadTimeout
 	}
@@ -1284,11 +1497,11 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 	// newMessage consumes a sequence number. If the response cannot be
 	// encoded nothing is sent, so give the number back: the sequence numbers
 	// on the wire have to stay contiguous.
-	prevSeq := instance.sequenceNumber
+	prevSeq, prevStarted := instance.sequenceNumber, instance.seqStarted
 	m := instance.newMessage(resp, typeID, reqID)
 	chunks, err := m.EncodeChunks(maxBodySize)
 	if err != nil {
-		instance.sequenceNumber = prevSeq
+		instance.sequenceNumber, instance.seqStarted = prevSeq, prevStarted
 		s.cfg.Logger.Warn("error encoding msg", "error", err)
 		return err
 	}

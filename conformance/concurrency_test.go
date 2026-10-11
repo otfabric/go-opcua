@@ -19,7 +19,9 @@ import (
 // the race detector (go test -race) to surface data races in the client/server
 // stacks.
 func TestConcurrency_ManyClients(t *testing.T) {
-	srv, url := testutil.NewTestServer(t)
+	// newServer is testutil.NewTestServer on an OS-assigned port, which
+	// lets the test run in parallel with the others.
+	srv, url := newServer(t)
 	f := testutil.AddFixture(t, srv)
 
 	const (
@@ -75,7 +77,7 @@ func TestConcurrency_ManyClients(t *testing.T) {
 // TestConcurrency_Subscriptions creates and tears down subscriptions from many
 // clients concurrently.
 func TestConcurrency_Subscriptions(t *testing.T) {
-	srv, url := testutil.NewTestServer(t)
+	srv, url := newServer(t)
 	f := testutil.AddFixture(t, srv)
 
 	const clients = 6

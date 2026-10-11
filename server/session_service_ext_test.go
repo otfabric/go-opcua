@@ -80,6 +80,11 @@ func TestSessionService_CreateSession_ClientCertRejected(t *testing.T) {
 	}
 	_, err := svc.CreateSession(context.Background(), scNone(), req, 1)
 	require.EqualError(t, err, "untrusted")
+	// Regression: the session created for the refused request stayed in
+	// the broker until its timeout.
+	srv.sb.mu.Lock()
+	defer srv.sb.mu.Unlock()
+	require.Empty(t, srv.sb.s, "no session is kept for a request that was refused")
 }
 
 func TestSessionService_ActivateSession_UnknownAndUsername(t *testing.T) {

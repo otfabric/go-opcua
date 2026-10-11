@@ -174,9 +174,10 @@ func TestChangeNotification_HighThroughput(t *testing.T) {
 		}
 	}()
 
-	// Send notifications rapidly.
+	// Change the value rapidly. Each write is a data change, so each one is
+	// reported (an unchanged value would not be, Part 4 §7.22.2).
 	for i := 0; i < count; i++ {
-		srv.MonitoredItemService.ChangeNotification(nodeID)
+		require.Equal(t, ua.StatusOK, ns.SetAttribute(nodeID, ua.AttributeIDValue, DataValueFromValue(int32(1000+i))))
 	}
 
 	wg.Wait()

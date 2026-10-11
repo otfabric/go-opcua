@@ -59,6 +59,13 @@ const (
 	SecurityPolicyURIBasic256Sha256      = "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256"
 	SecurityPolicyURIAes128Sha256RsaOaep = "http://opcfoundation.org/UA/SecurityPolicy#Aes128_Sha256_RsaOaep"
 	SecurityPolicyURIAes256Sha256RsaPss  = "http://opcfoundation.org/UA/SecurityPolicy#Aes256_Sha256_RsaPss"
+	SecurityPolicyURIECCNistP256         = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256"
+	SecurityPolicyURIECCNistP384         = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP384"
+
+	// The ECC policies of OPC UA 1.05.07 with authenticated encryption.
+	SecurityPolicyURIECCNistP256AesGcm     = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_AesGcm"
+	SecurityPolicyURIECCNistP256ChaChaPoly = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_ChaChaPoly"
+	SecurityPolicyURIECCCurve25519         = "http://opcfoundation.org/UA/SecurityPolicy#ECC_curve25519"
 )
 
 var SecurityPolicyURIs = map[string]string{
@@ -68,6 +75,12 @@ var SecurityPolicyURIs = map[string]string{
 	"Basic256Sha256":      SecurityPolicyURIBasic256Sha256,
 	"Aes128Sha256RsaOaep": SecurityPolicyURIAes128Sha256RsaOaep,
 	"Aes256Sha256RsaPss":  SecurityPolicyURIAes256Sha256RsaPss,
+	"ECCNistP256":         SecurityPolicyURIECCNistP256,
+	"ECCNistP384":         SecurityPolicyURIECCNistP384,
+
+	"ECCNistP256AesGcm":     SecurityPolicyURIECCNistP256AesGcm,
+	"ECCNistP256ChaChaPoly": SecurityPolicyURIECCNistP256ChaChaPoly,
+	"ECCCurve25519":         SecurityPolicyURIECCCurve25519,
 }
 
 // FormatSecurityPolicyURI converts a short name for a security policy into a

@@ -3,6 +3,7 @@
 package uasc
 
 import (
+	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
@@ -11,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/id"
 	uatest "github.com/otfabric/go-opcua/tests/python"
 	"github.com/otfabric/go-opcua/ua"
@@ -189,6 +191,9 @@ func TestSignAndEncryptVerifyAndDecrypt(t *testing.T) {
 	}{}
 
 	for _, uri := range ua.SecurityPolicyURIs {
+		if uapolicy.IsECC(uri) {
+			continue // RSA keys; the ECC policies are covered in ecc_channel_test.go
+		}
 		for i, keyLength := range []int{2048, 4096} {
 			if i == 1 && (uri == ua.SecurityPolicyURIBasic128Rsa15 || uri == ua.SecurityPolicyURIBasic256) {
 				continue
@@ -336,6 +341,33 @@ func TestNewSecureChannel(t *testing.T) {
 		_, err := NewSecureChannel("", &uacp.Conn{}, cfg, make(chan error))
 		require.ErrorContains(t, err, "invalid security configuration")
 		require.ErrorContains(t, err, "requires a private key")
+	})
+	// Interop finding (open62541 offers ECC policies that are not
+	// implemented here): the policy is refused by name, before anything is
+	// done with a server certificate this library may not even be able to
+	// parse (brainpool, Ed448).
+	t.Run("client: policy not implemented", func(t *testing.T) {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		for _, uri := range []string{
+			ua.SecurityPolicyURIPrefix + "ECC_brainpoolP256r1",
+			ua.SecurityPolicyURIPrefix + "ECC_curve448",
+			ua.SecurityPolicyURIPrefix + "ECC_brainpoolP384r1",
+			"urn:not-a-policy",
+		} {
+			cfg := &Config{
+				SecurityPolicyURI: uri,
+				SecurityMode:      ua.MessageSecurityModeSignAndEncrypt,
+				LocalKey:          key,
+				RemoteCertificate: []byte("not a certificate this library can parse"),
+			}
+			_, err := NewSecureChannel("", &uacp.Conn{}, cfg, make(chan error))
+			require.ErrorIs(t, err, errors.ErrUnsupportedSecurityPolicy, uri)
+			require.ErrorContains(t, err, uri)
+		}
+		require.True(t, uapolicy.IsSupported(ua.SecurityPolicyURINone))
+		require.True(t, uapolicy.IsSupported(ua.SecurityPolicyURIPrefix+"ECC_nistP256"))
+		require.False(t, uapolicy.IsSupported(""))
 	})
 }
 

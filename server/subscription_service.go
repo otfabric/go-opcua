@@ -3,6 +3,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"sync"
@@ -23,6 +24,11 @@ type SubscriptionService struct {
 
 	// lastID is the most recently assigned subscription id. Guarded by Mu.
 	lastID uint32
+
+	// closed is set while the server is shut down: a CreateSubscription
+	// request that is still being handled then must not start a
+	// subscription that nothing would stop. Guarded by Mu.
+	closed bool
 }
 
 // nextSubscriptionID returns an id that is not in use. Ids are handed out
@@ -46,6 +52,7 @@ func (s *SubscriptionService) nextSubscriptionID() uint32 {
 // down so that no subscription goroutine outlives it.
 func (s *SubscriptionService) deleteAll() {
 	s.Mu.Lock()
+	s.closed = true
 	ids := make([]uint32, 0, len(s.Subs))
 	for id := range s.Subs {
 		ids = append(ids, id)
@@ -54,6 +61,14 @@ func (s *SubscriptionService) deleteAll() {
 	for _, id := range ids {
 		s.DeleteSubscription(id)
 	}
+}
+
+// reopen lets subscriptions be created again. It is called when the server
+// starts.
+func (s *SubscriptionService) reopen() {
+	s.Mu.Lock()
+	s.closed = false
+	s.Mu.Unlock()
 }
 
 // DeleteSubscription removes all references to a subscription and all monitored items pointed at it.
@@ -93,6 +108,7 @@ func (s *SubscriptionService) finishDelete(id uint32, sub *Subscription) {
 
 	// ask the monitored item service to purge out any items that use this subscription.
 	s.srv.MonitoredItemService.DeleteSub(id)
+
 }
 
 // CreateSubscription implements the OPC UA CreateSubscription service.
@@ -114,6 +130,9 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
+	if s.closed {
+		return nil, ua.StatusBadShutdown
+	}
 
 	newsubid := s.nextSubscriptionID()
 
@@ -402,6 +421,29 @@ func (s *Subscription) announceExpiry(sess *session) {
 	sess.addStatusChange(change)
 }
 
+// releasePublishRequests answers every Publish request that is queued for
+// sess with a ServiceFault of the given status. A queued request is answered
+// when a subscription of the session has something to send; once the session
+// is closed that will never happen, and the client would wait for its own
+// timeout before it publishes again.
+func (s *SubscriptionService) releasePublishRequests(sess *session, status ua.StatusCode) {
+	if sess == nil {
+		return
+	}
+	for {
+		select {
+		case pr := <-sess.PublishRequests:
+			h := faultHeader(status)
+			if pr.Req != nil && pr.Req.RequestHeader != nil {
+				h.RequestHandle = pr.Req.RequestHeader.RequestHandle
+			}
+			_ = s.srv.sendPublishResponse(pr.replyChannel(nil), pr.ID, &ua.ServiceFault{ResponseHeader: h})
+		default:
+			return
+		}
+	}
+}
+
 // sessionHasSubscriptions reports whether at least one subscription is
 // currently assigned to sess.
 func (s *SubscriptionService) sessionHasSubscriptions(sess *session) bool {
@@ -462,10 +504,21 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 		return nil, err
 	}
 
-	session := s.srv.Session(req.Header())
+	requester := s.srv.Session(req.Header())
+	if requester == nil {
+		return nil, ua.StatusBadSessionIDInvalid
+	}
+
+	// The subscriptions that leave another session, with the session and
+	// channel they leave.
+	type moved struct {
+		sub     *Subscription
+		from    *session
+		channel *uasc.SecureChannel
+	}
+	var left []moved
 
 	s.Mu.Lock()
-	defer s.Mu.Unlock()
 
 	results := make([]*ua.TransferResult, len(req.SubscriptionIDs))
 	for i, subID := range req.SubscriptionIDs {
@@ -477,9 +530,24 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 			continue
 		}
 
+		// A subscription can only be taken over by its owner: the user
+		// of the session it belongs to (Part 4 §5.13.7). Subscription ids
+		// are easy to guess, so without this check any client could help
+		// itself to the data of another.
+		owner, ownerChannel := sub.sessionChannel()
+		if !sameUser(owner, requester) {
+			results[i] = &ua.TransferResult{
+				StatusCode: ua.StatusBadUserAccessDenied,
+			}
+			continue
+		}
+		if owner != requester {
+			left = append(left, moved{sub: sub, from: owner, channel: ownerChannel})
+		}
+
 		// Reassign the subscription to the requesting session and channel.
 		sub.Mu.Lock()
-		sub.Session = session
+		sub.Session = requester
 		sub.Channel = sc
 		sub.Mu.Unlock()
 
@@ -488,12 +556,66 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 			AvailableSequenceNumbers: sub.availableSequenceNumbers(),
 		}
 	}
+	s.Mu.Unlock()
+
+	// A Publish request that is queued in the session a subscription has
+	// left waits for a notification of a subscription the session no longer
+	// has. A client that carries on in the new session (the usual case: it
+	// replaced its session and took the subscriptions along) would not
+	// publish again before that request has timed out, and would receive
+	// nothing until then. The request is answered with a keep-alive message
+	// of the subscription: it consumes no sequence number, so it cannot be
+	// mistaken for, or hide, a notification of the subscription.
+	for _, m := range left {
+		select {
+		case pubreq := <-m.from.PublishRequests:
+			if pubreq.Channel == nil {
+				pubreq.Channel = m.channel
+			}
+			_ = m.sub.keepalive(pubreq)
+		default:
+		}
+	}
 
 	return &ua.TransferSubscriptionsResponse{
 		ResponseHeader:  responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
 		Results:         results,
 		DiagnosticInfos: []*ua.DiagnosticInfo{},
 	}, nil
+}
+
+// sameUser reports whether the session to is used by the user who owns the
+// subscriptions of the session from, which is the condition for transferring
+// them (Part 4 §5.13.7): the same user name, the same user certificate, or
+// for anonymous users and issued tokens, which do not identify anybody across
+// sessions, the same client application certificate. Two anonymous sessions
+// without an application certificate (no security) cannot be told apart and
+// count as the same.
+func sameUser(from, to *session) bool {
+	if from == nil || to == nil {
+		return false
+	}
+	if from == to {
+		return true
+	}
+	sameApplication := bytes.Equal(from.remoteCertificate, to.remoteCertificate)
+	switch a := from.identityToken.(type) {
+	case *ua.UserNameIdentityToken:
+		b, ok := to.identityToken.(*ua.UserNameIdentityToken)
+		return ok && a != nil && b != nil && a.UserName == b.UserName
+	case *ua.X509IdentityToken:
+		b, ok := to.identityToken.(*ua.X509IdentityToken)
+		return ok && a != nil && b != nil && bytes.Equal(a.CertificateData, b.CertificateData)
+	case *ua.IssuedIdentityToken:
+		_, ok := to.identityToken.(*ua.IssuedIdentityToken)
+		return ok && sameApplication
+	default: // anonymous
+		switch to.identityToken.(type) {
+		case nil, *ua.AnonymousIdentityToken:
+			return sameApplication
+		}
+		return false
+	}
 }
 
 // DeleteSubscriptions implements the OPC UA DeleteSubscriptions service.

@@ -3,6 +3,7 @@
 package uasc
 
 import (
+	"crypto"
 	"crypto/rsa"
 	"log/slog"
 	"time"
@@ -30,11 +31,36 @@ type Config struct {
 
 	// LocalKey is a RSA Private Key which will be used to encrypt the OpenSecureChannel
 	// messages.  It is the key associated with Certificate
+	//
+	// For a key of another type (the ECC security policies) set
+	// LocalPrivateKey instead.
 	LocalKey *rsa.PrivateKey
+
+	// LocalPrivateKey is the private key associated with Certificate, of any
+	// supported type: an *rsa.PrivateKey for the RSA security policies, a
+	// crypto.Signer with an ECDSA public key for the ECC ones. It takes
+	// precedence over LocalKey.
+	LocalPrivateKey crypto.Signer
 
 	// UserKey is a RSA Private Key which will be used to sign the UserTokenSignature.
 	// It is the key associated with AuthCertificate
+	//
+	// For a key of another type set UserPrivateKey instead.
 	UserKey *rsa.PrivateKey
+
+	// UserPrivateKey is the private key associated with the certificate of an
+	// X509IdentityToken, of any supported type. It takes precedence over
+	// UserKey.
+	UserPrivateKey crypto.Signer
+
+	// LocalIdentity, when set on a server SecureChannel, selects the
+	// application instance certificate and private key for the security
+	// policy a client opens the channel with. A server that offers RSA and
+	// ECC endpoints has one certificate per key type; the policy decides
+	// which one applies. It is called once, for the first OpenSecureChannel
+	// request, and its result replaces Certificate and LocalPrivateKey.
+	// An error rejects the channel with Bad_SecurityPolicyRejected.
+	LocalIdentity func(securityPolicyURI string) (certificate []byte, key crypto.Signer, err error)
 
 	// Thumbprint is the thumbprint of the X.509 v3 Certificate assigned to the receiving
 	// application Instance.
@@ -90,6 +116,29 @@ type Config struct {
 	// StatusBadCertificateUntrusted) to reject the channel open.
 	// Nil means no application-certificate trust check at channel open.
 	ClientCertificateValidator func(certDER []byte) error
+}
+
+// localKey returns the private key of the application instance certificate,
+// or nil if there is none. The result is never a typed nil.
+func (c *Config) localKey() crypto.PrivateKey {
+	if c.LocalPrivateKey != nil {
+		return c.LocalPrivateKey
+	}
+	if c.LocalKey != nil {
+		return c.LocalKey
+	}
+	return nil
+}
+
+// userKey returns the private key of the user certificate, or nil.
+func (c *Config) userKey() crypto.PrivateKey {
+	if c.UserPrivateKey != nil {
+		return c.UserPrivateKey
+	}
+	if c.UserKey != nil {
+		return c.UserKey
+	}
+	return nil
 }
 
 // SessionConfig is a set of common configurations used in Session.

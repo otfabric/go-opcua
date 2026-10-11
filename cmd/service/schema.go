@@ -14,10 +14,11 @@ type TypeDictionary struct {
 }
 
 type EnumType struct {
-	Name   string       `xml:",attr"`
-	Bits   int          `xml:"LengthInBits,attr"`
-	Doc    string       `xml:"Documentation"`
-	Values []*EnumValue `xml:"EnumeratedValue"`
+	Name        string       `xml:",attr"`
+	Bits        int          `xml:"LengthInBits,attr"`
+	IsOptionSet bool         `xml:"IsOptionSet,attr"`
+	Doc         string       `xml:"Documentation"`
+	Values      []*EnumValue `xml:"EnumeratedValue"`
 }
 
 type EnumValue struct {

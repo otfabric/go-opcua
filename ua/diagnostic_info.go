@@ -58,6 +58,11 @@ func (d *DiagnosticInfo) Decode(b []byte) (int, error) {
 
 func (d *DiagnosticInfo) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
+	if d == nil {
+		// A nil pointer is the empty DiagnosticInfo: no field is present.
+		_ = buf.WriteByte(0)
+		return buf.Bytes(), buf.Error()
+	}
 	_ = buf.WriteByte(d.EncodingMask)
 	if d.Has(DiagnosticInfoSymbolicID) {
 		buf.WriteInt32(d.SymbolicID)

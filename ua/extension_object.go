@@ -4,6 +4,7 @@ package ua
 
 import (
 	"log/slog"
+	"reflect"
 
 	"github.com/otfabric/go-opcua/id"
 )
@@ -17,6 +18,7 @@ func RegisterExtensionObject(typeID *NodeID, v interface{}) {
 	if err := eotypes.Register(typeID, v); err != nil {
 		panic("Extension object " + err.Error())
 	}
+	codecTypes.extensionObjectRegistered(reflect.TypeOf(v))
 }
 
 // These flags define the value type of an ExtensionObject.
@@ -90,13 +92,22 @@ func (e *ExtensionObject) Encode() ([]byte, error) {
 		e = &ExtensionObject{TypeID: NewTwoByteExpandedNodeID(0), EncodingMask: ExtensionObjectEmpty}
 	}
 	buf.WriteStruct(e.TypeID)
-	_ = buf.WriteByte(e.EncodingMask)
-	if e.EncodingMask == ExtensionObjectEmpty {
+	if e.EncodingMask == ExtensionObjectEmpty || e.Value == nil {
+		// No body. This includes an object of an unknown type as left by
+		// Decode, which keeps the type id but not the body.
+		_ = buf.WriteByte(ExtensionObjectEmpty)
 		return buf.Bytes(), buf.Error()
 	}
+	_ = buf.WriteByte(e.EncodingMask)
 
 	body := NewBuffer(nil)
-	body.WriteStruct(e.Value)
+	if raw, ok := e.Value.([]byte); ok {
+		// An opaque, already encoded body, as the JSON and XML decoders
+		// keep it for types that are not registered.
+		body.Write(raw)
+	} else {
+		body.WriteStruct(e.Value)
+	}
 	if body.Error() != nil {
 		return nil, body.Error()
 	}

@@ -29,7 +29,13 @@ const defaultListenAddr = "opc.tcp://localhost:0"
 var (
 	builtinNodeSetOnce sync.Once
 	builtinNodeSet     schema.UANodeSet
-	builtinNodeSetErr  error
+	// builtinNodeSetValues holds the decoded <Value> of the variables of
+	// the built-in node set (nil if it cannot be decoded). It is written
+	// once, under builtinNodeSetOnce. The Variants are prototypes: they
+	// tell which values decode and are never handed to a server, see
+	// importVariableValue.
+	builtinNodeSetValues map[*schema.Value]*ua.Variant
+	builtinNodeSetErr    error
 )
 
 // Server is a high-level OPC-UA server.
@@ -80,12 +86,32 @@ type Server struct {
 
 	// historyCPs binds opaque HistoryRead continuation points to sessions.
 	historyCPs *historyCPRegistry
+
+	// rcMu guards the reverse connect targets. rcCtx is the context of the
+	// running server (nil before Start) and rcClosed is set by Close.
+	rcMu            sync.Mutex
+	reverseConnects []*ReverseConnect
+	rcCtx           context.Context
+	rcClosed        bool
+	// disc holds the discovery state: registered servers, the mDNS node and
+	// the registration loops towards other discovery servers.
+	disc *discoveryManager
 }
 
 type serverConfig struct {
 	privateKey     *rsa.PrivateKey
 	certificate    []byte
 	applicationURI string
+	// applicationURISet tells that applicationURI was set with the
+	// ApplicationURI option and is not to be replaced by the certificate's.
+	applicationURISet bool
+
+	// reverseConnects are the targets configured with WithReverseConnect.
+	reverseConnects []reverseConnectSpec
+
+	// identities are the application instance certificates added with
+	// ApplicationIdentity, in the order they were given.
+	identities []applicationIdentity
 
 	endpoints  []string
 	listenAddr string // overrides endpoints[0] for TCP bind
@@ -107,6 +133,12 @@ type serverConfig struct {
 	clientCertificateValidator ClientCertificateValidator
 	allowUsernameOnNone        bool
 	metrics                    ServerMetrics
+
+	// lds, multicast and registrations configure the discovery roles of the
+	// server (discovery_lds.go, discovery_mdns.go, discovery_register.go).
+	lds           ldsConfig
+	multicast     multicastConfig
+	registrations []*registrationConfig
 
 	// responseWriteTimeout and maxPendingResponses configure the per-channel
 	// response writers. Zero selects the default.
@@ -224,8 +256,20 @@ func New(opts ...Option) (*Server, error) {
 		},
 	}
 
+	s.disc = newDiscoveryManager(s)
+
 	builtinNodeSetOnce.Do(func() {
 		builtinNodeSetErr = xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet)
+		// The values of the standard node set are decoded once, to know
+		// which of them a server can serve. A server does not get these
+		// Variants themselves: importVariableValue gives every node a
+		// copy of its own.
+		builtinNodeSetValues = make(map[*schema.Value]*ua.Variant)
+		for _, v := range builtinNodeSet.UAVariable {
+			if v.Value != nil {
+				builtinNodeSetValues[v.Value] = decodeNodeSetValue(v.Value)
+			}
+		}
 	})
 	if builtinNodeSetErr != nil {
 		return nil, fmt.Errorf("server: unmarshal built-in node set: %w", builtinNodeSetErr)
@@ -291,7 +335,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 		listenURL = cfg.endpoints[0]
 	}
 
-	return &Server{
+	s := &Server{
 		url:        listenURL,
 		cfg:        cfg,
 		cb:         newChannelBroker(cfg.logger, listenURL, cfg.clientCertificateValidator),
@@ -307,7 +351,9 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 			State:          ua.ServerStateSuspended,
 			ShutdownReason: &ua.LocalizedText{},
 		},
-	}, nil
+	}
+	s.disc = newDiscoveryManager(s)
+	return s, nil
 }
 
 func (s *Server) Session(hdr *ua.RequestHeader) *session {
@@ -460,6 +506,20 @@ func (s *Server) Start(ctx context.Context) error {
 	if len(s.cfg.endpoints) == 0 {
 		return fmt.Errorf("opcua: cannot start server: no endpoints defined")
 	}
+	if err := s.checkRegistrations(); err != nil {
+		return err
+	}
+
+	// An ECC endpoint without an ECC certificate cannot work, and unlike an
+	// RSA endpoint it cannot fall back on the server's RSA certificate.
+	for _, sec := range s.cfg.enabledSec {
+		if !uapolicy.IsECC(sec.secPolicy) {
+			continue
+		}
+		if _, _, ok := s.cfg.identityFor(sec.secPolicy); !ok {
+			return fmt.Errorf("opcua: cannot start server: security policy %s needs an ECC application instance certificate (see ApplicationIdentity)", sec.secPolicy)
+		}
+	}
 
 	// Register all service handlers
 	s.initHandlers()
@@ -486,8 +546,23 @@ func (s *Server) Start(ctx context.Context) error {
 	} else {
 		s.cb.endpointURL = s.url
 	}
+	s.cb.localIdentity = s.cfg.localIdentity
 	s.cb.writeTimeout = s.cfg.responseWriteTimeout
 	s.cb.maxPending = s.cfg.maxPendingResponses
+
+	// Discovery: the mDNS responder, the cleanup of registered servers and
+	// the registration with other discovery servers. Only the multicast
+	// sockets can fail here; a discovery server that is down cannot.
+	if err := s.disc.start(ctx); err != nil {
+		_ = s.l.Close()
+		s.setServerState(ua.ServerStateFailed)
+		return err
+	}
+
+	s.sb.reopen()
+	if s.SubscriptionService != nil {
+		s.SubscriptionService.reopen()
+	}
 
 	mctx, cancel := context.WithCancel(ctx)
 	s.cancelMonitor = cancel
@@ -496,7 +571,7 @@ func (s *Server) Start(ctx context.Context) error {
 	go s.superviseMonitor(mctx)
 	go s.reapSessions(mctx)
 
-	return nil
+	return s.startReverseConnects(mctx)
 }
 
 func (s *Server) setServerState(state ua.ServerState) {
@@ -510,6 +585,11 @@ func (s *Server) setServerState(state ua.ServerState) {
 func (s *Server) Close() error {
 	s.setServerState(ua.ServerStateShutdown)
 
+	// Leave the discovery servers and the network first, while the server
+	// can still be reached: unregister (IsOnline false) and say goodbye on
+	// mDNS.
+	s.disc.stop()
+
 	if s.cancelMonitor != nil {
 		s.cancelMonitor()
 	}
@@ -522,9 +602,14 @@ func (s *Server) Close() error {
 	// Shut down all secure channels and UACP connections
 	err := s.cb.Close(context.Background())
 
+	// Stop connecting to reverse connect clients and wait for what was
+	// started for them.
+	s.closeReverseConnects()
+
 	// Nothing can reach the subscriptions and sessions any more. Stop the
 	// subscription goroutines (they would otherwise keep ticking until their
-	// lifetime expires) and drop the sessions.
+	// lifetime expires) and drop the sessions. A request the dispatcher is
+	// still handling can no longer add one: both refuse from here on.
 	if s.SubscriptionService != nil {
 		s.SubscriptionService.deleteAll()
 	}
@@ -583,20 +668,24 @@ func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
 				continue
 			}
 
-			go func() {
-				// Last line of defence for this connection's goroutine: the
-				// connection is lost, the server is not.
-				defer func() {
-					if r := recover(); r != nil {
-						logPanic(s.cfg.logger, "serving a connection", r)
-						_ = c.Close()
-					}
-				}()
-				_ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey)
-			}()
+			go s.serveConn(ctx, c)
 			s.cfg.logger.Info("registered connection", "remote_addr", c.RemoteAddr())
 		}
 	}
+}
+
+// serveConn serves a connection that completed the HEL/ACK handshake until
+// it ends. Accepted and reverse connections are served alike.
+func (s *Server) serveConn(ctx context.Context, c *uacp.Conn) {
+	// Last line of defence for this connection's goroutine: the connection
+	// is lost, the server is not.
+	defer func() {
+		if r := recover(); r != nil {
+			logPanic(s.cfg.logger, "serving a connection", r)
+			_ = c.Close()
+		}
+	}()
+	_ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey)
 }
 
 // monitorConnections reads messages off the secure channel connection and
@@ -633,21 +722,10 @@ func (s *Server) initEndpoints() {
 			secLevel := uapolicy.SecurityLevel(sec.secPolicy, sec.secMode)
 
 			ep := &ua.EndpointDescription{
-				EndpointURL:   url, // todo: be able to listen on multiple adapters
-				SecurityLevel: secLevel,
-				Server: &ua.ApplicationDescription{
-					ApplicationURI: s.cfg.applicationURI,
-					ProductURI:     "urn:github.com:otfabric:opcua:server",
-					ApplicationName: &ua.LocalizedText{
-						EncodingMask: ua.LocalizedTextText,
-						Text:         s.cfg.applicationName,
-					},
-					ApplicationType:     ua.ApplicationTypeServer,
-					GatewayServerURI:    "",
-					DiscoveryProfileURI: "",
-					DiscoveryURLs:       s.URLs(),
-				},
-				ServerCertificate:   s.cfg.certificate,
+				EndpointURL:         url, // todo: be able to listen on multiple adapters
+				SecurityLevel:       secLevel,
+				Server:              s.applicationDescription(),
+				ServerCertificate:   s.cfg.certificateFor(sec.secPolicy),
 				SecurityMode:        sec.secMode,
 				SecurityPolicyURI:   sec.secPolicy,
 				TransportProfileURI: "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary",

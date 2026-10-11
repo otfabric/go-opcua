@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"crypto"
 	"crypto/rsa"
 	"fmt"
 	"io"
@@ -61,6 +62,11 @@ type channelBroker struct {
 	// clientCertificateValidator is copied onto each new SecureChannel Config
 	// so untrusted client certs can be rejected at OpenSecureChannel.
 	clientCertificateValidator ClientCertificateValidator
+
+	// localIdentity selects the application instance certificate and key of
+	// a new channel from the security policy the client opens it with. Nil
+	// means every channel uses the certificate passed to RegisterConn.
+	localIdentity func(securityPolicyURI string) ([]byte, crypto.Signer, error)
 }
 
 func newChannelBroker(l *slog.Logger, endpointURL string, clientCertValidator ClientCertificateValidator) *channelBroker {
@@ -86,6 +92,7 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 	cfg := defaultChannelConfig()
 	cfg.Certificate = localCert
 	cfg.LocalKey = localKey
+	cfg.LocalIdentity = c.localIdentity
 	cfg.Logger = c.logger
 	cfg.ClientCertificateValidator = c.clientCertificateValidator
 

@@ -10,9 +10,12 @@ package interop
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -174,47 +177,130 @@ func requireHistoryContinueScenario(t *testing.T, imageEnv, defaultImage string)
 	t.Skipf("%s", msg)
 }
 
-// requireAdapterOp skips (or fails when REQUIRE_CAPABILITIES=1) when the pinned
-// adapter image lacks a client operation.
-func requireAdapterOp(t *testing.T, imageEnv, defaultImage, op string) {
+// adapterCaps is the part of an adapter's print-capabilities output the suite
+// gates on (opcua-interop client contract §13).
+type adapterCaps struct {
+	Adapter struct {
+		Version string `json:"version"`
+	} `json:"adapter"`
+	ClientOperations []string `json:"clientOperations"`
+	ClientFeatures   []string `json:"clientFeatures"`
+	ServerFeatures   []string `json:"serverFeatures"`
+	SecurityProfiles []struct {
+		Policy string `json:"policy"`
+		Mode   string `json:"mode"`
+	} `json:"securityProfiles"`
+}
+
+var (
+	adapterCapsMu    sync.Mutex
+	adapterCapsCache = map[string]*adapterCaps{}
+)
+
+// capabilityUnavailable skips the test, or fails it when
+// OPCUA_INTEROP_REQUIRE_CAPABILITIES=1: a release verification run (CI) must
+// not turn green because the image under test predates a feature the suite
+// has evidence rows for.
+func capabilityUnavailable(t *testing.T, format string, args ...any) {
 	t.Helper()
-	image := getEnvOr(imageEnv, defaultImage)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", image, "print-capabilities")
-	raw, err := cmd.Output()
-	if err != nil {
-		if requireCapabilities() {
-			t.Fatalf("print-capabilities failed for %s: %v", image, err)
-		}
-		t.Skipf("print-capabilities failed for %s: %v", image, err)
-	}
-	var caps struct {
-		ClientOperations []string `json:"clientOperations"`
-		Adapter          struct {
-			Version string `json:"version"`
-		} `json:"adapter"`
-	}
-	if err := json.Unmarshal(raw, &caps); err != nil {
-		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
-		if len(lines) == 0 || json.Unmarshal([]byte(lines[len(lines)-1]), &caps) != nil {
-			if requireCapabilities() {
-				t.Fatalf("cannot parse capabilities from %s: %v\nraw: %s", image, err, raw)
-			}
-			t.Skipf("cannot parse capabilities from %s: %v\nraw: %s", image, err, raw)
-		}
-	}
-	for _, o := range caps.ClientOperations {
-		if o == op {
-			return
-		}
-	}
-	msg := "adapter " + image + " (version " + caps.Adapter.Version +
-		") lacks client op " + op + "; need opcua-interop v0.6.0 client ops"
+	msg := fmt.Sprintf(format, args...)
 	if requireCapabilities() {
 		t.Fatal(msg)
 	}
-	t.Skipf("%s", msg)
+	t.Skip(msg)
+}
+
+// imageCapabilities returns the print-capabilities output of the adapter
+// image selected by imageEnv (cached per image).
+func imageCapabilities(t *testing.T, imageEnv, defaultImage string) (*adapterCaps, string) {
+	t.Helper()
+	image := getEnvOr(imageEnv, defaultImage)
+	adapterCapsMu.Lock()
+	defer adapterCapsMu.Unlock()
+	if c, ok := adapterCapsCache[image]; ok {
+		return c, image
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	raw, err := exec.CommandContext(ctx, "docker", "run", "--rm", image, "print-capabilities").Output()
+	if err != nil {
+		capabilityUnavailable(t, "print-capabilities failed for %s: %v", image, err)
+	}
+	caps := &adapterCaps{}
+	if err := json.Unmarshal(raw, caps); err != nil {
+		lines := strings.Split(strings.TrimSpace(string(raw)), "\n")
+		if len(lines) == 0 || json.Unmarshal([]byte(lines[len(lines)-1]), caps) != nil {
+			capabilityUnavailable(t, "cannot parse capabilities from %s: %v\nraw: %s", image, err, raw)
+		}
+	}
+	adapterCapsCache[image] = caps
+	return caps, image
+}
+
+// requirePinnedVersion fails a capability-gated test when the image in use is
+// the default pin (no OPEN62541_IMAGE / MILO_IMAGE override) and that pin is
+// not the opcua-interop release the suite and the ledger are written against.
+// Skipping would let `make interop` pass against a stale pin while
+// coverage.json claims evidence for the newer release.
+func requirePinnedVersion(t *testing.T, imageEnv string, caps *adapterCaps, image string) {
+	t.Helper()
+	if os.Getenv(imageEnv) != "" || "v"+caps.Adapter.Version == interopVersion {
+		return
+	}
+	t.Fatalf("the default image %s is opcua-interop v%s, but this suite and interop/coverage.json are written against %s: "+
+		"re-pin the default images (harness_test.go, .github/workflows/interop.yml) or set %s to a %s image",
+		image, caps.Adapter.Version, interopVersion, imageEnv, interopVersion)
+}
+
+// requireAdapterOp skips (or fails when REQUIRE_CAPABILITIES=1) when the
+// adapter image lacks a client operation.
+func requireAdapterOp(t *testing.T, imageEnv, defaultImage, op string) {
+	t.Helper()
+	caps, image := imageCapabilities(t, imageEnv, defaultImage)
+	requirePinnedVersion(t, imageEnv, caps, image)
+	if slices.Contains(caps.ClientOperations, op) {
+		return
+	}
+	capabilityUnavailable(t, "adapter %s (version %s) lacks client op %s; need opcua-interop %s",
+		image, caps.Adapter.Version, op, interopVersion)
+}
+
+// requireAdapterFeature skips (or fails when REQUIRE_CAPABILITIES=1) when the
+// adapter image does not advertise feature in the given print-capabilities
+// list ("serverFeatures" or "clientFeatures"). Once the feature is
+// advertised, everything that goes wrong in the test fails it.
+func requireAdapterFeature(t *testing.T, imageEnv, defaultImage, list, feature string) {
+	t.Helper()
+	caps, image := imageCapabilities(t, imageEnv, defaultImage)
+	requirePinnedVersion(t, imageEnv, caps, image)
+	var have []string
+	switch list {
+	case "clientFeatures":
+		have = caps.ClientFeatures
+	case "serverFeatures":
+		have = caps.ServerFeatures
+	default:
+		t.Fatalf("requireAdapterFeature: unknown capability list %q", list)
+	}
+	if slices.Contains(have, feature) {
+		return
+	}
+	capabilityUnavailable(t, "adapter %s (version %s) does not advertise %s %q (has %v); need opcua-interop %s",
+		image, caps.Adapter.Version, list, feature, have, interopVersion)
+}
+
+// requireAdapterClientFeature gates on a clientFeatures entry.
+func requireAdapterClientFeature(t *testing.T, imageEnv, defaultImage, feature string) {
+	t.Helper()
+	requireAdapterFeature(t, imageEnv, defaultImage, "clientFeatures", feature)
+}
+
+// requireServerFeature gates on serverFeatures entries.
+func requireServerFeature(t *testing.T, imageEnv, defaultImage string, features ...string) {
+	t.Helper()
+	for _, f := range features {
+		requireAdapterFeature(t, imageEnv, defaultImage, "serverFeatures", f)
+	}
 }
 
 // findNSFromServer returns the interop namespace URI and index from a running Go server.
