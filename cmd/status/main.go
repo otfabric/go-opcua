@@ -104,16 +104,20 @@ var (
 )
 
 type StatusCodeDesc struct {
+	// Name is the name of the Go constant, e.g. "StatusBadNodeIDUnknown".
 	Name string
 	Text string
+	// Symbol is the name in the specification, e.g. "BadNodeIdUnknown". It
+	// is the Symbol of a StatusCode in the JSON DataEncoding.
+	Symbol string
 }
 
 // StatusCodes maps status codes to the status code error types.
 var StatusCodes = map[StatusCode]StatusCodeDesc{
-	StatusOK: {Name: "OK", Text: ""},
-	StatusUncertain: {Name: "Uncertain", Text: ""},
-	StatusBad: {Name: "Bad", Text: ""},
-	{{range .}}{{.GoName}}: { Name: "{{.GoName}}", Text: {{.Description}} },
+	StatusOK: {Name: "OK", Text: "", Symbol: "Good"},
+	StatusUncertain: {Name: "Uncertain", Text: "", Symbol: "Uncertain"},
+	StatusBad: {Name: "Bad", Text: "", Symbol: "Bad"},
+	{{range .}}{{.GoName}}: { Name: "{{.GoName}}", Text: {{.Description}}, Symbol: "{{.SpecName}}" },
 	{{end}}
 }
 `))

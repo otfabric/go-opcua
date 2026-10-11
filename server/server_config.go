@@ -3,6 +3,7 @@
 package server
 
 import (
+	"crypto"
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
@@ -19,11 +20,132 @@ import (
 type Option func(*serverConfig) error
 
 // PrivateKey sets the RSA private key in the secure channel configuration.
+//
+// Together with Certificate it configures the server's RSA application
+// instance certificate. Certificates of other key types, for the ECC security
+// policies, are added with ApplicationIdentity.
 func PrivateKey(key *rsa.PrivateKey) Option {
 	return func(s *serverConfig) error {
 		s.privateKey = key
 		return nil
 	}
+}
+
+// ApplicationIdentity adds an application instance certificate and its
+// private key to the server. It may be given several times, once per key
+// type, and combined with Certificate and PrivateKey:
+//
+//   - an RSA certificate serves the RSA security policies (Basic256Sha256,
+//     Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss, ...),
+//   - an ECDSA P-256 certificate serves ECC_nistP256, ECC_nistP256_AesGcm
+//     and ECC_nistP256_ChaChaPoly,
+//   - an ECDSA P-384 certificate serves ECC_nistP384 and the three
+//     ECC_nistP256 policies,
+//   - an Ed25519 certificate serves ECC_curve25519.
+//
+// A server that offers RSA and ECC endpoints therefore has (at least) two
+// certificates. For every SecureChannel the server uses the first configured
+// certificate whose key fits the security policy the client selected, and
+// each endpoint advertises the certificate of its policy. All certificates of
+// a server should carry the same ApplicationURI.
+//
+// cert is the DER encoded certificate. An ECC key only has to sign, so it may
+// be any crypto.Signer with an ECDSA or Ed25519 public key (for example a key
+// held in an HSM); an RSA key must be an *rsa.PrivateKey.
+func ApplicationIdentity(cert []byte, key crypto.Signer) Option {
+	return func(s *serverConfig) error {
+		x509cert, err := x509.ParseCertificate(cert)
+		if err != nil {
+			return fmt.Errorf("server: failed to parse x509 certificate: %w", err)
+		}
+		if !uapolicy.KeyMatchesCertificate(key, cert) {
+			return fmt.Errorf("server: private key does not belong to the certificate %q", x509cert.Subject.String())
+		}
+		s.identities = append(s.identities, applicationIdentity{certificate: cert, key: key})
+
+		// The first certificate of a server without a Certificate option is
+		// also the one used where no security policy selects one: on
+		// unsecured channels.
+		if s.certificate == nil {
+			s.certificate = cert
+			if len(x509cert.URIs) > 0 {
+				s.applicationURI = x509cert.URIs[0].String()
+			}
+			if rsaKey, ok := key.(*rsa.PrivateKey); ok && s.privateKey == nil {
+				s.privateKey = rsaKey
+			}
+		}
+		return nil
+	}
+}
+
+// applicationIdentity is an application instance certificate with its key.
+type applicationIdentity struct {
+	certificate []byte
+	key         crypto.Signer
+}
+
+// identityFor returns the application instance certificate and private key
+// the server uses with the security policy.
+func (s *serverConfig) identityFor(policyURI string) ([]byte, crypto.Signer, bool) {
+	// The Certificate / PrivateKey pair comes first: it is what a server
+	// without ApplicationIdentity has, and it must keep behaving as before.
+	var primary crypto.Signer
+	if s.privateKey != nil {
+		primary = s.privateKey
+	}
+	if policyURI == ua.SecurityPolicyURINone {
+		return s.certificate, primary, true
+	}
+	if s.certificate != nil && primary != nil && uapolicy.CheckCertificate(policyURI, s.certificate) == nil {
+		return s.certificate, primary, true
+	}
+	for _, id := range s.identities {
+		if uapolicy.CheckCertificate(policyURI, id.certificate) == nil {
+			return id.certificate, id.key, true
+		}
+	}
+	return nil, nil, false
+}
+
+// canSecure reports whether the server has an application instance
+// certificate with its key: the Certificate / PrivateKey pair or one added
+// with ApplicationIdentity (which is all a server with ECC certificates only
+// has).
+func (s *serverConfig) canSecure() bool {
+	return (len(s.certificate) > 0 && s.privateKey != nil) || len(s.identities) > 0
+}
+
+// certificateFor returns the certificate an endpoint with the security policy
+// advertises.
+func (s *serverConfig) certificateFor(policyURI string) []byte {
+	if cert, _, ok := s.identityFor(policyURI); ok {
+		return cert
+	}
+	return s.certificate
+}
+
+// localIdentity selects the certificate and key for a new SecureChannel. It
+// is the place where a client that asks for a security policy this server
+// does not offer is turned away, before a SecurityToken is issued.
+func (s *serverConfig) localIdentity(policyURI string) ([]byte, crypto.Signer, error) {
+	if len(s.enabledSec) > 0 {
+		enabled := false
+		for _, sec := range s.enabledSec {
+			if sec.secPolicy == policyURI {
+				enabled = true
+				break
+			}
+		}
+		if !enabled {
+			return nil, nil, fmt.Errorf("server: security policy %q is not enabled", policyURI)
+		}
+	}
+	cert, key, ok := s.identityFor(policyURI)
+	if !ok {
+		return nil, nil, fmt.Errorf("server: no application instance certificate for security policy %q", policyURI)
+	}
+	return cert, key, nil
 }
 
 // EndPoint adds an advertised endpoint to the server based on the host name
@@ -62,9 +184,28 @@ func Certificate(cert []byte) Option {
 			return fmt.Errorf("server: failed to parse x509 certificate: %w", err)
 		}
 
-		if len(x509cert.URIs) > 0 {
+		if len(x509cert.URIs) > 0 && !s.applicationURISet {
 			s.applicationURI = x509cert.URIs[0].String()
 		}
+		return nil
+	}
+}
+
+// ApplicationURI sets the ApplicationUri of the server: the globally unique
+// name it reports in its endpoint descriptions and announces as ServerUri
+// when it opens a reverse connection (see [WithReverseConnect]).
+//
+// A server with a certificate does not need this option: the ApplicationUri
+// is taken from the certificate (see [Certificate]), with which it must be
+// identical anyway. Use it for a server without a certificate, which has no
+// ApplicationUri otherwise.
+func ApplicationURI(uri string) Option {
+	return func(s *serverConfig) error {
+		if uri == "" {
+			return fmt.Errorf("server: empty ApplicationURI")
+		}
+		s.applicationURI = uri
+		s.applicationURISet = true
 		return nil
 	}
 }

@@ -1,5 +1,107 @@
 # go-opcua Releases
 
+## v1.6.0
+
+**Date:** 2026-10-11
+**Previous release:** v1.5.0
+
+### Summary
+
+Feature release closing the largest gaps to open62541: ECC security policies, reverse connect, a Local Discovery Server with mDNS, the OPC UA JSON and XML data encodings, and server-side DataChangeFilter / sampling. Every feature is interoperability-tested against open62541 v1.5.9, and against Eclipse Milo 1.1.8 where Milo implements it, through [opcua-interop v0.7.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.7.0).
+
+Several changes alter what existing clients and servers observe — read **Behaviour changes** before upgrading.
+
+### Behaviour changes
+
+- **Minimum Go version is now 1.26** (was 1.25), required by `golang.org/x/crypto` v0.58.0.
+- **Unchanged values no longer notify.** A write of an identical value, or a `ChangeNotification` without a change, produces no data-change notification unless the monitored item's trigger asks for it (a timestamp-only change needs `StatusValueTimestamp`).
+- **The sampling interval is enforced.** A monitored item with a sampling interval above 0 is sampled at most once per interval and keeps the latest value; previously every write was queued. Request `0` to receive every change. `RevisedSamplingInterval` is now the revised request (0 stays 0, negative means the publishing interval, otherwise 1 ms – 1 h); it used to echo the publishing interval.
+- **Unusable monitored items are rejected** per item: a malformed `IndexRange` (`BadIndexRangeInvalid`), a filter on a non-Value attribute or non-numeric deadband (`BadFilterNotAllowed`), a percent deadband without `EURange` (`BadMonitoredItemFilterUnsupported`), an invalid deadband (`BadDeadbandFilterInvalid`). They were silently accepted.
+- **NodeSet2 import applies variable values and attributes.** `ImportNodeSetXML` and the built-in namespace 0 now set Value, DataType, ValueRank, ArrayDimensions and (when present) AccessLevel / UserAccessLevel of variables; standard variables that used to be empty now serve their values.
+- **X.509 user tokens must be signed.** On a secured channel the server requires the `UserTokenSignature` (proof of possession); a missing signature used to skip the check.
+- **Non-enabled security policies are rejected at OpenSecureChannel** (`BadSecurityPolicyRejected`) instead of at CreateSession.
+- **A server no longer acts on a ReverseHello it receives.** It used to close the connection and dial the announced ServerUri as a TCP address; it now answers `BadTcpMessageTypeInvalid`.
+- **FindServers** applies the `serverUris` filter to the server itself and honours `endpointUrl` when choosing its discovery URLs.
+- **Event monitored items** no longer receive a data notification when `ChangeNotification` is called on their node; creating a monitored item no longer re-notifies the other items on that node.
+- **Secured channels reject out-of-sequence chunks** (`BadSequenceNumberInvalid`, Part 6 §6.7.2.4). A peer that does not keep sequence numbers contiguous on a secured channel loses its channel; channels without security are not checked.
+- After a failed CreateSubscription the client deletes subscriptions of its own session that it does not know; `Server.Close` waits (bounded by the request timeout) for a discovery registration already on the wire; DeleteMonitoredItems is synchronous; Variant arrays are limited to 32 dimensions.
+
+### Added — security
+
+- **ECC security policies `ECC_nistP256` and `ECC_nistP384`** on client and server: ECDSA-signed OpenSecureChannel, ephemeral ECDH + HKDF key derivation with fresh keys on every renewal, `EccEncryptedSecret` for passwords and issued tokens, ECDSA X.509 user tokens.
+- **AEAD ECC security policies `ECC_nistP256_AesGcm`, `ECC_nistP256_ChaChaPoly` and `ECC_curve25519`** (OPC UA 1.05.07, the set open62541 enables by default) on client and server: AES-128-GCM / ChaCha20-Poly1305 message protection, Ed25519 application and user certificates, X25519 key agreement, ChannelThumbprint binding, key chaining on renewal and channel-bound session signatures.
+- New dependency: `golang.org/x/crypto` v0.58.0 (ChaCha20-Poly1305 only). The library remains pure Go; no cgo.
+- Client options `PrivateKeySigner(crypto.Signer)` and `AuthPrivateKeySigner(crypto.Signer)`; `PrivateKeyFile` also loads ECDSA keys (PKCS#8, SEC1; PEM or DER).
+- Server option `ApplicationIdentity(cert, key)`, repeatable: one application certificate per key type for servers that offer RSA and ECC endpoints.
+- `opcua.SelectEndpoint(endpoints, policy, mode, certDER)` picks the best endpoint usable with the client certificate's key type; ECC endpoints rank above RSA ones, AEAD policies first, and endpoints with equal advertised SecurityLevel are ordered by the library's ranking.
+- A server with ECC-only certificates can register with a discovery server; the registration client uses the certificate that fits the endpoint.
+- The client and server refuse a security policy that is not implemented by name instead of failing later in the handshake.
+
+### Added — transport
+
+- **Reverse connect** (Part 6 §7.1.3) on client and server. Client: `opcua.ReverseConnect(listenAddr, …)`, `opcua.ReverseConnectListener(l, …)` (one listener serves many servers), `opcua.ReverseServerURI`; the announced ServerUri and EndpointUrl are validated and, with security, the ServerUri must match the server certificate. Works with `AutoReconnect` and the discovery helpers. Server: `server.WithReverseConnect(clientURL, …)`, `Server.AddReverseConnect`, `Server.ReverseConnects` and a `ReverseConnect` handle; one idle connection is kept available, with retry back-off.
+- `uacp`: `ReverseDialer`, `Conn.AcceptHello`, `ListenReverse` / `NewReverseListener` / `ReverseListener`, `Dialer.AcceptReverse`; sentinel `errors.ErrReverseHelloRejected`.
+
+### Added — discovery
+
+- **Local Discovery Server:** `server.WithLocalDiscoveryServer` accepts RegisterServer / RegisterServer2 (validation, expiry after 60 min by default, semaphore files, registration only over a secured channel and only for the registrant certificate's URI unless opted out) and returns registered servers from FindServers.
+- **Registration with a discovery server:** `server.WithDiscoveryRegistration(ldsURL, …)` registers in the background (RegisterServer2 with fallback to RegisterServer), renews, retries with back-off and unregisters on `Close`, without blocking `Start`.
+- **Multicast discovery (LDS-ME):** `server.WithMulticastDiscovery` announces the server (and, on an LDS, its registered servers) with a built-in, dependency-free mDNS / DNS-SD implementation and serves FindServersOnNetwork with record ids, paging and capability filter.
+- Client: `RegisterServer`, `RegisterServer2`, `FindServersWithFilter`, `FindServersOnNetworkWithFilter`, `opcua.DiscoverServers`, `opcua.DiscoveryURL` (well-known LDS port 4840).
+- `server.ApplicationURI(uri)` for servers without a certificate; `Server.RegisteredServers()`, `Server.ServersOnNetwork()`; `uasc.SecureChannel.RemoteCertificate()`.
+
+### Added — data encoding
+
+- **OPC UA JSON (Part 6 §5.4) and XML (Part 6 §5.3) DataEncodings** in `ua`: `EncodeJSON` / `DecodeJSON` / `EncodeXML` / `DecodeXML` for all built-in types, generated structures, enumerations and registered custom structures. JSON forms: 1.05 Compact (default) and Verbose, 1.04 reversible; 1.04 non-reversible encode only. This is a data encoding — the transport stays UA-TCP / UA Binary.
+- Options `WithJSONForm`, `WithNamespaceArray`, `WithServerArray`, `WithIndent`, `WithMaxDepth`, `WithMaxArrayLength`, `WithXMLRootName`, `WithoutXMLNamespace`; `RegisterDataTypeInfo` for the DataType / encoding NodeIds of custom structures; `StatusCodeDesc.Symbol`.
+- Existing `MarshalJSON` display formats of `Variant`, `DataValue`, `NodeID` and friends are unchanged.
+
+### Added — subscriptions
+
+- **Server honours `DataChangeFilter`** on CreateMonitoredItems and ModifyMonitoredItems: triggers Status, StatusValue (default) and StatusValueTimestamp; absolute deadband on numeric scalars and arrays; percent deadband on variables with an `EURange` property.
+- **Server honours the monitored item's `IndexRange`**: only the range is reported and changes outside it do not trigger.
+- Client: `opcua.NewDataChangeFilter` and `SubscriptionBuilder.DataChangeFilter`.
+
+### Fixed
+
+Found by the new chaos and parallelism suites for the v1.6.0 features (`chaos/secure`, `chaos/datachange`, `chaos/reverse`, `chaos/discovery`, `chaos/codec`):
+
+- **Security:** sequence numbers of secured channels were never verified — on the RSA policies and `ECC_nistP256` / `ECC_nistP384` a replayed request was executed again and a multi-chunk message with a lost or reordered chunk was accepted. Multi-chunk messages on SignAndEncrypt channels with a block cipher exceeded the peer's 65535-byte buffer by one byte and dropped the connection. Races on channel renewal (server rewrote its policy and peer certificate) and on unsolicited OpenSecureChannel messages (client). `ActivateSession` wrote the protected password into the identity token shared by all sessions.
+- **Monitored item ids are stable across reconnects.** The id `Monitor` returns keeps denoting the same item after the subscription is recreated on the server; `Unmonitor`, `ModifyMonitoredItems`, `SetMonitoringMode` and `SetTriggering` translate it to the server's current id. Before, an id obtained before a reconnect could address a different item afterwards. The id returned by `Monitor` can therefore differ from the id on the wire.
+- **A SecureChannel renewal cannot change the security mode.** The server refuses an OpenSecureChannel renewal that names another mode than the channel was opened with (`BadSecurityModeRejected`); it used to adopt it, so a renewal could downgrade SignAndEncrypt to Sign.
+- **Subscriptions follow a session change.** When the application re-activates or replaces the session after the client's own recovery, subscriptions are recreated in the new session instead of being deleted on the server while the client still lists them; a subscription that stays silent for three keep-alive intervals while other Publish responses arrive is recreated. Before, a client could report `Connected` with a subscription that never delivered again.
+- **`TransferSubscriptions` requires the owner.** The server only transfers a subscription to a session of the same user (`BadUserAccessDenied` otherwise); it used to hand any subscription to any session that asked by id.
+- Publish requests queued in a session are answered when the session is closed (`BadSessionClosed`) or its subscriptions are transferred away, instead of staying unanswered until the client's request timeout.
+- A notification message republished during recovery is no longer delivered a second time.
+- `uacp`: an Acknowledge with buffer sizes above those of the Hello made the client slice past its buffer and panic.
+- **Session AuthenticationTokens are unguessable.** The server issues an opaque NodeId with 256 bits from the cryptographic random generator; it used to be a 31-bit number from `math/rand`.
+- **Client:** a response with too few results panicked `ReadValue`, `WriteValue`, `WriteAttribute`, `Browse`, `Monitor` and `Cancel` (now `BadUnknownResponse`); a subscription whose recreation failed on a healthy connection was never retried; a lost CreateSubscription response left an orphan subscription on the server; the mode set with `SetMonitoringMode` was lost on recreation; `ModifyMonitoredItems` could dereference nil when racing `Unmonitor`; a server's Error message at OpenSecureChannel could surface as `io.EOF` instead of its status code.
+- **Server:** a request handled during `Close`, or a refused CreateSession, left a session behind; two samples could be taken within one sampling interval and the sampler timer stayed armed after its last item; data race in `Node.Value()`; an IndexRange write into an Uncertain array was rejected; built-in NodeSet values were shared (and raced) between all servers in a process.
+- **Discovery:** `Close` abandoned an in-flight registration that the discovery server then processed after the unregistration; a registration with a lost response was not unregistered; `RegisterRequestTimeout` did not bound an attempt; overlapping registrations withdrew each other's mDNS announcement; `ServersOnNetwork()` was not empty after `Close`.
+- **Data encoding:** concurrent first use, `RegisterDataTypeInfo` while coding, half-registered custom types, order-dependent lookup by name, mismatched XML metadata for ExtensionObjects; Variant dimension overflow and unbounded array allocation from a length prefix.
+
+Other fixes:
+
+- `ua`: nil `*Variant`, `*DataValue`, `*DiagnosticInfo` and `*GUID` pointers and body-less ExtensionObjects no longer panic or corrupt the binary stream; DateTime values outside 1678–2262 no longer overflow; `NewVariant` accepts arrays of ByteStrings of different lengths.
+- Client: the endpoint re-fetch after `BadCertificateInvalid` uses the client's own connection method (dial or reverse listener).
+
+### Interoperability
+
+- Peers: open62541 v1.5.9 and Eclipse Milo 1.1.8 via opcua-interop **v0.7.0** (OpenSSL-based open62541 build with ECC endpoints, reverse connect, LDS / mDNS, DataChangeFilter flags and a `codec` command on both adapters).
+- See [`interop/COVERAGE.md`](interop/COVERAGE.md) for the per-direction evidence of every feature above; Milo 1.1.8 has no ECC, no reverse connect and no discovery server, so those rows are open62541-only.
+
+### Known limitations
+
+- ECC: `Sign` mode follows open62541's key derivation, which differs from the Part 6 1.05.07 Sign-only rule implemented by the OPC Foundation .NET stack; use `SignAndEncrypt` when in doubt. Where open62541 and the specification text differ for the AEAD policies, go-opcua follows open62541 (see `docs/security.md`). Not implemented: `ECC_curve448`, Brainpool.
+- mDNS: no probing / conflict resolution; real multicast is verified on Linux only.
+- open62541 v1.5.9 cannot XML-encode structures, enumerations, DataValue or matrices and cannot JSON-decode a structure encoded in place in an ExtensionObject; go-opcua reads and writes the Part 6 forms.
+- When registering with a discovery server its certificate is not validated unless `RegisterCertificateValidator` is set.
+- An item re-enabled from `Disabled` does not report immediately; `ModifySubscription` does not re-revise items that use the default sampling interval.
+- A forged mDNS announcement can stay cached for up to 24 h.
+- Triggering links set with `SetTriggering` are not restored when a subscription is recreated after a reconnect.
+
+---
+
 ## v1.5.0
 
 **Date:** 2026-10-11
@@ -76,6 +178,8 @@ Several fixes change behaviour that existing deployments may have relied on — 
 - DataChangeFilter (deadband, trigger) and the sampling interval are ignored by the server; every write notifies.
 - Raw history delete removes the sample at the end time (Part 11 specifies an exclusive end).
 - `ServerStatus` child nodes `BuildInfo`, `ShutdownReason` and `SecondsTillShutdown` have the wrong value types; `MapNamespace` reads are not synchronised with writes.
+
+---
 
 ## v1.4.0
 

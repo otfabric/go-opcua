@@ -16,13 +16,37 @@ jobs:
     name: OPC UA interop — open62541
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    env:
+      # opcua-interop release the suite and interop/coverage.json are written
+      # against (interopVersion in interop/harness_test.go). Keep in step
+      # with the image digests below.
+      OPCUA_INTEROP_REF: v0.7.0
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with:
-          go-version: "1.25.x"
+          go-version: "1.26.x"
+
+      # The security tests (RSA and ECC policies, user tokens, secured reverse
+      # connect) need the opcua-interop test PKI. It is generated, never
+      # committed: take the generator of the release the suite is written
+      # against. Without it the suite fails under
+      # OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 instead of skipping those tests.
+      - name: Check out opcua-interop (test PKI generator)
+        uses: actions/checkout@v7
+        with:
+          repository: otfabric/opcua-interop
+          ref: ${{ env.OPCUA_INTEROP_REF }}
+          path: .opcua-interop
+          sparse-checkout: certs
+
+      - name: Generate the test PKI (RSA + ECC)
+        run: |
+          openssl version
+          bash .opcua-interop/certs/generate.sh
+          echo "OPCUA_INTEROP_PKI_DIR=${GITHUB_WORKSPACE}/.opcua-interop/certs/test-pki" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -33,12 +57,12 @@ jobs:
 
       - name: Run interop matrix
         env:
-          # Digest-pinned opcua-interop v0.6.0 multi-arch indexes:
-          # https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0
-          # Current digests: https://github.com/otfabric/opcua-interop/actions/runs/38136156545
+          # Digest-pinned opcua-interop v0.7.0 multi-arch indexes:
+          # https://github.com/otfabric/opcua-interop/releases/tag/v0.7.0
+          # Current digests: https://github.com/otfabric/opcua-interop/actions/runs/38158510021
           # Set OPEN62541_IMAGE / MILO_IMAGE in the env to test local builds.
-          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:d8cdfd67c9dd71713515fdf0e34533d7ff9f6d004bd5c7ceb349db40e325a1f2
-          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:95ad873ff5ae86a35815a1c6db2b75963675040f3283307e57ac10273194ab3f
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:7ff9c794846cf8278d40e14c0b06bc4ad03112b11db7f943f6b729f49fe048fc
+          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:8d59ac62bdec03e425f702c013d1695209c1ce7fc89cbdad052ed06043931f87
           OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
         run: make interop
 
@@ -51,7 +75,7 @@ jobs:
 
       - name: Upload failure diagnostics
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: go-opcua-interop-diagnostics
           path: artifacts/

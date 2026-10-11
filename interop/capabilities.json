@@ -46,7 +46,7 @@
     },
     {
       "id": "discovery.find-servers-on-network",
-      "title": "FindServersOnNetwork",
+      "title": "FindServersOnNetwork (records, capability filter, paging)",
       "profile": "discovery",
       "applicableDirections": [
         "go-client-to-open62541-server",
@@ -57,7 +57,7 @@
     },
     {
       "id": "discovery.lds-registration",
-      "title": "LDS registration",
+      "title": "LDS registration: a server registers itself and unregisters on shutdown (C→ = go-opcua server → peer LDS; →S = peer server → go-opcua LDS)",
       "profile": "discovery",
       "applicableDirections": [
         "go-client-to-open62541-server",
@@ -891,6 +891,499 @@
       "id": "nodeset2.import",
       "title": "NodeSet2 import peer model",
       "profile": "information-model",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "monitoreditem.deadband",
+      "title": "DataChangeFilter absolute deadband",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "monitoreditem.percent-deadband",
+      "title": "DataChangeFilter percent deadband (AnalogItem EURange)",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "monitoreditem.trigger",
+      "title": "DataChangeFilter trigger (Status / StatusValue / StatusValueTimestamp)",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "monitoreditem.sampling-interval",
+      "title": "Sampling interval honoured",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256.sign",
+      "title": "ECC_nistP256 / Sign",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256.sign-encrypt",
+      "title": "ECC_nistP256 / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256.subscription",
+      "title": "ECC_nistP256 / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256.username.valid",
+      "title": "ECC_nistP256 / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256.username.invalid",
+      "title": "ECC_nistP256 / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256.renewal",
+      "title": "ECC_nistP256 / SecurityToken renewal under subscription",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp384.sign",
+      "title": "ECC_nistP384 / Sign",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp384.sign-encrypt",
+      "title": "ECC_nistP384 / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp384.subscription",
+      "title": "ECC_nistP384 / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp384.username.valid",
+      "title": "ECC_nistP384 / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp384.username.invalid",
+      "title": "ECC_nistP384 / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp384.renewal",
+      "title": "ECC_nistP384 / SecurityToken renewal under subscription",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "title": "ECC_nistP256_AesGcm / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-aesgcm.write",
+      "title": "ECC_nistP256_AesGcm / Write and read back",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-aesgcm.subscription",
+      "title": "ECC_nistP256_AesGcm / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-aesgcm.username.valid",
+      "title": "ECC_nistP256_AesGcm / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-aesgcm.username.invalid",
+      "title": "ECC_nistP256_AesGcm / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-aesgcm.renewal",
+      "title": "ECC_nistP256_AesGcm / SecurityToken renewal under subscription (5 renewals)",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "title": "ECC_nistP256_ChaChaPoly / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-chachapoly.write",
+      "title": "ECC_nistP256_ChaChaPoly / Write and read back",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-chachapoly.subscription",
+      "title": "ECC_nistP256_ChaChaPoly / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-chachapoly.username.valid",
+      "title": "ECC_nistP256_ChaChaPoly / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-chachapoly.username.invalid",
+      "title": "ECC_nistP256_ChaChaPoly / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-nistp256-chachapoly.renewal",
+      "title": "ECC_nistP256_ChaChaPoly / SecurityToken renewal under subscription (5 renewals)",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve25519.sign-encrypt",
+      "title": "ECC_curve25519 / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve25519.write",
+      "title": "ECC_curve25519 / Write and read back",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve25519.subscription",
+      "title": "ECC_curve25519 / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve25519.username.valid",
+      "title": "ECC_curve25519 / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve25519.username.invalid",
+      "title": "ECC_curve25519 / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve25519.renewal",
+      "title": "ECC_curve25519 / SecurityToken renewal under subscription (5 renewals)",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc.unimplemented-policy",
+      "title": "ECC policies go-opcua does not implement (brainpoolP256r1, brainpoolP384r1, curve448) are refused cleanly",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "transport.reverse-connect",
+      "title": "Reverse connect (ReverseHello): session, Read, GetEndpoints. C→ = Go client listens, peer server dials; →S = Go server dials, peer client listens",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "transport.reverse-connect.subscription",
+      "title": "Reverse connect: subscription over the reverse connection",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "transport.reverse-connect.secure",
+      "title": "Reverse connect secured (Basic256Sha256, ECC_nistP256, ECC_nistP384)",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "encoding.json.variant",
+      "title": "JSON DataEncoding (1.05): built-in scalars, arrays, matrix (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "encoding",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "encoding.json.datavalue",
+      "title": "JSON DataEncoding (1.05): DataValue with timestamps (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "encoding",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "encoding.xml.variant",
+      "title": "XML DataEncoding: built-in scalars, arrays, matrix (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "encoding",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "encoding.xml.datavalue",
+      "title": "XML DataEncoding: DataValue with timestamps (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "encoding",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "discovery.register-server",
+      "title": "RegisterServer / RegisterServer2 services of the go-opcua LDS driven by the peer client (register, unregister, unknown server, configuration results)",
+      "profile": "discovery",
+      "applicableDirections": [
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "discovery.register-server2.mdns",
+      "title": "RegisterServer2 MdnsDiscoveryConfiguration: the registered server appears in FindServersOnNetwork (C→ = go-opcua server → peer LDS; →S = peer client → go-opcua LDS)",
+      "profile": "discovery",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "discovery.multicast",
+      "title": "Multicast extension (mDNS announce / browse). C→ = go-opcua discovers the peer; →S = the peer discovers go-opcua",
+      "profile": "discovery",
       "applicableDirections": [
         "go-client-to-open62541-server",
         "go-client-to-milo-server",

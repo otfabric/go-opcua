@@ -105,6 +105,13 @@ type Client struct {
 	connMu sync.Mutex
 	conn   *uacp.Conn
 
+	// activeEndpoint is the endpoint URL of the current connection if it
+	// differs from endpointURL and ownListener is the reverse connect
+	// listener the client opened for itself. See reverse.go. Guarded by
+	// connMu.
+	activeEndpoint string
+	ownListener    *uacp.ReverseListener
+
 	// sechan is the open secure channel.
 	atomicSechan atomic.Value // *uasc.SecureChannel
 
@@ -126,6 +133,17 @@ type Client struct {
 	// pendingAcks contains the pending subscription acknowledgements
 	// for all active subscriptions.
 	pendingAcks []*ua.SubscriptionAcknowledgement
+
+	// subCreating counts the CreateSubscription requests of Subscribe whose
+	// subscription is not registered yet, and subCreatesLost those requests
+	// that failed without telling whether the server created the
+	// subscription. See createSubscription.
+	subCreating    atomic.Int32
+	subCreatesLost atomic.Int32
+
+	// lastPublishResponse is when the last Publish response arrived (unix
+	// nanoseconds), see markSilentSubscriptions.
+	lastPublishResponse atomic.Int64
 
 	// pausech pauses the subscription publish loop
 	pausech chan struct{}
@@ -285,7 +303,7 @@ func (c *Client) Connect(ctx context.Context) error {
 		return err
 	}
 
-	if err := c.ActivateSession(ctx, s); err != nil {
+	if _, err := c.activateSession(ctx, s); err != nil {
 		c.discardSession(s)
 		_ = c.Close(ctx)
 		stats.RecordError(err)
@@ -346,14 +364,50 @@ func (c *Client) monitor(ctx context.Context) {
 		}
 	}()
 
+	// retryBroken fires when subscriptions that could not be recreated are
+	// to be tried again. A recreation can fail although the connection is
+	// fine (a request that timed out on a busy server, for example); without
+	// another attempt the subscription would stay without its monitored
+	// items, silently, until the connection is lost the next time.
+	var retryBroken <-chan time.Time
+	armRetry := func() {
+		retryBroken = nil
+		if !c.cfg.sechan.AutoReconnect || ctx.Err() != nil {
+			return
+		}
+		if _, broken := c.partitionSubscriptions(); len(broken) > 0 {
+			retryBroken = time.After(c.cfg.sechan.ReconnectInterval)
+		}
+	}
+
+	// silence is the clock of the check for subscriptions the server has
+	// stopped serving, see markSilentSubscriptions.
+	var silence <-chan time.Time
+	if c.cfg.sechan.AutoReconnect {
+		t := time.NewTicker(time.Second)
+		defer t.Stop()
+		silence = t.C
+	}
+
 	var action reconnectAction
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
+		case <-silence:
+			if c.State() == Connected && c.markSilentSubscriptions() > 0 {
+				c.recoverBrokenSubscriptions(ctx)
+				armRetry()
+			}
+
 		case <-c.subRecoverCh:
 			c.recoverBrokenSubscriptions(ctx)
+			armRetry()
+
+		case <-retryBroken:
+			c.recoverBrokenSubscriptions(ctx)
+			armRetry()
 
 		case err, ok := <-c.secureChannelErrors():
 			stats.RecordError(err)
@@ -371,6 +425,7 @@ func (c *Client) monitor(ctx context.Context) {
 				if c.cfg.sechan.AutoReconnect && c.markSubscriptionsBroken() > 0 {
 					c.recoverBrokenSubscriptions(ctx)
 				}
+				armRetry()
 				continue
 			}
 
@@ -410,7 +465,7 @@ func (c *Client) monitor(ctx context.Context) {
 				// The server certificate may have been rotated. Re-fetch
 				// endpoints to obtain the current certificate before
 				// reconnecting.
-				if eps, epErr := GetEndpoints(ctx, c.endpointURL); epErr == nil {
+				if eps, epErr := c.refetchEndpoints(ctx); epErr == nil {
 					for _, ep := range eps {
 						if ep.SecurityPolicyURI == c.cfg.sechan.SecurityPolicyURI &&
 							ep.SecurityMode == c.cfg.sechan.SecurityMode {
@@ -503,7 +558,7 @@ func (c *Client) monitor(ctx context.Context) {
 						}
 
 						c.cfg.logger.Debug("monitor: trying to restore session")
-						if err := c.ActivateSession(ctx, s); err != nil {
+						if _, err := c.activateSession(ctx, s); err != nil {
 							c.cfg.logger.Debug("monitor: restore session failed", "error", err)
 							action = recreateSession
 							continue
@@ -542,7 +597,7 @@ func (c *Client) monitor(ctx context.Context) {
 							action = c.retryReconnect(ctx)
 							continue
 						}
-						if err := c.ActivateSession(ctx, s); err != nil {
+						if _, err := c.activateSession(ctx, s); err != nil {
 							c.cfg.logger.Debug("monitor: reactivate session failed", "error", err)
 							c.discardSession(s)
 							action = c.retryReconnect(ctx)
@@ -708,11 +763,13 @@ func (c *Client) monitor(ctx context.Context) {
 			switch {
 			case activeSubs > 0 || len(c.SubscriptionIDs()) > 0:
 				c.cfg.logger.Debug("monitor: resuming subscriptions", "count", activeSubs)
+				c.touchSubscriptions()
 				c.resumeSubscriptions(ctx)
 				c.cfg.logger.Debug("monitor: resumed subscriptions", "count", activeSubs)
 			default:
 				c.cfg.logger.Debug("monitor: no subscriptions to resume")
 			}
+			armRetry()
 		}
 	}
 }
@@ -727,17 +784,28 @@ func (c *Client) Dial(ctx context.Context) error {
 
 	// connMu must not be held while dialing: the dial can take as long as
 	// its timeout and Close needs the mutex.
-	conn, err := c.cfg.dialer.Dial(ctx, c.endpointURL)
+	var (
+		conn     *uacp.Conn
+		endpoint = c.endpointURL
+		err      error
+	)
+	if c.cfg.reverse != nil {
+		// reverse connect: wait for the server to connect to us
+		conn, endpoint, err = c.acceptReverse(ctx)
+	} else {
+		conn, err = c.cfg.dialer.Dial(ctx, c.endpointURL)
+	}
 	if err != nil {
 		return err
 	}
 
 	c.connMu.Lock()
 	c.conn = conn
+	c.activeEndpoint = endpoint
 	c.connMu.Unlock()
 
 	errCh := make(chan error, 1)
-	sc, err := uasc.NewSecureChannel(c.endpointURL, conn, c.cfg.sechan, errCh)
+	sc, err := uasc.NewSecureChannel(endpoint, conn, c.cfg.sechan, errCh)
 	if err != nil {
 		_ = conn.Close()
 		return err
@@ -764,6 +832,16 @@ func (c *Client) Dial(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+// refetchEndpoints asks the server for its endpoints on a connection of its
+// own, the way the client itself connects.
+func (c *Client) refetchEndpoints(ctx context.Context) ([]*ua.EndpointDescription, error) {
+	opts, err := c.reverseOptions(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return GetEndpoints(ctx, c.endpointURL, opts...)
 }
 
 // secureChannelErrors returns the channel on which the current secure channel
@@ -859,6 +937,9 @@ func (c *Client) Close(ctx context.Context) error {
 		_ = c.conn.Close()
 	}
 	c.connMu.Unlock()
+
+	// stop listening for reverse connections
+	c.closeReverseListener()
 
 	c.closeDone.Store(true)
 
@@ -1004,6 +1085,16 @@ type Session struct {
 	// and User Authorization
 	serverNonce []byte
 
+	// clientNonce is the nonce sent in the CreateSession request. The channel
+	// bound signatures of ActivateSession cover it.
+	clientNonce []byte
+
+	// serverEphemeralKey is the ephemeral public key the server handed out
+	// most recently, for user identity tokens that are protected with an ECC
+	// security policy. A key is used for one ActivateSession only; every
+	// response brings the key for the next one.
+	serverEphemeralKey []byte
+
 	// revisedTimeout is the actual maximum time that a Session shall remain open without activity.
 	revisedTimeout time.Duration
 }
@@ -1068,11 +1159,18 @@ func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*S
 
 	req := &ua.CreateSessionRequest{
 		ClientDescription:       cfg.ClientDescription,
-		EndpointURL:             c.endpointURL,
+		EndpointURL:             c.endpoint(),
 		SessionName:             name,
 		ClientNonce:             nonce,
 		ClientCertificate:       c.cfg.sechan.Certificate,
 		RequestedSessionTimeout: float64(cfg.SessionTimeout / time.Millisecond),
+	}
+
+	// A user identity token that is protected with an ECC security policy
+	// needs an ephemeral key of the server. Ask for it.
+	ecdhPolicy := ecdhPolicyFor(sc, cfg)
+	if ecdhPolicy != "" {
+		req.RequestHeader = &ua.RequestHeader{AdditionalHeader: uasc.NewECDHPolicyHeader(ecdhPolicy)}
 	}
 
 	var s *Session
@@ -1084,7 +1182,11 @@ func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*S
 			return err
 		}
 
-		err := sc.VerifySessionSignature(res.ServerCertificate, nonce, res.ServerSignature.Signature)
+		var serverSignature []byte
+		if res.ServerSignature != nil {
+			serverSignature = res.ServerSignature.Signature
+		}
+		err := sc.VerifyCreateSessionSignature(res.ServerCertificate, nonce, res.ServerNonce, serverSignature)
 		if err != nil {
 			return fmt.Errorf("opcua: verify session signature: %w", err)
 		}
@@ -1114,13 +1216,72 @@ func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*S
 			cfg:               cfg,
 			resp:              res,
 			serverNonce:       res.ServerNonce,
+			clientNonce:       nonce,
 			serverCertificate: res.ServerCertificate,
 			revisedTimeout:    time.Duration(res.RevisedSessionTimeout) * time.Millisecond,
+		}
+
+		if ecdhPolicy != "" {
+			key, err := serverEphemeralKey(sc, ecdhPolicy, res.ResponseHeader, res.ServerCertificate)
+			if err != nil {
+				return fmt.Errorf("opcua: server ephemeral key: %w", err)
+			}
+			s.serverEphemeralKey = key
 		}
 
 		return nil
 	})
 	return s, err
+}
+
+// ecdhPolicyFor returns the ECC security policy that protects the secret of
+// the session's user identity token, or "" if the token has no secret or is
+// protected otherwise. Tokens with a secret are the user name token (its
+// password) and the issued token (its token data).
+func ecdhPolicyFor(sc *uasc.SecureChannel, cfg *uasc.SessionConfig) string {
+	switch cfg.UserIdentityToken.(type) {
+	case *ua.UserNameIdentityToken, *ua.IssuedIdentityToken:
+	default:
+		return ""
+	}
+	if !sc.UserTokenPolicyIsECC(cfg.AuthPolicyURI) {
+		return ""
+	}
+	if cfg.AuthPolicyURI != "" {
+		return cfg.AuthPolicyURI
+	}
+	return sc.SecurityPolicyURI()
+}
+
+// serverEphemeralKey extracts the ephemeral key from the AdditionalHeader of
+// a CreateSession or ActivateSession response and verifies that it was signed
+// with the server's application instance key. It returns nil if the response
+// carries no key.
+func serverEphemeralKey(sc *uasc.SecureChannel, policyURI string, hdr *ua.ResponseHeader, serverCertificate []byte) ([]byte, error) {
+	if hdr == nil {
+		return nil, nil
+	}
+	key, err := uasc.ECDHKeyFromHeader(hdr.AdditionalHeader)
+	if err != nil || key == nil {
+		return nil, err
+	}
+	if uri, ok := uasc.ECDHPolicyFromHeader(hdr.AdditionalHeader); ok && uri != policyURI {
+		return nil, fmt.Errorf("%w: key is for %s, not %s", ua.StatusBadSecurityPolicyRejected, uri, policyURI)
+	}
+	// An unsigned key could have been put there by anyone who can modify the
+	// response; the secret would then be encrypted for them.
+	if err := sc.VerifyEphemeralKeySignature(policyURI, serverCertificate, key.PublicKey, key.Signature); err != nil {
+		return nil, fmt.Errorf("%w: %w", ua.StatusBadSecurityChecksFailed, err)
+	}
+	return key.PublicKey, nil
+}
+
+// takeServerEphemeralKey returns the server's ephemeral key and forgets it: a
+// key protects a single secret.
+func (s *Session) takeServerEphemeralKey() []byte {
+	key := s.serverEphemeralKey
+	s.serverEphemeralKey = nil
+	return key
 }
 
 const defaultAnonymousPolicyID = "Anonymous"
@@ -1147,42 +1308,103 @@ func anonymousPolicyID(endpoints []*ua.EndpointDescription) string {
 //
 // See Part 4, 5.6.3.
 func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
+	replaced, err := c.activateSession(ctx, s)
+	if err != nil {
+		return err
+	}
+	// The subscriptions of the client lived in the session it had before.
+	// That session has just been closed, and its subscriptions with it, or
+	// (after DetachSession) it stays behind with them. Either way they are
+	// not in the session the client publishes in from now on: have them
+	// recreated there. Without this the client would keep subscriptions
+	// that never deliver again.
+	if replaced && c.cfg.sechan.AutoReconnect && c.markSubscriptionsBroken() > 0 {
+		c.requestSubscriptionRecovery()
+	}
+	return nil
+}
+
+// activateSession is ActivateSession without moving the subscriptions. It
+// reports whether s replaced another session, or none, of the client. The
+// reconnect logic uses it: it moves the subscriptions itself.
+func (c *Client) activateSession(ctx context.Context, s *Session) (replaced bool, err error) {
+	err = c.doActivateSession(ctx, s, &replaced)
+	return replaced, err
+}
+
+func (c *Client) doActivateSession(ctx context.Context, s *Session, replaced *bool) error {
 	sc := c.SecureChannel()
 	if sc == nil {
 		return ua.StatusBadServerNotConnected
 	}
 	stats.Client().Add("ActivateSession", 1)
-	sig, sigAlg, err := sc.NewSessionSignature(s.serverCertificate, s.serverNonce)
+	sig, sigAlg, err := sc.NewActivateSessionSignature(s.serverCertificate, s.serverNonce, s.clientNonce)
 	if err != nil {
 		return fmt.Errorf("opcua: create session signature: %w", err)
 	}
+
+	// identity is the token as it is sent. Protecting a token (encrypting the
+	// password, signing with the user certificate) never changes the
+	// configured one: the configuration is shared by every session of the
+	// client, and the client's reconnect may activate a session while the
+	// application activates another one.
+	identity := s.cfg.UserIdentityToken
+	tokenSignature := s.cfg.UserTokenSignature
+	ecdhPolicy := ecdhPolicyFor(sc, s.cfg)
 
 	switch tok := s.cfg.UserIdentityToken.(type) {
 	case *ua.AnonymousIdentityToken:
 		// nothing to do
 
 	case *ua.UserNameIdentityToken:
+		if ecdhPolicy != "" {
+			// ECC: the password travels in an EccEncryptedSecret. Its
+			// format is fixed by the security policy, so there is no
+			// encryption algorithm to name.
+			pass, err := sc.EncryptUserSecret(ecdhPolicy, []byte(s.cfg.AuthPassword), s.takeServerEphemeralKey(), s.serverNonce)
+			if err != nil {
+				c.cfg.logger.Warn("error encrypting user password", "error", err)
+				return err
+			}
+			protected := *tok
+			protected.Password = pass
+			protected.EncryptionAlgorithm = ""
+			identity = &protected
+			break
+		}
 		pass, passAlg, err := sc.EncryptUserPassword(s.cfg.AuthPolicyURI, s.cfg.AuthPassword, s.serverCertificate, s.serverNonce)
 		if err != nil {
 			c.cfg.logger.Warn("error encrypting user password", "error", err)
 			return err
 		}
-		tok.Password = pass
-		tok.EncryptionAlgorithm = passAlg
+		protected := *tok
+		protected.Password = pass
+		protected.EncryptionAlgorithm = passAlg
+		identity = &protected
 
 	case *ua.X509IdentityToken:
-		tokSig, tokSigAlg, err := sc.NewUserTokenSignature(s.cfg.AuthPolicyURI, s.serverCertificate, s.serverNonce)
+		tokSig, tokSigAlg, err := sc.NewSessionUserTokenSignature(s.cfg.AuthPolicyURI, s.serverCertificate, s.serverNonce, s.clientNonce)
 		if err != nil {
 			c.cfg.logger.Warn("error creating session signature", "error", err)
 			return err
 		}
-		s.cfg.UserTokenSignature = &ua.SignatureData{
+		tokenSignature = &ua.SignatureData{
 			Algorithm: tokSigAlg,
 			Signature: tokSig,
 		}
 
 	case *ua.IssuedIdentityToken:
-		tok.EncryptionAlgorithm = ""
+		protected := *tok
+		protected.EncryptionAlgorithm = ""
+		identity = &protected
+		if ecdhPolicy != "" {
+			data, err := sc.EncryptUserSecret(ecdhPolicy, tok.TokenData, s.takeServerEphemeralKey(), s.serverNonce)
+			if err != nil {
+				c.cfg.logger.Warn("error encrypting issued token", "error", err)
+				return err
+			}
+			protected.TokenData = data
+		}
 	}
 
 	req := &ua.ActivateSessionRequest{
@@ -1192,8 +1414,13 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 		},
 		ClientSoftwareCertificates: nil,
 		LocaleIDs:                  s.cfg.LocaleIDs,
-		UserIdentityToken:          ua.NewExtensionObject(s.cfg.UserIdentityToken),
-		UserTokenSignature:         s.cfg.UserTokenSignature,
+		UserIdentityToken:          ua.NewExtensionObject(identity),
+		UserTokenSignature:         tokenSignature,
+	}
+	if ecdhPolicy != "" {
+		// The key of this activation is spent. Ask for the next one: the
+		// session is activated again when the client reconnects.
+		req.RequestHeader = &ua.RequestHeader{AdditionalHeader: uasc.NewECDHPolicyHeader(ecdhPolicy)}
 	}
 	return sc.SendRequest(ctx, req, s.resp.AuthenticationToken, func(v ua.Response) error {
 		var res *ua.ActivateSessionResponse
@@ -1203,6 +1430,16 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 
 		// save the nonce for the next request
 		s.serverNonce = res.ServerNonce
+
+		if ecdhPolicy != "" {
+			key, err := serverEphemeralKey(sc, ecdhPolicy, res.ResponseHeader, s.serverCertificate)
+			if err != nil {
+				return fmt.Errorf("opcua: server ephemeral key: %w", err)
+			}
+			if key != nil {
+				s.serverEphemeralKey = key
+			}
+		}
 
 		// close the previous session
 		//
@@ -1216,8 +1453,16 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 		// (re-activation on a new secure channel after a reconnect) there
 		// is no previous session: closing "it" would close the session
 		// that was just activated and delete all of its subscriptions.
+		//
+		// The previous session is closed while it still is the client's
+		// session (the request is sent in it). Taking it away first would
+		// leave the client without a session for a moment, in which every
+		// request of another goroutine, the publish loop included, fails
+		// with BadSessionIdInvalid and sets off the reconnect logic.
 		if prev := c.Session(); prev != s {
-			_ = c.CloseSession(ctx)
+			*replaced = true
+			stats.Client().Add("CloseSession", 1)
+			_ = c.closeSession(ctx, prev)
 		}
 
 		c.setSession(s)
@@ -1448,7 +1693,7 @@ func (c *Client) FindServers(ctx context.Context) (*ua.FindServersResponse, erro
 	stats.Client().Add("FindServers", 1)
 
 	req := &ua.FindServersRequest{
-		EndpointURL: c.endpointURL,
+		EndpointURL: c.endpoint(),
 	}
 	return send[ua.FindServersResponse](ctx, c, req)
 }
@@ -1466,7 +1711,7 @@ func (c *Client) GetEndpoints(ctx context.Context) (*ua.GetEndpointsResponse, er
 	stats.Client().Add("GetEndpoints", 1)
 
 	req := &ua.GetEndpointsRequest{
-		EndpointURL: c.endpointURL,
+		EndpointURL: c.endpoint(),
 	}
 	return send[ua.GetEndpointsResponse](ctx, c, req)
 }
@@ -1949,6 +2194,9 @@ func (c *Client) ReadValue(ctx context.Context, nodeID *ua.NodeID) (*ua.DataValu
 	if err != nil {
 		return nil, err
 	}
+	if len(resp.Results) != 1 || resp.Results[0] == nil {
+		return nil, ua.StatusBadUnknownResponse
+	}
 	return resp.Results[0], nil
 }
 
@@ -2065,6 +2313,9 @@ func (c *Client) WriteValue(ctx context.Context, nodeID *ua.NodeID, value *ua.Da
 	})
 	if err != nil {
 		return ua.StatusBad, err
+	}
+	if len(resp.Results) != 1 {
+		return ua.StatusBad, ua.StatusBadUnknownResponse
 	}
 	return resp.Results[0], nil
 }
@@ -2272,6 +2523,9 @@ func (c *Client) WriteAttribute(ctx context.Context, nodeID *ua.NodeID, attrID u
 	})
 	if err != nil {
 		return ua.StatusBad, err
+	}
+	if len(resp.Results) != 1 {
+		return ua.StatusBad, ua.StatusBadUnknownResponse
 	}
 	return resp.Results[0], nil
 }

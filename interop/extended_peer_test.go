@@ -1259,7 +1259,14 @@ type publishingModeResult struct {
 
 // assertPeerPublishingMode runs the adapter scenario that disables publishing,
 // writes 1..5 into a queue of 3, re-enables publishing and collects what the Go
-// server kept: the newest three values, with the overflow bit set.
+// server kept: exactly the newest three values, with the overflow bit set.
+//
+// The expectation holds when every write is sampled. Since opcua-interop
+// v0.7.0 the adapters create the monitored item with SamplingInterval 0
+// (report every change), so the five back-to-back writes are five samples
+// whatever the server's sampling rate; before that they asked for 100 ms, and
+// a server that honours the sampling interval (go-opcua since v1.6.0)
+// coalesced the burst.
 func assertPeerPublishingMode(t *testing.T, run func(*testing.T, string, string, ...string) adapterResult) {
 	t.Helper()
 	endpoint := startGoServer(t)
@@ -1268,20 +1275,17 @@ func assertPeerPublishingMode(t *testing.T, run func(*testing.T, string, string,
 		"--scenario", "publishing-mode",
 		"--timeout-ms", "20000",
 	)
+	var items []publishingModeResult
+	if err := json.Unmarshal(result.Results, &items); err != nil || len(items) != 1 {
+		t.Fatalf("publishing-mode: success=%v serviceResult=%s error=%+v; parse results (%v): %s",
+			result.Success, result.ServiceResult, result.Error, err, result.Results)
+	}
 	if !result.Success {
 		t.Fatalf("publishing-mode failed: serviceResult=%s error=%+v raw=%s", result.ServiceResult, result.Error, result.Results)
 	}
-	var items []publishingModeResult
-	if err := json.Unmarshal(result.Results, &items); err != nil || len(items) != 1 {
-		t.Fatalf("parse publishing-mode results (%v): %s", err, result.Results)
-	}
 	got := items[0].Values
-	if len(got) < 3 {
-		t.Fatalf("values=%v, want the newest three writes [3 4 5]", got)
-	}
-	tail := got[len(got)-3:]
-	if tail[0] != 3 || tail[1] != 4 || tail[2] != 5 {
-		t.Fatalf("values=%v, want to end with [3 4 5]", got)
+	if len(got) < 3 || got[len(got)-3] != 3 || got[len(got)-2] != 4 || got[len(got)-1] != 5 {
+		t.Fatalf("values=%v, want the window [3 4 5] (newest 3 of 5 writes)", got)
 	}
 	if !items[0].Overflow {
 		t.Errorf("overflow bit not reported although 5 writes went into a queue of 3")

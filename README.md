@@ -1,6 +1,6 @@
 # go-opcua — OPC UA Client and Server Library for Go (Golang)
 
-[![Go](https://img.shields.io/badge/Go-1.25%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go](https://img.shields.io/badge/Go-1.26%2B-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![Go Reference](https://pkg.go.dev/badge/github.com/otfabric/go-opcua.svg)](https://pkg.go.dev/github.com/otfabric/go-opcua)
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![CI](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml/badge.svg)](https://github.com/otfabric/go-opcua/actions/workflows/ci.yml)
@@ -23,7 +23,7 @@ subscriptions, events, access control, and historical data support.
 go get github.com/otfabric/go-opcua
 ```
 
-Requires **Go 1.25** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/tools` used for code generation).
+Requires **Go 1.26** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/tools` used for code generation).
 
 ## Table of contents
 
@@ -36,6 +36,7 @@ Requires **Go 1.25** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
     - [Subscribe to changes](#subscribe-to-changes)
     - [Browse the address space](#browse-the-address-space)
     - [Run a server](#run-a-server)
+  - [go-opcua vs open62541 and Eclipse Milo](#go-opcua-vs-open62541-and-eclipse-milo)
   - [Client Features](#client-features)
   - [Server Features](#server-features)
   - [Service Support Matrix](#service-support-matrix)
@@ -51,7 +52,9 @@ Requires **Go 1.25** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
 
 - **Client and server** — Full OPC UA client and server implementations
   using OPC UA Binary over UA-TCP.
-- **Pure Go** — No CGO or native C library dependencies.
+- **Pure Go** — No CGO or native C library dependencies. Cryptography is the
+  Go standard library, plus ChaCha20-Poly1305 from `golang.org/x/crypto` for
+  two of the ECC security policies.
 - **Secure communication** — OPC UA message signing, encryption,
   X.509 certificates, and multiple authentication mechanisms.
 - **Data access** — Read, write, browse, and manage OPC UA nodes.
@@ -82,6 +85,7 @@ For full API details see [API.md](API.md).
 | [Server Guide](docs/server-guide.md) | Building servers, namespaces, custom nodes, methods, events, access control |
 | [Security Guide](docs/security.md) | Certificates, encryption policies, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
+| [JSON and XML Data Encodings](docs/encodings.md) | `ua.EncodeJSON` / `ua.EncodeXML`: supported forms, namespace tables, custom structures, open62541 interoperability |
 | [Errors](ERRORS.md) | Go sentinels vs wire `ua.StatusCode` |
 | [Observability](OBSERVABILITY.md) | Silent slog default and metrics callbacks |
 | [Interop](INTEROP.md) | Cross-stack testing vs open62541 / Milo; fixture layout, pins, local iteration |
@@ -198,23 +202,119 @@ func main() {
 }
 ```
 
+## go-opcua vs open62541 and Eclipse Milo
+
+go-opcua is tested against two other implementations in every applicable
+client/server direction (see
+[Testing and production readiness](#testing-and-production-readiness)):
+[open62541](https://github.com/open62541/open62541) and
+[Eclipse Milo](https://github.com/eclipse-milo/milo). Both are mature,
+widely deployed stacks; this table shows where the three differ so you can
+pick the right one for your project.
+
+| Capability | otfabric/go-opcua | open62541 | Eclipse Milo |
+|---|:---:|:---:|:---:|
+| Language | Go | C (C99) | Java 17+ |
+| License | MIT | MPL-2.0 | EPL-2.0 |
+| Client | ✅ | ✅ | ✅ |
+| Server | ✅ | ✅ | ✅ |
+| Client/Server over UA-TCP, OPC UA Binary | ✅ | ✅ | ✅ |
+| JSON / XML data encoding (Part 6 §5.4, §5.3) | ✅ all built-in types and structures; JSON Compact, Verbose and 1.04 reversible ⁵ | ✅ JSON 1.05 or 1.04; XML for built-in types and arrays ⁵ | ✅ JSON Compact and Verbose, XML |
+| PubSub (Part 14) | — | ✅ UDP, Ethernet, MQTT | — |
+| Reverse connect (client and server) | ✅ ¹ | ✅ | — |
+| RSA security policies (Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss; Basic128Rsa15 and Basic256 for legacy peers) | ✅ | ✅ | ✅ |
+| ECC security policies | ✅ ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519 | ✅ with OpenSSL (also Brainpool and Curve448) | — |
+| User identity: anonymous, username, X.509 | ✅ | ✅ | ✅ |
+| User identity: issued token | ✅ carried to the application | ✅ | server side |
+| SecureChannel renewal with token rotation | ✅ | ✅ | ✅ |
+| Discovery: FindServers, GetEndpoints | ✅ | ✅ | ✅ |
+| Discovery: local discovery server, mDNS (FindServersOnNetwork, RegisterServer, RegisterServer2) | ✅ LDS, registration, built-in mDNS (LDS-ME) | ✅ | client RegisterServer only |
+| Attribute, View, Method service sets | ✅ | ✅ | ✅ |
+| RegisterNodes / UnregisterNodes | ✅ | ✅ | ✅ |
+| NodeManagement (AddNodes, DeleteNodes, references) | ✅ | ✅ | — delegated to the application ² |
+| Query (QueryFirst, QueryNext) | ✅ client and server | — client request only | — |
+| Subscriptions: data change, Republish, TransferSubscriptions | ✅ | ✅ | ✅ |
+| DataChangeFilter (deadband, trigger) | ✅ ³ | ✅ | ✅ |
+| Events: emission, SelectClauses, WhereClause | ✅ | ✅ | ✅ |
+| Alarms & Conditions | — | experimental | types only |
+| HistoryRead raw, built-in store | ✅ | ✅ | — delegated to the application ² |
+| HistoryRead modified / at-time / processed, HistoryUpdate | ✅ built-in in-memory historian, pluggable provider | raw and update; rest via backend plugin | — delegated to the application ² |
+| NodeSet2 XML import at run time | ✅ nodes, references, values ⁴ | ✅ optional loader, plus build-time compiler | — |
+| Custom structured DataTypes | ✅ registered Go types | ✅ generated or runtime type descriptions | ✅ decoded dynamically from the server's type system |
+| Automatic reconnect with subscription recovery | ✅ | reconnect; subscriptions re-created by the application | ✅ |
+| Cancellation and deadlines per call | ✅ `context.Context` | — timeouts | ✅ futures and timeouts |
+| Retry policy for requests | ✅ pluggable | — | — |
+| Structured logging | ✅ `log/slog` | ✅ logger plugin | ✅ SLF4J |
+| Metrics hooks (client and server) | ✅ | — | — |
+| Concurrency model | goroutines | single-threaded event loop (multithreading optional) | Netty, asynchronous |
+| Runs without an OS / on microcontrollers | — | ✅ | — |
+| Native dependencies | none (pure Go, no cgo; one Go module besides the standard library for cryptography: `golang.org/x/crypto`) | none; mbedTLS or OpenSSL for encryption | JVM; Netty, Bouncy Castle |
+| OPC Foundation certification | — | ✅ example server, Standard Server 2017 profile (v1.4) | — |
+| Cross-tested against other stacks in CI | ✅ against both, [341 verified ledger rows](interop/COVERAGE.md) | CTT, fuzzing (OSS-Fuzz) | — not documented |
+
+¹ Part 6 §7.1.3: the server opens the connection to a listening client and
+announces itself with ReverseHello (`server.WithReverseConnect`,
+`opcua.ReverseConnect`). Wire-compatible with open62541 in both directions.
+Milo's transport has no ReverseHello message.
+
+² Milo's server SDK routes these service sets to the application's
+`AddressSpace`; there is no built-in implementation. In the reference server
+used for go-opcua's interop tests, AddNodes returns `BadNotSupported`.
+
+³ Client and server. The go-opcua server applies all three triggers, absolute
+deadband on numeric scalars and arrays, and percent deadband on variables with
+an `EURange` property; it also honours the sampling interval and the
+`IndexRange` of a monitored item.
+
+⁴ Nodes, references, role permissions and, for variables, the Value,
+DataType, ValueRank, ArrayDimensions and access levels are imported.
+
+⁵ An encoding of values (`ua.EncodeJSON`, `ua.EncodeXML`), not a transport:
+the wire stays UA-TCP with the binary encoding. go-opcua's codecs are verified
+against open62541 with a recorded corpus and, live, against open62541 and
+Eclipse Milo in both directions (interop ledger, `encoding.*`); open62541
+v1.5.9 does not encode structures, enumerations, DataValue, DiagnosticInfo or
+matrices to XML. See
+[JSON and XML Data Encodings](docs/encodings.md).
+
+✅ = available · — = not available or not documented. For open62541 v1.5.9
+and Eclipse Milo 1.1.8, the versions go-opcua is tested against, from their
+public sources and documentation as of October 2026. If you spot an
+inaccuracy, please [open an issue](https://github.com/otfabric/go-opcua/issues)
+and we will correct it.
+
+**Choose go-opcua if** you write Go and want client and server in one
+library with no cgo and a permissive license, `context` control on every
+call, reconnect with subscription recovery, retries and observability built
+in, and a server that includes history and query out of the box.
+
+**Choose open62541 if** you need a C library for embedded or bare-metal
+targets, PubSub, the Brainpool / Curve448 ECC security policies,
+a local discovery
+server, or a stack with an OPC Foundation certified server profile.
+
+**Choose Eclipse Milo if** you are on the JVM and want asynchronous client
+and server SDKs with strong support for dynamically decoded custom data
+types.
+
 ## Client Features
 
 | Area | Capabilities |
 |------|-------------|
 | **Connection** | Secure channel, session management, auto-reconnect, connection state callbacks, `SkipNamespaceUpdate`, configurable `DialTimeout` |
+| **Reverse connect** | `ReverseConnect` / `ReverseConnectListener`: wait for the server to connect (firewall/NAT traversal), one listener for many servers, ServerUri/EndpointUrl validation, auto-reconnect and discovery over reverse connections |
 | **Reading** | Single/batch reads, all attributes, `Node.Value()`, `Node.Summary()`, `ReadMulti` (chunked batch N×attributes) |
 | **Writing** | Single/batch writes, any attribute, `WriteValue`, `WriteAttribute` |
 | **Browsing** | Forward/inverse/both, continuation points, `BrowseAll`, `Walk` / `WalkLimit` (depth-limited), `WalkLimitDedup`, `BrowseWithDepth` (client-side recursive, returns slice) |
 | **Path resolution** | `NodeFromPath`, `NodeFromPathInNamespace`, `NodeFromQualifiedPath` (ns:name), `Node.TranslateBrowsePathInNamespaceToNodeID` (TranslateBrowsePathsToNodeIDs). Symbolic node names: `ua.StandardNodeID("CurrentTime")`, `id.NodeIDByName(name)` |
-| **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder `Timestamps`; Part 4 queue / lifecycle semantics on go-opcua servers |
+| **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder `Timestamps`, `SamplingInterval` and `DataChangeFilter` (trigger, deadband); Part 4 queue / lifecycle semantics on go-opcua servers |
 | **Monitoring** | `monitor` package: callback/channel subscriptions; batch add with per-item `ItemError`; zero-value `MonitoringMode` defaults to Reporting |
 | **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |
 | **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` |
 | **Query** | `QueryFirst`, `QueryNext` |
-| **Discovery** | `FindServers`, `GetEndpoints`, `ua.SelectEndpoint` |
-| **Security** | None, Basic128Rsa15, Basic256, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss |
+| **Discovery** | `FindServers`, `FindServersOnNetwork` (filters, paging), `GetEndpoints`, `ua.SelectEndpoint`, `opcua.SelectEndpoint` (aware of the client certificate's key type), `DiscoverServers` (well-known LDS port 4840), `RegisterServer` / `RegisterServer2`. Server: Local Discovery Server, registration with an LDS, mDNS (LDS-ME) without dependencies |
+| **Security** | None, Basic128Rsa15, Basic256, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss, ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519 (RSA, ECDSA and Ed25519 application certificates) |
 | **Authentication** | Anonymous, username/password, X.509 certificate, issued token |
 | **Retry** | Pluggable `RetryPolicy`, exponential backoff with jitter |
 | **Metrics** | Pluggable `ClientMetrics` interface for request/response/error/timeout tracking |
@@ -227,7 +327,7 @@ func main() {
 | **Services** | Read, Write, HistoryRead/HistoryUpdate (via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences |
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode; revise clamps, `MoreNotifications`, Publish ACK |
-| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; per-item rejection for unknown nodes |
+| **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; `DataChangeFilter` (Status / StatusValue / StatusValueTimestamp, absolute and percent deadband), sampling interval, per-item `IndexRange`; per-item rejection for unknown nodes and unusable filters |
 | **View** | RegisterNodes, UnregisterNodes |
 | **Query** | QueryFirst, QueryNext with full ContentFilter evaluation (all 18 operators, 3-valued logic), type/subtype matching, and continuation points |
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel |
@@ -235,7 +335,8 @@ func main() {
 | **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + custom `Fields` + EventFilter SelectClauses / WhereClause) |
 | **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces |
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
-| **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML` |
+| **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML`, including variable values, data types and access levels |
+| **Reverse connect** | `WithReverseConnect` / `AddReverseConnect`: connect to listening clients, keep one idle connection available, retry with back-off, add and remove targets at run time |
 | **Security** | Same encryption policies as client (server-side) |
 | **Authentication** | Anonymous, username/password, X.509, issued token identity tokens |
 
@@ -244,8 +345,10 @@ func main() {
 | Service Set | Service | Client | Server |
 |---|---|:---:|:---:|
 | **Discovery** | FindServers | Yes | Yes |
-| | FindServersOnNetwork | Yes | — |
+| | FindServersOnNetwork | Yes | Yes (`WithMulticastDiscovery`) |
 | | GetEndpoints | Yes | Yes |
+| | RegisterServer | Yes | Yes (`WithLocalDiscoveryServer`) |
+| | RegisterServer2 | Yes | Yes (`WithLocalDiscoveryServer`) |
 | **Secure Channel** | OpenSecureChannel | Yes | Yes |
 | | CloseSecureChannel | Yes | Yes |
 | **Session** | CreateSession | Yes | Yes |
@@ -355,7 +458,8 @@ go-opcua is continuously interoperability-tested in all applicable client/server
 - **Coverage**: `make coverage` writes `coverage.out` for core library packages (90% gate); CI passes the same `COVER_PKGS` list as `coverpkg` to the shared workflow so Codecov matches. `make cover` opens the report.
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
 - **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541, Milo). See [INTEROP.md](INTEROP.md).
-- **Fuzz tests**: `ua/fuzz_test.go`, `uasc/fuzz_test.go`, `uacp/fuzz_test.go`.
+- **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
+- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`.
 - **Linting**: `make lint` (staticcheck), `make lint-ci` (golangci-lint); full local gate is `make check` (fmt + lint + verify + coverage).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
@@ -364,8 +468,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 
 | Layer | Protocol | Supported |
 |-------|----------|:---------:|
-| Encoding | OPC-UA Binary | Yes |
+| Encoding (wire) | OPC-UA Binary | Yes |
+| Encoding (values only, not a transport) | OPC-UA JSON — 1.05.04 Compact and Verbose, 1.04 reversible; non-reversible encode only | Yes |
+| | OPC-UA XML — built-in types, structures, NodeSet2 values | Yes |
 | Transport | UA-TCP (`opc.tcp://`) | Yes |
+| | UA-TCP reverse connect (ReverseHello) | Yes (client and server) |
 | | HTTPS / WebSockets | No |
 | Message security | None / Sign / SignAndEncrypt | Yes |
 | Security policy | None | Yes |
@@ -374,6 +481,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 | | Basic256Sha256 | Yes |
 | | Aes128Sha256RsaOaep | Yes |
 | | Aes256Sha256RsaPss | Yes |
+| | ECC_nistP256 | Yes |
+| | ECC_nistP384 | Yes |
+| | ECC_nistP256_AesGcm (AES-128-GCM) | Yes |
+| | ECC_nistP256_ChaChaPoly (ChaCha20-Poly1305) | Yes |
+| | ECC_curve25519 (Ed25519, X25519, ChaCha20-Poly1305) | Yes |
+| | ECC_brainpoolP256r1 / ECC_brainpoolP384r1 | No |
+| | ECC_curve448 | No |
 | | PubSub-Aes128-CTR / PubSub-Aes256-CTR | No |
 
 Client/Server only — PubSub transport and policies are not implemented (stub policy files exist under `uapolicy/` but are not registered for secure-channel use).

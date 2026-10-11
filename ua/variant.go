@@ -17,6 +17,13 @@ var (
 	MaxVariantArrayLength = 0xffff
 )
 
+// maxVariantArrayDimensions is the largest number of dimensions the decoders
+// accept for a Variant (binary, JSON and XML). Every dimension is a level of
+// nested Go slices, with a slice type of its own, so the number must not be
+// left to the sender: a few kilobytes of dimensions of length 1 would
+// otherwise cost a recursion and a new type per dimension.
+const maxVariantArrayDimensions = 32
+
 const (
 	// VariantArrayDimensions flags whether the array has more than one dimension.
 	VariantArrayDimensions = 0x40
@@ -187,7 +194,7 @@ func (m *Variant) Decode(b []byte) (int, error) {
 	// check for dimensions of multi-dimensional array
 	if m.Has(VariantArrayDimensions) {
 		m.arrayDimensionsLength = buf.ReadInt32()
-		if m.arrayDimensionsLength < 0 {
+		if m.arrayDimensionsLength < 0 || m.arrayDimensionsLength > maxVariantArrayDimensions {
 			return buf.Pos(), StatusBadEncodingLimitsExceeded
 		}
 		m.arrayDimensions = make([]int32, m.arrayDimensionsLength)
@@ -209,11 +216,17 @@ func (m *Variant) Decode(b []byte) (int, error) {
 	// validate that the total number of elements
 	// matches the product of the array dimensions
 	if m.arrayDimensionsLength > 0 {
-		count := int32(1)
+		// The product is formed in 64 bits and never beyond the array
+		// length: in 32 bits it wraps around, and dimensions such as
+		// 65536 x 65536 x n would pass for an empty array.
+		count := int64(1)
 		for i := range m.arrayDimensions {
-			count *= m.arrayDimensions[i]
+			count *= int64(m.arrayDimensions[i])
+			if count > int64(MaxVariantArrayLength) {
+				return buf.Pos(), errUnbalancedSlice
+			}
 		}
-		if count != m.arrayLength {
+		if count != int64(m.arrayLength) {
 			return buf.Pos(), errUnbalancedSlice
 		}
 	}
@@ -351,6 +364,12 @@ func (m *Variant) decodeValue(buf *Buffer) interface{} {
 // Encode implements the codec interface.
 func (m *Variant) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
+	if m == nil {
+		// A nil pointer is the null Variant. Structures routinely leave
+		// optional Variant fields unset, which must not crash the encoder.
+		buf.WriteUint8(0)
+		return buf.Bytes(), buf.Error()
+	}
 	_ = buf.WriteByte(m.mask)
 
 	// a null value specifies that no other fields are encoded
@@ -490,7 +509,8 @@ func sliceDim(val reflect.Value) (typ reflect.Type, dim []int32, count int32, er
 	}
 
 	// check that inner slices all have the same length
-	if val.Index(0).Kind() == reflect.Slice {
+	// (a []byte element is one ByteString, not a dimension)
+	if val.Index(0).Kind() == reflect.Slice && val.Type().Elem() != reflect.TypeOf([]byte{}) {
 		for i := 0; i < val.Len(); i++ {
 			if val.Index(i).Len() != val.Index(0).Len() {
 				return nil, nil, 0, errUnbalancedSlice

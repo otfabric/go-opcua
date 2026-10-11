@@ -10,7 +10,7 @@
 // The package contains only tests. They run as part of "go test ./..." and
 // are meant to be run with the race detector:
 //
-//	go test -race ./chaos/...
+//	go test -race ./chaos/...       # this package and the feature suites
 //	make chaos                      # longer fault-injection phase
 //
 // # What is tested
@@ -34,8 +34,38 @@
 // shutdown under load, address-space mutation during browse/read, session
 // churn, and interleaved multi-chunk messages.
 //
+// Reverse connect (reverse_connect_test.go) puts the proxy on the path of the
+// connections the server opens to a listening client: the connection in use
+// and the idle one behind it are reset, half-closed and blackholed under a
+// running subscription, the client is made unreachable for the server, and
+// the server is restarted. Servers, targets, clients and listeners are also
+// closed in every order to check that nothing is left running.
+//
 // Regression tests (regression_test.go) pin down every product bug the
 // suite found with a small deterministic test.
+//
+// # Feature suites
+//
+// The sub-packages apply the same method to one feature each. They are
+// packages of their own so that every test binary stays well inside the
+// per-package time limit of CI; internal/testutil/chaoskit holds what they
+// share (knobs, watchdog, leak check, ConnState validation).
+//
+//   - chaos/secure: the monkey and the parallelism tests over secured
+//     channels (Basic256Sha256, ECC_nistP256, ECC_nistP384 and the AEAD
+//     policies ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519)
+//     with token renewals and attacks on the protected messages: bit flips,
+//     replayed, lost, reordered and misdirected chunks. Every value is
+//     verified, also while messages are altered.
+//   - chaos/datachange: DataChangeFilter, sampling intervals and index
+//     ranges under concurrent writers and concurrent monitored-item
+//     services, and their restoration when a subscription is recreated.
+//   - chaos/reverse: secured reverse connections, several servers into one
+//     listener, listeners and targets closed mid-handshake.
+//   - chaos/discovery: registration loops, the Local Discovery Server and
+//     mDNS (on an in-memory link) under faults.
+//   - chaos/codec: the JSON and XML encodings and the shared NodeSet values
+//     under concurrency.
 //
 // # Invariants
 //

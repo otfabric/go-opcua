@@ -168,8 +168,22 @@ func TestRepublish(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	// Wait briefly so the server has a chance to publish the initial notification.
-	time.Sleep(300 * time.Millisecond)
+	// Wait for the initial notification: the value does not change afterwards,
+	// so it is the only data change this subscription delivers. (Sleeping a
+	// fixed time instead let it arrive after the drain on a loaded machine and
+	// be mistaken for a dispatch by Republish.)
+	gotInitial := false
+	for deadline := time.After(30 * time.Second); !gotInitial; {
+		select {
+		case msg := <-notifyCh:
+			require.NoError(t, msg.Error)
+			if dcn, ok := msg.Value.(*ua.DataChangeNotification); ok && len(dcn.MonitoredItems) > 0 {
+				gotInitial = true
+			}
+		case <-deadline:
+			t.Fatal("no initial notification")
+		}
+	}
 
 	// Drain the channel so we can isolate whether Republish dispatches to it.
 	for len(notifyCh) > 0 {

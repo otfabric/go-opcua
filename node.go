@@ -512,6 +512,10 @@ func (n *Node) BrowseAll(ctx context.Context, refType uint32, dir ua.BrowseDirec
 			return
 		}
 
+		if len(resp.Results) != 1 || resp.Results[0] == nil {
+			yield(nil, ua.StatusBadUnknownResponse)
+			return
+		}
 		result := resp.Results[0]
 		for _, ref := range result.References {
 			if !yield(ref, nil) {
@@ -527,6 +531,10 @@ func (n *Node) BrowseAll(ctx context.Context, refType uint32, dir ua.BrowseDirec
 			nextResp, err := n.c.BrowseNext(ctx, nextReq)
 			if err != nil {
 				yield(nil, err)
+				return
+			}
+			if len(nextResp.Results) != 1 || nextResp.Results[0] == nil {
+				yield(nil, ua.StatusBadUnknownResponse)
 				return
 			}
 			result = nextResp.Results[0]

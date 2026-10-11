@@ -46,6 +46,7 @@ func (d Direction) String() string {
 //   - TruncateNext: deliver only the first n bytes of a stream, then reset
 //   - SetCorruption / CorruptNext: flip random bits
 //   - SetMangle: rewrite the forwarded bytes with a custom function
+//   - SetFrameMangle: drop, repeat, reorder or rewrite whole UACP messages
 //   - SetRefuse: reset every new connection ("server down")
 //   - SetBackend: retarget new connections (server restarted elsewhere)
 //
@@ -81,6 +82,7 @@ type chaosDirState struct {
 	corruptNext atomic.Int64 // number of pending one-shot corruptions
 	truncate    atomic.Int64 // bytes to still deliver before reset; <0 = disarmed
 	mangle      atomic.Pointer[func([]byte) []byte]
+	frameMangle atomic.Pointer[func([]byte) [][]byte]
 }
 
 // NewChaosProxy starts a proxy on an ephemeral localhost port which forwards
@@ -209,6 +211,28 @@ func (p *ChaosProxy) SetMangle(d Direction, fn func([]byte) []byte) {
 	p.dirs[d].mangle.Store(&fn)
 }
 
+// SetFrameMangle installs a function that sees every complete UACP message
+// (HEL, ACK, ERR, RHE, OPN, MSG, CLO: an 8 byte header with the message size,
+// then the body) forwarded in direction d and returns the messages to forward
+// in its place (nil removes the function). Returning nothing drops the
+// message while the connection stays up, returning it twice replays it, and a
+// function that keeps a message and returns it with a later one reorders the
+// stream or moves a message to another connection. fn is called from the
+// proxy's goroutines for all connections, owns its argument and may modify
+// it in place.
+//
+// While a function is installed the proxy reassembles the stream of each
+// connection into messages, so a message is only forwarded once it is
+// complete. Bytes that do not look like a UACP message are forwarded as they
+// are.
+func (p *ChaosProxy) SetFrameMangle(d Direction, fn func(msg []byte) [][]byte) {
+	if fn == nil {
+		p.dirs[d].frameMangle.Store(nil)
+		return
+	}
+	p.dirs[d].frameMangle.Store(&fn)
+}
+
 // SetRefuse makes the proxy reset every new connection immediately while on
 // is true, as if the server were down. Existing connections are not affected;
 // combine with DropAll to simulate a crash.
@@ -230,6 +254,7 @@ func (p *ChaosProxy) Heal() {
 		p.dirs[i].corruptNext.Store(0)
 		p.dirs[i].truncate.Store(-1)
 		p.dirs[i].mangle.Store(nil)
+		p.dirs[i].frameMangle.Store(nil)
 	}
 }
 
@@ -378,6 +403,7 @@ func (l *chaosLink) pump(d Direction, src, dst net.Conn) {
 	p := l.p
 	st := &p.dirs[d]
 	buf := make([]byte, 32*1024)
+	var pending []byte // bytes of an incomplete message, see SetFrameMangle
 
 	for {
 		for st.stall.Load() {
@@ -407,7 +433,16 @@ func (l *chaosLink) pump(d Direction, src, dst net.Conn) {
 				return
 			}
 
-			if fn := st.mangle.Load(); fn != nil {
+			if fm := st.frameMangle.Load(); fm != nil || len(pending) > 0 {
+				pending = append(pending, b...)
+				if fm == nil {
+					b, pending = pending, nil
+				} else {
+					b, pending = reframe(pending, *fm)
+				}
+			}
+
+			if fn := st.mangle.Load(); fn != nil && len(b) > 0 {
 				b = (*fn)(b)
 			}
 
@@ -428,6 +463,10 @@ func (l *chaosLink) pump(d Direction, src, dst net.Conn) {
 			}
 		}
 		if err != nil {
+			// what is left of a message the sender did not complete
+			if len(pending) > 0 && !l.forward(st, dst, pending) {
+				return
+			}
 			// Propagate an orderly EOF as a half close so the peer can
 			// still flush its own direction; anything else ends the link.
 			if tc, ok := dst.(*net.TCPConn); ok {
@@ -471,6 +510,33 @@ func (l *chaosLink) forward(st *chaosDirState, dst net.Conn, b []byte) bool {
 		}
 	}
 	return true
+}
+
+// maxFrameSize is the largest message reframe waits for. A size field beyond
+// it means that the stream is not (or no longer) UACP framed.
+const maxFrameSize = 1 << 24
+
+// reframe cuts the complete UACP messages off the front of stream, passes
+// each one to fn and returns the bytes to forward and the incomplete rest.
+func reframe(stream []byte, fn func([]byte) [][]byte) (out, rest []byte) {
+	upper := func(c byte) bool { return c >= 'A' && c <= 'Z' }
+	for len(stream) >= 8 {
+		size := int(uint32(stream[4]) | uint32(stream[5])<<8 | uint32(stream[6])<<16 | uint32(stream[7])<<24)
+		if !upper(stream[0]) || !upper(stream[1]) || !upper(stream[2]) || size < 8 || size > maxFrameSize {
+			return append(out, stream...), nil
+		}
+		if len(stream) < size {
+			break
+		}
+		for _, m := range fn(append([]byte(nil), stream[:size]...)) {
+			out = append(out, m...)
+		}
+		stream = stream[size:]
+	}
+	if len(stream) == 0 {
+		return out, nil
+	}
+	return out, append([]byte(nil), stream...)
 }
 
 func (l *chaosLink) flipBit(b []byte) {

@@ -106,6 +106,8 @@ type itemSpec struct {
 	modeSet bool
 	filter  *ua.ExtensionObject
 	index   string
+	// sampling is the requested sampling interval in ms (0 = fastest).
+	sampling float64
 }
 
 func (s itemSpec) request() *ua.MonitoredItemCreateRequest {
@@ -126,10 +128,11 @@ func (s itemSpec) request() *ua.MonitoredItemCreateRequest {
 		},
 		MonitoringMode: mode,
 		RequestedParameters: &ua.MonitoringParameters{
-			ClientHandle:  s.handle,
-			QueueSize:     s.queue,
-			DiscardOldest: s.discard,
-			Filter:        s.filter,
+			ClientHandle:     s.handle,
+			SamplingInterval: s.sampling,
+			QueueSize:        s.queue,
+			DiscardOldest:    s.discard,
+			Filter:           s.filter,
 		},
 	}
 }

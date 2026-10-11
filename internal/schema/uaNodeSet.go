@@ -240,16 +240,23 @@ type UAObject struct {
 }
 
 // Value ...
+//
+// EDIT: the element was generated empty. Its content is a value in the OPC UA
+// XML DataEncoding (Part 6 §5.3); it is kept verbatim for ua.DecodeXML.
 type Value struct {
+	XML string `xml:",innerxml"`
 }
 
 // UAVariable ...
+//
+// EDIT: ValueRank, AccessLevel and UserAccessLevel are pointers so that an
+// absent attribute can be told from an explicit 0.
 type UAVariable struct {
 	DataTypeAttr                string             `xml:"DataType,attr,omitempty"`
-	ValueRankAttr               int                `xml:"ValueRank,attr,omitempty"`
+	ValueRankAttr               *int               `xml:"ValueRank,attr,omitempty"`
 	ArrayDimensionsAttr         string             `xml:"ArrayDimensions,attr,omitempty"`
-	AccessLevelAttr             uint32             `xml:"AccessLevel,attr,omitempty"`
-	UserAccessLevelAttr         uint32             `xml:"UserAccessLevel,attr,omitempty"`
+	AccessLevelAttr             *uint32            `xml:"AccessLevel,attr,omitempty"`
+	UserAccessLevelAttr         *uint32            `xml:"UserAccessLevel,attr,omitempty"`
 	MinimumSamplingIntervalAttr float64            `xml:"MinimumSamplingInterval,attr,omitempty"`
 	HistorizingAttr             bool               `xml:"Historizing,attr,omitempty"`
 	Value                       *Value             `xml:"Value"`

@@ -1354,7 +1354,8 @@ func TestAuthOptionBranches(t *testing.T) {
 }
 
 func TestLoadPrivateKey_PKCS8NonRSA(t *testing.T) {
-	// Generate an ECDSA key (non-RSA PKCS#8) to hit the "!ok" branch
+	// An ECDSA key in PKCS#8 is the key of an ECC application instance
+	// certificate.
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	der, err := x509.MarshalPKCS8PrivateKey(key)
@@ -1363,9 +1364,9 @@ func TestLoadPrivateKey_PKCS8NonRSA(t *testing.T) {
 	f := filepath.Join(t.TempDir(), "ec.pem")
 	require.NoError(t, os.WriteFile(f, pemBlock, 0o600))
 
-	_, err = loadPrivateKey(f)
-	require.Error(t, err)
-	require.ErrorIs(t, err, goerrors.ErrInvalidPrivateKey)
+	got, err := loadPrivateKey(f)
+	require.NoError(t, err)
+	require.True(t, key.Equal(got))
 }
 
 func TestLoadPrivateKey_UnknownPEMType(t *testing.T) {

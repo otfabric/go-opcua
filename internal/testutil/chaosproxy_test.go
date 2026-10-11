@@ -452,6 +452,83 @@ func TestChaosProxyMangle(t *testing.T) {
 	}
 }
 
+// uacpMsg builds a UACP message of the given type with the given body.
+func uacpMsg(typ string, body string) []byte {
+	b := []byte(typ + "F\x00\x00\x00\x00" + body)
+	b[4] = byte(len(b))
+	return b
+}
+
+func TestChaosProxyFrameMangle(t *testing.T) {
+	s := newSink(t, false)
+	p := NewChaosProxy(t, s.ln.Addr().String(), 1)
+	var held []byte
+	p.SetFrameMangle(ClientToServer, func(m []byte) [][]byte {
+		switch string(m[8:]) {
+		case "drop":
+			return nil
+		case "twice":
+			return [][]byte{m, m}
+		case "hold":
+			held = m
+			return nil
+		case "release":
+			return [][]byte{m, held}
+		case "edit":
+			m[len(m)-1] = 'T'
+		}
+		return [][]byte{m}
+	})
+	c := dialProxy(t, p)
+
+	var sent, want []byte
+	for _, body := range []string{"a", "drop", "twice", "hold", "b", "release", "edit"} {
+		sent = append(sent, uacpMsg("MSG", body)...)
+	}
+	for _, body := range []string{"a", "twice", "twice", "b", "release", "hold", "ediT"} {
+		want = append(want, uacpMsg("MSG", body)...)
+	}
+	// Written in pieces that do not respect the message boundaries, with the
+	// start of one more message whose rest follows later.
+	tail := uacpMsg("CLO", "late")
+	sent = append(sent, tail[:5]...)
+	for len(sent) > 0 {
+		n := min(7, len(sent))
+		if _, err := c.Write(sent[:n]); err != nil {
+			t.Fatal(err)
+		}
+		sent = sent[n:]
+	}
+	waitFor(t, "mangled messages", func() bool { return len(s.received()) == len(want) })
+	if got := s.received(); !bytes.Equal(got, want) {
+		t.Fatalf("backend received %q, want %q", got, want)
+	}
+
+	// Removing the function releases the incomplete message with the next
+	// bytes; what is not UACP framed passes as it is.
+	p.SetFrameMangle(ClientToServer, nil)
+	rest := append(tail[5:], "not a message"...)
+	if _, err := c.Write(rest); err != nil {
+		t.Fatal(err)
+	}
+	want = append(append(want, tail...), "not a message"...)
+	waitFor(t, "released message", func() bool { return len(s.received()) == len(want) })
+	if got := s.received(); !bytes.Equal(got, want) {
+		t.Fatalf("backend received %q, want %q", got, want)
+	}
+
+	// Unframed bytes are forwarded while a function is installed, too.
+	p.SetFrameMangle(ClientToServer, func(m []byte) [][]byte { return nil })
+	if _, err := c.Write([]byte("lowercase is no message type")); err != nil {
+		t.Fatal(err)
+	}
+	want = append(want, "lowercase is no message type"...)
+	waitFor(t, "unframed bytes", func() bool { return len(s.received()) == len(want) })
+	if got := s.received(); !bytes.Equal(got, want) {
+		t.Fatalf("backend received %q, want %q", got, want)
+	}
+}
+
 func TestChaosProxyRefuseAndRetarget(t *testing.T) {
 	a := newSink(t, true)
 	b := newSink(t, false)

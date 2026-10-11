@@ -324,7 +324,6 @@ func (l *Listener) handshake(c *net.TCPConn) {
 		return conn.srvhandshake(l.endpoint)
 	}()
 	if err == nil {
-		// srvhandshake may have replaced the TCP connection (ReverseHello).
 		_ = conn.SetDeadline(time.Time{})
 	}
 
@@ -505,6 +504,18 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 			ack.MaxMessageSize = DefaultMaxMessageSize
 			c.logDebug("server has no message size limit, using default", "conn_id", c.id, "max_message_size", ack.MaxMessageSize)
 		}
+		// The server revises the buffer sizes of the Hello downwards (Part 6
+		// §7.1.2.4); it cannot raise them. The receive buffers of this
+		// connection have the size that was offered: an Acknowledge with a
+		// larger one (a faulty or hostile server, or a message damaged on
+		// the way) would make Receive accept a message that does not fit
+		// its buffer, and panic.
+		if hel.ReceiveBufSize > 0 && ack.ReceiveBufSize > hel.ReceiveBufSize {
+			ack.ReceiveBufSize = hel.ReceiveBufSize
+		}
+		if hel.SendBufSize > 0 && ack.SendBufSize > hel.SendBufSize {
+			ack.SendBufSize = hel.SendBufSize
+		}
 		c.ack = ack
 		c.logDebug("received ACK", "conn_id", c.id, "ack", fmt.Sprintf("%#v", ack))
 		return nil
@@ -545,7 +556,6 @@ func (c *Conn) srvhandshake(endpoint string) error {
 		return err
 	}
 
-	// HEL or RHE?
 	msgtyp := string(b[:4])
 	msg := b[hdrlen:]
 	switch msgtyp {
@@ -587,25 +597,11 @@ func (c *Conn) srvhandshake(endpoint string) error {
 		return nil
 
 	case "RHEF":
-		rhe := new(ReverseHello)
-		if _, err := rhe.Decode(msg); err != nil {
-			c.SendError(ua.StatusBadTCPInternalError)
-			return err
-		}
-		if rhe.EndpointURL != endpoint {
-			c.SendError(ua.StatusBadTCPEndpointURLInvalid)
-			return fmt.Errorf("%w: %s", errors.ErrInvalidEndpoint, rhe.EndpointURL)
-		}
-		c.logDebug("reverse hello redirect", "conn_id", c.id, "server_uri", rhe.ServerURI)
-		_ = c.Close()
-		var dialer net.Dialer
-		c2, err := dialer.DialContext(context.Background(), "tcp", rhe.ServerURI)
-		if err != nil {
-			return err
-		}
-		c.TCPConn = c2.(*net.TCPConn)
-		c.logDebug("received RHE", "conn_id", c.id, "rhe", fmt.Sprintf("%#v", rhe))
-		return nil
+		// A ReverseHello is only ever sent by a server, on a connection the
+		// server opened itself (Part 6 §7.1.3). A server that receives one on
+		// an accepted connection is talking to a confused or hostile peer.
+		c.SendError(ua.StatusBadTCPMessageTypeInvalid)
+		return fmt.Errorf("%w: %q: ReverseHello received by a server", errors.ErrInvalidMessageType, msgtyp)
 
 	case "ERRF":
 		errf := new(Error)
@@ -680,7 +676,7 @@ func (c *Conn) Receive() ([]byte, error) {
 		return nil, fmt.Errorf("uacp: header decode failed: %w", err)
 	}
 
-	if h.MessageSize > c.ack.ReceiveBufSize {
+	if h.MessageSize > c.ack.ReceiveBufSize || int64(h.MessageSize) > int64(len(b)) {
 		return nil, fmt.Errorf("%w: %d > %d bytes MsgType=%s ChunkType=%c", errors.ErrMessageTooLarge, h.MessageSize, c.ack.ReceiveBufSize, h.MessageType, h.ChunkType)
 	}
 	if h.MessageSize < hdrlen {

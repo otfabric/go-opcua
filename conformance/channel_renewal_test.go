@@ -117,14 +117,32 @@ func (s *tokenSniffer) snapshot() (opens int, tokenIDs []uint32) {
 	return s.opens, append([]uint32(nil), s.tokenIDs...)
 }
 
-// TestChannelRenewal_ServerRotatesSecurityToken pins the server side of
+// TestTokenRenewal runs the tests that renew the SecurityToken of a channel
+// on a 2 s lifetime. Each of them has to wait for several renewals, so they
+// run next to each other; and they run before the parallel tests of the
+// package start (the parent is not parallel), because a renewal that is
+// starved of CPU for longer than the token's grace period loses the channel.
+func TestTokenRenewal(t *testing.T) {
+	for name, test := range map[string]func(*testing.T){
+		"ServerRotatesSecurityToken": testChannelRenewalServerRotatesSecurityToken,
+		"ECC_UnderTraffic":           testECCRenewalUnderTraffic,
+		"AEAD_UnderTraffic":          testAEADRenewalUnderTraffic,
+	} {
+		t.Run(name, func(t *testing.T) {
+			parallel(t)
+			test(t)
+		})
+	}
+}
+
+// testChannelRenewalServerRotatesSecurityToken pins the server side of
 // SecurityToken renewal (Part 4 §5.5.2): each renewal must hand out a new
 // TokenId, the server must secure its messages with that token afterwards, and
 // traffic — including a running subscription — must not be disturbed.
 //
 // A server that renews in place (same TokenId, new keys) works against this
 // client but breaks every stack that selects keys by TokenId.
-func TestChannelRenewal_ServerRotatesSecurityToken(t *testing.T) {
+func testChannelRenewalServerRotatesSecurityToken(t *testing.T) {
 	// The server validates the endpoint URL of the Hello message, so it
 	// advertises the sniffer's port while listening on its own.
 	sniffer := startTokenSniffer(t)

@@ -65,6 +65,15 @@ func (r *TypeRegistry) Lookup(v interface{}) *NodeID {
 	return nil
 }
 
+// registered reports whether typ (the pointer type that was passed to
+// Register) is registered under any id.
+func (r *TypeRegistry) registered(typ reflect.Type) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	_, ok := r.ids[typ]
+	return ok
+}
+
 // Register adds a new type to the registry.
 //
 // If the id is already registered as a different type the function returns an error.

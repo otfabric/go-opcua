@@ -88,6 +88,12 @@ type Fixture struct {
 	Text         *ua.NodeID // String used for IndexRange tests
 	HistoryVar   *ua.NodeID // Double; history is enabled by tests that attach a historian
 	NoHistoryVar *ua.NodeID // Double; never enabled for history
+
+	// AnalogItemType variables with an EURange property, for PercentDeadband
+	// (Part 8 §7.2): Analog is a Double with EURange [0, 200], AnalogArray a
+	// Double array with EURange [0, 100].
+	Analog      *ua.NodeID
+	AnalogArray *ua.NodeID
 }
 
 // nodeID builds a string node id in the fixture namespace.
@@ -208,8 +214,38 @@ func AddFixture(t *testing.T, srv *server.Server) *Fixture {
 	f.Text = add("Text", "abcdefghij")
 	f.HistoryVar = add("HistoryVar", float64(0))
 	f.NoHistoryVar = add("NoHistoryVar", float64(0))
+	f.Analog = f.addAnalog(ns, obj, "Analog", float64(100), 0, 200)
+	f.AnalogArray = f.addAnalog(ns, obj, "AnalogArray", []float64{10, 20, 30}, 0, 100)
 
 	return f
+}
+
+// addAnalog adds a variable of AnalogItemType with an EURange property
+// (Part 8 §5.3.2.3) holding the Range [low, high].
+func (f *Fixture) addAnalog(ns *server.NodeNameSpace, obj *server.Node, name string, value any, low, high float64) *ua.NodeID {
+	n := ns.AddNewVariableStringNode(name, value)
+	obj.AddRef(n, id.HasComponent, true)
+	if typ := f.Srv.Node(ua.NewNumericNodeID(0, id.AnalogItemType)); typ != nil {
+		n.AddRef(typ, id.HasTypeDefinition, true)
+	}
+	rng := &ua.DataValue{
+		EncodingMask: ua.DataValueValue,
+		Value:        ua.MustVariant(ua.NewExtensionObject(&ua.Range{Low: low, High: high})),
+	}
+	prop := server.NewNode(
+		f.nodeID(name+".EURange"),
+		map[ua.AttributeID]*ua.DataValue{
+			ua.AttributeIDNodeClass:   server.DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:  server.DataValueFromValue(attrs.BrowseName("EURange")),
+			ua.AttributeIDDisplayName: server.DataValueFromValue(attrs.DisplayName("EURange", "EURange")),
+			ua.AttributeIDDataType:    server.DataValueFromValue(ua.NewNumericExpandedNodeID(0, id.Range)),
+		},
+		nil,
+		func() *ua.DataValue { return rng },
+	)
+	ns.AddNode(prop)
+	n.AddRef(prop, id.HasProperty, true)
+	return n.ID()
 }
 
 // addEventTypes registers a custom event type and a subtype of it below

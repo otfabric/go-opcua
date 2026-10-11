@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,4 +52,41 @@ func TestBeginServerRenewal_NotOpenYet(t *testing.T) {
 	renewing, err := s.beginServerRenewal(&MessageChunk{})
 	require.NoError(t, err)
 	require.Nil(t, renewing, "the initial Issue request is not a renewal")
+}
+
+func TestAcceptSecurityMode(t *testing.T) {
+	newChannel := func() *SecureChannel {
+		s := NewCryptoChannel(&Config{})
+		s.instances = map[uint32][]*channelInstance{}
+		return s
+	}
+
+	t.Run("initial open sets the mode", func(t *testing.T) {
+		s := newChannel()
+		require.NoError(t, s.acceptSecurityMode(ua.MessageSecurityModeSignAndEncrypt))
+		require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, s.cfg.SecurityMode)
+	})
+
+	t.Run("renewal must repeat the mode", func(t *testing.T) {
+		for _, opened := range []ua.MessageSecurityMode{
+			ua.MessageSecurityModeNone, ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt,
+		} {
+			for _, requested := range []ua.MessageSecurityMode{
+				ua.MessageSecurityModeNone, ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt,
+				ua.MessageSecurityModeInvalid,
+			} {
+				s := newChannel()
+				require.NoError(t, s.acceptSecurityMode(opened))
+				s.activeInstance = newChannelInstance(s) // the channel is open now
+
+				err := s.acceptSecurityMode(requested)
+				if requested == opened {
+					require.NoError(t, err, "%v -> %v", opened, requested)
+				} else {
+					require.ErrorIs(t, err, ua.StatusBadSecurityModeRejected, "%v -> %v", opened, requested)
+				}
+				require.Equal(t, opened, s.cfg.SecurityMode, "the mode of an open channel never changes")
+			}
+		}
+	})
 }

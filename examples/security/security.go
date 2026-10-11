@@ -30,7 +30,7 @@ package main
 
 import (
 	"context"
-	"crypto/rsa"
+	"crypto"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -46,7 +46,7 @@ import (
 func main() {
 	var (
 		endpoint = flag.String("endpoint", "opc.tcp://localhost:4840", "OPC UA Endpoint URL")
-		policy   = flag.String("sec-policy", "auto", "Security policy: None, Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss, or auto")
+		policy   = flag.String("sec-policy", "auto", "Security policy: None, Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss, ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519, or auto")
 		mode     = flag.String("sec-mode", "auto", "Security mode: None, Sign, SignAndEncrypt, or auto")
 		auth     = flag.String("auth", "anonymous", "Authentication: anonymous, username, certificate")
 		certfile = flag.String("cert", "", "Path to certificate PEM file (required for security != None)")
@@ -165,13 +165,16 @@ func main() {
 		if err != nil {
 			log.Fatalf("Failed to load certificate: %v", err)
 		}
-		pk, ok := c.PrivateKey.(*rsa.PrivateKey)
+		// An RSA key for the RSA security policies, an ECDSA key (P-256 or
+		// P-384) for the nistP256 / nistP384 ECC policies, an Ed25519 key for
+		// ECC_curve25519.
+		pk, ok := c.PrivateKey.(crypto.Signer)
 		if !ok {
-			log.Fatal("Private key must be RSA")
+			log.Fatal("Private key must be an RSA, ECDSA or Ed25519 key")
 		}
 		opts = append(opts,
 			opcua.Certificate(c.Certificate[0]),
-			opcua.PrivateKey(pk),
+			opcua.PrivateKeySigner(pk),
 		)
 	}
 

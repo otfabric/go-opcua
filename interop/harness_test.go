@@ -14,10 +14,17 @@
 //
 // Environment variables (all optional):
 //
-//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: digest-pinned v0.6.0)
-//	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest-pinned v0.6.0)
+//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: digest pin below)
+//	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest pin below)
 //	OPCUA_INTEROP_FIXTURE_DIR  Directory containing baseline.json     (default: testdata)
-//	OPCUA_INTEROP_PKI_DIR      Root of the test PKI tree              (default: ../../opcua-interop/certs/test-pki)
+//	OPCUA_INTEROP_PKI_DIR      Root of the test PKI tree, with the ECC certificates of
+//	                           opcua-interop v0.7.0 certs/generate.sh (default: ../../opcua-interop/certs/test-pki)
+//	OPCUA_INTEROP_REQUIRE_CAPABILITIES=1
+//	                           Fail instead of skip when the image lacks an operation or
+//	                           feature the suite has evidence for, or the PKI is missing.
+//
+// The multicast discovery tests create a user-defined Docker bridge network
+// and run the go-opcua side in a container on it (see discoverypeer).
 package interop
 
 import (
@@ -35,6 +42,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -51,18 +59,22 @@ import (
 // ---------------------------------------------------------------------------
 
 const (
-	// Single source of truth for the pinned opcua-interop release.
+	// Single source of truth for the opcua-interop release the suite and the
+	// ledger are written against.
 	// Keep INTEROP.md, coverage.json evidence versions, and CI workflow env in sync.
-	// Digests are GHCR multi-arch indexes from the current v0.6.0 publication:
-	// https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0
-	// https://github.com/otfabric/opcua-interop/actions/runs/38136156545
 	// opcua-interop tags are immutable: on a new release update the version
-	// and these digests in lockstep (harness defaults, interop.yml, INTEROP.md,
-	// coverage.json, render-interop-coverage).
-	interopVersion = "v0.6.0"
+	// and the digests below in lockstep (harness defaults, interop.yml,
+	// INTEROP.md, coverage.json, render-interop-coverage).
+	interopVersion = "v0.7.0"
 
-	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:d8cdfd67c9dd71713515fdf0e34533d7ff9f6d004bd5c7ceb349db40e325a1f2"
-	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:95ad873ff5ae86a35815a1c6db2b75963675040f3283307e57ac10273194ab3f"
+	// Digests are the GHCR multi-arch indexes of the v0.7.0 publication:
+	// https://github.com/otfabric/opcua-interop/releases/tag/v0.7.0
+	// https://github.com/otfabric/opcua-interop/actions/runs/38158510021
+	// A capability-gated test fails (it does not skip) when a default image
+	// is not the release named by interopVersion: see requirePinnedVersion.
+
+	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:7ff9c794846cf8278d40e14c0b06bc4ad03112b11db7f943f6b729f49fe048fc"
+	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:8d59ac62bdec03e425f702c013d1695209c1ce7fc89cbdad052ed06043931f87"
 	defaultFixtureDir     = "testdata"
 
 	interopNamespaceURI = "urn:otfabric:opcua-interop:model"
@@ -115,6 +127,30 @@ func dockerContainerName(t *testing.T) string {
 
 func dockerStop(name string) {
 	exec.Command("docker", "stop", "-t", "2", name).Run() //nolint:errcheck
+}
+
+// containerScratchDir returns a directory that is bind-mounted writable into
+// a container. Unlike t.TempDir its removal is best effort: files a container
+// created as another user must not fail the test (see dockerReleaseMount).
+func containerScratchDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "opcua-interop-mount-")
+	if err != nil {
+		t.Fatalf("scratch dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	return dir
+}
+
+// dockerReleaseMount makes everything under path, a writable bind mount of
+// the running container, accessible to the user running the tests. On Linux a
+// container that runs as root (Milo) or as another user (open62541) leaves
+// files and directories behind that the test's TempDir cleanup may not remove
+// ("unlinkat …: permission denied"), which fails an otherwise passing test.
+// Call it before the container is stopped; errors are ignored because the
+// directory may already be accessible (Docker Desktop maps ownership).
+func dockerReleaseMount(name, path string) {
+	exec.Command("docker", "exec", "-u", "0", name, "chmod", "-R", "a+rwX", path).Run() //nolint:errcheck
 }
 
 // ---------------------------------------------------------------------------
@@ -438,8 +474,17 @@ func runMiloClientResult(t *testing.T, endpoint, subcmd string, args ...string) 
 // Returns the endpoint URL with actual port.
 func startGoServer(t *testing.T) string {
 	t.Helper()
+	endpoint, _ := startGoServerWithOptions(t)
+	return endpoint
+}
 
-	s, err := server.New(
+// startGoServerWithOptions is startGoServer with extra server options
+// appended. It also returns the server, for tests that configure it further
+// once it runs (e.g. reverse connect targets).
+func startGoServerWithOptions(t *testing.T, extra ...server.Option) (string, *server.Server) {
+	t.Helper()
+
+	s, err := server.New(append([]server.Option{
 		// Bind port 0 (OS-assigned) to avoid freePort TOCTOU races under load.
 		// Advertise host.docker.internal so adapter clients that GetEndpoints
 		// + reconnect pick a routable URL (not 0.0.0.0).
@@ -447,7 +492,7 @@ func startGoServer(t *testing.T) string {
 		server.EndPoint("host.docker.internal", 0),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
-	)
+	}, extra...)...)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}
@@ -652,6 +697,37 @@ func startGoServer(t *testing.T) string {
 	ns.AddNode(counterNode)
 	objs.AddRef(counterNode, server.RefTypeIDHasComponent, true)
 
+	// Analog — AnalogItemType variables with an EURange [0, 100] property, as
+	// in the baseline fixture: the target of PercentDeadband filters.
+	// Analog.Level ramps 0..100 in steps of 2 every 100 ms; Analog.Setpoint
+	// is writable and static (50.0).
+	var levelAtomic atomic.Value
+	levelAtomic.Store(float64(0.0))
+	levelID := ua.NewStringNodeID(nsIdx, "Analog.Level")
+	levelNode := server.NewNode(
+		levelID,
+		map[ua.AttributeID]*ua.DataValue{
+			ua.AttributeIDNodeClass:       server.DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      server.DataValueFromValue(attrs.BrowseName("Analog.Level")),
+			ua.AttributeIDDisplayName:     server.DataValueFromValue(attrs.DisplayName("Level", "en")),
+			ua.AttributeIDDataType:        server.DataValueFromValue(ua.NewNumericExpandedNodeID(0, id.Double)),
+			ua.AttributeIDAccessLevel:     server.DataValueFromValue(uint8(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: server.DataValueFromValue(uint8(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDValueRank:       server.DataValueFromValue(int32(-1)),
+		},
+		nil,
+		func() *ua.DataValue {
+			return &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(levelAtomic.Load().(float64))}
+		},
+	)
+	ns.AddNode(levelNode)
+	objs.AddRef(levelNode, server.RefTypeIDHasComponent, true)
+	addAnalogItemProperties(s, ns, levelNode, 0, 100)
+
+	setpointNode := ns.AddNewVariableStringNode("Analog.Setpoint", float64(50.0))
+	objs.AddRef(setpointNode, server.RefTypeIDHasComponent, true)
+	addAnalogItemProperties(s, ns, setpointNode, 0, 100)
+
 	// Methods folder.
 	methodsFolderID := ua.NewStringNodeID(nsIdx, "Methods")
 	methodsFolder := server.NewFolderNode(methodsFolderID, "Methods")
@@ -842,7 +918,52 @@ func startGoServer(t *testing.T) string {
 		}
 	}()
 
-	return fmt.Sprintf("opc.tcp://localhost:%d", port)
+	// Level goroutine — increments by 2.0 every 100 ms, resets at 100.0.
+	go func() {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		ctx := t.Context()
+		for {
+			select {
+			case <-ticker.C:
+				next := levelAtomic.Load().(float64) + 2.0
+				if next > 100.0 {
+					next = 0.0
+				}
+				levelAtomic.Store(next)
+				s.ChangeNotification(levelID)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return fmt.Sprintf("opc.tcp://localhost:%d", port), s
+}
+
+// addAnalogItemProperties makes node an AnalogItemType variable (Part 8
+// §5.3.2.3) with an EURange property holding the Range [low, high].
+func addAnalogItemProperties(s *server.Server, ns *server.NodeNameSpace, node *server.Node, low, high float64) {
+	if typ := s.Node(ua.NewNumericNodeID(0, id.AnalogItemType)); typ != nil {
+		node.AddRef(typ, id.HasTypeDefinition, true)
+	}
+	rng := &ua.DataValue{
+		EncodingMask: ua.DataValueValue,
+		Value:        ua.MustVariant(ua.NewExtensionObject(&ua.Range{Low: low, High: high})),
+	}
+	prop := server.NewNode(
+		ua.NewStringNodeID(ns.ID(), node.ID().StringID()+".EURange"),
+		map[ua.AttributeID]*ua.DataValue{
+			ua.AttributeIDNodeClass:   server.DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:  server.DataValueFromValue(attrs.BrowseName("EURange")),
+			ua.AttributeIDDisplayName: server.DataValueFromValue(attrs.DisplayName("EURange", "en")),
+			ua.AttributeIDDataType:    server.DataValueFromValue(ua.NewNumericExpandedNodeID(0, id.Range)),
+		},
+		nil,
+		func() *ua.DataValue { return rng },
+	)
+	ns.AddNode(prop)
+	node.AddRef(prop, id.HasProperty, true)
 }
 
 // ---------------------------------------------------------------------------
@@ -975,22 +1096,72 @@ func dialUsernameClient(t *testing.T, endpoint, user, pass string) (*opcua.Clien
 // pkiDir returns the absolute path to the test PKI root, either from the
 // OPCUA_INTEROP_PKI_DIR env variable or from the conventional sibling-repo path
 // (../../opcua-interop/certs/test-pki relative to this package). If neither
-// exists the test is skipped.
+// exists the test is skipped, or fails when
+// OPCUA_INTEROP_REQUIRE_CAPABILITIES=1: a release verification run must not
+// pass without the security evidence.
 func pkiDir(t *testing.T) string {
 	t.Helper()
-	if v := os.Getenv("OPCUA_INTEROP_PKI_DIR"); v != "" {
-		return v
+	src := os.Getenv("OPCUA_INTEROP_PKI_DIR")
+	if src == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		candidate := filepath.Join(cwd, "..", "..", "opcua-interop", "certs", "test-pki")
+		if _, err := os.Stat(candidate); err != nil {
+			capabilityUnavailable(t, "no test PKI: OPCUA_INTEROP_PKI_DIR is not set and %s does not exist (generate one with opcua-interop certs/generate.sh)", candidate)
+		}
+		src = candidate
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
+	// Containers get a world-readable copy. certs/generate.sh writes private
+	// keys with mode 0600 and the adapter images do not run as root, so on a
+	// Linux Docker host a key bind-mounted from the original tree cannot be
+	// read by the adapter (Docker Desktop hides this: its file sharing does
+	// not enforce the mode). These are test keys.
+	sharedPKI.once.Do(func() {
+		dir, err := os.MkdirTemp("", "opcua-interop-pki-")
+		if err == nil {
+			err = copyDir(src, dir)
+		}
+		if err == nil {
+			err = shareWithContainers(dir)
+		}
+		sharedPKI.dir, sharedPKI.err = dir, err
+	})
+	if sharedPKI.err != nil {
+		t.Fatalf("copy the test PKI %s for the containers: %v", src, sharedPKI.err)
 	}
-	candidate := filepath.Join(cwd, "..", "..", "opcua-interop", "certs", "test-pki")
-	if _, err := os.Stat(candidate); err == nil {
-		return candidate
+	return sharedPKI.dir
+}
+
+var sharedPKI struct {
+	once sync.Once
+	dir  string
+	err  error
+}
+
+// TestMain removes the shared copy of the test PKI.
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if sharedPKI.dir != "" {
+		_ = os.RemoveAll(sharedPKI.dir)
 	}
-	t.Skip("OPCUA_INTEROP_PKI_DIR not set and default path not found; skipping security test")
-	return ""
+	os.Exit(code)
+}
+
+// shareWithContainers makes a directory tree that is bind-mounted into an
+// adapter container usable by the container's (non-root) user: readable, and
+// writable where the adapter writes (rejected certificates).
+func shareWithContainers(root string) error {
+	return filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return os.Chmod(path, 0o777)
+		}
+		return os.Chmod(path, info.Mode().Perm()|0o644)
+	})
 }
 
 // loadCACert reads and parses the CA certificate from the test PKI.
@@ -1029,7 +1200,7 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 
 	for _, f := range []string{certFile, keyFile, adapterPKI} {
 		if _, err := os.Stat(f); err != nil {
-			t.Skipf("test PKI file missing (%s): %v — run certs/generate.sh first", f, err)
+			capabilityUnavailable(t, "test PKI file missing (%s): %v — run certs/generate.sh first", f, err)
 		}
 	}
 
@@ -1037,9 +1208,12 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 	// FileBasedCertificateQuarantine and open62541's trust-list manager may
 	// write rejected-certificate entries; a read-only mount would silently
 	// break those paths and produce misleading test results.
-	runtimePKI := filepath.Join(t.TempDir(), "pki")
+	runtimePKI := filepath.Join(containerScratchDir(t), "pki")
 	if err := copyDir(adapterPKI, runtimePKI); err != nil {
 		t.Fatalf("copy PKI to temp dir: %v", err)
+	}
+	if err := shareWithContainers(runtimePKI); err != nil {
+		t.Fatalf("share PKI with the container: %v", err)
 	}
 
 	port := freePort(t)
@@ -1078,6 +1252,7 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 	}
 
 	stop := func() {
+		dockerReleaseMount(containerName, "/certs/pki")
 		dockerStop(containerName)
 		cmdCancel()
 		_ = cmd.Wait()
@@ -1287,7 +1462,7 @@ func loadGoServerCert(t *testing.T) []byte {
 	certPath := filepath.Join(pki, "go-server", "cert.crt")
 	raw, err := os.ReadFile(certPath)
 	if err != nil {
-		t.Skipf("go-server cert missing (%s): run certs/generate.sh first", certPath)
+		capabilityUnavailable(t, "go-server cert missing (%s): run certs/generate.sh first", certPath)
 	}
 	block, _ := pem.Decode(raw)
 	if block == nil {
@@ -1304,7 +1479,7 @@ func loadGoServerKey(t *testing.T) *rsa.PrivateKey {
 	keyPath := filepath.Join(pki, "go-server", "cert.key")
 	raw, err := os.ReadFile(keyPath)
 	if err != nil {
-		t.Skipf("go-server key missing (%s): run certs/generate.sh first", keyPath)
+		capabilityUnavailable(t, "go-server key missing (%s): run certs/generate.sh first", keyPath)
 	}
 	block, _ := pem.Decode(raw)
 	if block == nil {
@@ -1418,7 +1593,7 @@ func runSecureAdapterClient(t *testing.T, imageEnvVar, defaultImage, clientPKINa
 
 	for _, f := range []string{certFile, keyFile, caCert} {
 		if _, err := os.Stat(f); err != nil {
-			t.Skipf("adapter client PKI file missing (%s): run certs/generate.sh first", f)
+			capabilityUnavailable(t, "adapter client PKI file missing (%s): run certs/generate.sh first", f)
 		}
 	}
 
@@ -1473,7 +1648,7 @@ func runSecureAdapterClientResult(t *testing.T, imageEnvVar, defaultImage, clien
 
 	for _, f := range []string{certFile, keyFile, caCert} {
 		if _, err := os.Stat(f); err != nil {
-			t.Skipf("adapter client PKI file missing (%s): run certs/generate.sh first", f)
+			capabilityUnavailable(t, "adapter client PKI file missing (%s): run certs/generate.sh first", f)
 		}
 	}
 
@@ -1524,7 +1699,7 @@ func loadCACertDER(t *testing.T) []byte {
 	caPath := filepath.Join(pki, "ca", "ca.crt")
 	raw, err := os.ReadFile(caPath)
 	if err != nil {
-		t.Skipf("CA cert missing (%s): run certs/generate.sh first", caPath)
+		capabilityUnavailable(t, "CA cert missing (%s): run certs/generate.sh first", caPath)
 	}
 	block, _ := pem.Decode(raw)
 	if block == nil {

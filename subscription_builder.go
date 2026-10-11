@@ -30,6 +30,7 @@ type SubscriptionBuilder struct {
 	monitorReq       []*ua.MonitoredItemCreateRequest
 	ts               ua.TimestampsToReturn
 	samplingInterval time.Duration // if > 0, applied to Monitor/MonitorEvents items (server-side sampling rate in ms)
+	dataFilter       *ua.DataChangeFilter
 }
 
 // NewSubscription returns a SubscriptionBuilder for configuring a new subscription.
@@ -87,6 +88,25 @@ func (b *SubscriptionBuilder) SamplingInterval(d time.Duration) *SubscriptionBui
 	return b
 }
 
+// DataChangeFilter sets the data-change filter of the items added by
+// subsequent Monitor calls: which changes are reported (trigger) and how far a
+// numeric value has to move away from the last reported one (deadband). See
+// [NewDataChangeFilter] for the parameters. Call it before Monitor; items
+// added earlier, MonitorItems and MonitorEvents are not affected.
+//
+//	sub, ch, err := c.NewSubscription().
+//	    DataChangeFilter(ua.DataChangeTriggerStatusValue, ua.DeadbandTypeAbsolute, 0.5).
+//	    Monitor(nodeID).
+//	    Start(ctx)
+func (b *SubscriptionBuilder) DataChangeFilter(trigger ua.DataChangeTrigger, deadbandType ua.DeadbandType, deadbandValue float64) *SubscriptionBuilder {
+	b.dataFilter = &ua.DataChangeFilter{
+		Trigger:       trigger,
+		DeadbandType:  uint32(deadbandType),
+		DeadbandValue: deadbandValue,
+	}
+	return b
+}
+
 // NotifyChannel sets the channel for receiving notifications.
 // If not set, Start creates a buffered channel with capacity 256.
 func (b *SubscriptionBuilder) NotifyChannel(ch chan *PublishNotificationData) *SubscriptionBuilder {
@@ -102,6 +122,10 @@ func (b *SubscriptionBuilder) Monitor(nodeIDs ...*ua.NodeID) *SubscriptionBuilde
 		)
 		if b.samplingInterval > 0 {
 			req.RequestedParameters.SamplingInterval = float64(b.samplingInterval.Milliseconds())
+		}
+		if b.dataFilter != nil {
+			f := *b.dataFilter
+			req.RequestedParameters.Filter = ua.NewExtensionObject(&f)
 		}
 		b.monitorReq = append(b.monitorReq, req)
 	}

@@ -184,10 +184,15 @@ func (n *Node) ID() *ua.NodeID {
 }
 
 func (n *Node) Value() *ua.DataValue {
-	if n.val == nil {
+	// SetAttribute replaces the value function while requests read the
+	// value (and, through it, the data type) of the node.
+	n.mu.RLock()
+	val := n.val
+	n.mu.RUnlock()
+	if val == nil {
 		return nil
 	}
-	return n.val()
+	return val()
 }
 
 func (n *Node) attribute(id ua.AttributeID) (*AttrValue, error) {
@@ -244,7 +249,11 @@ func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error {
 		// Validate the data type if the node has a DataType attribute and
 		// both old and new values carry a typed variant.
 		if val != nil && val.Value != nil {
-			if cur := n.Value(); cur != nil && cur.Value != nil {
+			var cur *ua.DataValue
+			if n.val != nil {
+				cur = n.val()
+			}
+			if cur != nil && cur.Value != nil {
 				oldVal := cur.Value.Value()
 				newVal := val.Value.Value()
 				if oldVal != nil && newVal != nil {

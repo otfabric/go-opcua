@@ -91,6 +91,9 @@ func TestEncryptionAlgorithms(t *testing.T) {
 	require.NoError(t, err, "Unable to generate remote private key")
 
 	for uri, p := range policies {
+		if p.ecc != nil {
+			continue // RSA keys; see ecc_test.go
+		}
 		t.Run(uri, func(t *testing.T) {
 			localAsymmetric, err := p.asymmetric(localKey, &remoteKey.PublicKey)
 			require.NoError(t, err)
@@ -184,7 +187,7 @@ func TestMissingKey(t *testing.T) {
 	require.NoError(t, err, "Unable to generate private key")
 
 	for uri, p := range policies {
-		if uri == ua.SecurityPolicyURINone {
+		if uri == ua.SecurityPolicyURINone || p.ecc != nil {
 			continue
 		}
 

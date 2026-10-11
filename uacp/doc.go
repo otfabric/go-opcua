@@ -8,6 +8,11 @@
 // To wait for the client to connect to, call Listen() method, and to establish
 // connection with the Accept() method.
 //
+// For a reverse connection (Part 6 §7.1.3), in which the server opens the TCP
+// connection and announces itself with a ReverseHello message, the server
+// uses ReverseDialer and Conn.AcceptHello and the client uses ListenReverse
+// and Dialer.AcceptReverse.
+//
 // Once you have a connection you can call Read() to receive full UACP messages
 // including the header.
 //

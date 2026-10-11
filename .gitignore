@@ -22,3 +22,5 @@ cover.*
 *.pem
 *.crt
 *.csr
+# Claude Code agent worktrees
+.claude/

@@ -1,0 +1,269 @@
+// SPDX-License-Identifier: MIT
+
+// Package testpki is a small in-memory PKI shared by the test suites of this
+// module: self-signed RSA, ECDSA (P-256, P-384) and Ed25519 application
+// instance certificates for a server and a client, user identity
+// certificates, certificates nobody trusts and a CA with an issued leaf per
+// key family.
+//
+// Key generation is expensive (RSA under the race detector in particular), so
+// the PKI is built once per test binary.
+package testpki
+
+import (
+	"crypto"
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"math/big"
+	"net"
+	"net/url"
+	"sync"
+	"time"
+)
+
+// Application URIs of the application instance certificates.
+const (
+	ServerAppURI = "urn:otfabric:conformance:server"
+	ClientAppURI = "urn:otfabric:conformance:client"
+)
+
+// Curve names, the keys of the ECC certificate maps.
+const (
+	CurveP256    = "P-256"
+	CurveP384    = "P-384"
+	CurveEd25519 = "Ed25519"
+)
+
+// Identity is an ECC certificate with its private key: an ECDSA key or, for
+// the curve Ed25519, an EdDSA key.
+type Identity struct {
+	Cert []byte
+	Key  crypto.Signer
+	X509 *x509.Certificate
+}
+
+// ECC is the ECC half of the PKI: application instance and user certificates
+// on the curves of the ECC security policies.
+type ECC struct {
+	// Self-signed application instance certificates, by curve.
+	Server map[string]*Identity
+	Client map[string]*Identity
+
+	// User is a self-signed X.509 user identity certificate, Stranger a
+	// certificate nobody trusts (both P-256).
+	User     *Identity
+	Stranger *Identity
+
+	// EdUser is an Ed25519 X.509 user identity certificate.
+	EdUser *Identity
+
+	// A P-256 CA and a client certificate issued by it, for trust lists.
+	CACert []byte
+	Issued *Identity
+}
+
+// PKI holds the RSA certificates and, in ECC, the ECC ones.
+type PKI struct {
+	// Self-signed application instance certificates.
+	ServerCert []byte
+	ServerKey  *rsa.PrivateKey
+	ClientCert []byte
+	ClientKey  *rsa.PrivateKey
+
+	// A CA plus a client certificate issued by it, for trust-list tests.
+	CACert         []byte
+	IssuedCert     []byte
+	IssuedKey      *rsa.PrivateKey
+	UserCert       []byte // self-signed X.509 user identity certificate
+	UserKey        *rsa.PrivateKey
+	StrangerCert   []byte // a second self-signed cert nobody trusts
+	StrangerKey    *rsa.PrivateKey
+	ServerCertX509 *x509.Certificate
+
+	// ECC holds the certificates for the ECC security policies.
+	ECC *ECC
+}
+
+var (
+	once   sync.Once
+	pkiVal *PKI
+	pkiErr error
+)
+
+// Get returns the PKI of this test binary, building it on first use.
+func Get() (*PKI, error) {
+	once.Do(func() { pkiVal, pkiErr = build() })
+	return pkiVal, pkiErr
+}
+
+func build() (*PKI, error) {
+	p := &PKI{}
+	var err error
+	if p.ServerCert, p.ServerKey, err = SelfSigned("conformance server", ServerAppURI); err != nil {
+		return nil, err
+	}
+	if p.ClientCert, p.ClientKey, err = SelfSigned("conformance client", ClientAppURI); err != nil {
+		return nil, err
+	}
+	if p.UserCert, p.UserKey, err = SelfSigned("conformance user", "urn:otfabric:conformance:user"); err != nil {
+		return nil, err
+	}
+	if p.StrangerCert, p.StrangerKey, err = SelfSigned("conformance stranger", "urn:otfabric:conformance:stranger"); err != nil {
+		return nil, err
+	}
+	if p.ServerCertX509, err = x509.ParseCertificate(p.ServerCert); err != nil {
+		return nil, err
+	}
+	if p.ECC, err = buildECC(); err != nil {
+		return nil, err
+	}
+
+	// CA and a leaf issued by it.
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
+	}
+	caTmpl := CertTemplate("conformance CA", "")
+	caTmpl.IsCA = true
+	caTmpl.KeyUsage |= x509.KeyUsageCertSign
+	if p.CACert, err = x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey); err != nil {
+		return nil, err
+	}
+	caX509, err := x509.ParseCertificate(p.CACert)
+	if err != nil {
+		return nil, err
+	}
+	if p.IssuedKey, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
+		return nil, err
+	}
+	leaf := CertTemplate("conformance issued client", ClientAppURI)
+	if p.IssuedCert, err = x509.CreateCertificate(rand.Reader, leaf, caX509, &p.IssuedKey.PublicKey, caKey); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+// CertTemplate returns the template of an application instance certificate
+// for localhost with the given common name and, unless empty, application
+// URI.
+func CertTemplate(cn, appURI string) *x509.Certificate {
+	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
+	tmpl := &x509.Certificate{
+		SerialNumber: serial,
+		Subject:      pkix.Name{CommonName: cn, Organization: []string{"otfabric conformance"}},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment |
+			x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment,
+		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
+		BasicConstraintsValid: true,
+		DNSNames:              []string{"localhost"},
+		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
+	}
+	if appURI != "" {
+		if u, err := url.Parse(appURI); err == nil {
+			tmpl.URIs = []*url.URL{u}
+		}
+	}
+	return tmpl
+}
+
+// SelfSigned creates a self-signed RSA-2048 certificate.
+func SelfSigned(cn, appURI string) ([]byte, *rsa.PrivateKey, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, nil, err
+	}
+	tmpl := CertTemplate(cn, appURI)
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+	if err != nil {
+		return nil, nil, err
+	}
+	return der, key, nil
+}
+
+func eccCurve(name string) elliptic.Curve {
+	if name == CurveP384 {
+		return elliptic.P384()
+	}
+	return elliptic.P256()
+}
+
+// NewIdentity creates a certificate for a new key on the curve: an ECDSA key
+// on a NIST curve or an Ed25519 key. A nil issuer makes it self-signed.
+func NewIdentity(curve, cn, appURI string, issuer *x509.Certificate, issuerKey crypto.Signer) (*Identity, error) {
+	var (
+		key crypto.Signer
+		err error
+	)
+	if curve == CurveEd25519 {
+		_, key, err = ed25519.GenerateKey(rand.Reader)
+	} else {
+		key, err = ecdsa.GenerateKey(eccCurve(curve), rand.Reader)
+	}
+	if err != nil {
+		return nil, err
+	}
+	tmpl := CertTemplate(cn, appURI)
+	// An ECC key signs; it neither enciphers keys nor data.
+	tmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment
+	parent, signer := tmpl, key
+	if issuer != nil {
+		parent, signer = issuer, issuerKey
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, key.Public(), signer)
+	if err != nil {
+		return nil, err
+	}
+	parsed, err := x509.ParseCertificate(der)
+	if err != nil {
+		return nil, err
+	}
+	return &Identity{Cert: der, Key: key, X509: parsed}, nil
+}
+
+func buildECC() (*ECC, error) {
+	p := &ECC{Server: map[string]*Identity{}, Client: map[string]*Identity{}}
+	var err error
+	for _, curve := range []string{CurveP256, CurveP384, CurveEd25519} {
+		if p.Server[curve], err = NewIdentity(curve, "conformance server "+curve, ServerAppURI, nil, nil); err != nil {
+			return nil, err
+		}
+		if p.Client[curve], err = NewIdentity(curve, "conformance client "+curve, ClientAppURI, nil, nil); err != nil {
+			return nil, err
+		}
+	}
+	if p.User, err = NewIdentity(CurveP256, "conformance ecc user", "urn:otfabric:conformance:user", nil, nil); err != nil {
+		return nil, err
+	}
+	if p.Stranger, err = NewIdentity(CurveP256, "conformance ecc stranger", "urn:otfabric:conformance:stranger", nil, nil); err != nil {
+		return nil, err
+	}
+	if p.EdUser, err = NewIdentity(CurveEd25519, "conformance ed25519 user", "urn:otfabric:conformance:user", nil, nil); err != nil {
+		return nil, err
+	}
+
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		return nil, err
+	}
+	caTmpl := CertTemplate("conformance ECC CA", "")
+	caTmpl.IsCA = true
+	caTmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign
+	if p.CACert, err = x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey); err != nil {
+		return nil, err
+	}
+	caX509, err := x509.ParseCertificate(p.CACert)
+	if err != nil {
+		return nil, err
+	}
+	if p.Issued, err = NewIdentity(CurveP256, "conformance issued ecc client", ClientAppURI, caX509, caKey); err != nil {
+		return nil, err
+	}
+	return p, nil
+}

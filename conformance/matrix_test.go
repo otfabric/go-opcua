@@ -109,6 +109,7 @@ var builderCoverage = map[string]string{
 	"Priority":                   "TestSubscription_BuilderOptions",
 	"Timestamps":                 "TestSubscription_BuilderOptions",
 	"SamplingInterval":           "TestSubscription_BuilderOptions",
+	"DataChangeFilter":           "TestDataChange_BuilderAndHelper",
 	"NotifyChannel":              "TestSubscription_BuilderOptions",
 	"Monitor":                    "TestSubscription_BuilderOptions",
 	"MonitorItems":               "TestSubscription_BuilderOptions",

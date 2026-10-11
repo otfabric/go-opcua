@@ -62,6 +62,20 @@ func (s *SecureChannel) beginServerRenewal(m *MessageChunk) (*channelInstance, e
 	return renewing, nil
 }
 
+// acceptSecurityMode applies the security mode of an OpenSecureChannel
+// request. The initial request sets the mode of the channel; a renewal must
+// repeat it and is refused with BadSecurityModeRejected otherwise.
+func (s *SecureChannel) acceptSecurityMode(requested ua.MessageSecurityMode) error {
+	if s.activeInstanceOrNil() != nil {
+		if requested != s.cfg.SecurityMode {
+			return ua.StatusBadSecurityModeRejected
+		}
+		return nil
+	}
+	s.cfg.SecurityMode = requested
+	return nil
+}
+
 // reviseLifetime applies the server's limits to a requested token lifetime
 // (milliseconds). The configured lifetime is the maximum the server grants and
 // the value used when the client leaves the choice to the server.

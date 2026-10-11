@@ -3,8 +3,8 @@
 package server
 
 import (
+	"crypto/rand"
 	"log/slog"
-	mrand "math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,15 +12,29 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 type session struct {
 	cfg sessionConfig
 
-	ID                *ua.NodeID
-	AuthTokenID       *ua.NodeID
-	serverNonce       []byte
+	ID          *ua.NodeID
+	AuthTokenID *ua.NodeID
+	serverNonce []byte
+	// clientNonce is the nonce of the CreateSession request. The channel
+	// bound signatures of ActivateSession cover it.
+	clientNonce       []byte
 	remoteCertificate []byte
+
+	// ecdhKey is the ephemeral key handed to the client for the next user
+	// identity token that is protected with an ECC security policy
+	// (EccEncryptedSecret). It is good for one ActivateSession. ecdhPolicy
+	// is the policy the client last asked a key for; ecdhKeyUsed records
+	// that the current key was consumed, in which case the next
+	// ActivateSession response brings a new one unasked (Part 6 §6.8.2).
+	ecdhKey     *uapolicy.EphemeralKey
+	ecdhPolicy  string
+	ecdhKeyUsed bool
 
 	// identityToken is the user identity provided during ActivateSession.
 	identityToken ua.IdentityToken
@@ -113,6 +127,11 @@ type sessionBroker struct {
 	// s contains all sessions watched by the session broker
 	s      map[string]*session
 	logger *slog.Logger
+
+	// closed is set while the server is shut down. A request that is still
+	// being handled then (the dispatcher is not waited for) gets a session
+	// that the broker does not keep: nothing would ever remove it.
+	closed bool
 }
 
 func newSessionBroker(l *slog.Logger) *sessionBroker {
@@ -122,16 +141,33 @@ func newSessionBroker(l *slog.Logger) *sessionBroker {
 	}
 }
 
+// newAuthenticationToken returns the secret a client presents with every
+// request of a session (Part 4 §7.36: "the Server shall generate a token that
+// is difficult to guess"). It is an opaque NodeId with 256 random bits from
+// the system's cryptographic generator; knowing tokens of other sessions
+// gives no information about it.
+func newAuthenticationToken() *ua.NodeID {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		// crypto/rand does not fail on supported platforms; without
+		// randomness no session can be given a safe token.
+		panic("server: no cryptographic randomness for a session token: " + err.Error())
+	}
+	return ua.NewByteStringNodeID(0, b)
+}
+
 func (sb *sessionBroker) NewSession() *session {
 	s := &session{
 		ID:              ua.NewGUIDNodeID(1, uuid.New().String()),
-		AuthTokenID:     ua.NewNumericNodeID(0, uint32(mrand.Int31())),
+		AuthTokenID:     newAuthenticationToken(),
 		PublishRequests: make(chan PubReq, 100),
 	}
 	s.touch()
 
 	sb.mu.Lock()
-	sb.s[s.AuthTokenID.String()] = s
+	if !sb.closed {
+		sb.s[s.AuthTokenID.String()] = s
+	}
 	sb.mu.Unlock()
 
 	return s
@@ -149,11 +185,28 @@ func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
 	return nil
 }
 
-// closeAll forgets every session.
+// peek returns the session with the given token without restarting its
+// timeout, or nil.
+func (sb *sessionBroker) peek(authToken *ua.NodeID) *session {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.s[authToken.String()]
+}
+
+// closeAll forgets every session and keeps none from now on.
 func (sb *sessionBroker) closeAll() {
 	sb.mu.Lock()
 	defer sb.mu.Unlock()
 	clear(sb.s)
+	sb.closed = true
+}
+
+// reopen makes the broker keep sessions again. It is called when the server
+// starts.
+func (sb *sessionBroker) reopen() {
+	sb.mu.Lock()
+	sb.closed = false
+	sb.mu.Unlock()
 }
 
 func (sb *sessionBroker) Session(authToken *ua.NodeID) *session {

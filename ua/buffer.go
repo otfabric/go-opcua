@@ -192,7 +192,13 @@ func (b *Buffer) ReadTime() time.Time {
 		return time.Time{}
 	}
 	// decode time in "100 nanosecond intervals since January 1, 1601" manner.
-	return time.Unix(0, int64((ts-116444736000000000)*100)).UTC()
+	// Seconds and nanoseconds are split so that dates outside of the range
+	// of an int64 nanosecond count (years 1678..2262) do not overflow.
+	if ts > math.MaxInt64 {
+		ts = math.MaxInt64
+	}
+	ticks := int64(ts)
+	return time.Unix(ticks/10_000_000-11644473600, (ticks%10_000_000)*100).UTC()
 }
 
 func (b *Buffer) ReadN(n int) []byte {
@@ -318,8 +324,12 @@ func (b *Buffer) WriteTime(v time.Time) {
 	d := make([]byte, 8)
 	if !v.IsZero() {
 		// encode time in "100 nanosecond intervals since January 1, 1601"
-		ts := uint64(v.UTC().UnixNano()/100 + 116444736000000000)
-		binary.LittleEndian.PutUint64(d, ts)
+		// Dates before 1601 cannot be represented and encode as the
+		// null DateTime; UnixNano would overflow outside of 1678..2262.
+		if secs := v.Unix() + 11644473600; secs >= 0 && secs < math.MaxInt64/10_000_000 {
+			ts := uint64(secs)*10_000_000 + uint64(v.Nanosecond()/100)
+			binary.LittleEndian.PutUint64(d, ts)
+		}
 	}
 	b.Write(d)
 }

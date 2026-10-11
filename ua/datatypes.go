@@ -61,6 +61,11 @@ func (d *DataValue) Decode(b []byte) (int, error) {
 
 func (d *DataValue) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
+	if d == nil {
+		// A nil pointer is the empty DataValue: no field is present.
+		buf.WriteUint8(0)
+		return buf.Bytes(), buf.Error()
+	}
 	buf.WriteUint8(d.EncodingMask)
 
 	if d.Has(DataValueValue) {
@@ -152,10 +157,17 @@ func (g *GUID) Decode(b []byte) (int, error) {
 
 func (g *GUID) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
+	// A Guid always occupies 16 bytes. A nil pointer or a zero value with a
+	// short Data4 is the null Guid and must not shorten the stream.
+	data4 := make([]byte, 8)
+	if g == nil {
+		g = &GUID{}
+	}
+	copy(data4, g.Data4)
 	buf.WriteUint32(g.Data1)
 	buf.WriteUint16(g.Data2)
 	buf.WriteUint16(g.Data3)
-	buf.Write(g.Data4)
+	buf.Write(data4)
 	return buf.Bytes(), buf.Error()
 }
 

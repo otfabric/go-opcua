@@ -4,8 +4,8 @@
 .DEFAULT_GOAL := help
 
 # Core library packages measured by `make coverage` (excludes cmd/, examples/, tests/).
-TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ ./id/ ./internal/stats/
-COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats
+TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ ./id/ ./internal/stats/ ./internal/mdns/
+COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/
 
 .PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop chaos examples test-race install-py-opcua gen check-gen coverage-ledger
@@ -62,12 +62,13 @@ interop: ## Run interop tests against opcua-interop adapter images (-tags=intero
 	# workflow job timeout-minutes (45). Do not use 600s — it flakes at the edge.
 	@go test -count=1 -tags=interop -timeout 45m ./interop/...
 
-# Chaos-monkey and parallelism suite (see chaos/doc.go). It also runs, with a
+# Chaos-monkey and parallelism suites: chaos/ and its sub-packages secure,
+# datachange, reverse, discovery and codec (see chaos/doc.go). They also run, with a
 # short fault-injection phase, as part of `make test`. Override the knobs on
 # the command line, e.g. `make chaos CHAOS_DURATION=10m CHAOS_SEED=42`.
 CHAOS_DURATION ?= 30s
-chaos: ## Run the chaos-monkey and parallelism suite with the race detector (CHAOS_DURATION, CHAOS_SEED)
-	@echo "Running chaos suite (CHAOS_DURATION=$(CHAOS_DURATION))"
+chaos: ## Run the chaos-monkey and parallelism suites with the race detector (CHAOS_DURATION, CHAOS_SEED)
+	@echo "Running chaos suites (CHAOS_DURATION=$(CHAOS_DURATION))"
 	@CHAOS_DURATION=$(CHAOS_DURATION) CHAOS_SEED=$(CHAOS_SEED) go test -race -count=1 -timeout 60m ./chaos/...
 
 examples: ## Build all examples into build/

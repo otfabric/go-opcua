@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -248,6 +250,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 	}
 
 	// set up the variables
+	aliases := nodeSetAliases(nodes)
 	for i := range nodes.UAVariable {
 		ot := nodes.UAVariable[i]
 		nid, err := ua.ParseNodeID(ot.NodeIDAttr)
@@ -266,10 +269,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 			attrs[ua.AttributeIDDescription] = DataValueFromValue(ua.NewLocalizedText(ot.Description[0].Value))
 		}
 		attrs[ua.AttributeIDNodeClass] = DataValueFromValue(uint32(ua.NodeClassVariable))
+		s.importVariableAttributes(attrs, ot, aliases)
 
 		var refs References = make([]*ua.ReferenceDescription, 0)
 
-		n := NewNode(nid, attrs, refs, nil)
+		n := NewNode(nid, attrs, refs, s.importVariableValue(ot))
 		n.rolePermissions = resolveRolePermissions(ot.RolePermissions, nid)
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
@@ -352,6 +356,121 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 
 	return nil
 }
+
+// nodeSetAliases returns the alias table of a node set (Alias -> NodeId).
+func nodeSetAliases(nodes *schema.UANodeSet) map[string]string {
+	aliases := make(map[string]string)
+	if nodes.Aliases != nil {
+		for _, alias := range nodes.Aliases.Alias {
+			aliases[alias.AliasAttr] = alias.Value
+		}
+	}
+	return aliases
+}
+
+// importVariableAttributes applies the DataType, ValueRank, ArrayDimensions,
+// AccessLevel and UserAccessLevel attributes of a UAVariable.
+//
+// DataType and ValueRank get the defaults of the NodeSet schema (BaseDataType
+// and Scalar) when the attribute is absent. The access levels are only set
+// when the attribute is present: a variable without them stays readable and
+// writable, as imported variables have always been, instead of becoming
+// read-only through the schema default of CurrentRead.
+func (s *Server) importVariableAttributes(attrs Attributes, v *schema.UAVariable, aliases map[string]string) {
+	dataType := ua.NewNumericNodeID(0, id.BaseDataType)
+	if v.DataTypeAttr != "" {
+		text := v.DataTypeAttr
+		if target, ok := aliases[text]; ok {
+			text = target
+		}
+		// ParseNodeID reads anything without a type prefix as a String
+		// NodeId, which an unresolved alias must not become.
+		if parsed, err := ua.ParseNodeID(text); err == nil && strings.Contains(text, "=") {
+			dataType = parsed
+		} else {
+			s.cfg.logger.Warn("nodeset import: unknown data type", "node_id", v.NodeIDAttr, "data_type", v.DataTypeAttr)
+		}
+	}
+	attrs[ua.AttributeIDDataType] = DataValueFromValue(ua.NewExpandedNodeID(dataType, "", 0))
+
+	valueRank := int32(-1) // Scalar
+	if v.ValueRankAttr != nil {
+		valueRank = int32(*v.ValueRankAttr)
+	}
+	attrs[ua.AttributeIDValueRank] = DataValueFromValue(valueRank)
+
+	if v.ArrayDimensionsAttr != "" {
+		var dims []uint32
+		for _, part := range strings.Split(v.ArrayDimensionsAttr, ",") {
+			d, err := strconv.ParseUint(strings.TrimSpace(part), 10, 32)
+			if err != nil {
+				s.cfg.logger.Warn("nodeset import: invalid array dimensions", "node_id", v.NodeIDAttr, "array_dimensions", v.ArrayDimensionsAttr)
+				dims = nil
+				break
+			}
+			dims = append(dims, uint32(d))
+		}
+		if dims != nil {
+			attrs[ua.AttributeIDArrayDimensions] = DataValueFromValue(dims)
+		}
+	}
+	if v.AccessLevelAttr != nil {
+		attrs[ua.AttributeIDAccessLevel] = DataValueFromValue(byte(*v.AccessLevelAttr))
+	}
+	if v.UserAccessLevelAttr != nil {
+		attrs[ua.AttributeIDUserAccessLevel] = DataValueFromValue(byte(*v.UserAccessLevelAttr))
+	}
+}
+
+// importVariableValue decodes the <Value> element of a UAVariable, which
+// holds the value in the OPC UA XML DataEncoding, and returns the function
+// the node serves its Value attribute from. It returns nil if the variable
+// has no (decodable) value.
+func (s *Server) importVariableValue(v *schema.UAVariable) ValueFunc {
+	if v.Value == nil || strings.TrimSpace(v.Value.XML) == "" {
+		return nil
+	}
+	if proto, builtin := builtinNodeSetValues[v.Value]; builtin {
+		if proto == nil {
+			s.cfg.logger.Warn("nodeset import: cannot decode value", "node_id", v.NodeIDAttr)
+			return nil
+		}
+		// The built-in node set is parsed once per process and imported
+		// into every server. Its decoded values must not be: an array
+		// or a structure handed to one server is memory that the user
+		// of that server can write to (a slice element, a field of an
+		// Argument), and every other server - also one created later -
+		// would serve the result. Each node therefore decodes a value
+		// of its own, when it is read for the first time; decoding all
+		// of them for every server is what the shared parse avoids.
+		src := v.Value
+		return sync.OnceValue(func() *ua.DataValue {
+			val := decodeNodeSetValue(src)
+			if val == nil { // cannot happen: the same text decoded before
+				return &ua.DataValue{EncodingMask: ua.DataValueStatusCode, Status: ua.StatusBadDecodingError}
+			}
+			return &ua.DataValue{EncodingMask: ua.DataValueValue, Value: val}
+		})
+	}
+	val := decodeNodeSetValue(v.Value)
+	if val == nil {
+		s.cfg.logger.Warn("nodeset import: cannot decode value", "node_id", v.NodeIDAttr)
+		return nil
+	}
+	dv := &ua.DataValue{EncodingMask: ua.DataValueValue, Value: val}
+	return func() *ua.DataValue { return dv }
+}
+
+// decodeNodeSetValue returns the Variant held by a <Value> element, or nil if
+// it is empty or cannot be decoded.
+func decodeNodeSetValue(v *schema.Value) *ua.Variant {
+	val := new(ua.Variant)
+	if err := ua.DecodeXML([]byte("<Value>"+v.XML+"</Value>"), val); err != nil || val.Type() == ua.TypeIDNull {
+		return nil
+	}
+	return val
+}
+
 func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 
 	s.cfg.logger.Debug("new node set", "last_modified", nodes.LastModifiedAttr)
@@ -365,13 +484,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 		reftypes[rt.NodeIDAttr] = rt     // sometimes they use node id
 	}
 
-	aliases := make(map[string]string)
-	if nodes.Aliases != nil {
-		for i := range nodes.Aliases.Alias {
-			alias := nodes.Aliases.Alias[i]
-			aliases[alias.AliasAttr] = alias.Value
-		}
-	}
+	aliases := nodeSetAliases(nodes)
 
 	// any of the aliases could be reference types, so we have to check them all and add them to the reftypes map
 	// if they are.

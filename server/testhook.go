@@ -2,9 +2,49 @@
 
 package server
 
-import "github.com/otfabric/go-opcua/internal/testhook"
+import (
+	"fmt"
+	"time"
+
+	"github.com/otfabric/go-opcua/internal/mdns"
+	"github.com/otfabric/go-opcua/internal/testhook"
+)
 
 func init() {
+	testhook.ServerMulticastTransport = func(link any) any {
+		return Option(func(c *serverConfig) error {
+			network, ok := link.(*mdns.MemNetwork)
+			if !ok || network == nil {
+				return fmt.Errorf("server: multicast test transport: want *mdns.MemNetwork, got %T", link)
+			}
+			c.multicast.conns = func() ([]mdns.PacketConn, error) {
+				return []mdns.PacketConn{network.Conn()}, nil
+			}
+			return nil
+		})
+	}
+	testhook.ServerMulticastTTL = func(hostTTL, otherTTL uint32) any {
+		return Option(func(c *serverConfig) error {
+			c.multicast.hostTTL, c.multicast.otherTTL = hostTTL, otherTTL
+			return nil
+		})
+	}
+	testhook.ServerSessionsOf = func(v any) []string {
+		s, ok := v.(*Server)
+		if !ok || s == nil {
+			return nil
+		}
+		s.sb.mu.Lock()
+		defer s.sb.mu.Unlock()
+		var out []string
+		for _, sess := range s.sb.s {
+			out = append(out, fmt.Sprintf("%v timeout=%v idle=%v activated=%v", sess.ID,
+				time.Duration(sess.timeout.Load()),
+				time.Since(time.Unix(0, sess.lastActivity.Load())).Round(time.Millisecond),
+				sess.activated.Load()))
+		}
+		return out
+	}
 	testhook.ServerResourcesOf = func(v any) testhook.ServerResources {
 		s, ok := v.(*Server)
 		if !ok || s == nil {

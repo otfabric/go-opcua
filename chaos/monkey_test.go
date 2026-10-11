@@ -107,7 +107,7 @@ func (s *scenario) start() {
 		mc.c = s.e.connect(mc.rec, persistentOptions()...)
 		// one synchronous and one buffered notification channel per client
 		for j, counters := range [][]int{{0, 1}, {2, 3}} {
-			st, err := openStreamWith(ctx, s.e, mc.c, fmt.Sprintf("%s.s%d", mc.name, j), j*8, streamParams(), counters...)
+			st, err := openStreamWith(ctx, s.e, mc.c, fmt.Sprintf("%s.s%d", mc.name, j), j*8, faultStreamParams(), counters...)
 			if err != nil {
 				s.t.Fatalf("client %s: %v", mc.name, err)
 			}

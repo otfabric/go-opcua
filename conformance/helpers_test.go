@@ -4,20 +4,17 @@ package conformance
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
-	"crypto/x509/pkix"
 	"fmt"
-	"math/big"
 	"net"
-	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -303,7 +300,8 @@ func writeInt32(t *testing.T, c *opcua.Client, id *ua.NodeID, v int32) {
 
 // testPKI is a small in-memory PKI shared by all security tests. RSA key
 // generation is expensive (more so under the race detector), so it is built
-// once per test binary.
+// once per test binary. The certificates come from internal/testutil/testpki,
+// which the chaos suites share.
 type testPKI struct {
 	// Self-signed application instance certificates.
 	serverCert []byte
@@ -320,11 +318,14 @@ type testPKI struct {
 	strangerCert   []byte // a second self-signed cert nobody trusts
 	strangerKey    *rsa.PrivateKey
 	serverCertX509 *x509.Certificate
+
+	// ecc holds the certificates for the ECC security policies.
+	ecc *eccPKI
 }
 
 const (
-	serverAppURI = "urn:otfabric:conformance:server"
-	clientAppURI = "urn:otfabric:conformance:client"
+	serverAppURI = testpki.ServerAppURI
+	clientAppURI = testpki.ClientAppURI
 )
 
 var (
@@ -341,82 +342,25 @@ func pki(t *testing.T) *testPKI {
 }
 
 func buildPKI() (*testPKI, error) {
-	p := &testPKI{}
-	var err error
-	if p.serverCert, p.serverKey, err = selfSigned("conformance server", serverAppURI); err != nil {
-		return nil, err
-	}
-	if p.clientCert, p.clientKey, err = selfSigned("conformance client", clientAppURI); err != nil {
-		return nil, err
-	}
-	if p.userCert, p.userKey, err = selfSigned("conformance user", "urn:otfabric:conformance:user"); err != nil {
-		return nil, err
-	}
-	if p.strangerCert, p.strangerKey, err = selfSigned("conformance stranger", "urn:otfabric:conformance:stranger"); err != nil {
-		return nil, err
-	}
-	if p.serverCertX509, err = x509.ParseCertificate(p.serverCert); err != nil {
-		return nil, err
-	}
-
-	// CA and a leaf issued by it.
-	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	src, err := testpki.Get()
 	if err != nil {
 		return nil, err
 	}
-	caTmpl := certTemplate("conformance CA", "")
-	caTmpl.IsCA = true
-	caTmpl.KeyUsage |= x509.KeyUsageCertSign
-	if p.caCert, err = x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey); err != nil {
-		return nil, err
-	}
-	caX509, err := x509.ParseCertificate(p.caCert)
-	if err != nil {
-		return nil, err
-	}
-	if p.issuedKey, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
-		return nil, err
-	}
-	leaf := certTemplate("conformance issued client", clientAppURI)
-	if p.issuedCert, err = x509.CreateCertificate(rand.Reader, leaf, caX509, &p.issuedKey.PublicKey, caKey); err != nil {
-		return nil, err
-	}
-	return p, nil
-}
-
-func certTemplate(cn, appURI string) *x509.Certificate {
-	serial, _ := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 120))
-	tmpl := &x509.Certificate{
-		SerialNumber: serial,
-		Subject:      pkix.Name{CommonName: cn, Organization: []string{"otfabric conformance"}},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
-		KeyUsage: x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment |
-			x509.KeyUsageKeyEncipherment | x509.KeyUsageDataEncipherment,
-		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
-		BasicConstraintsValid: true,
-		DNSNames:              []string{"localhost"},
-		IPAddresses:           []net.IP{net.ParseIP("127.0.0.1")},
-	}
-	if appURI != "" {
-		if u, err := url.Parse(appURI); err == nil {
-			tmpl.URIs = []*url.URL{u}
-		}
-	}
-	return tmpl
-}
-
-func selfSigned(cn, appURI string) ([]byte, *rsa.PrivateKey, error) {
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
-	if err != nil {
-		return nil, nil, err
-	}
-	tmpl := certTemplate(cn, appURI)
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
-	if err != nil {
-		return nil, nil, err
-	}
-	return der, key, nil
+	return &testPKI{
+		serverCert:     src.ServerCert,
+		serverKey:      src.ServerKey,
+		clientCert:     src.ClientCert,
+		clientKey:      src.ClientKey,
+		caCert:         src.CACert,
+		issuedCert:     src.IssuedCert,
+		issuedKey:      src.IssuedKey,
+		userCert:       src.UserCert,
+		userKey:        src.UserKey,
+		strangerCert:   src.StrangerCert,
+		strangerKey:    src.StrangerKey,
+		serverCertX509: src.ServerCertX509,
+		ecc:            adaptECC(src.ECC),
+	}, nil
 }
 
 // endpointFor returns the endpoint advertised by the server for the given

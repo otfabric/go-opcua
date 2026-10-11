@@ -321,7 +321,10 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 				continue
 			}
 			cur := ns.Attribute(n.NodeID, ua.AttributeIDValue)
-			if cur == nil || cur.Status != ua.StatusOK || cur.Value == nil {
+			// The range is merged into the current value, so there has to be
+			// one. A value of Uncertain quality is a value: only a Bad status
+			// means there is nothing to merge into.
+			if cur == nil || cur.Value == nil || cur.Status&0x80000000 != 0 {
 				status[i] = ua.StatusBadIndexRangeInvalid
 				continue
 			}

@@ -4,7 +4,7 @@ Thank you for your interest in contributing. This document explains how to get s
 
 ## Development setup
 
-- **Go**: 1.25 or later.
+- **Go**: 1.26 or later.
 - **Python**: 3.11+ (optional, for integration tests against the Python client).
 
 ```sh
@@ -21,7 +21,11 @@ go mod download
   - `make integration` — Python client vs Go server.
   - `make selfintegration` — Go client vs in-process server.
 
+- **Chaos and parallelism tests**: the packages under `chaos/` run with `make test` (short fault-injection phase) and, for longer, with `make chaos` (`CHAOS_DURATION=10m CHAOS_SEED=42 make chaos`). A failing randomized scenario prints its seed and the command to replay it. They are bug-finding tests: when one fails, fix the product and pin the defect with a small deterministic regression test; do not loosen the invariant. See `chaos/doc.go`.
+
 By default, `go test ./...` does not run integration tests; use the targets above.
+
+CI runs `go test -race -timeout=120s` per package on a small runner. Keep every test package well below that (about 40 s locally with `-race`): put a new group of slow tests into a package of its own rather than growing `conformance/` or `chaos/`.
 
 ## Code style and linting
 

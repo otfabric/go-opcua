@@ -68,6 +68,7 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		return nil, ua.StatusBadInternalError
 	}
 	sess.serverNonce = nonce
+	sess.clientNonce = req.ClientNonce
 	sess.remoteCertificate = req.ClientCertificate
 
 	// Validate the client's application certificate against the server's
@@ -77,13 +78,17 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 	if s.srv.cfg.clientCertificateValidator != nil && len(req.ClientCertificate) > 0 {
 		if err := s.srv.cfg.clientCertificateValidator(req.ClientCertificate); err != nil {
 			s.srv.cfg.logger.Warn("client certificate rejected", "error", err)
+			// The client never learns of the session: do not keep it
+			// until its timeout.
+			_ = s.srv.sb.Close(sess.AuthTokenID)
 			return nil, err
 		}
 	}
 
-	sig, alg, err := sc.NewSessionSignature(req.ClientCertificate, req.ClientNonce)
+	sig, alg, err := sc.NewCreateSessionSignature(req.ClientCertificate, req.ClientNonce, nonce)
 	if err != nil {
 		s.srv.cfg.logger.Warn("error creating session signature")
+		_ = s.srv.sb.Close(sess.AuthTokenID)
 		return nil, ua.StatusBadInternalError
 	}
 
@@ -97,8 +102,14 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		}
 	}
 
+	hdr := responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK)
+	if st := s.issueEphemeralKey(sc, sess, req.RequestHeader, hdr, true); st != ua.StatusOK {
+		_ = s.srv.sb.Close(sess.AuthTokenID)
+		return nil, st
+	}
+
 	response := &ua.CreateSessionResponse{
-		ResponseHeader:        responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
+		ResponseHeader:        hdr,
 		SessionID:             sess.ID,
 		AuthenticationToken:   sess.AuthTokenID,
 		RevisedSessionTimeout: float64(sess.cfg.sessionTimeout / time.Millisecond),
@@ -107,7 +118,7 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 			Signature: sig,
 			Algorithm: alg,
 		},
-		ServerCertificate: s.srv.cfg.certificate,
+		ServerCertificate: s.serverCertificate(sc),
 		ServerNonce:       nonce,
 		ServerEndpoints:   matchingEndpoints,
 	}
@@ -130,7 +141,11 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		return nil, ua.StatusBadSessionIDInvalid
 	}
 
-	err = sc.VerifySessionSignature(sess.remoteCertificate, sess.serverNonce, req.ClientSignature.Signature)
+	var clientSignature []byte
+	if req.ClientSignature != nil {
+		clientSignature = req.ClientSignature.Signature
+	}
+	err = sc.VerifyActivateSessionSignature(sess.remoteCertificate, sess.serverNonce, sess.clientNonce, clientSignature)
 	if err != nil {
 		s.srv.cfg.logger.Warn("error verifying session signature", "error", err)
 		return nil, ua.StatusBadSecurityChecksFailed
@@ -160,7 +175,7 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	if uname, ok := sess.identityToken.(*ua.UserNameIdentityToken); ok {
 		// On secured channels the password arrives encrypted with the server
 		// certificate (Part 4 §7.41). Decrypt it before validation.
-		password, st := s.decryptUserPassword(sc, uname, prevNonce)
+		password, st := s.decryptUserPassword(sc, sess, uname, prevNonce)
 		if st != ua.StatusOK {
 			s.srv.cfg.logger.Warn("ActivateSession username token: cannot decrypt password",
 				"username", uname.UserName, "status", st)
@@ -184,6 +199,19 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		}
 	}
 
+	// The data of an issued token is a secret like a password. With an ECC
+	// security policy it arrives as an EccEncryptedSecret; the role mapper
+	// gets the token the issuer created.
+	if issued, ok := sess.identityToken.(*ua.IssuedIdentityToken); ok && uapolicy.IsECC(s.userTokenPolicy(sc)) {
+		data, st := s.decryptEccSecret(sc, sess, issued.TokenData, prevNonce)
+		if st != ua.StatusOK {
+			s.srv.cfg.logger.Warn("ActivateSession issued token: cannot decrypt token data", "status", st)
+			return nil, st
+		}
+		issued.TokenData = data
+		issued.EncryptionAlgorithm = ""
+	}
+
 	// Validate X.509 identity token (OPC UA Part 4 §5.6.3.3).
 	if x509tok, ok := sess.identityToken.(*ua.X509IdentityToken); ok {
 		if err := s.validateX509UserToken(sc, sess, req, x509tok); err != nil {
@@ -199,10 +227,15 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		sess.roles = DefaultRoleMapper(sess.identityToken)
 	}
 
+	hdr := responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK)
+	if st := s.issueEphemeralKey(sc, sess, req.RequestHeader, hdr, false); st != ua.StatusOK {
+		return nil, st
+	}
+
 	sess.activated.Store(true)
 
 	response := &ua.ActivateSessionResponse{
-		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
+		ResponseHeader: hdr,
 		ServerNonce:    nonce,
 		// Results:         []ua.StatusCode{},
 		// DiagnosticInfos: []*ua.DiagnosticInfo{},
@@ -238,7 +271,7 @@ func (s *SessionService) validateX509UserToken(
 
 	// Verify the UserTokenSignature: signature over (serverCertificate || serverNonce).
 	// This proves the client holds the private key for the presented certificate.
-	if req.UserTokenSignature != nil && len(req.UserTokenSignature.Signature) > 0 {
+	{
 		// Determine the security policy for the user token: the token policy may
 		// specify its own URI; fall back to the secure channel policy.
 		policyURI := sc.SecurityPolicyURI()
@@ -255,21 +288,32 @@ func (s *SessionService) validateX509UserToken(
 		}
 
 		if policyURI != ua.SecurityPolicyURINone {
-			remoteKey, keyErr := uapolicy.PublicKey(tok.CertificateData)
+			// Without a signature nothing shows that the client holds the
+			// private key: a certificate is public and anyone can present it.
+			if req.UserTokenSignature == nil || len(req.UserTokenSignature.Signature) == 0 {
+				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: no user token signature")
+				return ua.StatusBadUserSignatureInvalid
+			}
+
+			remoteKey, keyErr := uapolicy.CertificatePublicKey(tok.CertificateData)
 			if keyErr != nil {
 				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot extract public key", "error", keyErr)
 				return ua.StatusBadIdentityTokenInvalid
 			}
 
-			enc, encErr := uapolicy.Asymmetric(policyURI, nil, remoteKey)
-			if encErr != nil {
+			// The key type of the user certificate has to fit the policy: an
+			// ECC policy verifies ECDSA signatures only, ECC_curve25519
+			// Ed25519 ones.
+			if encErr := uapolicy.CheckPublicKey(policyURI, remoteKey); encErr != nil {
 				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot build asymmetric context", "error", encErr)
 				return ua.StatusBadIdentityTokenInvalid
 			}
 
-			// Message is serverCertificate || serverNonce per Part 4 §7.37.
-			message := append(append([]byte(nil), s.srv.cfg.certificate...), sess.serverNonce...)
-			if sigErr := enc.VerifySignature(message, req.UserTokenSignature.Signature); sigErr != nil {
+			// Message is serverCertificate || serverNonce per Part 4 §7.37,
+			// or the channel bound data of Part 4 §6.1.8 if the policies of
+			// the channel and of the token have SecureChannelEnhancements.
+			sigErr := sc.VerifySessionUserTokenSignature(policyURI, tok.CertificateData, s.serverCertificate(sc), sess.serverNonce, sess.clientNonce, req.UserTokenSignature.Signature)
+			if sigErr != nil {
 				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: signature verification failed", "error", sigErr)
 				return ua.StatusBadUserSignatureInvalid
 			}
@@ -335,18 +379,29 @@ func (s *SessionService) checkChannelSecurity(sc *uasc.SecureChannel) ua.StatusC
 //
 // The trailing nonce must match the nonce this server last issued for the
 // session, which binds the secret to this activation and prevents replay.
-func (s *SessionService) decryptUserPassword(sc *uasc.SecureChannel, tok *ua.UserNameIdentityToken, serverNonce []byte) ([]byte, ua.StatusCode) {
+//
+// With an ECC security policy there is no asymmetric encryption. The password
+// is an EccEncryptedSecret instead, whatever the token says about its
+// EncryptionAlgorithm (see decryptEccSecret).
+func (s *SessionService) decryptUserPassword(sc *uasc.SecureChannel, sess *session, tok *ua.UserNameIdentityToken, serverNonce []byte) ([]byte, ua.StatusCode) {
+	if uapolicy.IsECC(s.userTokenPolicy(sc)) {
+		return s.decryptEccSecret(sc, sess, tok.Password, serverNonce)
+	}
 	if tok.EncryptionAlgorithm == "" {
 		return tok.Password, ua.StatusOK
 	}
-	if sc == nil || s.srv.cfg.privateKey == nil {
+	if sc == nil {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
 	policyURI := sc.SecurityPolicyURI()
 	if policyURI == ua.SecurityPolicyURINone {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
-	enc, err := uapolicy.Asymmetric(policyURI, s.srv.cfg.privateKey, nil)
+	_, key, ok := s.srv.cfg.identityFor(policyURI)
+	if !ok || key == nil {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	enc, err := uapolicy.AsymmetricKeys(policyURI, key, nil)
 	if err != nil {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
@@ -382,6 +437,12 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 	authToken := req.RequestHeader.AuthenticationToken
 	if s.srv.historyCPs != nil && authToken != nil {
 		s.srv.historyCPs.releaseSession(authToken.String())
+	}
+
+	// The Publish requests queued for the session will not be answered by
+	// a subscription any more: answer them now (Part 4 §5.6.4).
+	if ss := s.srv.SubscriptionService; ss != nil && authToken != nil {
+		ss.releasePublishRequests(s.srv.sb.peek(authToken), ua.StatusBadSessionClosed)
 	}
 
 	err = s.srv.sb.Close(authToken)
@@ -465,4 +526,114 @@ func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r u
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
 		CancelCount:    cancelCount,
 	}, nil
+}
+
+// serverCertificate returns the application instance certificate the server
+// uses on the channel: with certificates of several key types it is the one
+// that fits the security policy of the channel.
+func (s *SessionService) serverCertificate(sc *uasc.SecureChannel) []byte {
+	if sc != nil {
+		if cert := sc.LocalCertificate(); len(cert) > 0 {
+			return cert
+		}
+	}
+	return s.srv.cfg.certificate
+}
+
+// userTokenPolicy returns the security policy that protects the user identity
+// tokens of a channel. The UserTokenPolicies of this server do not name a
+// policy of their own, so it is the policy of the SecureChannel.
+func (s *SessionService) userTokenPolicy(sc *uasc.SecureChannel) string {
+	if sc == nil {
+		return ua.SecurityPolicyURINone
+	}
+	return sc.SecurityPolicyURI()
+}
+
+// issueEphemeralKey puts a new ephemeral key for the session into the
+// response header if the client is due one (Part 6 §6.8.2):
+//
+//   - the request names an ECDHPolicyUri: a key for that policy, or
+//     Bad_SecurityPolicyRejected if the policy cannot be used;
+//   - CreateSession over an ECC channel without a request: a key for the
+//     policy of the channel, so that clients that do not ask still get one;
+//   - ActivateSession without a request, after the previous key was used: a
+//     new key for the policy the client asked for last;
+//   - otherwise nothing, and the previous key stays valid.
+func (s *SessionService) issueEphemeralKey(sc *uasc.SecureChannel, sess *session, reqHdr *ua.RequestHeader, respHdr *ua.ResponseHeader, create bool) ua.StatusCode {
+	if sc == nil {
+		return ua.StatusOK
+	}
+	channelPolicy := s.userTokenPolicy(sc)
+
+	var policyURI string
+	requested, ok := "", false
+	if reqHdr != nil {
+		requested, ok = uasc.ECDHPolicyFromHeader(reqHdr.AdditionalHeader)
+	}
+	switch {
+	case ok:
+		// User identity tokens are protected with the policy of the
+		// channel; a key for any other policy would never be used, and the
+		// certificate of the channel could not sign it.
+		if !uapolicy.IsECC(requested) || requested != channelPolicy {
+			s.srv.cfg.logger.Warn("ephemeral key requested for a security policy that is not available", "policy", requested)
+			return ua.StatusBadSecurityPolicyRejected
+		}
+		policyURI = requested
+	case create && uapolicy.IsECC(channelPolicy):
+		policyURI = channelPolicy
+	case !create && sess.ecdhKeyUsed && uapolicy.IsECC(sess.ecdhPolicy) && sess.ecdhPolicy == channelPolicy:
+		policyURI = sess.ecdhPolicy
+	default:
+		return ua.StatusOK
+	}
+
+	key, err := uapolicy.NewEphemeralKey(policyURI)
+	if err != nil {
+		s.srv.cfg.logger.Warn("cannot create an ephemeral key", "policy", policyURI, "error", err)
+		return ua.StatusBadInternalError
+	}
+	public := key.PublicKey()
+	signature, err := sc.NewEphemeralKeySignature(policyURI, public)
+	if err != nil {
+		s.srv.cfg.logger.Warn("cannot sign the ephemeral key", "policy", policyURI, "error", err)
+		return ua.StatusBadInternalError
+	}
+
+	sess.ecdhKey = key
+	sess.ecdhPolicy = policyURI
+	sess.ecdhKeyUsed = false
+	respHdr.AdditionalHeader = uasc.NewECDHKeyHeader(policyURI, &ua.EphemeralKeyType{PublicKey: public, Signature: signature})
+	return ua.StatusOK
+}
+
+// decryptEccSecret returns the secret of a user identity token that is
+// protected with an ECC security policy: an EccEncryptedSecret (Part 4
+// §7.41.2.3) made for the ephemeral key this server handed out for the
+// session.
+//
+// The secret must be signed with the application instance key of the client
+// that owns the SecureChannel and be bound to the session nonce the server
+// issued last. The ephemeral key is spent by the attempt, whatever its
+// outcome: no second secret is accepted for it.
+func (s *SessionService) decryptEccSecret(sc *uasc.SecureChannel, sess *session, data, serverNonce []byte) ([]byte, ua.StatusCode) {
+	key := sess.ecdhKey
+	sess.ecdhKey = nil
+	sess.ecdhKeyUsed = true
+	if sc == nil || key == nil || key.PolicyURI() != s.userTokenPolicy(sc) {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	clientCert := sc.RemoteCertificate()
+	if len(clientCert) == 0 {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	secret, err := uasc.DecryptUserSecret(key, data, clientCert, serverNonce)
+	if err != nil {
+		// The reason is not told to the client, and never includes the
+		// secret itself.
+		s.srv.cfg.logger.Warn("cannot decrypt the EccEncryptedSecret of a user identity token", "error", err)
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	return secret, ua.StatusOK
 }

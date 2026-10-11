@@ -144,6 +144,17 @@ func decodeSlice(b []byte, val reflect.Value, name string) (int, error) {
 	}
 
 	pos := buf.Pos()
+	// The length is the claim of the sender; the slice must not be
+	// allocated on its word. Every element takes at least one byte of the
+	// input - unless it is a structure without fields, of which a sane
+	// number is accepted - so four bytes of input cannot ask for gigabytes.
+	limit := len(b) - pos
+	if n > uint32(limit) && emptyStruct(elemType) {
+		limit = MaxVariantArrayLength
+	}
+	if n > uint32(limit) {
+		return pos, fmt.Errorf("%w: %d elements, %d bytes of input", errors.ErrArrayTooLarge, n, len(b)-pos)
+	}
 	// a is a slice of []*Foo
 	a := reflect.MakeSlice(val.Type(), int(n), int(n))
 	for i := 0; i < int(n); i++ {
@@ -164,6 +175,27 @@ func decodeSlice(b []byte, val reflect.Value, name string) (int, error) {
 	val.Set(a)
 
 	return pos, nil
+}
+
+// emptyStruct reports whether a value of type t has an empty binary
+// encoding: a structure without fields (or with nothing but such structures
+// in it), or a pointer to one.
+func emptyStruct(t reflect.Type) bool { return emptyStructDepth(t, 0) }
+
+func emptyStructDepth(t reflect.Type, depth int) bool {
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct || depth > 8 || t == timeType ||
+		t.Implements(binaryDecoder) || reflect.PointerTo(t).Implements(binaryDecoder) {
+		return false
+	}
+	for i := 0; i < t.NumField(); i++ {
+		if !emptyStructDepth(t.Field(i).Type, depth+1) {
+			return false
+		}
+	}
+	return true
 }
 
 func decodeArray(b []byte, val reflect.Value, name string) (int, error) {

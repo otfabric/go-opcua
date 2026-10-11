@@ -72,7 +72,8 @@ func TestMonitoredItem_CreateResults(t *testing.T) {
 				require.NotZero(t, res[i].MonitoredItemID)
 				require.False(t, ids[res[i].MonitoredItemID], "duplicate monitored item id")
 				ids[res[i].MonitoredItemID] = true
-				require.Equal(t, sub.interval, res[i].RevisedSamplingInterval)
+				// A requested interval of 0 selects exception-based sampling.
+				require.Zero(t, res[i].RevisedSamplingInterval)
 			} else {
 				require.Zero(t, res[i].MonitoredItemID)
 			}
@@ -277,14 +278,16 @@ func TestMonitoredItem_Modify(t *testing.T) {
 		return res.Results
 	}
 	params := func(handle, queue uint32, discard bool) *ua.MonitoringParameters {
-		return &ua.MonitoringParameters{ClientHandle: handle, SamplingInterval: 250, QueueSize: queue, DiscardOldest: discard}
+		// Sampling interval 0: every write below is sampled, so the queue
+		// behaviour can be observed write by write.
+		return &ua.MonitoringParameters{ClientHandle: handle, QueueSize: queue, DiscardOldest: discard}
 	}
 
 	// Grow the queue, change handle and timestamps.
 	res := modify(c, ua.TimestampsToReturnServer, &ua.MonitoredItemModifyRequest{MonitoredItemID: id, RequestedParameters: params(50, 3, true)})
 	require.Equal(t, ua.StatusOK, res[0].StatusCode)
 	require.Equal(t, uint32(3), res[0].RevisedQueueSize)
-	require.Equal(t, float64(250), res[0].RevisedSamplingInterval)
+	require.Zero(t, res[0].RevisedSamplingInterval)
 
 	samples := sub.refill(f.Int32, 1, 2, 3, 4, 5)
 	require.Equal(t, []any{int32(3), int32(4), int32(5)}, values(samples))
