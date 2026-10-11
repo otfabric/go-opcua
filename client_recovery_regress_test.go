@@ -186,3 +186,96 @@ func TestConnect_AfterCloseFails(t *testing.T) {
 	assert.Equal(t, Closed, c.State())
 	assert.Nil(t, c.SecureChannel())
 }
+
+// A StatusChangeNotification with a bad status means the server has closed
+// the subscription. The client used to hand it to the consumer and carry on
+// as if nothing had happened.
+func TestSubscriptionEnded(t *testing.T) {
+	msg := func(v any) *ua.NotificationMessage {
+		return &ua.NotificationMessage{NotificationData: []*ua.ExtensionObject{ua.NewExtensionObject(v)}}
+	}
+
+	assert.True(t, subscriptionEnded(msg(&ua.StatusChangeNotification{Status: ua.StatusBadTimeout})))
+	assert.True(t, subscriptionEnded(msg(&ua.StatusChangeNotification{Status: ua.StatusBadSubscriptionIDInvalid})))
+
+	// the subscription lives on in another session
+	assert.False(t, subscriptionEnded(msg(&ua.StatusChangeNotification{Status: ua.StatusGoodSubscriptionTransferred})))
+	assert.False(t, subscriptionEnded(msg(&ua.DataChangeNotification{})))
+	assert.False(t, subscriptionEnded(&ua.NotificationMessage{}))
+	assert.False(t, subscriptionEnded(&ua.NotificationMessage{NotificationData: []*ua.ExtensionObject{nil}}))
+	assert.False(t, subscriptionEnded(nil))
+}
+
+func TestDeliverPublishResponse_StatusChangeSchedulesRecreation(t *testing.T) {
+	statusChange := func(subID uint32) *ua.PublishResponse {
+		return &ua.PublishResponse{
+			SubscriptionID: subID,
+			Results:        []ua.StatusCode{},
+			NotificationMessage: &ua.NotificationMessage{
+				SequenceNumber: 1,
+				NotificationData: []*ua.ExtensionObject{
+					ua.NewExtensionObject(&ua.StatusChangeNotification{Status: ua.StatusBadTimeout}),
+				},
+			},
+		}
+	}
+	setup := func(t *testing.T, opts ...Option) (*Client, <-chan *PublishNotificationData) {
+		c, err := NewClient("opc.tcp://example.com:4840", opts...)
+		require.NoError(t, err)
+		ended, ch := newNotifyTestSub(7)
+		sibling, _ := newNotifyTestSub(8)
+		c.subMux.Lock()
+		c.subs[7], c.subs[8] = ended, sibling
+		c.subMux.Unlock()
+		c.setPublishPaused(false)
+		return c, ch
+	}
+
+	t.Run("auto reconnect", func(t *testing.T) {
+		c, ch := setup(t)
+		c.deliverPublishResponse(context.Background(), statusChange(7))
+
+		// the consumer still sees the notification
+		select {
+		case n := <-ch:
+			_, ok := n.Value.(*ua.StatusChangeNotification)
+			require.True(t, ok, "got %T", n.Value)
+		default:
+			t.Fatal("the StatusChangeNotification was not delivered to the consumer")
+		}
+		// only the ended subscription is marked, and the monitor is woken
+		intact, broken := c.partitionSubscriptions()
+		assert.Equal(t, []uint32{8}, intact)
+		assert.Equal(t, []uint32{7}, broken)
+		select {
+		case <-c.subRecoverCh:
+		default:
+			t.Fatal("the connection monitor was not asked to recreate the subscription")
+		}
+	})
+
+	t.Run("without auto reconnect nothing is recreated", func(t *testing.T) {
+		c, ch := setup(t, AutoReconnect(false))
+		c.deliverPublishResponse(context.Background(), statusChange(7))
+		require.Len(t, ch, 1)
+		_, broken := c.partitionSubscriptions()
+		assert.Empty(t, broken)
+		assert.Empty(t, c.subRecoverCh)
+	})
+}
+
+func TestMarkSubscriptionsBroken(t *testing.T) {
+	c := newNotifyTestClient(t)
+	assert.Zero(t, c.markSubscriptionsBroken())
+
+	a, _ := newNotifyTestSub(1)
+	b, _ := newNotifyTestSub(2)
+	c.subMux.Lock()
+	c.subs[1], c.subs[2] = a, b
+	c.subMux.Unlock()
+
+	assert.Equal(t, 2, c.markSubscriptionsBroken())
+	intact, broken := c.partitionSubscriptions()
+	assert.Empty(t, intact)
+	assert.ElementsMatch(t, []uint32{1, 2}, broken)
+}

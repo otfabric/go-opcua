@@ -1,5 +1,82 @@
 # go-opcua Releases
 
+## v1.5.0
+
+**Date:** 2026-10-11
+**Previous release:** v1.4.0
+
+### Summary
+
+Hardening release. Peer interoperability moves to open62541 v1.5.9 / Eclipse Milo 1.1.8 (opcua-interop v0.6.0) with 32 more verified ledger rows; a chaos / parallelism suite and a much larger Go↔Go conformance suite found and fixed defects in SecureChannel renewal, session handling, the publish loop and reconnect; the OPC UA schema is refreshed to UA-1.05.07; merged coverage is 91% with a 90% gate.
+
+Several fixes change behaviour that existing deployments may have relied on — read **Behaviour changes** before upgrading.
+
+### Behaviour changes
+
+- **Sessions are enforced.** Services other than discovery and session management require an activated session; requests without one (or with a closed session's token) get `BadSessionIdInvalid` / `BadSessionNotActivated` instead of being served.
+- **Sessions time out.** The server drops a session that is idle longer than its revised timeout, with its subscriptions.
+- **Enabled security is enforced.** `CreateSession` over a policy/mode the server did not enable is rejected (`BadSecurityPolicyRejected` / `BadSecurityModeRejected`).
+- **SecurityToken lifetime is revised and enforced.** The server grants at most its configured lifetime (and that value when the client asks for `0`), retires superseded tokens after lifetime + 25%, and closes a channel whose token was never renewed. Clients retire superseded tokens on the same schedule, measured on the local clock.
+- **Stalled clients are disconnected.** A client that does not read a response within `WithResponseWriteTimeout` (default 15s) loses its channel.
+- **Subscription ids** are monotonic from a random base and never reused; they no longer start at 1.
+- **`Client.Close` waits** for the client's monitor goroutine (bounded by the context); the dial timeout now also covers the HEL/ACK handshake.
+- **Attribute types:** `EventNotifier` is served as Byte (was Int16); the `DataType` of helper-created variables is a NodeId derived from the value (was `ExpandedNodeId i=267`); `NewFolderNode` no longer adds a reference back to the namespace Objects folder (the hierarchy was cyclic).
+- An untrusted client certificate is answered with a transport `ERR` (`BadCertificateUntrusted`) instead of an undecodable ServiceFault.
+
+### Added
+
+- **Server options** `WithResponseWriteTimeout(d)` (default 15s) and `WithMaxPendingResponses(n)` (default 256).
+- **`uasc.SecureChannel.Disconnected()`** and **`uasc.SecureChannel.ReleaseTokens()`**.
+- **Server sends `StatusChangeNotification(BadTimeout)`** when a subscription expires; AutoReconnect clients recreate expired or deleted subscriptions (and on `BadNoSubscription`) through the existing recovery handler.
+- **Panic containment in the server:** a panic in a handler or application callback fails that request with `BadInternalError`; a panic while decoding drops only that channel. Both are logged at Error with the stack.
+- **AddNodes applies `VariableAttributes`** (value, data type, access levels, display name, description); an unset `SpecifiedAttributes` mask is read as "all", as open62541 clients send it.
+- **Status codes** `StatusUncertainOverRange`, `StatusUncertainUnderRange`; new structures (`NumberRange`, alias-name types) and 123 NodeIds from the UA-1.05.07 schema.
+- **`chaos/` package** and `make chaos`: seeded chaos monkey over a fault-injecting proxy (`internal/testutil.ChaosProxy`), parallelism tests and hostile raw-frame tests. Knobs: `CHAOS_SEED`, `CHAOS_DURATION`, `CHAOS_LOG`.
+- **Conformance suite** grown from ~85 to ~200 Go↔Go tests (security matrix, identities, session and channel lifecycle, raw Publish protocol, monitored items, events, history, view, attributes, node management, query); the API matrix now also covers `Node`, `Subscription`, the builder, `Session`, `monitor` and every client/server option.
+- **`.github/workflows/schema-check.yml`**: weekly check that opens a tracking issue when the upstream OPC Foundation schema changes.
+
+### Fixed — server
+
+- **SecureChannel renewal** reused the TokenId and swapped keys on the live instance: every peer session (open62541, Milo) failed with `could not verify signature` at its first renewal. Renewal now issues a new TokenId on a fresh instance and keeps the old token valid until it expires.
+- A renewal request carrying a session `AuthenticationToken` (as open62541 sends) was rejected with `BadSecureChannelTokenUnknown`.
+- Username passwords on secured endpoints were never decrypted; X509 user-token signatures were checked against the wrong nonce.
+- One client that stopped reading stalled every client (responses are now written by a per-channel writer).
+- A truncated 8–11 byte frame panicked `readChunk`; a silent TCP connection blocked the accept loop; a peer reset during the handshake stopped the server accepting connections.
+- Lock-order deadlock between the subscription and monitored-item services; recursive read lock in Browse; data races on subscription parameters, `Node.refs` and stored `DataValue`s.
+- Publish responses were sent on the channel a subscription was created on rather than the requesting one; a transferred subscription kept serving the old session; Publish without a subscription hung; a full publish queue dropped requests silently; idle subscriptions effectively never expired.
+- RBAC could not be enabled through the public API; reading `RolePermissions` failed the whole Read; user-defined event types were rejected in `OfType`; MapNamespace variables could not be monitored.
+- NodeSet2 import stored references declared on both ends twice and kept the `"1:"` prefix in browse names; reverse raw history reads returned the oldest values; `SoftwareVersion` was ignored in ServerStatus.
+- Building the address space was quadratic in the number of references; `server.New` is several times faster.
+
+### Fixed — client
+
+- Reconnect closed the session it had just restored, leaving the client `Connected` with dead subscriptions; the restore path never resumed publishing; a second drop during recovery left the client stuck on a dead channel; a failed recreate dropped the subscription for good.
+- A consumer that stopped reading after `Cancel` blocked the publish loop for all subscriptions; `Subscribe` / `Cancel` could block for a keep-alive period.
+- The HEL/ACK handshake ignored the context and had no timeout; `Close` could race the monitor and leak a server session; a failed `Connect` left the state at `Connecting`.
+- The client adopted the policy URI and certificate from every OpenSecureChannel response; token renewal rounded the lifetime to whole seconds (a tight renew loop below 1.34s).
+- `Monitor` remembered items the server had rejected, which aborted subscription recreation after a reconnect.
+- Encoding a nil `*LocalizedText` panicked.
+
+### Interoperability
+
+- Peers: **open62541 v1.5.9**, **Eclipse Milo 1.1.8** via [opcua-interop v0.6.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0) (digest-pinned in `interop/harness_test.go` and `.github/workflows/interop.yml`).
+- Ledger: **231 verified** rows (was 199). Newly verified: SecureChannel renewal under a live subscription (all four directions), HistoryRead continuation C→O / C→M, RegisterNodes (all four), AddNodes / DeleteNodes (C→O, O→S, M→S), ModifySubscription and ModifyMonitoredItems (C→O, C→M), SetPublishingMode and SetMonitoringMode (all four), EventFilter WhereClause comparison operators and event queue overflow (C→O, C→M).
+- Recorded peer limits: the Milo reference server has no NodeManagement service set; Milo's SDK does not pass `ReleaseContinuationPoints` to its history backend.
+
+### Changed
+
+- **Schema** refreshed to UA-1.05.07 (2026-07-30 hotfix); `schema/update-schema.sh` now fetches the upstream `latest` branch and writes `Opc.Ua.NodeSet2.xml` to `internal/schema/`, where it is embedded.
+- **Coverage gate** raised from 80% to 90% (`make coverage`, `codecov.yml`); merged coverage is 91%.
+
+### Known limitations
+
+- Request handling is still serial: a slow or blocking handler (for example a user method callback) delays all clients. Only the write side is decoupled.
+- Reference types and browse names created through the node helpers are always in namespace 0.
+- Any `BadSessionIdInvalid` / `BadSubscriptionIdInvalid` / `BadNoSubscription` service fault makes the client start recovery, including faults provoked by an application request.
+- DataChangeFilter (deadband, trigger) and the sampling interval are ignored by the server; every write notifies.
+- Raw history delete removes the sample at the end time (Part 11 specifies an exclusive end).
+- `ServerStatus` child nodes `BuildInfo`, `ShutdownReason` and `SecondsTillShutdown` have the wrong value types; `MapNamespace` reads are not synchronised with writes.
+
 ## v1.4.0
 
 **Date:** 2026-07-30

@@ -75,6 +75,13 @@ type Node struct {
 	refs References
 	val  ValueFunc
 
+	// typeDef caches the target of the first forward HasTypeDefinition
+	// reference (nil when there is none); valid only while typeDefKnown is
+	// set. Appends to refs call noteRefAppended, every other change calls
+	// invalidateTypeDef. Guarded by mu.
+	typeDef      *ua.ExpandedNodeID
+	typeDefKnown bool
+
 	rolePermissions []*ua.RolePermissionType
 
 	ns NameSpace
@@ -311,23 +318,60 @@ func (n *Node) DataType() *ua.ExpandedNodeID {
 	v := n.attr[ua.AttributeIDDataType]
 	if v == nil || v.Value.Value() == nil {
 		// if we have a type definition, return that?
-		// Scanned in place under the read lock: this runs for every AddRef
-		// that targets n, so copying the reference list here made building
-		// the address space quadratic in the number of references.
-		n.mu.RLock()
-		defer n.mu.RUnlock()
-		for _, r := range n.refs {
-			if r.ReferenceTypeID == nil {
-				slog.Default().Warn("reference type ID is nil")
-				continue
-			}
-			if r.ReferenceTypeID.IntID() == id.HasTypeDefinition && r.IsForward {
-				return r.NodeID
-			}
+		if td := n.typeDefinition(); td != nil {
+			return td
 		}
 		return ua.NewTwoByteExpandedNodeID(0)
 	}
 	return v.Value.Value().(*ua.ExpandedNodeID)
+}
+
+// typeDefinition returns the target of the node's first forward
+// HasTypeDefinition reference, or nil. AddRef asks this of its target for
+// every reference it adds, so the answer is cached: scanning (or copying) the
+// reference list each time made building the address space quadratic.
+func (n *Node) typeDefinition() *ua.ExpandedNodeID {
+	n.mu.RLock()
+	if n.typeDefKnown {
+		td := n.typeDef
+		n.mu.RUnlock()
+		return td
+	}
+	n.mu.RUnlock()
+
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.typeDefKnown {
+		return n.typeDef
+	}
+	n.typeDef = nil
+	for _, r := range n.refs {
+		if r.ReferenceTypeID == nil {
+			slog.Default().Warn("reference type ID is nil")
+			continue
+		}
+		if r.ReferenceTypeID.IntID() == id.HasTypeDefinition && r.IsForward {
+			n.typeDef = r.NodeID
+			break
+		}
+	}
+	n.typeDefKnown = true
+	return n.typeDef
+}
+
+// invalidateTypeDef drops the cached type definition. mu must be held.
+func (n *Node) invalidateTypeDef() { n.typeDefKnown = false }
+
+// noteRefAppended keeps the cached type definition current after ref was
+// appended to refs: an append can only supply the first type definition, never
+// change an existing one. mu must be held.
+func (n *Node) noteRefAppended(ref *ua.ReferenceDescription) {
+	if !n.typeDefKnown || n.typeDef != nil {
+		return
+	}
+	if ref.ReferenceTypeID != nil && ref.ReferenceTypeID.IntID() == id.HasTypeDefinition && ref.IsForward {
+		n.typeDef = ref.NodeID
+	}
 }
 
 func (n *Node) SetNodeClass(nc ua.NodeClass) {
@@ -364,6 +408,7 @@ func (n *Node) AddObject(o *Node) *Node {
 	ref := refs.Organizes(nn.id, nn.BrowseName().Name, nn.DisplayName().Text, nn.DataType())
 	n.mu.Lock()
 	n.refs = append(n.refs, ref)
+	n.noteRefAppended(ref)
 	n.mu.Unlock()
 	return n.ns.AddNode(nn)
 }
@@ -382,6 +427,7 @@ func (n *Node) AddVariable(o *Node) *Node {
 	ref := refs.Organizes(nn.id, nn.BrowseName().Name, nn.DisplayName().Text, nn.DataType())
 	n.mu.Lock()
 	n.refs = append(n.refs, ref)
+	n.noteRefAppended(ref)
 	n.mu.Unlock()
 	return n.ns.AddNode(nn)
 }
@@ -409,6 +455,7 @@ func (n *Node) AddRef(o *Node, rt RefType, forward bool) {
 	// The reference is built before taking the lock: o may be n itself.
 	n.mu.Lock()
 	n.refs = append(n.refs, &ref)
+	n.noteRefAppended(&ref)
 	n.mu.Unlock()
 }
 
@@ -442,6 +489,7 @@ func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forw
 		// Remove by swapping with last element.
 		n.refs[i] = n.refs[len(n.refs)-1]
 		n.refs = n.refs[:len(n.refs)-1]
+		n.invalidateTypeDef()
 		return true
 	}
 	return false

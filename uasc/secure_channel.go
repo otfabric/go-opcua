@@ -454,7 +454,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			// The client dispatcher only receives responses so extracting
 			// the error from the ResponseHeader is correct here. Server-side
-			// request error handling lives in handleService().
+			// request error handling lives in the server (Server.serve).
 			//
 			// Since we are not decoding the ResponseHeader separately
 			// we need to drop every message that has an error since we

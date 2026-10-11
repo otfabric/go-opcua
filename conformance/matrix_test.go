@@ -195,7 +195,8 @@ func TestMatrix_TypeAPICoverage(t *testing.T) {
 var optionsNotCovered = map[string]map[string]string{
 	"opcua": {},
 	"server": {
-		"ListenOn": "binds a separate (wildcard) listen address; exercised by server/bound_port_test.go to keep this suite on loopback",
+		"ListenOn":                 "binds a separate (wildcard) listen address; exercised by server/bound_port_test.go to keep this suite on loopback",
+		"WithResponseWriteTimeout": "only observable with a peer that stops reading its socket; exercised by chaos/robustness_test.go",
 	},
 }
 
