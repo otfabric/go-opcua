@@ -20,11 +20,11 @@ func TestScheduleRenewalWaitsForSubSecondLifetimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	go func() {
 		c, err := ln.Accept()
 		if err == nil {
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 			buf := make([]byte, 1024)
 			for {
 				if _, err := c.Read(buf); err != nil {
@@ -37,7 +37,7 @@ func TestScheduleRenewalWaitsForSubSecondLifetimes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer tc.Close()
+	defer func() { _ = tc.Close() }()
 	conn, err := uacp.NewConn(tc.(*net.TCPConn), nil)
 	if err != nil {
 		t.Fatal(err)

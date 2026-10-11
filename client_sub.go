@@ -356,12 +356,6 @@ func (c *Client) forgetSubscriptionOf(ctx context.Context, sub *Subscription) ui
 	return id
 }
 
-func (c *Client) forgetSubscription(ctx context.Context, id uint32) {
-	c.subMux.Lock()
-	c.forgetSubscriptionNeedsSubMuxLock(ctx, id)
-	c.subMux.Unlock()
-}
-
 func (c *Client) forgetSubscriptionNeedsSubMuxLock(ctx context.Context, id uint32) {
 	delete(c.subs, id)
 	c.updatePublishTimeoutNeedsSubMuxLock()

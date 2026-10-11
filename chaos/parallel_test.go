@@ -780,7 +780,7 @@ func TestParallelAddressSpaceMutation(t *testing.T) {
 			n := ns.AddNewVariableStringNode(fmt.Sprintf("Srv%d", r), int32(r))
 			folder.AddRef(n, id.HasComponent, true)
 			if r%3 == 0 {
-				ns.DeleteNode(n.ID())
+				_ = ns.DeleteNode(n.ID())
 			}
 			time.Sleep(time.Millisecond)
 		}
