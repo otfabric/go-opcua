@@ -107,6 +107,13 @@ func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r u
 			}
 		}
 
+		// ns.Attribute may return the DataValue stored in the node. Work on a
+		// copy so that the timestamp filtering of this request neither races
+		// with other readers nor alters what the node holds.
+		if dv != nil {
+			cp := *dv
+			dv = &cp
+		}
 		_ = ua.ApplyTimestampsToReturn(dv, req.TimestampsToReturn)
 		results[i] = dv
 	}

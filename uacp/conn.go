@@ -121,6 +121,15 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 	}
 	conn.logger = d.Logger
 
+	// The connection is only usable once the HEL/ACK exchange is done, so the
+	// dial timeout covers it as well: a peer that accepts the TCP connection
+	// but stays silent must not hold up the caller indefinitely.
+	if dl.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, dl.Timeout)
+		defer cancel()
+	}
+
 	conn.logDebug("starting HEL/ACK handshake", "conn_id", conn.id)
 	if err := conn.Handshake(ctx, endpoint); err != nil {
 		conn.logWarn("HEL/ACK handshake failed", "conn_id", conn.id, "error", err)
@@ -162,11 +171,32 @@ func DialTCPWithTimeout(ctx context.Context, endpoint string, timeout time.Durat
 	return (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", raddr.Host)
 }
 
+// serverHandshakeTimeout bounds how long an accepted connection may take to
+// complete the HEL/ACK handshake before it is dropped.
+const serverHandshakeTimeout = 10 * time.Second
+
 // Listener is a OPC UA Connection Protocol network listener.
 type Listener struct {
 	l        *net.TCPListener
 	ack      *Acknowledge
 	endpoint string
+
+	// The TCP accept loop and the HEL/ACK handshakes run in the background
+	// so that a peer which connects but does not (or only slowly) send its
+	// HEL cannot keep other peers from being accepted.
+	start     sync.Once
+	ready     chan acceptResult
+	closed    chan struct{}
+	closeOnce sync.Once
+
+	mu      sync.Mutex
+	pending map[*net.TCPConn]struct{} // connections in handshake
+}
+
+// acceptResult is the outcome of accepting one connection.
+type acceptResult struct {
+	conn *Conn
+	err  error
 }
 
 // Listen acts like net.Listen for OPC UA Connection Protocol networks.
@@ -200,18 +230,78 @@ func Listen(ctx context.Context, endpoint string, ack *Acknowledge) (*Listener, 
 		l:        l.(*net.TCPListener),
 		ack:      ack,
 		endpoint: endpoint,
+		ready:    make(chan acceptResult),
+		closed:   make(chan struct{}),
+		pending:  make(map[*net.TCPConn]struct{}),
 	}, nil
 }
 
-// Accept accepts the next incoming call and returns the new connection.
+// Accept returns the next connection that completed the HEL/ACK handshake.
 //
-// The first param ctx is to be passed to monitor(), which monitors and handles
-// incoming messages automatically in another goroutine.
+// TCP connections are accepted and handshaken in the background, each with a
+// deadline, so a slow or silent peer does not delay other connections. A
+// failed handshake is reported as an error; the caller should keep calling
+// Accept. Accept returns ctx.Err() when ctx is done and a *net.OpError
+// wrapping net.ErrClosed once the listener is closed.
 func (l *Listener) Accept(ctx context.Context) (*Conn, error) {
-	c, err := l.l.AcceptTCP()
-	if err != nil {
-		return nil, err
+	l.start.Do(func() { go l.acceptLoop() })
+
+	select {
+	case r := <-l.ready:
+		return r.conn, r.err
+	case <-l.closed:
+		return nil, l.closedError()
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
+}
+
+func (l *Listener) closedError() error {
+	return &net.OpError{Op: "accept", Net: "tcp", Addr: l.l.Addr(), Err: net.ErrClosed}
+}
+
+// deliver hands r to a caller of Accept. It reports false if the listener
+// was closed first.
+func (l *Listener) deliver(r acceptResult) bool {
+	select {
+	case l.ready <- r:
+		return true
+	case <-l.closed:
+		return false
+	}
+}
+
+func (l *Listener) acceptLoop() {
+	for {
+		c, err := l.l.AcceptTCP()
+		if err != nil {
+			select {
+			case <-l.closed:
+				return
+			default:
+			}
+			if !l.deliver(acceptResult{err: err}) {
+				return
+			}
+			// Do not spin on a persistent accept error (e.g. EMFILE).
+			select {
+			case <-l.closed:
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+			continue
+		}
+
+		l.mu.Lock()
+		l.pending[c] = struct{}{}
+		l.mu.Unlock()
+		go l.handshake(c)
+	}
+}
+
+// handshake performs the server side of the HEL/ACK exchange on c and
+// delivers the result to Accept.
+func (l *Listener) handshake(c *net.TCPConn) {
 	// Clone listener ACK; srvhandshake also clones before negotiating, but
 	// the initial HEL receive must use a per-connection copy.
 	ackCopy := *l.ack
@@ -220,16 +310,40 @@ func (l *Listener) Accept(ctx context.Context) (*Conn, error) {
 		b := make([]byte, ackCopy.ReceiveBufSize)
 		return &b
 	}
-	if err := conn.srvhandshake(l.endpoint); err != nil {
-		_ = c.Close()
-		return nil, err
+
+	_ = c.SetDeadline(time.Now().Add(serverHandshakeTimeout))
+	err := conn.srvhandshake(l.endpoint)
+	if err == nil {
+		// srvhandshake may have replaced the TCP connection (ReverseHello).
+		_ = conn.SetDeadline(time.Time{})
 	}
-	return conn, nil
+
+	l.mu.Lock()
+	delete(l.pending, c)
+	l.mu.Unlock()
+
+	if err != nil {
+		_ = c.Close()
+		l.deliver(acceptResult{err: err})
+		return
+	}
+	if !l.deliver(acceptResult{conn: conn}) {
+		_ = conn.Close()
+	}
 }
 
-// Close closes the Listener.
+// Close closes the Listener and drops the connections whose handshake has
+// not completed yet.
 func (l *Listener) Close() error {
-	return l.l.Close()
+	l.closeOnce.Do(func() { close(l.closed) })
+	err := l.l.Close()
+
+	l.mu.Lock()
+	for c := range l.pending {
+		_ = c.Close()
+	}
+	l.mu.Unlock()
+	return err
 }
 
 // Addr returns the listener's network address.
@@ -338,14 +452,26 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 	if dl, ok := ctx.Deadline(); ok {
 		_ = c.SetDeadline(dl)
 	}
+	// Abort the exchange when ctx is cancelled: without this a peer that
+	// accepts the connection but never answers the HEL blocks the caller
+	// forever when ctx has no deadline.
+	stop := context.AfterFunc(ctx, func() { _ = c.SetDeadline(time.Now()) })
+	defer stop()
 
 	if err := c.Send("HELF", hel); err != nil {
-		return err
+		return handshakeError(ctx, err)
 	}
 
 	b, err := c.Receive()
 	if err != nil {
-		return err
+		return handshakeError(ctx, err)
+	}
+
+	// From here on ctx no longer governs the connection. If the cancellation
+	// hook has already fired it may still be about to expire the deadline,
+	// which would poison the established connection, so give up instead.
+	if !stop() {
+		return ctx.Err()
 	}
 
 	// clear the deadline
@@ -385,6 +511,21 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 		c.SendError(ua.StatusBadTCPInternalError)
 		return fmt.Errorf("%w: %q", errors.ErrInvalidMessageType, msgtyp)
 	}
+}
+
+// handshakeError returns the context's error if the handshake failed because
+// ctx was cancelled or timed out, and err otherwise.
+func handshakeError(ctx context.Context, err error) error {
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return ctxErr
+	}
+	// The connection's deadline is the context's deadline and may fire a
+	// moment before the context itself reports it.
+	var netErr net.Error
+	if _, ok := ctx.Deadline(); ok && errors.As(err, &netErr) && netErr.Timeout() {
+		return context.DeadlineExceeded
+	}
+	return err
 }
 
 func (c *Conn) srvhandshake(endpoint string) error {

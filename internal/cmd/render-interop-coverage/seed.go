@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 )
 
-const pin = "v0.5.0"
+const pin = "v0.6.0"
 
 var dirs = []string{
 	"go-client-to-open62541-server",
@@ -247,7 +247,7 @@ func build() ([]capability, []coverageEntry) {
 			cto: "unverified", ctm: "unverified",
 		}},
 
-		// Events (peer subscription verified on opcua-interop v0.5.0)
+		// Events (peer subscription verified on opcua-interop v0.6.0)
 		{"event.subscription", "Event subscription create", "events", all, rowSpec{
 			cto: "unverified", ctm: "unverified",
 			ots: "verified", mts: "verified",
@@ -271,7 +271,7 @@ func build() ([]capability, []coverageEntry) {
 			cto: "deferred", ctm: "deferred", ots: "deferred", mts: "deferred",
 		}},
 
-		// History (raw O→S / M→S verified on opcua-interop v0.5.0)
+		// History (raw O→S / M→S verified on opcua-interop v0.6.0)
 		{"history.read.raw", "HistoryRead raw", "history", all, rowSpec{
 			cto: "unverified", ctm: "unverified",
 			ots: "verified", mts: "verified",

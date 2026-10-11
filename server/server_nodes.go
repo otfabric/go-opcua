@@ -27,7 +27,7 @@ func NamespacesNode(s *Server) *Node {
 		ua.NewNumericNodeID(0, id.ServerNamespaceArray),
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("Namespaces")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassObject)),
+			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)), // NamespaceArray is a Variable
 		},
 		nil,
 		func() *ua.DataValue {
@@ -141,7 +141,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	sState := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusState),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ServerStatus")),
+			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("State")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
 		},
 		nil,
@@ -150,7 +150,7 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	mName := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoManufacturerName),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ProductName")),
+			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ManufacturerName")),
 			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
 		},
 		nil,
@@ -259,9 +259,27 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	for i := range nodes {
 		sStatus.AddRef(nodes[i], id.HasComponent, true)
 	}
-	ServerNode.AddRef(sStatus, id.HasComponent, true)
+	// The standard nodeset already links Server to ServerStatus; only add the
+	// reference when it is missing so Browse does not report it twice.
+	if !hasReference(ServerNode, sStatus.ID(), id.HasComponent, true) {
+		ServerNode.AddRef(sStatus, id.HasComponent, true)
+	}
 
 	nodes = append(nodes, sStatus)
 
 	return nodes
+}
+
+// hasReference reports whether n has a reference of the given type and
+// direction to target.
+func hasReference(n *Node, target *ua.NodeID, refType uint32, forward bool) bool {
+	for _, ref := range n.refsSnapshot() {
+		if ref == nil || ref.IsForward != forward || ref.ReferenceTypeID == nil || ref.NodeID == nil || ref.NodeID.NodeID == nil {
+			continue
+		}
+		if ref.ReferenceTypeID.IntID() == refType && ref.NodeID.NodeID.Equal(target) {
+			return true
+		}
+	}
+	return false
 }

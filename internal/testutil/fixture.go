@@ -62,6 +62,32 @@ type Fixture struct {
 	CustomVarA   *ua.NodeID
 	CustomVarB   *ua.NodeID
 	CustomSubVar *ua.NodeID
+
+	// Custom event type hierarchy in the fixture namespace:
+	// BaseEventType <- CustomEventType <- CustomEventSubType.
+	CustomEventType    *ua.NodeID
+	CustomEventSubType *ua.NodeID
+
+	// Nested address space used by view tests:
+	//
+	//	Plant (HasComponent) -> Line1 (HasComponent) -> Motor (HasComponent) -> Speed
+	//	                                          -> Motor (HasProperty)  -> SerialNumber
+	//	                  -> Line2 (HasComponent) -> Speed
+	//
+	// Line1 additionally Organizes Line2, so Line2 is reachable on two paths.
+	Plant        *ua.NodeID
+	Line1        *ua.NodeID
+	Line2        *ua.NodeID
+	Motor        *ua.NodeID
+	MotorSpeed   *ua.NodeID
+	MotorSerial  *ua.NodeID
+	Line2Speed   *ua.NodeID
+	Matrix       *ua.NodeID // 2x3 Int32 matrix
+	ByteArray    *ua.NodeID // ByteString used for IndexRange tests
+	DoubleArray  *ua.NodeID
+	Text         *ua.NodeID // String used for IndexRange tests
+	HistoryVar   *ua.NodeID // Double; history is enabled by tests that attach a historian
+	NoHistoryVar *ua.NodeID // Double; never enabled for history
 }
 
 // nodeID builds a string node id in the fixture namespace.
@@ -166,8 +192,91 @@ func AddFixture(t *testing.T, srv *server.Server) *Fixture {
 	f.EventObject = eventID
 
 	f.addQueryTypes(ns, obj)
+	f.addEventTypes(ns)
+	f.addPlant(ns, obj)
+	// Also reachable straight from the standard Objects folder, so the
+	// client's path helpers (which start at i=85 and split on ".") can
+	// address it: the namespace's own Objects folder is named after the
+	// namespace URI, which contains dots.
+	if plant := srv.Node(f.Plant); plant != nil {
+		rootObj.AddRef(plant, id.Organizes, true)
+	}
+
+	f.Matrix = add("Matrix", [][]int32{{1, 2, 3}, {4, 5, 6}})
+	f.ByteArray = add("ByteArray", []byte{0, 1, 2, 3, 4, 5, 6, 7, 8, 9})
+	f.DoubleArray = add("DoubleArray", []float64{0.5, 1.5, 2.5, 3.5})
+	f.Text = add("Text", "abcdefghij")
+	f.HistoryVar = add("HistoryVar", float64(0))
+	f.NoHistoryVar = add("NoHistoryVar", float64(0))
 
 	return f
+}
+
+// addEventTypes registers a custom event type and a subtype of it below
+// BaseEventType so OfType filters can be exercised with user-defined types.
+func (f *Fixture) addEventTypes(ns *server.NodeNameSpace) {
+	newType := func(name string) *server.Node {
+		n := server.NewNode(
+			f.nodeID(name),
+			map[ua.AttributeID]*ua.DataValue{
+				ua.AttributeIDNodeClass:   server.DataValueFromValue(uint32(ua.NodeClassObjectType)),
+				ua.AttributeIDBrowseName:  server.DataValueFromValue(attrs.BrowseName(name)),
+				ua.AttributeIDDisplayName: server.DataValueFromValue(attrs.DisplayName(name, name)),
+			},
+			nil, nil,
+		)
+		ns.AddNode(n)
+		return n
+	}
+	custom := newType("CustomEventType")
+	sub := newType("CustomEventSubType")
+	if base := f.Srv.Node(ua.NewNumericNodeID(0, id.BaseEventType)); base != nil {
+		base.AddRef(custom, id.HasSubtype, true)
+	}
+	custom.AddRef(sub, id.HasSubtype, true)
+	f.CustomEventType = custom.ID()
+	f.CustomEventSubType = sub.ID()
+}
+
+// addPlant builds the small nested hierarchy documented on Fixture.
+func (f *Fixture) addPlant(ns *server.NodeNameSpace, obj *server.Node) {
+	folder := func(name string) *server.Node {
+		n := server.NewFolderNode(f.nodeID(name), name)
+		ns.AddNode(n)
+		return n
+	}
+	variable := func(idName, browseName string, v any) *server.Node {
+		n := server.NewVariableNode(f.nodeID(idName), browseName, v)
+		ns.AddNode(n)
+		return n
+	}
+
+	plant := folder("Plant")
+	line1 := folder("Line1")
+	line2 := folder("Line2")
+	motor := folder("Motor")
+	speed := variable("Motor.Speed", "Speed", float64(1500))
+	serial := variable("Motor.SerialNumber", "SerialNumber", "SN-0001")
+	speed2 := variable("Line2.Speed", "Speed", float64(900))
+
+	obj.AddRef(plant, id.Organizes, true)
+	plant.AddRef(obj, id.Organizes, false)
+	plant.AddRef(line1, id.HasComponent, true)
+	line1.AddRef(plant, id.HasComponent, false)
+	plant.AddRef(line2, id.HasComponent, true)
+	line2.AddRef(plant, id.HasComponent, false)
+	line1.AddRef(motor, id.HasComponent, true)
+	motor.AddRef(line1, id.HasComponent, false)
+	line1.AddRef(line2, id.Organizes, true)
+	motor.AddRef(speed, id.HasComponent, true)
+	speed.AddRef(motor, id.HasComponent, false)
+	motor.AddRef(serial, id.HasProperty, true)
+	serial.AddRef(motor, id.HasProperty, false)
+	line2.AddRef(speed2, id.HasComponent, true)
+	speed2.AddRef(line2, id.HasComponent, false)
+
+	f.Plant, f.Line1, f.Line2, f.Motor = plant.ID(), line1.ID(), line2.ID(), motor.ID()
+	f.MotorSpeed, f.MotorSerial, f.Line2Speed = speed.ID(), serial.ID(), speed2.ID()
 }
 
 // addQueryTypes builds a small custom VariableType hierarchy and typed

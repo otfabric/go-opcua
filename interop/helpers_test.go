@@ -160,7 +160,7 @@ func requireHistoryContinueScenario(t *testing.T, imageEnv, defaultImage string)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	// Missing required flags → adapters emit usage that includes [--scenario continue]
-	// once Wave 3B is present (published v0.5.0 pins).
+	// once Wave 3B is present (published v0.6.0 pins).
 	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", image, "client", "history-read")
 	raw, _ := cmd.CombinedOutput()
 	out := string(raw)
@@ -210,7 +210,7 @@ func requireAdapterOp(t *testing.T, imageEnv, defaultImage, op string) {
 		}
 	}
 	msg := "adapter " + image + " (version " + caps.Adapter.Version +
-		") lacks client op " + op + "; need opcua-interop v0.5.0 client ops"
+		") lacks client op " + op + "; need opcua-interop v0.6.0 client ops"
 	if requireCapabilities() {
 		t.Fatal(msg)
 	}

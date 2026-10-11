@@ -87,9 +87,12 @@ func NewNode(id *ua.NodeID, attr Attributes, refs References, val ValueFunc) *No
 }
 
 func NewFolderNode(nodeID *ua.NodeID, name string) *Node {
-	reftype := ua.NewTwoByteNodeID(uint8(id.HasComponent)) // folder
-	eoid := ua.NewNumericExpandedNodeID(nodeID.Namespace(), id.ObjectsFolder)
-	typedef := ua.NewNumericExpandedNodeID(0, id.ObjectsFolder)
+	// A new folder starts without references; the caller links it into the
+	// address space with AddRef. It used to be created with a forward
+	// HasComponent reference to the namespace's Objects folder (labelled with
+	// the folder's own name). Every folder below Objects therefore pointed
+	// back up at Objects, turning the hierarchy into a cycle that sent
+	// recursive browses (e.g. the client's Node.Walk) into an endless loop.
 	n := NewNode(
 		nodeID,
 		map[ua.AttributeID]*ua.DataValue{
@@ -97,17 +100,9 @@ func NewFolderNode(nodeID *ua.NodeID, name string) *Node {
 			ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(name)),
 			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
 			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
-			ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
+			ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)), // EventNotifier is a Byte (Part 3 §5.5.1)
 		},
-		[]*ua.ReferenceDescription{{
-			ReferenceTypeID: reftype,
-			IsForward:       true,
-			NodeID:          eoid,
-			BrowseName:      &ua.QualifiedName{NamespaceIndex: nodeID.Namespace(), Name: name},
-			DisplayName:     &ua.LocalizedText{EncodingMask: ua.LocalizedTextText, Text: name},
-			NodeClass:       ua.NodeClassObject,
-			TypeDefinition:  typedef,
-		}},
+		[]*ua.ReferenceDescription{},
 		nil,
 	)
 	return n
@@ -126,7 +121,7 @@ func NewVariableNode(nodeID *ua.NodeID, name string, value any) *Node {
 				ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
 				ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 				ua.AttributeIDDataType:      DataValueFromValue(typedef),
-				ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
+				ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)), // EventNotifier is a Byte (Part 3 §5.5.1)
 			},
 			[]*ua.ReferenceDescription{},
 			func() *ua.DataValue {
@@ -148,7 +143,7 @@ func NewVariableNode(nodeID *ua.NodeID, name string, value any) *Node {
 			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
 			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 			ua.AttributeIDDataType:      DataValueFromValue(typedef),
-			ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
+			ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)), // EventNotifier is a Byte (Part 3 §5.5.1)
 		},
 		[]*ua.ReferenceDescription{},
 		vf,
@@ -203,7 +198,10 @@ func (n *Node) attribute(id ua.AttributeID) (*AttrValue, error) {
 		if len(n.rolePermissions) > 0 {
 			extObjs := make([]*ua.ExtensionObject, len(n.rolePermissions))
 			for i, rp := range n.rolePermissions {
-				extObjs[i] = &ua.ExtensionObject{Value: rp}
+				// NewExtensionObject fills in the TypeID and encoding mask;
+				// without them the attribute cannot be encoded and the
+				// whole Read response fails with BadEncodingError.
+				extObjs[i] = ua.NewExtensionObject(rp)
 			}
 			v := ua.MustVariant(extObjs)
 			return NewAttrValue(&ua.DataValue{
@@ -298,7 +296,11 @@ func (n *Node) Description() *ua.LocalizedText {
 }
 
 func (n *Node) SetDescription(text, locale string) {
-	n.attr[ua.AttributeIDDescription] = DataValueFromValue(&ua.LocalizedText{Text: text, Locale: locale})
+	lt := &ua.LocalizedText{Text: text, Locale: locale}
+	// Without the encoding mask the text is not put on the wire and clients
+	// read an empty description.
+	lt.UpdateMask()
+	n.attr[ua.AttributeIDDescription] = DataValueFromValue(lt)
 }
 
 func (n *Node) DataType() *ua.ExpandedNodeID {
@@ -309,8 +311,7 @@ func (n *Node) DataType() *ua.ExpandedNodeID {
 	v := n.attr[ua.AttributeIDDataType]
 	if v == nil || v.Value.Value() == nil {
 		// if we have a type definition, return that?
-		for i := range n.refs {
-			r := n.refs[i]
+		for _, r := range n.refsSnapshot() {
 			if r.ReferenceTypeID == nil {
 				slog.Default().Warn("reference type ID is nil")
 				continue
@@ -349,13 +350,16 @@ func (n *Node) AddObject(o *Node) *Node {
 	nn := &Node{
 		id:   o.id,
 		attr: maps.Clone(o.attr),
-		refs: slices.Clone(o.refs),
+		refs: o.refsSnapshot(),
 	}
 	if n.attr == nil {
 		n.attr = Attributes{}
 	}
 	nn.SetNodeClass(ua.NodeClassObject)
-	n.refs = append(n.refs, refs.Organizes(nn.id, nn.BrowseName().Name, nn.DisplayName().Text, nn.DataType()))
+	ref := refs.Organizes(nn.id, nn.BrowseName().Name, nn.DisplayName().Text, nn.DataType())
+	n.mu.Lock()
+	n.refs = append(n.refs, ref)
+	n.mu.Unlock()
 	return n.ns.AddNode(nn)
 }
 
@@ -363,14 +367,17 @@ func (n *Node) AddVariable(o *Node) *Node {
 	nn := &Node{
 		id:   o.id,
 		attr: maps.Clone(o.attr),
-		refs: slices.Clone(o.refs),
+		refs: o.refsSnapshot(),
 		val:  o.val,
 	}
 	if n.attr == nil {
 		n.attr = Attributes{}
 	}
 	nn.SetNodeClass(ua.NodeClassVariable)
-	n.refs = append(n.refs, refs.Organizes(nn.id, nn.BrowseName().Name, nn.DisplayName().Text, nn.DataType()))
+	ref := refs.Organizes(nn.id, nn.BrowseName().Name, nn.DisplayName().Text, nn.DataType())
+	n.mu.Lock()
+	n.refs = append(n.refs, ref)
+	n.mu.Unlock()
 	return n.ns.AddNode(nn)
 }
 
@@ -394,12 +401,26 @@ func (n *Node) AddRef(o *Node, rt RefType, forward bool) {
 		NodeClass:       o.NodeClass(),
 		TypeDefinition:  o.DataType(),
 	}
+	// The reference is built before taking the lock: o may be n itself.
+	n.mu.Lock()
 	n.refs = append(n.refs, &ref)
+	n.mu.Unlock()
+}
+
+// refsSnapshot returns a copy of the node's references. The address space
+// may be mutated (AddRef/RemoveRef, AddNodes/DeleteNodes) while services
+// such as Browse iterate over the references, so readers work on a snapshot.
+func (n *Node) refsSnapshot() References {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return slices.Clone(n.refs)
 }
 
 // RemoveRef removes a reference from the node matching the given target, reference type, and direction.
 // Returns true if a matching reference was found and removed.
 func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forward bool) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
 	for i, ref := range n.refs {
 		if ref.IsForward != forward {
 			continue

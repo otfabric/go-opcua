@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"encoding/xml"
+	stderrors "errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -209,7 +210,7 @@ func New(opts ...Option) (*Server, error) {
 				ProductURI:       "https://github.com/otfabric/go-opcua",
 				ManufacturerName: cfg.manufacturerName,
 				ProductName:      cfg.productName,
-				SoftwareVersion:  "0.0.0-dev",
+				SoftwareVersion:  cfg.softwareVersion, // honour the SoftwareVersion option
 				BuildNumber:      "",
 				BuildDate:        time.Time{},
 			},
@@ -230,6 +231,17 @@ func New(opts ...Option) (*Server, error) {
 		return nil, fmt.Errorf("server: namespace 0 is not a NodeNameSpace")
 	}
 	n0.srv = s
+
+	// An RBACAccessController needs the server whose address space it guards,
+	// but options are evaluated before the server exists. Bind a controller
+	// that was created without one, so that
+	//
+	//	server.New(server.WithAccessController(server.NewRBACAccessController(nil)), ...)
+	//
+	// works; before, RBAC could not be enabled through the public API at all.
+	if rbac, ok := cfg.accessController.(*RBACAccessController); ok && rbac != nil && rbac.srv == nil {
+		rbac.srv = s
+	}
 	if err := s.importNodeSet(&builtinNodeSet); err != nil {
 		return nil, fmt.Errorf("server: import built-in node set: %w", err)
 	}
@@ -475,6 +487,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go s.acceptAndRegister(mctx, s.l)
 	go s.monitorConnections(mctx)
+	go s.reapSessions(mctx)
 
 	return nil
 }
@@ -500,11 +513,43 @@ func (s *Server) Close() error {
 	}
 
 	// Shut down all secure channels and UACP connections
-	return s.cb.Close(context.Background())
+	err := s.cb.Close(context.Background())
+
+	// Nothing can reach the subscriptions and sessions any more. Stop the
+	// subscription goroutines (they would otherwise keep ticking until their
+	// lifetime expires) and drop the sessions.
+	if s.SubscriptionService != nil {
+		s.SubscriptionService.deleteAll()
+	}
+	s.sb.closeAll()
+
+	return err
 }
 
-type temporary interface {
-	Temporary() bool
+// sessionReapInterval is how often the server looks for timed-out sessions.
+const sessionReapInterval = 250 * time.Millisecond
+
+// reapSessions closes sessions whose timeout has elapsed until ctx is done.
+//
+// The subscriptions of a timed-out session are not deleted with it: Part 4
+// §5.13.1.1 keeps them alive until their own lifetime expires so that the
+// client can still transfer them to a new session.
+func (s *Server) reapSessions(ctx context.Context) {
+	t := time.NewTicker(sessionReapInterval)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case now := <-t.C:
+			for _, sess := range s.sb.reapExpired(now) {
+				s.cfg.logger.Info("session timed out", "session_id", sess.ID)
+				if s.historyCPs != nil && sess.AuthTokenID != nil {
+					s.historyCPs.releaseSession(sess.AuthTokenID.String())
+				}
+			}
+		}
+	}
 }
 
 func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
@@ -515,19 +560,20 @@ func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
 		default:
 			c, err := l.Accept(ctx)
 			if err != nil {
-				switch x := err.(type) {
-				case *net.OpError:
-					// Listener was closed (normal during shutdown).
+				// Only a closed listener (or a cancelled context) ends the
+				// accept loop. Everything else is the failure of a single
+				// connection, typically a peer that reset the connection or
+				// sent garbage during the HEL/ACK handshake. Such an error
+				// can be a *net.OpError too, so the error's type says nothing
+				// about the listener: treating it as "listener closed" let
+				// one misbehaving peer stop the server from accepting
+				// connections for good.
+				if ctx.Err() != nil || stderrors.Is(err, net.ErrClosed) {
 					s.cfg.logger.Debug("listener closed", "error", err)
 					return
-				case temporary:
-					if x.Temporary() {
-						continue
-					}
-				default:
-					s.cfg.logger.Error("error accepting connection", "error", err)
-					continue
 				}
+				s.cfg.logger.Warn("error accepting connection", "error", err)
+				continue
 			}
 
 			go func() { _ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey) }()

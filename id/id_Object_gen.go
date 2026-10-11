@@ -1466,10 +1466,23 @@ const (
 	Streams                                                                                                                             = 24230
 	TalkerStreams                                                                                                                       = 24231
 	ListenerStreams                                                                                                                     = 24232
+	NumberRangeEncodingDefaultBinary                                                                                                    = 24250
+	AliasNameVerboseDataTypeEncodingDefaultBinary                                                                                       = 24262
 	UserManagement                                                                                                                      = 24290
 	UserManagementDataTypeEncodingDefaultBinary                                                                                         = 24292
 	UserManagementDataTypeEncodingDefaultXML                                                                                            = 24296
 	UserManagementDataTypeEncodingDefaultJSON                                                                                           = 24300
+	AliasCategoryUpdateDataTypeEncodingDefaultBinary                                                                                    = 24338
+	AliasUpdateDataTypeEncodingDefaultBinary                                                                                            = 24339
+	NumberRangeEncodingDefaultXML                                                                                                       = 24352
+	AliasNameVerboseDataTypeEncodingDefaultXML                                                                                          = 24353
+	AliasCategoryUpdateDataTypeEncodingDefaultXML                                                                                       = 24354
+	AliasUpdateDataTypeEncodingDefaultXML                                                                                               = 24355
+	NumberRangeEncodingDefaultJSON                                                                                                      = 24368
+	AliasNameVerboseDataTypeEncodingDefaultJSON                                                                                         = 24369
+	AliasCategoryUpdateDataTypeEncodingDefaultJSON                                                                                      = 24370
+	AliasUpdateDataTypeEncodingDefaultJSON                                                                                              = 24371
+	DefaultJSON                                                                                                                         = 24502
 	IetfBaseNetworkInterfaceTypeInterfaceNamePlaceholder                                                                                = 25226
 	PriorityMappingEntryTypeEncodingDefaultBinary                                                                                       = 25239
 	PriorityMappingEntryTypeEncodingDefaultXML                                                                                          = 25243
@@ -3032,10 +3045,23 @@ var nameObject = map[uint32]string{
 	24230: "Streams",
 	24231: "TalkerStreams",
 	24232: "ListenerStreams",
+	24250: "NumberRange_Encoding_DefaultBinary",
+	24262: "AliasNameVerboseDataType_Encoding_DefaultBinary",
 	24290: "UserManagement",
 	24292: "UserManagementDataType_Encoding_DefaultBinary",
 	24296: "UserManagementDataType_Encoding_DefaultXml",
 	24300: "UserManagementDataType_Encoding_DefaultJson",
+	24338: "AliasCategoryUpdateDataType_Encoding_DefaultBinary",
+	24339: "AliasUpdateDataType_Encoding_DefaultBinary",
+	24352: "NumberRange_Encoding_DefaultXml",
+	24353: "AliasNameVerboseDataType_Encoding_DefaultXml",
+	24354: "AliasCategoryUpdateDataType_Encoding_DefaultXml",
+	24355: "AliasUpdateDataType_Encoding_DefaultXml",
+	24368: "NumberRange_Encoding_DefaultJson",
+	24369: "AliasNameVerboseDataType_Encoding_DefaultJson",
+	24370: "AliasCategoryUpdateDataType_Encoding_DefaultJson",
+	24371: "AliasUpdateDataType_Encoding_DefaultJson",
+	24502: "DefaultJson",
 	25226: "IetfBaseNetworkInterfaceType_InterfaceName_Placeholder",
 	25239: "PriorityMappingEntryType_Encoding_DefaultBinary",
 	25243: "PriorityMappingEntryType_Encoding_DefaultXml",

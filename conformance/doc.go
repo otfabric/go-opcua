@@ -21,6 +21,8 @@
 //   - Concurrency runs many clients in parallel and is intended to be run under
 //     the race detector.
 //
-// matrix_test.go enforces that every exported client method is referenced by
-// the suite so coverage does not silently regress.
+// matrix_test.go keeps the suite honest as the API grows: every exported
+// method of *opcua.Client, *opcua.Node, *opcua.Subscription, the subscription
+// builder, *opcua.Session and the monitor package, and every client and server
+// Option constructor, must be exercised by a test in this package.
 package conformance

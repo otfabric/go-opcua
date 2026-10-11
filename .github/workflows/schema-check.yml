@@ -1,0 +1,136 @@
+name: Upstream schema check
+run-name: "Upstream schema check (${{ github.event_name }}) by @${{ github.actor }}"
+
+# Downloads the OPC Foundation schema files with schema/update-schema.sh and
+# compares them with the copies vendored in this repository. When upstream has
+# moved, it opens (or refreshes) a tracking issue; nothing is committed.
+# The update itself stays manual: ./schema/update-schema.sh && make gen.
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: schema-check
+  cancel-in-progress: false
+
+env:
+  ISSUE_LABEL: schema-update
+  UPSTREAM_REPO: OPCFoundation/UA-Nodeset
+
+jobs:
+  check:
+    name: Compare vendored schema with upstream
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download upstream schema
+        run: ./schema/update-schema.sh
+
+      - name: Compare with vendored copies
+        id: diff
+        run: |
+          set -euo pipefail
+
+          # Record intent-to-add so files that are new upstream show up too.
+          git add --intent-to-add schema internal/schema
+
+          changed=$(git diff --name-only -- schema internal/schema)
+          if [ -z "${changed}" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Vendored schema matches upstream." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Identifies this exact upstream content, so the same change is
+          # reported once even if the tracking issue is closed unresolved.
+          fingerprint=$(git diff -- schema internal/schema | sha256sum | cut -c1-16)
+
+          {
+            echo "| File | Lines added | Lines removed |"
+            echo "|---|---:|---:|"
+            git diff --numstat -- schema internal/schema \
+              | awk -F'\t' '{ printf "| `%s` | %s | %s |\n", $3, $1, $2 }'
+          } > "$RUNNER_TEMP/schema-table.md"
+
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+          echo "fingerprint=${fingerprint}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## Upstream schema differs from the vendored copy"
+            echo
+            cat "$RUNNER_TEMP/schema-table.md"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open or refresh tracking issue
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FINGERPRINT: ${{ steps.diff.outputs.fingerprint }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          marker="<!-- schema-fingerprint:${FINGERPRINT} -->"
+
+          # Latest upstream commit touching the schema directory (best effort).
+          upstream=$(gh api "repos/${UPSTREAM_REPO}/commits?path=Schema&per_page=1" \
+            --jq '.[0] | "[`\(.sha[0:12])`](\(.html_url)) — \(.commit.committer.date[0:10]) — \(.commit.message | split("\n")[0])"' \
+            2>/dev/null || true)
+
+          {
+            echo "${marker}"
+            echo "The OPC Foundation schema files in [${UPSTREAM_REPO}](https://github.com/${UPSTREAM_REPO}) no longer match the copies vendored in this repository."
+            echo
+            if [ -n "${upstream}" ]; then
+              echo "Latest upstream schema commit: ${upstream}"
+              echo
+            fi
+            cat "$RUNNER_TEMP/schema-table.md"
+            echo
+            echo "### Update manually"
+            echo
+            echo '```sh'
+            echo "./schema/update-schema.sh"
+            echo "make gen"
+            echo "make test"
+            echo '```'
+            echo
+            echo "Review the generated diff (new NodeIds, StatusCodes, types and default permissions) before committing."
+            echo
+            echo "Detected by [this workflow run](${RUN_URL}). Closing this issue without updating silences it until upstream changes again."
+          } > "$RUNNER_TEMP/issue-body.md"
+
+          gh label create "${ISSUE_LABEL}" --color 0E8A16 \
+            --description "Upstream OPC UA schema changed; vendored copy needs a manual update" \
+            --force
+
+          # Already reported (open, or closed as "not now")? Then stay quiet.
+          reported=$(gh issue list --label "${ISSUE_LABEL}" --state all --limit 100 \
+            --search "\"schema-fingerprint:${FINGERPRINT}\" in:body" --json number --jq '.[0].number // empty')
+          if [ -n "${reported}" ]; then
+            echo "Upstream state ${FINGERPRINT} is already tracked in #${reported}; nothing to do." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          # Upstream moved again while an issue is still open: refresh it
+          # instead of opening a second one.
+          open=$(gh issue list --label "${ISSUE_LABEL}" --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "${open}" ]; then
+            gh issue edit "${open}" --body-file "$RUNNER_TEMP/issue-body.md"
+            gh issue comment "${open}" --body "Upstream schema changed again; the description above now reflects the current difference (${RUN_URL})."
+            echo "Refreshed tracking issue #${open}." | tee -a "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          url=$(gh issue create \
+            --title "Upstream OPC UA schema update available" \
+            --label "${ISSUE_LABEL}" \
+            --body-file "$RUNNER_TEMP/issue-body.md")
+          echo "Opened ${url}." | tee -a "$GITHUB_STEP_SUMMARY"

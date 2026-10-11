@@ -221,8 +221,16 @@ func (s *Server) isKnownEventType(nodeID *ua.NodeID) bool {
 	if dv == nil || dv.Value == nil {
 		return false
 	}
-	nc, ok := dv.Value.Value().(uint32)
-	return ok && ua.NodeClass(nc) == ua.NodeClassObjectType
+	// The NodeClass attribute is exposed as Int32 (Part 3 §5.2.1) although
+	// nodes store it as uint32, so accept both representations. Checking for
+	// uint32 only made every user-defined event type look unknown.
+	switch nc := dv.Value.Value().(type) {
+	case int32:
+		return ua.NodeClass(nc) == ua.NodeClassObjectType
+	case uint32:
+		return ua.NodeClass(nc) == ua.NodeClassObjectType
+	}
+	return false
 }
 
 // BaseEvent contains fields for a BaseEventType event.

@@ -4,15 +4,15 @@ Counts from `go run ./internal/cmd/render-interop-coverage -summary`.
 
 ## Publication
 
-opcua-interop **v0.5.0** published:
-https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0
+opcua-interop **v0.6.0** published:
+https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0
 
 Pinned digests (multi-arch indexes) in `harness_test.go` / CI:
 
 | Image | Digest |
 |---|---|
-| open62541 | `sha256:53c7a184ca9769bab87c6b5335c01322925411894368644913133c0812999283` |
-| milo | `sha256:c462f45a5e9b9ce8878788b97c77973832b23861e7ae5d0c6642279f798c15cf` |
+| open62541 | `sha256:d8cdfd67c9dd71713515fdf0e34533d7ff9f6d004bd5c7ceb349db40e325a1f2` |
+| milo | `sha256:95ad873ff5ae86a35815a1c6db2b75963675040f3283307e57ac10273194ab3f` |
 
 ## Promoted on published v0.5.0
 
@@ -42,3 +42,19 @@ Pinned digests (multi-arch indexes) in `harness_test.go` / CI:
 Advanced HA, NodeSet2, custom-type peer fixture, Query, NodeManagement,
 IssuedIdentityToken, A&C, LDS, general WhereClause expression surface, custom
 event models. See `GAPS.md` — not a backlog for this pass.
+
+## Promoted on published v0.6.0 (open62541 v1.5.9 / Milo 1.1.8)
+
+Uses the v0.6.0 adapter surface: client ops `register-nodes`, `node-management`,
+and the global `--channel-lifetime-ms` flag.
+
+| Item | Directions |
+|---|---|
+| `security.channel.renewal` | all four |
+| `history.read.continuation` | C→O, C→M (C→M paging only — Milo SDK does not surface release) |
+| `view.register-nodes` (new row) | all four |
+| `nodemgmt.add-nodes`, `nodemgmt.delete-nodes` | C→O, O→S, M→S; C→M `unsupported` |
+| `subscription.modify`, `monitoreditem.modify` (new rows) | C→O, C→M |
+| `subscription.publishing-mode`, `monitoreditem.monitoring-mode` (new rows) | all four |
+| `event.filter.where-clause` | C→O, C→M (comparison operators, positive + negative) |
+| `event.queue-overflow` | C→O, C→M (EventQueueOverflowEventType ahead of the queued events) |

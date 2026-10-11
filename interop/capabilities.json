@@ -427,6 +427,46 @@
       ]
     },
     {
+      "id": "subscription.modify",
+      "title": "ModifySubscription",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "subscription.publishing-mode",
+      "title": "SetPublishingMode",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "monitoreditem.modify",
+      "title": "ModifyMonitoredItems",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "monitoreditem.monitoring-mode",
+      "title": "SetMonitoringMode",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "event.subscription",
       "title": "Event subscription create",
       "profile": "events",
@@ -797,6 +837,17 @@
     {
       "id": "translate.browse-path",
       "title": "TranslateBrowsePathsToNodeIDs",
+      "profile": "view",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "view.register-nodes",
+      "title": "RegisterNodes / UnregisterNodes",
       "profile": "view",
       "applicableDirections": [
         "go-client-to-open62541-server",

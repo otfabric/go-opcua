@@ -38,6 +38,8 @@ opcua-interop
       subscription_timestamps_test.go / subscription_timestamps_peer_test.go
       discovery_peer_test.go / translate_peer_test.go
       security_peer_test.go / method_peer_test.go
+      extended_peer_test.go                channel renewal, C→ history continuation,
+                                           RegisterNodes, NodeManagement, modify services
       monitored_item_queue_test.go         subscriptions (queue windows)
       index_range_test.go                  attribute (IndexRange edges)
       browse_mask_test.go                  browse (ResultMask bits)
@@ -70,12 +72,12 @@ OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:dev \
 MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev \
 make interop
 
-# Run against published v0.5.0 release images (default)
+# Run against published v0.6.0 release images (default)
 make interop
 
 # CI — digest pinned (update interop.yml after each release)
-OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:53c7a184ca9769bab87c6b5335c01322925411894368644913133c0812999283 \
-MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:c462f45a5e9b9ce8878788b97c77973832b23861e7ae5d0c6642279f798c15cf \
+OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:d8cdfd67c9dd71713515fdf0e34533d7ff9f6d004bd5c7ceb349db40e325a1f2 \
+MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:95ad873ff5ae86a35815a1c6db2b75963675040f3283307e57ac10273194ab3f \
 make interop
 ```
 
@@ -101,11 +103,12 @@ go test -tags=interop -v ./interop/...
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `OPEN62541_IMAGE` | open62541 adapter image | digest-pinned `v0.5.0` (see defaults in `harness_test.go`) |
-| `MILO_IMAGE` | Milo (Java) adapter image | digest-pinned `v0.5.0` (see defaults in `harness_test.go`) |
+| `OPEN62541_IMAGE` | open62541 adapter image | digest-pinned `v0.6.0` (see defaults in `harness_test.go`) |
+| `MILO_IMAGE` | Milo (Java) adapter image | digest-pinned `v0.6.0` (see defaults in `harness_test.go`) |
 | `OPCUA_INTEROP_FIXTURE_DIR` | Path to fixture directory containing `baseline.json` | `testdata/` |
 | `OPCUA_INTEROP_PKI_DIR` | Root of test PKI tree | `../../opcua-interop/certs/test-pki` |
 | `OPCUA_INTEROP_REQUIRE_CAPABILITIES` | Fail (instead of skip) when a peer image lacks a required client op | unset (skip) |
+| `INTEROP_DEBUG_LOG` | Print the Go server's structured log to stderr in the SecureChannel renewal peer tests | unset |
 
 ## Test naming
 
@@ -210,6 +213,14 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Untrusted cert rejected at SecureChannel | ✓ | ✓ |
 | Browse filtering (NodeClassMask / IncludeSubtypes) | ✓ | ✓ |
 | Invalid NodeId service results | ✓ | ✓ |
+| SecureChannel renewal under subscription | ✓ | ✓ |
+| HistoryRead continuation points | ✓ | ✓ |
+| RegisterNodes / UnregisterNodes | ✓ | ✓ |
+| AddNodes / DeleteNodes | ✓ | ✓ |
+| ModifySubscription | ✓ | n/a |
+| SetPublishingMode (queue kept while disabled) | ✓ | ✓ |
+| ModifyMonitoredItems | ✓ | n/a |
+| SetMonitoringMode (Disabled / Sampling / Reporting) | ✓ | ✓ |
 
 \* Go-client-driven against Go server always; adapter reverse only where CLI exposes the control (`--queue-size`, `--discard-oldest`, `--timestamps` on subscribe).
 
@@ -294,9 +305,19 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Untrusted cert rejected at SecureChannel | ✓ | ✓ |
 | Browse filtering (NodeClassMask / IncludeSubtypes) | ✓ | ✓ |
 | Invalid NodeId service results | ✓ | ✓ |
+| SecureChannel renewal under subscription | ✓ | ✓ |
+| HistoryRead continuation points | ✓† | ✓ |
+| RegisterNodes / UnregisterNodes | ✓ | ✓ |
+| AddNodes / DeleteNodes | ⚠ | ✓ |
+| ModifySubscription | ✓ | n/a |
+| SetPublishingMode (queue kept while disabled) | ✓ | ✓ |
+| ModifyMonitoredItems | ✓ | n/a |
+| SetMonitoringMode (Disabled / Sampling / Reporting) | ✓ | ✓ |
 
 \* Go-client-driven against Go server always; adapter reverse only where CLI exposes the control (`--queue-size`, `--discard-oldest`, `--timestamps` on subscribe).
 ⚠ Milo soft-accepts EncodingMask-bearing Writes; ledger marks `write.encoding-mask` C→M as `unsupported` (claim requires `BadWriteNotSupported`).
+⚠ The Milo reference server does not implement NodeManagement (AddNodes → `BadNotSupported`); `nodemgmt.*` C→M is `unsupported`.
+† Paging through continuation points is verified; Milo's SDK does not pass `ReleaseContinuationPoints` to the history backend, so release/reuse is asserted on C→O only.
 
 ---
 
@@ -318,14 +339,16 @@ Every `unverified` row must carry a controlled `reason`:
 
 `test-missing` · `adapter-command-missing` · `adapter-fixture-missing` · `fault-harness-missing` · `consumer-demand-missing` · `peer-capability-unknown`
 
-Adapter images are pinned to [opcua-interop v0.5.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0) (digest-pinned below). Peer capability companions use `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` in CI so missing ops fail rather than skip.
+Adapter images are pinned to [opcua-interop v0.6.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0) (digest-pinned below). The ledger's peer versions are open62541 **1.5.9** and Eclipse Milo **1.1.8**. Peer capability companions use `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` in CI so missing ops fail rather than skip.
 
 | Image | Tag |
 |-------|-----|
-| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.5.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0) / `@sha256:53c7a184…2999283` |
-| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.5.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0) / `@sha256:c462f45a…798c15cf` |
+| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.6.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0) / `@sha256:d8cdfd67…0e325a1f2` |
+| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.6.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0) / `@sha256:95ad873f…3194ab3f` |
 
 > **Local dev images:** Override `OPEN62541_IMAGE` / `MILO_IMAGE` when testing unreleased adapter builds.
+
+> `extended_peer_test.go` needs the v0.6.0 adapter surface (`register-nodes`, `node-management`, `--channel-lifetime-ms`); older images fail it.
 
 **Interop claim rule:** only modes with positive and negative peer tests in the ledger are claimed interoperable.
 
@@ -350,12 +373,30 @@ Optimise for accurate evidence, not a zero-unverified quota. Current ledger: **0
 | `event.subscription` / decode / select | C→ + O→S/M→S (as applicable) |
 | `event.filter.of-type` / `severity-threshold` | all four |
 | `history.read.raw` | all four |
-| `history.read.continuation` | O→S, M→S |
+| `history.read.continuation` | all four (O→S/M→S `--scenario continue`; C→M paging only) |
+| `security.channel.renewal` | all four (Basic256Sha256 / SignAndEncrypt, ≥ 3 renewals under a live subscription) |
+| `view.register-nodes` | all four |
+| `nodemgmt.add-nodes` / `nodemgmt.delete-nodes` | C→O, O→S, M→S |
+| `subscription.modify`, `monitoreditem.modify` | C→O, C→M |
+| `subscription.publishing-mode`, `monitoreditem.monitoring-mode` | all four |
+| `event.filter.where-clause` | C→O, C→M (five comparison operators, matching **and** non-matching operands) |
+| `event.queue-overflow` | C→O, C→M (EventQueueOverflowEventType ahead of the queued events) |
 
 ### Remaining gaps (summary)
 
-- **Unsupported (behavioural):** `write.encoding-mask` C→M — Milo soft-accepts; claim requires `BadWriteNotSupported`.
-- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query, NodeManagement, IssuedIdentityToken, A&C, LDS/GDS, dynamic EO decode, custom event emission, general WhereClause surface, C→ history continuation.
+- **Unsupported (behavioural):** `write.encoding-mask` C→M — Milo soft-accepts; claim requires `BadWriteNotSupported`. `nodemgmt.add-nodes` / `nodemgmt.delete-nodes` C→M — the Milo reference server has no NodeManagement service set.
+- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query, IssuedIdentityToken, A&C, LDS/GDS, dynamic EO decode, custom event emission, general WhereClause surface, HistoryRead modified/at-time/processed/events, HistoryUpdate, certificate chains / CRL.
+
+### Server defects found by peer evidence
+
+Peer tests are the only place these showed up — the Go client tolerated all of them:
+
+| Defect | Peer symptom | Fix |
+|---|---|---|
+| Server renewed SecurityTokens in place (same TokenId, new keys, keys swapped on the live instance) | open62541 / Milo: `could not verify signature` on the first message after renewal — any peer session died at 75% of the channel lifetime | Renewal issues a new TokenId on a fresh instance; old token stays valid until it expires (`uasc/secure_channel_renew.go`) |
+| Server rejected an OpenSecureChannel renewal carrying a session AuthenticationToken | open62541: `BadSecureChannelTokenUnknown`, then `SecurityToken timed out` | Token is ignored for this service |
+| Server never revised the requested token lifetime and never expired tokens | — (hygiene) | Lifetime capped at the configured maximum, `0` → server default; expired tokens are retired, un-renewed channels closed |
+| AddNodes ignored `NodeAttributes` | open62541 / Milo: added Variable read back `null` | VariableAttributes applied (unset mask read as "all", as open62541 clients send it) |
 
 #### events — Go↔Go companions
 
@@ -371,7 +412,7 @@ All tests in `interop/events_test.go` exercise a Go server + Go client with no p
 | `TestGoServer_CustomEventFields` | User fields from `BaseEvent.Fields` selected by name and delivered |
 | `TestGoServer_ModifyMonitoredItem_EventFilter` | ModifyMonitoredItems updates the live event filter; post-modify filter enforced |
 
-Peer event subscription, BaseEvent emission, SelectClauses, OfType, and severity-threshold filters are verified on the published v0.5.0 pins. Broad WhereClause and custom event emission remain deferred.
+Peer event subscription, BaseEvent emission, SelectClauses, OfType, and severity-threshold filters are verified on the published v0.6.0 pins. WhereClause comparison operators are verified C→O / C→M; the adapter clients expose only `--of-type` / `--min-severity`, so the general WhereClause surface stays deferred for O→S / M→S, as does custom event emission.
 
 #### custom-types — Go↔Go companions
 

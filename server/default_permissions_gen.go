@@ -20,168 +20,168 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2058: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2059: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2060: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2069: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2071: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2075: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2078: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2080: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2082: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2085: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2086: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2087: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2088: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2089: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2090: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2091: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2093: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2095: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2097: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2099: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2100: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2104: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2127: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2253: {
@@ -484,7 +484,7 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2735: {
@@ -515,28 +515,28 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2790: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2803: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2829: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	2992: {
@@ -583,42 +583,42 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	3006: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	3012: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	3014: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	3019: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	3022: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	3704: {
@@ -671,28 +671,28 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	8944: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	8961: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	11093: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	11313: {
@@ -827,7 +827,7 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	12165: {
@@ -1647,7 +1647,7 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	15215: {
@@ -2654,21 +2654,21 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	17242: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	17259: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	17364: {
@@ -2773,7 +2773,15 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
+		},
+	},
+	19309: {
+		AccessRestrictions: 0,
+		RolePermissions: []ua.RolePermissionType{
+			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
+			{RoleID: roleNodeID("ConfigureAdmin"), Permissions: 0x0e7ff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0e7ff},
 		},
 	},
 	19442: {
@@ -2806,14 +2814,14 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	23926: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	24095: {
@@ -3645,14 +3653,14 @@ var DefaultNodePermissions = map[uint32]NodePermissionDefault{
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 	32803: {
 		AccessRestrictions: 0,
 		RolePermissions: []ua.RolePermissionType{
 			{RoleID: roleNodeID("Anonymous"), Permissions: 0x00021},
-			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x1ffff},
+			{RoleID: roleNodeID("SecurityAdmin"), Permissions: 0x0ffff},
 		},
 	},
 }

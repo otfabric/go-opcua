@@ -14,8 +14,8 @@
 //
 // Environment variables (all optional):
 //
-//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: digest-pinned v0.5.0)
-//	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest-pinned v0.5.0)
+//	OPEN62541_IMAGE            Docker image for the open62541 adapter (default: digest-pinned v0.6.0)
+//	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest-pinned v0.6.0)
 //	OPCUA_INTEROP_FIXTURE_DIR  Directory containing baseline.json     (default: testdata)
 //	OPCUA_INTEROP_PKI_DIR      Root of the test PKI tree              (default: ../../opcua-interop/certs/test-pki)
 package interop
@@ -53,15 +53,16 @@ import (
 const (
 	// Single source of truth for the pinned opcua-interop release.
 	// Keep INTEROP.md, coverage.json evidence versions, and CI workflow env in sync.
-	// Digests are GHCR multi-arch indexes from the current v0.5.0 publication:
-	// https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0
-	// https://github.com/otfabric/opcua-interop/actions/runs/30137524051
-	// When opcua-interop republishes v0.5.0, update these digests in lockstep
-	// (harness defaults, interop.yml, INTEROP.md). Do not introduce v0.5.1/RC pins.
-	interopVersion = "v0.5.0"
+	// Digests are GHCR multi-arch indexes from the current v0.6.0 publication:
+	// https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0
+	// https://github.com/otfabric/opcua-interop/actions/runs/38136156545
+	// opcua-interop tags are immutable: on a new release update the version
+	// and these digests in lockstep (harness defaults, interop.yml, INTEROP.md,
+	// coverage.json, render-interop-coverage).
+	interopVersion = "v0.6.0"
 
-	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:53c7a184ca9769bab87c6b5335c01322925411894368644913133c0812999283"
-	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:c462f45a5e9b9ce8878788b97c77973832b23861e7ae5d0c6642279f798c15cf"
+	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:d8cdfd67c9dd71713515fdf0e34533d7ff9f6d004bd5c7ceb349db40e325a1f2"
+	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:95ad873ff5ae86a35815a1c6db2b75963675040f3283307e57ac10273194ab3f"
 	defaultFixtureDir     = "testdata"
 
 	interopNamespaceURI = "urn:otfabric:opcua-interop:model"

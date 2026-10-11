@@ -5,6 +5,8 @@ package server
 import (
 	"encoding/xml"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
@@ -28,6 +30,42 @@ func (s *Server) ImportNodeSetXML(data []byte) error {
 // UANodeSet can be shared safely across calls.
 func isForward(ref *schema.Reference) bool {
 	return ref.IsForwardAttr == nil || *ref.IsForwardAttr
+}
+
+// importBrowseName converts the BrowseName attribute of a NodeSet2 node into a
+// QualifiedName. The attribute has the form "Name" or "<nsIndex>:Name"; the
+// numeric prefix is the namespace index and not part of the name. Without a
+// prefix the name belongs to the namespace of the node.
+func importBrowseName(nid *ua.NodeID, attr string) *ua.QualifiedName {
+	if i := strings.IndexByte(attr, ':'); i > 0 {
+		if ns, err := strconv.ParseUint(attr[:i], 10, 16); err == nil {
+			return &ua.QualifiedName{NamespaceIndex: uint16(ns), Name: attr[i+1:]}
+		}
+	}
+	return &ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: attr}
+}
+
+// importedRef identifies one reference added by a nodeset import.
+type importedRef struct {
+	from, to *Node
+	refType  RefType
+	forward  bool
+}
+
+// refImporter adds the references of one nodeset import, each of them once.
+// NodeSet2 files commonly declare a reference on both of its ends (forward on
+// the parent and inverse on the child), and the importer derives the opposite
+// direction for each declaration. Adding blindly would store every such
+// reference twice and return duplicates from Browse.
+type refImporter map[importedRef]struct{}
+
+func (ri refImporter) add(n, o *Node, rt RefType, forward bool) {
+	key := importedRef{from: n, to: o, refType: rt, forward: forward}
+	if _, done := ri[key]; done {
+		return
+	}
+	ri[key] = struct{}{}
+	n.AddRef(o, rt, forward)
 }
 
 func (s *Server) importNodeSet(nodes *schema.UANodeSet) error {
@@ -76,7 +114,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(rt.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: rt.BrowseNameAttr})
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, rt.BrowseNameAttr))
 		attrs[ua.AttributeIDIsAbstract] = DataValueFromValue(rt.IsAbstractAttr)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(rt.UserWriteMaskAttr)
 		attrs[ua.AttributeIDSymmetric] = DataValueFromValue(rt.SymmetricAttr)
@@ -116,7 +154,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(dt.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: dt.BrowseNameAttr})
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, dt.BrowseNameAttr))
 		attrs[ua.AttributeIDIsAbstract] = DataValueFromValue(dt.IsAbstractAttr)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(dt.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(dt.WriteMaskAttr)
@@ -151,7 +189,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
 		attrs[ua.AttributeIDIsAbstract] = DataValueFromValue(ot.IsAbstractAttr)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
@@ -185,7 +223,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {
@@ -218,7 +256,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {
@@ -251,7 +289,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {
@@ -287,7 +325,7 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: ot.BrowseNameAttr})
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {
@@ -319,6 +357,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 	s.cfg.logger.Debug("new node set", "last_modified", nodes.LastModifiedAttr)
 
 	failures := 0
+	added := refImporter{}
 	reftypes := make(map[string]*schema.UAReferenceType)
 	for i := range nodes.UAReferenceType {
 		rt := nodes.UAReferenceType[i]
@@ -415,9 +454,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: reference type %q: parse reference type id %q: %w", rt.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
+			added.add(node, n, RefType(reftypeid.IntID()), fwd)
 			if !refTypeEntry.SymmetricAttr {
-				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
+				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
 			}
 		}
 
@@ -465,9 +504,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: data type %q: parse reference type id %q: %w", dt.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
+			added.add(node, n, RefType(reftypeid.IntID()), fwd)
 			if !refTypeEntry.SymmetricAttr {
-				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
+				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
 			}
 
 		}
@@ -511,9 +550,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: object type %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
+			added.add(node, n, RefType(reftypeid.IntID()), fwd)
 			if !refTypeEntry.SymmetricAttr {
-				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
+				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
 			}
 		}
 	}
@@ -555,9 +594,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: variable type %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
+			added.add(node, n, RefType(reftypeid.IntID()), fwd)
 			if !refTypeEntry.SymmetricAttr {
-				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
+				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
 			}
 
 		}
@@ -601,9 +640,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: variable %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
+			added.add(node, n, RefType(reftypeid.IntID()), fwd)
 			if !refTypeEntry.SymmetricAttr {
-				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
+				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
 			}
 
 		}
@@ -647,9 +686,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: method %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
+			added.add(node, n, RefType(reftypeid.IntID()), fwd)
 			if !refTypeEntry.SymmetricAttr {
-				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
+				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
 			}
 		}
 
@@ -695,9 +734,9 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: object %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			node.AddRef(n, RefType(reftypeid.IntID()), fwd)
+			added.add(node, n, RefType(reftypeid.IntID()), fwd)
 			if !refTypeEntry.SymmetricAttr {
-				n.AddRef(node, RefType(reftypeid.IntID()), !fwd)
+				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
 			}
 
 		}

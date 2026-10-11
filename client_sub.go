@@ -61,9 +61,6 @@ func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, 
 
 	stats.Subscription().Add("Count", 1)
 
-	// start the publish loop if it isn't already running
-	c.resumech <- struct{}{}
-
 	sub := &Subscription{
 		SubscriptionID:            res.SubscriptionID,
 		RevisedPublishingInterval: time.Duration(res.RevisedPublishingInterval) * time.Millisecond,
@@ -74,19 +71,28 @@ func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, 
 		params:                    params,
 		nextSeq:                   1,
 		c:                         c,
+		cancelled:                 make(chan struct{}),
 	}
 
 	c.subMux.Lock()
 	defer c.subMux.Unlock()
 
-	if sub.SubscriptionID == 0 || c.subs[sub.SubscriptionID] != nil {
+	if sub.id() == 0 || c.subs[sub.id()] != nil {
 		// this should not happen and is usually indicative of a server bug
 		// see: Part 4 Section 5.13.2.2, Table 88 – CreateSubscription Service Parameters
 		return nil, ua.StatusBadSubscriptionIDInvalid
 	}
 
-	c.subs[sub.SubscriptionID] = sub
+	c.subs[sub.id()] = sub
 	c.updatePublishTimeoutNeedsSubMuxLock()
+
+	// Start the publish loop if it isn't already running. This is done while
+	// holding subMux, after the subscription is registered, so that it is
+	// ordered with the pause issued when the last subscription is forgotten:
+	// a concurrent Cancel of another subscription either still sees it (and
+	// pauses before this resume) or sees the new one (and does not pause).
+	// It never blocks, see setPublishPaused.
+	c.setPublishPaused(false)
 	return sub, nil
 }
 
@@ -100,6 +106,23 @@ func (c *Client) SubscriptionIDs() []uint32 {
 		ids = append(ids, id)
 	}
 	return ids
+}
+
+// partitionSubscriptions splits the registered subscriptions into those that
+// are expected to exist on the server and those whose last recreation failed
+// and that therefore have to be recreated from scratch.
+func (c *Client) partitionSubscriptions() (intact, broken []uint32) {
+	c.subMux.RLock()
+	defer c.subMux.RUnlock()
+
+	for id, sub := range c.subs {
+		if sub.needsRecreate {
+			broken = append(broken, id)
+		} else {
+			intact = append(intact, id)
+		}
+	}
+	return intact, broken
 }
 
 // recreateSubscriptions creates new subscriptions
@@ -119,8 +142,22 @@ func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
 	// (outside the reconnect path) do not leave publishing permanently paused.
 	c.forgetSubscriptionNeedsSubMuxLock(ctx, id)
 	if err := sub.recreateCreate(ctx); err != nil {
+		// Do not lose the subscription: without an entry in c.subs no later
+		// recovery would ever try again and its consumer would silently
+		// stop receiving data. recreateCreate registers the subscription
+		// itself once the server has assigned a new id; if it failed before
+		// that, put it back under the id it is known by.
+		if _, ok := c.subs[sub.id()]; !ok {
+			c.subs[sub.id()] = sub
+			stats.Subscription().Add("Count", 1)
+			c.updatePublishTimeoutNeedsSubMuxLock()
+		}
+		// Whatever exists on the server now is incomplete (for example a
+		// subscription without its monitored items).
+		sub.needsRecreate = true
 		return err
 	}
+	sub.needsRecreate = false
 	c.resumeSubscriptions(ctx)
 	return nil
 }
@@ -174,15 +211,15 @@ func (c *Client) republishSubscription(ctx context.Context, id uint32, available
 		return republishResult{}, fmt.Errorf("%w: id=%d", errors.ErrInvalidSubscriptionID, id)
 	}
 
-	c.cfg.logger.Debug("republishing subscription", "sub_id", sub.SubscriptionID)
+	c.cfg.logger.Debug("republishing subscription", "sub_id", sub.id())
 	rr, err := c.sendRepublishRequests(ctx, sub, availableSeq)
 	if err != nil {
 		switch {
 		case errors.Is(err, ua.StatusBadSessionIDInvalid):
 			return rr, nil
 		case errors.Is(err, ua.StatusBadSubscriptionIDInvalid):
-			c.cfg.logger.Debug("republish failed, subscription invalid", "sub_id", sub.SubscriptionID)
-			return rr, fmt.Errorf("%w: subscription %d is invalid", errors.ErrInvalidSubscriptionID, sub.SubscriptionID)
+			c.cfg.logger.Debug("republish failed, subscription invalid", "sub_id", sub.id())
+			return rr, fmt.Errorf("%w: subscription %d is invalid", errors.ErrInvalidSubscriptionID, sub.id())
 		default:
 			return rr, err
 		}
@@ -207,17 +244,24 @@ type republishResult struct {
 func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, availableSeq []uint32) (republishResult, error) {
 	var result republishResult
 
+	// Republishing reads and advances the subscription's sequence numbers and
+	// delivers to its consumer, just like the publish loop does for a live
+	// PublishResponse. deliverMu keeps the two apart, see
+	// deliverPublishResponse.
+	c.deliverMu.Lock()
+	defer c.deliverMu.Unlock()
+
 	// If our expected next sequence number isn't in the server's retransmission queue
 	// some notifications may have been lost. We log a warning and continue rather than
 	// failing because data loss during reconnection is expected per Part 4 §6.5.
 	if len(availableSeq) > 0 && !slices.Contains(availableSeq, sub.nextSeq) {
-		c.cfg.logger.Warn("next sequence number not in retransmission buffer", "sub_id", sub.SubscriptionID, "next_seq", sub.nextSeq, "available_seq", availableSeq)
+		c.cfg.logger.Warn("next sequence number not in retransmission buffer", "sub_id", sub.id(), "next_seq", sub.nextSeq, "available_seq", availableSeq)
 		result.gapDetected = true
 	}
 
 	for {
 		req := &ua.RepublishRequest{
-			SubscriptionID:           sub.SubscriptionID,
+			SubscriptionID:           sub.id(),
 			RetransmitSequenceNumber: sub.nextSeq,
 		}
 
@@ -268,31 +312,48 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 				sub.lastSeq = res.NotificationMessage.SequenceNumber
 				sub.nextSeq = sub.lastSeq + 1
 				result.republishedCount++
-				c.cfg.logger.Debug("republished notification", "seq_num", res.NotificationMessage.SequenceNumber, "sub_id", sub.SubscriptionID)
+				c.cfg.logger.Debug("republished notification", "seq_num", res.NotificationMessage.SequenceNumber, "sub_id", sub.id())
 
 				if len(availableSeq) > 0 && !slices.Contains(availableSeq, sub.nextSeq) {
-					c.cfg.logger.Debug("republishing subscription complete", "sub_id", sub.SubscriptionID)
+					c.cfg.logger.Debug("republishing subscription complete", "sub_id", sub.id())
 					return result, nil
 				}
 			}
 		}
 
-		time.Sleep(time.Second)
+		// more notifications may be buffered: fetch the next one, unless
+		// the client is shutting down
+		if err := ctx.Err(); err != nil {
+			return result, err
+		}
 	}
 }
 
 // registerSubscriptionNeedsSubMuxLock registers a subscription.
 func (c *Client) registerSubscriptionNeedsSubMuxLock(sub *Subscription) error {
-	if sub.SubscriptionID == 0 {
+	if sub.id() == 0 {
 		return ua.StatusBadSubscriptionIDInvalid
 	}
 
-	if _, ok := c.subs[sub.SubscriptionID]; ok {
-		return fmt.Errorf("%w: id=%d", errors.ErrInvalidSubscriptionID, sub.SubscriptionID)
+	if _, ok := c.subs[sub.id()]; ok {
+		return fmt.Errorf("%w: id=%d", errors.ErrInvalidSubscriptionID, sub.id())
 	}
 
-	c.subs[sub.SubscriptionID] = sub
+	c.subs[sub.id()] = sub
 	return nil
+}
+
+// forgetSubscriptionOf removes sub from the client and returns the id it was
+// registered with.
+func (c *Client) forgetSubscriptionOf(ctx context.Context, sub *Subscription) uint32 {
+	c.subMux.Lock()
+	defer c.subMux.Unlock()
+
+	id := sub.id()
+	if c.subs[id] == sub {
+		c.forgetSubscriptionNeedsSubMuxLock(ctx, id)
+	}
+	return id
 }
 
 func (c *Client) forgetSubscription(ctx context.Context, id uint32) {
@@ -307,9 +368,9 @@ func (c *Client) forgetSubscriptionNeedsSubMuxLock(ctx context.Context, id uint3
 	stats.Subscription().Add("Count", -1)
 
 	if len(c.subs) == 0 {
-		// pauseSubscriptions blocks on channel send; this is acceptable under the
-		// subscription mutex since there are no remaining subs to contend.
-		c.pauseSubscriptions(ctx)
+		// Pause the publish loop. This runs under the subscription mutex and
+		// never blocks, see setPublishPaused.
+		c.setPublishPaused(true)
 	}
 }
 
@@ -351,7 +412,7 @@ func (c *Client) notifySubscription(ctx context.Context, sub *Subscription, noti
 
 	if notif == nil {
 		sub.notify(ctx, &PublishNotificationData{
-			SubscriptionID: sub.SubscriptionID,
+			SubscriptionID: sub.id(),
 			Error:          errors.ErrEmptyResponse,
 		})
 		return
@@ -362,7 +423,7 @@ func (c *Client) notifySubscription(ctx context.Context, sub *Subscription, noti
 		// Part 4, 7.20 NotificationData parameters
 		if data == nil || data.Value == nil {
 			sub.notify(ctx, &PublishNotificationData{
-				SubscriptionID: sub.SubscriptionID,
+				SubscriptionID: sub.id(),
 				Error:          errors.ErrEmptyResponse,
 			})
 			continue
@@ -374,36 +435,115 @@ func (c *Client) notifySubscription(ctx context.Context, sub *Subscription, noti
 		// Part 4, 7.20.4 StatusChangeNotification parameter
 		case ua.Notification:
 			sub.notify(ctx, &PublishNotificationData{
-				SubscriptionID: sub.SubscriptionID,
+				SubscriptionID: sub.id(),
 				Value:          v,
 			})
 
 		// Error
 		default:
 			sub.notify(ctx, &PublishNotificationData{
-				SubscriptionID: sub.SubscriptionID,
+				SubscriptionID: sub.id(),
 				Error:          fmt.Errorf("%w: %T", errors.ErrInvalidResponseType, data.Value),
 			})
 		}
 	}
 }
 
-// pauseSubscriptions suspends the publish loop by signalling the pausech.
-// It has no effect if the publish loop is already paused.
-func (c *Client) pauseSubscriptions(ctx context.Context) {
+// The publish loop is controlled by a piece of state, publishPaused, rather
+// than by the order in which pause and resume signals arrive: the signals
+// travel on two separate channels, so their relative order is lost, and a
+// pause that overtakes a later resume would leave the loop paused for good
+// while subscriptions exist. pausech and resumech only wake the loop up so
+// that it looks at the state again.
+
+// setPublishRecovering marks the start and the end of a connection recovery.
+// While a recovery is in progress the publish loop is held regardless of
+// publishPaused: the recovery republishes missed notifications, and a live
+// PublishResponse delivered at the same time would break their order. A
+// plain pause would not do, because Subscribe (which can succeed as soon as
+// the new session is up) resumes publishing.
+func (c *Client) setPublishRecovering(recovering bool) {
+	c.publishMu.Lock()
+	c.publishRecovering = recovering
+	c.publishMu.Unlock()
+
+	ch := c.resumech
+	if recovering {
+		ch = c.pausech
+	}
 	select {
-	case <-ctx.Done():
-	case c.pausech <- struct{}{}:
+	case ch <- struct{}{}:
+	default:
 	}
 }
 
-// resumeSubscriptions restarts the publish loop by signalling the resumech.
+// publishRecoveryInProgress reports whether a connection recovery is in
+// progress.
+func (c *Client) publishRecoveryInProgress() bool {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	return c.publishRecovering
+}
+
+// setPublishPaused sets whether the publish loop should be paused and wakes
+// it up. It never blocks: if the wake-up buffer is full the loop is already
+// going to re-read the state.
+func (c *Client) setPublishPaused(paused bool) {
+	c.publishMu.Lock()
+	c.publishPaused = paused
+	if !paused {
+		// A new generation invalidates the pause a failing publish attempt
+		// that started earlier is about to request, see pausePublishIfGen.
+		c.publishGen++
+	}
+	c.publishMu.Unlock()
+
+	ch := c.resumech
+	if paused {
+		ch = c.pausech
+	}
+	select {
+	case ch <- struct{}{}:
+	default:
+	}
+}
+
+// publishState returns whether the publish loop has to hold (it is paused or
+// a recovery is in progress) and the current resume generation.
+func (c *Client) publishState() (paused bool, gen uint64) {
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+	return c.publishPaused || c.publishRecovering, c.publishGen
+}
+
+// pausePublishIfGen pauses the publish loop after a failed publish attempt
+// unless the loop was resumed since the attempt started. Such a resume means
+// that whatever made the attempt fail (typically a lost connection) has
+// already been repaired, and pausing now would never be undone.
+func (c *Client) pausePublishIfGen(gen uint64) {
+	c.publishMu.Lock()
+	if c.publishGen == gen {
+		c.publishPaused = true
+	}
+	c.publishMu.Unlock()
+}
+
+// pauseSubscriptions suspends the publish loop.
+// It has no effect if the publish loop is already paused.
+func (c *Client) pauseSubscriptions(ctx context.Context) {
+	if ctx.Err() != nil {
+		return
+	}
+	c.setPublishPaused(true)
+}
+
+// resumeSubscriptions restarts the publish loop.
 // It has no effect if the publish loop is not paused.
 func (c *Client) resumeSubscriptions(ctx context.Context) {
-	select {
-	case <-ctx.Done():
-	case c.resumech <- struct{}{}:
+	if ctx.Err() != nil {
+		return
 	}
+	c.setPublishPaused(false)
 }
 
 // monitorSubscriptions sends publish requests and handles publish responses
@@ -411,38 +551,36 @@ func (c *Client) resumeSubscriptions(ctx context.Context) {
 func (c *Client) monitorSubscriptions(ctx context.Context) {
 	defer c.cfg.logger.Debug("monitorSubscriptions: done")
 
-publish:
 	for {
-		select {
-		case <-ctx.Done():
+		if ctx.Err() != nil {
 			c.cfg.logger.Debug("monitorSubscriptions: ctx.Done()")
 			return
+		}
 
-		case <-c.resumech:
-			c.cfg.logger.Debug("monitorSubscriptions: resume")
-
-		case <-c.pausech:
+		paused, gen := c.publishState()
+		if paused {
 			c.cfg.logger.Debug("monitorSubscriptions: pause")
-			for {
-				select {
-				case <-ctx.Done():
-					c.cfg.logger.Debug("monitorSubscriptions: pause: ctx.Done()")
-					return
-
-				case <-c.resumech:
-					c.cfg.logger.Debug("monitorSubscriptions: pause: resume")
-					continue publish
-
-				case <-c.pausech:
-					c.cfg.logger.Debug("monitorSubscriptions: pause: pause")
-				}
+			select {
+			case <-ctx.Done():
+			case <-c.resumech:
+			case <-c.pausech:
 			}
+			continue
+		}
 
+		// drop wake-ups that are already reflected in the state
+		select {
+		case <-c.resumech:
 		default:
-			if err := c.publish(ctx); err != nil {
-				c.cfg.logger.Debug("monitorSubscriptions: error", "error", err)
-				c.pauseSubscriptions(ctx)
-			}
+		}
+		select {
+		case <-c.pausech:
+		default:
+		}
+
+		if err := c.publish(ctx); err != nil {
+			c.cfg.logger.Debug("monitorSubscriptions: error", "error", err)
+			c.pausePublishIfGen(gen)
 		}
 	}
 }
@@ -508,28 +646,50 @@ func (c *Client) publish(ctx context.Context) error {
 		return err
 
 	default:
-		c.subMux.Lock()
-		// handle pending acks for all subscriptions
-		c.handleAcksNeedsSubMuxLock(res.Results)
-
-		sub, ok := c.subs[res.SubscriptionID]
-		if !ok {
-			c.subMux.Unlock()
-			// Subscription may have been deleted between PublishRequest and PublishResponse.
-			// Returning nil is correct — the warning log is sufficient.
-			c.cfg.logger.Debug("publish: unknown subscription", "sub_id", res.SubscriptionID)
-			return nil
-		}
-
-		// handle the publish response for a specific subscription
-		c.handleNotificationNeedsSubMuxLock(sub, res)
-		c.subMux.Unlock()
-
-		c.notifySubscription(ctx, sub, res.NotificationMessage)
-		c.cfg.logger.Debug("publish: notification received", "seq_num", res.NotificationMessage.SequenceNumber)
+		c.deliverPublishResponse(ctx, res)
 	}
 
 	return nil
+}
+
+// deliverPublishResponse processes a successful PublishResponse: it updates
+// the acknowledgement and sequence number bookkeeping and hands the
+// notification to its subscription.
+func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResponse) {
+	// deliverMu orders this delivery with the republishing done by the
+	// reconnect logic, which delivers to the same subscriptions.
+	c.deliverMu.Lock()
+	defer c.deliverMu.Unlock()
+
+	// The response belongs to a request that was sent before a recovery
+	// started. The recovery republishes everything from the subscription's
+	// next expected sequence number on, including this message, so
+	// delivering it here as well would duplicate it or, worse, deliver it
+	// after newer ones. It has not been acknowledged, so the server keeps it.
+	if c.publishRecoveryInProgress() {
+		c.cfg.logger.Debug("publish: response arrived during recovery, leaving it to republish", "sub_id", res.SubscriptionID)
+		return
+	}
+
+	c.subMux.Lock()
+	// handle pending acks for all subscriptions
+	c.handleAcksNeedsSubMuxLock(res.Results)
+
+	sub, ok := c.subs[res.SubscriptionID]
+	if !ok {
+		c.subMux.Unlock()
+		// Subscription may have been deleted between PublishRequest and PublishResponse.
+		// Returning is correct — the warning log is sufficient.
+		c.cfg.logger.Debug("publish: unknown subscription", "sub_id", res.SubscriptionID)
+		return
+	}
+
+	// handle the publish response for a specific subscription
+	c.handleNotificationNeedsSubMuxLock(sub, res)
+	c.subMux.Unlock()
+
+	c.notifySubscription(ctx, sub, res.NotificationMessage)
+	c.cfg.logger.Debug("publish: notification received", "seq_num", res.NotificationMessage.SequenceNumber)
 }
 
 func (c *Client) handleAcksNeedsSubMuxLock(res []ua.StatusCode) {

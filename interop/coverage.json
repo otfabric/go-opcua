@@ -6,10 +6,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -18,10 +18,10 @@
       "status": "verified",
       "test": "TestMiloServer_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -30,10 +30,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -42,10 +42,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Access_ReadOnly_WriteRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -54,10 +54,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -66,10 +66,10 @@
       "status": "verified",
       "test": "TestMiloServer_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -78,10 +78,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -90,10 +90,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Access_WriteOnly_ReadRejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -122,10 +122,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -134,10 +134,10 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -146,10 +146,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -158,10 +158,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseFiltering",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -170,10 +170,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseInteropNamespace",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -182,10 +182,10 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseInteropNamespace",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -194,10 +194,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseObjectsNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -206,10 +206,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseObjectsNodes",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -218,10 +218,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -230,10 +230,10 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -242,10 +242,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -254,10 +254,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseNext",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -266,10 +266,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -278,10 +278,10 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -290,10 +290,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -302,10 +302,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseNextRelease",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -314,10 +314,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -326,10 +326,10 @@
       "status": "verified",
       "test": "TestMiloServer_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -338,10 +338,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -350,10 +350,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -362,10 +362,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -374,10 +374,10 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -386,10 +386,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -398,10 +398,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseResultMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -410,10 +410,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -422,10 +422,10 @@
       "status": "verified",
       "test": "TestMiloServer_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -434,10 +434,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -446,10 +446,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BrowseScalarsFolder",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -498,10 +498,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -510,10 +510,10 @@
       "status": "verified",
       "test": "TestMiloServer_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -522,10 +522,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -534,10 +534,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_DataValue_GoodWithTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -546,10 +546,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -558,10 +558,10 @@
       "status": "verified",
       "test": "TestMiloServer_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -570,10 +570,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -582,10 +582,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_DataValue_Uncertain",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -594,10 +594,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -606,10 +606,10 @@
       "status": "verified",
       "test": "TestMiloServer_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -618,10 +618,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -630,10 +630,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -642,10 +642,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -654,10 +654,10 @@
       "status": "verified",
       "test": "TestMiloServer_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -666,10 +666,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -678,10 +678,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_FindServers",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -740,10 +740,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventEmissionBase",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -752,10 +752,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventEmissionBase",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -784,10 +784,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -796,10 +796,10 @@
       "status": "verified",
       "test": "TestMiloServer_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -808,10 +808,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -820,10 +820,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventFilterOfType",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -832,10 +832,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -844,10 +844,10 @@
       "status": "verified",
       "test": "TestMiloServer_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -856,10 +856,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -868,10 +868,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventFilterSelectClauses",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -880,10 +880,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -892,10 +892,10 @@
       "status": "verified",
       "test": "TestMiloServer_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -904,10 +904,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -916,21 +916,37 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventFilterSeverityThreshold",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
       "capability": "event.filter.where-clause",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestOpen62541Server_EventFilterWhereClause",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "Comparison operators (Equals, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual) with matching and non-matching operands; logical/Like/InList operators not yet probed"
     },
     {
       "capability": "event.filter.where-clause",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestMiloServer_EventFilterWhereClause",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Comparison operators (Equals, GreaterThan, LessThan, GreaterThanOrEqual, LessThanOrEqual) with matching and non-matching operands; logical/Like/InList operators not yet probed"
     },
     {
       "capability": "event.filter.where-clause",
@@ -948,10 +964,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventNotificationDecode",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -960,10 +976,10 @@
       "status": "verified",
       "test": "TestMiloServer_EventNotificationDecode",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -979,12 +995,26 @@
     {
       "capability": "event.queue-overflow",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestOpen62541Server_EventQueueOverflow",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "event.queue-overflow",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestMiloServer_EventQueueOverflow",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "event.queue-overflow",
@@ -1002,10 +1032,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_EventSubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1014,10 +1044,10 @@
       "status": "verified",
       "test": "TestMiloServer_EventSubscription",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1026,10 +1056,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_EventSubscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1038,10 +1068,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_EventSubscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1087,12 +1117,27 @@
     {
       "capability": "history.read.continuation",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestOpen62541Server_HistoryReadContinuation",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "history.read.continuation",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestMiloServer_HistoryReadContinuation",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Paging verified; Milo's AddressSpace.historyRead is not told about ReleaseContinuationPoints, so release/reuse is asserted on C→O only"
     },
     {
       "capability": "history.read.continuation",
@@ -1100,10 +1145,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_HistoryReadContinuation",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1112,10 +1157,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_HistoryReadContinuation",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1184,10 +1229,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1196,10 +1241,10 @@
       "status": "verified",
       "test": "TestMiloServer_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1208,10 +1253,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1220,10 +1265,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_HistoryReadRaw",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1272,10 +1317,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_CallMethodAdd",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1284,10 +1329,10 @@
       "status": "verified",
       "test": "TestMiloServer_CallMethodAdd",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1296,10 +1341,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_CallMethod",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1308,10 +1353,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_CallMethod",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1320,10 +1365,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1332,10 +1377,10 @@
       "status": "verified",
       "test": "TestMiloServer_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1344,10 +1389,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1356,51 +1401,109 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_MethodValidation",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
       "capability": "nodemgmt.add-nodes",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestOpen62541Server_AddNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "nodemgmt.add-nodes",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "test": "TestMiloServer_NodeManagementUnsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Milo reference server does not implement the NodeManagement service set (AddNodes → BadNotSupported)"
     },
     {
       "capability": "nodemgmt.add-nodes",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_AddNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "nodemgmt.add-nodes",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_AddNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "nodemgmt.delete-nodes",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestOpen62541Server_DeleteNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "nodemgmt.delete-nodes",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "test": "TestMiloServer_NodeManagementUnsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Milo reference server does not implement the NodeManagement service set (AddNodes → BadNotSupported)"
     },
     {
       "capability": "nodemgmt.delete-nodes",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_DeleteNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "nodemgmt.delete-nodes",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_DeleteNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "nodeset2.import",
@@ -1468,10 +1571,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1480,10 +1583,10 @@
       "status": "verified",
       "test": "TestMiloServer_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1492,10 +1595,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1504,10 +1607,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_ReadArrayInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1516,10 +1619,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1528,10 +1631,10 @@
       "status": "verified",
       "test": "TestMiloServer_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1540,10 +1643,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1552,10 +1655,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BatchRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1564,10 +1667,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1576,10 +1679,10 @@
       "status": "verified",
       "test": "TestMiloServer_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1588,10 +1691,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1600,10 +1703,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_ReadDynamicCounter",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1612,10 +1715,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1624,10 +1727,10 @@
       "status": "verified",
       "test": "TestMiloServer_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1636,10 +1739,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1648,10 +1751,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_IndexRangeSubset",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1660,10 +1763,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1672,10 +1775,10 @@
       "status": "verified",
       "test": "TestMiloServer_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1684,10 +1787,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1696,10 +1799,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_InvalidNodeId",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1708,10 +1811,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1720,10 +1823,10 @@
       "status": "verified",
       "test": "TestMiloServer_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1732,10 +1835,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1744,10 +1847,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_ReadScalarInt32",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1756,10 +1859,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1768,10 +1871,10 @@
       "status": "verified",
       "test": "TestMiloServer_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1780,10 +1883,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1792,10 +1895,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1804,10 +1907,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1816,10 +1919,10 @@
       "status": "verified",
       "test": "TestMiloServer_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1828,10 +1931,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1840,10 +1943,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1852,10 +1955,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1864,10 +1967,10 @@
       "status": "verified",
       "test": "TestMiloServer_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1876,10 +1979,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1888,10 +1991,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1900,10 +2003,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1912,10 +2015,10 @@
       "status": "verified",
       "test": "TestMiloServer_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1924,10 +2027,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1936,10 +2039,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Basic256Sha256_Sign_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1948,10 +2051,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1960,10 +2063,10 @@
       "status": "verified",
       "test": "TestMiloServer_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -1972,10 +2075,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -1984,10 +2087,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Basic256Sha256_SignAndEncrypt_ScalarRead",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2036,10 +2139,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2048,10 +2151,10 @@
       "status": "verified",
       "test": "TestMiloServer_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2060,10 +2163,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2072,10 +2175,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TrustedCert_Accepted",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2084,10 +2187,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2096,10 +2199,10 @@
       "status": "verified",
       "test": "TestMiloServer_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2108,10 +2211,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2120,31 +2223,59 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_UntrustedCert_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
       "capability": "security.channel.renewal",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestOpen62541Server_SecureChannelRenewal",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "security.channel.renewal",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestMiloServer_SecureChannelRenewal",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "security.channel.renewal",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_SecureChannelRenewal",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "security.channel.renewal",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_SecureChannelRenewal",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "security.issued-token",
@@ -2172,10 +2303,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2184,10 +2315,10 @@
       "status": "verified",
       "test": "TestMiloServer_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2196,10 +2327,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2208,10 +2339,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Username_InvalidPassword_Rejected",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2220,10 +2351,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2232,10 +2363,10 @@
       "status": "verified",
       "test": "TestMiloServer_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2244,10 +2375,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2256,10 +2387,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Username_ValidCredentials",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2268,10 +2399,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2280,10 +2411,10 @@
       "status": "verified",
       "test": "TestMiloServer_Connect",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2292,10 +2423,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2304,10 +2435,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Endpoints",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2316,10 +2447,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2328,10 +2459,10 @@
       "status": "verified",
       "test": "TestMiloServer_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2340,10 +2471,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2352,10 +2483,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Browse",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2364,10 +2495,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_ClientRepublish",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2376,10 +2507,10 @@
       "status": "verified",
       "test": "TestMiloServer_ClientRepublish",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2398,10 +2529,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_ClientTransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2410,10 +2541,10 @@
       "status": "verified",
       "test": "TestMiloServer_ClientTransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2432,10 +2563,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2444,10 +2575,10 @@
       "status": "verified",
       "test": "TestMiloServer_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2456,10 +2587,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2468,10 +2599,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Subscribe",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2490,10 +2621,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_Delete",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2502,10 +2633,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscriptionLifecycle_Delete",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2524,10 +2655,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_Revise",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2536,10 +2667,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscriptionLifecycle_Revise",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2548,10 +2679,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2560,10 +2691,10 @@
       "status": "verified",
       "test": "TestMiloServer_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2572,10 +2703,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2584,10 +2715,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Subscribe_DiscardOldest",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2596,10 +2727,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_SubscriptionRecoveryReconnect",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2608,10 +2739,10 @@
       "status": "verified",
       "test": "TestMiloServer_SubscriptionRecoveryReconnect",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2640,10 +2771,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Republish",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2652,10 +2783,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Republish",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2674,10 +2805,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2686,10 +2817,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TransferSubscriptions",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2698,10 +2829,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_SubscribeTimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2710,10 +2841,10 @@
       "status": "verified",
       "test": "TestMiloServer_SubscribeTimestampsToReturn",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2722,10 +2853,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_SubscribeTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2734,10 +2865,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_SubscribeTimestamps",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2746,10 +2877,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2758,10 +2889,10 @@
       "status": "verified",
       "test": "TestMiloServer_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2770,10 +2901,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2782,10 +2913,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_TranslateBrowsePath",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2794,10 +2925,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2806,10 +2937,10 @@
       "status": "verified",
       "test": "TestMiloServer_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2818,10 +2949,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2830,10 +2961,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_BatchWrite",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2842,10 +2973,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2854,10 +2985,10 @@
       "status": "unsupported",
       "test": "TestMiloServer_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "1.1.x"
+        "version": "1.1.8"
       },
       "nextAction": "Milo soft-accepts EncodingMask timestamp Writes; claim requires BadWriteNotSupported"
     },
@@ -2867,10 +2998,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2879,10 +3010,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_WriteEncodingMask",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2891,10 +3022,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2903,10 +3034,10 @@
       "status": "verified",
       "test": "TestMiloServer_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2915,10 +3046,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2927,10 +3058,10 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_WriteTypeMismatch",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2939,10 +3070,10 @@
       "status": "verified",
       "test": "TestOpen62541Server_WriteAndReadBack",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2951,10 +3082,10 @@
       "status": "verified",
       "test": "TestMiloServer_WriteAndReadBack",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
       }
     },
     {
@@ -2963,10 +3094,10 @@
       "status": "verified",
       "test": "TestGoServer_Open62541Client_Write",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "open62541",
-        "version": "1.4.x"
+        "version": "1.5.9"
       }
     },
     {
@@ -2975,12 +3106,224 @@
       "status": "verified",
       "test": "TestGoServer_MiloClient_Write",
       "fixture": "baseline",
-      "interopVersion": "v0.5.0",
+      "interopVersion": "v0.6.0",
       "peer": {
         "stack": "eclipse-milo",
-        "version": "0.6.x"
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_RegisterNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_RegisterNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_RegisterNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_RegisterNodes",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ModifySubscription",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_ModifySubscription",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ModifyMonitoredItems",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_ModifyMonitoredItems",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_SetMonitoringMode",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_SetMonitoringMode",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_MonitoringMode",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_SubscriptionLifecycle_MonitoringMode",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ModifySubscription",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_ModifySubscription",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_SubscriptionLifecycle_PublishingMode",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_SubscriptionLifecycle_PublishingMode",
+      "fixture": "baseline",
+      "interopVersion": "v0.6.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
       }
     }
   ],
-  "interopVersion": "v0.5.0"
+  "interopVersion": "v0.6.0"
 }

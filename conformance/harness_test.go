@@ -14,7 +14,7 @@ import (
 // resources are torn down via t.Cleanup.
 func setup(t *testing.T) (*opcua.Client, *testutil.Fixture, context.Context) {
 	t.Helper()
-	srv, url := testutil.NewTestServer(t)
+	srv, url := newServer(t)
 	f := testutil.AddFixture(t, srv)
 	c := testutil.NewTestClient(t, url)
 	return c, f, context.Background()

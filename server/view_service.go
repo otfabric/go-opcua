@@ -276,7 +276,7 @@ func getSubRefsVisited(srv *Server, nid *ua.NodeID, visited map[string]bool) []*
 		return nil
 	}
 	var refs []*ua.NodeID
-	for _, ref := range node.refs {
+	for _, ref := range node.refsSnapshot() {
 		if ref.ReferenceTypeID.Equal(hasSubtype) && ref.IsForward && ref.NodeID != nil {
 			refs = append(refs, ref.NodeID.NodeID)
 			refs = append(refs, getSubRefsVisited(srv, ref.NodeID.NodeID, visited)...)

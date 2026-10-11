@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"fmt"
+	mrand "math/rand"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -67,6 +68,13 @@ func (s *Server) initHandlers() {
 	sub := &SubscriptionService{
 		srv:  s,
 		Subs: make(map[uint32]*Subscription),
+		// Start the subscription ids at a value that is unlikely to repeat
+		// after a restart. A client that reconnects to a restarted server
+		// asks for its old subscriptions by id (TransferSubscriptions,
+		// Republish); if the new instance handed out the same small numbers
+		// again, it would be given a subscription that another client has
+		// just created.
+		lastID: mrand.Uint32() >> 1,
 	}
 	s.SubscriptionService = sub
 	s.RegisterHandler(id.CreateSubscriptionRequestEncodingDefaultBinary, sub.CreateSubscription)
@@ -119,7 +127,10 @@ func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqI
 
 	typeID := ua.ServiceTypeID(req)
 	h, ok := s.handlers[typeID]
-	if ok {
+	if status := s.checkSession(req); ok && status != ua.StatusOK {
+		// The service needs an activated session and the request has none.
+		err = status
+	} else if ok {
 		resp, err = h(ctx, sc, req, reqID)
 	} else {
 		if typeID == 0 {
@@ -152,7 +163,49 @@ func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqI
 	err = sc.SendResponseWithContext(ctx, reqID, resp)
 	if err != nil {
 		s.cfg.logger.Warn("error sending response", "error", err)
+		// The response could not be sent, most likely because it could not
+		// be encoded. Never leave the request unanswered: the client would
+		// block until its timeout. If the connection itself is broken this
+		// second send fails as well, which is harmless.
+		if _, isFault := resp.(*ua.ServiceFault); !isFault {
+			fault := &ua.ServiceFault{ResponseHeader: responseHeader(0, ua.StatusBadEncodingError)}
+			if ferr := sc.SendResponseWithContext(ctx, reqID, fault); ferr != nil {
+				s.cfg.logger.Warn("error sending service fault", "error", ferr)
+			}
+		}
 	}
+}
+
+// checkSession enforces the session state machine of Part 4 §5.6: apart from
+// the Discovery services and the services that establish a session, every
+// service is only available within a session that has been activated.
+//
+// Without this check a client can use the address space without ever
+// authenticating (CreateSession without ActivateSession, or no session at
+// all), and a request carrying the token of a session that was closed or
+// has timed out keeps being served.
+func (s *Server) checkSession(req ua.Request) ua.StatusCode {
+	switch req.(type) {
+	case *ua.FindServersRequest, *ua.FindServersOnNetworkRequest, *ua.GetEndpointsRequest,
+		*ua.RegisterServerRequest, *ua.RegisterServer2Request,
+		*ua.CreateSessionRequest, *ua.ActivateSessionRequest, *ua.CloseSessionRequest:
+		// CloseSession is allowed for a session that was never activated;
+		// its handler validates the token.
+		return ua.StatusOK
+	}
+
+	hdr := req.Header()
+	if hdr == nil || hdr.AuthenticationToken == nil {
+		return ua.StatusBadSessionIDInvalid
+	}
+	sess := s.sb.Session(hdr.AuthenticationToken)
+	if sess == nil {
+		return ua.StatusBadSessionIDInvalid
+	}
+	if !sess.activated.Load() {
+		return ua.StatusBadSessionNotActivated
+	}
+	return ua.StatusOK
 }
 
 func responseHeader(reqID uint32, statusCode ua.StatusCode) *ua.ResponseHeader {

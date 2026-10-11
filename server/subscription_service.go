@@ -20,15 +20,69 @@ type SubscriptionService struct {
 	// pub sub stuff
 	Mu   sync.Mutex
 	Subs map[uint32]*Subscription
+
+	// lastID is the most recently assigned subscription id. Guarded by Mu.
+	lastID uint32
+}
+
+// nextSubscriptionID returns an id that is not in use. Ids are handed out
+// from a monotonic counter instead of being derived from the number of live
+// subscriptions: after a delete, len(Subs)+1 is the id of a subscription that
+// still exists, which the new one would silently replace.
+// Caller must hold s.Mu.
+func (s *SubscriptionService) nextSubscriptionID() uint32 {
+	for {
+		s.lastID++
+		if s.lastID == 0 {
+			continue
+		}
+		if _, used := s.Subs[s.lastID]; !used {
+			return s.lastID
+		}
+	}
+}
+
+// deleteAll stops every subscription. It is called when the server shuts
+// down so that no subscription goroutine outlives it.
+func (s *SubscriptionService) deleteAll() {
+	s.Mu.Lock()
+	ids := make([]uint32, 0, len(s.Subs))
+	for id := range s.Subs {
+		ids = append(ids, id)
+	}
+	s.Mu.Unlock()
+	for _, id := range ids {
+		s.DeleteSubscription(id)
+	}
 }
 
 // DeleteSubscription removes all references to a subscription and all monitored items pointed at it.
 func (s *SubscriptionService) DeleteSubscription(id uint32) {
 	s.Mu.Lock()
-	defer s.Mu.Unlock()
+	sub := s.removeNeedsLock(id)
+	s.Mu.Unlock()
 
-	sub, ok := s.Subs[id]
-	if ok {
+	s.finishDelete(id, sub)
+}
+
+// removeNeedsLock takes the subscription out of the table so that no further
+// request can address it. The caller must hold s.Mu and call finishDelete
+// after releasing it.
+func (s *SubscriptionService) removeNeedsLock(id uint32) *Subscription {
+	sub := s.Subs[id]
+	delete(s.Subs, id)
+	return sub
+}
+
+// finishDelete stops the goroutine of a removed subscription and purges its
+// monitored items.
+//
+// It must be called without s.Mu: the monitored item service takes its own
+// lock before s.Mu (CreateMonitoredItems), so calling into it with s.Mu held
+// is a lock-order inversion that deadlocks the server when a subscription is
+// deleted while items are created on another one.
+func (s *SubscriptionService) finishDelete(id uint32, sub *Subscription) {
+	if sub != nil {
 		sub.Mu.Lock()
 		if sub.running {
 			sub.running = false
@@ -37,11 +91,8 @@ func (s *SubscriptionService) DeleteSubscription(id uint32) {
 		sub.Mu.Unlock()
 	}
 
-	delete(s.Subs, id)
-
-	// ask the monitored item service to purge out any items that use this subscription
+	// ask the monitored item service to purge out any items that use this subscription.
 	s.srv.MonitoredItemService.DeleteSub(id)
-
 }
 
 // CreateSubscription implements the OPC UA CreateSubscription service.
@@ -54,10 +105,17 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 		return nil, err
 	}
 
+	// A subscription belongs to a session (Part 4 §5.13.2). Without one there
+	// is nobody to deliver notifications to.
+	sess := s.srv.Session(r.Header())
+	if sess == nil {
+		return nil, ua.StatusBadSessionIDInvalid
+	}
+
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
-	newsubid := uint32(len(s.Subs)) + 1
+	newsubid := s.nextSubscriptionID()
 
 	s.srv.cfg.logger.Info("new subscription", "sub_id", newsubid, "remote_addr", sc.RemoteAddr())
 
@@ -69,7 +127,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 
 	sub := NewSubscription()
 	sub.srv = s
-	sub.Session = s.srv.Session(r.Header())
+	sub.Session = sess
 	sub.Channel = sc
 	sub.ID = newsubid
 	sub.RevisedPublishingInterval = pi
@@ -129,7 +187,7 @@ func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.S
 		}, nil
 	}
 
-	if session == nil || session.AuthTokenID.String() != sub.Session.AuthTokenID.String() {
+	if !sub.ownedBy(session) {
 		return &ua.ModifySubscriptionResponse{
 			ResponseHeader: &ua.ResponseHeader{
 				Timestamp:          time.Now(),
@@ -153,14 +211,15 @@ func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.S
 	req.RequestedLifetimeCount = lifetime
 	req.RequestedMaxKeepAliveCount = keepalive
 
+	// Apply the new parameters before responding so that they are in effect
+	// for whatever the client sends next, then wake the subscription
+	// goroutine (which owns the ticker) to re-arm its publishing timer. A nil
+	// message only re-arms; if the channel is full a wake-up is already
+	// pending.
+	sub.Update(req)
 	select {
-	case sub.ModifyChannel <- req:
+	case sub.ModifyChannel <- nil:
 	default:
-		// Apply synchronously if the modify channel is full.
-		sub.Update(req)
-		if sub.T != nil {
-			sub.T.Reset(time.Millisecond * time.Duration(sub.RevisedPublishingInterval))
-		}
 	}
 
 	return &ua.ModifySubscriptionResponse{
@@ -200,7 +259,7 @@ func (s *SubscriptionService) SetPublishingMode(ctx context.Context, sc *uasc.Se
 			results[i] = ua.StatusBadSubscriptionIDInvalid
 			continue
 		}
-		if session == nil || session.AuthTokenID.String() != sub.Session.AuthTokenID.String() {
+		if !sub.ownedBy(session) {
 			results[i] = ua.StatusBadSessionIDInvalid
 			continue
 		}
@@ -258,15 +317,42 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 		return response, nil
 	}
 
+	// Part 4 §5.13.5: a Publish request for a session without subscriptions
+	// is answered right away. Queuing it instead would leave the client
+	// waiting for a response that no subscription will ever produce.
+	if !s.sessionHasSubscriptions(session) {
+		return nil, ua.StatusBadNoSubscription
+	}
+
 	select {
-	case session.PublishRequests <- PubReq{Req: req, ID: reqID}:
+	case session.PublishRequests <- PubReq{Req: req, ID: reqID, Channel: sc}:
 	default:
+		// The per-session queue is full. Tell the client instead of silently
+		// dropping the request, which it would only notice as a timeout.
 		s.srv.cfg.logger.Warn("too many publish requests")
+		return nil, ua.StatusBadTooManyPublishRequests
 	}
 
 	// per opcua spec, we don't respond now.  When data is available on the subscription,
 	// the Subscription will respond in the background.
 	return nil, nil
+}
+
+// sessionHasSubscriptions reports whether at least one subscription is
+// currently assigned to sess.
+func (s *SubscriptionService) sessionHasSubscriptions(sess *session) bool {
+	s.Mu.Lock()
+	subs := make([]*Subscription, 0, len(s.Subs))
+	for _, sub := range s.Subs {
+		subs = append(subs, sub)
+	}
+	s.Mu.Unlock()
+	for _, sub := range subs {
+		if owner, _ := sub.sessionChannel(); owner == sess {
+			return true
+		}
+	}
+	return false
 }
 
 // Republish implements the OPC UA Republish service.
@@ -357,9 +443,15 @@ func (s *SubscriptionService) DeleteSubscriptions(ctx context.Context, sc *uasc.
 	}
 	session := s.srv.Session(req.Header())
 
-	s.Mu.Lock()
-	defer s.Mu.Unlock()
+	// The subscriptions are taken out of the table under the lock, so a
+	// second request for the same id is answered with
+	// BadSubscriptionIdInvalid, and are torn down before the response is
+	// sent, so the client can rely on them being gone. (Deleting them from a
+	// background goroutine reported success twice for concurrent requests
+	// and left the subscription alive for a moment after the response.)
+	removed := make(map[uint32]*Subscription)
 
+	s.Mu.Lock()
 	results := make([]ua.StatusCode, len(req.SubscriptionIDs))
 	for i := range req.SubscriptionIDs {
 
@@ -370,14 +462,17 @@ func (s *SubscriptionService) DeleteSubscriptions(ctx context.Context, sc *uasc.
 			results[i] = ua.StatusBadSubscriptionIDInvalid
 			continue
 		}
-		if session == nil || session.AuthTokenID.String() != sub.Session.AuthTokenID.String() {
+		if !sub.ownedBy(session) {
 			results[i] = ua.StatusBadSessionIDInvalid
 			continue
 		}
-		// delete subscription gets the lock so we set them up to run in the background
-		// once this function releases its lock
-		go s.DeleteSubscription(subid)
+		removed[subid] = s.removeNeedsLock(subid)
 		results[i] = ua.StatusOK
+	}
+	s.Mu.Unlock()
+
+	for subid, sub := range removed {
+		s.finishDelete(subid, sub)
 	}
 	return &ua.DeleteSubscriptionsResponse{
 		ResponseHeader: &ua.ResponseHeader{
@@ -399,6 +494,22 @@ type PubReq struct {
 
 	// The request ID (from the header) of the publish request.  This has to be used when replying.
 	ID uint32
+
+	// Channel is the secure channel the Publish request arrived on. The
+	// response has to be sent on the same channel: after a client reconnect
+	// the session lives on a new channel, while the channel the subscription
+	// was created on is gone.
+	Channel *uasc.SecureChannel
+}
+
+// replyChannel returns the secure channel on which the response to this
+// request is sent: the one it arrived on, or fallback for requests that were
+// queued without one.
+func (p PubReq) replyChannel(fallback *uasc.SecureChannel) *uasc.SecureChannel {
+	if p.Channel != nil {
+		return p.Channel
+	}
+	return fallback
 }
 
 // Subscription is the type that with its run function works in the background fulfilling subscription
@@ -488,11 +599,32 @@ func NewSubscription() *Subscription {
 }
 
 func (s *Subscription) Update(req *ua.ModifySubscriptionRequest) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
 	s.RevisedPublishingInterval = req.RequestedPublishingInterval
 	s.RevisedLifetimeCount = req.RequestedLifetimeCount
 	s.RevisedMaxKeepAliveCount = req.RequestedMaxKeepAliveCount
 	s.MaxNotificationsPerPublish = req.MaxNotificationsPerPublish
 	s.Priority = req.Priority
+}
+
+// ownedBy reports whether the subscription currently belongs to sess. It is
+// false for a nil session and for a subscription without a session.
+func (s *Subscription) ownedBy(sess *session) bool {
+	own, _ := s.sessionChannel()
+	if sess == nil || own == nil || sess.AuthTokenID == nil || own.AuthTokenID == nil {
+		return false
+	}
+	return own.AuthTokenID.Equal(sess.AuthTokenID)
+}
+
+// timing returns the publishing interval and the keep-alive and lifetime
+// counts under Mu; ModifySubscription may change them at any time.
+func (s *Subscription) timing() (interval time.Duration, keepAlive, lifetime int) {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	return time.Duration(s.RevisedPublishingInterval * float64(time.Millisecond)),
+		int(s.RevisedMaxKeepAliveCount), int(s.RevisedLifetimeCount)
 }
 
 // ackPublishAcknowledgements applies Publish SubscriptionAcknowledgements for
@@ -608,11 +740,23 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 		Results:                  ackResults,
 		DiagnosticInfos:          []*ua.DiagnosticInfo{},
 	}
-	err := ch.SendResponseWithContext(context.Background(), pubreq.ID, response)
+	err := pubreq.replyChannel(ch).SendResponseWithContext(context.Background(), pubreq.ID, response)
 	if err != nil {
 		return err
 	}
+	s.touchSession()
 	return nil
+}
+
+// touchSession restarts the timeout of the owning session after a Publish
+// response was sent. A client whose only activity is waiting for Publish
+// responses issues its next request only after the keep-alive interval,
+// which may be longer than the session timeout; answering its Publish
+// requests shows that the session is in use.
+func (s *Subscription) touchSession() {
+	if sess, _ := s.sessionChannel(); sess != nil {
+		sess.touch()
+	}
 }
 
 // this function should be run as a go-routine and will handle sending data out
@@ -641,8 +785,12 @@ func (s *Subscription) run() {
 	keepaliveCounter := 0
 	lifetimeCounter := 0
 	//TODO: if a sub is modified, this ticker time may need to change.
-	s.T = time.NewTicker(time.Millisecond * time.Duration(s.RevisedPublishingInterval))
-	defer s.T.Stop()
+	interval, _, _ := s.timing()
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	s.Mu.Lock()
+	s.T = ticker
+	s.Mu.Unlock()
 
 	// This is the master run event loop.  It has effectively 3 states that it can be in.  The first two are designated with
 	// the labels L0, and L2.  Everything after the L2 loop is the third state where we send any pending notifications.
@@ -679,37 +827,64 @@ func (s *Subscription) run() {
 				pendingData = true
 			case evt := <-s.EventNotifyChannel:
 				eventQueue = append(eventQueue, evt)
-			case <-s.T.C:
+			case <-ticker.C:
+				// TransferSubscriptions may have moved the subscription to
+				// another session while this loop was waiting. Follow it, so
+				// the Publish requests of the new session are the ones served.
+				if cur, _ := s.sessionChannel(); cur != nil {
+					sess = cur
+				}
 				s.Mu.Lock()
 				enabled := s.publishingEnabled
 				s.Mu.Unlock()
+				_, maxKeepAlive, maxLifetime := s.timing()
+
+				// The lifetime counter counts consecutive publishing cycles
+				// without a Publish request to answer (Part 4 §5.13.1.1). It
+				// has to run in every cycle, not only when a keep-alive is
+				// due: otherwise an idle subscription whose client vanished
+				// lives for keep-alive × lifetime cycles, i.e. practically
+				// forever with common parameters.
+				if len(sess.PublishRequests) == 0 {
+					lifetimeCounter++
+					if lifetimeCounter > maxLifetime {
+						s.srv.srv.cfg.logger.Warn("subscription timed out", "sub_id", s.ID)
+						return
+					}
+				} else {
+					lifetimeCounter = 0
+				}
 
 				hasQueued := pendingData || s.srv.srv.MonitoredItemService.PendingReportableNotifications(s.ID)
 				if (!hasQueued && len(eventQueue) == 0) || !enabled {
 					keepaliveCounter++
-					if keepaliveCounter > int(s.RevisedMaxKeepAliveCount) {
-						keepaliveCounter = 0
+					if keepaliveCounter > maxKeepAlive {
 						select {
 						case pubreq := <-sess.PublishRequests:
+							keepaliveCounter = 0
+							lifetimeCounter = 0
 							err := s.keepalive(pubreq)
 							if err != nil {
+								// The connection of this request is gone. That does
+								// not end the subscription: the client may come
+								// back and send new Publish requests until the
+								// lifetime expires (Part 4 §5.13.1.1).
 								s.srv.srv.cfg.logger.Warn("problem sending keepalive", "sub_id", s.ID, "error", err)
-								return
+								continue
 							}
 						default:
-							lifetimeCounter++
-							if lifetimeCounter > int(s.RevisedLifetimeCount) {
-								s.srv.srv.cfg.logger.Warn("subscription timed out", "sub_id", s.ID)
-								return
-							}
+							// no Publish request: the keep-alive stays due
 						}
 					}
 					continue // nothing to publish this interval
 				}
 				break L0
 			case update := <-s.ModifyChannel:
-				s.Update(update)
-				s.T.Reset(time.Millisecond * time.Duration(s.RevisedPublishingInterval))
+				if update != nil {
+					s.Update(update)
+				}
+				interval, _, _ := s.timing()
+				ticker.Reset(interval)
 			}
 		}
 		var pubreq PubReq
@@ -726,9 +901,13 @@ func (s *Subscription) run() {
 			case evt := <-s.EventNotifyChannel:
 				eventQueue = append(eventQueue, evt)
 
-			case <-s.T.C:
+			case <-ticker.C:
+				// See L0: keep following a transferred subscription.
+				if cur, _ := s.sessionChannel(); cur != nil {
+					sess = cur
+				}
 				lifetimeCounter++
-				if lifetimeCounter > int(s.RevisedLifetimeCount) {
+				if _, _, maxLifetime := s.timing(); lifetimeCounter > maxLifetime {
 					s.srv.srv.cfg.logger.Warn("subscription timed out", "sub_id", s.ID)
 					return
 				}
@@ -801,13 +980,17 @@ func (s *Subscription) run() {
 			s.srv.srv.cfg.logger.Warn("subscription has no channel after transfer, shutting down", "sub_id", s.ID)
 			return
 		}
-		err := ch.SendResponseWithContext(context.Background(), pubreq.ID, response)
+		err := pubreq.replyChannel(ch).SendResponseWithContext(context.Background(), pubreq.ID, response)
 		if err != nil {
-			s.srv.srv.cfg.logger.Error("problem sending channel response", "error", err)
-			s.srv.srv.cfg.logger.Error("killing subscription", "sub_id", s.ID)
-			return
+			// The connection of this Publish request is gone. The message
+			// stays in the retransmission queue, so a client that reconnects
+			// can fetch it with Republish; the subscription itself lives on
+			// until its lifetime expires (Part 4 §5.13.1.1).
+			s.srv.srv.cfg.logger.Warn("problem sending publish response", "sub_id", s.ID, "error", err)
+			continue
 		}
 		s.srv.srv.cfg.logger.Debug("published items", "count", len(finalItems), "more", moreData, "sub_id", s.ID)
+		s.touchSession()
 
 		// If MoreNotifications is set, wake the loop so the next interval can
 		// publish remaining queued samples without waiting for a new write.
