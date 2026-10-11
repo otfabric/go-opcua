@@ -8,7 +8,7 @@ TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ 
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/
 
-.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop examples test-race install-py-opcua gen check-gen coverage-ledger
+.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop chaos examples test-race install-py-opcua gen check-gen coverage-ledger
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -61,6 +61,14 @@ interop: ## Run interop tests against opcua-interop adapter images (-tags=intero
 	# Suite is ~10m locally / slower on CI GHA runners; keep headroom under the
 	# workflow job timeout-minutes (45). Do not use 600s — it flakes at the edge.
 	@go test -count=1 -tags=interop -timeout 45m ./interop/...
+
+# Chaos-monkey and parallelism suite (see chaos/doc.go). It also runs, with a
+# short fault-injection phase, as part of `make test`. Override the knobs on
+# the command line, e.g. `make chaos CHAOS_DURATION=10m CHAOS_SEED=42`.
+CHAOS_DURATION ?= 30s
+chaos: ## Run the chaos-monkey and parallelism suite with the race detector (CHAOS_DURATION, CHAOS_SEED)
+	@echo "Running chaos suite (CHAOS_DURATION=$(CHAOS_DURATION))"
+	@CHAOS_DURATION=$(CHAOS_DURATION) CHAOS_SEED=$(CHAOS_SEED) go test -race -count=1 -timeout 60m ./chaos/...
 
 examples: ## Build all examples into build/
 	@echo "Building examples"

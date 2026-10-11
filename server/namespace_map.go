@@ -239,7 +239,7 @@ func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue 
 	case ua.AttributeIDEventNotifier:
 		dv.Status = ua.StatusOK
 		dv.EncodingMask |= ua.DataValueValue
-		dv.Value = ua.MustVariant(int16(0))
+		dv.Value = ua.MustVariant(byte(0))
 
 	// values are in section 5.1.2 of the standard.
 	// https://reference.opcfoundation.org/Core/Part6/v104/docs/5.1.2
@@ -255,8 +255,8 @@ func (ns *MapNamespace) Attribute(n *ua.NodeID, a ua.AttributeID) *ua.DataValue 
 			}
 		case int:
 			// we can't use an int because it is of unspecified length.  I'm going to use int64 so that we don't
-			// have to worry about cutting data off.
-			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 6))
+			// have to worry about cutting data off. The DataType must say Int64 too.
+			dv.Value, err = ua.NewVariant(ua.NewNumericNodeID(0, 8))
 			if err != nil {
 				ns.srv.cfg.logger.Warn("problem creating variant", "error", err)
 			}
@@ -361,9 +361,9 @@ func (ns *MapNamespace) Objects() *Node {
 			ua.AttributeIDNodeClass:     DataValueFromValue(int32(ua.NodeClassObject)),
 			ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(ns.name)),
 			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(ns.name, ns.name)),
-			ua.AttributeIDDescription:   DataValueFromValue(uint32(ua.NodeClassObject)),
+			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 			ua.AttributeIDDataType:      DataValueFromValue(typedef),
-			ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
+			ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)),
 		},
 		[]*ua.ReferenceDescription{},
 		nil,

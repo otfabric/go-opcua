@@ -359,27 +359,6 @@ func TestSecureChannel_Accessors(t *testing.T) {
 	}
 }
 
-func TestConditionLocker(t *testing.T) {
-	cl := newConditionLocker()
-
-	// Initially unlocked: waitIfLock should return immediately.
-	cl.waitIfLock()
-
-	// Lock then unlock from a goroutine to verify broadcast wakes up waiter.
-	cl.lock()
-	done := make(chan struct{})
-	go func() {
-		cl.waitIfLock()
-		close(done)
-	}()
-	cl.unlock()
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("waitIfLock did not unblock after unlock")
-	}
-}
-
 func TestSecureChannel_TimeNow(t *testing.T) {
 	// With custom time func
 	fixed := time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC)

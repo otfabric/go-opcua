@@ -27,6 +27,10 @@ type channelBroker struct {
 	// s is a slice of all SecureChannels watched by the channelBroker
 	s map[uint32]*uasc.SecureChannel
 
+	// closed is set by Close. A connection that is registered afterwards is
+	// dropped at once: nobody would ever close it.
+	closed bool
+
 	// Next Secure Channel ID to issue to a client
 	secureChannelID uint32
 
@@ -92,10 +96,17 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 	}
 
 	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		_ = conn.Close()
+		return io.EOF
+	}
 	c.s[secureChannelID] = sc
 	c.logger.Info("registered new channel", "secure_channel_id", secureChannelID, "total_channels", len(c.s))
-	c.mu.Unlock()
+	// Add under the lock that Close holds while it collects the channels, so
+	// that Close waits for exactly the channels it has seen.
 	c.wg.Add(1)
+	c.mu.Unlock()
 outer:
 	for {
 		select {
@@ -137,9 +148,19 @@ outer:
 		}
 	}
 
+	sc.ReleaseTokens()
+
 	c.mu.Lock()
 	delete(c.s, secureChannelID)
 	c.mu.Unlock()
+
+	// The channel is finished, whatever the reason: release the TCP
+	// connection and stop the channel's timers. Without this the socket of
+	// every client that disconnected (or sent garbage) stays open until the
+	// server shuts down. The connection is closed first so that a response
+	// still being written to an unresponsive peer cannot hold up the close.
+	_ = conn.Close()
+	_ = sc.Close()
 	c.wg.Done()
 
 	return ctx.Err()
@@ -170,10 +191,16 @@ const brokerCloseTimeout = 10 * time.Second
 func (c *channelBroker) Close(ctx context.Context) error {
 	var err error
 	c.mu.Lock()
+	c.closed = true
+	channels := make([]*uasc.SecureChannel, 0, len(c.s))
 	for _, s := range c.s {
-		_ = s.Close()
+		channels = append(channels, s)
 	}
 	c.mu.Unlock()
+	// Closing writes to the connection, so do it without holding the lock.
+	for _, s := range channels {
+		_ = s.Close()
+	}
 
 	// Wait for all goroutines to finish or context to expire.
 	done := make(chan struct{})

@@ -3,9 +3,11 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/x509"
+	"encoding/binary"
 	"fmt"
 	"strings"
 	"time"
@@ -40,14 +42,25 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		return nil, err
 	}
 
+	// A session may only be created over a SecureChannel whose security
+	// policy and mode match one of the endpoints this server exposes
+	// (Part 4 §5.6.2). Without this check a client could simply pick a weaker
+	// policy/mode than any the operator enabled.
+	if st := s.checkChannelSecurity(sc); st != ua.StatusOK {
+		s.srv.cfg.logger.Warn("CreateSession rejected: secure channel security not enabled on this server",
+			"policy", sc.SecurityPolicyURI(), "mode", sc.SecurityMode())
+		return nil, st
+	}
+
 	// New session
 	sess := s.srv.sb.NewSession()
 
 	// Ensure session timeout is reasonable
-	sess.cfg.sessionTimeout = time.Duration(req.RequestedSessionTimeout) * time.Millisecond
-	if sess.cfg.sessionTimeout > sessionTimeoutMax || sess.cfg.sessionTimeout < sessionTimeoutMin {
-		sess.cfg.sessionTimeout = sessionTimeoutDefault
+	sessionTimeout := time.Duration(req.RequestedSessionTimeout) * time.Millisecond
+	if sessionTimeout > sessionTimeoutMax || sessionTimeout < sessionTimeoutMin {
+		sessionTimeout = sessionTimeoutDefault
 	}
+	sess.setTimeout(sessionTimeout)
 
 	nonce := make([]byte, sessionNonceLength)
 	if _, err := rand.Read(nonce); err != nil {
@@ -123,12 +136,17 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		return nil, ua.StatusBadSecurityChecksFailed
 	}
 
+	// The client computed its user token signature / encrypted its password
+	// against the nonce it last received, so keep that one for validating the
+	// identity token before handing out the next nonce.
+	// The new nonce is therefore only stored once the token has been accepted.
+	prevNonce := sess.serverNonce
+
 	nonce := make([]byte, sessionNonceLength)
 	if _, err := rand.Read(nonce); err != nil {
 		s.srv.cfg.logger.Warn("error creating session nonce")
 		return nil, ua.StatusBadInternalError
 	}
-	sess.serverNonce = nonce
 
 	// Extract user identity, validate credentials, and resolve roles.
 	if req.UserIdentityToken != nil {
@@ -140,6 +158,16 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	// Validate username/password credentials if the client presented a
 	// UserNameIdentityToken and a validator is configured.
 	if uname, ok := sess.identityToken.(*ua.UserNameIdentityToken); ok {
+		// On secured channels the password arrives encrypted with the server
+		// certificate (Part 4 §7.41). Decrypt it before validation.
+		password, st := s.decryptUserPassword(sc, uname, prevNonce)
+		if st != ua.StatusOK {
+			s.srv.cfg.logger.Warn("ActivateSession username token: cannot decrypt password",
+				"username", uname.UserName, "status", st)
+			return nil, st
+		}
+		uname.Password = password
+		uname.EncryptionAlgorithm = ""
 		if v := s.srv.cfg.usernameValidator; v != nil {
 			if err := v(uname.UserName, string(uname.Password)); err != nil {
 				s.srv.cfg.logger.Info("ActivateSession username rejected",
@@ -163,11 +191,15 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		}
 	}
 
+	sess.serverNonce = nonce
+
 	if rm := s.srv.cfg.roleMapper; rm != nil {
 		sess.roles = rm(sess.identityToken)
 	} else {
 		sess.roles = DefaultRoleMapper(sess.identityToken)
 	}
+
+	sess.activated.Store(true)
 
 	response := &ua.ActivateSessionResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
@@ -236,7 +268,7 @@ func (s *SessionService) validateX509UserToken(
 			}
 
 			// Message is serverCertificate || serverNonce per Part 4 §7.37.
-			message := append(s.srv.cfg.certificate, sess.serverNonce...)
+			message := append(append([]byte(nil), s.srv.cfg.certificate...), sess.serverNonce...)
 			if sigErr := enc.VerifySignature(message, req.UserTokenSignature.Signature); sigErr != nil {
 				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: signature verification failed", "error", sigErr)
 				return ua.StatusBadUserSignatureInvalid
@@ -265,6 +297,76 @@ func (s *SessionService) validateX509UserToken(
 		"subject", userCert.Subject.String(),
 	)
 	return ua.StatusBadIdentityTokenRejected
+}
+
+// checkChannelSecurity reports whether the secure channel uses a security
+// policy / mode combination enabled on this server. Servers constructed
+// without any EnableSecurity option (bare unit-test servers) are not
+// restricted.
+func (s *SessionService) checkChannelSecurity(sc *uasc.SecureChannel) ua.StatusCode {
+	if sc == nil || len(s.srv.cfg.enabledSec) == 0 {
+		return ua.StatusOK
+	}
+	policy, mode := sc.SecurityPolicyURI(), sc.SecurityMode()
+	policyKnown := false
+	for _, sec := range s.srv.cfg.enabledSec {
+		if sec.secPolicy != policy {
+			continue
+		}
+		policyKnown = true
+		if sec.secMode == mode {
+			return ua.StatusOK
+		}
+	}
+	if policyKnown {
+		return ua.StatusBadSecurityModeRejected
+	}
+	return ua.StatusBadSecurityPolicyRejected
+}
+
+// decryptUserPassword returns the clear-text password of a UserNameIdentityToken.
+//
+// When the token carries no EncryptionAlgorithm the password is already clear
+// text (unsecured token policy). Otherwise the secret was encrypted with the
+// server certificate's public key using the asymmetric algorithm of the
+// SecureChannel's security policy and has the layout (Part 4 §7.41.2.3):
+//
+//	UInt32 length | password bytes | serverNonce
+//
+// The trailing nonce must match the nonce this server last issued for the
+// session, which binds the secret to this activation and prevents replay.
+func (s *SessionService) decryptUserPassword(sc *uasc.SecureChannel, tok *ua.UserNameIdentityToken, serverNonce []byte) ([]byte, ua.StatusCode) {
+	if tok.EncryptionAlgorithm == "" {
+		return tok.Password, ua.StatusOK
+	}
+	if sc == nil || s.srv.cfg.privateKey == nil {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	policyURI := sc.SecurityPolicyURI()
+	if policyURI == ua.SecurityPolicyURINone {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	enc, err := uapolicy.Asymmetric(policyURI, s.srv.cfg.privateKey, nil)
+	if err != nil {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	if enc.EncryptionURI() != tok.EncryptionAlgorithm {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	plain, err := enc.Decrypt(tok.Password)
+	if err != nil || len(plain) < 4 {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	n := int(binary.LittleEndian.Uint32(plain[:4]))
+	if n < len(serverNonce) || 4+n > len(plain) {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	secret := plain[4 : 4+n]
+	pwLen := n - len(serverNonce)
+	if !bytes.Equal(secret[pwLen:], serverNonce) {
+		return nil, ua.StatusBadIdentityTokenInvalid
+	}
+	return secret[:pwLen], ua.StatusOK
 }
 
 // CloseSession implements the OPC UA CloseSession service.
@@ -298,7 +400,7 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 		ss.Mu.Lock()
 		var toDelete []uint32
 		for id, sub := range ss.Subs {
-			if sub.Session != nil && sub.Session.AuthTokenID.Equal(req.RequestHeader.AuthenticationToken) {
+			if own, _ := sub.sessionChannel(); own != nil && own.AuthTokenID.Equal(req.RequestHeader.AuthenticationToken) {
 				toDelete = append(toDelete, id)
 			}
 		}

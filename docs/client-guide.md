@@ -697,7 +697,7 @@ Low-level `HistoryReadRawModified` / `HistoryReadProcessed` / `HistoryReadAtTime
 HistoryUpdate helpers accept full details and continuation points. Against go-opcua servers
 with the default `*Historian`, raw/modified/at-time/processed and data update/delete paths
 are available after `SetHistorian` + `EnableNode`. Historical **events** remain unsupported.
-Peer-proven history is raw HistoryRead in all four directions on opcua-interop v0.5.0
+Peer-proven history is raw HistoryRead in all four directions on opcua-interop v0.6.0
 (`history.read.raw`); continuation points are verified open62541→Go and Milo→Go.
 
 IndexRange on current Values uses the same NumericRange grammar as servers:

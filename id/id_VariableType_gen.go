@@ -64,6 +64,8 @@ const (
 	MultiStateDictionaryEntryDiscreteBaseType = 19077
 	MultiStateDictionaryEntryDiscreteType     = 19084
 	PubSubDiagnosticsCounterType              = 19725
+	AnalogNumberItemType                      = 23906
+	AnalogNumberUnitRangeType                 = 23918
 	AlarmStateVariableType                    = 32244
 	BitFieldType                              = 32431
 	ReferenceDescriptionVariableType          = 32657
@@ -129,6 +131,8 @@ var nameVariableType = map[uint32]string{
 	19077: "MultiStateDictionaryEntryDiscreteBaseType",
 	19084: "MultiStateDictionaryEntryDiscreteType",
 	19725: "PubSubDiagnosticsCounterType",
+	23906: "AnalogNumberItemType",
+	23918: "AnalogNumberUnitRangeType",
 	32244: "AlarmStateVariableType",
 	32431: "BitFieldType",
 	32657: "ReferenceDescriptionVariableType",

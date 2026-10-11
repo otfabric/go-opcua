@@ -4,7 +4,6 @@ package server
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"sync"
@@ -263,7 +262,17 @@ func (s *MonitoredItemService) nodeExists(nodeid *ua.NodeID) bool {
 	if err != nil {
 		return false
 	}
-	return ns.Node(nodeid) != nil
+	if ns.Node(nodeid) != nil {
+		return true
+	}
+	// Not every namespace is backed by Node objects: MapNamespace serves its
+	// keys through Attribute only and has no Node for them. Such a variable
+	// exists if its Value can be read; otherwise none of its keys could ever
+	// be monitored.
+	if dv := ns.Attribute(nodeid, ua.AttributeIDValue); dv != nil && dv.Status == ua.StatusOK {
+		return true
+	}
+	return false
 }
 
 func (s *MonitoredItemService) NextID() uint32 {
@@ -311,12 +320,18 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 	sub, ok := s.SubService.Subs[subID]
 	s.SubService.Mu.Unlock()
 	if !ok {
-		return nil, errors.New("sub doesn't exist")
+		// Part 4 §5.12.2.3: an unknown subscription is a service-level
+		// BadSubscriptionIdInvalid, not an internal error.
+		return nil, ua.StatusBadSubscriptionIDInvalid
 	}
+	// Session and timing may be changed concurrently by TransferSubscriptions
+	// and ModifySubscription.
+	subSess, _ := sub.sessionChannel()
+	pubInterval, _, _ := sub.timing()
 
 	sess := s.SubService.srv.Session(req.RequestHeader)
-	if sess == nil || sub.Session == nil || sub.Session.AuthTokenID == nil ||
-		sess.AuthTokenID == nil || !sub.Session.AuthTokenID.Equal(sess.AuthTokenID) {
+	if sess == nil || subSess == nil || subSess.AuthTokenID == nil ||
+		sess.AuthTokenID == nil || !subSess.AuthTokenID.Equal(sess.AuthTokenID) {
 		// Wrong/missing session must not become BadUnexpectedError via a plain error.
 		return &ua.CreateMonitoredItemsResponse{
 			ResponseHeader: &ua.ResponseHeader{
@@ -432,7 +447,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		res[i] = &ua.MonitoredItemCreateResult{
 			StatusCode:              ua.StatusOK,
 			MonitoredItemID:         item.ID,
-			RevisedSamplingInterval: sub.RevisedPublishingInterval,
+			RevisedSamplingInterval: float64(pubInterval) / float64(time.Millisecond),
 			RevisedQueueSize:        qsize,
 			FilterResult:            filterResult,
 		}
@@ -485,7 +500,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
-		if sess == nil || mi.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+		if !mi.Sub.ownedBy(sess) {
 			results[i] = &ua.MonitoredItemModifyResult{
 				StatusCode: ua.StatusBadSessionIDInvalid,
 			}
@@ -578,7 +593,7 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 			continue
 		}
 
-		if sess == nil || item.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+		if !item.Sub.ownedBy(sess) {
 			results[i] = ua.StatusBadSessionIDInvalid
 			continue
 		}
@@ -636,7 +651,7 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 	}
 
 	sess := s.SubService.srv.Session(req.RequestHeader)
-	if sess == nil || triggerItem.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+	if !triggerItem.Sub.ownedBy(sess) {
 		return &ua.SetTriggeringResponse{
 			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadSessionIDInvalid),
 		}, nil
@@ -695,7 +710,7 @@ func (s *MonitoredItemService) DeleteMonitoredItems(ctx context.Context, sc *uas
 			continue
 		}
 
-		if sess == nil || item.Sub.Session.AuthTokenID.String() != sess.AuthTokenID.String() {
+		if !item.Sub.ownedBy(sess) {
 			results[i] = ua.StatusBadSessionIDInvalid
 			continue
 		}

@@ -1097,10 +1097,28 @@ const (
 	SubscribedDataSetFolderTypeRemoveDataSetFolder                                                                                                    = 23819
 	AddSubscribedDataSetMethodType                                                                                                                    = 23821
 	RemoveSubscribedDataSetMethodType                                                                                                                 = 23824
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderFindAliasVerbose                                                                            = 23930
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderAddAliasesToCategory                                                                        = 23936
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderDeleteAliasesFromCategory                                                                   = 23960
+	AliasNameCategoryTypeFindAliasVerbose                                                                                                             = 23963
+	AliasNameCategoryTypeAddAliasesToCategory                                                                                                         = 23972
+	AliasNameCategoryTypeDeleteAliasesFromCategory                                                                                                    = 23975
+	FindAliasVerboseMethodType                                                                                                                        = 24003
 	PublishSubscribeTypeSubscribedDataSetsAddSubscribedDataSet                                                                                        = 24004
 	PublishSubscribeTypeSubscribedDataSetsRemoveSubscribedDataSet                                                                                     = 24007
 	PublishSubscribeSubscribedDataSetsAddSubscribedDataSet                                                                                            = 24010
 	PublishSubscribeSubscribedDataSetsRemoveSubscribedDataSet                                                                                         = 24013
+	AddAliasesToCategoryMethodType                                                                                                                    = 24025
+	DeleteAliasesFromCategoryMethodType                                                                                                               = 24028
+	AliasesFindAliasVerbose                                                                                                                           = 24054
+	AliasesAddAliasesToCategory                                                                                                                       = 24057
+	AliasesDeleteAliasesFromCategory                                                                                                                  = 24060
+	TagVariablesFindAliasVerbose                                                                                                                      = 24063
+	TagVariablesAddAliasesToCategory                                                                                                                  = 24066
+	TagVariablesDeleteAliasesFromCategory                                                                                                             = 24069
+	TopicsFindAliasVerbose                                                                                                                            = 24072
+	TopicsAddAliasesToCategory                                                                                                                        = 24075
+	TopicsDeleteAliasesFromCategory                                                                                                                   = 24078
 	UserManagementTypeAddUser                                                                                                                         = 24269
 	UserManagementTypeModifyUser                                                                                                                      = 24271
 	UserManagementTypeRemoveUser                                                                                                                      = 24273
@@ -1126,6 +1144,9 @@ const (
 	AlarmGroupTypeAlarmConditionInstancePlaceholderRemoveFromService2                                                                                 = 24332
 	AlarmGroupTypeAlarmConditionInstancePlaceholderPlaceInService2                                                                                    = 24334
 	AlarmGroupTypeAlarmConditionInstancePlaceholderReset2                                                                                             = 24336
+	LogObjectTypeReleaseContinuationPoint                                                                                                             = 24372
+	ReleaseContinuationPointMethodType                                                                                                                = 24374
+	ServerLogReleaseContinuationPoint                                                                                                                 = 24377
 	CertificateGroupTypeCertificateExpiredSuppress2                                                                                                   = 24518
 	CertificateGroupTypeCertificateExpiredUnsuppress2                                                                                                 = 24520
 	CertificateGroupTypeCertificateExpiredRemoveFromService2                                                                                          = 24522
@@ -2710,10 +2731,28 @@ var nameMethod = map[uint32]string{
 	23819: "SubscribedDataSetFolderType_RemoveDataSetFolder",
 	23821: "AddSubscribedDataSetMethodType",
 	23824: "RemoveSubscribedDataSetMethodType",
+	23930: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_FindAliasVerbose",
+	23936: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_AddAliasesToCategory",
+	23960: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_DeleteAliasesFromCategory",
+	23963: "AliasNameCategoryType_FindAliasVerbose",
+	23972: "AliasNameCategoryType_AddAliasesToCategory",
+	23975: "AliasNameCategoryType_DeleteAliasesFromCategory",
+	24003: "FindAliasVerboseMethodType",
 	24004: "PublishSubscribeType_SubscribedDataSets_AddSubscribedDataSet",
 	24007: "PublishSubscribeType_SubscribedDataSets_RemoveSubscribedDataSet",
 	24010: "PublishSubscribe_SubscribedDataSets_AddSubscribedDataSet",
 	24013: "PublishSubscribe_SubscribedDataSets_RemoveSubscribedDataSet",
+	24025: "AddAliasesToCategoryMethodType",
+	24028: "DeleteAliasesFromCategoryMethodType",
+	24054: "Aliases_FindAliasVerbose",
+	24057: "Aliases_AddAliasesToCategory",
+	24060: "Aliases_DeleteAliasesFromCategory",
+	24063: "TagVariables_FindAliasVerbose",
+	24066: "TagVariables_AddAliasesToCategory",
+	24069: "TagVariables_DeleteAliasesFromCategory",
+	24072: "Topics_FindAliasVerbose",
+	24075: "Topics_AddAliasesToCategory",
+	24078: "Topics_DeleteAliasesFromCategory",
 	24269: "UserManagementType_AddUser",
 	24271: "UserManagementType_ModifyUser",
 	24273: "UserManagementType_RemoveUser",
@@ -2739,6 +2778,9 @@ var nameMethod = map[uint32]string{
 	24332: "AlarmGroupType_AlarmConditionInstance_Placeholder_RemoveFromService2",
 	24334: "AlarmGroupType_AlarmConditionInstance_Placeholder_PlaceInService2",
 	24336: "AlarmGroupType_AlarmConditionInstance_Placeholder_Reset2",
+	24372: "LogObjectType_ReleaseContinuationPoint",
+	24374: "ReleaseContinuationPointMethodType",
+	24377: "ServerLog_ReleaseContinuationPoint",
 	24518: "CertificateGroupType_CertificateExpired_Suppress2",
 	24520: "CertificateGroupType_CertificateExpired_Unsuppress2",
 	24522: "CertificateGroupType_CertificateExpired_RemoveFromService2",

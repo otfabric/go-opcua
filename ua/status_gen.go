@@ -92,6 +92,8 @@ var (
 	StatusBadNotReadable                                               StatusCode = 0x803A0000
 	StatusBadNotWritable                                               StatusCode = 0x803B0000
 	StatusBadOutOfRange                                                StatusCode = 0x803C0000
+	StatusUncertainOverRange                                           StatusCode = 0x40F20000
+	StatusUncertainUnderRange                                          StatusCode = 0x40F30000
 	StatusBadNotSupported                                              StatusCode = 0x803D0000
 	StatusBadNotFound                                                  StatusCode = 0x803E0000
 	StatusBadObjectDeleted                                             StatusCode = 0x803F0000
@@ -376,6 +378,8 @@ var StatusCodes = map[StatusCode]StatusCodeDesc{
 	StatusBadNotReadable:                                               {Name: "StatusBadNotReadable", Text: "The access level does not allow reading or subscribing to the Node."},
 	StatusBadNotWritable:                                               {Name: "StatusBadNotWritable", Text: "The access level does not allow writing to the Node."},
 	StatusBadOutOfRange:                                                {Name: "StatusBadOutOfRange", Text: "The value was out of range."},
+	StatusUncertainOverRange:                                           {Name: "StatusUncertainOverRange", Text: "The value is over the allowed range."},
+	StatusUncertainUnderRange:                                          {Name: "StatusUncertainUnderRange", Text: "The value is under the allowed range."},
 	StatusBadNotSupported:                                              {Name: "StatusBadNotSupported", Text: "The requested operation is not supported."},
 	StatusBadNotFound:                                                  {Name: "StatusBadNotFound", Text: "A requested item was not found or a search operation ended without success."},
 	StatusBadObjectDeleted:                                             {Name: "StatusBadObjectDeleted", Text: "The object cannot be used because it has been deleted."},
@@ -568,7 +572,7 @@ var StatusCodes = map[StatusCode]StatusCodeDesc{
 	StatusUncertainConfigurationError:                                  {Name: "StatusUncertainConfigurationError", Text: "The value may not be accurate due to a configuration issue."},
 	StatusGoodCascadeInitializationAcknowledged:                        {Name: "StatusGoodCascadeInitializationAcknowledged", Text: "The value source supports cascade handshaking and the value has been Initialized based on an initialization request from a cascade secondary."},
 	StatusGoodCascadeInitializationRequest:                             {Name: "StatusGoodCascadeInitializationRequest", Text: "The value source supports cascade handshaking and is requesting initialization of a cascade primary."},
-	StatusGoodCascadeNotInvited:                                        {Name: "StatusGoodCascadeNotInvited", Text: "The value source supports cascade handshaking, however, the source’s current state does not allow for cascade."},
+	StatusGoodCascadeNotInvited:                                        {Name: "StatusGoodCascadeNotInvited", Text: "The value source supports cascade handshaking, however, the source's current state does not allow for cascade."},
 	StatusGoodCascadeNotSelected:                                       {Name: "StatusGoodCascadeNotSelected", Text: "The value source supports cascade handshaking, however, the source has not selected the corresponding cascade primary for use."},
 	StatusGoodFaultStateActive:                                         {Name: "StatusGoodFaultStateActive", Text: "There is a fault state condition active in the value source."},
 	StatusGoodInitiateFaultState:                                       {Name: "StatusGoodInitiateFaultState", Text: "A fault state condition is being requested of the destination."},

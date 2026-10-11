@@ -53,9 +53,9 @@ func NewNodeNameSpace(srv *Server, name string) *NodeNameSpace {
 			ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassObject)),
 			ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(ns.name)),
 			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(ns.name, ns.name)),
-			ua.AttributeIDDescription:   DataValueFromValue(uint32(ua.NodeClassObject)),
+			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 			ua.AttributeIDDataType:      DataValueFromValue(typedef),
-			ua.AttributeIDEventNotifier: DataValueFromValue(int16(0)),
+			ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)),
 		},
 		[]*ua.ReferenceDescription{},
 		nil,
@@ -185,6 +185,13 @@ func (as *NodeNameSpace) Attribute(id *ua.NodeID, attr ua.AttributeID) *ua.DataV
 		if ok {
 			a.Value.Value = ua.MustVariant(int32(x))
 		}
+	case ua.AttributeIDDataType:
+		a, err = n.Attribute(attr)
+		if err == nil {
+			if dt := variableDataType(n, a.Value); dt != nil {
+				a = &AttrValue{Value: DataValueFromValue(dt)}
+			}
+		}
 	default:
 		a, err = n.Attribute(attr)
 	}
@@ -197,6 +204,32 @@ func (as *NodeNameSpace) Attribute(id *ua.NodeID, attr ua.AttributeID) *ua.DataV
 		}
 	}
 	return a.Value
+}
+
+// variableDataType returns the NodeId to report for the DataType attribute of
+// a Variable node, or nil to report the stored attribute unchanged.
+//
+// The DataType attribute is a NodeId (Part 3 §5.6.2). Nodes built with
+// NewVariableNode store an ExpandedNodeId placeholder (i=267, which is not a
+// data type) because the same slot doubles as the type definition used for
+// browsing. For those the data type is derived from the current value, the
+// same way MapNamespace does; other stored ExpandedNodeIds are reported as
+// the plain NodeId they wrap.
+func variableDataType(n *Node, stored *ua.DataValue) *ua.NodeID {
+	if n.NodeClass() != ua.NodeClassVariable || stored == nil || stored.Value == nil {
+		return nil
+	}
+	en, ok := stored.Value.Value().(*ua.ExpandedNodeID)
+	if !ok || en == nil || en.NodeID == nil {
+		return nil
+	}
+	if en.NodeID.Namespace() != 0 || en.NodeID.IntID() != id.VariableNode {
+		return en.NodeID
+	}
+	if dv := n.Value(); dv != nil && dv.Value != nil && dv.Value.Value() != nil {
+		return ua.NewNumericNodeID(0, uint32(dv.Value.Type()))
+	}
+	return ua.NewNumericNodeID(0, id.BaseDataType)
 }
 
 func (as *NodeNameSpace) Node(id *ua.NodeID) *Node {
@@ -224,9 +257,9 @@ func (as *NodeNameSpace) Root() *Node {
 }
 
 func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
-	as.mu.RLock()
-	defer as.mu.RUnlock()
-
+	// as.mu must not be held here: as.Node (and Server.Node for the type
+	// definitions below) take the read lock themselves, and a recursive
+	// RLock deadlocks as soon as a writer (AddNode/DeleteNode) is waiting.
 	as.srv.cfg.logger.Debug("browse request", "node_id", bd.NodeID, "result_mask", bd.ResultMask)
 
 	n := as.Node(bd.NodeID)
@@ -234,10 +267,10 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 		return &ua.BrowseResult{StatusCode: ua.StatusBadNodeIDUnknown}
 	}
 
-	refs := make([]*ua.ReferenceDescription, 0, len(n.refs))
+	nodeRefs := n.refsSnapshot()
+	refs := make([]*ua.ReferenceDescription, 0, len(nodeRefs))
 
-	for i := range n.refs {
-		r := n.refs[i]
+	for _, r := range nodeRefs {
 		// we can't have nils in these or the encoder will fail.
 		if r.NodeID == nil || r.BrowseName == nil || r.DisplayName == nil || r.TypeDefinition == nil {
 			continue
@@ -250,9 +283,15 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 
 		td := as.srv.Node(r.NodeID.NodeID)
 
-		var typeDefinition *ua.ExpandedNodeID
+		// The target may be gone (deleted concurrently, or a dangling
+		// reference left behind by DeleteNode). A nil ExpandedNodeID cannot
+		// be encoded and would make the whole Browse response unsendable, so
+		// report the null NodeId instead.
+		typeDefinition := ua.NewTwoByteExpandedNodeID(0)
 		if td != nil {
-			typeDefinition = td.DataType()
+			if dt := td.DataType(); dt != nil {
+				typeDefinition = dt
+			}
 		}
 
 		isTypeDef := r.ReferenceTypeID != nil && r.ReferenceTypeID.IntID() == id.HasTypeDefinition && r.IsForward

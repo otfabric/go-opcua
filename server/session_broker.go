@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	mrand "math/rand"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +30,37 @@ type session struct {
 	roles []*ua.NodeID
 
 	PublishRequests chan PubReq
+
+	// activated is set once ActivateSession succeeded. Until then the
+	// session cannot be used for anything but activating or closing it.
+	activated atomic.Bool
+
+	// lastActivity is the time (UnixNano) the session was last used. timeout
+	// is the revised session timeout in nanoseconds. Both are accessed by the
+	// request handlers and by the session reaper.
+	lastActivity atomic.Int64
+	timeout      atomic.Int64
+}
+
+// touch records activity on the session, restarting its timeout.
+func (s *session) touch() {
+	s.lastActivity.Store(time.Now().UnixNano())
+}
+
+// setTimeout sets the revised session timeout (Part 4 §5.6.2).
+func (s *session) setTimeout(d time.Duration) {
+	s.cfg.sessionTimeout = d
+	s.timeout.Store(int64(d))
+}
+
+// expired reports whether the session has been idle for longer than its
+// timeout.
+func (s *session) expired(now time.Time) bool {
+	timeout := time.Duration(s.timeout.Load())
+	if timeout <= 0 {
+		timeout = sessionTimeoutDefault
+	}
+	return now.Sub(time.Unix(0, s.lastActivity.Load())) > timeout
 }
 
 type sessionConfig struct {
@@ -57,6 +89,7 @@ func (sb *sessionBroker) NewSession() *session {
 		AuthTokenID:     ua.NewNumericNodeID(0, uint32(mrand.Int31())),
 		PublishRequests: make(chan PubReq, 100),
 	}
+	s.touch()
 
 	sb.mu.Lock()
 	sb.s[s.AuthTokenID.String()] = s
@@ -77,6 +110,13 @@ func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
 	return nil
 }
 
+// closeAll forgets every session.
+func (sb *sessionBroker) closeAll() {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	clear(sb.s)
+}
+
 func (sb *sessionBroker) Session(authToken *ua.NodeID) *session {
 	sb.mu.Lock()
 	defer sb.mu.Unlock()
@@ -84,7 +124,30 @@ func (sb *sessionBroker) Session(authToken *ua.NodeID) *session {
 	s := sb.s[authToken.String()]
 	if s == nil {
 		sb.logger.Warn("sessionBroker.Session: error looking up session", "auth_token", authToken)
+		return nil
 	}
+	// Every service request looks its session up, so this is where the
+	// session timeout is restarted.
+	s.touch()
 
 	return s
+}
+
+// reapExpired removes and returns the sessions whose timeout has elapsed.
+//
+// Part 4 §5.6.2: a session that receives no request within its revised
+// timeout is closed by the server. Without this a client that disappears
+// without CloseSession (crash, network loss) leaks its session forever.
+func (sb *sessionBroker) reapExpired(now time.Time) []*session {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+
+	var expired []*session
+	for k, s := range sb.s {
+		if s.expired(now) {
+			expired = append(expired, s)
+			delete(sb.s, k)
+		}
+	}
+	return expired
 }

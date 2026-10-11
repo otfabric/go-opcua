@@ -107,7 +107,12 @@ type Client struct {
 
 	// sechan is the open secure channel.
 	atomicSechan atomic.Value // *uasc.SecureChannel
-	sechanErr    chan error
+
+	// sechanErr receives the errors of the current secure channel. Every
+	// secure channel gets its own channel (see Dial) so that an error of a
+	// channel that has already been replaced cannot be mistaken for an error
+	// of its successor. Guarded by connMu.
+	sechanErr chan error
 
 	// atomicSession is the active atomicSession.
 	atomicSession atomic.Value // *Session
@@ -128,8 +133,31 @@ type Client struct {
 	// resumech resumes subscription publish loop
 	resumech chan struct{}
 
-	// mcancel stops subscription publish loop
+	// publishPaused is the desired state of the publish loop and publishGen
+	// counts how often it was resumed. See setPublishPaused.
+	publishMu         sync.Mutex
+	publishPaused     bool
+	publishRecovering bool
+	publishGen        uint64
+
+	// deliverMu serialises the delivery of live PublishResponses with the
+	// republishing done during a connection recovery.
+	deliverMu sync.Mutex
+
+	// mctx is the context of the connection monitor and the publish loop;
+	// mcancel stops them. Both are created with the client so that Close and
+	// Connect can be called concurrently.
+	mctx    context.Context
 	mcancel func()
+
+	// monitorDone is closed when the connection monitor has stopped;
+	// monitorStarted tells whether it was ever started. inMonitorHandler is
+	// set while the monitor runs a user supplied handler and closeDone once
+	// Close has finished. See Close.
+	monitorDone      chan struct{}
+	monitorStarted   atomic.Bool
+	inMonitorHandler atomic.Bool
+	closeDone        atomic.Bool
 
 	// timeout for sending PublishRequests
 	atomicPublishTimeout atomic.Value // time.Duration
@@ -174,9 +202,13 @@ func NewClient(endpoint string, opts ...Option) (*Client, error) {
 	cfg.dialer.Logger = cfg.logger
 	cfg.sechan.Logger = cfg.logger
 
+	mctx, mcancel := context.WithCancel(context.Background())
 	c := Client{
 		endpointURL:  endpoint,
 		cfg:          cfg,
+		mctx:         mctx,
+		mcancel:      mcancel,
+		monitorDone:  make(chan struct{}),
 		sechanErr:    make(chan error, 1),
 		subs:         make(map[uint32]*Subscription),
 		pendingAcks:  make([]*ua.SubscriptionAcknowledgement, 0),
@@ -233,6 +265,8 @@ func (c *Client) Connect(ctx context.Context) error {
 	c.setState(ctx, Connecting)
 	if err := c.Dial(ctx); err != nil {
 		stats.RecordError(err)
+		// nothing was established: do not leave the state at Connecting
+		c.setState(ctx, Closed)
 
 		return err
 	}
@@ -246,6 +280,7 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 
 	if err := c.ActivateSession(ctx, s); err != nil {
+		c.discardSession(s)
 		_ = c.Close(ctx)
 		stats.RecordError(err)
 
@@ -253,12 +288,19 @@ func (c *Client) Connect(ctx context.Context) error {
 	}
 	c.setState(ctx, Connected)
 
-	mctx, mcancel := context.WithCancel(context.Background())
-	c.mcancel = mcancel
 	c.monitorOnce.Do(func() {
-		go c.monitor(mctx)
-		go c.monitorSubscriptions(mctx)
+		c.monitorStarted.Store(true)
+		go c.monitor(c.mctx)
+		go c.monitorSubscriptions(c.mctx)
 	})
+
+	// Close may have run while the connection was being established. It
+	// could then not see (and close) what Connect has set up since, so
+	// tear it down here instead of returning a client that looks connected.
+	if c.mctx.Err() != nil {
+		_ = c.Close(ctx)
+		return ua.StatusBadConnectionClosed
+	}
 
 	// Update the client's namespace table from the server.
 	// See https://github.com/otfabric/go-opcua/pull/512 for discussion.
@@ -279,8 +321,24 @@ func (c *Client) monitor(ctx context.Context) {
 	c.cfg.logger.Debug("monitor: start")
 	defer c.cfg.logger.Debug("monitor: done")
 
+	// Runs last: Close waits for it.
+	defer close(c.monitorDone)
 	defer c.mcancel()
-	defer c.setState(ctx, Closed)
+	defer c.setStateFromMonitor(ctx, Closed)
+	defer func() {
+		// Close normally waits for the monitor to stop before it closes the
+		// session and the secure channel. It cannot wait when it is called
+		// from a handler the monitor itself is running; a secure channel
+		// that a reconnect attempt installs after such a Close has finished
+		// would stay open forever, so close it here.
+		if !c.closeDone.Load() {
+			return
+		}
+		if sc := c.SecureChannel(); sc != nil {
+			_ = sc.Close()
+			c.setSecureChannel(nil)
+		}
+	}()
 
 	var action reconnectAction
 	for {
@@ -288,7 +346,7 @@ func (c *Client) monitor(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case err, ok := <-c.sechanErr:
+		case err, ok := <-c.secureChannelErrors():
 			stats.RecordError(err)
 
 			// return if channel or connection is closed
@@ -304,7 +362,7 @@ func (c *Client) monitor(ctx context.Context) {
 			}
 
 			// tell the handler the connection is disconnected
-			c.setState(ctx, Disconnected)
+			c.setStateFromMonitor(ctx, Disconnected)
 			c.cfg.logger.Debug("monitor: disconnected")
 
 			if !c.cfg.sechan.AutoReconnect {
@@ -356,7 +414,10 @@ func (c *Client) monitor(ctx context.Context) {
 				action = createSecureChannel
 			}
 
-			c.pauseSubscriptions(ctx)
+			// Hold the publish loop for the whole recovery. Missed notifications
+			// are republished below, and a live PublishResponse delivered at
+			// the same time would break their order.
+			c.setPublishRecovering(true)
 
 			var (
 				subsToRepublish []uint32            // subscription ids for which to send republish requests
@@ -398,7 +459,7 @@ func (c *Client) monitor(ctx context.Context) {
 							c.connMu.Unlock()
 						}
 
-						c.setState(ctx, Reconnecting)
+						c.setStateFromMonitor(ctx, Reconnecting)
 
 						c.cfg.logger.Debug("monitor: trying to recreate secure channel")
 						for {
@@ -419,7 +480,7 @@ func (c *Client) monitor(ctx context.Context) {
 					case restoreSession:
 						c.cfg.logger.Debug("monitor: action: restoreSession")
 
-						c.setState(ctx, Reconnecting)
+						c.setStateFromMonitor(ctx, Reconnecting)
 
 						s := c.Session()
 						if s == nil {
@@ -440,18 +501,24 @@ func (c *Client) monitor(ctx context.Context) {
 						if !c.cfg.skipNamespaceUpdate {
 							if err := c.UpdateNamespaces(ctx); err != nil {
 								c.cfg.logger.Debug("monitor: updating namespaces failed", "error", err)
-								action = createSecureChannel
+								action = c.retryReconnect(ctx)
 								continue
 							}
 						}
 						c.cfg.logger.Debug("monitor: namespaces updated")
+
+						// The session survived, and with it its subscriptions.
+						// Fetch the notifications that were sent while the
+						// connection was down and resume publishing.
+						subsToRepublish, subsToRecreate = c.partitionSubscriptions()
+						availableSeqs = map[uint32][]uint32{}
 
 						action = restoreSubscriptions
 
 					case recreateSession:
 						c.cfg.logger.Debug("monitor: action: recreateSession")
 
-						c.setState(ctx, Reconnecting)
+						c.setStateFromMonitor(ctx, Reconnecting)
 
 						c.setSession(nil)
 
@@ -459,12 +526,13 @@ func (c *Client) monitor(ctx context.Context) {
 						s, err := c.CreateSession(ctx, c.cfg.session)
 						if err != nil {
 							c.cfg.logger.Debug("monitor: recreate session failed", "error", err)
-							action = createSecureChannel
+							action = c.retryReconnect(ctx)
 							continue
 						}
 						if err := c.ActivateSession(ctx, s); err != nil {
 							c.cfg.logger.Debug("monitor: reactivate session failed", "error", err)
-							action = createSecureChannel
+							c.discardSession(s)
+							action = c.retryReconnect(ctx)
 							continue
 						}
 						c.cfg.logger.Debug("monitor: session recreated")
@@ -473,7 +541,7 @@ func (c *Client) monitor(ctx context.Context) {
 						if !c.cfg.skipNamespaceUpdate {
 							if err := c.UpdateNamespaces(ctx); err != nil {
 								c.cfg.logger.Debug("monitor: updating namespaces failed", "error", err)
-								action = createSecureChannel
+								action = c.retryReconnect(ctx)
 								continue
 							}
 						}
@@ -484,14 +552,26 @@ func (c *Client) monitor(ctx context.Context) {
 					case transferSubscriptions:
 						c.cfg.logger.Debug("monitor: action: transferSubscriptions")
 
-						subIDs := c.SubscriptionIDs()
+						// Subscriptions whose last recreation failed do not exist
+						// on the server in a usable form; transferring them is
+						// pointless, they have to be recreated.
+						subIDs, broken := c.partitionSubscriptions()
 
 						availableSeqs = map[uint32][]uint32{}
 						subsToRecreate = nil
 						subsToRepublish = nil
 
-						res, err := c.transferSubscriptions(ctx, subIDs)
+						var (
+							res *ua.TransferSubscriptionsResponse
+							err error
+						)
+						if len(subIDs) > 0 {
+							res, err = c.transferSubscriptions(ctx, subIDs)
+						}
 						switch {
+
+						case len(subIDs) == 0:
+							// nothing to transfer
 
 						case errors.Is(err, ua.StatusBadServiceUnsupported):
 							c.cfg.logger.Debug("monitor: transfer subscriptions not supported, recreating all subscriptions", "error", err)
@@ -504,19 +584,25 @@ func (c *Client) monitor(ctx context.Context) {
 							subsToRecreate = subIDs
 
 						default:
-							for i := range res.Results {
+							for i, subID := range subIDs {
+								// a subscription without a result was not transferred
+								if i >= len(res.Results) || res.Results[i] == nil {
+									subsToRecreate = append(subsToRecreate, subID)
+									continue
+								}
 								transferResult := res.Results[i]
 								switch transferResult.StatusCode {
 								case ua.StatusBadSubscriptionIDInvalid:
-									c.cfg.logger.Debug("monitor: transfer subscription failed", "sub_id", subIDs[i])
-									subsToRecreate = append(subsToRecreate, subIDs[i])
+									c.cfg.logger.Debug("monitor: transfer subscription failed", "sub_id", subID)
+									subsToRecreate = append(subsToRecreate, subID)
 
 								default:
-									subsToRepublish = append(subsToRepublish, subIDs[i])
-									availableSeqs[subIDs[i]] = transferResult.AvailableSequenceNumbers
+									subsToRepublish = append(subsToRepublish, subID)
+									availableSeqs[subID] = transferResult.AvailableSequenceNumbers
 								}
 							}
 						}
+						subsToRecreate = append(subsToRecreate, broken...)
 
 						action = restoreSubscriptions
 
@@ -549,7 +635,7 @@ func (c *Client) monitor(ctx context.Context) {
 									outcome = SubscriptionRecoveryTransferred
 									detail = "transferred successfully; no buffered notifications to recover"
 								}
-								c.notifyRecovery(SubscriptionRecoveryEvent{
+								c.notifyRecoveryFromMonitor(SubscriptionRecoveryEvent{
 									SubscriptionID:           subID,
 									Outcome:                  outcome,
 									AvailableSequenceNumbers: avail,
@@ -562,9 +648,12 @@ func (c *Client) monitor(ctx context.Context) {
 						for _, subID := range subsToRecreate {
 							if err := c.recreateSubscription(ctx, subID); err != nil {
 								c.cfg.logger.Debug("monitor: recreate subscriptions failed", "error", err)
+								// The subscription stays registered so that the
+								// next recovery tries again; tell its consumer.
+								c.notifySubscriptionOfError(ctx, subID, err)
 								continue
 							}
-							c.notifyRecovery(SubscriptionRecoveryEvent{
+							c.notifyRecoveryFromMonitor(SubscriptionRecoveryEvent{
 								SubscriptionID: subID,
 								Outcome:        SubscriptionRecoveryRecreated,
 								Detail:         "subscription recreated as new; previous notification history lost",
@@ -572,7 +661,24 @@ func (c *Client) monitor(ctx context.Context) {
 							activeSubs++
 						}
 
-						c.setState(ctx, Connected)
+						// Errors reported up to here belong to the recovery
+						// itself (requests failing while the session was
+						// being replaced) and are obsolete now.
+						c.drainSecureChannelErrors()
+
+						// The connection may have been lost again while the
+						// recovery was in progress. Its error has just been
+						// discarded, and the secure channel reports only
+						// once, so check explicitly: declaring the client
+						// Connected on a dead channel would leave it stuck
+						// there for good.
+						if c.secureChannelLost() {
+							c.cfg.logger.Debug("monitor: connection lost during recovery, starting over")
+							action = c.retryReconnect(ctx)
+							continue
+						}
+
+						c.setStateFromMonitor(ctx, Connected)
 						action = none
 
 					case abortReconnect:
@@ -584,13 +690,10 @@ func (c *Client) monitor(ctx context.Context) {
 				}
 			}
 
-			// clear sechan errors from reconnection
-			for len(c.sechanErr) > 0 {
-				<-c.sechanErr
-			}
+			c.setPublishRecovering(false)
 
 			switch {
-			case activeSubs > 0:
+			case activeSubs > 0 || len(c.SubscriptionIDs()) > 0:
 				c.cfg.logger.Debug("monitor: resuming subscriptions", "count", activeSubs)
 				c.resumeSubscriptions(ctx)
 				c.cfg.logger.Debug("monitor: resumed subscriptions", "count", activeSubs)
@@ -609,28 +712,33 @@ func (c *Client) Dial(ctx context.Context) error {
 		return errors.ErrAlreadyConnected
 	}
 
-	var err error
-	c.connMu.Lock()
-	c.conn, err = c.cfg.dialer.Dial(ctx, c.endpointURL)
-	c.connMu.Unlock()
+	// connMu must not be held while dialing: the dial can take as long as
+	// its timeout and Close needs the mutex.
+	conn, err := c.cfg.dialer.Dial(ctx, c.endpointURL)
 	if err != nil {
 		return err
 	}
 
 	c.connMu.Lock()
-	conn := c.conn
+	c.conn = conn
 	c.connMu.Unlock()
 
-	sc, err := uasc.NewSecureChannel(c.endpointURL, conn, c.cfg.sechan, c.sechanErr)
+	errCh := make(chan error, 1)
+	sc, err := uasc.NewSecureChannel(c.endpointURL, conn, c.cfg.sechan, errCh)
 	if err != nil {
 		_ = conn.Close()
 		return err
 	}
 
 	if err := sc.Open(ctx); err != nil {
+		// closing the secure channel also stops its dispatcher
+		_ = sc.Close()
 		_ = conn.Close()
 		return err
 	}
+	c.connMu.Lock()
+	c.sechanErr = errCh
+	c.connMu.Unlock()
 	c.setSecureChannel(sc)
 
 	// Validate the server certificate configured via SecurityFromEndpoint
@@ -645,6 +753,53 @@ func (c *Client) Dial(ctx context.Context) error {
 	return nil
 }
 
+// secureChannelErrors returns the channel on which the current secure channel
+// reports its errors.
+func (c *Client) secureChannelErrors() chan error {
+	c.connMu.Lock()
+	defer c.connMu.Unlock()
+	return c.sechanErr
+}
+
+// drainSecureChannelErrors discards the pending errors of the current secure
+// channel.
+func (c *Client) drainSecureChannelErrors() {
+	ch := c.secureChannelErrors()
+	for {
+		select {
+		case <-ch:
+		default:
+			return
+		}
+	}
+}
+
+// secureChannelLost reports whether the client has no secure channel or its
+// connection is gone.
+func (c *Client) secureChannelLost() bool {
+	sc := c.SecureChannel()
+	if sc == nil {
+		return true
+	}
+	select {
+	case <-sc.Disconnected():
+		return true
+	default:
+		return false
+	}
+}
+
+// retryReconnect waits for the reconnect interval and returns the action
+// that starts the recovery over with a new secure channel. The wait keeps a
+// recovery that fails immediately from spinning.
+func (c *Client) retryReconnect(ctx context.Context) reconnectAction {
+	select {
+	case <-ctx.Done():
+	case <-time.After(c.cfg.sechan.ReconnectInterval):
+	}
+	return createSecureChannel
+}
+
 // Close closes the session, secure channel, and underlying TCP connection.
 //
 // It attempts to gracefully close the session on the server, then closes the
@@ -656,14 +811,21 @@ func (c *Client) Dial(ctx context.Context) error {
 func (c *Client) Close(ctx context.Context) error {
 	stats.Client().Add("Close", 1)
 
+	// Stop the connection monitor and the publish loop first and wait until
+	// the monitor is gone. As long as it runs, the reconnect logic reacts to
+	// the session being closed below (requests of other goroutines fail
+	// with BadSessionIdInvalid) by creating a new session, which nobody
+	// would ever close, and may replace the secure channel behind our back.
+	if c.mcancel != nil {
+		c.mcancel()
+	}
+	c.waitForMonitor(ctx)
+
 	// try to close the session but ignore any error
 	// so that we close the underlying channel and connection.
 	_ = c.CloseSession(ctx)
 	c.setState(ctx, Closed)
 
-	if c.mcancel != nil {
-		c.mcancel()
-	}
 	if sc := c.SecureChannel(); sc != nil {
 		_ = sc.Close()
 		c.setSecureChannel(nil)
@@ -685,7 +847,53 @@ func (c *Client) Close(ctx context.Context) error {
 	}
 	c.connMu.Unlock()
 
+	c.closeDone.Store(true)
+
 	return nil
+}
+
+// waitForMonitor waits until the connection monitor has stopped, or ctx is
+// done. It returns immediately if the monitor was never started, and when it
+// is called from a handler (state or recovery handler) that the monitor
+// itself is running: waiting there would wait for itself.
+func (c *Client) waitForMonitor(ctx context.Context) {
+	if !c.monitorStarted.Load() || c.inMonitorHandler.Load() {
+		return
+	}
+	select {
+	case <-c.monitorDone:
+	case <-ctx.Done():
+	}
+}
+
+// setStateFromMonitor is setState for the connection monitor. It marks the
+// time the state handler runs so that a handler may call Close.
+func (c *Client) setStateFromMonitor(ctx context.Context, s ConnState) {
+	c.inMonitorHandler.Store(true)
+	defer c.inMonitorHandler.Store(false)
+	c.setState(ctx, s)
+}
+
+// notifyRecoveryFromMonitor is notifyRecovery for the connection monitor,
+// see setStateFromMonitor.
+func (c *Client) notifyRecoveryFromMonitor(ev SubscriptionRecoveryEvent) {
+	c.inMonitorHandler.Store(true)
+	defer c.inMonitorHandler.Store(false)
+	c.notifyRecovery(ev)
+}
+
+// discardSession closes a session that was created on the server but could
+// not be activated. Such a session is not the client's session, so nothing
+// else would close it and it would occupy the server until its timeout
+// expires. This is best effort and does not wait for the response.
+func (c *Client) discardSession(s *Session) {
+	sc := c.SecureChannel()
+	if sc == nil || s == nil || s.resp == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.sechan.RequestTimeout)
+	defer cancel()
+	_ = sc.SendRequest(ctx, &ua.CloseSessionRequest{DeleteSubscriptions: true}, s.resp.AuthenticationToken, nil)
 }
 
 // State returns the current connection state.
@@ -990,7 +1198,14 @@ func (c *Client) ActivateSession(ctx context.Context, s *Session) error {
 		// We decided not to check the error of CloseSession() since we
 		// can't do much about it anyway and it creates a race in the
 		// re-connection logic.
-		_ = c.CloseSession(ctx)
+		//
+		// When the session being activated is the client's current one
+		// (re-activation on a new secure channel after a reconnect) there
+		// is no previous session: closing "it" would close the session
+		// that was just activated and delete all of its subscriptions.
+		if prev := c.Session(); prev != s {
+			_ = c.CloseSession(ctx)
+		}
 
 		c.setSession(s)
 		return nil

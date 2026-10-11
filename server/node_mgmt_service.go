@@ -70,7 +70,13 @@ func (s *NodeManagementService) addNode(item *ua.AddNodesItem) *ua.AddNodesResul
 	var n *Node
 	switch item.NodeClass {
 	case ua.NodeClassVariable:
-		n = NewVariableNode(nid, name, nil)
+		va := variableAttributes(item)
+		var initial any
+		if va != nil && variableAttributeSpecified(va, ua.NodeAttributesMaskValue) && va.Value != nil {
+			initial = va.Value.Value()
+		}
+		n = NewVariableNode(nid, name, initial)
+		applyVariableAttributes(n, va)
 	default:
 		n = NewFolderNode(nid, name)
 		n.SetNodeClass(item.NodeClass)
@@ -88,6 +94,55 @@ func (s *NodeManagementService) addNode(item *ua.AddNodesItem) *ua.AddNodesResul
 	return &ua.AddNodesResult{
 		StatusCode:  ua.StatusGood,
 		AddedNodeID: nid,
+	}
+}
+
+// variableAttributes returns the VariableAttributes carried by an AddNodesItem,
+// or nil when the client supplied none (or attributes of another node class).
+func variableAttributes(item *ua.AddNodesItem) *ua.VariableAttributes {
+	if item.NodeAttributes == nil {
+		return nil
+	}
+	va, _ := item.NodeAttributes.Value.(*ua.VariableAttributes)
+	return va
+}
+
+// variableAttributeSpecified reports whether the client supplied attribute m.
+// A SpecifiedAttributes mask of zero is read as "everything in the structure
+// is meant": open62541's client API leaves the mask unset while filling in the
+// attributes, and a NodeAttributes object that specifies nothing is otherwise
+// meaningless.
+func variableAttributeSpecified(va *ua.VariableAttributes, m ua.NodeAttributesMask) bool {
+	return va.SpecifiedAttributes == 0 || va.SpecifiedAttributes&uint32(m) != 0
+}
+
+// applyVariableAttributes copies the attributes the client marked as specified
+// onto a freshly created Variable node (Part 4 §5.7.2, Part 3 §5.6.2). The
+// initial Value is handled by the caller. Unspecified attributes keep the
+// server defaults.
+func applyVariableAttributes(n *Node, va *ua.VariableAttributes) {
+	if va == nil {
+		return
+	}
+	specified := func(m ua.NodeAttributesMask) bool { return variableAttributeSpecified(va, m) }
+
+	if specified(ua.NodeAttributesMaskDisplayName) && va.DisplayName != nil {
+		n.SetDisplayName(va.DisplayName.Text, va.DisplayName.Locale)
+	}
+	if specified(ua.NodeAttributesMaskDescription) && va.Description != nil {
+		n.SetDescription(va.Description.Text, va.Description.Locale)
+	}
+	if specified(ua.NodeAttributesMaskDataType) && va.DataType != nil {
+		n.attr[ua.AttributeIDDataType] = DataValueFromValue(ua.NewExpandedNodeID(va.DataType, "", 0))
+	}
+	if specified(ua.NodeAttributesMaskValueRank) {
+		n.attr[ua.AttributeIDValueRank] = DataValueFromValue(va.ValueRank)
+	}
+	if specified(ua.NodeAttributesMaskAccessLevel) {
+		n.attr[ua.AttributeIDAccessLevel] = DataValueFromValue(va.AccessLevel)
+	}
+	if specified(ua.NodeAttributesMaskUserAccessLevel) {
+		n.attr[ua.AttributeIDUserAccessLevel] = DataValueFromValue(va.UserAccessLevel)
 	}
 }
 

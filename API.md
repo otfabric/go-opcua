@@ -1649,7 +1649,7 @@ Unknown field names resolve to null (as per Part 4).
 **Monitored-item modification:** `ModifyMonitoredItems` re-validates and applies an
 updated `EventFilter` to an existing event item when a new filter is supplied.
 
-Peer EventFilter / event-subscription interoperability against opcua-interop v0.5.0:
+Peer EventFilter / event-subscription interoperability against opcua-interop v0.6.0:
 `event.subscription`, SelectClauses, OfType, and severity-threshold filters are
 verified in all applicable directions. Broad WhereClause and custom emission remain
 deferred. Go↔Go covered.
@@ -1785,7 +1785,7 @@ Limitations:
 - Without `SetHistorian`, HistoryRead returns unsupported / non-historized results
 
 Peer HistoryRead raw interoperability: all four directions verified
-(`history.read.raw`) against opcua-interop v0.5.0; continuation points verified
+(`history.read.raw`) against opcua-interop v0.6.0; continuation points verified
 open62541→Go and Milo→Go. Go↔Go covered.
 
 ---

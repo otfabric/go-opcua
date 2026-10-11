@@ -8697,6 +8697,9 @@ const (
 	OpcUaBinarySchemaReceiveQosPriorityDataType                                                                                                                              = 23900
 	OpcUaBinarySchemaReceiveQosPriorityDataTypeDataTypeVersion                                                                                                               = 23901
 	OpcUaBinarySchemaReceiveQosPriorityDataTypeDictionaryFragment                                                                                                            = 23902
+	BaseAnalogTypeInstrumentNumberRange                                                                                                                                      = 23904
+	BaseAnalogTypeEUNumberRange                                                                                                                                              = 23905
+	AnalogNumberItemTypeEUNumberRange                                                                                                                                        = 23907
 	AuditClientEventTypeServerURI                                                                                                                                            = 23908
 	OpcUaBinarySchemaDatagramConnectionTransport2DataType                                                                                                                    = 23909
 	OpcUaBinarySchemaDatagramConnectionTransport2DataTypeDataTypeVersion                                                                                                     = 23910
@@ -8707,6 +8710,10 @@ const (
 	OpcUaBinarySchemaDatagramDataSetReaderTransportDataType                                                                                                                  = 23915
 	OpcUaBinarySchemaDatagramDataSetReaderTransportDataTypeDataTypeVersion                                                                                                   = 23916
 	OpcUaBinarySchemaDatagramDataSetReaderTransportDataTypeDictionaryFragment                                                                                                = 23917
+	AnalogNumberUnitRangeTypeEUNumberRange                                                                                                                                   = 23927
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderFindAliasVerboseInputArguments                                                                                     = 23931
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderFindAliasVerboseOutputArguments                                                                                    = 23935
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderAddAliasesToCategoryInputArguments                                                                                 = 23937
 	OpcUaXMLSchemaStandaloneSubscribedDataSetRefDataType                                                                                                                     = 23938
 	OpcUaXMLSchemaStandaloneSubscribedDataSetRefDataTypeDataTypeVersion                                                                                                      = 23939
 	OpcUaXMLSchemaStandaloneSubscribedDataSetRefDataTypeDictionaryFragment                                                                                                   = 23940
@@ -8728,12 +8735,20 @@ const (
 	OpcUaXMLSchemaTransmitQosPriorityDataType                                                                                                                                = 23956
 	OpcUaXMLSchemaTransmitQosPriorityDataTypeDataTypeVersion                                                                                                                 = 23957
 	OpcUaXMLSchemaTransmitQosPriorityDataTypeDictionaryFragment                                                                                                              = 23958
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderAddAliasesToCategoryOutputArguments                                                                                = 23959
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderDeleteAliasesFromCategoryInputArguments                                                                            = 23961
+	AliasNameCategoryTypeSubAliasNameCategoriesPlaceholderDeleteAliasesFromCategoryOutputArguments                                                                           = 23962
+	AliasNameCategoryTypeFindAliasVerboseInputArguments                                                                                                                      = 23964
 	OpcUaXMLSchemaReceiveQosDataType                                                                                                                                         = 23965
 	OpcUaXMLSchemaReceiveQosDataTypeDataTypeVersion                                                                                                                          = 23966
 	OpcUaXMLSchemaReceiveQosDataTypeDictionaryFragment                                                                                                                       = 23967
 	OpcUaXMLSchemaReceiveQosPriorityDataType                                                                                                                                 = 23968
 	OpcUaXMLSchemaReceiveQosPriorityDataTypeDataTypeVersion                                                                                                                  = 23969
 	OpcUaXMLSchemaReceiveQosPriorityDataTypeDictionaryFragment                                                                                                               = 23970
+	AliasNameCategoryTypeFindAliasVerboseOutputArguments                                                                                                                     = 23971
+	AliasNameCategoryTypeAddAliasesToCategoryInputArguments                                                                                                                  = 23973
+	AliasNameCategoryTypeAddAliasesToCategoryOutputArguments                                                                                                                 = 23974
+	AliasNameCategoryTypeDeleteAliasesFromCategoryInputArguments                                                                                                             = 23976
 	OpcUaXMLSchemaDatagramConnectionTransport2DataType                                                                                                                       = 23977
 	OpcUaXMLSchemaDatagramConnectionTransport2DataTypeDataTypeVersion                                                                                                        = 23978
 	OpcUaXMLSchemaDatagramConnectionTransport2DataTypeDictionaryFragment                                                                                                     = 23979
@@ -8743,6 +8758,7 @@ const (
 	OpcUaXMLSchemaDatagramDataSetReaderTransportDataType                                                                                                                     = 23983
 	OpcUaXMLSchemaDatagramDataSetReaderTransportDataTypeDataTypeVersion                                                                                                      = 23984
 	OpcUaXMLSchemaDatagramDataSetReaderTransportDataTypeDictionaryFragment                                                                                                   = 23985
+	AliasNameCategoryTypeDeleteAliasesFromCategoryOutputArguments                                                                                                            = 23986
 	AuditClientUpdateMethodResultEventTypeObjectID                                                                                                                           = 23994
 	AuditClientUpdateMethodResultEventTypeMethodID                                                                                                                           = 23995
 	AuditClientUpdateMethodResultEventTypeStatusCodeID                                                                                                                       = 23998
@@ -8754,18 +8770,42 @@ const (
 	PublishSubscribeSubscribedDataSetsAddSubscribedDataSetInputArguments                                                                                                     = 24011
 	PublishSubscribeSubscribedDataSetsAddSubscribedDataSetOutputArguments                                                                                                    = 24012
 	PublishSubscribeSubscribedDataSetsRemoveSubscribedDataSetInputArguments                                                                                                  = 24014
+	FindAliasVerboseMethodTypeInputArguments                                                                                                                                 = 24015
 	DatagramDataSetReaderTransportTypeAddressNetworkInterface                                                                                                                = 24018
 	DatagramDataSetReaderTransportTypeAddressNetworkInterfaceSelections                                                                                                      = 24019
 	DatagramDataSetReaderTransportTypeAddressNetworkInterfaceSelectionDescriptions                                                                                           = 24020
 	DatagramDataSetReaderTransportTypeAddressNetworkInterfaceRestrictToList                                                                                                  = 24021
 	DatagramDataSetReaderTransportTypeDatagramQos                                                                                                                            = 24022
 	DatagramDataSetReaderTransportTypeTopic                                                                                                                                  = 24023
+	FindAliasVerboseMethodTypeOutputArguments                                                                                                                                = 24024
+	AddAliasesToCategoryMethodTypeInputArguments                                                                                                                             = 24026
+	AddAliasesToCategoryMethodTypeOutputArguments                                                                                                                            = 24027
+	DeleteAliasesFromCategoryMethodTypeInputArguments                                                                                                                        = 24029
+	DeleteAliasesFromCategoryMethodTypeOutputArguments                                                                                                                       = 24030
 	OpcUaBinarySchemaProgramDiagnostic2DataType                                                                                                                              = 24035
 	OpcUaBinarySchemaProgramDiagnostic2DataTypeDataTypeVersion                                                                                                               = 24036
 	OpcUaBinarySchemaProgramDiagnostic2DataTypeDictionaryFragment                                                                                                            = 24037
 	OpcUaXMLSchemaProgramDiagnostic2DataType                                                                                                                                 = 24039
 	OpcUaXMLSchemaProgramDiagnostic2DataTypeDataTypeVersion                                                                                                                  = 24040
 	OpcUaXMLSchemaProgramDiagnostic2DataTypeDictionaryFragment                                                                                                               = 24041
+	AliasesFindAliasVerboseInputArguments                                                                                                                                    = 24055
+	AliasesFindAliasVerboseOutputArguments                                                                                                                                   = 24056
+	AliasesAddAliasesToCategoryInputArguments                                                                                                                                = 24058
+	AliasesAddAliasesToCategoryOutputArguments                                                                                                                               = 24059
+	AliasesDeleteAliasesFromCategoryInputArguments                                                                                                                           = 24061
+	AliasesDeleteAliasesFromCategoryOutputArguments                                                                                                                          = 24062
+	TagVariablesFindAliasVerboseInputArguments                                                                                                                               = 24064
+	TagVariablesFindAliasVerboseOutputArguments                                                                                                                              = 24065
+	TagVariablesAddAliasesToCategoryInputArguments                                                                                                                           = 24067
+	TagVariablesAddAliasesToCategoryOutputArguments                                                                                                                          = 24068
+	TagVariablesDeleteAliasesFromCategoryInputArguments                                                                                                                      = 24070
+	TagVariablesDeleteAliasesFromCategoryOutputArguments                                                                                                                     = 24071
+	TopicsFindAliasVerboseInputArguments                                                                                                                                     = 24073
+	TopicsFindAliasVerboseOutputArguments                                                                                                                                    = 24074
+	TopicsAddAliasesToCategoryInputArguments                                                                                                                                 = 24076
+	TopicsAddAliasesToCategoryOutputArguments                                                                                                                                = 24077
+	TopicsDeleteAliasesFromCategoryInputArguments                                                                                                                            = 24079
+	TopicsDeleteAliasesFromCategoryOutputArguments                                                                                                                           = 24080
 	ServerTypeServerCapabilitiesMaxMonitoredItems                                                                                                                            = 24083
 	ServerTypeServerCapabilitiesMaxSubscriptionsPerSession                                                                                                                   = 24084
 	ServerTypeServerCapabilitiesMaxSelectClauseParameters                                                                                                                    = 24085
@@ -8862,6 +8902,10 @@ const (
 	IPriorityMappingEntryTypePriorityLabel                                                                                                                                   = 24207
 	IPriorityMappingEntryTypePriorityValuePCP                                                                                                                                = 24208
 	IPriorityMappingEntryTypePriorityValueDSCP                                                                                                                               = 24209
+	IIetfBaseNetworkInterfaceTypeSpeedInstrumentNumberRange                                                                                                                  = 24219
+	IIetfBaseNetworkInterfaceTypeSpeedEUNumberRange                                                                                                                          = 24221
+	IIeeeBaseEthernetPortTypeSpeedInstrumentNumberRange                                                                                                                      = 24223
+	IIeeeBaseEthernetPortTypeSpeedEUNumberRange                                                                                                                              = 24225
 	IIeeeAutoNegotiationStatusTypeNegotiationStatus                                                                                                                          = 24234
 	DuplexEnumValues                                                                                                                                                         = 24235
 	InterfaceAdminStatusEnumValues                                                                                                                                           = 24236
@@ -8873,9 +8917,11 @@ const (
 	TsnListenerStatusEnumValues                                                                                                                                              = 24242
 	OPCUANamespaceMetadataNamespaceFileMaxByteStringLength                                                                                                                   = 24243
 	FileTypeMaxByteStringLength                                                                                                                                              = 24244
+	IetfBaseNetworkInterfaceTypeSpeedInstrumentNumberRange                                                                                                                   = 24245
 	NamespaceMetadataTypeNamespaceFileMaxByteStringLength                                                                                                                    = 24246
 	NamespacesTypeNamespaceIdentifierPlaceholderNamespaceFileMaxByteStringLength                                                                                             = 24247
 	FileDirectoryTypeFileNamePlaceholderMaxByteStringLength                                                                                                                  = 24248
+	IetfBaseNetworkInterfaceTypeSpeedEUNumberRange                                                                                                                           = 24249
 	CertificateGroupTypeTrustListMaxByteStringLength                                                                                                                         = 24251
 	CertificateGroupFolderTypeDefaultApplicationGroupTrustListMaxByteStringLength                                                                                            = 24252
 	CertificateGroupFolderTypeDefaultHTTPSGroupTrustListMaxByteStringLength                                                                                                  = 24253
@@ -8928,6 +8974,43 @@ const (
 	AlarmGroupTypeAlarmConditionInstancePlaceholderRemoveFromService2InputArguments                                                                                          = 24333
 	AlarmGroupTypeAlarmConditionInstancePlaceholderPlaceInService2InputArguments                                                                                             = 24335
 	AlarmGroupTypeAlarmConditionInstancePlaceholderReset2InputArguments                                                                                                      = 24337
+	OpcUaBinarySchemaNumberRange                                                                                                                                             = 24340
+	OpcUaBinarySchemaNumberRangeDataTypeVersion                                                                                                                              = 24341
+	OpcUaBinarySchemaNumberRangeDictionaryFragment                                                                                                                           = 24342
+	OpcUaBinarySchemaAliasNameVerboseDataType                                                                                                                                = 24343
+	OpcUaBinarySchemaAliasNameVerboseDataTypeDataTypeVersion                                                                                                                 = 24344
+	OpcUaBinarySchemaAliasNameVerboseDataTypeDictionaryFragment                                                                                                              = 24345
+	OpcUaBinarySchemaAliasCategoryUpdateDataType                                                                                                                             = 24346
+	OpcUaBinarySchemaAliasCategoryUpdateDataTypeDataTypeVersion                                                                                                              = 24347
+	OpcUaBinarySchemaAliasCategoryUpdateDataTypeDictionaryFragment                                                                                                           = 24348
+	OpcUaBinarySchemaAliasUpdateDataType                                                                                                                                     = 24349
+	OpcUaBinarySchemaAliasUpdateDataTypeDataTypeVersion                                                                                                                      = 24350
+	OpcUaBinarySchemaAliasUpdateDataTypeDictionaryFragment                                                                                                                   = 24351
+	OpcUaXMLSchemaNumberRange                                                                                                                                                = 24356
+	OpcUaXMLSchemaNumberRangeDataTypeVersion                                                                                                                                 = 24357
+	OpcUaXMLSchemaNumberRangeDictionaryFragment                                                                                                                              = 24358
+	OpcUaXMLSchemaAliasNameVerboseDataType                                                                                                                                   = 24359
+	OpcUaXMLSchemaAliasNameVerboseDataTypeDataTypeVersion                                                                                                                    = 24360
+	OpcUaXMLSchemaAliasNameVerboseDataTypeDictionaryFragment                                                                                                                 = 24361
+	OpcUaXMLSchemaAliasCategoryUpdateDataType                                                                                                                                = 24362
+	OpcUaXMLSchemaAliasCategoryUpdateDataTypeDataTypeVersion                                                                                                                 = 24363
+	OpcUaXMLSchemaAliasCategoryUpdateDataTypeDictionaryFragment                                                                                                              = 24364
+	OpcUaXMLSchemaAliasUpdateDataType                                                                                                                                        = 24365
+	OpcUaXMLSchemaAliasUpdateDataTypeDataTypeVersion                                                                                                                         = 24366
+	OpcUaXMLSchemaAliasUpdateDataTypeDictionaryFragment                                                                                                                      = 24367
+	LogObjectTypeReleaseContinuationPointInputArguments                                                                                                                      = 24373
+	ReleaseContinuationPointMethodTypeInputArguments                                                                                                                         = 24375
+	BaseLogEventTypeTraceContext                                                                                                                                             = 24376
+	ServerLogReleaseContinuationPointInputArguments                                                                                                                          = 24378
+	OpcUaBinarySchemaSignatureData                                                                                                                                           = 24481
+	OpcUaBinarySchemaSignatureDataDataTypeVersion                                                                                                                            = 24482
+	OpcUaBinarySchemaSignatureDataDictionaryFragment                                                                                                                         = 24495
+	OpcUaXMLSchemaSignatureData                                                                                                                                              = 24496
+	OpcUaXMLSchemaSignatureDataDataTypeVersion                                                                                                                               = 24497
+	OpcUaXMLSchemaSignatureDataDictionaryFragment                                                                                                                            = 24498
+	AliasUpdateDataTypeDataSetClassID                                                                                                                                        = 24499
+	AliasUpdateDataTypeDataSetMetaData                                                                                                                                       = 24500
+	FixedSizeArray                                                                                                                                                           = 24501
 	CertificateGroupTypeCertificateExpiredSuppress2InputArguments                                                                                                            = 24519
 	CertificateGroupTypeCertificateExpiredUnsuppress2InputArguments                                                                                                          = 24521
 	CertificateGroupTypeCertificateExpiredRemoveFromService2InputArguments                                                                                                   = 24523
@@ -19259,6 +19342,9 @@ var nameVariable = map[uint32]string{
 	23900: "OpcUa_BinarySchema_ReceiveQosPriorityDataType",
 	23901: "OpcUa_BinarySchema_ReceiveQosPriorityDataType_DataTypeVersion",
 	23902: "OpcUa_BinarySchema_ReceiveQosPriorityDataType_DictionaryFragment",
+	23904: "BaseAnalogType_InstrumentNumberRange",
+	23905: "BaseAnalogType_EUNumberRange",
+	23907: "AnalogNumberItemType_EUNumberRange",
 	23908: "AuditClientEventType_ServerUri",
 	23909: "OpcUa_BinarySchema_DatagramConnectionTransport2DataType",
 	23910: "OpcUa_BinarySchema_DatagramConnectionTransport2DataType_DataTypeVersion",
@@ -19269,6 +19355,10 @@ var nameVariable = map[uint32]string{
 	23915: "OpcUa_BinarySchema_DatagramDataSetReaderTransportDataType",
 	23916: "OpcUa_BinarySchema_DatagramDataSetReaderTransportDataType_DataTypeVersion",
 	23917: "OpcUa_BinarySchema_DatagramDataSetReaderTransportDataType_DictionaryFragment",
+	23927: "AnalogNumberUnitRangeType_EUNumberRange",
+	23931: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_FindAliasVerbose_InputArguments",
+	23935: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_FindAliasVerbose_OutputArguments",
+	23937: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_AddAliasesToCategory_InputArguments",
 	23938: "OpcUa_XmlSchema_StandaloneSubscribedDataSetRefDataType",
 	23939: "OpcUa_XmlSchema_StandaloneSubscribedDataSetRefDataType_DataTypeVersion",
 	23940: "OpcUa_XmlSchema_StandaloneSubscribedDataSetRefDataType_DictionaryFragment",
@@ -19290,12 +19380,20 @@ var nameVariable = map[uint32]string{
 	23956: "OpcUa_XmlSchema_TransmitQosPriorityDataType",
 	23957: "OpcUa_XmlSchema_TransmitQosPriorityDataType_DataTypeVersion",
 	23958: "OpcUa_XmlSchema_TransmitQosPriorityDataType_DictionaryFragment",
+	23959: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_AddAliasesToCategory_OutputArguments",
+	23961: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_DeleteAliasesFromCategory_InputArguments",
+	23962: "AliasNameCategoryType_SubAliasNameCategories_Placeholder_DeleteAliasesFromCategory_OutputArguments",
+	23964: "AliasNameCategoryType_FindAliasVerbose_InputArguments",
 	23965: "OpcUa_XmlSchema_ReceiveQosDataType",
 	23966: "OpcUa_XmlSchema_ReceiveQosDataType_DataTypeVersion",
 	23967: "OpcUa_XmlSchema_ReceiveQosDataType_DictionaryFragment",
 	23968: "OpcUa_XmlSchema_ReceiveQosPriorityDataType",
 	23969: "OpcUa_XmlSchema_ReceiveQosPriorityDataType_DataTypeVersion",
 	23970: "OpcUa_XmlSchema_ReceiveQosPriorityDataType_DictionaryFragment",
+	23971: "AliasNameCategoryType_FindAliasVerbose_OutputArguments",
+	23973: "AliasNameCategoryType_AddAliasesToCategory_InputArguments",
+	23974: "AliasNameCategoryType_AddAliasesToCategory_OutputArguments",
+	23976: "AliasNameCategoryType_DeleteAliasesFromCategory_InputArguments",
 	23977: "OpcUa_XmlSchema_DatagramConnectionTransport2DataType",
 	23978: "OpcUa_XmlSchema_DatagramConnectionTransport2DataType_DataTypeVersion",
 	23979: "OpcUa_XmlSchema_DatagramConnectionTransport2DataType_DictionaryFragment",
@@ -19305,6 +19403,7 @@ var nameVariable = map[uint32]string{
 	23983: "OpcUa_XmlSchema_DatagramDataSetReaderTransportDataType",
 	23984: "OpcUa_XmlSchema_DatagramDataSetReaderTransportDataType_DataTypeVersion",
 	23985: "OpcUa_XmlSchema_DatagramDataSetReaderTransportDataType_DictionaryFragment",
+	23986: "AliasNameCategoryType_DeleteAliasesFromCategory_OutputArguments",
 	23994: "AuditClientUpdateMethodResultEventType_ObjectId",
 	23995: "AuditClientUpdateMethodResultEventType_MethodId",
 	23998: "AuditClientUpdateMethodResultEventType_StatusCodeId",
@@ -19316,18 +19415,42 @@ var nameVariable = map[uint32]string{
 	24011: "PublishSubscribe_SubscribedDataSets_AddSubscribedDataSet_InputArguments",
 	24012: "PublishSubscribe_SubscribedDataSets_AddSubscribedDataSet_OutputArguments",
 	24014: "PublishSubscribe_SubscribedDataSets_RemoveSubscribedDataSet_InputArguments",
+	24015: "FindAliasVerboseMethodType_InputArguments",
 	24018: "DatagramDataSetReaderTransportType_Address_NetworkInterface",
 	24019: "DatagramDataSetReaderTransportType_Address_NetworkInterface_Selections",
 	24020: "DatagramDataSetReaderTransportType_Address_NetworkInterface_SelectionDescriptions",
 	24021: "DatagramDataSetReaderTransportType_Address_NetworkInterface_RestrictToList",
 	24022: "DatagramDataSetReaderTransportType_DatagramQos",
 	24023: "DatagramDataSetReaderTransportType_Topic",
+	24024: "FindAliasVerboseMethodType_OutputArguments",
+	24026: "AddAliasesToCategoryMethodType_InputArguments",
+	24027: "AddAliasesToCategoryMethodType_OutputArguments",
+	24029: "DeleteAliasesFromCategoryMethodType_InputArguments",
+	24030: "DeleteAliasesFromCategoryMethodType_OutputArguments",
 	24035: "OpcUa_BinarySchema_ProgramDiagnostic2DataType",
 	24036: "OpcUa_BinarySchema_ProgramDiagnostic2DataType_DataTypeVersion",
 	24037: "OpcUa_BinarySchema_ProgramDiagnostic2DataType_DictionaryFragment",
 	24039: "OpcUa_XmlSchema_ProgramDiagnostic2DataType",
 	24040: "OpcUa_XmlSchema_ProgramDiagnostic2DataType_DataTypeVersion",
 	24041: "OpcUa_XmlSchema_ProgramDiagnostic2DataType_DictionaryFragment",
+	24055: "Aliases_FindAliasVerbose_InputArguments",
+	24056: "Aliases_FindAliasVerbose_OutputArguments",
+	24058: "Aliases_AddAliasesToCategory_InputArguments",
+	24059: "Aliases_AddAliasesToCategory_OutputArguments",
+	24061: "Aliases_DeleteAliasesFromCategory_InputArguments",
+	24062: "Aliases_DeleteAliasesFromCategory_OutputArguments",
+	24064: "TagVariables_FindAliasVerbose_InputArguments",
+	24065: "TagVariables_FindAliasVerbose_OutputArguments",
+	24067: "TagVariables_AddAliasesToCategory_InputArguments",
+	24068: "TagVariables_AddAliasesToCategory_OutputArguments",
+	24070: "TagVariables_DeleteAliasesFromCategory_InputArguments",
+	24071: "TagVariables_DeleteAliasesFromCategory_OutputArguments",
+	24073: "Topics_FindAliasVerbose_InputArguments",
+	24074: "Topics_FindAliasVerbose_OutputArguments",
+	24076: "Topics_AddAliasesToCategory_InputArguments",
+	24077: "Topics_AddAliasesToCategory_OutputArguments",
+	24079: "Topics_DeleteAliasesFromCategory_InputArguments",
+	24080: "Topics_DeleteAliasesFromCategory_OutputArguments",
 	24083: "ServerType_ServerCapabilities_MaxMonitoredItems",
 	24084: "ServerType_ServerCapabilities_MaxSubscriptionsPerSession",
 	24085: "ServerType_ServerCapabilities_MaxSelectClauseParameters",
@@ -19424,6 +19547,10 @@ var nameVariable = map[uint32]string{
 	24207: "IPriorityMappingEntryType_PriorityLabel",
 	24208: "IPriorityMappingEntryType_PriorityValue_PCP",
 	24209: "IPriorityMappingEntryType_PriorityValue_DSCP",
+	24219: "IIetfBaseNetworkInterfaceType_Speed_InstrumentNumberRange",
+	24221: "IIetfBaseNetworkInterfaceType_Speed_EUNumberRange",
+	24223: "IIeeeBaseEthernetPortType_Speed_InstrumentNumberRange",
+	24225: "IIeeeBaseEthernetPortType_Speed_EUNumberRange",
 	24234: "IIeeeAutoNegotiationStatusType_NegotiationStatus",
 	24235: "Duplex_EnumValues",
 	24236: "InterfaceAdminStatus_EnumValues",
@@ -19435,9 +19562,11 @@ var nameVariable = map[uint32]string{
 	24242: "TsnListenerStatus_EnumValues",
 	24243: "OPCUANamespaceMetadata_NamespaceFile_MaxByteStringLength",
 	24244: "FileType_MaxByteStringLength",
+	24245: "IetfBaseNetworkInterfaceType_Speed_InstrumentNumberRange",
 	24246: "NamespaceMetadataType_NamespaceFile_MaxByteStringLength",
 	24247: "NamespacesType_NamespaceIdentifier_Placeholder_NamespaceFile_MaxByteStringLength",
 	24248: "FileDirectoryType_FileName_Placeholder_MaxByteStringLength",
+	24249: "IetfBaseNetworkInterfaceType_Speed_EUNumberRange",
 	24251: "CertificateGroupType_TrustList_MaxByteStringLength",
 	24252: "CertificateGroupFolderType_DefaultApplicationGroup_TrustList_MaxByteStringLength",
 	24253: "CertificateGroupFolderType_DefaultHttpsGroup_TrustList_MaxByteStringLength",
@@ -19490,6 +19619,43 @@ var nameVariable = map[uint32]string{
 	24333: "AlarmGroupType_AlarmConditionInstance_Placeholder_RemoveFromService2_InputArguments",
 	24335: "AlarmGroupType_AlarmConditionInstance_Placeholder_PlaceInService2_InputArguments",
 	24337: "AlarmGroupType_AlarmConditionInstance_Placeholder_Reset2_InputArguments",
+	24340: "OpcUa_BinarySchema_NumberRange",
+	24341: "OpcUa_BinarySchema_NumberRange_DataTypeVersion",
+	24342: "OpcUa_BinarySchema_NumberRange_DictionaryFragment",
+	24343: "OpcUa_BinarySchema_AliasNameVerboseDataType",
+	24344: "OpcUa_BinarySchema_AliasNameVerboseDataType_DataTypeVersion",
+	24345: "OpcUa_BinarySchema_AliasNameVerboseDataType_DictionaryFragment",
+	24346: "OpcUa_BinarySchema_AliasCategoryUpdateDataType",
+	24347: "OpcUa_BinarySchema_AliasCategoryUpdateDataType_DataTypeVersion",
+	24348: "OpcUa_BinarySchema_AliasCategoryUpdateDataType_DictionaryFragment",
+	24349: "OpcUa_BinarySchema_AliasUpdateDataType",
+	24350: "OpcUa_BinarySchema_AliasUpdateDataType_DataTypeVersion",
+	24351: "OpcUa_BinarySchema_AliasUpdateDataType_DictionaryFragment",
+	24356: "OpcUa_XmlSchema_NumberRange",
+	24357: "OpcUa_XmlSchema_NumberRange_DataTypeVersion",
+	24358: "OpcUa_XmlSchema_NumberRange_DictionaryFragment",
+	24359: "OpcUa_XmlSchema_AliasNameVerboseDataType",
+	24360: "OpcUa_XmlSchema_AliasNameVerboseDataType_DataTypeVersion",
+	24361: "OpcUa_XmlSchema_AliasNameVerboseDataType_DictionaryFragment",
+	24362: "OpcUa_XmlSchema_AliasCategoryUpdateDataType",
+	24363: "OpcUa_XmlSchema_AliasCategoryUpdateDataType_DataTypeVersion",
+	24364: "OpcUa_XmlSchema_AliasCategoryUpdateDataType_DictionaryFragment",
+	24365: "OpcUa_XmlSchema_AliasUpdateDataType",
+	24366: "OpcUa_XmlSchema_AliasUpdateDataType_DataTypeVersion",
+	24367: "OpcUa_XmlSchema_AliasUpdateDataType_DictionaryFragment",
+	24373: "LogObjectType_ReleaseContinuationPoint_InputArguments",
+	24375: "ReleaseContinuationPointMethodType_InputArguments",
+	24376: "BaseLogEventType_TraceContext",
+	24378: "ServerLog_ReleaseContinuationPoint_InputArguments",
+	24481: "OpcUa_BinarySchema_SignatureData",
+	24482: "OpcUa_BinarySchema_SignatureData_DataTypeVersion",
+	24495: "OpcUa_BinarySchema_SignatureData_DictionaryFragment",
+	24496: "OpcUa_XmlSchema_SignatureData",
+	24497: "OpcUa_XmlSchema_SignatureData_DataTypeVersion",
+	24498: "OpcUa_XmlSchema_SignatureData_DictionaryFragment",
+	24499: "AliasUpdateDataType_DataSetClassId",
+	24500: "AliasUpdateDataType_DataSetMetaData",
+	24501: "FixedSizeArray",
 	24519: "CertificateGroupType_CertificateExpired_Suppress2_InputArguments",
 	24521: "CertificateGroupType_CertificateExpired_Unsuppress2_InputArguments",
 	24523: "CertificateGroupType_CertificateExpired_RemoveFromService2_InputArguments",

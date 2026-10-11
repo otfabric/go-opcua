@@ -461,7 +461,11 @@ const (
 	ApplicationConfigurationDataType          = 23743
 	AuthorizationServiceConfigurationDataType = 23744
 	URIString                                 = 23751
+	NumberRange                               = 23903
 	ProgramDiagnostic2DataType                = 24033
+	AliasNameVerboseDataType                  = 24051
+	AliasCategoryUpdateDataType               = 24052
+	AliasUpdateDataType                       = 24053
 	PortableQualifiedName                     = 24105
 	PortableNodeID                            = 24106
 	UnsignedRationalNumber                    = 24107
@@ -957,7 +961,11 @@ var nameDataType = map[uint32]string{
 	23743: "ApplicationConfigurationDataType",
 	23744: "AuthorizationServiceConfigurationDataType",
 	23751: "UriString",
+	23903: "NumberRange",
 	24033: "ProgramDiagnostic2DataType",
+	24051: "AliasNameVerboseDataType",
+	24052: "AliasCategoryUpdateDataType",
+	24053: "AliasUpdateDataType",
 	24105: "PortableQualifiedName",
 	24106: "PortableNodeId",
 	24107: "UnsignedRationalNumber",

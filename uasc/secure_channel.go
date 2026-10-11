@@ -63,39 +63,6 @@ func (b MessageBody) Response() ua.Response {
 	return nil
 }
 
-type conditionLocker struct {
-	bLock   bool
-	lockMu  sync.Mutex
-	lockCnd *sync.Cond
-}
-
-func newConditionLocker() *conditionLocker {
-	c := &conditionLocker{}
-	c.lockCnd = sync.NewCond(&c.lockMu)
-	return c
-}
-
-func (c *conditionLocker) lock() {
-	c.lockMu.Lock()
-	c.bLock = true
-	c.lockMu.Unlock()
-}
-
-func (c *conditionLocker) unlock() {
-	c.lockMu.Lock()
-	c.bLock = false
-	c.lockMu.Unlock()
-	c.lockCnd.Broadcast()
-}
-
-func (c *conditionLocker) waitIfLock() {
-	c.lockMu.Lock()
-	for c.bLock {
-		c.lockCnd.Wait()
-	}
-	c.lockMu.Unlock()
-}
-
 type SecureChannel struct {
 	endpointURL string
 
@@ -124,9 +91,16 @@ type SecureChannel struct {
 	activeInstance *channelInstance
 	instancesMu    sync.Mutex
 
-	// prevent sending msg when secure channel renewal occurs
-	reqLocker  *conditionLocker
-	pendingReq sync.WaitGroup
+	// maxLifetime is the longest SecurityToken lifetime (ms) a server channel
+	// grants; captured from the configured lifetime on the first open.
+	maxLifetime uint32
+
+	// sendGate keeps requests and token renewal apart: every request holds
+	// the read side while it is written to the connection and a renewal
+	// holds the write side. A renewal therefore starts only when no request
+	// is half-way out, and no request picks a channel instance while the
+	// token is being replaced.
+	sendGate sync.RWMutex
 
 	// openDone is signalled by open() when it finishes processing an
 	// OpenSecureChannelResponse. The dispatcher waits on this channel
@@ -235,7 +209,6 @@ func newSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, kind channelKi
 		cfg:          cfg,
 		requestID:    cfg.RequestIDSeed,
 		kind:         kind,
-		reqLocker:    newConditionLocker(),
 		openDone:     make(chan struct{}, 1),
 		errch:        errCh,
 		closing:      make(chan struct{}),
@@ -547,6 +520,13 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 	}
 
 	const hdrlen = 12 // secure conversation header size
+	// The transport layer only guarantees its own 8 byte header. A shorter
+	// frame than the secure conversation header (a damaged size field, or a
+	// hostile peer) must be rejected here: slicing it would panic and take
+	// the whole process down.
+	if len(b) < hdrlen {
+		return nil, fmt.Errorf("sechan: chunk of %d bytes is shorter than its header: %w", len(b), ua.StatusBadDecodingError)
+	}
 	h := new(Header)
 	if _, err := h.Decode(b[:hdrlen]); err != nil {
 		return nil, fmt.Errorf("sechan: decode header failed: %w", err)
@@ -569,6 +549,31 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 
 		if s.openingInstance == nil {
 			return nil, fmt.Errorf("%w: openingInstance is nil", errors.ErrInvalidState)
+		}
+
+		if s.kind == server {
+			renewing, err := s.beginServerRenewal(m)
+			if err != nil {
+				return nil, err
+			}
+			if renewing != nil {
+				s.openingInstance = renewing
+			}
+		}
+
+		if s.kind == client {
+			// A client knows which policy and server certificate it opened
+			// the channel with; open() has prepared the opening instance
+			// accordingly. The response must not rewrite that configuration:
+			// it is shared by every later reconnect of the client, so a
+			// single damaged (or forged) OpenSecureChannel response would
+			// otherwise change the client's security settings for good and
+			// could leave it unable to ever connect again.
+			if m.SecurityPolicyURI != s.cfg.SecurityPolicyURI {
+				return nil, ua.StatusBadSecurityPolicyRejected
+			}
+			decryptWith = s.openingInstance
+			break
 		}
 
 		s.cfg.SecurityPolicyURI = m.SecurityPolicyURI
@@ -633,13 +638,32 @@ func (s *SecureChannel) verifyAndDecrypt(m *MessageChunk, b []byte, instance *ch
 		verified []byte
 	)
 
+	// Prefer the token named in the symmetric header; fall back to the other
+	// known tokens (newest first) for peers that do not rotate TokenIds.
+	if m.SymmetricSecurityHeader != nil {
+		for i := len(instances) - 1; i >= 0; i-- {
+			if instances[i].securityTokenID != m.SymmetricSecurityHeader.TokenID {
+				continue
+			}
+			if verified, err = instances[i].verifyAndDecrypt(m, b); err == nil {
+				return verified, nil
+			}
+		}
+	}
+
 	for i := len(instances) - 1; i >= 0; i-- {
+		if m.SymmetricSecurityHeader != nil && instances[i].securityTokenID == m.SymmetricSecurityHeader.TokenID {
+			continue
+		}
 		if verified, err = instances[i].verifyAndDecrypt(m, b); err == nil {
 			return verified, nil
 		}
 		s.cfg.Logger.Debug("attempting older channel state", "channel_id", s.c.ID())
 	}
 
+	if err == nil {
+		err = ua.StatusBadSecureChannelTokenUnknown
+	}
 	return nil, err
 }
 
@@ -656,7 +680,7 @@ func (s *SecureChannel) getInstancesBySecureChannelID(id uint32) []*channelInsta
 	cpy := make([]*channelInstance, len(instances))
 	copy(cpy, instances)
 
-	return instances
+	return cpy
 }
 
 func (s *SecureChannel) LocalEndpoint() string {
@@ -720,8 +744,8 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 	// s.openingInstance.securityTokenID = s.securityTokenID
 
 	if requestType == ua.SecurityTokenRequestTypeRenew {
-		// Safe: reqLocker.lock() blocks new requests, pendingReq.Wait()
-		// drains in-flight ones, and instance.Lock() is held by renew().
+		// Safe: renew() holds the write side of sendGate, so no request is
+		// being sent, and it holds instance.Lock().
 		// Snapshot the current sequence number and bump the source so
 		// the value is never reused if the old instance is briefly active
 		// during the OpenSecureChannel round-trip.
@@ -830,13 +854,20 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 		return ua.StatusBadProtocolVersionUnsupported
 	}
 
-	// Part 6.7.4: The AuthenticationToken should be nil. ???
-	if req.RequestHeader.AuthenticationToken.IntID() != 0 {
-		return ua.StatusBadSecureChannelTokenUnknown
-	}
+	// Part 4 §5.5.2 says the AuthenticationToken of an OpenSecureChannel
+	// request is null, but it carries no meaning for this service and
+	// widely deployed stacks (open62541) send the session token along when
+	// renewing. It is ignored rather than rejected: rejecting it tears down
+	// the channel of an otherwise conformant client at its first renewal.
 
-	s.cfg.Lifetime = req.RequestedLifetime
-	s.cfg.SecurityMode = req.SecurityMode
+	revisedLifetime := s.reviseLifetime(req.RequestedLifetime)
+	s.cfg.Lifetime = revisedLifetime
+	// On a renewal the channel is in use: other goroutines read the security
+	// mode while they send responses. The mode of an open channel does not
+	// change, so only store it when it actually differs (the initial open).
+	if s.cfg.SecurityMode != req.SecurityMode {
+		s.cfg.SecurityMode = req.SecurityMode
+	}
 
 	// Reject untrusted client application certificates at channel open
 	// (OPC UA application authentication), before issuing a SecurityToken.
@@ -849,18 +880,12 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 				sc = status
 			}
 			s.cfg.Logger.Warn("client certificate rejected at OpenSecureChannel", "error", verr)
-			fault := &ua.ServiceFault{
-				ResponseHeader: &ua.ResponseHeader{
-					Timestamp:          s.timeNow(),
-					RequestHandle:      req.RequestHeader.RequestHandle,
-					ServiceResult:      sc,
-					ServiceDiagnostics: &ua.DiagnosticInfo{},
-					StringTable:        []string{},
-					AdditionalHeader:   ua.NewExtensionObject(nil),
-				},
-			}
-			ctx := context.Background()
-			_ = s.sendResponseWithContext(ctx, s.openingInstance, reqID, fault)
+			// Part 6 §6.7.2/§7.1.5: a failed OpenSecureChannel is reported with
+			// a transport-level Error message, after which the connection is
+			// closed. No SecurityToken has been issued yet, so a ServiceFault
+			// secured with the (not yet established) symmetric keys could not
+			// be decoded by the client.
+			s.c.SendError(sc)
 			return sc
 		}
 	}
@@ -895,6 +920,18 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 	instance.algo = algo
 	instance.sc.requestID = req.RequestHeader.RequestHandle // server echoes client's RequestHandle for correlation
 
+	// Renewal: issue a new token on the same channel. The outgoing token's
+	// send lock is held across the hand-over so sequence numbers stay
+	// contiguous and nothing is secured with the old token after the renewal
+	// response; senders blocked on it re-resolve the active instance once it
+	// is released (see sendResponseWithContext).
+	if outgoing := s.activeInstanceOrNil(); outgoing != nil && outgoing != instance {
+		outgoing.Lock()
+		defer outgoing.Unlock()
+		instance.securityTokenID = outgoing.securityTokenID + 1
+		instance.sequenceNumber = outgoing.sequenceNumber
+	}
+
 	nonce := make([]byte, instance.algo.NonceLength())
 	if _, err := rand.Read(nonce); err != nil {
 		return err
@@ -912,7 +949,7 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 			ChannelID:       instance.secureChannelID,
 			TokenID:         instance.securityTokenID,
 			CreatedAt:       s.timeNow(),
-			RevisedLifetime: req.RequestedLifetime,
+			RevisedLifetime: revisedLifetime,
 		},
 		ServerNonce: nonce,
 	}
@@ -934,6 +971,8 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 	instance.SetMaximumBodySize(int(s.c.SendBufSize()))
 
 	instance.state = channelActive // correct: per Part 6 §6.7.2, server considers channel open after sending response
+	instance.createdAt = s.timeNow()
+	instance.revisedLifetime = time.Duration(revisedLifetime) * time.Millisecond
 
 	s.instancesMu.Lock()
 	s.instances[instance.secureChannelID] = append(
@@ -941,6 +980,7 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 		instance,
 	)
 	s.activeInstance = instance
+	s.scheduleServerTokenExpiry(instance)
 	s.instancesMu.Unlock()
 
 	return nil
@@ -951,7 +991,10 @@ func (s *SecureChannel) scheduleRenewal(instance *channelInstance) {
 	// Clients should request a new SecurityToken after 75 % of its lifetime has elapsed. This should ensure that
 	// clients will receive the new SecurityToken before the old one actually expire
 	const renewAfter = 0.75
-	when := time.Second * time.Duration(instance.revisedLifetime.Seconds()*renewAfter)
+	// Computed on the duration itself. Rounding the lifetime down to whole
+	// seconds first turns every lifetime below 1.34s into "renew now", and
+	// the renewed token is renewed immediately again, in a tight loop.
+	when := time.Duration(float64(instance.revisedLifetime) * renewAfter)
 
 	s.cfg.Logger.Debug("security token refresh scheduled", "channel_id", s.c.ID(), "refresh_at", time.Now().UTC().Add(when).Format(time.RFC3339), "timeout", when, "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
 
@@ -965,15 +1008,20 @@ func (s *SecureChannel) scheduleRenewal(instance *channelInstance) {
 	}
 
 	if err := s.renew(instance); err != nil {
-		s.errch <- fmt.Errorf("opcua: security token renewal failed: %w", err)
+		// Do not block forever if nobody is listening any more (the owner
+		// closed the channel, or already has an error pending).
+		select {
+		case s.errch <- fmt.Errorf("opcua: security token renewal failed: %w", err):
+		case <-s.closing:
+		}
 	}
 }
 
 func (s *SecureChannel) renew(instance *channelInstance) error {
-	// lock ensure no one else renews this at the same time
-	s.reqLocker.lock()
-	defer s.reqLocker.unlock()
-	s.pendingReq.Wait()
+	// The write side of sendGate ensures that no one else renews at the same
+	// time and that no request is in the middle of being sent.
+	s.sendGate.Lock()
+	defer s.sendGate.Unlock()
 	instance.Lock()
 	defer instance.Unlock()
 
@@ -1028,11 +1076,9 @@ func (s *SecureChannel) sendRequestWithTimeout(
 	timeout time.Duration,
 	h ResponseHandler) error {
 
-	s.pendingReq.Add(1)
 	respRequired := h != nil
 
 	ch, err := s.sendAsyncWithTimeout(ctx, req, reqID, instance, authToken, respRequired, timeout)
-	s.pendingReq.Done()
 	if err != nil {
 		return err
 	}
@@ -1040,6 +1086,12 @@ func (s *SecureChannel) sendRequestWithTimeout(
 	if !respRequired {
 		return nil
 	}
+
+	return s.awaitResponse(ctx, reqID, ch, timeout, h)
+}
+
+// awaitResponse waits for the response to request reqID and passes it to h.
+func (s *SecureChannel) awaitResponse(ctx context.Context, reqID uint32, ch <-chan *MessageBody, timeout time.Duration, h ResponseHandler) error {
 
 	// `+ timeoutLeniency` to give the server a chance to respond to TimeoutHint
 	timer := time.NewTimer(timeout + timeoutLeniency)
@@ -1092,13 +1144,24 @@ func (s *SecureChannel) SendRequest(ctx context.Context, req ua.Request, authTok
 }
 
 func (s *SecureChannel) SendRequestWithTimeout(ctx context.Context, req ua.Request, authToken *ua.NodeID, timeout time.Duration, h ResponseHandler) error {
-	s.reqLocker.waitIfLock()
+	// Only the transmission is done under the gate; waiting for the response
+	// must not hold up a token renewal.
+	s.sendGate.RLock()
 	active, err := s.getActiveChannelInstance()
+	if err != nil {
+		s.sendGate.RUnlock()
+		return err
+	}
+	reqID := s.nextRequestID()
+	ch, err := s.sendAsyncWithTimeout(ctx, req, reqID, active, authToken, h != nil, timeout)
+	s.sendGate.RUnlock()
 	if err != nil {
 		return err
 	}
-
-	return s.sendRequestWithTimeout(ctx, req, s.nextRequestID(), active, authToken, timeout, h)
+	if h == nil {
+		return nil
+	}
+	return s.awaitResponse(ctx, reqID, ch, timeout, h)
 }
 
 func (s *SecureChannel) sendAsyncWithTimeout(
@@ -1238,15 +1301,26 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 		return fmt.Errorf("%w: %T", errors.ErrUnknownService, resp)
 	}
 
-	var err error
-	if instance == nil {
-		instance, err = s.getActiveChannelInstance()
-		if err != nil {
-			return err
+	// Without an explicit instance the response is secured with the active
+	// token. A renewal can replace it while we wait for the send lock, in
+	// which case the token we resolved is stale and must not be used.
+	useActive := instance == nil
+	for {
+		if useActive {
+			var err error
+			if instance, err = s.getActiveChannelInstance(); err != nil {
+				return err
+			}
 		}
+		instance.Lock()
+		if !useActive || s.isActiveInstance(instance) {
+			break
+		}
+		instance.Unlock()
 	}
-	instance.Lock()
 	defer instance.Unlock()
+
+	var err error
 
 	// Encode the message into one or more chunks. maxBodySize is derived from
 	// the negotiated send buffer (see SetMaximumBodySize), so large responses
@@ -1343,8 +1417,6 @@ func (s *SecureChannel) close() error {
 		_ = s.c.Close()
 	}()
 
-	s.reqLocker.unlock()
-
 	select {
 	case <-s.disconnected:
 		return io.EOF
@@ -1352,8 +1424,15 @@ func (s *SecureChannel) close() error {
 	}
 
 	// Best-effort: try to send CloseSecureChannelRequest but don't
-	// fail the close if the connection is already dead.
-	_ = s.SendRequest(context.Background(), &ua.CloseSecureChannelRequest{}, nil, nil)
+	// fail the close if the connection is already dead. A token renewal in
+	// progress holds the gate until the server answers or the request times
+	// out; closing must not wait for that, so the request is skipped then.
+	if s.sendGate.TryRLock() {
+		if active, err := s.getActiveChannelInstance(); err == nil {
+			_, _ = s.sendAsyncWithTimeout(context.Background(), &ua.CloseSecureChannelRequest{}, s.nextRequestID(), active, nil, false, s.cfg.RequestTimeout)
+		}
+		s.sendGate.RUnlock()
+	}
 
 	return io.EOF
 }

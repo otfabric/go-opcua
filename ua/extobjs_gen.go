@@ -95,6 +95,11 @@ type CurrencyUnitType struct {
 	Currency       *LocalizedText
 }
 
+type NumberRange struct {
+	Low  *Variant
+	High *Variant
+}
+
 type AnnotationDataType struct {
 	Annotation string
 	Discipline string
@@ -837,6 +842,23 @@ type JSONActionResponseMessage struct {
 type AliasNameDataType struct {
 	AliasName       *QualifiedName
 	ReferencedNodes []*ExpandedNodeID
+}
+
+type AliasNameVerboseDataType struct {
+	AliasName           *QualifiedName
+	ReferencedNodes     []*ExpandedNodeID
+	ServerURIs          []string
+	AliasNameCategoryID *NodeID
+}
+
+type AliasCategoryUpdateDataType struct {
+	Category   *PortableNodeID
+	LastChange uint32
+}
+
+type AliasUpdateDataType struct {
+	ApplicationURI string
+	Categories     []*AliasCategoryUpdateDataType
 }
 
 type UserManagementDataType struct {

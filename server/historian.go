@@ -137,17 +137,25 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 		}, nil
 	}
 
-	startIdx := 0
+	// Determine time range direction.
+	reverse := !startTime.IsZero() && !endTime.IsZero() && startTime.After(endTime)
+
+	// Samples are walked in the direction of the read: oldest first for a
+	// forward read, newest first for a reverse read (startTime > endTime).
+	// Walking a reverse read forwards would make NumValuesPerNode keep the
+	// oldest values of the range instead of the newest ones, and hand out
+	// the pages of a continued read in the wrong order.
+	step, startIdx := 1, 0
+	if reverse {
+		step, startIdx = -1, len(nh.samples)-1
+	}
 	if cont != nil {
 		startIdx = cont.nextIndex
 	}
 
-	// Determine time range direction.
-	reverse := !startTime.IsZero() && !endTime.IsZero() && startTime.After(endTime)
-
 	// Collect matching samples.
 	var matches []*ua.DataValue
-	for i := startIdx; i < len(nh.samples); i++ {
+	for i := startIdx; i >= 0 && i < len(nh.samples); i += step {
 		sample := nh.samples[i]
 		ts := sample.SourceTimestamp
 
@@ -168,14 +176,14 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 
 		if numValues > 0 && uint32(len(matches)) >= numValues {
 			// Create continuation point for remaining data.
-			if i+1 < len(nh.samples) {
+			if next := i + step; next >= 0 && next < len(nh.samples) {
 				cpBytes := generateContinuationPoint()
 				cpKey := hex.EncodeToString(cpBytes)
 				h.continuations[cpKey] = &historyContinuation{
 					nodeKey:   nodeKey,
 					startTime: startTime,
 					endTime:   endTime,
-					nextIndex: i + 1,
+					nextIndex: next,
 					numValues: numValues,
 					bounds:    returnBounds,
 					created:   time.Now(),
@@ -183,7 +191,7 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 				h.cleanExpiredContinuations()
 
 				if reverse {
-					sort.Slice(matches, func(a, b int) bool {
+					sort.SliceStable(matches, func(a, b int) bool {
 						return matches[a].SourceTimestamp.After(matches[b].SourceTimestamp)
 					})
 				}
@@ -199,7 +207,7 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 	}
 
 	if reverse {
-		sort.Slice(matches, func(a, b int) bool {
+		sort.SliceStable(matches, func(a, b int) bool {
 			return matches[a].SourceTimestamp.After(matches[b].SourceTimestamp)
 		})
 	}

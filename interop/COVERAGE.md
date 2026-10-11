@@ -6,7 +6,7 @@ Source of truth: [`capabilities.json`](capabilities.json) + [`coverage.json`](co
 Regenerate with `go generate ./interop`.
 Gap summary: `go run ./internal/cmd/render-interop-coverage -summary`.
 
-Pinned opcua-interop version: **v0.5.0**
+Pinned opcua-interop version: **v0.6.0**
 
 | Status | Meaning |
 |---|---|
@@ -81,19 +81,19 @@ Go↔Go tests never earn ✅.
 | Event subscription create | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_EventSubscription`; C→M: `TestMiloServer_EventSubscription`; O→S: `TestGoServer_Open62541Client_EventSubscribe`; M→S: `TestGoServer_MiloClient_EventSubscribe` |
 | EventFilter SelectClauses | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_EventFilterSelectClauses`; C→M: `TestMiloServer_EventFilterSelectClauses`; O→S: `TestGoServer_Open62541Client_EventFilterSelectClauses`; M→S: `TestGoServer_MiloClient_EventFilterSelectClauses` |
 | EventFilter OfType | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_EventFilterOfType`; C→M: `TestMiloServer_EventFilterOfType`; O→S: `TestGoServer_Open62541Client_EventFilterOfType`; M→S: `TestGoServer_MiloClient_EventFilterOfType` |
-| EventFilter WhereClause | Deferred | Deferred | Deferred | Deferred | — |
+| EventFilter WhereClause | ✅ | ✅ | Deferred | Deferred | C→O: `TestOpen62541Server_EventFilterWhereClause`; C→M: `TestMiloServer_EventFilterWhereClause` |
 | EventFilter Severity threshold | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_EventFilterSeverityThreshold`; C→M: `TestMiloServer_EventFilterSeverityThreshold`; O→S: `TestGoServer_Open62541Client_EventFilterSeverityThreshold`; M→S: `TestGoServer_MiloClient_EventFilterSeverityThreshold` |
 | Event notification decode | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_EventNotificationDecode`; C→M: `TestMiloServer_EventNotificationDecode` |
 | BaseEvent emission | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_EventEmissionBase`; M→S: `TestGoServer_MiloClient_EventEmissionBase` |
 | Custom event emission | N/A | N/A | Deferred | Deferred | — |
-| Event queue overflow | Deferred | Deferred | Deferred | Deferred | — |
+| Event queue overflow | ✅ | ✅ | Deferred | Deferred | C→O: `TestOpen62541Server_EventQueueOverflow`; C→M: `TestMiloServer_EventQueueOverflow` |
 
 ## history
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
 |---|:---:|:---:|:---:|:---:|---|
 | HistoryRead raw | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_HistoryReadRaw`; C→M: `TestMiloServer_HistoryReadRaw`; O→S: `TestGoServer_Open62541Client_HistoryReadRaw`; M→S: `TestGoServer_MiloClient_HistoryReadRaw` |
-| HistoryRead continuation points | Deferred | Deferred | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_HistoryReadContinuation`; M→S: `TestGoServer_MiloClient_HistoryReadContinuation` |
+| HistoryRead continuation points | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_HistoryReadContinuation`; C→M: `TestMiloServer_HistoryReadContinuation`; O→S: `TestGoServer_Open62541Client_HistoryReadContinuation`; M→S: `TestGoServer_MiloClient_HistoryReadContinuation` |
 | HistoryRead modified | Deferred | Deferred | Deferred | Deferred | — |
 | HistoryRead at-time | Deferred | Deferred | Deferred | Deferred | — |
 | HistoryRead processed | Deferred | Deferred | Deferred | Deferred | — |
@@ -119,8 +119,8 @@ Go↔Go tests never earn ✅.
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
 |---|:---:|:---:|:---:|:---:|---|
-| AddNodes | Deferred | Deferred | Deferred | Deferred | — |
-| DeleteNodes | Deferred | Deferred | Deferred | Deferred | — |
+| AddNodes | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541Server_AddNodes`; O→S: `TestGoServer_Open62541Client_AddNodes`; M→S: `TestGoServer_MiloClient_AddNodes` |
+| DeleteNodes | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541Server_DeleteNodes`; O→S: `TestGoServer_Open62541Client_DeleteNodes`; M→S: `TestGoServer_MiloClient_DeleteNodes` |
 
 ## query
 
@@ -144,7 +144,7 @@ Go↔Go tests never earn ✅.
 | Issued identity token | Deferred | Deferred | Deferred | Deferred | — |
 | Intermediate certificate chains | Deferred | Deferred | Deferred | Deferred | — |
 | Certificate revocation (CRL) | Deferred | Deferred | Deferred | Deferred | — |
-| SecureChannel renewal under subscription | Deferred | Deferred | Deferred | Deferred | — |
+| SecureChannel renewal under subscription | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_SecureChannelRenewal`; C→M: `TestMiloServer_SecureChannelRenewal`; O→S: `TestGoServer_Open62541Client_SecureChannelRenewal`; M→S: `TestGoServer_MiloClient_SecureChannelRenewal` |
 
 ## session
 
@@ -167,10 +167,15 @@ Go↔Go tests never earn ✅.
 | Client TransferSubscriptions helper | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ClientTransferSubscriptions`; C→M: `TestMiloServer_ClientTransferSubscriptions` |
 | Server TransferSubscriptions handler | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_TransferSubscriptions`; M→S: `TestGoServer_MiloClient_TransferSubscriptions` |
 | Automatic subscription recovery | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_SubscriptionRecoveryReconnect`; C→M: `TestMiloServer_SubscriptionRecoveryReconnect` |
+| ModifySubscription | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ModifySubscription`; C→M: `TestMiloServer_ModifySubscription` |
+| SetPublishingMode | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_ModifySubscription`; C→M: `TestMiloServer_ModifySubscription`; O→S: `TestGoServer_Open62541Client_SubscriptionLifecycle_PublishingMode`; M→S: `TestGoServer_MiloClient_SubscriptionLifecycle_PublishingMode` |
+| ModifyMonitoredItems | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ModifyMonitoredItems`; C→M: `TestMiloServer_ModifyMonitoredItems` |
+| SetMonitoringMode | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_SetMonitoringMode`; C→M: `TestMiloServer_SetMonitoringMode`; O→S: `TestGoServer_Open62541Client_SubscriptionLifecycle_MonitoringMode`; M→S: `TestGoServer_MiloClient_SubscriptionLifecycle_MonitoringMode` |
 
 ## view
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
 |---|:---:|:---:|:---:|:---:|---|
 | TranslateBrowsePathsToNodeIDs | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_TranslateBrowsePath`; C→M: `TestMiloServer_TranslateBrowsePath`; O→S: `TestGoServer_Open62541Client_TranslateBrowsePath`; M→S: `TestGoServer_MiloClient_TranslateBrowsePath` |
+| RegisterNodes / UnregisterNodes | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_RegisterNodes`; C→M: `TestMiloServer_RegisterNodes`; O→S: `TestGoServer_Open62541Client_RegisterNodes`; M→S: `TestGoServer_MiloClient_RegisterNodes` |
 

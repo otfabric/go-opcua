@@ -238,6 +238,14 @@ func (l *LocalizedText) Decode(b []byte) (int, error) {
 
 func (l *LocalizedText) Encode() ([]byte, error) {
 	buf := NewBuffer(nil)
+	if l == nil {
+		// A nil pointer is the null LocalizedText: an encoding mask with
+		// neither locale nor text. Structures routinely leave optional
+		// LocalizedText fields unset (e.g. DisplayName/Description in
+		// NodeAttributes or Argument), which must not crash the encoder.
+		buf.WriteUint8(0)
+		return buf.Bytes(), buf.Error()
+	}
 	buf.WriteUint8(l.EncodingMask)
 	if l.Has(LocalizedTextLocale) {
 		buf.WriteString(l.Locale)

@@ -33,12 +33,12 @@ jobs:
 
       - name: Run interop matrix
         env:
-          # Digest-pinned opcua-interop v0.5.0 multi-arch indexes:
-          # https://github.com/otfabric/opcua-interop/releases/tag/v0.5.0
-          # Current digests: https://github.com/otfabric/opcua-interop/actions/runs/30137524051
+          # Digest-pinned opcua-interop v0.6.0 multi-arch indexes:
+          # https://github.com/otfabric/opcua-interop/releases/tag/v0.6.0
+          # Current digests: https://github.com/otfabric/opcua-interop/actions/runs/38136156545
           # Set OPEN62541_IMAGE / MILO_IMAGE in the env to test local builds.
-          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:53c7a184ca9769bab87c6b5335c01322925411894368644913133c0812999283
-          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:c462f45a5e9b9ce8878788b97c77973832b23861e7ae5d0c6642279f798c15cf
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:d8cdfd67c9dd71713515fdf0e34533d7ff9f6d004bd5c7ceb349db40e325a1f2
+          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:95ad873ff5ae86a35815a1c6db2b75963675040f3283307e57ac10273194ab3f
           OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
         run: make interop
 
