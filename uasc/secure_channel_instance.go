@@ -34,8 +34,11 @@ type channelInstance struct {
 	algo            *uapolicy.EncryptionAlgorithm
 	maxBodySize     uint32
 
-	// expiry retires a server-issued token; guarded by SecureChannel.instancesMu.
-	expiry *time.Timer
+	// expiry retires the token; expired is set once a client token has
+	// outlived its grace period. Both are guarded by
+	// SecureChannel.instancesMu.
+	expiry  *time.Timer
+	expired bool
 
 	bytesSent uint64 // atomic.Load/Store - needs to be aligned for 32bit systems
 	// bytesReceived    uint64

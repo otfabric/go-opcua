@@ -31,6 +31,12 @@ type session struct {
 
 	PublishRequests chan PubReq
 
+	// statusChanges holds the StatusChangeNotifications of subscriptions that
+	// ended while no Publish request was available to announce it. They are
+	// delivered with the next Publish request of the session.
+	statusMu      sync.Mutex
+	statusChanges []pendingStatusChange
+
 	// activated is set once ActivateSession succeeded. Until then the
 	// session cannot be used for anything but activating or closing it.
 	activated atomic.Bool
@@ -40,6 +46,39 @@ type session struct {
 	// request handlers and by the session reaper.
 	lastActivity atomic.Int64
 	timeout      atomic.Int64
+}
+
+// pendingStatusChange is a StatusChangeNotification waiting for a Publish
+// request.
+type pendingStatusChange struct {
+	subID  uint32
+	seq    uint32
+	status ua.StatusCode
+}
+
+// maxPendingStatusChanges bounds the notifications kept for a session whose
+// client does not send Publish requests any more.
+const maxPendingStatusChanges = 1000
+
+// addStatusChange queues a StatusChangeNotification for the session.
+func (s *session) addStatusChange(c pendingStatusChange) {
+	s.statusMu.Lock()
+	if len(s.statusChanges) < maxPendingStatusChanges {
+		s.statusChanges = append(s.statusChanges, c)
+	}
+	s.statusMu.Unlock()
+}
+
+// takeStatusChange returns the oldest queued StatusChangeNotification.
+func (s *session) takeStatusChange() (pendingStatusChange, bool) {
+	s.statusMu.Lock()
+	defer s.statusMu.Unlock()
+	if len(s.statusChanges) == 0 {
+		return pendingStatusChange{}, false
+	}
+	c := s.statusChanges[0]
+	s.statusChanges = s.statusChanges[1:]
+	return c, true
 }
 
 // touch records activity on the session, restarting its timeout.

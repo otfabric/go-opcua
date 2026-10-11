@@ -108,6 +108,11 @@ type serverConfig struct {
 	allowUsernameOnNone        bool
 	metrics                    ServerMetrics
 
+	// responseWriteTimeout and maxPendingResponses configure the per-channel
+	// response writers. Zero selects the default.
+	responseWriteTimeout time.Duration
+	maxPendingResponses  int
+
 	logger *slog.Logger
 }
 
@@ -481,12 +486,14 @@ func (s *Server) Start(ctx context.Context) error {
 	} else {
 		s.cb.endpointURL = s.url
 	}
+	s.cb.writeTimeout = s.cfg.responseWriteTimeout
+	s.cb.maxPending = s.cfg.maxPendingResponses
 
 	mctx, cancel := context.WithCancel(ctx)
 	s.cancelMonitor = cancel
 
 	go s.acceptAndRegister(mctx, s.l)
-	go s.monitorConnections(mctx)
+	go s.superviseMonitor(mctx)
 	go s.reapSessions(mctx)
 
 	return nil
@@ -576,7 +583,17 @@ func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
 				continue
 			}
 
-			go func() { _ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey) }()
+			go func() {
+				// Last line of defence for this connection's goroutine: the
+				// connection is lost, the server is not.
+				defer func() {
+					if r := recover(); r != nil {
+						logPanic(s.cfg.logger, "serving a connection", r)
+						_ = c.Close()
+					}
+				}()
+				_ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey)
+			}()
 			s.cfg.logger.Info("registered connection", "remote_addr", c.RemoteAddr())
 		}
 	}
@@ -586,37 +603,25 @@ func (s *Server) acceptAndRegister(ctx context.Context, l *uacp.Listener) {
 // sends the message to the service handler.
 func (s *Server) monitorConnections(ctx context.Context) {
 	for ctx.Err() == nil {
-		msg := s.cb.ReadMessage(ctx)
-		if msg == nil {
+		in, ok := s.cb.ReadMessage(ctx)
+		if !ok {
 			continue // ctx is likely done, ctx.Err will be non-nil
 		}
-		if msg.Err != nil {
-			s.cfg.logger.Error("monitorConnections: error received", "error", msg.Err)
-			// Closing the SC here is risky: the channel may recover from transient errors.
-			// The channel broker already handles fatal errors by breaking its read loop.
-			continue
-		}
-		if resp := msg.Response(); resp != nil {
-			s.cfg.logger.Error("monitorConnections: server received response", "type", fmt.Sprintf("%T", resp))
-			// A server should never receive a response. This is a protocol violation
-			// but closing the channel could disrupt active sessions on the same channel.
-			continue
-		}
-		s.cfg.logger.Debug("monitorConnections: received message", "type", fmt.Sprintf("%T", msg.Request()))
-		s.cb.mu.RLock()
-		sc, ok := s.cb.s[msg.SecureChannelID]
-		s.cb.mu.RUnlock()
-		if !ok {
-			// if the secure channel ID is 0, this is probably a open secure channel request.
-			if msg.SecureChannelID != 0 {
-				s.cfg.logger.Error("monitorConnections: unknown secure channel", "secure_channel_id", msg.SecureChannelID)
-			}
-			continue
-		}
+		s.cfg.logger.Debug("monitorConnections: received message", "type", fmt.Sprintf("%T", in.msg.Request()))
 
-		// handleService is synchronous; long-running handlers would block
-		// message processing. If this becomes a bottleneck, wrap in a goroutine.
-		s.handleService(ctx, sc, msg.RequestID, msg.Request())
+		// Requests are handled one at a time: the services rely on it (a
+		// Write and the data change it triggers, for example, are applied
+		// in request order). What must not happen here is waiting for a
+		// client, so the response is only queued on the channel's writer.
+		resp := s.serve(ctx, in.sc, in.msg.RequestID, in.msg.Request())
+		if resp == nil {
+			// answered later (Publish): the request is no longer in flight
+			in.w.release()
+			continue
+		}
+		if err := in.w.send(in.msg.RequestID, resp); err != nil {
+			s.cfg.logger.Debug("response dropped", "error", err)
+		}
 	}
 }
 

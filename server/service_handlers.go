@@ -5,7 +5,9 @@ package server
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	mrand "math/rand"
+	"runtime/debug"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -111,6 +113,19 @@ func (s *Server) RegisterHandler(typeID uint16, h Handler) {
 }
 
 func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqID uint32, req ua.Request) {
+	resp := s.serve(ctx, sc, reqID, req)
+	if resp == nil {
+		return
+	}
+	s.respond(sc, reqID, resp)
+}
+
+// serve runs the handler of a request and returns the response to send, or
+// nil if the request is answered later (Publish). It never panics: a panic
+// in a handler, or in application code a handler calls (method handlers,
+// value functions, access controllers, validators), fails that one request
+// with BadInternalError.
+func (s *Server) serve(ctx context.Context, sc *uasc.SecureChannel, reqID uint32, req ua.Request) (resp ua.Response) {
 	s.cfg.logger.Debug("handleService", "type", fmt.Sprintf("%T", req))
 
 	m := s.cfg.metrics
@@ -122,8 +137,17 @@ func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqI
 		start = time.Now()
 	}
 
-	var resp ua.Response
 	var err error
+
+	defer func() {
+		if r := recover(); r != nil {
+			logPanic(s.cfg.logger, "handling a request", r, "type", fmt.Sprintf("%T", req), "request_id", reqID)
+			if m != nil {
+				m.OnError(svc, time.Since(start), ua.StatusBadInternalError)
+			}
+			resp = &ua.ServiceFault{ResponseHeader: responseHeader(requestHandle(req), ua.StatusBadInternalError)}
+		}
+	}()
 
 	typeID := ua.ServiceTypeID(req)
 	h, ok := s.handlers[typeID]
@@ -156,12 +180,35 @@ func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqI
 		}
 	}
 
-	if resp == nil {
+	return resp
+}
+
+// requestHandle returns the handle of a request, or 0 if it has no header.
+func requestHandle(req ua.Request) uint32 {
+	if req == nil {
+		return 0
+	}
+	if hdr := req.Header(); hdr != nil {
+		return hdr.RequestHandle
+	}
+	return 0
+}
+
+// respond sends a response on sc. A channel that is served by the server has
+// a writer, which takes the response without blocking; see channelWriter.
+// Otherwise (a channel driven directly, as tests do) it is written in place,
+// bounded by the response write timeout.
+func (s *Server) respond(sc *uasc.SecureChannel, reqID uint32, resp ua.Response) {
+	if w := s.channelWriter(sc); w != nil {
+		if !w.acquire(context.Background()) {
+			return
+		}
+		if err := w.send(reqID, resp); err != nil {
+			s.cfg.logger.Debug("response dropped", "error", err)
+		}
 		return
 	}
-
-	err = sc.SendResponseWithContext(ctx, reqID, resp)
-	if err != nil {
+	if err := s.writeDirect(sc, reqID, resp); err != nil {
 		s.cfg.logger.Warn("error sending response", "error", err)
 		// The response could not be sent, most likely because it could not
 		// be encoded. Never leave the request unanswered: the client would
@@ -169,11 +216,84 @@ func (s *Server) handleService(ctx context.Context, sc *uasc.SecureChannel, reqI
 		// second send fails as well, which is harmless.
 		if _, isFault := resp.(*ua.ServiceFault); !isFault {
 			fault := &ua.ServiceFault{ResponseHeader: responseHeader(0, ua.StatusBadEncodingError)}
-			if ferr := sc.SendResponseWithContext(ctx, reqID, fault); ferr != nil {
+			if ferr := s.writeDirect(sc, reqID, fault); ferr != nil {
 				s.cfg.logger.Warn("error sending service fault", "error", ferr)
 			}
 		}
 	}
+}
+
+// channelWriter returns the writer of a channel registered with the server.
+func (s *Server) channelWriter(sc *uasc.SecureChannel) *channelWriter {
+	if s.cb == nil || sc == nil {
+		return nil
+	}
+	return s.cb.writer(sc)
+}
+
+// writeDirect writes a response on the calling goroutine with the response
+// write timeout as deadline.
+func (s *Server) writeDirect(sc *uasc.SecureChannel, reqID uint32, resp ua.Response) error {
+	timeout := s.cfg.responseWriteTimeout
+	if timeout <= 0 {
+		timeout = defaultResponseWriteTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	return sc.SendResponseWithContext(ctx, reqID, resp)
+}
+
+// sendPublishResponse sends a Publish response from a subscription. The
+// request it answers was parked and holds no in-flight slot, so the response
+// goes into the channel's (bounded) Publish backlog. An error means that the
+// client does not get the message now; the subscription keeps it in its
+// retransmission queue.
+func (s *Server) sendPublishResponse(sc *uasc.SecureChannel, reqID uint32, resp ua.Response) error {
+	if sc == nil {
+		return errChannelGone
+	}
+	if w := s.channelWriter(sc); w != nil {
+		return w.sendUnslotted(reqID, resp)
+	}
+	return s.writeDirect(sc, reqID, resp)
+}
+
+// superviseMonitor keeps the request handling goroutine alive. serve
+// recovers from panics in handlers; this covers everything around it.
+func (s *Server) superviseMonitor(ctx context.Context) {
+	for ctx.Err() == nil {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logPanic(s.cfg.logger, "dispatching requests", r)
+				}
+			}()
+			s.monitorConnections(ctx)
+		}()
+	}
+}
+
+// logPanic logs a recovered panic with its stack at Error level.
+func logPanic(l *slog.Logger, what string, r any, args ...any) {
+	if l == nil {
+		return
+	}
+	args = append([]any{"panic", fmt.Sprint(r), "stack", string(debug.Stack())}, args...)
+	l.Error("recovered from panic while "+what, args...)
+}
+
+// goSafe runs fn in a new goroutine. A panic in it (typically in application
+// supplied code such as a value function) is logged instead of ending the
+// process.
+func (s *Server) goSafe(what string, fn func()) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logPanic(s.cfg.logger, what, r)
+			}
+		}()
+		fn()
+	}()
 }
 
 // checkSession enforces the session state machine of Part 4 §5.6: apart from

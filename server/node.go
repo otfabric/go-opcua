@@ -311,7 +311,12 @@ func (n *Node) DataType() *ua.ExpandedNodeID {
 	v := n.attr[ua.AttributeIDDataType]
 	if v == nil || v.Value.Value() == nil {
 		// if we have a type definition, return that?
-		for _, r := range n.refsSnapshot() {
+		// Scanned in place under the read lock: this runs for every AddRef
+		// that targets n, so copying the reference list here made building
+		// the address space quadratic in the number of references.
+		n.mu.RLock()
+		defer n.mu.RUnlock()
+		for _, r := range n.refs {
 			if r.ReferenceTypeID == nil {
 				slog.Default().Warn("reference type ID is nil")
 				continue
