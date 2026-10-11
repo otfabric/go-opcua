@@ -317,6 +317,13 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 		return response, nil
 	}
 
+	// A subscription of this session ended (its lifetime expired) while no
+	// Publish request was available. Tell the client now, before anything
+	// else: this is how it learns that the subscription is gone.
+	if change, ok := session.takeStatusChange(); ok {
+		return statusChangeResponse(req, change, s.ackPublishAcknowledgements(req.SubscriptionAcknowledgements)), nil
+	}
+
 	// Part 4 §5.13.5: a Publish request for a session without subscriptions
 	// is answered right away. Queuing it instead would leave the client
 	// waiting for a response that no subscription will ever produce.
@@ -336,6 +343,63 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 	// per opcua spec, we don't respond now.  When data is available on the subscription,
 	// the Subscription will respond in the background.
 	return nil, nil
+}
+
+// statusChangeResponse builds the Publish response that carries a
+// StatusChangeNotification (Part 4 §7.20.4).
+func statusChangeResponse(req *ua.PublishRequest, change pendingStatusChange, ackResults []ua.StatusCode) *ua.PublishResponse {
+	eo := ua.NewExtensionObject(&ua.StatusChangeNotification{
+		Status:         change.status,
+		DiagnosticInfo: &ua.DiagnosticInfo{},
+	})
+	eo.UpdateMask()
+	return &ua.PublishResponse{
+		ResponseHeader: &ua.ResponseHeader{
+			Timestamp:          time.Now(),
+			RequestHandle:      req.RequestHeader.RequestHandle,
+			ServiceResult:      ua.StatusOK,
+			ServiceDiagnostics: &ua.DiagnosticInfo{},
+			StringTable:        []string{},
+			AdditionalHeader:   ua.NewExtensionObject(nil),
+		},
+		SubscriptionID: change.subID,
+		NotificationMessage: &ua.NotificationMessage{
+			SequenceNumber:   change.seq,
+			PublishTime:      time.Now(),
+			NotificationData: []*ua.ExtensionObject{eo},
+		},
+		AvailableSequenceNumbers: []uint32{},
+		Results:                  ackResults,
+		DiagnosticInfos:          []*ua.DiagnosticInfo{},
+	}
+}
+
+// announceExpiry tells the client that the subscription's lifetime has
+// expired, with a StatusChangeNotification carrying BadTimeout
+// (Part 4 §5.13.1.1). The lifetime expires precisely because the client sent
+// no Publish request, so there is usually none to answer: the notification
+// then waits on the session for the next one. Without it a client that is
+// still there never learns that its subscription is gone.
+func (s *Subscription) announceExpiry(sess *session) {
+	if sess == nil {
+		return
+	}
+	seq := s.SequenceID + 1
+	if seq == 0 {
+		seq = 1
+	}
+	change := pendingStatusChange{subID: s.ID, seq: seq, status: ua.StatusBadTimeout}
+
+	select {
+	case pubreq := <-sess.PublishRequests:
+		_, ch := s.sessionChannel()
+		resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements))
+		if err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, resp); err == nil {
+			return
+		}
+	default:
+	}
+	sess.addStatusChange(change)
 }
 
 // sessionHasSubscriptions reports whether at least one subscription is
@@ -740,7 +804,7 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 		Results:                  ackResults,
 		DiagnosticInfos:          []*ua.DiagnosticInfo{},
 	}
-	err := pubreq.replyChannel(ch).SendResponseWithContext(context.Background(), pubreq.ID, response)
+	err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, response)
 	if err != nil {
 		return err
 	}
@@ -765,6 +829,11 @@ func (s *Subscription) touchSession() {
 func (s *Subscription) run() {
 	// if this go routine dies, we need to delete ourselves.
 	defer func() {
+		// A panic here (for instance in a value function called while the
+		// notifications are collected) ends this subscription only.
+		if r := recover(); r != nil {
+			logPanic(s.srv.srv.cfg.logger, "running a subscription", r, "sub_id", s.ID)
+		}
 		s.srv.srv.cfg.logger.Info("subscription shutting down", "sub_id", s.ID)
 		s.srv.DeleteSubscription(s.ID)
 	}()
@@ -849,6 +918,7 @@ func (s *Subscription) run() {
 					lifetimeCounter++
 					if lifetimeCounter > maxLifetime {
 						s.srv.srv.cfg.logger.Warn("subscription timed out", "sub_id", s.ID)
+						s.announceExpiry(sess)
 						return
 					}
 				} else {
@@ -909,6 +979,7 @@ func (s *Subscription) run() {
 				lifetimeCounter++
 				if _, _, maxLifetime := s.timing(); lifetimeCounter > maxLifetime {
 					s.srv.srv.cfg.logger.Warn("subscription timed out", "sub_id", s.ID)
+					s.announceExpiry(sess)
 					return
 				}
 			}
@@ -980,7 +1051,7 @@ func (s *Subscription) run() {
 			s.srv.srv.cfg.logger.Warn("subscription has no channel after transfer, shutting down", "sub_id", s.ID)
 			return
 		}
-		err := pubreq.replyChannel(ch).SendResponseWithContext(context.Background(), pubreq.ID, response)
+		err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, response)
 		if err != nil {
 			// The connection of this Publish request is gone. The message
 			// stays in the retransmission queue, so a client that reconnects

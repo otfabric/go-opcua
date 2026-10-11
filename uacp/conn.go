@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -312,7 +313,16 @@ func (l *Listener) handshake(c *net.TCPConn) {
 	}
 
 	_ = c.SetDeadline(time.Now().Add(serverHandshakeTimeout))
-	err := conn.srvhandshake(l.endpoint)
+	err := func() (err error) {
+		// A panic while decoding what a peer sent must end this connection,
+		// not the process: this goroutine belongs to the listener.
+		defer func() {
+			if r := recover(); r != nil {
+				err = fmt.Errorf("uacp: panic during handshake: %v\n%s", r, debug.Stack())
+			}
+		}()
+		return conn.srvhandshake(l.endpoint)
+	}()
 	if err == nil {
 		// srvhandshake may have replaced the TCP connection (ReverseHello).
 		_ = conn.SetDeadline(time.Time{})

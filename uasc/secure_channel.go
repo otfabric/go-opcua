@@ -812,27 +812,14 @@ func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChann
 	s.instancesMu.Lock()
 	defer s.instancesMu.Unlock()
 
-	s.instances[resp.SecurityToken.ChannelID] = append(
-		s.instances[resp.SecurityToken.ChannelID],
-		s.openingInstance,
-	)
-
-	s.activeInstance = instance
+	s.installClientToken(instance)
 
 	s.cfg.Logger.Debug("received security token", "channel_id", s.c.ID(), "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID, "created_at", instance.createdAt.Format(time.RFC3339), "lifetime", instance.revisedLifetime)
 
-	// depending on whether the channel is used in a client
-	// or a server we need to trigger different behavior.
-	// client channels trigger token renewals and need to cleanup old
-	// channel crypto configs. server channels only need to do the
-	// channel cleanup.
-	switch s.kind {
-	case client:
+	// A client renews its token before it expires. Retiring superseded
+	// tokens is set up by installClientToken above.
+	if s.kind == client {
 		go s.scheduleRenewal(instance)
-		go s.scheduleExpiration(instance)
-
-	case server:
-		go s.scheduleExpiration(instance)
 	}
 
 	return
@@ -1026,45 +1013,6 @@ func (s *SecureChannel) renew(instance *channelInstance) error {
 	defer instance.Unlock()
 
 	return s.open(context.Background(), instance, ua.SecurityTokenRequestTypeRenew)
-}
-
-func (s *SecureChannel) scheduleExpiration(instance *channelInstance) {
-	// https://reference.opcfoundation.org/v104/Core/docs/Part4/5.5.2/#5.5.2.1
-	// Clients should accept Messages secured by an expired SecurityToken for up to 25 % of the token lifetime.
-	const expireAfter = 1.25
-	when := instance.createdAt.Add(time.Second * time.Duration(instance.revisedLifetime.Seconds()*expireAfter))
-
-	s.cfg.Logger.Debug("security token expiration scheduled", "channel_id", s.c.ID(), "expires_at", when.UTC().Format(time.RFC3339), "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
-
-	t := time.NewTimer(time.Until(when))
-	defer t.Stop()
-
-	select {
-	case <-s.closing:
-		return
-	case <-t.C:
-	}
-
-	s.instancesMu.Lock()
-	defer s.instancesMu.Unlock()
-
-	oldInstances := s.instances[instance.securityTokenID]
-
-	s.instances[instance.securityTokenID] = []*channelInstance{}
-
-	for _, oldInstance := range oldInstances {
-		if oldInstance.secureChannelID != instance.secureChannelID {
-			// something has gone horribly wrong!
-			s.cfg.Logger.Warn("secureChannelID mismatch during scheduleExpiration", "channel_id", s.c.ID())
-		}
-		if oldInstance.securityTokenID == instance.securityTokenID {
-			continue
-		}
-		s.instances[instance.securityTokenID] = append(
-			s.instances[instance.securityTokenID],
-			oldInstance,
-		)
-	}
 }
 
 func (s *SecureChannel) sendRequestWithTimeout(
@@ -1333,9 +1281,14 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 		maxBodySize = s.c.SendBufSize()
 	}
 
+	// newMessage consumes a sequence number. If the response cannot be
+	// encoded nothing is sent, so give the number back: the sequence numbers
+	// on the wire have to stay contiguous.
+	prevSeq := instance.sequenceNumber
 	m := instance.newMessage(resp, typeID, reqID)
 	chunks, err := m.EncodeChunks(maxBodySize)
 	if err != nil {
+		instance.sequenceNumber = prevSeq
 		s.cfg.Logger.Warn("error encoding msg", "error", err)
 		return err
 	}
@@ -1411,6 +1364,8 @@ func (s *SecureChannel) close() error {
 
 	defer func() {
 		close(s.closing)
+		// no token of a closed channel needs to be retired any more
+		s.ReleaseTokens()
 		// Close the underlying UACP connection so that the secure channel
 		// is the single owner of the connection lifecycle. This is safe
 		// to call even if the connection is already closed (closeOnce).

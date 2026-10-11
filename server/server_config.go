@@ -230,6 +230,45 @@ func EnableAuthMode(tokenType ua.UserTokenType) Option {
 	}
 }
 
+// WithResponseWriteTimeout sets how long the server waits for a response to
+// be written to a client before it gives up on that client.
+//
+// Every secure channel has its own response writer, so a client that stops
+// reading its responses does not hold up the others. Once a response to such
+// a client has been waiting for d, the client is considered stalled and its
+// connection is closed; its session and subscriptions then end through their
+// own timeouts unless the client reconnects. Other channels are not
+// affected.
+//
+// The default is 15 seconds. Choose a larger value for clients on very slow
+// links that fetch large responses. Zero or a negative value selects the
+// default.
+func WithResponseWriteTimeout(d time.Duration) Option {
+	return func(s *serverConfig) error {
+		s.responseWriteTimeout = d
+		return nil
+	}
+}
+
+// WithMaxPendingResponses sets how many requests of one secure channel may
+// be in flight, that is received but not yet answered on the wire, at a
+// time.
+//
+// When a client has n requests in flight the server stops reading further
+// requests from that client until responses have been written. This bounds
+// the memory one client can occupy with queued responses and applies TCP
+// back pressure to a client that sends requests faster than it reads the
+// answers; it never drops a request. Publish requests that are waiting for
+// a notification do not count.
+//
+// The default is 256. Zero or a negative value selects the default.
+func WithMaxPendingResponses(n int) Option {
+	return func(s *serverConfig) error {
+		s.maxPendingResponses = n
+		return nil
+	}
+}
+
 func defaultChannelConfig() *uasc.Config {
 	return &uasc.Config{
 		SecurityPolicyURI: ua.SecurityPolicyURINone,

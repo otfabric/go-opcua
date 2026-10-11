@@ -67,7 +67,9 @@ func TestSession_TimeoutRevision(t *testing.T) {
 	for _, tc := range []struct {
 		requested, revised time.Duration
 	}{
-		{100 * time.Millisecond, 100 * time.Millisecond},
+		// (Very short in-range timeouts are not used here: the server enforces
+		// them, and a slow machine would lose the session while connecting.)
+		{30 * time.Second, 30 * time.Second},
 		{90 * time.Second, 90 * time.Second},
 		{30 * time.Minute, 30 * time.Minute},
 		{50 * time.Millisecond, 60 * time.Second},
@@ -78,6 +80,80 @@ func TestSession_TimeoutRevision(t *testing.T) {
 			require.Equal(t, tc.revised, c.Session().RevisedTimeout())
 		})
 	}
+}
+
+// TestSession_TimeoutEnforced verifies the server closes a session that stays
+// idle for longer than its revised timeout, while a session that keeps issuing
+// requests lives on.
+func TestSession_TimeoutEnforced(t *testing.T) {
+	srv, url := newServer(t)
+	f := testutil.AddFixture(t, srv)
+	ctx := context.Background()
+	const timeout = 3 * time.Second
+
+	idle := newClient(t, url, opcua.SessionTimeout(timeout))
+	busy := newClient(t, url, opcua.SessionTimeout(timeout))
+	require.Equal(t, timeout, idle.Session().RevisedTimeout())
+
+	// Keep one session busy for one and a half timeouts.
+	deadline := time.Now().Add(timeout + timeout/2)
+	for time.Now().Before(deadline) {
+		dv, err := busy.ReadValue(ctx, f.Int32)
+		require.NoError(t, err, "a session in use must not time out")
+		require.Equal(t, int32(42), dv.Value.Value())
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	// The other one was idle all that time and is gone.
+	_, err := idle.ReadValue(ctx, f.Int32)
+	require.ErrorIs(t, err, ua.StatusBadSessionIDInvalid)
+	// The busy one is still fine.
+	dv, err := busy.ReadValue(ctx, f.Int32)
+	require.NoError(t, err)
+	require.Equal(t, int32(42), dv.Value.Value())
+}
+
+// TestSession_RequiresActivation verifies services are refused without an
+// activated session.
+func TestSession_RequiresActivation(t *testing.T) {
+	srv, url := newServer(t)
+	f := testutil.AddFixture(t, srv)
+	ctx := context.Background()
+
+	c, err := opcua.NewClient(url,
+		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.DialTimeout(30*time.Second),
+		opcua.RequestTimeout(30*time.Second),
+		opcua.AutoReconnect(false),
+	)
+	require.NoError(t, err)
+	require.NoError(t, c.Dial(ctx))
+	t.Cleanup(func() { _ = c.Close(ctx) })
+
+	// A secure channel alone is enough for discovery...
+	eps, err := c.GetEndpoints(ctx)
+	require.NoError(t, err)
+	require.NotEmpty(t, eps.Endpoints)
+
+	// ...but not for the address space: no session at all,
+	_, err = c.ReadValue(ctx, f.Int32)
+	require.ErrorIs(t, err, ua.StatusBadSessionIDInvalid)
+
+	// Creating a session does not make it usable yet: the client only adopts
+	// it once it has been activated.
+	cfg := opcua.DefaultSessionConfig()
+	cfg.UserIdentityToken = &ua.AnonymousIdentityToken{PolicyID: "anonymous_none"}
+	sess, err := c.CreateSession(ctx, cfg)
+	require.NoError(t, err)
+	require.Nil(t, c.Session())
+	_, err = c.ReadValue(ctx, f.Int32)
+	require.ErrorIs(t, err, ua.StatusBadSessionIDInvalid)
+
+	// Once activated, the same session works.
+	require.NoError(t, c.ActivateSession(ctx, sess))
+	dv, err := c.ReadValue(ctx, f.Int32)
+	require.NoError(t, err)
+	require.Equal(t, int32(42), dv.Value.Value())
 }
 
 // TestSession_ReactivateOnNewChannel detaches a session from one client and

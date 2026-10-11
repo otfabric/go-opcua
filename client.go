@@ -140,6 +140,11 @@ type Client struct {
 	publishRecovering bool
 	publishGen        uint64
 
+	// subRecoverCh wakes the connection monitor when a subscription was
+	// found to have ended on the server while the connection is fine. See
+	// recoverBrokenSubscriptions.
+	subRecoverCh chan struct{}
+
 	// deliverMu serialises the delivery of live PublishResponses with the
 	// republishing done during a connection recovery.
 	deliverMu sync.Mutex
@@ -209,6 +214,7 @@ func NewClient(endpoint string, opts ...Option) (*Client, error) {
 		mctx:         mctx,
 		mcancel:      mcancel,
 		monitorDone:  make(chan struct{}),
+		subRecoverCh: make(chan struct{}, 1),
 		sechanErr:    make(chan error, 1),
 		subs:         make(map[uint32]*Subscription),
 		pendingAcks:  make([]*ua.SubscriptionAcknowledgement, 0),
@@ -346,6 +352,9 @@ func (c *Client) monitor(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
+		case <-c.subRecoverCh:
+			c.recoverBrokenSubscriptions(ctx)
+
 		case err, ok := <-c.secureChannelErrors():
 			stats.RecordError(err)
 
@@ -355,9 +364,13 @@ func (c *Client) monitor(ctx context.Context) {
 				return
 			}
 
-			// the subscriptions don't exist for session.
-			// skip this error and continue monitor loop
+			// The server has no subscription for the session. That is not a
+			// connection problem. If the client believes it has some, they
+			// have ended on the server (expired or deleted): recreate them.
 			if errors.Is(err, ua.StatusBadNoSubscription) {
+				if c.cfg.sechan.AutoReconnect && c.markSubscriptionsBroken() > 0 {
+					c.recoverBrokenSubscriptions(ctx)
+				}
 				continue
 			}
 

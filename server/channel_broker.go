@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"crypto/rsa"
+	"fmt"
 	"io"
 	"log/slog"
 	mrand "math/rand"
@@ -15,6 +16,13 @@ import (
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uasc"
 )
+
+// inbound is a request together with the channel it arrived on.
+type inbound struct {
+	msg *uasc.MessageBody
+	sc  *uasc.SecureChannel
+	w   *channelWriter
+}
 
 type channelBroker struct {
 	endpoints   map[string]*ua.EndpointDescription
@@ -37,9 +45,17 @@ type channelBroker struct {
 	// Next Token ID to issue to a client
 	secureTokenID uint32
 
+	// writers holds the response writer of every registered channel.
+	writers map[*uasc.SecureChannel]*channelWriter
+
+	// writeTimeout and maxPending configure the channel writers, see
+	// WithResponseWriteTimeout and WithMaxPendingResponses.
+	writeTimeout time.Duration
+	maxPending   int
+
 	// msgChan is the common channel that all messages from all channels
 	// get funneled into for handling
-	msgChan chan *uasc.MessageBody
+	msgChan chan inbound
 	logger  *slog.Logger
 
 	// clientCertificateValidator is copied onto each new SecureChannel Config
@@ -53,7 +69,8 @@ func newChannelBroker(l *slog.Logger, endpointURL string, clientCertValidator Cl
 		endpoints:                  make(map[string]*ua.EndpointDescription),
 		endpointURL:                endpointURL,
 		s:                          make(map[uint32]*uasc.SecureChannel),
-		msgChan:                    make(chan *uasc.MessageBody),
+		writers:                    make(map[*uasc.SecureChannel]*channelWriter),
+		msgChan:                    make(chan inbound),
 		secureChannelID:            uint32(rng.Int31()),
 		secureTokenID:              uint32(rng.Int31()),
 		logger:                     l,
@@ -95,6 +112,8 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 		return err
 	}
 
+	w := newChannelWriter(sc, conn, c.logger, c.writeTimeout, c.maxPending)
+
 	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
@@ -102,68 +121,119 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 		return io.EOF
 	}
 	c.s[secureChannelID] = sc
+	c.writers[sc] = w
 	c.logger.Info("registered new channel", "secure_channel_id", secureChannelID, "total_channels", len(c.s))
 	// Add under the lock that Close holds while it collects the channels, so
 	// that Close waits for exactly the channels it has seen.
 	c.wg.Add(1)
 	c.mu.Unlock()
-outer:
-	for {
-		select {
-		case <-ctx.Done():
-			c.logger.Warn("context done, closing secure channel", "secure_channel_id", secureChannelID)
-			break outer
 
-		default:
-			msg := sc.Receive(ctx)
-			if msg.Err == io.EOF {
-				c.logger.Warn("secure channel closed", "secure_channel_id", secureChannelID)
-				break outer
-			} else if msg.Err != nil {
-				c.logger.Info("secure channel message error", "secure_channel_id", secureChannelID, "request_id", msg.RequestID, "error", msg.Err)
-				// A per-request decoding/processing error must not tear down the
-				// whole channel. When the failure can be correlated to a request
-				// (RequestID != 0), return a ServiceFault so the caller fails
-				// fast instead of blocking until its timeout, then keep serving.
-				// Only unrecoverable/connection-level errors (RequestID == 0)
-				// close the channel.
-				if msg.RequestID != 0 {
-					c.logger.Warn("request error, returning service fault",
-						"secure_channel_id", secureChannelID, "request_id", msg.RequestID, "error", msg.Err)
-					fault := &ua.ServiceFault{ResponseHeader: faultHeader(msg.Err)}
-					if err := sc.SendResponseWithContext(ctx, msg.RequestID, fault); err != nil {
-						c.logger.Error("error sending service fault", "secure_channel_id", secureChannelID, "error", err)
-						break outer
-					}
-					continue
-				}
-				c.logger.Error("secure channel error", "secure_channel_id", secureChannelID, "error", msg.Err)
-				break outer
-			}
-			select {
-			case <-ctx.Done():
-				break outer
-			case c.msgChan <- msg:
-			}
-		}
-	}
+	go w.run()
+
+	c.receive(ctx, sc, w, secureChannelID)
 
 	sc.ReleaseTokens()
 
 	c.mu.Lock()
 	delete(c.s, secureChannelID)
+	delete(c.writers, sc)
 	c.mu.Unlock()
 
 	// The channel is finished, whatever the reason: release the TCP
-	// connection and stop the channel's timers. Without this the socket of
-	// every client that disconnected (or sent garbage) stays open until the
-	// server shuts down. The connection is closed first so that a response
-	// still being written to an unresponsive peer cannot hold up the close.
-	_ = conn.Close()
+	// connection and stop the channel's writer and timers. Without this the
+	// socket of every client that disconnected (or sent garbage) stays open
+	// until the server shuts down. The connection is closed first so that a
+	// response still being written to an unresponsive peer cannot hold up
+	// the close.
+	w.close()
+	<-w.exited
 	_ = sc.Close()
 	c.wg.Done()
 
 	return ctx.Err()
+}
+
+// receive reads the requests of one channel and hands them to the request
+// handler until the channel ends.
+func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *channelWriter, secureChannelID uint32) {
+	// A panic while decoding a message cannot be attributed to a request
+	// (it has not been decoded) and leaves the stream in an unknown state.
+	// It ends this channel, not the process.
+	defer func() {
+		if r := recover(); r != nil {
+			logPanic(c.logger, "receiving on a secure channel", r, "secure_channel_id", secureChannelID)
+		}
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			c.logger.Warn("context done, closing secure channel", "secure_channel_id", secureChannelID)
+			return
+		case <-w.done:
+			return
+		default:
+		}
+
+		msg := sc.Receive(ctx)
+		if msg.Err == io.EOF {
+			c.logger.Warn("secure channel closed", "secure_channel_id", secureChannelID)
+			return
+		}
+		if msg.Err != nil {
+			c.logger.Info("secure channel message error", "secure_channel_id", secureChannelID, "request_id", msg.RequestID, "error", msg.Err)
+			// A per-request decoding/processing error must not tear down the
+			// whole channel. When the failure can be correlated to a request
+			// (RequestID != 0), return a ServiceFault so the caller fails
+			// fast instead of blocking until its timeout, then keep serving.
+			// Only unrecoverable/connection-level errors (RequestID == 0)
+			// close the channel.
+			if msg.RequestID != 0 {
+				c.logger.Warn("request error, returning service fault",
+					"secure_channel_id", secureChannelID, "request_id", msg.RequestID, "error", msg.Err)
+				fault := &ua.ServiceFault{ResponseHeader: faultHeader(msg.Err)}
+				if !w.acquire(ctx) {
+					return
+				}
+				if err := w.send(msg.RequestID, fault); err != nil {
+					c.logger.Error("error sending service fault", "secure_channel_id", secureChannelID, "error", err)
+					return
+				}
+				continue
+			}
+			c.logger.Error("secure channel error", "secure_channel_id", secureChannelID, "error", msg.Err)
+			return
+		}
+		if msg.Request() == nil {
+			// OpenSecureChannel is answered inside Receive, and a server has
+			// no use for anything that is not a request.
+			if resp := msg.Response(); resp != nil {
+				c.logger.Error("server received a response", "secure_channel_id", secureChannelID, "type", fmt.Sprintf("%T", resp))
+			}
+			continue
+		}
+
+		// Take an in-flight slot before handing the request over. This is
+		// what applies back pressure to a client that sends requests faster
+		// than it reads the responses.
+		if !w.acquire(ctx) {
+			return
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-w.done:
+			return
+		case c.msgChan <- inbound{msg: msg, sc: sc, w: w}:
+		}
+	}
+}
+
+// writer returns the response writer of a registered channel, or nil.
+func (c *channelBroker) writer(sc *uasc.SecureChannel) *channelWriter {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.writers[sc]
 }
 
 // faultHeader builds a ResponseHeader for a ServiceFault returned in response
@@ -227,11 +297,11 @@ func (c *channelBroker) Close(ctx context.Context) error {
 	return err
 }
 
-func (c *channelBroker) ReadMessage(ctx context.Context) *uasc.MessageBody {
+func (c *channelBroker) ReadMessage(ctx context.Context) (inbound, bool) {
 	select {
 	case <-ctx.Done():
-		return nil
-	case msg := <-c.msgChan:
-		return msg
+		return inbound{}, false
+	case in := <-c.msgChan:
+		return in, true
 	}
 }

@@ -680,10 +680,93 @@ func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResp
 
 	// handle the publish response for a specific subscription
 	c.handleNotificationNeedsSubMuxLock(sub, res)
+
+	// The server announces the end of a subscription (typically BadTimeout,
+	// its lifetime expired because no Publish request reached the server in
+	// time) with a StatusChangeNotification. Nothing more will ever arrive
+	// for it, so have it recreated. The notification itself is still
+	// delivered to the consumer below.
+	ended := c.cfg.sechan.AutoReconnect && subscriptionEnded(res.NotificationMessage)
+	if ended {
+		sub.needsRecreate = true
+	}
 	c.subMux.Unlock()
 
 	c.notifySubscription(ctx, sub, res.NotificationMessage)
 	c.cfg.logger.Debug("publish: notification received", "seq_num", res.NotificationMessage.SequenceNumber)
+
+	if ended {
+		c.cfg.logger.Debug("publish: subscription ended on the server, scheduling its recreation", "sub_id", res.SubscriptionID)
+		c.requestSubscriptionRecovery()
+	}
+}
+
+// subscriptionEnded reports whether a notification message carries a
+// StatusChangeNotification with a bad status, which means that the server
+// has closed the subscription (Part 4 §5.13.1.1 and §7.20.4). A good status
+// such as GoodSubscriptionTransferred does not count: the subscription lives
+// on, in another session.
+func subscriptionEnded(msg *ua.NotificationMessage) bool {
+	if msg == nil {
+		return false
+	}
+	for _, data := range msg.NotificationData {
+		if data == nil {
+			continue
+		}
+		if sc, ok := data.Value.(*ua.StatusChangeNotification); ok && sc != nil && sc.Status&0x80000000 != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// requestSubscriptionRecovery asks the connection monitor to recreate the
+// subscriptions marked with needsRecreate. It never blocks.
+func (c *Client) requestSubscriptionRecovery() {
+	select {
+	case c.subRecoverCh <- struct{}{}:
+	default:
+	}
+}
+
+// markSubscriptionsBroken marks every registered subscription as gone on the
+// server and returns how many there are.
+func (c *Client) markSubscriptionsBroken() int {
+	c.subMux.Lock()
+	defer c.subMux.Unlock()
+	for _, sub := range c.subs {
+		sub.needsRecreate = true
+	}
+	return len(c.subs)
+}
+
+// recoverBrokenSubscriptions recreates the subscriptions that ended on the
+// server although the connection and the session are fine: their lifetime
+// expired, or the server deleted them. It is the recreate step of the
+// reconnect logic applied to just those subscriptions; the others are not
+// touched and keep publishing. The connection state does not change.
+//
+// It runs on the connection monitor's goroutine, so it cannot overlap with a
+// reconnect. A subscription that cannot be recreated stays marked and is
+// tried again by the next recovery; its consumer receives the error.
+func (c *Client) recoverBrokenSubscriptions(ctx context.Context) {
+	_, broken := c.partitionSubscriptions()
+	for _, id := range broken {
+		if ctx.Err() != nil {
+			return
+		}
+		if err := c.recreateSubscription(ctx, id); err != nil {
+			c.cfg.logger.Debug("recreating ended subscription failed", "sub_id", id, "error", err)
+			c.notifySubscriptionOfError(ctx, id, err)
+			continue
+		}
+		c.notifyRecoveryFromMonitor(SubscriptionRecoveryEvent{
+			SubscriptionID: id,
+			Outcome:        SubscriptionRecoveryRecreated,
+			Detail:         "subscription ended on the server (lifetime expired or deleted); recreated as new, previous notification history lost",
+		})
+	}
 }
 
 func (c *Client) handleAcksNeedsSubMuxLock(res []ua.StatusCode) {

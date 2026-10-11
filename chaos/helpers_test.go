@@ -115,6 +115,9 @@ type env struct {
 	seed  int64
 	proxy *testutil.ChaosProxy
 
+	// serverOpts are additional options for every server instance.
+	serverOpts []server.Option
+
 	// directPort is set for an environment without a proxy: the server
 	// listens on this fixed port and clients connect to it directly.
 	directPort int
@@ -133,9 +136,9 @@ type env struct {
 	old []*server.Server
 }
 
-func newEnv(t *testing.T, seed int64) *env {
+func newEnv(t *testing.T, seed int64, serverOpts ...server.Option) *env {
 	t.Helper()
-	e := &env{t: t, seed: seed}
+	e := &env{t: t, seed: seed, serverOpts: serverOpts}
 	e.proxy = testutil.NewChaosProxy(t, "", seed)
 	e.startServer()
 	t.Cleanup(func() { e.stopServer() })
@@ -199,6 +202,7 @@ func (e *env) startServer() {
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(debugLogger()),
 	}
+	opts = append(opts, e.serverOpts...)
 	if e.proxy != nil {
 		opts = append(opts, server.EndPoint("localhost", e.proxy.Port()), server.ListenOn("localhost:0"))
 	} else {

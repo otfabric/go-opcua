@@ -75,6 +75,26 @@ func (s *SecureChannel) reviseLifetime(requested uint32) uint32 {
 	return requested
 }
 
+// tokenGrace returns how long after it was issued a SecurityToken is still
+// accepted: its lifetime plus the 25% Part 4 §5.5.2.1 allows for messages
+// that were secured with it shortly before it was replaced.
+func tokenGrace(lifetime time.Duration) time.Duration {
+	return lifetime + lifetime/4
+}
+
+// removeInstanceNeedsLock drops a retired token from the list of tokens that
+// incoming messages are verified against. instancesMu must be held.
+func (s *SecureChannel) removeInstanceNeedsLock(instance *channelInstance) {
+	instances := s.instances[instance.secureChannelID]
+	kept := make([]*channelInstance, 0, len(instances))
+	for _, other := range instances {
+		if other != instance {
+			kept = append(kept, other)
+		}
+	}
+	s.instances[instance.secureChannelID] = kept
+}
+
 // scheduleServerTokenExpiry retires a server-issued SecurityToken once its
 // lifetime plus the 25% grace period clients are allowed has elapsed. If the
 // token is still the active one by then the client never renewed it, so the
@@ -86,16 +106,9 @@ func (s *SecureChannel) scheduleServerTokenExpiry(instance *channelInstance) {
 	if lifetime <= 0 {
 		return
 	}
-	instance.expiry = time.AfterFunc(lifetime+lifetime/4, func() {
+	instance.expiry = time.AfterFunc(tokenGrace(lifetime), func() {
 		s.instancesMu.Lock()
-		instances := s.instances[instance.secureChannelID]
-		kept := make([]*channelInstance, 0, len(instances))
-		for _, other := range instances {
-			if other != instance {
-				kept = append(kept, other)
-			}
-		}
-		s.instances[instance.secureChannelID] = kept
+		s.removeInstanceNeedsLock(instance)
 		stillActive := s.activeInstance == instance
 		s.instancesMu.Unlock()
 
@@ -107,9 +120,53 @@ func (s *SecureChannel) scheduleServerTokenExpiry(instance *channelInstance) {
 	})
 }
 
-// ReleaseTokens stops the expiry timers of all SecurityTokens issued on a
-// server channel. The channel broker calls it once the connection is gone so
-// a closed channel is not retained until its tokens would have expired.
+// installClientToken makes a SecurityToken received from the server the
+// active one and arranges for it to be retired.
+//
+// A token stays in the list of tokens that incoming messages are verified
+// against until it has been superseded by a renewal and its lifetime plus
+// the grace period has elapsed, whichever comes last:
+//
+//   - The time is measured on the local monotonic clock from the moment the
+//     token was received. The CreatedAt timestamp in the token is the
+//     server's wall clock; using it would retire a live token at once (or
+//     keep a dead one for years) when the two clocks disagree.
+//   - The active token is never removed, however old it is: without it
+//     nothing the server sends could be read. A token that outlives its
+//     grace period because a renewal failed is retired as soon as a later
+//     renewal succeeds.
+//
+// instancesMu must be held.
+func (s *SecureChannel) installClientToken(instance *channelInstance) {
+	previous := s.activeInstance
+
+	s.instances[instance.secureChannelID] = append(s.instances[instance.secureChannelID], instance)
+	s.activeInstance = instance
+
+	// The token that was just superseded has already outlived its grace
+	// period: nothing is waiting to retire it, so do it now.
+	if previous != nil && previous != instance && previous.expired {
+		s.removeInstanceNeedsLock(previous)
+	}
+
+	lifetime := instance.revisedLifetime
+	if lifetime <= 0 {
+		return
+	}
+	instance.expiry = time.AfterFunc(tokenGrace(lifetime), func() {
+		s.instancesMu.Lock()
+		defer s.instancesMu.Unlock()
+		instance.expired = true
+		if s.activeInstance != instance {
+			s.removeInstanceNeedsLock(instance)
+		}
+	})
+}
+
+// ReleaseTokens stops the expiry timers of all SecurityTokens of the channel.
+// A client channel does this when it is closed; for a server channel the
+// channel broker calls it once the connection is gone. Either way a closed
+// channel is not retained until its tokens would have expired.
 func (s *SecureChannel) ReleaseTokens() {
 	s.instancesMu.Lock()
 	defer s.instancesMu.Unlock()

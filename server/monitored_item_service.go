@@ -453,7 +453,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		}
 		// For data items, do an initial update for the nodeids in the background.
 		if !isEventItem {
-			go s.ChangeNotification(nodeid)
+			s.SubService.srv.goSafe("sampling the initial value of a monitored item", func() { s.ChangeNotification(nodeid) })
 		}
 
 	}
@@ -716,7 +716,7 @@ func (s *MonitoredItemService) DeleteMonitoredItems(ctx context.Context, sc *uas
 		}
 
 		// this function gets the lock so we need to do it in the background so it can happen after our lock is released.
-		go s.DeleteMonitoredItem(id)
+		s.SubService.srv.goSafe("deleting a monitored item", func() { s.DeleteMonitoredItem(id) })
 		results[i] = ua.StatusOK
 	}
 
