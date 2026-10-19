@@ -186,9 +186,7 @@ func main() {
         log.Fatal(err)
     }
 
-    ns := server.NewNodeNameSpace(srv, "example")
-    idx := srv.AddNamespace(ns)
-    _ = idx
+    ns := server.NewNodeNameSpace(srv, "example") // registers the namespace
 
     n := ns.AddNewVariableStringNode("temperature", float64(21.5))
     ns.Objects().AddRef(n, 47, true) // HasComponent
@@ -290,8 +288,7 @@ in, and a server that includes history and query out of the box.
 
 **Choose open62541 if** you need a C library for embedded or bare-metal
 targets, PubSub, the Brainpool / Curve448 ECC security policies,
-a local discovery
-server, or a stack with an OPC Foundation certified server profile.
+or a stack with an OPC Foundation certified server profile.
 
 **Choose Eclipse Milo if** you are on the JVM and want asynchronous client
 and server SDKs with strong support for dynamically decoded custom data

@@ -20,7 +20,7 @@
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
 
-For services not wrapped by a dedicated method, use `Client.Send(req, resp)` directly.
+For services not wrapped by a dedicated method, use `Client.Send(ctx, req, handler)` directly; the handler receives the `ua.Response`.
 
 ---
 
@@ -86,12 +86,17 @@ if err != nil {
     log.Fatal(err)
 }
 
-// Select the best endpoint
-ep := opcua.SelectEndpoint(endpoints, "Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt)
+// Select the best endpoint this client can use with its certificate (DER)
+ep, err := opcua.SelectEndpoint(endpoints, "Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt, cert)
+if err != nil {
+    log.Fatal(err)
+}
 
 // Connect with auto-configured security
 c, _ := opcua.NewClient(ep.EndpointURL,
     opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
+    opcua.Certificate(cert),
+    opcua.PrivateKey(key),
 )
 ```
 
@@ -148,7 +153,7 @@ and then run over a reverse connection too:
 ```go
 reverse := opcua.ReverseConnect("0.0.0.0:4841", opcua.ReverseServerURI("urn:acme:plc-17"))
 endpoints, err := opcua.GetEndpoints(ctx, "", reverse, opcua.DialTimeout(60*time.Second))
-ep := opcua.SelectEndpoint(endpoints, "Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt)
+ep, err := opcua.SelectEndpoint(endpoints, "Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt, cert)
 c, _ := opcua.NewClient("", reverse, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous) /* ... */)
 ```
 
@@ -544,10 +549,10 @@ if err != nil {
 }
 ```
 
-**Symbolic node names:** For a single well-known standard node (e.g. `CurrentTime` → i=2258, `ServerStatus` → i=2256, `Objects` → i=85), use `StandardNodeID(name)` to get a `*ua.NodeID` without parsing. Useful for CLI flags like `get value -n CurrentTime`. Returns `(nil, false)` if the name is not in the standard set.
+**Symbolic node names:** For a single well-known standard node (e.g. `CurrentTime` → i=2258, `ServerStatus` → i=2256, `Objects` → i=85), use `ua.StandardNodeID(name)` to get a `*ua.NodeID` without parsing. Useful for CLI flags like `get value -n CurrentTime`. Returns `(nil, false)` if the name is not in the standard set.
 
 ```go
-if nodeID, ok := opcua.StandardNodeID("CurrentTime"); ok {
+if nodeID, ok := ua.StandardNodeID("CurrentTime"); ok {
     v, _ := c.Node(nodeID).Value(ctx)
 }
 ```
