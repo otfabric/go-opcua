@@ -79,7 +79,7 @@ Client.ReadValue(nodeID)
 Client.Read(ctx, req)         ← Build ua.ReadRequest
   │
   ▼
-Client.Send(ctx, req, resp)   ← Generic send with type assertion
+Client.Send(ctx, req, h)      ← Generic send; h type-asserts the response
   │
   ▼
 SecureChannel.SendRequest()   ← Serialize, encrypt, sign, chunk
