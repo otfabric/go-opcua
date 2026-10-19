@@ -44,11 +44,14 @@ import (
 )
 
 func main() {
-    s := server.New(
+    s, err := server.New(
         server.EndPoint("localhost", 4840),
         server.EnableSecurity("None", ua.MessageSecurityModeNone),
         server.EnableAuthMode(ua.UserTokenTypeAnonymous),
     )
+    if err != nil {
+        log.Fatal(err)
+    }
 
     if err := s.Start(context.Background()); err != nil {
         log.Fatal(err)
@@ -78,7 +81,7 @@ This creates a server with:
 | `ManufacturerName(name)` | Manufacturer metadata |
 | `ProductName(name)` | Product metadata |
 | `SoftwareVersion(version)` | Version string |
-| `SetLogger(l)` | `*slog.Logger`; defaults to `slog.Default()` |
+| `SetLogger(l)` | `*slog.Logger`; silent by default (`nil` restores silent) |
 | `WithAccessController(ac)` | Custom authorization logic |
 | `ApplicationURI(uri)` | ApplicationUri of a server without a certificate (otherwise taken from the certificate) |
 | `WithReverseConnect(clientURL, opts...)` | Connect to a listening client ([reverse connect](#reverse-connect)) |
@@ -665,7 +668,7 @@ func (ac *MyAccessController) CheckCall(ctx context.Context, sess *server.Sessio
 }
 
 // Apply to server
-s := server.New(
+s, err := server.New(
     server.WithAccessController(&MyAccessController{
         readOnlyNodes: map[string]bool{"ns=1;i=1001": true},
     }),
@@ -704,7 +707,7 @@ func main() {
     cert := tlsCert.Certificate[0]
 
     // Configure server
-    s := server.New(
+    s, err := server.New(
         server.EndPoint("0.0.0.0", 4840),
         server.Certificate(cert),
         server.PrivateKey(pk),
@@ -715,6 +718,9 @@ func main() {
         server.ServerName("My OPC-UA Server"),
         server.SetLogger(slog.New(slog.NewTextHandler(os.Stderr, nil))),
     )
+    if err != nil {
+        log.Fatal(err)
+    }
 
     // Create application namespace
     ns := server.NewNodeNameSpace(s, "http://example.com/myapp")

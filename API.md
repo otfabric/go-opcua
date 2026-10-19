@@ -1783,6 +1783,14 @@ func (as *NodeNameSpace) Nodes() []*Node
 func (ns *MapNamespace) Nodes() []*Node
 ```
 
+`NodeNameSpace` has helpers that create a variable node and add it to the
+namespace in one step:
+
+```go
+func (as *NodeNameSpace) AddNewVariableNode(name string, value any) *Node       // numeric NodeID from the namespace sequence
+func (as *NodeNameSpace) AddNewVariableStringNode(name string, value any) *Node // string NodeID equal to name
+```
+
 ---
 
 ### Node (server-side)

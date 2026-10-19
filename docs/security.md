@@ -8,8 +8,8 @@
 
 OPC-UA security operates at the transport level using a two-phase key exchange:
 
-1. **Asymmetric handshake** — RSA-based `OpenSecureChannel` to establish trust and exchange nonces
-2. **Symmetric session** — AES/HMAC-based message encryption derived from the exchanged nonces
+1. **Asymmetric handshake** — `OpenSecureChannel` signed with the RSA or ECC application certificate to establish trust and exchange nonces
+2. **Symmetric session** — message protection (AES-CBC with HMAC, or AES-GCM / ChaCha20-Poly1305 for the AEAD policies) with keys derived from the exchanged nonces
 
 The library handles this automatically. You configure certificates, policies, and authentication modes; the protocol layers do the rest.
 
@@ -229,7 +229,7 @@ openssl req -x509 -newkey rsa:2048 \
     -subj "/CN=OPC-UA Test" \
     -addext "subjectAltName=URI:urn:otfabric:opcua:client,DNS:localhost"
 
-# For modern policies (Aes256_Sha256_RsaPss), use 4096-bit keys
+# 4096-bit keys also work with every RSA policy (Aes256_Sha256_RsaPss etc.)
 openssl req -x509 -newkey rsa:4096 \
     -keyout key.pem -out cert.pem \
     -days 365 -nodes \
@@ -260,7 +260,7 @@ openssl req -x509 -newkey ed25519 \
 - **Format:** X.509, PEM-encoded files (DER-encoded internally)
 - **Key type:** RSA for the RSA policies; ECDSA P-256 or P-384 for the nistP256 / nistP384 ECC policies; Ed25519 for `ECC_curve25519`
 - **Key files:** PKCS #1 (`RSA PRIVATE KEY`), PKCS #8 (`PRIVATE KEY`: RSA, ECDSA, Ed25519) or SEC 1 (`EC PRIVATE KEY`), PEM or DER; `uapolicy.ParsePrivateKey` reads all of them
-- **Key size:** RSA 2048+ bits (4096 for `Aes128_Sha256_RsaOaep` and `Aes256_Sha256_RsaPss`)
+- **Key size:** RSA 2048+ bits for `Basic256Sha256`, `Aes128_Sha256_RsaOaep` and `Aes256_Sha256_RsaPss` (4096 is also accepted)
 - **SAN:** Must include an `ApplicationURI` as a URI subject alternative name
 - **Key usage:** RSA: `DigitalSignature`, `KeyEncipherment`, `DataEncipherment`. ECC: `DigitalSignature` (an ECC key enciphers nothing)
 - **Extended key usage:** `ServerAuth`, `ClientAuth`
@@ -296,7 +296,7 @@ c, _ := opcua.NewClient(endpoint,
 )
 
 // Server
-s := server.New(
+s, err := server.New(
     server.EnableAuthMode(ua.UserTokenTypeAnonymous),
     server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
     server.Certificate(certBytes),
@@ -319,7 +319,7 @@ c, _ := opcua.NewClient(endpoint,
 )
 
 // Server
-s := server.New(
+s, err := server.New(
     server.EnableAuthMode(ua.UserTokenTypeUserName),
     server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
     server.Certificate(certBytes),
@@ -342,7 +342,7 @@ c, _ := opcua.NewClient(endpoint,
 )
 
 // Server
-s := server.New(
+s, err := server.New(
     server.EnableAuthMode(ua.UserTokenTypeCertificate),
     server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
     server.Certificate(certBytes),
@@ -367,7 +367,7 @@ c, _ := opcua.NewClient("opc.tcp://localhost:4840",
 )
 
 // Server
-s := server.New(
+s, err := server.New(
     server.EndPoint("localhost", 4840),
     server.EnableSecurity("None", ua.MessageSecurityModeNone),
     server.EnableAuthMode(ua.UserTokenTypeAnonymous),
@@ -457,7 +457,7 @@ func (ac *RoleBasedAC) CheckWrite(ctx context.Context, sess *session, nodeID *ua
 }
 
 // Apply to server
-s := server.New(
+s, err := server.New(
     server.WithAccessController(&RoleBasedAC{
         adminNodes: map[string]bool{"ns=1;i=1001": true},
     }),
@@ -697,7 +697,7 @@ from what others announce. mDNS has no authentication:
 
 - [ ] Use `MessageSecurityModeSignAndEncrypt` in production
 - [ ] Use `Basic256Sha256` or newer policies (avoid `Basic128Rsa15`, `Basic256`)
-- [ ] Use 2048-bit+ RSA keys (4096-bit for modern policies)
+- [ ] Use 2048-bit+ RSA keys
 - [ ] Include proper SANs in certificates (hostnames, IPs, ApplicationURI)
 - [ ] Never use `SecurityPolicy#None` outside development
 - [ ] Always pair username/password auth with encryption
