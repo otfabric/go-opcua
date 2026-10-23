@@ -15,6 +15,7 @@ import (
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/remote"
 	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -226,4 +227,74 @@ func TestRemoteErrors(t *testing.T) {
 	require.Empty(t, wgs)
 	_, err = r.AddWriterGroup(ctx, v.ID(), pubsub.WriterGroup("wg", 1, time.Second))
 	require.Error(t, err)
+}
+
+// TestRemoteMalformedServer checks the helpers against a server whose
+// PubSub methods answer with too few or wrongly typed outputs, and against a
+// closed connection.
+func TestRemoteMalformedServer(t *testing.T) {
+	t.Parallel()
+	srv, url := testutil.NewTestServer(t)
+	ns := server.NewNodeNameSpace(srv, "malformed")
+	root, err := srv.Namespace(0)
+	require.NoError(t, err)
+
+	// AddConnection answers without output arguments, AddPublishedDataItems
+	// with a string where a NodeId belongs.
+	srv.RegisterMethod(remote.PublishSubscribe, ua.NewNumericNodeID(0, id.PublishSubscribeAddConnection),
+		func(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+			return nil, ua.StatusOK
+		})
+	notNode := func(n int) server.MethodHandler {
+		return func(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+			out := make([]*ua.Variant, n)
+			for i := range out {
+				out[i] = ua.MustVariant("not a node id")
+			}
+			return out, ua.StatusOK
+		}
+	}
+	srv.RegisterMethod(remote.PublishedDataSets, ua.NewNumericNodeID(0, id.DataSetFolderTypeAddPublishedDataItems), notNode(3))
+	srv.RegisterMethod(remote.PublishedDataSets, ua.NewNumericNodeID(0, id.DataSetFolderTypeAddPublishedDataItemsTemplate), notNode(2))
+
+	// A component whose Status/State is not an integer.
+	object := func(name string) *server.Node {
+		return ns.AddNode(server.NewNode(ua.NewStringNodeID(ns.ID(), name), map[ua.AttributeID]*ua.DataValue{
+			ua.AttributeIDNodeClass:   server.DataValueFromValue(uint32(ua.NodeClassObject)),
+			ua.AttributeIDBrowseName:  server.DataValueFromValue(attrs.BrowseName(name)),
+			ua.AttributeIDDisplayName: server.DataValueFromValue(attrs.DisplayName(name, name)),
+		}, nil, nil))
+	}
+	comp := object("Weird")
+	root.Objects().AddRef(comp, id.Organizes, true)
+	status := object("Status")
+	comp.AddRef(status, id.HasComponent, true)
+	state := ns.AddNewVariableStringNode("State", "operational?")
+	status.AddRef(state, id.HasComponent, true)
+
+	c := testutil.NewTestClient(t, url)
+	r := remote.New(c)
+	ctx := context.Background()
+
+	_, err = r.AddConnection(ctx, pubsub.UDPConnection("c", "opc.udp://127.0.0.1:4840", uint16(1)))
+	require.ErrorContains(t, err, "output arguments")
+	_, err = r.AddPublishedDataItems(ctx, "p", nil, nil, nil)
+	require.ErrorContains(t, err, "want a NodeId")
+	_, _, err = r.AddPublishedDataItemsTemplate(ctx, "p", pubsub.MetaData("p"), nil)
+	require.ErrorContains(t, err, "want a NodeId")
+	_, err = r.State(ctx, comp.ID())
+	require.ErrorContains(t, err, "State is string")
+	_, err = r.State(ctx, status.ID())
+	require.ErrorIs(t, err, ua.StatusBadNotFound, "Status has no Status")
+
+	// The connection is gone: every helper reports the service error.
+	require.NoError(t, c.Close(ctx))
+	_, err = r.AddWriterGroup(ctx, ua.NewStringNodeID(ns.ID(), "x"), pubsub.WriterGroup("wg", 1, time.Second))
+	require.Error(t, err)
+	_, err = r.State(ctx, comp.ID())
+	require.Error(t, err)
+	_, err = r.Connections(ctx)
+	require.Error(t, err)
+	_, err = r.AddConnection(ctx, pubsub.UDPConnection("c", "opc.udp://127.0.0.1:4840", uint16(1)))
+	require.Error(t, err, "the method is cached, the call itself fails")
 }

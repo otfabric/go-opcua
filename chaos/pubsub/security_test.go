@@ -7,11 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"net"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
@@ -157,7 +158,16 @@ func TestChaosSecurityAttacks(t *testing.T) {
 				time.Sleep(time.Millisecond)
 			}
 			p.chk.waitGrowth(t, 10, p.readers...)
-			after := status(t, p.sub, sub).Counters
+			// The last injected datagrams may still be on their way.
+			var after pubsub.Counters
+			deadline := time.Now().Add(5 * time.Second)
+			for {
+				after = status(t, p.sub, sub).Counters
+				if after.DecodeErrors-before.DecodeErrors >= uint64(rejected) || time.Now().After(deadline) {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
 			t.Logf("rejected %d, tampered %d, replayed %d: decode errors %d, sequence discards %d", rejected, tampered, replayed,
 				after.DecodeErrors-before.DecodeErrors, after.SequenceDiscards-before.SequenceDiscards)
 			if got := after.DecodeErrors - before.DecodeErrors; got < uint64(rejected) || got > uint64(rejected+tampered) {
@@ -204,7 +214,17 @@ func TestChaosKeyRotationStorm(t *testing.T) {
 	}
 	last, _ := ks.CurrentTokenID("sg")
 	p.chk.waitGrowth(t, 10, p.readers...)
-	ctr := status(t, p.sub, sub).Counters
+	// The last injected datagrams may still be on their way: wait until
+	// every one of them was counted (or a while has passed).
+	var ctr pubsub.Counters
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		ctr = status(t, p.sub, sub).Counters
+		if ctr.DecodeErrors >= uint64(injected) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	t.Logf("tokens %d..%d, injected %d old messages, subscriber %+v", first, last, injected, ctr)
 	if last-first < 10 {
 		t.Errorf("only %d key changes", last-first)
@@ -243,12 +263,7 @@ type sksServer struct {
 
 func freeTCPPort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = l.Close() }()
-	return l.Addr().(*net.TCPAddr).Port
+	return testport.TCP(t)
 }
 
 func startSKS(t *testing.T, ks *security.KeyService) *sksServer {

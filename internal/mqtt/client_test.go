@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
+
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/internal/mqtt"
@@ -390,17 +392,14 @@ func TestDialErrors(t *testing.T) {
 	require.Error(t, err)
 
 	// Nothing listens: retried until the context ends.
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	addr := l.Addr().String()
-	require.NoError(t, l.Close())
+	addr := fmt.Sprintf("127.0.0.1:%d", testport.TCP(t))
 	ctx, cancel := context.WithTimeout(bg, 200*time.Millisecond)
 	defer cancel()
 	_, err = mqtt.Dial(ctx, mqtt.Options{Server: "tcp://" + addr, MinReconnectDelay: 10 * time.Millisecond})
 	require.Error(t, err)
 
 	// A server that never answers CONNECT.
-	l, err = net.Listen("tcp", "127.0.0.1:0")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = l.Close() }()
 	go func() {

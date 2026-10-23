@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
+
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/server"
@@ -93,13 +95,11 @@ func AddTestNodes(t *testing.T, srv *server.Server) *server.NodeNameSpace {
 	return ns
 }
 
+// freePort returns a TCP port for a test server. Binding port 0 and closing
+// the listener takes the port from the ephemeral range, where any other
+// socket (other packages run in parallel) may take it before the server
+// binds it; testport's ports come from outside that range.
 func freePort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("testutil: free port: %v", err)
-	}
-	port := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
-	return port
+	return testport.TCP(t)
 }
