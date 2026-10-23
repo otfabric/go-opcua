@@ -6,7 +6,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sort"
 	"sync"
 	"time"
 
@@ -451,13 +450,4 @@ func (p *PubSub) Configuration() *ua.PubSubConfigurationDataType {
 		cfg.Connections = append(cfg.Connections, c.config())
 	}
 	return cfg
-}
-
-func sortedIDs[T any](m map[ComponentID]T) []ComponentID {
-	ids := make([]ComponentID, 0, len(m))
-	for id := range m {
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	return ids
 }

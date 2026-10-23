@@ -156,7 +156,7 @@ type dataSetReader struct {
 
 	// Subscribing state, guarded by PubSub.mu.
 	running  bool
-	timer    *time.Timer
+	timer    *timerRef
 	lastRecv time.Time
 	streams  map[streamKey]*stream
 	// lastGood is the last usable value per target variable.
