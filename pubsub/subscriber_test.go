@@ -239,7 +239,10 @@ func TestInvalidAndVersionMismatch(t *testing.T) {
 func TestMessageReceiveTimeout(t *testing.T) {
 	t.Parallel()
 	f := subscriberOnly(t, func(r *ua.DataSetReaderDataType) {
-		r.MessageReceiveTimeout = 60
+		// Well above the 25 ms between the keep-alives below, so that a
+		// slow scheduler (race detector, loaded CI runner) does not time
+		// the reader out while they keep it alive.
+		r.MessageReceiveTimeout = 250
 		SetTargetVariables(r,
 			&ua.FieldTargetDataType{TargetNodeID: nodeA, AttributeID: ua.AttributeIDValue, OverrideValueHandling: ua.OverrideValueHandlingLastUsableValue},
 			&ua.FieldTargetDataType{TargetNodeID: nodeB, AttributeID: ua.AttributeIDValue, OverrideValueHandling: ua.OverrideValueHandlingOverrideValue, OverrideValue: ua.MustVariant(int32(-1))},

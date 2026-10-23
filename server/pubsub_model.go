@@ -383,14 +383,49 @@ func (m *pubsubModel) add(info pubsub.ComponentInfo) {
 	}
 	m.comps[c.id] = c
 	m.byNode[c.obj.ID().String()] = c.id
+	if c.kind == pubsub.KindPublishedDataSet {
+		m.linkWriters(c, info.Name)
+	}
 }
 
-func (m *pubsubModel) parentOf(info pubsub.ComponentInfo) (*psComp, error) {
-	p := m.comps[info.Parent]
-	if p == nil {
-		return nil, fmt.Errorf("parent %d has no node", info.Parent)
+// linkWriters adds the DataSetToWriter references from a published data set
+// to the writers of it that were represented before it (see parentOf).
+func (m *pubsubModel) linkWriters(pds *psComp, name string) {
+	for _, w := range m.comps {
+		if w.kind != pubsub.KindDataSetWriter || w.pds != nil {
+			continue
+		}
+		if cfg, err := m.rt.DataSetWriterConfig(w.id); err == nil && cfg.DataSetName == name {
+			linkChild(pds.obj, w.obj, id.DataSetToWriter)
+			w.pds = pds
+		}
 	}
-	return p, nil
+}
+
+// parentOf returns the representation of the parent of a component,
+// creating it first if needed. The runtime runs its event callbacks after it
+// released its lock, so with concurrent changes the event that adds a child
+// can be handled before the one that adds its parent.
+func (m *pubsubModel) parentOf(info pubsub.ComponentInfo) (*psComp, error) {
+	return m.ensure(info.Parent)
+}
+
+// ensure returns the representation of component cid, creating it from the
+// runtime if its EventAdded has not been handled yet. It fails if the
+// component no longer exists.
+func (m *pubsubModel) ensure(cid pubsub.ComponentID) (*psComp, error) {
+	if p := m.comps[cid]; p != nil {
+		return p, nil
+	}
+	info, err := m.rt.Component(cid)
+	if err != nil {
+		return nil, fmt.Errorf("component %d: %w", cid, err)
+	}
+	m.add(info)
+	if p := m.comps[cid]; p != nil {
+		return p, nil
+	}
+	return nil, fmt.Errorf("component %d has no node", cid)
 }
 
 func (m *pubsubModel) addConnectionNodes(c *psComp, info pubsub.ComponentInfo) error {
@@ -507,7 +542,7 @@ func (m *pubsubModel) addWriterNodes(c *psComp, info pubsub.ComponentInfo) error
 	m.status(c)
 	if cfg.DataSetName != "" {
 		if pid, ok := m.rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, cfg.DataSetName); ok {
-			if pds := m.comps[pid]; pds != nil {
+			if pds, err := m.ensure(pid); err == nil {
 				linkChild(pds.obj, c.obj, id.DataSetToWriter)
 				c.pds = pds
 			}
