@@ -93,6 +93,9 @@ make interop
 # Release verification: nothing the images advertise may be skipped
 OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 make interop
 
+# One of N slices of the suite, as the CI workflow runs it (six parallel jobs)
+make interop-shard SHARD=2 SHARDS=6
+
 # CI — digest pinned (update interop.yml after each release)
 OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:2f008620c41ca6f752abe5d9a470cdba2742afed92d93b7ec6332750e20b9e84 \
 MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:0fbbf7624ce59d7e8e0ff866570e1cdb6fc8f3aadd6900d3d29e6d21b2a823ed \
