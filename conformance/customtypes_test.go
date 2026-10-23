@@ -19,9 +19,10 @@ package conformance
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
@@ -77,11 +78,7 @@ func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.N
 
 func freeCustomPort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "localhost:0")
-	require.NoError(t, err)
-	p := l.Addr().(*net.TCPAddr).Port
-	_ = l.Close()
-	return p
+	return testport.TCP(t)
 }
 
 // TestCustomTypes_FlatStruct_Read verifies that a server-side FlatStruct is

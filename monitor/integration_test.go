@@ -219,3 +219,33 @@ func TestNodeMonitor_AddRemoveNodesByID(t *testing.T) {
 	require.NoError(t, sub.RemoveNodeIDs(ctx, f.Double))
 	require.Equal(t, 0, sub.Subscribed())
 }
+
+// TestNodeMonitor_ServiceErrors checks that every method returns the error
+// of the service call once the connection to the server is gone.
+func TestNodeMonitor_ServiceErrors(t *testing.T) {
+	srv, url := testutil.NewTestServer(t)
+	f := testutil.AddFixture(t, srv)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
+
+	m, err := monitor.NewNodeMonitor(c)
+	require.NoError(t, err)
+	sub, err := m.ChanSubscribe(ctx, &opcua.SubscriptionParameters{Interval: 100 * time.Millisecond}, make(chan *monitor.DataChangeMessage, 4))
+	require.NoError(t, err)
+	items, err := sub.AddMonitorItems(ctx, monitor.Request{NodeID: f.Int32})
+	require.NoError(t, err)
+	require.NoError(t, sub.AddNodeIDs(ctx, f.Double))
+
+	require.NoError(t, c.Close(ctx))
+
+	require.Error(t, sub.Modify(ctx, &opcua.SubscriptionParameters{Interval: time.Second}))
+	_, err = sub.AddMonitorItems(ctx, monitor.Request{NodeID: f.String})
+	require.Error(t, err)
+	require.Error(t, sub.AddNodeIDs(ctx, f.String))
+	require.Error(t, sub.ModifyMonitorItems(ctx, monitor.Request{NodeID: f.Int32}))
+	require.Error(t, sub.SetMonitoringMode(ctx, ua.MonitoringModeDisabled, items...))
+	require.Error(t, sub.SetMonitoringModeForNodeIDs(ctx, ua.MonitoringModeDisabled, f.Double))
+	require.Error(t, sub.RemoveMonitorItems(ctx, items...))
+	require.Error(t, sub.RemoveNodeIDs(ctx, f.Double))
+	_ = sub.Unsubscribe(ctx)
+}

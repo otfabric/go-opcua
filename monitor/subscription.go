@@ -346,16 +346,26 @@ func (s *Subscription) AddMonitorItems(ctx context.Context, nodes ...Request) ([
 		}
 		toAdd = append(toAdd, request)
 	}
+	// The handles were registered before the call; a call that created
+	// nothing must not leave them behind.
+	forget := func() {
+		for i := range nodes {
+			delete(s.handles, nodes[i].handle)
+		}
+	}
 	resp, err := s.sub.Monitor(ctx, ua.TimestampsToReturnBoth, toAdd...)
 	if err != nil {
+		forget()
 		return nil, err
 	}
 
 	if resp.ResponseHeader.ServiceResult != ua.StatusOK {
+		forget()
 		return nil, resp.ResponseHeader.ServiceResult
 	}
 
 	if len(resp.Results) != len(toAdd) {
+		forget()
 		return nil, fmt.Errorf("%w: monitor items response length mismatch", errors.ErrInvalidResponseType)
 	}
 	var monitoredItems []Item
@@ -424,15 +434,15 @@ func (s *Subscription) RemoveMonitorItems(ctx context.Context, items ...Item) er
 
 	var toRemove []uint32
 	for _, item := range items {
-		_, ok := s.itemLookup[item.id]
-		if !ok {
+		if _, ok := s.itemLookup[item.id]; !ok {
 			return fmt.Errorf("%w: item %v", errors.ErrMonitoredItemNotFound, item.id)
 		}
-		delete(s.itemLookup, item.id)
-		delete(s.handles, item.handle)
 		toRemove = append(toRemove, item.id)
 	}
 
+	// The items are forgotten only once the server has answered: if the
+	// call fails they are still monitored there and must stay known here
+	// (their notifications keep arriving and can be removed again).
 	resp, err := s.sub.Unmonitor(ctx, toRemove...)
 	if err != nil {
 		return err
@@ -446,6 +456,12 @@ func (s *Subscription) RemoveMonitorItems(ctx context.Context, items ...Item) er
 		return fmt.Errorf("%w: unmonitor items response length mismatch", errors.ErrInvalidResponseType)
 	}
 
+	// A Bad result means the server does not have the item (any more):
+	// it is gone either way.
+	for _, item := range items {
+		delete(s.itemLookup, item.id)
+		delete(s.handles, item.handle)
+	}
 	for _, res := range resp.Results {
 		if res != ua.StatusOK {
 			return res
@@ -467,10 +483,12 @@ func (s *Subscription) ModifyMonitorItems(ctx context.Context, nodes ...Request)
 	toModify := make([]*ua.MonitoredItemModifyRequest, 0)
 
 	for _, node := range nodes {
+		found := false
 		for _, item := range s.itemLookup {
 			if item.nodeID.String() != node.NodeID.String() {
 				continue
 			}
+			found = true
 
 			if node.MonitoringParameters == nil {
 				break
@@ -483,6 +501,9 @@ func (s *Subscription) ModifyMonitorItems(ctx context.Context, nodes ...Request)
 			request.RequestedParameters.ClientHandle = item.handle
 			toModify = append(toModify, request)
 			break
+		}
+		if !found {
+			return fmt.Errorf("%w: node %v", errors.ErrMonitoredItemNotFound, node.NodeID)
 		}
 	}
 

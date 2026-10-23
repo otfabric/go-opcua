@@ -24,3 +24,4 @@ cover.*
 *.csr
 # Claude Code agent worktrees
 .claude/
+coverage-gate.out
