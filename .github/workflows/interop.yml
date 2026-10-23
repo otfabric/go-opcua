@@ -98,10 +98,12 @@ jobs:
           path: artifacts/
           if-no-files-found: ignore
 
-  # One result for the whole suite (branch protection and badges).
+  # One result for the whole suite (branch protection and badges). Not run
+  # when the workflow was cancelled (a newer push), so a superseded run shows
+  # as cancelled rather than failed.
   result:
     name: OPC UA interop — open62541
-    if: always()
+    if: ${{ !cancelled() }}
     needs: shard
     runs-on: ubuntu-latest
     steps:
