@@ -33,6 +33,11 @@ func TestCloseAfterDeliveryDoesNotLoseAck(t *testing.T) {
 		m := in.next(t)
 		require.Equal(t, []byte{byte(i)}, m.Payload, "round %d: a redelivered message", i)
 		require.NoError(t, sub.Close()) // right after the message was seen
+		// The broker reads a connection's packets in order: once it has
+		// handled the DISCONNECT (the client is gone) it has handled the
+		// PUBACK written before it. Reconnecting earlier could legitimately
+		// get the message again (at least once).
+		require.Eventually(t, func() bool { return b.ClientCount() == 1 }, 5*time.Second, time.Millisecond)
 	}
 
 	// Nothing is left for the session.

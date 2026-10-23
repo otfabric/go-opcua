@@ -285,6 +285,10 @@ func TestQoS1RetransmitAfterReconnect(t *testing.T) {
 	// The subscriber was away while a message was published: the broker
 	// delivers it on reconnect.
 	require.NoError(t, sub.Close())
+	// Wait until the broker has handled the subscriber's DISCONNECT, and
+	// with it the PUBACK of "queued" written before it: otherwise the
+	// session may legitimately get "queued" again on reconnect.
+	require.Eventually(t, func() bool { return b.ClientCount() == 1 }, 5*time.Second, time.Millisecond)
 	require.NoError(t, pub.Publish(bg, "q/3", []byte("offline"), 1, false))
 	in2 := newInbox()
 	dial(t, mqtt.Options{Server: b.URL(), ClientID: "sub", PersistentSession: true, DefaultHandler: in2.handle})
