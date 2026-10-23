@@ -72,7 +72,7 @@ interop-shard: ## Run shard SHARD of SHARDS of the interop tests (e.g. SHARD=2 S
 		| awk -v n=$(SHARDS) -v i=$(SHARD) '(NR - 1) % n == i - 1' | paste -sd'|' -); \
 	if [ -z "$$tests" ]; then echo "interop shard $(SHARD)/$(SHARDS): no tests"; exit 0; fi; \
 	echo "interop shard $(SHARD)/$(SHARDS): $$(echo "$$tests" | tr '|' '\n' | wc -l | tr -d ' ') tests"; \
-	go test -count=1 -tags=interop -timeout 45m -run "^($$tests)$$" ./interop/
+	go test -v -count=1 -tags=interop -timeout 45m -run "^($$tests)$$" ./interop/
 
 # Chaos-monkey and parallelism suites: chaos/ and its sub-packages secure,
 # datachange, reverse, discovery and codec (see chaos/doc.go). They also run, with a
