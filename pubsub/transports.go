@@ -1,10 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-//go:build pubsub_transports
 
-// The UDP and MQTT transports are built in a parallel branch. Once they are
-// merged, drop the build constraint above so that importing package pubsub
-// registers the "opc.udp", "mqtt" and "mqtts" schemes.
+// Importing package pubsub registers the "opc.udp", "mqtt" and "mqtts"
+// transports.
 
 package pubsub
 

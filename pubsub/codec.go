@@ -36,11 +36,26 @@ type codec interface {
 	Encode(nm *message.NetworkMessage, opts *uadp.EncodeOptions) ([]byte, error)
 	// Decode decodes a NetworkMessage. It returns uadp.ErrFiltered if
 	// opts.Accept rejected the message.
-	Decode(b []byte, opts *uadp.DecodeOptions) (*message.NetworkMessage, error)
+	Decode(b []byte, opts *decodeOptions) (*message.NetworkMessage, error)
 	// EncodeMetaData and DecodeMetaData handle the "ua-metadata" messages
 	// of the JSON mapping.
 	EncodeMetaData(m *jsonmsg.MetaDataMessage) ([]byte, error)
-	DecodeMetaData(b []byte, opts *uadp.DecodeOptions) (*jsonmsg.MetaDataMessage, error)
+	DecodeMetaData(b []byte, opts *decodeOptions) (*jsonmsg.MetaDataMessage, error)
+}
+
+// decodeOptions are the options of the UADP decoder plus the fallbacks the
+// JSON decoder uses for messages without DataSetWriterId or PublisherId.
+type decodeOptions struct {
+	uadp.DecodeOptions
+	DataSetWriterID uint16
+	PublisherID     *message.PublisherID
+}
+
+func (o *decodeOptions) json() *jsonmsg.DecodeOptions {
+	if o == nil {
+		return &jsonmsg.DecodeOptions{}
+	}
+	return &jsonmsg.DecodeOptions{MetaData: o.MetaData, DataSetWriterID: o.DataSetWriterID, PublisherID: o.PublisherID}
 }
 
 var errNoJSONMetaData = errors.New("pubsub: the UADP mapping announces DataSetMetaData with discovery messages")
@@ -51,15 +66,18 @@ func (uadpCodec) Encode(nm *message.NetworkMessage, opts *uadp.EncodeOptions) ([
 	return uadp.Encode(nm, opts)
 }
 
-func (uadpCodec) Decode(b []byte, opts *uadp.DecodeOptions) (*message.NetworkMessage, error) {
-	return uadp.Decode(b, opts)
+func (uadpCodec) Decode(b []byte, opts *decodeOptions) (*message.NetworkMessage, error) {
+	if opts == nil {
+		return uadp.Decode(b, nil)
+	}
+	return uadp.Decode(b, &opts.DecodeOptions)
 }
 
 func (uadpCodec) EncodeMetaData(*jsonmsg.MetaDataMessage) ([]byte, error) {
 	return nil, errNoJSONMetaData
 }
 
-func (uadpCodec) DecodeMetaData([]byte, *uadp.DecodeOptions) (*jsonmsg.MetaDataMessage, error) {
+func (uadpCodec) DecodeMetaData([]byte, *decodeOptions) (*jsonmsg.MetaDataMessage, error) {
 	return nil, errNoJSONMetaData
 }
 
@@ -69,12 +87,8 @@ func (jsonCodec) Encode(nm *message.NetworkMessage, _ *uadp.EncodeOptions) ([]by
 	return jsonmsg.Encode(nm, &jsonmsg.EncodeOptions{})
 }
 
-func (jsonCodec) Decode(b []byte, opts *uadp.DecodeOptions) (*message.NetworkMessage, error) {
-	var md message.MetaDataLookup
-	if opts != nil {
-		md = opts.MetaData
-	}
-	nm, err := jsonmsg.Decode(b, &jsonmsg.DecodeOptions{MetaData: md})
+func (jsonCodec) Decode(b []byte, opts *decodeOptions) (*message.NetworkMessage, error) {
+	nm, err := jsonmsg.Decode(b, opts.json())
 	if err != nil {
 		return nil, err
 	}
@@ -88,12 +102,8 @@ func (jsonCodec) EncodeMetaData(m *jsonmsg.MetaDataMessage) ([]byte, error) {
 	return jsonmsg.EncodeMetaData(m, &jsonmsg.EncodeOptions{})
 }
 
-func (jsonCodec) DecodeMetaData(b []byte, opts *uadp.DecodeOptions) (*jsonmsg.MetaDataMessage, error) {
-	var md message.MetaDataLookup
-	if opts != nil {
-		md = opts.MetaData
-	}
-	return jsonmsg.DecodeMetaData(b, &jsonmsg.DecodeOptions{MetaData: md})
+func (jsonCodec) DecodeMetaData(b []byte, opts *decodeOptions) (*jsonmsg.MetaDataMessage, error) {
+	return jsonmsg.DecodeMetaData(b, opts.json())
 }
 
 // defaultCodecs returns the codecs of the message mappings.

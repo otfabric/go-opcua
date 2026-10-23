@@ -13,6 +13,9 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 )
 
+// openTimeout bounds one attempt to open a transport.
+const openTimeout = 10 * time.Second
+
 func newGUID() *ua.GUID { return ua.NewGUID(uuid.NewString()) }
 
 // reconcileConnection runs or stops a connection and its groups. parentOp
@@ -145,7 +148,11 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 	var tc transport.Connection
 	for {
 		var err error
-		tc, err = transport.Open(ctx, tcfg)
+		// A broker transport keeps trying until its context ends: bound
+		// each attempt so that a failure shows as the Error state.
+		octx, cancel := context.WithTimeout(ctx, openTimeout)
+		tc, err = transport.Open(octx, tcfg)
+		cancel()
 		if err == nil {
 			break
 		}

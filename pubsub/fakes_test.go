@@ -318,7 +318,7 @@ func (f fakeCodec) parse(b []byte) (*fakeNM, error) {
 	return &in, nil
 }
 
-func (f fakeCodec) Decode(b []byte, opts *uadp.DecodeOptions) (*message.NetworkMessage, error) {
+func (f fakeCodec) Decode(b []byte, opts *decodeOptions) (*message.NetworkMessage, error) {
 	in, err := f.parse(b)
 	if err != nil {
 		return nil, err
@@ -404,7 +404,7 @@ func (f fakeCodec) EncodeMetaData(m *jsonmsg.MetaDataMessage) ([]byte, error) {
 	return json.Marshal(fakeMeta{MessageType: "ua-metadata", MessageID: m.MessageID, Pub: m.PublisherID, WID: m.DataSetWriterID, WGName: m.WriterGroupName, MD: b})
 }
 
-func (f fakeCodec) DecodeMetaData(b []byte, _ *uadp.DecodeOptions) (*jsonmsg.MetaDataMessage, error) {
+func (f fakeCodec) DecodeMetaData(b []byte, _ *decodeOptions) (*jsonmsg.MetaDataMessage, error) {
 	var in fakeMeta
 	if err := json.Unmarshal(b, &in); err != nil {
 		return nil, err
