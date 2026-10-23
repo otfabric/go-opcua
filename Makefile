@@ -4,8 +4,8 @@
 .DEFAULT_GOAL := help
 
 # Core library packages measured by `make coverage` (excludes cmd/, examples/, tests/).
-TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ ./id/ ./internal/stats/ ./internal/mdns/
-COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
+TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ ./id/ ./internal/stats/ ./internal/mdns/ ./pubsub/ ./pubsub/uadp/ ./pubsub/jsonmsg/ ./pubsub/transport/ ./pubsub/transport/udp/ ./pubsub/transport/mqtt/ ./pubsub/security/ ./pubsub/sks/ ./pubsub/remote/ ./internal/mqtt/
+COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/pubsub,github.com/otfabric/go-opcua/pubsub/message,github.com/otfabric/go-opcua/pubsub/uadp,github.com/otfabric/go-opcua/pubsub/jsonmsg,github.com/otfabric/go-opcua/pubsub/transport,github.com/otfabric/go-opcua/pubsub/transport/udp,github.com/otfabric/go-opcua/pubsub/transport/mqtt,github.com/otfabric/go-opcua/pubsub/security,github.com/otfabric/go-opcua/pubsub/sks,github.com/otfabric/go-opcua/pubsub/remote,github.com/otfabric/go-opcua/internal/mqtt
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/
 
 .PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop chaos examples test-race install-py-opcua gen check-gen coverage-ledger
