@@ -20,11 +20,31 @@ Feature release adding OPC UA PubSub (Part 14): publishers and subscribers over 
 - **Method handlers** receive the calling session and channel (`server.MethodCallerFromContext`), so they can authorize by identity and security mode.
 - Examples in `examples/pubsub` (publisher, subscriber, server) and the guide [docs/pubsub.md](docs/pubsub.md).
 
+### Behaviour changes
+
+- **`monitor`:** `ModifyMonitorItems` returns `ErrMonitoredItemNotFound` for a node that is not monitored (it was ignored); a failed `RemoveMonitorItems` keeps the items known (they are still monitored on the server).
+- **Reverse connect:** `Dialer.AcceptReverse` reports a server refused at any time since the wait began, also before a failed handshake; new `ReverseListener.Rejected`, `ReverseListener.AcceptSince` and `Dialer.AcceptReverseSince`.
+- **Generated files** carry the standard marker `// Code generated ... DO NOT EDIT.` (was `DO NOT EDIT!`), so Go tooling recognises them.
+
 ### Fixed
 
+- **Events:** a Publish request could be answered while events emitted before it were still waiting in the subscription's queue, splitting a burst over two notification messages.
+- **Reverse connect:** a server refused between opening the client's listener and starting to wait was not reported; the wait ended with only "context canceled".
+- **MQTT client:** a QoS 1 / QoS 2 message was handed to the application before its acknowledgement was written, so closing right after receiving it could make the broker deliver it again.
+- **`monitor`:** `AddMonitorItems` left the client handles of a failed call behind; `RemoveMonitorItems` forgot its items before the call (see Behaviour changes).
+- **XML:** an `XmlElement` whose top-level element had `xmlns=""` directly followed by an attribute was decoded to an element that no XML parser reads (found by fuzzing).
+- **PubSub runtime** (found by the chaos and conformance suites): a secured reader accepted unsecured JSON messages and messages verified with another SecurityGroup's keys; UADP fields were placed by one reader's metadata for all readers; the strictest reader's security mode applied to all readers of a writer; a delta-frame field index could size the received DataSet (amplification); a restarted publisher was discarded until its sequence numbers caught up; equal connection names took over each other's MQTT session; a change carried by an unsent delta frame was lost until the next key frame; `Start` right after a cancelled context left the runtime stopped; a refused MQTT re-subscription was not retried.
+- **PubSub runtime:** a panic in an application callback (`DataSetHandler`, `DataSource`, `TargetWriter`, event handler) or while decoding crashed the program, with `server.WithPubSub` the whole server; it is now recovered, logged and counted (`Counters.Panics`).
+- **PubSub information model:** with concurrent configuration changes a component could end up without a node (its parent's event was handled after its own).
 - **ExtensionObject registration:** several generated structures whose Go name differs from the OPC UA name (`UADP*/JSON*MessageDataType`, `NetworkAddressURLDataType`, `ReadValueID`, ...) were never registered; they encoded with TypeId i=0 and decoded to nil.
 - **Method argument checks** accept subtypes of the declared built-in type (IntegerId, Duration, ...) and empty arrays; such calls failed with `BadTypeMismatch`.
 - **Server:** `Node.DisplayName` raced with Browse when nodes were added while the server runs.
+
+### Tests
+
+- Every library package has at least 90% statement coverage on its own, generated code excluded (`make coverage-gate`, CI job `coverage-gate`; 94% in all).
+- A goroutine leak check runs after the tests of every library package; `FuzzServerRawConnection` fuzzes a running server over TCP; chaos suite `chaos/pubsub` (network faults, security attacks, key-rotation storms, SKS outages, broker restarts, configuration churn, 70 parallel writer groups, transport fuzzing).
+- The interop suite runs as six parallel CI jobs (`make interop-shard`).
 
 ### Interoperability
 
