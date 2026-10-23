@@ -6110,14 +6110,15 @@
     {
       "capability": "pubsub.uadp.udp-multicast",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
+      "status": "verified",
+      "test": "TestPubSubMulticast_GoPublishes_Open62541Subscribes",
       "fixture": "baseline",
+      "interopVersion": "v0.8.1",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "reason": "test-missing",
-      "nextAction": "Multicast does not cross the Docker Desktop VM; needs a Linux-only test with --network host (or the go-opcua side in a container on the adapter's bridge network, as discoverypeer does)"
+      "case": "--network host (Linux only: multicast does not cross Docker Desktop's VM; the test skips elsewhere)"
     },
     {
       "capability": "pubsub.uadp.udp-multicast",
@@ -6135,14 +6136,15 @@
     {
       "capability": "pubsub.uadp.udp-multicast",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
+      "status": "verified",
+      "test": "TestPubSubMulticast_Open62541Publishes_GoSubscribes",
       "fixture": "baseline",
+      "interopVersion": "v0.8.1",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "reason": "test-missing",
-      "nextAction": "Multicast does not cross the Docker Desktop VM; needs a Linux-only test with --network host (or the go-opcua side in a container on the adapter's bridge network, as discoverypeer does)"
+      "case": "--network host (Linux only: multicast does not cross Docker Desktop's VM; the test skips elsewhere)"
     },
     {
       "capability": "pubsub.uadp.udp-multicast",

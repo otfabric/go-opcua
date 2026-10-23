@@ -347,6 +347,10 @@ type pubsubServerOpts struct {
 	// secure starts the server with the open62541-server certificate of
 	// the test PKI (needed for sksClient, serveSks and SetSecurityKeys).
 	secure bool
+	// hostNetwork runs the container in the host's network namespace
+	// (Linux only): multicast between the host and the container works
+	// there, while it does not cross Docker Desktop's VM or a bridge.
+	hostNetwork bool
 }
 
 // startPubSubServer starts the open62541 adapter with a PubSub
@@ -376,15 +380,20 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 	port := freePort(t)
 	name := dockerContainerName(t)
 	args := []string{"run", "--rm", "--name", name,
-		"--add-host=host.docker.internal:host-gateway",
-		"-p", fmt.Sprintf("%d:4840", port),
 		"-v", fixtureDir + ":/fixtures:ro",
 		"-v", dir + ":/pubsub:ro",
 	}
-	for _, p := range o.udpPorts {
-		args = append(args, "-p", fmt.Sprintf("%d:%d/udp", p, p))
-	}
 	serverArgs := []string{"server", "--fixture", "/fixtures/baseline.json", "--pubsub-config", "/pubsub/pubsub.json"}
+	if o.hostNetwork {
+		// No port mapping: the server binds the host port itself.
+		args = append(args, "--network", "host")
+		serverArgs = append(serverArgs, "--bind-port", fmt.Sprint(port), "--advertised-host", "localhost")
+	} else {
+		args = append(args, "--add-host=host.docker.internal:host-gateway", "-p", fmt.Sprintf("%d:4840", port))
+		for _, p := range o.udpPorts {
+			args = append(args, "-p", fmt.Sprintf("%d:%d/udp", p, p))
+		}
+	}
 	if o.secure {
 		pki := pkiDir(t)
 		runtimePKI := filepath.Join(containerScratchDir(t), "pki")
