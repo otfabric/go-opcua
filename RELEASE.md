@@ -1,5 +1,44 @@
 # go-opcua Releases
 
+## v1.7.0
+
+**Date:** unreleased
+**Previous release:** v1.6.0
+
+### Summary
+
+Feature release adding OPC UA PubSub (Part 14): publishers and subscribers over UDP and MQTT with the UADP and JSON message mappings, UADP message security with the PubSub-Aes128-CTR / PubSub-Aes256-CTR policies, the Security Key Service, the PublishSubscribe information model with its configuration methods in the server, and client helpers to configure any Part 14 server. PubSub is interoperability-tested against open62541 v1.5.9 through [opcua-interop v0.8.1](https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1); Eclipse Milo 1.1.8 has no PubSub implementation. The library stays pure Go without new module dependencies (the MQTT 3.1.1 client is built in).
+
+### Added — PubSub
+
+- **Runtime** (package `pubsub`): `pubsub.New(*ua.PubSubConfigurationDataType, ...)` runs PubSubConnections, WriterGroups, DataSetWriters, ReaderGroups, DataSetReaders and PublishedDataSets from the standard configuration model; components can be added, removed, enabled and disabled at run time and follow the Part 14 state machine (Disabled, Paused, PreOperational, Operational, Error). Publishers: publishing interval and offset, key frames and delta frames (KeyFrameCount), keep-alive, DataSetOrdering, splitting of oversize groups, MQTT topics and retained metadata, PublishedDataItems through a `DataSource`, PublishedEvents through an `EventSource`. Subscribers: filtering by PublisherId / WriterGroupId / DataSetWriterId, sequence number checks, delta frame merging, MessageReceiveTimeout, MajorVersion checks, a `DataSetHandler`, TargetVariables (with OverrideValueHandling) and SubscribedDataSetMirror through a `TargetWriter`. Builders (`UDPConnection`, `MQTTConnection`, `WriterGroup`, `JSONWriterGroup`, `PublishedDataItems`, `DataSetReader`, `Secure`, ...) and `Validate`.
+- **Message mappings:** `pubsub/uadp` (all NetworkMessage and DataSetMessage header options, Variant / DataValue / RawData field encodings, key and delta frames, keep-alive, events, DataSetMetaData announcements, message security) and `pubsub/jsonmsg` (`ua-data` with every content mask, `ua-metadata`, `ua-status`). Model in `pubsub/message`; both decoders are fuzzed.
+- **Transports:** `pubsub/transport/udp` (`opc.udp://`, unicast and multicast, IPv4 and IPv6) and `pubsub/transport/mqtt` (`mqtt://`, `mqtts://`, MQTT 3.1.1 with QoS 0/1, retain, reconnect and resubscribe) on a dependency-free MQTT client.
+- **Security:** `pubsub/security` with the PubSub-Aes128-CTR and PubSub-Aes256-CTR policies (byte-compatible with open62541), `KeyRing` with key rotation, and `KeyService` (SecurityGroups, GetSecurityKeys semantics, authorization: keys only over SignAndEncrypt channels and not to anonymous users by default); `pubsub/sks` with GetSecurityKeys / SetSecurityKeys calls and a key source that pulls keys from a remote SKS and refreshes them before they rotate.
+- **Server:** `server.WithPubSub` runs PubSub inside the server with its address space as data source, event source and target; the PublishSubscribe information model (connections, groups, writers, readers, published data sets, status) with AddConnection, RemoveConnection, AddPublishedDataItems, AddPublishedDataItemsTemplate, RemovePublishedDataSet, AddWriterGroup, AddReaderGroup, RemoveGroup, AddDataSetWriter, RemoveDataSetWriter, AddDataSetReader, RemoveDataSetReader, Enable and Disable; `server.WithPubSubAuthorizer`; `Server.EnableSecurityKeyService` (GetSecurityKeys, Add/Remove/GetSecurityGroup) and `Server.EnableSecurityKeyPush` (SetSecurityKeys).
+- **Client:** `pubsub/remote` wraps the PubSub configuration methods of any Part 14 server (tested against go-opcua and open62541).
+- **Method handlers** receive the calling session and channel (`server.MethodCallerFromContext`), so they can authorize by identity and security mode.
+- Examples in `examples/pubsub` (publisher, subscriber, server) and the guide [docs/pubsub.md](docs/pubsub.md).
+
+### Fixed
+
+- **ExtensionObject registration:** several generated structures whose Go name differs from the OPC UA name (`UADP*/JSON*MessageDataType`, `NetworkAddressURLDataType`, `ReadValueID`, ...) were never registered; they encoded with TypeId i=0 and decoded to nil.
+- **Method argument checks** accept subtypes of the declared built-in type (IntegerId, Duration, ...) and empty arrays; such calls failed with `BadTypeMismatch`.
+- **Server:** `Node.DisplayName` raced with Browse when nodes were added while the server runs.
+
+### Interoperability
+
+- Peers: open62541 v1.5.9 and Eclipse Milo 1.1.8 via opcua-interop **v0.8.1** (open62541 with PubSub, MQTT, PubSub encryption and SKS; a `--pubsub-config` server flag; NetworkMessage codec operations; an Eclipse Mosquitto broker).
+- PubSub against open62541, in both directions: UADP and JSON codecs byte-exact, live data over UDP and MQTT, Sign / SignAndEncrypt with both policies, SKS pull and push, the runtime as publisher and subscriber, and the information-model methods — 50 verified ledger rows, [`interop/COVERAGE.md`](interop/COVERAGE.md) (391 verified rows in all). Milo 1.1.8 has no PubSub.
+- Not interop-verified: UDP multicast (does not cross the Docker Desktop VM; tested Go↔Go) and keep-alive from open62541 (it sends none).
+
+### Known limitations
+
+- No Ethernet (`opc.eth://`) or AMQP transport, no chunked NetworkMessages, no UADP discovery requests; DataSetMetaData announcements over UDP are not sent (metadata is published on broker transports).
+- Not implemented in the information model: Diagnostics objects, AddVariables / RemoveVariables, AddPublishedEvents, AddDataSetFolder, ReserveIds, the PubSub configuration file methods, CreateTargetVariables / CreateDataSetMirror; the optional SKS methods InvalidateKeys and ForceKeyRotation.
+
+---
+
 ## v1.6.0
 
 **Date:** 2026-10-11
