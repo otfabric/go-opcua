@@ -8,14 +8,20 @@ Pinned opcua-interop version: **v0.7.0**
 
 - `deferred`: 64
 - `not-applicable`: 28
-- `unsupported`: 83
-- `verified`: 341
+- `unsupported`: 138
+- `unverified`: 3
+- `verified`: 391
 
 ## Unverified by reason
 
+- `adapter-command-missing`: 1
+- `test-missing`: 2
 
 ## Unverified rows
 
 | Capability | Dir | Reason | Next action |
 |---|:---:|---|---|
+| `pubsub.uadp.security-header` | O→S | `adapter-command-missing` | The open62541 codec operations have no keys (contract §14.9): the →S direction of signed / encrypted messages is pubsub.security.* |
+| `pubsub.uadp.udp-multicast` | C→O | `test-missing` | Multicast does not cross the Docker Desktop VM; needs a Linux-only test with --network host (or the go-opcua side in a container on the adapter's bridge network, as discoverypeer does) |
+| `pubsub.uadp.udp-multicast` | O→S | `test-missing` | Multicast does not cross the Docker Desktop VM; needs a Linux-only test with --network host (or the go-opcua side in a container on the adapter's bridge network, as discoverypeer does) |
 
