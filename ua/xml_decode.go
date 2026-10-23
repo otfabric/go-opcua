@@ -695,6 +695,12 @@ func xmlFragmentWithoutNamespaceReset(fragment string) string {
 	for _, at := range cuts {
 		b.WriteString(fragment[last:at])
 		last = at + len(xmlNoNamespaceAttr)
+		// The declaration may be followed directly by another attribute
+		// (`<a xmlns=""b="1">`, which the XML decoder accepts): keep them
+		// apart, or the element name runs into the attribute name.
+		if last < len(fragment) && !strings.ContainsRune(" \t\r\n/>", rune(fragment[last])) {
+			b.WriteByte(' ')
+		}
 	}
 	b.WriteString(fragment[last:])
 	return b.String()

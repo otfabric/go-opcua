@@ -189,6 +189,7 @@ func TestServiceFailureKeepsState(t *testing.T) {
 	require.NoError(t, err)
 	sub, err := m.ChanSubscribe(ctx, nil, make(chan *DataChangeMessage, 8))
 	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe(ctx) })
 	items, err := sub.AddMonitorItems(ctx, Request{NodeID: f.Int32}, Request{NodeID: f.Double})
 	require.NoError(t, err)
 	require.Equal(t, 2, sub.Subscribed())
