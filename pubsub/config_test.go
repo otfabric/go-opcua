@@ -307,7 +307,7 @@ func TestFuncAdaptersAndTransportConfig(t *testing.T) {
 	require.Equal(t, "u", got.Username)
 	require.Equal(t, map[string]string{"k": "v"}, got.Properties)
 	require.Equal(t, url, got.URL)
-	require.Equal(t, "c", got.ClientID)
+	require.Empty(t, got.ClientID, "the connection name is no MQTT client identifier")
 }
 
 func TestRealCodecsRegistered(t *testing.T) {

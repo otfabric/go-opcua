@@ -66,6 +66,10 @@ type sendStats struct {
 	lastErr                    error
 	dsm, ka                    map[*dataSetWriter]uint64
 	meta                       map[*dataSetWriter]bool
+	// lost are the writers of messages that could not be encoded or
+	// sent: their next message is a key frame, so that a change carried
+	// by a lost delta frame is not missing until the next regular one.
+	lost map[*dataSetWriter]bool
 }
 
 // publishCycle samples the writers of a group, builds their DataSetMessages
@@ -174,7 +178,7 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	}
 	p.unlock()
 
-	st := &sendStats{dsm: map[*dataSetWriter]uint64{}, ka: map[*dataSetWriter]uint64{}, meta: map[*dataSetWriter]bool{}}
+	st := &sendStats{dsm: map[*dataSetWriter]uint64{}, ka: map[*dataSetWriter]uint64{}, meta: map[*dataSetWriter]bool{}, lost: map[*dataSetWriter]bool{}}
 	lookup := func(_ message.PublisherID, _ uint16, dswID uint16) *ua.DataSetMetaDataType {
 		if md := mds[dswID]; md != nil {
 			return md
@@ -212,6 +216,9 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 		w.ctr.MetaDataSent++
 		w.metaPending = false
 		w.metaSentAt = now
+	}
+	for w := range st.lost {
+		w.needKey = true
 	}
 	p.unlock()
 }
@@ -505,6 +512,7 @@ func (e *encoder) sendData(ctx context.Context, outs []*outDSM) {
 		b, err := e.encode(nm)
 		if err != nil {
 			e.fail(err, true)
+			e.lose(chunk)
 			continue
 		}
 		if maxSize > 0 && len(b) > maxSize {
@@ -514,10 +522,12 @@ func (e *encoder) sendData(ctx context.Context, outs []*outDSM) {
 				continue
 			}
 			e.fail(fmt.Errorf("%w: %d > %d bytes (writer %q)", errTooLarge, len(b), maxSize, chunk[0].w.name), true)
+			e.lose(chunk)
 			continue
 		}
 		e.number++
 		if !e.send(ctx, b, transport.PublishOptions{Topic: chunk[0].topic, QoS: chunk[0].qos}) {
+			e.lose(chunk)
 			continue
 		}
 		g.nmSeq++
@@ -570,6 +580,15 @@ func (e *encoder) encode(nm *message.NetworkMessage) ([]byte, error) {
 		opts.NonceSequence = e.g.nonceSeq
 	}
 	return e.p.codecs(e.g.enc).Encode(nm, opts)
+}
+
+// lose records the writers of DataSetMessages that were not sent.
+func (e *encoder) lose(chunk []*outDSM) {
+	for _, o := range chunk {
+		if o.dsm.Type != message.DataSetMessageKeepAlive {
+			e.st.lost[o.w] = true
+		}
+	}
 }
 
 func (e *encoder) fail(err error, encode bool) {

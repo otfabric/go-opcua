@@ -635,10 +635,24 @@ func (l *ReverseListener) claim(p *reverseConn) bool {
 //
 // match must not block and must not call methods of the listener.
 func (l *ReverseListener) Accept(ctx context.Context, match func(*ReverseHello) error) (*net.TCPConn, *ReverseHello, error) {
-	l.mu.Lock()
-	rejected := l.rejected
-	l.mu.Unlock()
+	return l.AcceptSince(ctx, match, l.Rejected())
+}
 
+// Rejected returns the number of connections the listener's filter has
+// refused so far (see ReverseListenerConfig.Filter).
+func (l *ReverseListener) Rejected() uint64 {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.rejected
+}
+
+// AcceptSince is Accept for a caller that started waiting before it called
+// it: rejected is the value of Rejected when the caller began to wait. If ctx
+// ends the waiting and the filter refused a server since then, the error
+// names the reason, so that a refusal that happened while the caller was
+// still setting up (opening the listener, a failed handshake on an earlier
+// connection) is not lost.
+func (l *ReverseListener) AcceptSince(ctx context.Context, match func(*ReverseHello) error, rejected uint64) (*net.TCPConn, *ReverseHello, error) {
 	for {
 		l.mu.Lock()
 		if l.isClosed() {
@@ -728,6 +742,16 @@ func (d *Dialer) AcceptReverse(ctx context.Context, l *ReverseListener, endpoint
 	if l == nil {
 		return nil, nil, fmt.Errorf("uacp: no reverse listener")
 	}
+	return d.AcceptReverseSince(ctx, l, endpoint, match, l.Rejected())
+}
+
+// AcceptReverseSince is AcceptReverse for a caller that started waiting
+// before it called it; rejected is the listener's Rejected count at that
+// moment (see ReverseListener.AcceptSince).
+func (d *Dialer) AcceptReverseSince(ctx context.Context, l *ReverseListener, endpoint string, match func(*ReverseHello) error, rejected uint64) (*Conn, *ReverseHello, error) {
+	if l == nil {
+		return nil, nil, fmt.Errorf("uacp: no reverse listener")
+	}
 	dl := d.Dialer
 	if dl == nil {
 		dl = defaultNetDialer()
@@ -739,7 +763,9 @@ func (d *Dialer) AcceptReverse(ctx context.Context, l *ReverseListener, endpoint
 	}
 
 	for {
-		c, rhe, err := l.Accept(ctx, match)
+		// One baseline for the whole wait: a server refused before an
+		// earlier handshake failed still explains why the wait ended.
+		c, rhe, err := l.AcceptSince(ctx, match, rejected)
 		if err != nil {
 			return nil, nil, err
 		}

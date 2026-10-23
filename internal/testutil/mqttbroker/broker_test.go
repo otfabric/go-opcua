@@ -228,6 +228,12 @@ func TestPersistentSessionAndTakeover(t *testing.T) {
 		pub.read()
 	}
 	pub.send(&mqtt.Publish{Topic: "q", Payload: []byte("zero")})
+	// QoS 0 has no acknowledgement: make sure the broker has handled "zero"
+	// (while "p" is offline) before "p" comes back. It handles the packets of
+	// a connection in order, so the PUBACK of a later QoS 1 message on an
+	// unsubscribed topic proves it.
+	pub.send(&mqtt.Publish{Topic: "sync", QoS: 1, PacketID: 20, Payload: []byte("sync")})
+	require.Equal(t, uint16(20), pub.read().(*mqtt.Ack).PacketID)
 	s3 := rawDial(t, b)
 	require.True(t, s3.connect(&mqtt.Connect{ClientID: "p"}).SessionPresent)
 	require.Equal(t, "a", string(s3.read().(*mqtt.Publish).Payload))

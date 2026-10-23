@@ -177,6 +177,22 @@ func (c *Client) reverseListener(ctx context.Context) (*uacp.ReverseListener, er
 	return l, nil
 }
 
+// reverseRejected returns how many servers the reverse listener of the
+// client has refused so far: 0 if the client has not opened its own listener
+// yet (it will be new).
+func (c *Client) reverseRejected() uint64 {
+	if l := c.cfg.reverse.listener; l != nil {
+		return l.Rejected()
+	}
+	c.connMu.Lock()
+	l := c.ownListener
+	c.connMu.Unlock()
+	if l == nil {
+		return 0
+	}
+	return l.Rejected()
+}
+
 // closeReverseListener closes the listener the client opened for itself.
 func (c *Client) closeReverseListener() {
 	c.connMu.Lock()
@@ -206,6 +222,10 @@ func (c *Client) matchReverseHello(rhe *uacp.ReverseHello) error {
 // acceptReverse waits for the server to connect and returns the connection
 // together with the endpoint URL to use on it.
 func (c *Client) acceptReverse(ctx context.Context) (*uacp.Conn, string, error) {
+	// The client waits from here on: a server refused from now on explains
+	// a wait that ends without a connection, also one refused before
+	// AcceptReverse runs (for example right after a new listener opened).
+	rejected := c.reverseRejected()
 	l, err := c.reverseListener(ctx)
 	if err != nil {
 		return nil, "", err
@@ -218,7 +238,7 @@ func (c *Client) acceptReverse(ctx context.Context) (*uacp.Conn, string, error) 
 	stop := context.AfterFunc(c.mctx, cancel)
 	defer stop()
 
-	conn, rhe, err := c.cfg.dialer.AcceptReverse(ctx, l, c.endpointURL, c.matchReverseHello)
+	conn, rhe, err := c.cfg.dialer.AcceptReverseSince(ctx, l, c.endpointURL, c.matchReverseHello, rejected)
 	if err != nil {
 		if c.mctx.Err() != nil && ctx.Err() != nil {
 			return nil, "", ua.StatusBadConnectionClosed

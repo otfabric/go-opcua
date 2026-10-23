@@ -5,6 +5,7 @@ package pubsub
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -175,7 +176,25 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		recv = time.Now()
 	}
 	enc := payloadEncoding(m.Payload)
+	if enc == encJSON {
+		// The JSON mapping has no message security: its messages are
+		// only for the readers that require none.
+		n := 0
+		for _, s := range snap {
+			if s.mode <= ua.MessageSecurityModeNone {
+				snap[n] = s
+				n++
+			}
+		}
+		if n == 0 {
+			p.decodeFailed(c, fmt.Errorf("%w: unsecured JSON message, the readers require message security", uadp.ErrSecurityMode))
+			return
+		}
+		snap = snap[:n]
+	}
 	cd := p.codecs(enc)
+	// keyGroup is the SecurityGroup whose keys verified the message.
+	var keyGroup string
 	opts := &decodeOptions{}
 	opts.DecodeOptions = uadp.DecodeOptions{
 		Accept: func(h *message.NetworkMessage) bool {
@@ -186,22 +205,27 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			}
 			return false
 		},
+		// The decoder requires the least security a matching reader
+		// requires and verifies with the keys of the first secured one;
+		// every reader then only takes what satisfies its own security
+		// (readerSnap.secured).
 		Security: func(h *message.NetworkMessage) (ua.MessageSecurityMode, security.KeySource, error) {
-			mode := ua.MessageSecurityModeNone
+			mode := ua.MessageSecurityModeInvalid
 			var ks security.KeySource
 			for i := range snap {
 				s := &snap[i]
-				if !s.matches(h, nil, enc, m.Topic) || s.mode <= ua.MessageSecurityModeNone {
+				if !s.matches(h, nil, enc, m.Topic) {
 					continue
 				}
-				if s.mode > mode {
-					mode = s.mode
+				if rm := max(s.mode, ua.MessageSecurityModeNone); mode == ua.MessageSecurityModeInvalid || rm < mode {
+					mode = rm
 				}
-				if ks == nil {
+				if s.mode > ua.MessageSecurityModeNone && ks == nil {
 					ks = p.KeySource(s.groupID)
+					keyGroup = s.groupID
 				}
 			}
-			return mode, ks, nil
+			return max(mode, ua.MessageSecurityModeNone), ks, nil
 		},
 		MetaData: func(pub message.PublisherID, wgid, dswid uint16) *ua.DataSetMetaDataType {
 			return p.lookupMetaData(snap, pub, wgid, dswid)
@@ -220,7 +244,7 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			p.decodeFailed(c, err)
 			return
 		}
-		p.applyMetaData(c, gen, md.PublisherID, md.DataSetWriterID, md.MetaData)
+		p.applyMetaData(c, gen, md.PublisherID, md.DataSetWriterID, md.MetaData, ua.MessageSecurityModeNone, "")
 		return
 	}
 	if enc == encJSON {
@@ -251,13 +275,14 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	}
 	if nm.Type == message.NetworkMessageDiscoveryResponse {
 		if d := nm.Discovery; d != nil && d.Type == message.DiscoveryDataSetMetaData && d.MetaData != nil {
-			p.applyMetaData(c, gen, nm.PublisherID, d.DataSetWriterID, d.MetaData)
+			p.applyMetaData(c, gen, nm.PublisherID, d.DataSetWriterID, d.MetaData, securityOf(nm), keyGroup)
 		}
 		return
 	}
 	if nm.Type != message.NetworkMessageDataSet {
 		return
 	}
+	got := securityOf(nm)
 	p.lock()
 	defer p.unlock()
 	if c.gen != gen {
@@ -266,7 +291,7 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	for _, dsm := range nm.Messages {
 		for i := range snap {
 			s := &snap[i]
-			if !s.matches(nm, dsm, enc, m.Topic) {
+			if !s.matches(nm, dsm, enc, m.Topic) || !s.secured(got, keyGroup) {
 				continue
 			}
 			r := s.r
@@ -276,6 +301,27 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			p.processDSM(r, nm, dsm, enc, recv)
 		}
 	}
+}
+
+// securityOf returns the security mode of a received NetworkMessage.
+func securityOf(nm *message.NetworkMessage) ua.MessageSecurityMode {
+	switch h := nm.Security; {
+	case h == nil || !h.Signed:
+		return ua.MessageSecurityModeNone
+	case h.Encrypted:
+		return ua.MessageSecurityModeSignAndEncrypt
+	default:
+		return ua.MessageSecurityModeSign
+	}
+}
+
+// secured tells whether a message secured with mode by the keys of the
+// SecurityGroup keyGroup satisfies the security a reader requires.
+func (s *readerSnap) secured(mode ua.MessageSecurityMode, keyGroup string) bool {
+	if s.mode <= ua.MessageSecurityModeNone {
+		return true
+	}
+	return mode >= s.mode && s.groupID == keyGroup
 }
 
 func (p *PubSub) decodeFailed(c *connection, err error) {
@@ -291,6 +337,10 @@ func (p *PubSub) decodeFailed(c *connection, err error) {
 func (p *PubSub) lookupMetaData(snap []readerSnap, pub message.PublisherID, wgid, dswid uint16) *ua.DataSetMetaDataType {
 	p.lock()
 	defer p.unlock()
+	// The reader with the most specific filter: an unfiltered reader may
+	// have learned the metadata of any writer.
+	var best *ua.DataSetMetaDataType
+	bestScore := -1
 	for i := range snap {
 		s := &snap[i]
 		if s.hasPub && !samePublisher(s.pub, pub) {
@@ -302,16 +352,31 @@ func (p *PubSub) lookupMetaData(snap []readerSnap, pub message.PublisherID, wgid
 		if s.dswid != 0 && dswid != 0 && s.dswid != dswid {
 			continue
 		}
-		if s.r.md != nil {
-			return s.r.md
+		if s.r.md == nil {
+			continue
+		}
+		score := 0
+		if s.hasPub {
+			score++
+		}
+		if s.wgid != 0 {
+			score++
+		}
+		if s.dswid != 0 {
+			score++
+		}
+		if score > bestScore {
+			best, bestScore = s.r.md, score
 		}
 	}
-	return nil
+	return best
 }
 
 // applyMetaData updates the readers of a connection that take the messages
-// of a writer with DataSetMetaData received from it.
-func (p *PubSub) applyMetaData(c *connection, gen uint64, pub message.PublisherID, dswid uint16, md *ua.DataSetMetaDataType) {
+// of a writer with DataSetMetaData received from it. mode and keyGroup are
+// the security of the message the DataSetMetaData came with: readers that
+// require more do not take it.
+func (p *PubSub) applyMetaData(c *connection, gen uint64, pub message.PublisherID, dswid uint16, md *ua.DataSetMetaDataType, mode ua.MessageSecurityMode, keyGroup string) {
 	if md == nil {
 		return
 	}
@@ -323,6 +388,9 @@ func (p *PubSub) applyMetaData(c *connection, gen uint64, pub message.PublisherI
 	for _, g := range c.rgs {
 		for _, r := range g.readers {
 			if !r.running || (r.hasPub && !samePublisher(r.pub, pub)) || (r.cfg.DataSetWriterID != 0 && r.cfg.DataSetWriterID != dswid) {
+				continue
+			}
+			if r.mode > ua.MessageSecurityModeNone && (mode < r.mode || r.groupID != keyGroup) {
 				continue
 			}
 			r.ctr.MetaDataReceived++
@@ -457,13 +525,32 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	if r.md != nil {
 		mdFields = r.md.Fields
 	}
-	idxs := make([]int, len(dsm.Fields))
+	// The field index of a delta frame is bounded by the DataSet: its
+	// DataSetMetaData or, without, the last key frame. Fields beyond it
+	// are dropped; they must not size the DataSet.
+	limit := max(len(dsm.Fields), len(mdFields))
+	if dsm.Type == message.DataSetMessageDeltaFrame {
+		limit = len(mdFields)
+		if limit == 0 {
+			limit = max(len(st.fields), len(dsm.Fields))
+		}
+	}
+	idxs := make([]int, 0, len(dsm.Fields))
+	msgFields := make([]*message.Field, 0, len(dsm.Fields))
 	n := len(mdFields)
 	for j, f := range dsm.Fields {
-		idxs[j] = fieldIndex(mdFields, f, j, dsm.Type)
-		if idxs[j] >= n {
-			n = idxs[j] + 1
+		i := fieldIndex(mdFields, f, j, dsm.Type, enc)
+		if i < 0 || i >= limit {
+			continue
 		}
+		idxs = append(idxs, i)
+		msgFields = append(msgFields, f)
+		if i >= n {
+			n = i + 1
+		}
+	}
+	if len(msgFields) < len(dsm.Fields) {
+		r.ctr.DecodeErrors++
 	}
 	var fields []*ua.DataValue
 	complete := true
@@ -483,7 +570,7 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	} else {
 		fields = st.fields
 	}
-	for j, f := range dsm.Fields {
+	for j, f := range msgFields {
 		fields[idxs[j]] = normalizeValue(f.Value, mdFields, idxs[j])
 	}
 
@@ -528,7 +615,7 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 		}
 		ds.Fields[i] = rf
 	}
-	for j, f := range dsm.Fields {
+	for j, f := range msgFields {
 		if ds.Fields[idxs[j]].Name == "" {
 			ds.Fields[idxs[j]].Name = f.Name
 		}
@@ -556,10 +643,12 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 }
 
 // fieldIndex returns the DataSet index of the j-th field of a message: by
-// name if the message names it, by the index of a delta frame, by position
-// otherwise.
-func fieldIndex(md []*ua.FieldMetaData, f *message.Field, j int, t message.DataSetMessageType) int {
-	if f.Name != "" {
+// name if the message names it (JSON), by the index of a delta frame, by
+// position otherwise. UADP carries no field names: the names the decoder
+// gives the fields come from the DataSetMetaData of some reader of the
+// writer, not necessarily this one's.
+func fieldIndex(md []*ua.FieldMetaData, f *message.Field, j int, t message.DataSetMessageType, enc encoding) int {
+	if f.Name != "" && enc == encJSON {
 		for i, m := range md {
 			if m != nil && m.Name == f.Name {
 				return i

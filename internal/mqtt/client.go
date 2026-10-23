@@ -439,6 +439,7 @@ func (c *Client) attach(conn net.Conn, sessionPresent bool) bool {
 	}
 	c.conn = conn
 	c.connGen++
+	gen := c.connGen
 	now := time.Now().UnixNano()
 	c.lastSent.Store(now)
 	c.lastRecv.Store(now)
@@ -465,21 +466,10 @@ func (c *Client) attach(conn net.Conn, sessionPresent bool) bool {
 	c.mu.Unlock()
 
 	if len(resub) > 0 {
-		_ = c.write(conn, &Subscribe{PacketID: subID, Topics: resub})
 		c.wg.Add(1)
 		go func() {
 			defer c.wg.Done()
-			select {
-			case p := <-subAck:
-				if s, ok := p.(*Suback); ok {
-					for i, rc := range s.ReturnCodes {
-						if rc == SubackFailure && i < len(resub) {
-							c.log.Warn("mqtt: broker refused subscription after reconnect", "filter", resub[i].Filter)
-						}
-					}
-				}
-			case <-c.done:
-			}
+			c.resubscribe(conn, gen, resub, subID, subAck)
 		}()
 	}
 	for _, p := range resend {
@@ -488,6 +478,67 @@ func (c *Client) attach(conn net.Conn, sessionPresent bool) bool {
 		_ = c.write(conn, &pkt)
 	}
 	return true
+}
+
+// resubscribe makes the subscriptions of the client again on a new
+// connection. The filters the broker refuses are asked for again, with
+// backoff, for as long as the connection lasts and they have handlers:
+// nobody else would, the subscribers believe they are subscribed.
+func (c *Client) resubscribe(conn net.Conn, gen uint64, filters []TopicFilter, id uint16, ack chan Packet) {
+	delay := c.opts.MinReconnectDelay
+	for {
+		_ = c.write(conn, &Subscribe{PacketID: id, Topics: filters})
+		var refused []string
+		select {
+		case p, ok := <-ack:
+			if !ok {
+				return // connection lost: the next one subscribes again
+			}
+			s, _ := p.(*Suback)
+			if s == nil {
+				return
+			}
+			for i, rc := range s.ReturnCodes {
+				if rc == SubackFailure && i < len(filters) {
+					c.log.Warn("mqtt: broker refused subscription after reconnect", "filter", filters[i].Filter, "retry_in", delay)
+					refused = append(refused, filters[i].Filter)
+				}
+			}
+		case <-c.done:
+			c.dropAck(id)
+			return
+		}
+		if len(refused) == 0 {
+			return
+		}
+		t := time.NewTimer(delay)
+		select {
+		case <-t.C:
+		case <-c.done:
+			t.Stop()
+			return
+		}
+		delay = min(delay*2, c.opts.MaxReconnectDelay)
+		c.mu.Lock()
+		if c.closed || c.conn != conn || c.connGen != gen {
+			c.mu.Unlock()
+			return
+		}
+		filters = filters[:0]
+		for _, f := range refused {
+			if e := c.subs[f]; e != nil {
+				filters = append(filters, TopicFilter{Filter: f, QoS: e.qos})
+			}
+		}
+		if len(filters) == 0 {
+			c.mu.Unlock()
+			return
+		}
+		id = c.allocID()
+		ack = make(chan Packet, 1)
+		c.acks[id] = ack
+		c.mu.Unlock()
+	}
 }
 
 // detach forgets conn and fails the waiters that need it.

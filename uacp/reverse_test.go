@@ -766,6 +766,37 @@ func TestReverseListenerAcceptTimeout(t *testing.T) {
 		require.ErrorIs(t, err, errors.ErrReverseHelloRejected)
 	})
 
+	// Regression: the refusal happened after the caller began to wait but
+	// before it called Accept (e.g. right after it opened the listener). It
+	// used to be lost: the error said only "context canceled".
+	t.Run("a server was refused before Accept was called", func(t *testing.T) {
+		l, addr := testReverseListener(t, &ReverseListenerConfig{
+			Filter: func(*ReverseHello) error { return errors.ErrReverseHelloRejected },
+		})
+		since := l.Rejected()
+		c := announce(t, addr, "urn:refused", "")
+		require.Equal(t, ua.StatusBadTCPEndpointURLInvalid, readError(t, c))
+		require.Equal(t, since+1, l.Rejected())
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel()
+		_, _, err := l.AcceptSince(ctx, nil, since)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.ErrorIs(t, err, errors.ErrReverseHelloRejected)
+
+		ctx2, cancel2 := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel2()
+		_, _, err = (&Dialer{}).AcceptReverseSince(ctx2, l, "", nil, since)
+		require.ErrorIs(t, err, errors.ErrReverseHelloRejected)
+
+		// Accept starts waiting when it is called: the refusal is older.
+		ctx3, cancel3 := context.WithTimeout(context.Background(), 30*time.Millisecond)
+		defer cancel3()
+		_, _, err = l.Accept(ctx3, nil)
+		require.ErrorIs(t, err, context.DeadlineExceeded)
+		require.NotErrorIs(t, err, errors.ErrReverseHelloRejected)
+	})
+
 	t.Run("dial timeout bounds AcceptReverse", func(t *testing.T) {
 		l, _ := testReverseListener(t, nil)
 		d := &Dialer{Dialer: &net.Dialer{Timeout: 30 * time.Millisecond}}
