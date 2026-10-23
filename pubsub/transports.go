@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 
-
 // Importing package pubsub registers the "opc.udp", "mqtt" and "mqtts"
 // transports.
 
