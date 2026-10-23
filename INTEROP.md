@@ -434,7 +434,7 @@ Adapter images are pinned to [opcua-interop v0.8.1](https://github.com/otfabric/
 
 ### Evidence objective
 
-Optimise for accurate evidence, not a zero-unverified quota. Current ledger: **3 unverified** rows, all PubSub (`pubsub.uadp.udp-multicast` in both directions: multicast does not cross the Docker Desktop VM; `pubsub.uadp.security-header` O→S: the adapter's standalone codec has no keys) — the other gaps are `deferred`, `unsupported`, or `not-applicable` (see [`GAPS.md`](interop/GAPS.md) and [`BUCKET_B.md`](interop/BUCKET_B.md)).
+Optimise for accurate evidence, not a zero-unverified quota. Current ledger: **1 unverified** row (`pubsub.uadp.security-header` O→S: the adapter's standalone codec has no keys; signed and encrypted messages from open62541 are verified live as `pubsub.security.*`) — the other gaps are `deferred`, `unsupported`, or `not-applicable` (see [`GAPS.md`](interop/GAPS.md) and [`BUCKET_B.md`](interop/BUCKET_B.md)).
 
 ### Recently promoted peer rows (core evidence)
 
@@ -464,12 +464,13 @@ Optimise for accurate evidence, not a zero-unverified quota. Current ledger: **3
 
 ### Promoted with opcua-interop v0.8.0 / v0.8.1 (go-opcua v1.7.0)
 
-PubSub (Part 14) against open62541 1.5.9 — profile `pubsub` in the ledger, 50 verified rows; Eclipse Milo 1.1.8 has no PubSub (`unsupported`). Directions: C→O = go-opcua encodes / publishes / acts as client, O→S = open62541 does.
+PubSub (Part 14) against open62541 1.5.9 — profile `pubsub` in the ledger, 52 verified rows; Eclipse Milo 1.1.8 has no PubSub (`unsupported`). Directions: C→O = go-opcua encodes / publishes / acts as client, O→S = open62541 does.
 
 | Capability | Directions |
 |---|---|
 | `pubsub.uadp.codec`, `pubsub.json.codec` (byte-exact, all header options and field encodings) | C→O, O→S |
 | `pubsub.uadp.udp` (Variant, DataValue, RawData), `pubsub.uadp.mqtt`, `pubsub.json.mqtt` | C→O, O→S |
+| `pubsub.uadp.udp-multicast` | C→O, O→S (adapter with `--network host`; Linux only, skipped on macOS) |
 | `pubsub.security.*` (Sign, SignAndEncrypt; PubSub-Aes128-CTR, PubSub-Aes256-CTR; wrong keys and unsecured messages rejected) | C→O, O→S |
 | `pubsub.sks.*` (GetSecurityKeys, SKS pull, SetSecurityKeys push, Add/RemoveSecurityGroup) | C→O, O→S |
 | `pubsub.runtime.*` (go publisher and subscriber, TargetVariables, receive timeout) | C→O, O→S |

@@ -249,7 +249,7 @@ pick the right one for your project.
 | Runs without an OS / on microcontrollers | — | ✅ | — |
 | Native dependencies | none (pure Go, no cgo; one Go module besides the standard library for cryptography: `golang.org/x/crypto`) | none; mbedTLS or OpenSSL for encryption | JVM; Netty, Bouncy Castle |
 | OPC Foundation certification | — | ✅ example server, Standard Server 2017 profile (v1.4) | — |
-| Cross-tested against other stacks in CI | ✅ against both, [391 verified ledger rows](interop/COVERAGE.md) | CTT, fuzzing (OSS-Fuzz) | — not documented |
+| Cross-tested against other stacks in CI | ✅ against both, [393 verified ledger rows](interop/COVERAGE.md) | CTT, fuzzing (OSS-Fuzz) | — not documented |
 
 ¹ Part 6 §7.1.3: the server opens the connection to a listening client and
 announces itself with ReverseHello (`server.WithReverseConnect`,

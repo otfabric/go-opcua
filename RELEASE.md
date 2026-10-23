@@ -29,8 +29,8 @@ Feature release adding OPC UA PubSub (Part 14): publishers and subscribers over 
 ### Interoperability
 
 - Peers: open62541 v1.5.9 and Eclipse Milo 1.1.8 via opcua-interop **v0.8.1** (open62541 with PubSub, MQTT, PubSub encryption and SKS; a `--pubsub-config` server flag; NetworkMessage codec operations; an Eclipse Mosquitto broker).
-- PubSub against open62541, in both directions: UADP and JSON codecs byte-exact, live data over UDP and MQTT, Sign / SignAndEncrypt with both policies, SKS pull and push, the runtime as publisher and subscriber, and the information-model methods — 50 verified ledger rows, [`interop/COVERAGE.md`](interop/COVERAGE.md) (391 verified rows in all). Milo 1.1.8 has no PubSub.
-- Not interop-verified: UDP multicast (does not cross the Docker Desktop VM; tested Go↔Go) and keep-alive from open62541 (it sends none).
+- PubSub against open62541, in both directions: UADP and JSON codecs byte-exact, live data over UDP and MQTT, Sign / SignAndEncrypt with both policies, SKS pull and push, the runtime as publisher and subscriber, and the information-model methods — 52 verified ledger rows, [`interop/COVERAGE.md`](interop/COVERAGE.md) (393 verified rows in all). Milo 1.1.8 has no PubSub.
+- UDP multicast is verified on Linux, with the adapter in the host's network namespace (it does not cross Docker Desktop's VM). Not interop-verified: keep-alive from open62541 (it sends none).
 
 ### Known limitations
 
