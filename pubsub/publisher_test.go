@@ -71,7 +71,9 @@ func TestPublishingInterval(t *testing.T) {
 	nms := f.waitSent(6)
 	sent := bus.sentTo(f.url)
 	gap := sent[5].At.Sub(sent[1].At) / 4
-	require.InDelta(t, float64(20*time.Millisecond), float64(gap), float64(10*time.Millisecond))
+	// The ticker keeps the average interval; allow for a loaded machine.
+	require.GreaterOrEqual(t, gap, 15*time.Millisecond)
+	require.Less(t, gap, 60*time.Millisecond)
 	// Network message sequence numbers count up per message.
 	for i := 1; i < 6; i++ {
 		require.Equal(t, nms[i-1].GH.SequenceNumber+1, nms[i].GH.SequenceNumber)

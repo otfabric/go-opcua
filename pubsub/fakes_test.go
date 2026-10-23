@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -522,8 +523,18 @@ func (r *recorder) reset() {
 
 // memURL returns a bus address unique to the test.
 func memURL(t *testing.T) string {
-	return "mem://" + strings.NewReplacer("/", "_", " ", "_").Replace(t.Name())
+	if u, ok := memURLs.Load(t); ok {
+		return u.(string)
+	}
+	u := fmt.Sprintf("mem://%s-%d", strings.NewReplacer("/", "_", " ", "_").Replace(t.Name()), memSeq.Add(1))
+	memURLs.Store(t, u)
+	return u
 }
+
+var (
+	memURLs sync.Map
+	memSeq  atomic.Int64
+)
 
 func memConnection(name, url string, pub any) *ua.PubSubConnectionDataType {
 	c := UDPConnection(name, url, pub)
