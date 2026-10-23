@@ -13,6 +13,7 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -105,8 +106,23 @@ type Config struct {
 	// PubSubConnection, by name, for transport specific options.
 	Properties map[string]string
 
+	// MaxMessageSize limits the size of the NetworkMessages the connection
+	// sends and receives. Zero selects the transport default: the largest
+	// UDP payload (65507 bytes over IPv4, 65527 over IPv6) for UDP, 1 MiB
+	// for MQTT.
+	MaxMessageSize int
+
 	Logger *slog.Logger
 }
+
+// Errors shared by the transports.
+var (
+	// ErrClosed is returned by the methods of a closed Connection.
+	ErrClosed = errors.New("pubsub/transport: connection closed")
+	// ErrMessageTooLarge is returned by Send for a payload above
+	// MaxMessageSize.
+	ErrMessageTooLarge = errors.New("pubsub/transport: message too large")
+)
 
 // Opener opens a Connection for one transport.
 type Opener func(ctx context.Context, cfg Config) (Connection, error)
