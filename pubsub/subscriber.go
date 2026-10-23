@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/transport"
@@ -157,6 +158,10 @@ func (s *readerSnap) matches(nm *message.NetworkMessage, dsm *message.DataSetMes
 	return true
 }
 
+// errDecodePanic is the decode error of a message whose decoding panicked
+// (recovered and logged by protect).
+var errDecodePanic = errors.New("pubsub: decoding the message panicked")
+
 // receive handles a message received on a connection.
 func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	p.lock()
@@ -239,7 +244,11 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		}
 	}
 	if enc == encJSON && (isMeta || isJSONMetaData(m.Payload)) {
-		md, err := cd.DecodeMetaData(m.Payload, opts)
+		var md *jsonmsg.MetaDataMessage
+		var err error
+		if p.protect("decode", func() { md, err = cd.DecodeMetaData(m.Payload, opts) }) {
+			err = errDecodePanic
+		}
 		if err != nil {
 			p.decodeFailed(c, err)
 			return
@@ -265,7 +274,11 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			}
 		}
 	}
-	nm, err := cd.Decode(m.Payload, opts)
+	var nm *message.NetworkMessage
+	var err error
+	if p.protect("decode", func() { nm, err = cd.Decode(m.Payload, opts) }) {
+		err = errDecodePanic
+	}
 	if err != nil {
 		if errors.Is(err, uadp.ErrFiltered) {
 			return

@@ -228,7 +228,8 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 func (p *PubSub) sample(ctx context.Context, items []*ua.PublishedVariableDataType) []*ua.DataValue {
 	var vals []*ua.DataValue
 	if ds := p.opts.dataSource; ds != nil {
-		vals = ds.ReadPublishedData(ctx, items)
+		// A panicking DataSource yields no values: the fields are Bad.
+		p.protect("DataSource", func() { vals = ds.ReadPublishedData(ctx, items) })
 	}
 	out := make([]*ua.DataValue, len(items))
 	now := time.Now()
