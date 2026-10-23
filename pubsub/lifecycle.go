@@ -426,7 +426,7 @@ func (p *PubSub) stopReader(r *dataSetReader, override bool) {
 	}
 	r.running = false
 	if r.timer != nil {
-		r.timer.Stop()
+		r.timer.t.Stop()
 		r.timer = nil
 	}
 	if override && r.state == ua.PubSubStateOperational {
@@ -442,20 +442,24 @@ func (p *PubSub) armTimer(r *dataSetReader) {
 	if r.timer != nil {
 		return
 	}
-	var t *time.Timer
-	t = time.AfterFunc(r.timeout, func() { p.readerTimeout(r, t) })
-	r.timer = t
+	ref := &timerRef{}
+	ref.t = time.AfterFunc(r.timeout, func() { p.readerTimeout(r, ref) })
+	r.timer = ref
 }
 
+// timerRef identifies an armed MessageReceiveTimeout. Its timer is only read
+// under PubSub.mu, after AfterFunc returned.
+type timerRef struct{ t *time.Timer }
+
 // readerTimeout handles the expiry of the MessageReceiveTimeout of a reader.
-func (p *PubSub) readerTimeout(r *dataSetReader, t *time.Timer) {
+func (p *PubSub) readerTimeout(r *dataSetReader, ref *timerRef) {
 	p.lock()
 	defer p.unlock()
-	if r.timer != t || !r.running {
+	if r.timer != ref || !r.running {
 		return
 	}
 	if rest := r.timeout - time.Since(r.lastRecv); rest > 0 {
-		t.Reset(rest)
+		ref.t.Reset(rest)
 		return
 	}
 	r.timer = nil

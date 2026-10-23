@@ -112,7 +112,7 @@ func topicMatch(filter, topic string) bool {
 // matches tells whether a reader takes a DataSetMessage (dsm nil: any
 // message of the NetworkMessage header).
 func (s *readerSnap) matches(nm *message.NetworkMessage, dsm *message.DataSetMessage, enc encoding, topic string) bool {
-	if s.topic != "" && topic != "" && !topicMatch(s.topic, topic) {
+	if s.topic != "" && topic != "" && !topicMatch(s.topic, topic) && (s.metaTopic == "" || !topicMatch(s.metaTopic, topic)) {
 		return false
 	}
 	if s.hasPub {
@@ -120,7 +120,7 @@ func (s *readerSnap) matches(nm *message.NetworkMessage, dsm *message.DataSetMes
 		if !ok {
 			// A JSON NetworkMessage without header may still carry the
 			// PublisherId in its DataSetMessages.
-			if !(enc == encJSON && dsm == nil) {
+			if enc != encJSON || dsm != nil {
 				return false
 			}
 		} else if !id.Equal(s.pub) {
