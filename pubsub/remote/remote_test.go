@@ -5,9 +5,10 @@ package remote_test
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
@@ -19,10 +20,8 @@ import (
 )
 
 func udpURL(t *testing.T) string {
-	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer func() { _ = c.Close() }()
-	return fmt.Sprintf("opc.udp://127.0.0.1:%d", c.LocalAddr().(*net.UDPAddr).Port)
+	t.Helper()
+	return fmt.Sprintf("opc.udp://127.0.0.1:%d", testport.UDP(t))
 }
 
 // TestRemoteConfiguration configures a publisher and a subscriber of a

@@ -5,9 +5,10 @@ package pubsub
 import (
 	"context"
 	"fmt"
-	"net"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
 	"github.com/otfabric/go-opcua/ua"
@@ -50,10 +51,8 @@ func waitData(t *testing.T, rec *recorder) {
 }
 
 func freeUDPPort(t *testing.T) int {
-	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer func() { _ = c.Close() }()
-	return c.LocalAddr().(*net.UDPAddr).Port
+	t.Helper()
+	return testport.UDP(t)
 }
 
 func TestE2EUDP(t *testing.T) {

@@ -5,10 +5,11 @@ package conformance
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
@@ -31,10 +32,7 @@ const psInterval = 10 * time.Millisecond
 
 func psUDPURL(t *testing.T) string {
 	t.Helper()
-	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer func() { _ = c.Close() }()
-	return fmt.Sprintf("opc.udp://127.0.0.1:%d", c.LocalAddr().(*net.UDPAddr).Port)
+	return fmt.Sprintf("opc.udp://127.0.0.1:%d", testport.UDP(t))
 }
 
 func psBroker(t *testing.T) *mqttbroker.Broker {
@@ -509,10 +507,7 @@ func variantOf(prefix, reader string) psVariant {
 // receive from, or false.
 func psMulticastURL(t *testing.T) (string, bool) {
 	t.Helper()
-	l, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := l.LocalAddr().(*net.UDPAddr).Port
-	_ = l.Close()
+	port := testport.UDP(t)
 	url := fmt.Sprintf("opc.udp://239.255.77.%d:%d", 1+port%200, port)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

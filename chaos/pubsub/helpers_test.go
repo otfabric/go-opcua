@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
+
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/message"
@@ -36,12 +38,7 @@ const settle = 15 * time.Second
 // freeUDPPort returns a UDP port that was free a moment ago.
 func freeUDPPort(t *testing.T) int {
 	t.Helper()
-	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = c.Close() }()
-	return c.LocalAddr().(*net.UDPAddr).Port
+	return testport.UDP(t)
 }
 
 func udpURL(port int) string { return fmt.Sprintf("opc.udp://127.0.0.1:%d", port) }

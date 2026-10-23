@@ -661,17 +661,24 @@ func (c *Client) handle(conn net.Conn, p Packet) error {
 		case 0:
 			c.enqueue(msg)
 		case 1:
+			// Acknowledge before the application sees the message: once it
+			// has seen it, a Close must not lose the PUBACK and make the
+			// broker deliver the message again. If the write fails the
+			// connection is gone and the broker redelivers anyway (at least
+			// once), so the message is delivered all the same.
+			err := c.write(conn, &Ack{Kind: TypePuback, PacketID: p.PacketID})
 			c.enqueue(msg)
-			return c.write(conn, &Ack{Kind: TypePuback, PacketID: p.PacketID})
+			return err
 		case 2:
 			c.mu.Lock()
 			seen := c.qos2[p.PacketID]
 			c.qos2[p.PacketID] = true
 			c.mu.Unlock()
+			err := c.write(conn, &Ack{Kind: TypePubrec, PacketID: p.PacketID})
 			if !seen {
 				c.enqueue(msg)
 			}
-			return c.write(conn, &Ack{Kind: TypePubrec, PacketID: p.PacketID})
+			return err
 		}
 	case *Ack:
 		switch p.Kind {

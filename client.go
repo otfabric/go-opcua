@@ -858,7 +858,12 @@ func (c *Client) drainSecureChannelErrors() {
 	ch := c.secureChannelErrors()
 	for {
 		select {
-		case <-ch:
+		case _, ok := <-ch:
+			// The channel is never closed (see Close), but a closed one
+			// would make this loop spin forever.
+			if !ok {
+				return
+			}
 		default:
 			return
 		}

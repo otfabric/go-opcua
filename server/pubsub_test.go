@@ -5,10 +5,11 @@ package server_test
 import (
 	"context"
 	"fmt"
-	"net"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
@@ -20,10 +21,8 @@ import (
 )
 
 func pubsubUDPURL(t *testing.T) string {
-	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	defer func() { _ = c.Close() }()
-	return fmt.Sprintf("opc.udp://127.0.0.1:%d", c.LocalAddr().(*net.UDPAddr).Port)
+	t.Helper()
+	return fmt.Sprintf("opc.udp://127.0.0.1:%d", testport.UDP(t))
 }
 
 func nid(n uint32) *ua.NodeID { return ua.NewNumericNodeID(0, n) }
