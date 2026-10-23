@@ -18,7 +18,7 @@
 //	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest pin below)
 //	OPCUA_INTEROP_FIXTURE_DIR  Directory containing baseline.json     (default: testdata)
 //	OPCUA_INTEROP_PKI_DIR      Root of the test PKI tree, with the ECC certificates of
-//	                           opcua-interop v0.7.0 certs/generate.sh (default: ../../opcua-interop/certs/test-pki)
+//	                           opcua-interop v0.8.1 certs/generate.sh (default: ../../opcua-interop/certs/test-pki)
 //	OPCUA_INTEROP_REQUIRE_CAPABILITIES=1
 //	                           Fail instead of skip when the image lacks an operation or
 //	                           feature the suite has evidence for, or the PKI is missing.
@@ -65,16 +65,16 @@ const (
 	// opcua-interop tags are immutable: on a new release update the version
 	// and the digests below in lockstep (harness defaults, interop.yml,
 	// INTEROP.md, coverage.json, render-interop-coverage).
-	interopVersion = "v0.7.0"
+	interopVersion = "v0.8.1"
 
-	// Digests are the GHCR multi-arch indexes of the v0.7.0 publication:
-	// https://github.com/otfabric/opcua-interop/releases/tag/v0.7.0
+	// Digests are the GHCR multi-arch indexes of the v0.8.1 publication:
+	// https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1
 	// https://github.com/otfabric/opcua-interop/actions/runs/38158510021
 	// A capability-gated test fails (it does not skip) when a default image
 	// is not the release named by interopVersion: see requirePinnedVersion.
 
-	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:7ff9c794846cf8278d40e14c0b06bc4ad03112b11db7f943f6b729f49fe048fc"
-	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:8d59ac62bdec03e425f702c013d1695209c1ce7fc89cbdad052ed06043931f87"
+	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:2f008620c41ca6f752abe5d9a470cdba2742afed92d93b7ec6332750e20b9e84"
+	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:0fbbf7624ce59d7e8e0ff866570e1cdb6fc8f3aadd6900d3d29e6d21b2a823ed"
 	defaultFixtureDir     = "testdata"
 
 	interopNamespaceURI = "urn:otfabric:opcua-interop:model"
