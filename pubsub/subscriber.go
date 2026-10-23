@@ -67,6 +67,12 @@ func (p *PubSub) snapshotReaders(c *connection) []readerSnap {
 	return out
 }
 
+// samePublisher compares PublisherIds by value: the JSON mapping carries
+// them as strings, so a numeric id may come back with another type.
+func samePublisher(a, b message.PublisherID) bool {
+	return a.String() == b.String()
+}
+
 // pubOf returns the PublisherId of a DataSetMessage: its own (JSON) or the
 // one of the NetworkMessage, if the message carries one.
 func pubOf(nm *message.NetworkMessage, dsm *message.DataSetMessage) (message.PublisherID, bool) {
@@ -123,7 +129,7 @@ func (s *readerSnap) matches(nm *message.NetworkMessage, dsm *message.DataSetMes
 			if enc != encJSON || dsm != nil {
 				return false
 			}
-		} else if !id.Equal(s.pub) {
+		} else if !samePublisher(id, s.pub) {
 			return false
 		}
 	}
@@ -170,7 +176,8 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	}
 	enc := payloadEncoding(m.Payload)
 	cd := p.codecs(enc)
-	opts := &uadp.DecodeOptions{
+	opts := &decodeOptions{}
+	opts.DecodeOptions = uadp.DecodeOptions{
 		Accept: func(h *message.NetworkMessage) bool {
 			for i := range snap {
 				if snap[i].matches(h, nil, enc, m.Topic) {
@@ -215,6 +222,24 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		}
 		p.applyMetaData(c, gen, md.PublisherID, md.DataSetWriterID, md.MetaData)
 		return
+	}
+	if enc == encJSON {
+		// Headerless JSON messages: the writer follows from the topic.
+		var only *readerSnap
+		n := 0
+		for i := range snap {
+			if snap[i].topic != "" && m.Topic != "" && topicMatch(snap[i].topic, m.Topic) {
+				only = &snap[i]
+				n++
+			}
+		}
+		if n == 1 {
+			opts.DataSetWriterID = only.dswid
+			if only.hasPub {
+				pub := only.pub
+				opts.PublisherID = &pub
+			}
+		}
 	}
 	nm, err := cd.Decode(m.Payload, opts)
 	if err != nil {
@@ -268,7 +293,7 @@ func (p *PubSub) lookupMetaData(snap []readerSnap, pub message.PublisherID, wgid
 	defer p.unlock()
 	for i := range snap {
 		s := &snap[i]
-		if s.hasPub && !s.pub.Equal(pub) {
+		if s.hasPub && !samePublisher(s.pub, pub) {
 			continue
 		}
 		if s.wgid != 0 && wgid != 0 && s.wgid != wgid {
@@ -297,7 +322,7 @@ func (p *PubSub) applyMetaData(c *connection, gen uint64, pub message.PublisherI
 	}
 	for _, g := range c.rgs {
 		for _, r := range g.readers {
-			if !r.running || (r.hasPub && !r.pub.Equal(pub)) || (r.cfg.DataSetWriterID != 0 && r.cfg.DataSetWriterID != dswid) {
+			if !r.running || (r.hasPub && !samePublisher(r.pub, pub)) || (r.cfg.DataSetWriterID != 0 && r.cfg.DataSetWriterID != dswid) {
 				continue
 			}
 			r.ctr.MetaDataReceived++
@@ -391,12 +416,11 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	}
 	keepAlive := dsm.Type == message.DataSetMessageKeepAlive
 	if hasSeq(dsm, enc) {
-		seq := dsm.SequenceNumber
-		if enc == encUADP {
-			seq &= 0xffff
-		}
+		// UADP carries 16 bits; JSON publishers wrap at 16 bits as well
+		// (open62541 rejects larger values), so both compare in 16 bits.
+		seq := dsm.SequenceNumber & 0xffff
 		if st.hasSeq {
-			switch compareSeq(seq, st.seq, enc == encUADP) {
+			switch compareSeq(seq, st.seq, true) {
 			case seqDuplicate:
 				if !keepAlive {
 					r.ctr.SequenceDiscards++

@@ -332,6 +332,10 @@ func (p *PubSub) buildMessages(w *dataSetWriter, vals []*ua.DataValue, now time.
 			w.seq++
 			dsm.SequenceNumber = w.seq
 		}
+		if w.group.enc == encJSON {
+			// open62541 rejects JSON sequence numbers above 65535.
+			dsm.SequenceNumber &= 0xffff
+		}
 	}
 	if len(out) > 0 {
 		w.lastSent = now
