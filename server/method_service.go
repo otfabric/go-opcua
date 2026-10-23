@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -54,7 +55,7 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 				}
 			}
 		}
-		results[i] = s.callMethod(ctx, m)
+		results[i] = s.callMethod(withMethodCaller(ctx, sess, sc), m)
 	}
 
 	return &ua.CallResponse{
@@ -154,7 +155,7 @@ func validateMethodInputs(srv *Server, methodID *ua.NodeID, inputs []*ua.Variant
 	results := make([]ua.StatusCode, len(inputs))
 	mismatch := false
 	for i, arg := range expected {
-		if !variantMatchesArgument(inputs[i], arg) {
+		if !variantMatchesArgument(srv, inputs[i], arg) {
 			results[i] = ua.StatusBadTypeMismatch
 			mismatch = true
 		} else {
@@ -225,8 +226,11 @@ func declaredInputArguments(srv *Server, methodID *ua.NodeID) []*ua.Argument {
 }
 
 // variantMatchesArgument reports whether v is compatible with the declared
-// Argument DataType / ValueRank for built-in types in namespace 0.
-func variantMatchesArgument(v *ua.Variant, arg *ua.Argument) bool {
+// Argument DataType / ValueRank for data types in namespace 0. A subtype of
+// a built-in type (IntegerId, Duration, UtcTime, ...) takes the encoding of
+// the built-in type it derives from; BaseDataType and the abstract types
+// below it accept any value.
+func variantMatchesArgument(srv *Server, v *ua.Variant, arg *ua.Argument) bool {
 	if v == nil || arg == nil || arg.DataType == nil {
 		return true
 	}
@@ -234,18 +238,58 @@ func variantMatchesArgument(v *ua.Variant, arg *ua.Argument) bool {
 	if arg.DataType.Namespace() != 0 {
 		return true // cannot validate custom types here
 	}
-	want := ua.TypeID(arg.DataType.IntID())
+	want, ok := builtinTypeOf(srv, arg.DataType)
+	if !ok {
+		return true
+	}
 	if v.Type() != want {
 		return false
 	}
-	// ValueRank -1 = scalar; 1 = one-dimensional array.
-	isArray := v.ArrayLength() > 0
+	// ValueRank -1 = scalar; 1 = one-dimensional array (possibly empty).
 	switch arg.ValueRank {
 	case -1:
-		return !isArray
+		return !v.IsArray()
 	case 1:
-		return isArray
+		return v.IsArray()
 	default:
 		return true
 	}
 }
+
+// builtinTypeOf returns the built-in type a namespace 0 DataType is encoded
+// as: the type itself or the built-in type it is a subtype of. It returns
+// false for BaseDataType, for the abstract types below it that are not
+// subtypes of a built-in type (Number, Integer, Enumeration) and for
+// unknown types. The standard type tree does not change, so the results
+// are cached.
+func builtinTypeOf(srv *Server, dt *ua.NodeID) (ua.TypeID, bool) {
+	if dt == nil || dt.Namespace() != 0 || dt.Type() != ua.NodeIDTypeNumeric {
+		return 0, false
+	}
+	n := dt.IntID()
+	if n == id.BaseDataType {
+		return 0, false
+	}
+	if n >= 1 && n <= id.DiagnosticInfo {
+		return ua.TypeID(n), true
+	}
+	if t, ok := builtinTypeCache.Load(n); ok {
+		return t.(ua.TypeID), t.(ua.TypeID) != 0
+	}
+	if srv == nil || srv.Node(dt) == nil {
+		return 0, false
+	}
+	var found ua.TypeID
+	for b := uint32(1); b <= id.DiagnosticInfo; b++ {
+		if b != id.BaseDataType && srv.isSubtypeOf(dt, ua.NewNumericNodeID(0, b)) {
+			found = ua.TypeID(b)
+			break
+		}
+	}
+	builtinTypeCache.Store(n, found)
+	return found, found != 0
+}
+
+// builtinTypeCache maps namespace 0 DataType ids to their built-in type
+// (0: none).
+var builtinTypeCache sync.Map
