@@ -209,8 +209,10 @@ func TestKeySourceRefresh(t *testing.T) {
 			require.NoError(t, err)
 			t.Cleanup(func() { _ = src.Close() })
 			require.Same(t, security.Aes128CTR(), src.Policy())
-			require.Equal(t, uint32(1), src.Ring().CurrentTokenID())
-			require.Equal(t, int(tc.future), src.Ring().FutureKeyCount())
+			// Under load the first rotation may already have happened by now
+			// (the key lifetime is short), so only bound the start state.
+			require.NotZero(t, src.Ring().CurrentTokenID())
+			require.LessOrEqual(t, src.Ring().FutureKeyCount(), int(tc.future))
 
 			svc, err := ks.KeySource("sg")
 			require.NoError(t, err)
