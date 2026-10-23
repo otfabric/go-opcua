@@ -8,7 +8,7 @@ TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ 
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/pubsub,github.com/otfabric/go-opcua/pubsub/message,github.com/otfabric/go-opcua/pubsub/uadp,github.com/otfabric/go-opcua/pubsub/jsonmsg,github.com/otfabric/go-opcua/pubsub/transport,github.com/otfabric/go-opcua/pubsub/transport/udp,github.com/otfabric/go-opcua/pubsub/transport/mqtt,github.com/otfabric/go-opcua/pubsub/security,github.com/otfabric/go-opcua/pubsub/sks,github.com/otfabric/go-opcua/pubsub/remote,github.com/otfabric/go-opcua/internal/mqtt
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/
 
-.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop chaos examples test-race install-py-opcua gen check-gen coverage-ledger
+.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -61,6 +61,18 @@ interop: ## Run interop tests against opcua-interop adapter images (-tags=intero
 	# Suite is ~10m locally / slower on CI GHA runners; keep headroom under the
 	# workflow job timeout-minutes (45). Do not use 600s — it flakes at the edge.
 	@go test -count=1 -tags=interop -timeout 45m ./interop/...
+
+# One of SHARDS slices of the interop tests (SHARD = 1..SHARDS), for parallel
+# CI jobs: the top-level tests are sorted by name and dealt out round-robin,
+# so related (and similarly slow) tests land on different shards.
+SHARDS ?= 1
+SHARD  ?= 1
+interop-shard: ## Run shard SHARD of SHARDS of the interop tests (e.g. SHARD=2 SHARDS=6)
+	@tests=$$(go test -tags=interop -list '.*' ./interop/ | grep '^Test' | sort \
+		| awk -v n=$(SHARDS) -v i=$(SHARD) '(NR - 1) % n == i - 1' | paste -sd'|' -); \
+	if [ -z "$$tests" ]; then echo "interop shard $(SHARD)/$(SHARDS): no tests"; exit 0; fi; \
+	echo "interop shard $(SHARD)/$(SHARDS): $$(echo "$$tests" | tr '|' '\n' | wc -l | tr -d ' ') tests"; \
+	go test -count=1 -tags=interop -timeout 45m -run "^($$tests)$$" ./interop/
 
 # Chaos-monkey and parallelism suites: chaos/ and its sub-packages secure,
 # datachange, reverse, discovery and codec (see chaos/doc.go). They also run, with a

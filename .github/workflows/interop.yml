@@ -11,11 +11,22 @@ permissions:
   contents: read
   packages: read
 
+concurrency:
+  group: interop-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
-  open62541:
-    name: OPC UA interop — open62541
+  # The suite (~470 tests, mostly sequential docker containers) runs as six
+  # parallel shards; `make interop-shard` deals the tests out round-robin by
+  # name. Run the whole suite locally with `make interop`.
+  shard:
+    name: Interop shard ${{ matrix.shard }}/6
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     env:
       # opcua-interop release the suite and interop/coverage.json are written
       # against (interopVersion in interop/harness_test.go). Keep in step
@@ -59,12 +70,18 @@ jobs:
         env:
           # Digest-pinned opcua-interop v0.8.1 multi-arch indexes:
           # https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1
-          # Current digests: https://github.com/otfabric/opcua-interop/actions/runs/38158510021
+          # Release run: https://github.com/otfabric/opcua-interop/actions/runs/40031915713
           # Set OPEN62541_IMAGE / MILO_IMAGE in the env to test local builds.
           OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:2f008620c41ca6f752abe5d9a470cdba2742afed92d93b7ec6332750e20b9e84
           MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:0fbbf7624ce59d7e8e0ff866570e1cdb6fc8f3aadd6900d3d29e6d21b2a823ed
           OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
-        run: make interop
+        run: |
+          # Pull both adapter images once, up front, instead of inside the
+          # first test that starts each of them.
+          docker pull --quiet "${OPEN62541_IMAGE}" &
+          docker pull --quiet "${MILO_IMAGE}" &
+          wait
+          make interop-shard SHARD=${{ matrix.shard }} SHARDS=6
 
       - name: Collect Docker diagnostics
         if: failure()
@@ -77,6 +94,20 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: go-opcua-interop-diagnostics
+          name: go-opcua-interop-diagnostics-shard-${{ matrix.shard }}
           path: artifacts/
           if-no-files-found: ignore
+
+  # One result for the whole suite (branch protection and badges).
+  result:
+    name: OPC UA interop — open62541
+    if: always()
+    needs: shard
+    runs-on: ubuntu-latest
+    steps:
+      - name: All shards passed
+        run: |
+          if [ "${{ needs.shard.result }}" != "success" ]; then
+            echo "::error::interop shards: ${{ needs.shard.result }}"
+            exit 1
+          fi
