@@ -96,6 +96,9 @@ type Server struct {
 	// disc holds the discovery state: registered servers, the mDNS node and
 	// the registration loops towards other discovery servers.
 	disc *discoveryManager
+
+	// ps is the PubSub runtime and its information model (pubsub.go).
+	ps pubsubState
 }
 
 type serverConfig struct {
@@ -146,6 +149,11 @@ type serverConfig struct {
 	maxPendingResponses  int
 
 	logger *slog.Logger
+
+	// pubsub is the PubSub configuration of WithPubSub (nil: no PubSub).
+	pubsub *pubsubConfig
+	// pubsubAuth authorises the PubSub configuration methods.
+	pubsubAuth PubSubAuthorizer
 }
 
 var capabilities = ServerCapabilities{
@@ -571,6 +579,13 @@ func (s *Server) Start(ctx context.Context) error {
 	go s.superviseMonitor(mctx)
 	go s.reapSessions(mctx)
 
+	if err := s.startPubSub(mctx); err != nil {
+		cancel()
+		_ = s.l.Close()
+		s.setServerState(ua.ServerStateFailed)
+		return err
+	}
+
 	return s.startReverseConnects(mctx)
 }
 
@@ -589,6 +604,9 @@ func (s *Server) Close() error {
 	// can still be reached: unregister (IsOnline false) and say goodbye on
 	// mDNS.
 	s.disc.stop()
+
+	// Stop publishing and subscribing before the address space goes away.
+	s.closePubSub()
 
 	if s.cancelMonitor != nil {
 		s.cancelMonitor()

@@ -442,6 +442,9 @@ func (s *Server) eventTypeMatches(actual, expected *ua.NodeID) bool {
 // EmitBaseEvent emits a BaseEventType event to all event-monitored items watching nodeID.
 // It applies each item's OfType check and full WhereClause before selecting fields.
 func (s *Server) EmitBaseEvent(nodeID *ua.NodeID, event *BaseEvent) error {
+	// PublishedEvents of the PubSub runtime see the event too.
+	s.forwardPubSubEvent(nodeID, event)
+
 	if s.MonitoredItemService == nil || s.eventItems == nil {
 		return nil
 	}
