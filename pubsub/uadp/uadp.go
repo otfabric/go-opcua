@@ -124,7 +124,15 @@ type DecodeOptions struct {
 // A NetworkMessage of type NetworkMessageDataSet needs at least one
 // DataSetMessage, and the PayloadHeader when it has more than one. A
 // NetworkMessage of type NetworkMessageDiscoveryResponse carries
-// nm.Discovery; only DataSetMetaData announcements are supported.
+// nm.Discovery; only DataSetMetaData announcements are supported, and the
+// PayloadHeader bit of the mask is ignored for them. The WriterGroupId,
+// GroupVersion, NetworkMessageNumber and SequenceNumber bits only take effect
+// together with the GroupHeader bit. nm.Security is ignored: the security
+// header follows from opts. Encode does not modify nm.
+//
+// For a secured message the caller increments opts.NonceSequence for every
+// message; MessageNonces must never repeat for the same keys, since AES-CTR
+// with a repeated counter block reveals the plaintext.
 func Encode(nm *message.NetworkMessage, opts *EncodeOptions) ([]byte, error) {
 	if nm == nil {
 		return nil, fmt.Errorf("%w: nil NetworkMessage", ErrMalformed)
