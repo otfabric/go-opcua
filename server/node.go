@@ -292,9 +292,11 @@ func (n *Node) DisplayName() *ua.LocalizedText {
 	if v == nil || v.Value.Value() == nil {
 		return &ua.LocalizedText{}
 	}
-	val := v.Value.Value().(*ua.LocalizedText)
+	// Work on a copy: the stored text is shared with readers (Browse,
+	// Read) and must not be written to.
+	val := *v.Value.Value().(*ua.LocalizedText)
 	val.UpdateMask()
-	return val
+	return &val
 }
 
 func (n *Node) SetDisplayName(text, locale string) {
