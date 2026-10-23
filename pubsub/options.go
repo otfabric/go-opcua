@@ -95,7 +95,9 @@ type MirrorWriter interface {
 
 // DataSetHandler receives the DataSets of all DataSetReaders. It is called
 // outside the runtime's lock, in the order the messages were received on a
-// connection, and must not block for long.
+// connection, and must not block for long. It runs on the receiving
+// goroutine of the transport, which [PubSub.Close] waits for: a handler
+// must not call Close (it may start it in a goroutine of its own).
 type DataSetHandler func(ds *ReceivedDataSet)
 
 // KeySourceLookup returns the keys of a SecurityGroup, nil if unknown.

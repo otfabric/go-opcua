@@ -187,7 +187,14 @@ func (p *PubSub) Start(ctx context.Context) error {
 		return ErrClosed
 	}
 	if p.running {
-		return nil
+		if p.ctx.Err() == nil {
+			return nil
+		}
+		// The context of the previous run ended and the goroutine that
+		// watches it has not stopped the runtime yet: stop it here, the
+		// components of that run are already cancelled.
+		p.running = false
+		p.reconcileLocked()
 	}
 	p.ctx, p.cancel = context.WithCancel(ctx)
 	p.running = true
@@ -209,6 +216,10 @@ func (p *PubSub) Start(ctx context.Context) error {
 
 // Close stops the runtime and waits for its goroutines. It closes all
 // transports. Close is idempotent; the runtime cannot be started again.
+//
+// The callbacks of the runtime (DataSetHandler, TargetWriter, event
+// handlers, DataSource) run on its goroutines: calling Close from one of
+// them deadlocks. Start it in a goroutine of its own instead.
 func (p *PubSub) Close() error {
 	p.lock()
 	if p.closed {

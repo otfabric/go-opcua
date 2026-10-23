@@ -66,6 +66,10 @@
 //     mDNS (on an in-memory link) under faults.
 //   - chaos/codec: the JSON and XML encodings and the shared NodeSet values
 //     under concurrency.
+//   - chaos/pubsub: PubSub publishers and subscribers over UDP and MQTT
+//     under datagram faults, broker outages, attacks on the message
+//     security, key rotation storms, SKS outages, runtime and information
+//     model churn, and fuzzed messages through the real transports.
 //
 // # Invariants
 //

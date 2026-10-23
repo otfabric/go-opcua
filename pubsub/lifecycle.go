@@ -112,11 +112,14 @@ func (p *PubSub) stopConnection(c *connection) {
 
 // transportConfig builds the transport configuration of a connection.
 func (p *PubSub) transportConfig(c *connection) transport.Config {
+	// No ClientID: the name of a connection is not unique on a broker
+	// (two applications with a connection "Connection1" would take over
+	// each other's MQTT session again and again). The transport uses the
+	// "client-id" connection property or a random identifier.
 	cfg := transport.Config{
 		ProfileURI: c.cfg.TransportProfileURI,
 		URL:        c.url,
 		Interface:  c.iface,
-		ClientID:   c.name,
 		Logger:     p.log,
 	}
 	if len(c.cfg.ConnectionProperties) > 0 {
@@ -474,6 +477,10 @@ func (p *PubSub) readerTimeout(r *dataSetReader, ref *timerRef) {
 		return
 	}
 	r.ctr.Timeouts++
+	// Forget the sequence numbers of the writers: a publisher that was
+	// restarted meanwhile starts again at 1, and its messages would be
+	// discarded as older than the last ones of its previous run.
+	r.streams = map[streamKey]*stream{}
 	wasOp := r.state == ua.PubSubStateOperational
 	p.setState(&r.base, ua.PubSubStateError, ua.StatusBadTimeout)
 	if wasOp {
