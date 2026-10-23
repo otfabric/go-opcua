@@ -2,6 +2,10 @@
 
 package uapolicy
 
+// This file only documents the profile. PubSub security policies secure
+// NetworkMessages, not secure channels, so they are not registered here:
+// see github.com/otfabric/go-opcua/pubsub/security (Aes128CTR).
+
 /*
 "SecurityPolicy [A] - PubSub-Aes128-CTR" Profile
 	 http://opcfoundation.org/UA/SecurityPolicy#PubSub-Aes128-CTR
