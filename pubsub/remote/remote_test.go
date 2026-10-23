@@ -194,3 +194,37 @@ func TestRemoteAddConnectionNested(t *testing.T) {
 	require.ErrorIs(t, err, ua.StatusBadBrowseNameDuplicated)
 	require.Len(t, srv.PubSub().Components(), 6)
 }
+
+func TestRemoteErrors(t *testing.T) {
+	t.Parallel()
+	srv, url := testutil.NewTestServer(t, server.WithPubSub(nil))
+	ns := server.NewNodeNameSpace(srv, "test")
+	v := ns.AddNewVariableStringNode("v", int32(1))
+	c := testutil.NewTestClient(t, url)
+	r := remote.New(c)
+	ctx := context.Background()
+
+	res, err := r.AddPublishedDataItems(ctx, "p", nil, nil, nil)
+	require.NoError(t, err)
+	require.Empty(t, res.AddResults)
+	_, err = r.AddPublishedDataItems(ctx, "q", []string{"a"}, []ua.DataSetFieldFlags{ua.DataSetFieldFlagsPromotedField},
+		[]*ua.PublishedVariableDataType{{PublishedVariable: v.ID(), AttributeID: ua.AttributeIDValue}})
+	require.NoError(t, err)
+	_, err = r.AddPublishedDataItems(ctx, "q", []string{"a", "b"}, nil, []*ua.PublishedVariableDataType{{PublishedVariable: v.ID()}})
+	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
+	_, _, err = r.AddPublishedDataItemsTemplate(ctx, "t", pubsub.MetaData("t"), []*ua.PublishedVariableDataType{{PublishedVariable: v.ID()}})
+	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
+	_, err = r.AddConnection(ctx, &ua.PubSubConnectionDataType{Name: "x"})
+	require.ErrorIs(t, err, ua.StatusBadConfigurationError)
+
+	_, err = r.Property(ctx, remote.PublishSubscribe, "nosuch")
+	require.ErrorIs(t, err, ua.StatusBadNotFound)
+	require.ErrorIs(t, r.Enable(ctx, v.ID()), ua.StatusBadNotFound)
+	require.ErrorIs(t, r.Disable(ctx, v.ID()), ua.StatusBadNotFound)
+	_, err = r.State(ctx, remote.PublishedDataSets)
+	require.ErrorIs(t, err, ua.StatusBadNotFound)
+	wgs, _ := r.WriterGroups(ctx, ua.NewStringNodeID(ns.ID(), "nosuch"))
+	require.Empty(t, wgs)
+	_, err = r.AddWriterGroup(ctx, v.ID(), pubsub.WriterGroup("wg", 1, time.Second))
+	require.Error(t, err)
+}
