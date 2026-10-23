@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"runtime/debug"
 	"sync"
 	"time"
 
@@ -127,8 +128,25 @@ func (p *PubSub) unlock() {
 	p.pending = nil
 	p.mu.Unlock()
 	for _, f := range fns {
-		f()
+		p.protect("callback", f)
 	}
+}
+
+// protect runs f, which may call application code, and turns a panic into a
+// logged and counted error instead of a crash of the program (a server with
+// WithPubSub in particular). It reports whether f panicked.
+func (p *PubSub) protect(what string, f func()) (panicked bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			panicked = true
+			p.log.Error("pubsub: recovered from a panic", "in", what, "panic", r, "stack", string(debug.Stack()))
+			p.mu.Lock()
+			p.root.ctr.Panics++
+			p.mu.Unlock()
+		}
+	}()
+	f()
+	return false
 }
 
 // later queues f to run after the lock is released.

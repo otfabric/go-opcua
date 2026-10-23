@@ -146,6 +146,10 @@ type Counters struct {
 	TargetWriteErrors uint64
 	// StateChanges counts state transitions.
 	StateChanges uint64
+	// Panics counts panics the runtime recovered from: in an application
+	// callback (DataSetHandler, DataSource, TargetWriter, event handler) or
+	// while decoding a received message. They are logged with their stack.
+	Panics uint64
 }
 
 func (c *Counters) add(o *Counters) {
@@ -168,6 +172,7 @@ func (c *Counters) add(o *Counters) {
 	c.Timeouts += o.Timeouts
 	c.TargetWriteErrors += o.TargetWriteErrors
 	c.StateChanges += o.StateChanges
+	c.Panics += o.Panics
 }
 
 // Status is the state and the diagnostics of a component.
