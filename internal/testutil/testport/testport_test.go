@@ -27,5 +27,16 @@ func TestUDP(t *testing.T) {
 	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = c.Close() }()
-	require.False(t, free(c.LocalAddr().(*net.UDPAddr).Port))
+	require.False(t, freeUDP(c.LocalAddr().(*net.UDPAddr).Port))
+}
+
+func TestTCP(t *testing.T) {
+	p := TCP(t)
+	require.GreaterOrEqual(t, p, lowPort)
+	require.Less(t, p, highPort)
+	l, err := net.Listen("tcp4", net.JoinHostPort("127.0.0.1", strconv.Itoa(p)))
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	require.False(t, freeTCP(p))
+	require.NotEqual(t, p, UDP(t), "no number twice")
 }

@@ -31,7 +31,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,6 +41,7 @@ import (
 
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 	_ "github.com/otfabric/go-opcua/pubsub/transport/mqtt" // mqtt:// scheme
@@ -459,12 +459,7 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 // freeUDPPort returns a UDP port that is free on the host.
 func freeUDPPort(t *testing.T) int {
 	t.Helper()
-	c, err := net.ListenPacket("udp4", "0.0.0.0:0")
-	if err != nil {
-		t.Fatalf("free UDP port: %v", err)
-	}
-	defer func() { _ = c.Close() }()
-	return c.LocalAddr().(*net.UDPAddr).Port
+	return testport.UDP(t)
 }
 
 // startMosquitto starts the MQTT broker and returns its host port.

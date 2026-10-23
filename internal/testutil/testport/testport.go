@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-// Package testport hands out UDP ports for tests that must configure a fixed
-// port (a PubSub connection URL) instead of binding port 0.
+// Package testport hands out TCP and UDP ports for tests that must configure
+// a fixed port (a PubSub connection URL, a port Docker publishes) instead of
+// binding port 0.
 //
 // A port found by binding port 0 and closing the socket is taken from the
 // kernel's ephemeral range, which every outgoing socket of every process
@@ -34,6 +35,22 @@ var (
 // address. It fails the test if it finds none.
 func UDP(tb testing.TB) int {
 	tb.Helper()
+	return pick(tb, "udp", freeUDP)
+}
+
+// TCP returns a TCP port that is free on 127.0.0.1 and on the wildcard
+// address (where Docker publishes container ports). It fails the test if it
+// finds none.
+func TCP(tb testing.TB) int {
+	tb.Helper()
+	return pick(tb, "tcp", freeTCP)
+}
+
+// pick returns a port of the range that free reports free and that was not
+// handed out before. TCP and UDP share the bookkeeping, so a test never gets
+// the same number for both.
+func pick(tb testing.TB, proto string, free func(int) bool) int {
+	tb.Helper()
 	mu.Lock()
 	defer mu.Unlock()
 	for range 200 {
@@ -44,13 +61,13 @@ func UDP(tb testing.TB) int {
 		used[p] = true
 		return p
 	}
-	tb.Fatal("testport: no free UDP port")
+	tb.Fatalf("testport: no free %s port", proto)
 	return 0
 }
 
-// free reports whether nothing is bound to UDP port p.
-func free(p int) bool {
-	for _, addr := range []string{fmt.Sprintf("127.0.0.1:%d", p), fmt.Sprintf("0.0.0.0:%d", p)} {
+// freeUDP reports whether nothing is bound to UDP port p.
+func freeUDP(p int) bool {
+	for _, addr := range addrs(p) {
 		c, err := net.ListenPacket("udp4", addr)
 		if err != nil {
 			return false
@@ -58,4 +75,20 @@ func free(p int) bool {
 		_ = c.Close()
 	}
 	return true
+}
+
+// freeTCP reports whether nothing listens on TCP port p.
+func freeTCP(p int) bool {
+	for _, addr := range addrs(p) {
+		l, err := net.Listen("tcp4", addr)
+		if err != nil {
+			return false
+		}
+		_ = l.Close()
+	}
+	return true
+}
+
+func addrs(p int) []string {
+	return []string{fmt.Sprintf("127.0.0.1:%d", p), fmt.Sprintf("0.0.0.0:%d", p)}
 }

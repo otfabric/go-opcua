@@ -1109,6 +1109,11 @@ func (s *Subscription) run() {
 		lifetimeCounter = 0
 		keepaliveCounter = 0
 
+		// select picks at random among ready cases: the Publish request may
+		// have been taken while events emitted before it were still in the
+		// channel. They belong in this notification message, in order.
+		eventQueue = s.drainEvents(eventQueue)
+
 		ackResults := s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements)
 
 		s.SequenceID++
@@ -1197,3 +1202,16 @@ func (s *Subscription) run() {
 }
 
 //PublishRequest_Encoding_DefaultBinary
+
+// drainEvents appends the events waiting in EventNotifyChannel to q without
+// blocking.
+func (s *Subscription) drainEvents(q []*ua.EventFieldList) []*ua.EventFieldList {
+	for {
+		select {
+		case evt := <-s.EventNotifyChannel:
+			q = append(q, evt)
+		default:
+			return q
+		}
+	}
+}

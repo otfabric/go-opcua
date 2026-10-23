@@ -47,6 +47,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
+
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/server"
@@ -104,15 +106,13 @@ func getEnvOr(key, def string) string {
 // Port allocation
 // ---------------------------------------------------------------------------
 
+// freePort returns a TCP port for a container port to be published on.
+// Ports from binding port 0 come from the ephemeral range every outgoing
+// socket draws from, so Docker sometimes found them taken; testport's come
+// from outside it.
 func freePort(t *testing.T) int {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("freePort: %v", err)
-	}
-	p := l.Addr().(*net.TCPAddr).Port
-	l.Close()
-	return p
+	return testport.TCP(t)
 }
 
 // ---------------------------------------------------------------------------
@@ -211,11 +211,9 @@ func startAdapterServer(t *testing.T, imageEnvVar, defaultImage string) *serverH
 	startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
 	defer startCancel()
 
-	for {
-		if exec.CommandContext(startCtx, "docker", "exec",
-			containerName, "test", "-f", "/run/opcua-interop/ready").Run() == nil {
-			break
-		}
+	for exec.CommandContext(startCtx, "docker", "exec",
+		containerName, "test", "-f", "/run/opcua-interop/ready").Run() != nil {
+
 		select {
 		case <-startCtx.Done():
 			stop()
@@ -1261,11 +1259,9 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 	startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
 	defer startCancel()
 
-	for {
-		if exec.CommandContext(startCtx, "docker", "exec",
-			containerName, "test", "-f", "/run/opcua-interop/ready").Run() == nil {
-			break
-		}
+	for exec.CommandContext(startCtx, "docker", "exec",
+		containerName, "test", "-f", "/run/opcua-interop/ready").Run() != nil {
+
 		select {
 		case <-startCtx.Done():
 			stop()

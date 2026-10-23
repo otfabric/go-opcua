@@ -12,6 +12,11 @@ linters:
     - nilerr         # return nil instead of err
     - exhaustive     # exhaustive switch on enums
   settings:
+    misspell:
+      # Eclipse Mosquitto (the MQTT broker of the PubSub tests) is not a
+      # misspelling of "mosquito"; --fix would rename its image.
+      ignore-rules:
+        - mosquitto
     exhaustive:
       default-signifies-exhaustive: true
     staticcheck:
