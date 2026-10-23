@@ -10,8 +10,11 @@ import (
 	"runtime"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/stretchr/testify/require"
 
@@ -21,11 +24,33 @@ import (
 // freePort returns a UDP port that is free on 127.0.0.1 right now.
 func freePort(t *testing.T) int {
 	t.Helper()
-	c, err := net.ListenPacket("udp4", "127.0.0.1:0")
-	require.NoError(t, err)
-	port := c.LocalAddr().(*net.UDPAddr).Port
-	require.NoError(t, c.Close())
-	return port
+	return testport.UDP(t)
+}
+
+// listen opens a connection for the config cfgFor builds around a free port
+// and subscribes h on it, which binds the port. freePort cannot reserve the
+// port: another test (CI runs packages in parallel) may bind it before we
+// do, so a bind that finds the port taken is retried with another one.
+func listen(t *testing.T, cfgFor func(port int) transport.Config, h transport.Handler) (c *Conn, port int, cancel func() error) {
+	t.Helper()
+	for range 20 {
+		port = freePort(t)
+		c, err := Open(context.Background(), cfgFor(port))
+		require.NoError(t, err)
+		cancel, err = c.Subscribe(context.Background(), "", 0, h)
+		if err == nil {
+			t.Cleanup(func() { _ = c.Close() })
+			return c, port, cancel
+		}
+		_ = c.Close()
+		require.ErrorIs(t, err, syscall.EADDRINUSE)
+	}
+	t.Fatal("no free UDP port after 20 attempts")
+	return nil, 0, nil
+}
+
+func loopback(port int) transport.Config {
+	return transport.Config{URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port)}
 }
 
 func open(t *testing.T, cfg transport.Config) *Conn {
@@ -78,13 +103,14 @@ func (c *collector) get(i int) *transport.Message {
 }
 
 func TestUnicastLoopback(t *testing.T) {
-	port := freePort(t)
-	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
-	sub := open(t, transport.Config{URL: url})
 	col := newCollector()
-	cancel, err := sub.Subscribe(context.Background(), "ignored", 1, col.handle)
-	require.NoError(t, err)
+	sub, port, cancel := listen(t, loopback, col.handle)
+	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
 	require.Equal(t, fmt.Sprintf("127.0.0.1:%d", port), sub.LocalAddr().String())
+	// A topic and QoS are ignored by the datagram transport.
+	cancelIgnored, err := sub.Subscribe(context.Background(), "ignored", 1, func(*transport.Message) {})
+	require.NoError(t, err)
+	require.NoError(t, cancelIgnored())
 
 	pub := open(t, transport.Config{URL: url})
 	require.Nil(t, pub.LocalAddr())
@@ -109,11 +135,10 @@ func TestUnicastLoopback(t *testing.T) {
 }
 
 func TestLocalhostReceivesAll(t *testing.T) {
-	port := freePort(t)
-	sub := open(t, transport.Config{URL: fmt.Sprintf("opc.udp://localhost:%d", port)})
 	col := newCollector()
-	_, err := sub.Subscribe(context.Background(), "", 0, col.handle)
-	require.NoError(t, err)
+	sub, port, _ := listen(t, func(p int) transport.Config {
+		return transport.Config{URL: fmt.Sprintf("opc.udp://localhost:%d", p)}
+	}, col.handle)
 	ua, ok := sub.LocalAddr().(*net.UDPAddr)
 	require.True(t, ok)
 	require.True(t, ua.IP.IsUnspecified(), "wildcard bind, got %s", ua)
@@ -123,34 +148,35 @@ func TestLocalhostReceivesAll(t *testing.T) {
 	require.True(t, col.wait(t, 1, 5*time.Second))
 
 	// An empty host receives all too but cannot send.
-	empty := open(t, transport.Config{URL: fmt.Sprintf("opc.udp://:%d", freePort(t))})
+	empty, _, _ := listen(t, func(p int) transport.Config {
+		return transport.Config{URL: fmt.Sprintf("opc.udp://:%d", p)}
+	}, func(*transport.Message) {})
 	require.ErrorContains(t, empty.Send(context.Background(), []byte("x"), transport.PublishOptions{}), "no destination")
-	_, err = empty.Subscribe(context.Background(), "", 0, func(*transport.Message) {})
-	require.NoError(t, err)
 }
 
 func TestListenAddress(t *testing.T) {
-	port := freePort(t)
-	sub := open(t, transport.Config{URL: "opc.udp://192.0.2.1:4840", ListenAddress: fmt.Sprintf("127.0.0.1:%d", port)})
 	col := newCollector()
-	_, err := sub.Subscribe(context.Background(), "", 0, col.handle)
-	require.NoError(t, err)
+	_, port, _ := listen(t, func(p int) transport.Config {
+		return transport.Config{URL: "opc.udp://192.0.2.1:4840", ListenAddress: fmt.Sprintf("127.0.0.1:%d", p)}
+	}, col.handle)
 	pub := open(t, transport.Config{URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port)})
 	require.NoError(t, pub.Send(context.Background(), []byte("x"), transport.PublishOptions{}))
 	require.True(t, col.wait(t, 1, 5*time.Second))
 
 	// Host only: the port of the URL.
-	c := open(t, transport.Config{URL: fmt.Sprintf("opc.udp://192.0.2.1:%d", freePort(t)), ListenAddress: "127.0.0.1"})
-	_, err = c.Subscribe(context.Background(), "", 0, col.handle)
-	require.NoError(t, err)
+	c, _, _ := listen(t, func(p int) transport.Config {
+		return transport.Config{URL: fmt.Sprintf("opc.udp://192.0.2.1:%d", p), ListenAddress: "127.0.0.1"}
+	}, col.handle)
+	require.Equal(t, "127.0.0.1", c.LocalAddr().(*net.UDPAddr).IP.String())
 	// Port only: the wildcard address.
-	c = open(t, transport.Config{URL: "opc.udp://192.0.2.1:4840", ListenAddress: fmt.Sprintf(":%d", freePort(t))})
-	_, err = c.Subscribe(context.Background(), "", 0, col.handle)
-	require.NoError(t, err)
+	c, _, _ = listen(t, func(p int) transport.Config {
+		return transport.Config{URL: "opc.udp://192.0.2.1:4840", ListenAddress: fmt.Sprintf(":%d", p)}
+	}, col.handle)
+	require.True(t, c.LocalAddr().(*net.UDPAddr).IP.IsUnspecified())
 
 	// Binding a foreign unicast address fails in Subscribe.
 	c = open(t, transport.Config{URL: "opc.udp://192.0.2.1:4840"})
-	_, err = c.Subscribe(context.Background(), "", 0, col.handle)
+	_, err := c.Subscribe(context.Background(), "", 0, col.handle)
 	require.ErrorContains(t, err, "bind")
 }
 
@@ -159,13 +185,12 @@ func TestUnicastIPv6(t *testing.T) {
 	if err != nil {
 		t.Skipf("no IPv6 loopback: %v", err)
 	}
-	port := probe.LocalAddr().(*net.UDPAddr).Port
 	require.NoError(t, probe.Close())
-	url := fmt.Sprintf("opc.udp://[::1]:%d", port)
-	sub := open(t, transport.Config{URL: url})
 	col := newCollector()
-	_, err = sub.Subscribe(context.Background(), "", 0, col.handle)
-	require.NoError(t, err)
+	_, port, _ := listen(t, func(p int) transport.Config {
+		return transport.Config{URL: fmt.Sprintf("opc.udp://[::1]:%d", p)}
+	}, col.handle)
+	url := fmt.Sprintf("opc.udp://[::1]:%d", port)
 	pub := open(t, transport.Config{URL: url})
 	require.Equal(t, MaxDatagramIPv6, pub.MaxMessageSize())
 	require.NoError(t, pub.Send(context.Background(), []byte("six"), transport.PublishOptions{}))
@@ -174,12 +199,9 @@ func TestUnicastIPv6(t *testing.T) {
 }
 
 func TestLargeDatagrams(t *testing.T) {
-	port := freePort(t)
-	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
-	sub := open(t, transport.Config{URL: url})
 	col := newCollector()
-	_, err := sub.Subscribe(context.Background(), "", 0, col.handle)
-	require.NoError(t, err)
+	_, port, _ := listen(t, loopback, col.handle)
+	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
 	pub := open(t, transport.Config{URL: url})
 
 	big := bytes.Repeat([]byte("0123456789abcdef"), MaxDatagramIPv4/16+1)[:MaxDatagramIPv4]
@@ -187,17 +209,16 @@ func TestLargeDatagrams(t *testing.T) {
 	require.True(t, col.wait(t, 1, 5*time.Second))
 	require.Equal(t, big, col.get(0).Payload)
 
-	err = pub.Send(context.Background(), append(big, 'x'), transport.PublishOptions{})
+	err := pub.Send(context.Background(), append(big, 'x'), transport.PublishOptions{})
 	require.ErrorIs(t, err, transport.ErrMessageTooLarge)
 
 	// A configured limit applies to both directions.
 	small := open(t, transport.Config{URL: url, MaxMessageSize: 100})
 	require.ErrorIs(t, small.Send(context.Background(), make([]byte, 101), transport.PublishOptions{}), transport.ErrMessageTooLarge)
-	port2 := freePort(t)
-	limited := open(t, transport.Config{URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port2), MaxMessageSize: 100})
 	col2 := newCollector()
-	_, err = limited.Subscribe(context.Background(), "", 0, col2.handle)
-	require.NoError(t, err)
+	_, port2, _ := listen(t, func(p int) transport.Config {
+		return transport.Config{URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", p), MaxMessageSize: 100}
+	}, col2.handle)
 	pub2 := open(t, transport.Config{URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port2)})
 	require.NoError(t, pub2.Send(context.Background(), make([]byte, 200), transport.PublishOptions{}))
 	require.NoError(t, pub2.Send(context.Background(), make([]byte, 50), transport.PublishOptions{}))
@@ -206,14 +227,11 @@ func TestLargeDatagrams(t *testing.T) {
 }
 
 func TestConcurrentSendReceive(t *testing.T) {
-	port := freePort(t)
-	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
-	sub := open(t, transport.Config{URL: url})
 	var got atomic.Int64
 	var c1, c2 atomic.Int64
-	_, err := sub.Subscribe(context.Background(), "", 0, func(*transport.Message) { got.Add(1); c1.Add(1) })
-	require.NoError(t, err)
-	_, err = sub.Subscribe(context.Background(), "", 0, func(m *transport.Message) {
+	sub, port, _ := listen(t, loopback, func(*transport.Message) { got.Add(1); c1.Add(1) })
+	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
+	_, err := sub.Subscribe(context.Background(), "", 0, func(m *transport.Message) {
 		m.Payload[0] = 'X' // each subscriber owns its copy
 		c2.Add(1)
 	})
@@ -247,16 +265,12 @@ func TestConcurrentSendReceive(t *testing.T) {
 
 func TestCloseSemantics(t *testing.T) {
 	before := runtime.NumGoroutine()
-	port := freePort(t)
+	c, port, _ := listen(t, loopback, func(*transport.Message) {})
 	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
-	c, err := Open(context.Background(), transport.Config{URL: url})
-	require.NoError(t, err)
-	_, err = c.Subscribe(context.Background(), "", 0, func(*transport.Message) {})
-	require.NoError(t, err)
 	require.NoError(t, c.Close())
 	require.NoError(t, c.Close())
 	require.ErrorIs(t, c.Send(context.Background(), []byte("x"), transport.PublishOptions{}), transport.ErrClosed)
-	_, err = c.Subscribe(context.Background(), "", 0, func(*transport.Message) {})
+	_, err := c.Subscribe(context.Background(), "", 0, func(*transport.Message) {})
 	require.ErrorIs(t, err, transport.ErrClosed)
 	// Close waited for the receive goroutine (no Eventually here: it runs
 	// its condition in a goroutine of its own).
