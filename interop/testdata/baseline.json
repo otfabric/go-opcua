@@ -995,6 +995,189 @@
         "low": 0.0,
         "high": 100.0
       }
+    },
+    {
+      "nodeClass": "Object",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "browseName": "1:PubSub",
+      "displayName": "PubSub",
+      "description": "PubSub (Part 14) published fields and subscriber TargetVariables: writable, one per type, no behaviors.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=Compatibility",
+      "referenceType": "Organizes"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.Boolean",
+      "browseName": "1:PubSub.Boolean",
+      "displayName": "PubSub Boolean",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "Boolean",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": false
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.Int32",
+      "browseName": "1:PubSub.Int32",
+      "displayName": "PubSub Int32",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 0
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.Int64",
+      "browseName": "1:PubSub.Int64",
+      "displayName": "PubSub Int64",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable). Also the target of Dynamic.Counter (Int64) in the smoke tests.",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "Int64",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "0"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.UInt64",
+      "browseName": "1:PubSub.UInt64",
+      "displayName": "PubSub UInt64",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "UInt64",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "0"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.Double",
+      "browseName": "1:PubSub.Double",
+      "displayName": "PubSub Double",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": 0.0
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.String",
+      "browseName": "1:PubSub.String",
+      "displayName": "PubSub String",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "String",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": ""
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.DateTime",
+      "browseName": "1:PubSub.DateTime",
+      "displayName": "PubSub DateTime",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "DateTime",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": "2026-01-01T00:00:00Z"
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.ByteString",
+      "browseName": "1:PubSub.ByteString",
+      "displayName": "PubSub ByteString",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "ByteString",
+      "valueRank": -1,
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": ""
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.Int32Array",
+      "browseName": "1:PubSub.Int32Array",
+      "displayName": "PubSub Int32Array",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "Int32",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        0,
+        0,
+        0
+      ]
+    },
+    {
+      "nodeClass": "Variable",
+      "nodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub.DoubleArray",
+      "browseName": "1:PubSub.DoubleArray",
+      "displayName": "PubSub DoubleArray",
+      "description": "Writable PubSub field: published by a publisher, written by a subscriber (TargetVariable).",
+      "parentNodeId": "nsu=urn:otfabric:opcua-interop:model;s=PubSub",
+      "referenceType": "Organizes",
+      "dataType": "Double",
+      "valueRank": 1,
+      "arrayDimensions": [
+        0
+      ],
+      "accessLevel": [
+        "CurrentRead",
+        "CurrentWrite"
+      ],
+      "initialValue": [
+        0.0,
+        0.0,
+        0.0
+      ]
     }
   ],
   "behaviors": [

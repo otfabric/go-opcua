@@ -1390,6 +1390,303 @@
         "open62541-client-to-go-server",
         "milo-client-to-go-server"
       ]
+    },
+    {
+      "id": "pubsub.uadp.codec",
+      "title": "UADP NetworkMessage mapping: PublisherId types, group / payload headers, timestamps, picoseconds, DataSetClassId, promoted fields, DataSetMessage headers, multiple DataSetMessages (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.uadp.delta-frame",
+      "title": "UADP DeltaFrame DataSetMessages, Variant and DataValue (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.uadp.keep-alive-message",
+      "title": "UADP KeepAlive DataSetMessages (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.uadp.security-header",
+      "title": "UADP SecurityHeader layout: flags, SecurityTokenId, MessageNonce (C→ = go-opcua encodes, peer decodes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.json.codec",
+      "title": "JSON NetworkMessage mapping (ua-data): MessageId, PublisherId, DataSetClassId, DataSetMessage headers, Variant and DataValue fields, multiple DataSetMessages, the open62541 1.5 quirks (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.field.variant",
+      "title": "DataSet fields in the Variant encoding, all PubSub fixture types (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.field.datavalue",
+      "title": "DataSet fields in the DataValue encoding: StatusCode and timestamps (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.field.rawdata",
+      "title": "DataSet fields in the RawData encoding with DataSetMetaData (MaxStringLength) (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.uadp.udp",
+      "title": "UADP over UDP unicast (opc.udp) (C→ = go-opcua publishes, peer subscribes into TargetVariables; →S = peer publishes PublishedDataItems, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.uadp.udp-multicast",
+      "title": "UADP over UDP multicast (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.uadp.mqtt",
+      "title": "UADP over MQTT 3.1.1 through Eclipse Mosquitto (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.json.mqtt",
+      "title": "JSON over MQTT 3.1.1 through Eclipse Mosquitto (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.security.sign",
+      "title": "UADP message security Sign (HMAC-SHA256), static keys (C→ = go-opcua signs, peer verifies; →S = peer signs, go-opcua verifies)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.security.aes128-ctr",
+      "title": "UADP message security SignAndEncrypt PubSub-Aes128-CTR, static keys (C→ = go-opcua encrypts, peer decrypts; →S = peer encrypts, go-opcua decrypts)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.security.aes256-ctr",
+      "title": "UADP message security SignAndEncrypt PubSub-Aes256-CTR, static keys (C→ = go-opcua encrypts, peer decrypts; →S = peer encrypts, go-opcua decrypts)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.security.reject",
+      "title": "Secured receivers drop unsecured messages and messages under other keys (C→ = go-opcua sends them, the peer subscriber drops them; →S = the peer sends, go-opcua rejects)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.sks.get-security-keys",
+      "title": "SKS GetSecurityKeys over SignAndEncrypt: policy, key length, key count, token ids, KeyLifetime, refusal over None / Sign (C→ = go-opcua client, peer SKS; →S = peer client, go-opcua SKS)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.sks.pull",
+      "title": "SKS pull: a PubSub party fetches the keys of its SecurityGroup from an SKS and secures messages with them (C→ = go-opcua pulls from the peer SKS and decrypts its publisher; →S = the peer publisher pulls from the go-opcua SKS)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.sks.push",
+      "title": "SKS push: SetSecurityKeys to a Publisher / Subscriber over SignAndEncrypt (C→ = go-opcua pushes to the peer subscriber; →S = the peer client pushes to the go-opcua server)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.sks.security-groups",
+      "title": "SKS AddSecurityGroup / RemoveSecurityGroup (C→ = go-opcua client, peer SKS; →S = peer client, go-opcua SKS)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.runtime",
+      "title": "go-opcua PubSub runtime (pubsub.New, server.WithPubSub) over UDP and MQTT, UADP and JSON, Variant / DataValue / RawData, static keys (C→ = the go-opcua runtime publishes, peer subscribes; →S = peer publishes, the go-opcua runtime subscribes, DataSetHandler)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.runtime.target-variables",
+      "title": "Subscriber TargetVariables in the address space (C→ = go-opcua publishes into the peer server's TargetVariables; →S = peer publishes into the go-opcua server's TargetVariables, WithPubSub)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.runtime.sks-pull",
+      "title": "Runtime with keys pulled from an SKS (C→ = the go-opcua runtime subscriber pulls from the peer SKS publisher; →S = the peer subscriber pulls from the go-opcua SKS publisher)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.keepalive",
+      "title": "Live KeepAlive messages of a WriterGroup without data, decoded and matched by the reader (C→ = go-opcua publishes, peer reader; →S = peer publishes, go-opcua reader)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.receive-timeout",
+      "title": "DataSetReader MessageReceiveTimeout: the reader goes to Error when the publisher stops (C→ = go-opcua publishes, peer reader times out; →S = peer publishes, go-opcua reader times out and recovers)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.infomodel.methods",
+      "title": "PublishSubscribe information model methods: AddPublishedDataItems, AddConnection, AddWriterGroup / AddReaderGroup, AddDataSetReader, Enable / Disable, Remove* (C→ = go-opcua client (pubsub/remote) configures the peer; →S = peer client configures the go-opcua server)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.infomodel.browse",
+      "title": "PublishSubscribe information model browse: connections, groups, writers, readers, published data sets, Status.State (C→ = go-opcua client browses the peer; →S = peer client browses go-opcua)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
     }
   ]
 }
