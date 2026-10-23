@@ -122,7 +122,9 @@ func loadNodeIDs(filename string) map[string]bool {
 func filterByBinaryEncoding(objs []Type, nodeIDs map[string]bool) []Type {
 	var filtered []Type
 	for _, o := range objs {
-		if nodeIDs[o.Name+"_Encoding_DefaultBinary"] {
+		// NodeIds.csv uses the OPC UA name (UadpWriterGroupMessageDataType,
+		// NetworkAddressUrlDataType), not the Go name derived from it.
+		if nodeIDs[o.OrigName+"_Encoding_DefaultBinary"] {
 			filtered = append(filtered, o)
 		}
 	}
