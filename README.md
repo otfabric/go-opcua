@@ -85,6 +85,7 @@ For full API details see [API.md](API.md).
 | [Server Guide](docs/server-guide.md) | Building servers, namespaces, custom nodes, methods, events, access control |
 | [Security Guide](docs/security.md) | Certificates, encryption policies, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
+| [PubSub](docs/pubsub.md) | Publishers and subscribers over UDP and MQTT, UADP and JSON, message security, Security Key Service, PublishSubscribe information model |
 | [JSON and XML Data Encodings](docs/encodings.md) | `ua.EncodeJSON` / `ua.EncodeXML`: supported forms, namespace tables, custom structures, open62541 interoperability |
 | [Errors](ERRORS.md) | Go sentinels vs wire `ua.StatusCode` |
 | [Observability](OBSERVABILITY.md) | Silent slog default and metrics callbacks |
@@ -218,7 +219,7 @@ pick the right one for your project.
 | Server | ✅ | ✅ | ✅ |
 | Client/Server over UA-TCP, OPC UA Binary | ✅ | ✅ | ✅ |
 | JSON / XML data encoding (Part 6 §5.4, §5.3) | ✅ all built-in types and structures; JSON Compact, Verbose and 1.04 reversible ⁵ | ✅ JSON 1.05 or 1.04; XML for built-in types and arrays ⁵ | ✅ JSON Compact and Verbose, XML |
-| PubSub (Part 14) | — | ✅ UDP, Ethernet, MQTT | — |
+| PubSub (Part 14) | ✅ UADP and JSON over UDP and MQTT, PubSub-Aes128/256-CTR, Security Key Service, PublishSubscribe information model ⁶ | ✅ UDP, Ethernet, MQTT | — |
 | Reverse connect (client and server) | ✅ ¹ | ✅ | — |
 | RSA security policies (Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss; Basic128Rsa15 and Basic256 for legacy peers) | ✅ | ✅ | ✅ |
 | ECC security policies | ✅ ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519 | ✅ with OpenSSL (also Brainpool and Curve448) | — |
@@ -275,6 +276,15 @@ v1.5.9 does not encode structures, enumerations, DataValue, DiagnosticInfo or
 matrices to XML. See
 [JSON and XML Data Encodings](docs/encodings.md).
 
+⁶ Publisher and subscriber, standalone (`pubsub.New`) or in the server
+(`server.WithPubSub`, address space as data source and target variables);
+UADP with Variant, DataValue and RawData fields, delta frames, keep-alive and
+events; JSON `ua-data`, `ua-metadata`, `ua-status`; signed and encrypted UADP
+with keys from a static key ring, a local or remote Security Key Service, or
+SetSecurityKeys push; remote configuration with `pubsub/remote`. No Ethernet
+or AMQP transport and no chunked messages. Interoperability-tested against
+open62541 (interop ledger, profile `pubsub`). See [PubSub](docs/pubsub.md).
+
 ✅ = available · — = not available or not documented. For open62541 v1.5.9
 and Eclipse Milo 1.1.8, the versions go-opcua is tested against, from their
 public sources and documentation as of October 2026. If you spot an
@@ -287,7 +297,7 @@ call, reconnect with subscription recovery, retries and observability built
 in, and a server that includes history and query out of the box.
 
 **Choose open62541 if** you need a C library for embedded or bare-metal
-targets, PubSub, the Brainpool / Curve448 ECC security policies,
+targets, PubSub over Ethernet (TSN), the Brainpool / Curve448 ECC security policies,
 or a stack with an OPC Foundation certified server profile.
 
 **Choose Eclipse Milo if** you are on the JVM and want asynchronous client
@@ -398,6 +408,7 @@ types.
 | `uacp` | OPC-UA Connection Protocol (TCP transport); `ParseEndpoint`, `DialWithTimeout` |
 | `uasc` | OPC-UA Secure Conversation (secure channel) |
 | `uapolicy` | Security policy implementations (encryption, signing) |
+| `pubsub` | PubSub runtime (Part 14): publishers, subscribers, configuration builders; sub-packages `message`, `uadp`, `jsonmsg`, `transport` (`udp`, `mqtt`), `security`, `sks`, `remote` |
 | `internal/stats` | Expvar-based statistics collection (internal) |
 
 Test-only packages (`interop/`, `conformance/`, `tests/`) are not part of the public library surface.
@@ -485,9 +496,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 | | ECC_curve25519 (Ed25519, X25519, ChaCha20-Poly1305) | Yes |
 | | ECC_brainpoolP256r1 / ECC_brainpoolP384r1 | No |
 | | ECC_curve448 | No |
-| | PubSub-Aes128-CTR / PubSub-Aes256-CTR | No |
+| | PubSub-Aes128-CTR / PubSub-Aes256-CTR | Yes (PubSub UADP message security) |
 
-Client/Server only — PubSub transport and policies are not implemented (stub policy files exist under `uapolicy/` but are not registered for secure-channel use).
+PubSub (Part 14) is implemented in the `pubsub` packages: UDP (`opc.udp://`, unicast and multicast) and MQTT 3.1.1 (`mqtt://`, `mqtts://`) transports with the UADP and JSON message mappings; the PubSub-Aes128-CTR / PubSub-Aes256-CTR policies secure UADP messages and are not secure-channel policies. Ethernet and AMQP transports are not implemented. See [PubSub](docs/pubsub.md).
 
 ## License
 

@@ -2076,6 +2076,68 @@ type ServerMetrics interface {
 
 ---
 
+## Package `pubsub`
+
+OPC UA PubSub (Part 14). The guide is [docs/pubsub.md](docs/pubsub.md); the
+configuration is the generated `ua.PubSubConfigurationDataType` model.
+
+### Runtime
+
+```go
+func New(cfg *ua.PubSubConfigurationDataType, opts ...Option) (*PubSub, error)
+func (p *PubSub) Start(ctx context.Context) error
+func (p *PubSub) Close() error
+func (p *PubSub) Running() bool
+
+// Components: connections, groups, writers, readers, published data sets.
+func (p *PubSub) AddPublishedDataSet(cfg *ua.PublishedDataSetDataType) (ComponentID, error)
+func (p *PubSub) AddConnection(cfg *ua.PubSubConnectionDataType) (ComponentID, error)
+func (p *PubSub) AddWriterGroup(conn ComponentID, cfg *ua.WriterGroupDataType) (ComponentID, error)
+func (p *PubSub) AddReaderGroup(conn ComponentID, cfg *ua.ReaderGroupDataType) (ComponentID, error)
+func (p *PubSub) AddDataSetWriter(group ComponentID, cfg *ua.DataSetWriterDataType) (ComponentID, error)
+func (p *PubSub) AddDataSetReader(group ComponentID, cfg *ua.DataSetReaderDataType) (ComponentID, error)
+// Remove*, Enable, Disable, State, Status, Components, Component, Lookup,
+// Configuration, SetKeySource, KeySource.
+```
+
+Options: `WithDataSource`, `WithEventSource`, `WithDataSetHandler`,
+`WithTargetWriter`, `WithEventHandler`, `WithKeySource`,
+`WithKeySourceLookup`, `WithTransportConfig`, `WithRetryInterval`,
+`WithLogger`.
+
+Builders: `NewConfiguration`, `UDPConnection`, `MQTTConnection` (`MappingUADP`,
+`MappingJSON`), `AttachWriterGroups`, `AttachReaderGroups`, `WriterGroup`,
+`JSONWriterGroup`, `Secure`, `DataSetWriter`, `SetWriterQueue`,
+`PublishedDataItems` / `Var`, `MetaData` / `Field`, `DataSetMetaDataOf`,
+`ReaderGroup`, `DataSetReader`, `SetReaderQueue`, `Target`,
+`SetTargetVariables`, `SetMirror`, `PublisherIDVariant`; `Validate` checks a
+configuration (`*ConfigError`), `NewMemoryDataSource` holds values to publish.
+
+### Sub-packages
+
+| Package | Main API |
+|---------|----------|
+| `pubsub/message` | `NetworkMessage`, `DataSetMessage`, `Field`, `PublisherID`, `MetaDataLookup` |
+| `pubsub/uadp` | `Encode(nm, *EncodeOptions)`, `Decode(b, *DecodeOptions)`; errors `ErrFiltered`, `ErrMalformed`, `ErrUnsupported`, `ErrSecurityMode`, `ErrSecurityChecksFailed`, `ErrNoMetaData` |
+| `pubsub/jsonmsg` | `Encode`, `Decode`, `DecodeAny`, `EncodeMetaData` / `DecodeMetaData`, `EncodeStatus` / `DecodeStatus`, `MessageType` |
+| `pubsub/transport` | `Open(ctx, Config)`, `Connection`, `Register`; `udp` registers `opc.udp`, `mqtt` registers `mqtt` and `mqtts` |
+| `pubsub/security` | `Aes128CTR()`, `Aes256CTR()`, `PolicyByURI`, `KeyRing`, `KeyRings`, `KeyService` (`AddSecurityGroup`, `GetSecurityKeys`, `KeySource`) |
+| `pubsub/sks` | `GetSecurityKeys`, `SetSecurityKeys`, `Push`, `NewKeySource(ctx, Config)` |
+| `pubsub/remote` | `New(*opcua.Client)`; `AddConnection`, `AddWriterGroup`, `AddReaderGroup`, `AddDataSetWriter`, `AddDataSetReader`, `AddPublishedDataItems`, `AddPublishedDataItemsTemplate`, `Remove*`, `Enable`, `Disable`, `State`, `Property`, `Connections`, `WriterGroups`, `ReaderGroups`, `DataSetWriters`, `DataSetReaders`, `PublishedDataSets` |
+
+### Server integration
+
+```go
+func WithPubSub(cfg *ua.PubSubConfigurationDataType, opts ...pubsub.Option) Option
+func WithPubSubAuthorizer(a PubSubAuthorizer) Option
+func (s *Server) PubSub() *pubsub.PubSub
+func (s *Server) PubSubNodeID(c pubsub.ComponentID) (*ua.NodeID, bool)
+func (s *Server) PubSubComponentID(nodeID *ua.NodeID) (pubsub.ComponentID, bool)
+func (s *Server) EnableSecurityKeyService(ks *security.KeyService, opts ...SKSOption) (*SecurityKeyService, error)
+func (s *Server) EnableSecurityKeyPush(rings *security.KeyRings, opts ...SKSOption) error
+func MethodCallerFromContext(ctx context.Context) (*MethodCaller, bool)
+```
+
 ## Package `monitor`
 
 High-level subscription management with callback and channel APIs.
