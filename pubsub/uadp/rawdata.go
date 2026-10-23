@@ -375,7 +375,7 @@ func (rf *rawField) readLeaf(b *ua.Buffer, vb *ua.Buffer) error {
 		if strLen > int(rf.maxLen) {
 			return malformed("RawData string of %d bytes, MaxStringLength is %d", strLen, rf.maxLen)
 		}
-		if b.ReadN(int(rf.maxLen)-strLen); b.Error() != nil {
+		if b.ReadN(int(rf.maxLen) - strLen); b.Error() != nil {
 			return malformed("RawData string without its padding")
 		}
 	}

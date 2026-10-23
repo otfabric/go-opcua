@@ -169,14 +169,14 @@ func TestSecurityModeChecks(t *testing.T) {
 
 type nilKeys struct{ p security.Policy }
 
-func (k nilKeys) Policy() security.Policy                    { return k.p }
-func (nilKeys) CurrentKeys() (*security.Keys, error)         { return nil, nil }
+func (k nilKeys) Policy() security.Policy                   { return k.p }
+func (nilKeys) CurrentKeys() (*security.Keys, error)        { return nil, nil }
 func (nilKeys) KeysForToken(uint32) (*security.Keys, error) { return nil, nil }
 
 // failingPolicy fails in the operation named by fail.
 type failingPolicy struct {
 	testPolicy
-	fail   string
+	fail     string
 	sigLen   int
 	nonce    []byte
 	nonceLen int
