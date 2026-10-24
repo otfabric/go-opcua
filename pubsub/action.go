@@ -64,8 +64,9 @@ import (
 // sent.
 //
 // ctx ends with the TimeoutHint of the request (at most
-// ActionOptions.MaxTimeout) and when the runtime stops; a handler must
-// return then, since [PubSub.Close] waits for it. [ActionInvocationFrom]
+// ActionOptions.MaxTimeout), when the runtime or the writer stops; a
+// handler must return then, since [PubSub.Close] waits for it (and so a
+// handler must not call Close itself). [ActionInvocationFrom]
 // tells which request it serves. A panic is recovered and answered with
 // Bad_InternalError.
 type ActionHandler func(ctx context.Context, inputs []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
