@@ -24,10 +24,16 @@ import (
 // policy and key lifetime.
 func psKeyService(t *testing.T, policy string, lifetime time.Duration, groups ...string) *security.KeyService {
 	t.Helper()
+	return psKeyServicePast(t, policy, lifetime, 2, groups...)
+}
+
+// psKeyServicePast is psKeyService with past past keys per group.
+func psKeyServicePast(t *testing.T, policy string, lifetime time.Duration, past uint32, groups ...string) *security.KeyService {
+	t.Helper()
 	ks := security.NewKeyService()
 	for _, g := range groups {
 		require.NoError(t, ks.AddSecurityGroup(security.SecurityGroupConfig{
-			SecurityGroupID: g, SecurityPolicyURI: policy, KeyLifetime: lifetime, MaxFutureKeyCount: 2, MaxPastKeyCount: 2,
+			SecurityGroupID: g, SecurityPolicyURI: policy, KeyLifetime: lifetime, MaxFutureKeyCount: 2, MaxPastKeyCount: past,
 		}))
 	}
 	return ks
@@ -73,7 +79,10 @@ func TestPubSub_MessageSecurity(t *testing.T) {
 		{"enc256", ua.MessageSecurityModeSignAndEncrypt, security.PolicyURIAes256CTR},
 	}
 	const rotate = 100 * time.Millisecond
-	rotating := psKeyService(t, security.PolicyURIAes256CTR, rotate, "rotating")
+	// A subscriber verifies a message with the key of its token, which
+	// becomes a past key at the next change: ten past keys keep a message
+	// a loaded host delivers up to a second late verifiable.
+	rotating := psKeyServicePast(t, security.PolicyURIAes256CTR, rotate, 10, "rotating")
 	var pubOpts, subOpts []pubsub.Option
 	pubConn := pubsub.UDPConnection("pub", url, uint16(9))
 	subConn := pubsub.UDPConnection("sub", url, nil)
@@ -141,7 +150,7 @@ func TestPubSub_MessageSecurity(t *testing.T) {
 	require.NoError(t, err)
 	// Every message was verified (with the keys of the reader of its
 	// writer); the downgrade and otherkeys readers just do not take them.
-	require.Zero(t, st.Counters.DecodeErrors)
+	require.Zero(t, st.Counters.DecodeErrors, "last error: %v", st.LastError)
 	for _, r := range []string{"downgrade", "otherkeys"} {
 		s, err := sub.State(psComponent(t, sub, pubsub.KindDataSetReader, r))
 		require.NoError(t, err)
