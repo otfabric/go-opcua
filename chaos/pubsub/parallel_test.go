@@ -144,9 +144,11 @@ func TestParallelStartClose(t *testing.T) {
 	wd := chaoskit.NewWatchdog(t)
 	sink := &chaoskit.ErrSink{}
 	end := time.Now().Add(chaoskit.Duration(t, defaultDuration))
+	// One port for all iterations: an iteration closes its runtime, and
+	// with it every socket on the port, before the next one starts.
+	port := freeUDPPort(t)
 	for iter := 0; time.Now().Before(end); iter++ {
 		rng := rand.New(rand.NewSource(seed + int64(iter)))
-		port := freeUDPPort(t)
 		cfg := pubsub.NewConfiguration([]*ua.PublishedDataSetDataType{counterPDS("ds0")},
 			pubsub.AttachReaderGroups(
 				pubsub.AttachWriterGroups(pubsub.UDPConnection("c", udpURL(port), uint16(1)),

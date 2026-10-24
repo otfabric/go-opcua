@@ -103,13 +103,25 @@ func pick(tb testing.TB, proto string, free func(int) bool) int {
 	ephemeralOnce.Do(func() { ephemeralLow, ephemeralHigh = ephemeralRange() })
 	mu.Lock()
 	defer mu.Unlock()
-	for range 400 {
-		p := lowPort + rand.IntN(highPort-lowPort)
+	ok := func(p int) bool {
 		if used[p] || ephemeral(p) || !free(p) {
-			continue
+			return false
 		}
 		used[p] = true
-		return p
+		return true
+	}
+	for range 400 {
+		if p := lowPort + rand.IntN(highPort-lowPort); ok(p) {
+			return p
+		}
+	}
+	// Most of the range is handed out (a long -count run) or taken: look
+	// at every port before giving up.
+	start := rand.IntN(highPort - lowPort)
+	for i := range highPort - lowPort {
+		if p := lowPort + (start+i)%(highPort-lowPort); ok(p) {
+			return p
+		}
 	}
 	tb.Fatalf("testport: no free %s port", proto)
 	return 0
