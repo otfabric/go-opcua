@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -350,4 +352,66 @@ func TestRegressionIncompleteChunksExpire(t *testing.T) {
 	pending := sub.conns[0].reasm.Stats().Pending
 	sub.unlock()
 	require.Zero(t, pending)
+}
+
+// Regression: a Responder dropped an exchange at the end of its
+// TimeoutHint even while its handler still ran. A copy of the request
+// delivered late then ran the handler a second time, and a handler that
+// ignores its context no longer counted toward MaxConcurrent. Ended
+// exchanges are now remembered for the late copies of their requests.
+func TestRegressionActionExchangeExpiry(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	var calls atomic.Int32
+	release := make(chan struct{})
+	h := func(ctx context.Context, in []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		if calls.Add(1) == 1 {
+			<-release // ignores ctx
+		}
+		return addHandler(ctx, in)
+	}
+	resp := startReal(t, responderConfig(url, 10*time.Millisecond, ua.MessageSecurityModeNone), WithActionHandler("Calc", 1, h),
+		WithActionOptions(ActionOptions{MaxTimeout: 50 * time.Millisecond, MaxConcurrent: 1}))
+	var once sync.Once
+	t.Cleanup(func() { once.Do(func() { close(release) }) })
+	waitRunning(t, resp, "Responder")
+	waitResponder(t, resp)
+
+	// Request 1 expires while its handler runs: answered Bad_Timeout, and
+	// it still takes the only slot.
+	bus.inject(url, "", rawRequest(t, 1, 1, 1, ua.ActionStateExecuting, "c", 1, 2))
+	require.Eventually(t, func() bool {
+		for _, r := range responses(url) {
+			if r.reqID == 1 && r.state == ua.ActionStateDone && r.status == ua.StatusBadTimeout {
+				return true
+			}
+		}
+		return false
+	}, 3*time.Second, time.Millisecond)
+	bus.inject(url, "", rawRequest(t, 1, 1, 2, ua.ActionStateExecuting, "c", 1, 2))
+	require.Eventually(t, func() bool {
+		for _, r := range responses(url) {
+			if r.reqID == 2 && r.status == ua.StatusBadTooManyOperations {
+				return true
+			}
+		}
+		return false
+	}, 3*time.Second, time.Millisecond)
+	// A late copy of request 1 is answered, not executed again.
+	time.Sleep(2 * actionDuplicateGuard)
+	bus.inject(url, "", rawRequest(t, 1, 1, 1, ua.ActionStateExecuting, "c", 1, 2))
+	require.Eventually(t, func() bool { return countResponses(url, 1, ua.ActionStateDone) >= 2 }, 3*time.Second, time.Millisecond)
+	once.Do(func() { close(release) })
+	require.Eventually(t, func() bool { return exchanges(resp) == 0 }, 3*time.Second, time.Millisecond)
+	bus.inject(url, "", rawRequest(t, 1, 1, 1, ua.ActionStateExecuting, "c", 1, 2))
+
+	// Request 3 completes and is acknowledged; a late copy is not
+	// executed again either.
+	bus.inject(url, "", rawRequest(t, 1, 1, 3, ua.ActionStateExecuting, "c", 1, 2))
+	require.Eventually(t, func() bool { return countResponses(url, 3, ua.ActionStateDone) >= 1 }, 3*time.Second, time.Millisecond)
+	bus.inject(url, "", rawRequest(t, 1, 1, 3, ua.ActionStateIdle, "c"))
+	require.Eventually(t, func() bool { return countResponses(url, 3, ua.ActionStateIdle) == 1 }, 3*time.Second, time.Millisecond)
+	bus.inject(url, "", rawRequest(t, 1, 1, 3, ua.ActionStateExecuting, "c", 1, 2))
+	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, int32(2), calls.Load())
 }
