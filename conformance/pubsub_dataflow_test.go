@@ -597,9 +597,13 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 	require.Equal(t, ua.PubSubStateOperational, st.State, "keep-alives keep the reader Operational")
 	require.GreaterOrEqual(t, st.Counters.KeepAlivesReceived, uint64(4))
 	require.Len(t, rec.of("r"), 1, "no DataSet without a change")
-	pst, err := pub.Status(psComponent(t, pub, pubsub.KindDataSetWriter, "w"))
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, pst.Counters.KeepAlivesSent, st.Counters.KeepAlivesReceived)
+	// The publisher counts a keep-alive once its send returned, which can be
+	// after the reader counted it.
+	wid := psComponent(t, pub, pubsub.KindDataSetWriter, "w")
+	require.Eventually(t, func() bool {
+		pst, err := pub.Status(wid)
+		return err == nil && pst.Counters.KeepAlivesSent >= st.Counters.KeepAlivesReceived
+	}, 10*time.Second, time.Millisecond, "the publisher sent fewer keep-alives than the reader received")
 
 	// A change: one delta frame.
 	require.NoError(t, ds.Set(node, int32(2)))
