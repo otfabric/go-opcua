@@ -502,7 +502,9 @@ func (p *PubSub) lookupMetaData(snap []readerSnap, pub message.PublisherID, wgid
 		if s.dswid != 0 && dswid != 0 && s.dswid != dswid {
 			continue
 		}
-		if s.r.md == nil {
+		if s.r.md == nil || len(s.r.md.Fields) == 0 {
+			// No DataSetMetaData yet (a reader configured without
+			// it has an empty one): nothing to decode against.
 			continue
 		}
 		score := 0

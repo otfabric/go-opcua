@@ -2181,6 +2181,38 @@
       "fixture": "baseline"
     },
     {
+      "capability": "pubsub.mqtt5",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.mqtt5",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.amqp",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.amqp",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
       "capability": "pubsub.security.sign",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",

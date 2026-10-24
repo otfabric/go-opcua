@@ -1611,6 +1611,28 @@
       ]
     },
     {
+      "id": "pubsub.mqtt5",
+      "title": "UADP and JSON over MQTT 5.0 through Eclipse Mosquitto, go-opcua on MQTT 5.0 and the peer on its own MQTT version (C→ = go-opcua publishes with QoS 2, content type and UAMessageType, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.amqp",
+      "title": "UADP and JSON over AMQP 1.0 (RabbitMQ 4, ActiveMQ Artemis) (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "pubsub.security.sign",
       "title": "UADP message security Sign (HMAC-SHA256), static keys (C→ = go-opcua signs, peer verifies; →S = peer signs, go-opcua verifies)",
       "profile": "pubsub",

@@ -248,7 +248,7 @@ what the interop suite has actually exercised.
 | HistoryRead raw with a built-in store | ✅ | ✅ | delegated ⁵ | delegated | delegated | ✅ | ✅ |
 | HistoryRead modified / at-time / processed, HistoryUpdate | ✅ built-in historian, pluggable provider | raw and update; rest via backend plugin | delegated ⁵ | delegated | delegated | raw only | raw and events |
 | Server diagnostics (ServerDiagnostics, DiagnosticInfo) | — | ✅ | — | — | ✅ | ✅ | — |
-| PubSub (Part 14) ⁷ | ✅ UADP and JSON over UDP and MQTT, security, SKS | ✅ UDP, Ethernet, MQTT | — | — | ✅ UDP, MQTT | commercial add-on | experimental UADP over UDP |
+| PubSub (Part 14) ⁷ | ✅ UADP and JSON over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, security, SKS | ✅ UDP, Ethernet, MQTT | — | — | ✅ UDP, MQTT | commercial add-on | experimental UADP over UDP |
 | JSON / XML data encoding of values ⁸ | ✅ JSON 1.05 Compact and Verbose, 1.04; XML | ✅ JSON; XML for built-in types | ✅ JSON Compact and Verbose; XML | JSON 1.04 form; NodeSet2 XML | ✅ JSON Compact and Verbose; XML | JSON | — NodeSet2 XML only |
 | NodeSet2 XML import at run time | ✅ | ✅ loader, plus build-time compiler | — | ✅ | ✅ | ✅ | ✅ |
 | Custom structured DataTypes | registered Go types | generated or runtime descriptions | decoded dynamically | generated | decoded dynamically | decoded dynamically | decoded dynamically |
@@ -300,10 +300,13 @@ numeric scalars and arrays, and percent deadband on variables with an
 (`server.WithPubSub`); UADP with Variant, DataValue and RawData fields, delta
 frames, keep-alive and events; JSON `ua-data`, `ua-metadata`, `ua-status`;
 PubSub-Aes128/256-CTR with keys from a static key ring, a Security Key Service
-or SetSecurityKeys push; remote configuration with `pubsub/remote`. No
-Ethernet or AMQP transport and no chunked messages. Interoperability-tested
-against open62541, the only peer whose adapter offers PubSub. See
-[PubSub](docs/pubsub.md).
+or SetSecurityKeys push; remote configuration with `pubsub/remote`; chunked
+NetworkMessages, UADP discovery and the diagnostics objects. Transports: UDP
+unicast and multicast, raw Ethernet (Linux, macOS, FreeBSD; no TSN
+scheduling), MQTT 3.1.1 and 5.0, AMQP 1.0. No PubSub actions.
+Interoperability-tested against open62541, the only peer whose adapter offers
+PubSub (UDP, multicast, Ethernet, MQTT 3.1.1 and 5.0); the AMQP transport is
+tested through RabbitMQ 4 and ActiveMQ Artemis. See [PubSub](docs/pubsub.md).
 
 ⁸ An encoding of values (`ua.EncodeJSON`, `ua.EncodeXML`), not a transport.
 Verified live in both directions against open62541, Milo and
@@ -338,7 +341,7 @@ call, reconnect with subscription recovery, retries and observability built
 in, and a server that includes discovery, history and query out of the box.
 
 **Choose open62541 if** you need a C library for embedded or bare-metal
-targets, PubSub over Ethernet (TSN), the Brainpool / Curve448 ECC security
+targets, time-scheduled PubSub over Ethernet (TSN), the Brainpool / Curve448 ECC security
 policies, or a stack with an OPC Foundation certified server profile.
 
 **Choose Eclipse Milo if** you are on the JVM and want asynchronous client
@@ -547,7 +550,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 | | ECC_curve448 | No |
 | | PubSub-Aes128-CTR / PubSub-Aes256-CTR | Yes (PubSub UADP message security) |
 
-PubSub (Part 14) is implemented in the `pubsub` packages: UDP (`opc.udp://`, unicast and multicast) and MQTT 3.1.1 (`mqtt://`, `mqtts://`) transports with the UADP and JSON message mappings; the PubSub-Aes128-CTR / PubSub-Aes256-CTR policies secure UADP messages and are not secure-channel policies. Ethernet and AMQP transports are not implemented. See [PubSub](docs/pubsub.md).
+PubSub (Part 14) is implemented in the `pubsub` packages: UDP (`opc.udp://`, unicast and multicast), Ethernet (`opc.eth://`, UADP only), MQTT 3.1.1 and 5.0 (`mqtt://`, `mqtts://`) and AMQP 1.0 (`amqp://`, `amqps://`) transports with the UADP and JSON message mappings; the PubSub-Aes128-CTR / PubSub-Aes256-CTR policies secure UADP messages and are not secure-channel policies. See [PubSub](docs/pubsub.md).
 
 ## License
 

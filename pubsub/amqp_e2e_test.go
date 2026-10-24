@@ -98,6 +98,9 @@ func TestE2EAMQP(t *testing.T) {
 			meta := fmt.Sprintf("/queues/meta.%d", m)
 			sub, rec := amqpPair(t, b.URL(), m, data, meta, nil)
 			waitData(t, rec)
+			st, err := sub.Status(Root)
+			require.NoError(t, err)
+			require.Zero(t, st.Counters.DecodeErrors, errString(sub))
 			// The metadata came from the broker.
 			rid := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, mustID(t, sub, KindConnection, Root, "sub"), "rg"), "r")
 			require.Eventually(t, func() bool {
