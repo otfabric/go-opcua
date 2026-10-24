@@ -5,11 +5,13 @@ package pubsub
 import (
 	"context"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	"github.com/otfabric/go-opcua/pubsub/uadp"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -272,18 +274,41 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 			}
 			close(c.subsCh)
 			c.subsCh = make(chan struct{})
+			// Responder groups wait for their request queue.
+			p.reconcileLocked()
 		}
 		p.unlock()
 	}
 	sync()
+	// Incomplete chunked messages expire as chunks arrive; without
+	// chunks the ticker releases them.
+	expire := time.NewTicker(p.reassemblyTimeout())
+	defer expire.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-kick:
 			sync()
+		case now := <-expire.C:
+			if n := c.reasm.Expire(now); n > 0 {
+				p.lock()
+				if c.gen == gen {
+					c.ctr.ChunksDiscarded += uint64(n)
+				}
+				p.unlock()
+			}
 		}
 	}
+}
+
+// reassemblyTimeout is how long an incomplete chunked message waits for its
+// chunks.
+func (p *PubSub) reassemblyTimeout() time.Duration {
+	if o := p.opts.reassembly; o != nil && o.Timeout > 0 {
+		return o.Timeout
+	}
+	return uadp.DefaultReassemblyTimeout
 }
 
 // reconcileWriterGroup runs or stops a writer group and its writers.
@@ -299,9 +324,13 @@ func (p *PubSub) reconcileWriterGroup(g *writerGroup, parentOp bool) {
 		if g.cancel == nil {
 			p.startWriterGroup(g)
 		}
-		if g.mode > ua.MessageSecurityModeNone && !g.keysOK {
+		switch {
+		case g.mode > ua.MessageSecurityModeNone && !g.keysOK:
 			p.setState(&g.base, ua.PubSubStatePreOperational, nil)
-		} else {
+		case !p.actionQueueReady(g):
+			// A Responder is Operational once it hears requests.
+			p.setState(&g.base, ua.PubSubStatePreOperational, nil)
+		default:
 			p.setState(&g.base, ua.PubSubStateOperational, nil)
 		}
 	}
@@ -309,6 +338,25 @@ func (p *PubSub) reconcileWriterGroup(g *writerGroup, parentOp bool) {
 	for _, w := range g.writers {
 		p.reconcileWriter(w, op)
 	}
+}
+
+// actionQueueReady tells whether the connection of a writer group with
+// Action writers is subscribed to where their requests arrive: the
+// QueueName of the group on a broker, the connection address on a datagram
+// transport. A group without Action writers is always ready. p.mu is held.
+func (p *PubSub) actionQueueReady(g *writerGroup) bool {
+	if !slices.ContainsFunc(g.writers, (*dataSetWriter).isAction) {
+		return true
+	}
+	c := g.conn
+	topic := ""
+	if c.broker {
+		if g.brokerTS == nil {
+			return false
+		}
+		topic = g.brokerTS.QueueName
+	}
+	return c.subscribed[topic]
 }
 
 func (p *PubSub) startWriterGroup(g *writerGroup) {
@@ -411,6 +459,17 @@ func (p *PubSub) stopWriter(w *dataSetWriter) {
 	if w.evCancel != nil {
 		p.later(w.evCancel)
 		w.evCancel = nil
+	}
+	// The requests of a stopped Action writer end: their handlers are
+	// cancelled and nothing more is sent for them.
+	c := w.group.conn
+	for _, m := range []map[exchangeKey]*exchange{c.act.exchanges, c.act.tombs} {
+		for k, ex := range m {
+			if ex.w == w {
+				delete(m, k)
+				ex.stop()
+			}
+		}
 	}
 }
 

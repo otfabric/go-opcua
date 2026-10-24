@@ -619,8 +619,14 @@ func (e *encoder) sendChunks(ctx context.Context, o *outDSM, maxSize int) {
 	// not sent: a subscriber must not mistake a later chunk for one of
 	// them.
 	g.nmSeq += n
+	var own *dataSetWriter
+	if o.own {
+		own = o.w
+	}
+	opts := transport.PublishOptions{Topic: o.topic, QoS: o.qos,
+		ContentType: g.enc.contentType(), MessageType: transport.MessageTypeData, Properties: messageProperties(g, own)}
 	for _, b := range parts {
-		if !e.send(ctx, b, transport.PublishOptions{Topic: o.topic, QoS: o.qos}) {
+		if !e.send(ctx, b, opts) {
 			e.lose([]*outDSM{o})
 			return
 		}

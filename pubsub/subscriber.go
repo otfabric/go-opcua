@@ -37,7 +37,15 @@ type stream struct {
 	// expired is set by a MessageReceiveTimeout: the writer may have
 	// restarted its sequence numbers meanwhile (see processDSM).
 	expired bool
+	// seen is when the stream last had a message.
+	seen time.Time
 }
+
+// maxReaderStreams bounds the streams a reader keeps: a reader that does
+// not filter on PublisherId, WriterGroupId or DataSetWriterId would else
+// keep one for every identity a sender makes up. The least recently seen
+// stream makes room for a new one.
+const maxReaderStreams = 1024
 
 // staleWindow is how far behind the last sequence number a message may be,
 // after a MessageReceiveTimeout, and still count as a late copy of an old
@@ -185,7 +193,7 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		probe = err == nil && !chunk && t == message.NetworkMessageDiscoveryRequest
 	}
 	if encErr == nil && !probe && isActionMessage(enc, m) {
-		p.receiveAction(c, gen, enc, m)
+		p.receiveAction(c, gen, enc, m, false)
 		return
 	}
 	p.lock()
@@ -324,6 +332,13 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			return
 		}
 		p.decodeFailed(c, gen, snap, hdr, err)
+		return
+	}
+	if nm.Action != nil && nm.Chunk == nil {
+		// An action message isActionMessage did not recognise: a JSON
+		// MessageType beyond the bytes it looks at or escaped, or an
+		// MQTT 5.0 message type that says otherwise.
+		p.receiveAction(c, gen, enc, m, true)
 		return
 	}
 	if nm.Chunk != nil {
@@ -640,14 +655,32 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	if enc == encUADP && !dsm.Valid {
 		return
 	}
+	switch dsm.Type {
+	case message.DataSetMessageKeyFrame, message.DataSetMessageDeltaFrame, message.DataSetMessageEvent, message.DataSetMessageKeepAlive:
+	default:
+		// Action messages are handled by receiveAction; one that gets
+		// here (a reassembled chunk without ActionHeader) is malformed.
+		return
+	}
 	pub, _ := pubOf(nm, dsm)
 	wgid, _ := wgOf(nm)
 	key := streamKey{pub: pub.String(), pt: pub.Type, wg: wgid, dsw: dsm.DataSetWriterID}
 	st := r.streams[key]
 	if st == nil {
+		if len(r.streams) >= maxReaderStreams {
+			var oldest streamKey
+			var at time.Time
+			for k, s := range r.streams {
+				if at.IsZero() || s.seen.Before(at) {
+					oldest, at = k, s.seen
+				}
+			}
+			delete(r.streams, oldest)
+		}
 		st = &stream{}
 		r.streams[key] = st
 	}
+	st.seen = recv
 	keepAlive := dsm.Type == message.DataSetMessageKeepAlive
 	if hasSeq(dsm, enc) {
 		// UADP carries 16 bits; JSON publishers wrap at 16 bits as well

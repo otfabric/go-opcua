@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"net/netip"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -63,9 +64,13 @@ func clone[T any](v *T) (*T, error) {
 }
 
 // eoValue returns the decoded body of an ExtensionObject, nil if there is
-// none.
+// none: also for a nil pointer of a structure type, which the type switches
+// on the body would otherwise take for a structure.
 func eoValue(eo *ua.ExtensionObject) any {
-	if eo == nil {
+	if eo == nil || eo.Value == nil {
+		return nil
+	}
+	if v := reflect.ValueOf(eo.Value); v.Kind() == reflect.Pointer && v.IsNil() {
 		return nil
 	}
 	return eo.Value

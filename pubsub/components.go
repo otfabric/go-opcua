@@ -960,8 +960,11 @@ func (p *PubSub) addReaderLocked(g *readerGroup, in *ua.DataSetReaderDataType) (
 	if ts, ok := eoValue(cfg.TransportSettings).(*ua.BrokerDataSetReaderTransportDataType); ok {
 		r.brokerTS = ts
 	}
+	// A reader with a SecurityMode of its own overrides the security of its
+	// group; a SecurityGroupId alone (with SecurityMode Invalid or None)
+	// does not lower it.
 	r.mode, r.groupID = securityMode(g.cfg.SecurityMode), g.cfg.SecurityGroupID
-	if securityMode(cfg.SecurityMode) > ua.MessageSecurityModeNone || cfg.SecurityGroupID != "" {
+	if securityMode(cfg.SecurityMode) > ua.MessageSecurityModeNone {
 		r.mode, r.groupID = securityMode(cfg.SecurityMode), cfg.SecurityGroupID
 	}
 	switch sds := eoValue(cfg.SubscribedDataSet).(type) {

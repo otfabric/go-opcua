@@ -99,7 +99,9 @@ type MirrorWriter interface {
 // outside the runtime's lock, in the order the messages were received on a
 // connection, and must not block for long. It runs on the receiving
 // goroutine of the transport, which [PubSub.Close] waits for: a handler
-// must not call Close (it may start it in a goroutine of its own).
+// must not call Close (it may start it in a goroutine of its own). Nor may
+// it wait for [PubSub.CallAction]: the response would arrive on the
+// goroutine the handler blocks.
 type DataSetHandler func(ds *ReceivedDataSet)
 
 // KeySourceLookup returns the keys of a SecurityGroup, nil if unknown.
@@ -159,7 +161,11 @@ func WithDataSetHandler(h DataSetHandler) Option {
 }
 
 // WithEventHandler adds a handler for the events of the runtime: components
-// added and removed, and state changes.
+// added and removed, and state changes. Handlers run on the goroutine that
+// made the change, which is a goroutine of the runtime for the state
+// changes of a connection and its readers: they must not block for long,
+// call [PubSub.Close] or wait for [PubSub.CallAction] (start those in a
+// goroutine of their own).
 func WithEventHandler(h func(Event)) Option {
 	return func(o *options) {
 		if h != nil {
