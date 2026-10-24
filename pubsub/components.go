@@ -76,9 +76,9 @@ type connection struct {
 	// ready is closed once the run's first subscriptions are in place (or
 	// failed): the writer groups of the connection publish only then, so
 	// that its own readers and probe listener hear the first messages.
-	ready chan struct{}
-	topicsSeq  uint64
-	syncedSeq  uint64
+	ready     chan struct{}
+	topicsSeq uint64
+	syncedSeq uint64
 	// act is the state of the PubSub Actions of the current run.
 	act actionState
 }
