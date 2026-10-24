@@ -5,6 +5,7 @@ package opcua
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -61,4 +62,11 @@ func TestWithRetryPolicy(t *testing.T) {
 	c, err := NewClient("opc.tcp://example.com:4840", WithRetryPolicy(ExponentialBackoff(time.Second, time.Minute, 1)))
 	require.NoError(t, err)
 	_ = c.Close(context.Background())
+}
+
+// A timeout is recognised when it is wrapped, too.
+func TestExponentialBackoffWrappedTimeout(t *testing.T) {
+	p := NewExponentialBackoff(ExponentialBackoffConfig{})
+	retry, _ := p.ShouldRetry(0, fmt.Errorf("read: %w", ua.StatusBadTimeout))
+	require.False(t, retry)
 }

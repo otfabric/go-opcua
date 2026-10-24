@@ -418,7 +418,7 @@ func (c *Client) monitor(ctx context.Context) {
 			stats.RecordError(err)
 
 			// return if channel or connection is closed
-			if !ok || err == io.EOF && c.State() == Closed {
+			if !ok || errors.Is(err, io.EOF) && c.State() == Closed {
 				c.cfg.logger.Debug("monitor: closed")
 				return
 			}
@@ -1570,7 +1570,7 @@ func (c *Client) doSend(ctx context.Context, req ua.Request, h func(ua.Response)
 		stats.RecordError(err)
 		d := time.Since(start)
 		if err != nil {
-			if err == ua.StatusBadTimeout {
+			if errors.Is(err, ua.StatusBadTimeout) {
 				m.OnTimeout(svc, d)
 			} else {
 				m.OnError(svc, d, err)

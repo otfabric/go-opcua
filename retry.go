@@ -5,6 +5,8 @@ package opcua
 import (
 	"time"
 
+	"github.com/otfabric/go-opcua/errors"
+
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -43,7 +45,7 @@ type exponentialBackoff struct {
 }
 
 func (e *exponentialBackoff) ShouldRetry(attempt int, err error) (bool, time.Duration) {
-	if !e.cfg.RetryOnTimeout && err == ua.StatusBadTimeout {
+	if !e.cfg.RetryOnTimeout && errors.Is(err, ua.StatusBadTimeout) {
 		return false, 0
 	}
 	if e.cfg.MaxAttempts > 0 && attempt >= e.cfg.MaxAttempts {
