@@ -6548,6 +6548,110 @@
       "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
     },
     {
+      "capability": "pubsub.uadp.chunk",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
+    },
+    {
+      "capability": "pubsub.uadp.chunk",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.uadp.chunk",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
+    },
+    {
+      "capability": "pubsub.uadp.chunk",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.uadp.discovery",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json)"
+    },
+    {
+      "capability": "pubsub.uadp.discovery",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.uadp.discovery",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json)"
+    },
+    {
+      "capability": "pubsub.uadp.discovery",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
       "capability": "pubsub.uadp.eth",
       "direction": "go-client-to-open62541-server",
       "status": "verified",

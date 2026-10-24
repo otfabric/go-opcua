@@ -8,17 +8,21 @@ Pinned opcua-interop version: **v0.9.0**
 
 - `deferred`: 64
 - `not-applicable`: 44
-- `unsupported`: 156
-- `unverified`: 1
+- `unsupported`: 160
+- `unverified`: 5
 - `verified`: 411
 
 ## Unverified by reason
 
-- `adapter-command-missing`: 1
+- `adapter-command-missing`: 5
 
 ## Unverified rows
 
 | Capability | Dir | Reason | Next action |
 |---|:---:|---|---|
+| `pubsub.uadp.chunk` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
+| `pubsub.uadp.chunk` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
+| `pubsub.uadp.discovery` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
+| `pubsub.uadp.discovery` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.security-header` | O→S | `adapter-command-missing` | The open62541 codec operations have no keys (contract §14.9): the →S direction of signed / encrypted messages is pubsub.security.* |
 

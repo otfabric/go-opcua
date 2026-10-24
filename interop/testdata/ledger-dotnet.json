@@ -1978,421 +1978,533 @@
     {
       "capability": "pubsub.uadp.codec",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_GoEncodesUADP_DotnetDecodes",
+      "case": "*; dataset-message-invalid skipped: Opc.Ua.PubSub drops an invalid DataSetMessage (Part 14 §7.2.4.5.4)",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.codec",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_DotnetEncodesUADP_GoDecodes",
+      "case": "*; empty-string: Opc.Ua.PubSub encodes the empty String with length 0, go-opcua with length -1 (both decode alike); dataset-message-invalid skipped",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.delta-frame",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_GoEncodesUADP_DotnetDecodes",
+      "case": "delta-frame-*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.delta-frame",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_DotnetEncodesUADP_GoDecodes",
+      "case": "delta-frame-*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.keep-alive-message",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_GoEncodesUADP_DotnetDecodes",
+      "case": "keep-alive",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.keep-alive-message",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_DotnetEncodesUADP_GoDecodes",
+      "case": "keep-alive",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.security-header",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "sign*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.security-header",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "sign*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.json.codec",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_GoEncodesJSON_DotnetDecodes",
+      "case": "*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.json.codec",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubCodec_DotnetEncodesJSON_GoDecodes",
+      "case": "*; datavalue-fields: go-opcua cannot decode the DataValue Value Opc.Ua.PubSub writes without UaType when it has the DataSetMetaData (a go-opcua gap, pinned by the test)",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.field.variant",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "variant",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.field.variant",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "variant",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.field.datavalue",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "datavalue",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.field.datavalue",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "datavalue",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.field.rawdata",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "rawdata",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.field.rawdata",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "rawdata",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.udp",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.udp",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.udp-multicast",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "unverified",
+      "reason": "test-missing",
+      "nextAction": "multicast does not cross Docker Desktop's VM and the --network host tests (TestPubSubMulticast_*) run only the open62541 adapter; opcua-interop's own smoke (make smoke-pubsub-dotnet, udp-multicast) covers dotnet multicast container to container",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.udp-multicast",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "unverified",
+      "reason": "test-missing",
+      "nextAction": "multicast does not cross Docker Desktop's VM and the --network host tests (TestPubSubMulticast_*) run only the open62541 adapter; opcua-interop's own smoke (make smoke-pubsub-dotnet, udp-multicast) covers dotnet multicast container to container",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.chunk",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestPubSubChunk_GoPublishes_DotnetReassembles",
+      "case": "*; MaxNetworkMessageSize 80 unsecured, 128 with PubSub-Aes256-CTR",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.chunk",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestPubSubChunk_DotnetPublishes_GoReassembles",
+      "case": "*; MaxNetworkMessageSize 80 unsecured, 128 with PubSub-Aes256-CTR",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.discovery",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestPubSubDiscovery_GoProbes_DotnetAnswers",
+      "case": "*; the .NET layout (message.DiscoveryLayoutDotNet)",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.discovery",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestPubSubDiscovery_DotnetProbes_GoAnswers",
+      "case": "*; client pubsub-discover, the .NET layout",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.eth",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 has no raw Ethernet transport (its PubSub transports are UDP and MQTT)",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.eth",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 has no raw Ethernet transport (its PubSub transports are UDP and MQTT)",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.mqtt",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubMQTT_GoPublishes_DotnetSubscribes",
+      "case": "uadp; dotnet on MQTT 3.1.1",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.mqtt",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubMQTT_DotnetPublishes_GoReceives",
+      "case": "uadp; dotnet publishes on MQTT 5.0 (Opc.Ua.PubSub.Mqtt cannot publish below 5.0), go-opcua subscribes on 3.1.1",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.json.mqtt",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubMQTT_GoPublishes_DotnetSubscribes",
+      "case": "json; dotnet on MQTT 3.1.1",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.json.mqtt",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubMQTT_DotnetPublishes_GoReceives",
+      "case": "json; dotnet publishes on MQTT 5.0 (Opc.Ua.PubSub.Mqtt cannot publish below 5.0), go-opcua subscribes on 3.1.1",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.mqtt5",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubMQTT5_GoPublishes_DotnetSubscribes",
+      "case": "uadp, json; Mosquitto 2.0.22, dotnet on MQTT 5.0",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.mqtt5",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubMQTT5_DotnetPublishes_GoSubscribes",
+      "case": "uadp, json; Mosquitto 2.0.22, dotnet on MQTT 5.0",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.amqp",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 has no AMQP transport (its PubSub transports are UDP and MQTT)",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.amqp",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 has no AMQP transport (its PubSub transports are UDP and MQTT)",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.sign",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "sign-aes128-ctr",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.sign",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "sign-aes128-ctr",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.aes128-ctr",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "sign-and-encrypt-aes128-ctr",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.aes128-ctr",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "sign-and-encrypt-aes128-ctr",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.aes256-ctr",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
+      "case": "sign-and-encrypt-aes256-ctr",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.aes256-ctr",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "sign-and-encrypt-aes256-ctr",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.reject",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetSubscriber_RejectsInsecure",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.security.reject",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
+      "case": "sign*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.get-security-keys",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.get-security-keys",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.pull",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.pull",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.push",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.push",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.security-groups",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.sks.security-groups",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.runtime",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubRuntime_GoPublishes_DotnetSubscribes",
+      "case": "*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.runtime",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubRuntime_DotnetPublishes_GoSubscribes",
+      "case": "*",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.runtime.target-variables",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubRuntime_GoPublishes_DotnetSubscribes",
+      "case": "variant",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.runtime.target-variables",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "verified",
+      "test": "TestPubSubRuntime_DotnetPublishes_GoTargetVariables",
+      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.runtime.sks-pull",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.runtime.sks-pull",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter refuses serveSks and sksClient (contract §14.13): only static keys (securityGroups[].keys) are wired; Opc.Ua.PubSub 2.0.1 has an SKS client and server, the adapter would have to host them",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.keepalive",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop dotnet adapter exposes no reader or writer state (no PublishSubscribe information model, contract §14.13), which the keep-alive and receive-timeout tests read",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.keepalive",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop dotnet adapter exposes no reader or writer state (no PublishSubscribe information model, contract §14.13), which the keep-alive and receive-timeout tests read",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.receive-timeout",
       "direction": "go-client-to-dotnet-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop dotnet adapter exposes no reader or writer state (no PublishSubscribe information model, contract §14.13), which the keep-alive and receive-timeout tests read",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.receive-timeout",
       "direction": "dotnet-client-to-go-server",
-      "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop dotnet adapter exposes no reader or writer state (no PublishSubscribe information model, contract §14.13), which the keep-alive and receive-timeout tests read",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.infomodel.methods",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter does not expose the PublishSubscribe information model (contract §14.13): it builds the Opc.Ua.PubSub runtime from --pubsub-config, the server has no PublishSubscribe object",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.infomodel.methods",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter does not expose the PublishSubscribe information model (contract §14.13): it builds the Opc.Ua.PubSub runtime from --pubsub-config, the server has no PublishSubscribe object",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.infomodel.browse",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter does not expose the PublishSubscribe information model (contract §14.13): it builds the Opc.Ua.PubSub runtime from --pubsub-config, the server has no PublishSubscribe object",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.infomodel.browse",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "nextAction": "the opcua-interop dotnet adapter does not expose the PublishSubscribe information model (contract §14.13): it builds the Opc.Ua.PubSub runtime from --pubsub-config, the server has no PublishSubscribe object",
       "fixture": "baseline"
     }
   ]
