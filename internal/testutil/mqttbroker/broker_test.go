@@ -6,6 +6,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"net"
+	"strconv"
 	"testing"
 	"time"
 
@@ -371,4 +372,48 @@ func TestSlowClient(t *testing.T) {
 	}()
 	require.Eventually(t, func() bool { return b.ClientCount() == 1 }, 20*time.Second, 10*time.Millisecond)
 	require.Equal(t, "mqtt://"+b.Addr(), b.URL())
+}
+
+// TestResumedSessionKeepsOrder: a client that resumes its session gets the
+// QoS 1 messages queued for it before the ones published while it connects
+// (MQTT 3.1.1 §4.6).
+func TestResumedSessionKeepsOrder(t *testing.T) {
+	for range 10 {
+		b := start(t, Options{MaxQueued: 1000})
+		sub := rawDial(t, b)
+		sub.connect(&mqtt.Connect{ClientID: "s"})
+		sub.subscribe(1, "q", 1)
+		require.NoError(t, sub.conn.Close())
+		require.Eventually(t, func() bool { return b.ClientCount() == 0 }, 5*time.Second, time.Millisecond)
+
+		pub := rawDial(t, b)
+		pub.connect(&mqtt.Connect{ClientID: "pub", CleanSession: true})
+		n := 0
+		publish := func() {
+			n++
+			pub.send(&mqtt.Publish{Topic: "q", QoS: 1, PacketID: uint16(n), Payload: []byte(strconv.Itoa(n))})
+			pub.read()
+		}
+		for range 200 {
+			publish() // queued for the offline session
+		}
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for range 200 {
+				publish() // routed while the session resumes
+			}
+		}()
+		s := rawDial(t, b)
+		require.True(t, s.connect(&mqtt.Connect{ClientID: "s"}).SessionPresent)
+		<-done
+		for want := 1; want <= 400; want++ {
+			m, ok := s.read().(*mqtt.Publish)
+			require.True(t, ok)
+			got, _ := strconv.Atoi(string(m.Payload))
+			require.Equal(t, want, got, "messages out of order")
+			s.send(&mqtt.Ack{Kind: mqtt.TypePuback, PacketID: m.PacketID})
+		}
+		b.Close()
+	}
 }
