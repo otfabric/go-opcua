@@ -60,8 +60,8 @@ func findComponent(t *testing.T, cs []remote.Component, name string) *ua.NodeID 
 // open62541 server through its PublishSubscribe methods.
 func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 	requirePubSubServer(t)
-	hostPort := freeUDPPort(t)   // open62541 publishes to the host
-	readerPort := freeUDPPort(t) // go-opcua publishes to open62541
+	hostPort, ch := psListenUDP(t) // open62541 publishes to the host
+	readerPort := freeUDPPort(t)   // go-opcua publishes to open62541
 	srv := startPubSubServer(t, pubsubServerOpts{
 		config:   jobj{"configuration": jobj{"PublishedDataSets": []jobj{}, "Connections": []jobj{}, "Enabled": true}},
 		udpPorts: []int{readerPort},
@@ -115,7 +115,6 @@ func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 	if st := mustOK[ua.PubSubState](t)(r.State(ctx, conn)); st != ua.PubSubStateDisabled {
 		t.Errorf("new connection: %v, want Disabled (open62541 1.5.9)", st)
 	}
-	ch := psListen(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", hostPort)}, "")
 	for _, n := range []*ua.NodeID{conn, writer} {
 		if err := r.Enable(ctx, n); err != nil {
 			t.Fatalf("Enable %v: %v", n, err)
@@ -281,8 +280,7 @@ func adapterReadState(t *testing.T, endpoint, node string) ua.PubSubState {
 func TestPubSubInfoModel_Open62541Client_GoServer(t *testing.T) {
 	requireAdapterOp(t, "OPEN62541_IMAGE", defaultOpen62541Image, "call")
 	requirePubSubServer(t)
-	port := freeUDPPort(t)
-	ch := psListen(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", port)}, "")
+	port, ch := psListenUDP(t)
 	vars := psVars
 	srv := startGoPubSubServer(t, goPubSubOpts{}, func(p *pubsub.PubSub, ns uint16) {
 		mustOK[pubsub.ComponentID](t)(p.AddPublishedDataSet(psRuntimeDataSet(vars, ns, 0)))

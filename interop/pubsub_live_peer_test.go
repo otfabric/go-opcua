@@ -256,8 +256,7 @@ func psPeerPublishesUDP(t *testing.T, p *psPeer) {
 	for _, c := range psUDPCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
-			port := freeUDPPort(t)
-			ch := psListen(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", port)}, "")
+			port, ch := psListenUDP(t)
 			pub := startPubSubServer(t, pubsubServerOpts{peer: p, config: psUDPPublisherConfig(c, port)})
 			values := psValues(c.vars, psFresh())
 			writePubSubVars(t, pub.endpoint, c.vars, values)
