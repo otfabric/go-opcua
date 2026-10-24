@@ -5,11 +5,13 @@ package pubsub
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	mqtttransport "github.com/otfabric/go-opcua/pubsub/transport/mqtt"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -129,6 +131,28 @@ func uintPublisherID(n uint64) *ua.Variant {
 	default:
 		return ua.MustVariant(n)
 	}
+}
+
+// connectionProperties returns the ConnectionProperties of a connection
+// by name. Strings are taken as they are; Booleans and integers, which the
+// MQTT connection properties of Part 14 §7.3.4.4 Table 202 use, as their
+// text. Other values are left out.
+func connectionProperties(kvs []*ua.KeyValuePair) map[string]string {
+	props := map[string]string{}
+	for _, kv := range kvs {
+		if kv == nil || kv.Key == nil {
+			continue
+		}
+		switch v := variantValue(kv.Value).(type) {
+		case string:
+			props[kv.Key.Name] = v
+		case bool:
+			props[kv.Key.Name] = strconv.FormatBool(v)
+		case uint8, uint16, uint32, uint64, int8, int16, int32, int64:
+			props[kv.Key.Name] = fmt.Sprint(v)
+		}
+	}
+	return props
 }
 
 // isBroker reports whether a connection uses a broker transport.
@@ -350,6 +374,11 @@ func validateConnection(path string, c *ua.PubSubConnectionDataType, pds map[str
 		return configErr(path, "Address: %v", err)
 	}
 	broker := isBroker(c.TransportProfileURI, url)
+	if broker && len(c.ConnectionProperties) > 0 {
+		if err := mqtttransport.CheckProperties(connectionProperties(c.ConnectionProperties)); err != nil {
+			return configErr(path, "ConnectionProperties: %v", err)
+		}
+	}
 	wgNames := map[string]bool{}
 	wgIDs := map[uint16]bool{}
 	for i, wg := range c.WriterGroups {

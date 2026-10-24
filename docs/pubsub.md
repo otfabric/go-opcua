@@ -11,7 +11,7 @@ to variables.
 | Area | Supported |
 |------|-----------|
 | Message mappings | UADP (binary) and JSON (`ua-data`, `ua-metadata`, `ua-status`) |
-| Transports | UDP unicast and multicast (`opc.udp://`), MQTT 3.1.1 (`mqtt://`, `mqtts://`) with UADP or JSON |
+| Transports | UDP unicast and multicast (`opc.udp://`), MQTT 3.1.1 and 5.0 (`mqtt://`, `mqtts://`) with UADP or JSON, QoS 0, 1 and 2 |
 | UADP field encodings | Variant, DataValue, RawData |
 | DataSetMessages | key frames, delta frames, keep-alive, events (PublishedEvents) |
 | Message security | Sign and SignAndEncrypt with PubSub-Aes128-CTR and PubSub-Aes256-CTR (UADP) |
@@ -113,7 +113,30 @@ group := pubsub.JSONWriterGroup("Group", 1, time.Second, "plant/line1",
 Topics are the `QueueName` of the writer (or group) and of the reader;
 `SetWriterQueue` / `SetReaderQueue` also set the metadata queue, on which the
 publisher sends retained `ua-metadata` messages. `WithTransportConfig` sets
-broker credentials and TLS (`mqtts://`).
+broker credentials and TLS (`mqtts://`). The `RequestedDeliveryGuarantee` of
+the writer or reader picks the QoS (Part 14 §7.3.4.5): BestEffort and
+AtMostOnce are QoS 0, AtLeastOnce QoS 1 and ExactlyOnce QoS 2.
+
+The connection speaks MQTT 3.1.1 unless asked otherwise (Part 14 §7.3.4.4,
+`0:MqttVersion` of Table 201):
+
+```go
+pubsub.SetMQTTVersion(conn, pubsub.MQTTVersion5)             // or MQTTVersionBestAvailable
+pubsub.SetConnectionProperty(conn, "connection-Session Expiry Interval", uint32(300))
+pubsub.SetConnectionProperty(conn, "site", "berlin")          // sent as a CONNECT user property
+```
+
+`BestAvailable` tries 5.0 and falls back to 3.1.1 when the broker refuses it.
+With 5.0, the Table 202 properties (`connection-ClientID`, `connection-Receive
+Maximum`, `connection-Maximum Packet Size`, `connection-Session Expiry Interval`,
+`connection-Request Response Information`, `connection-Request Problem
+Information`) go into the CONNECT, any other connection property becomes a
+user property, and `Validate` checks their values; with 3.1.1 they are ignored.
+Topic aliases are never used. Each message carries its content type
+(`application/opcua+uadp` or `application/json`, §7.3.4.9) and the
+`UAMessageType` user property (`ua-data`, `ua-metadata`, §7.3.4.8); the
+subscriber uses the content type to pick the decoder. Broker refusals (reason
+codes) are reported as errors with the broker's reason string.
 
 ## In the server
 
