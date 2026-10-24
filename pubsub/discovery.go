@@ -382,7 +382,7 @@ func (p *PubSub) answersLocked(c *connection, req *message.DiscoveryRequest, now
 				continue
 			}
 			for _, w := range g.writers {
-				if !w.running || w.pds == nil || w.pds.md == nil || !wanted(w.cfg.DataSetWriterID) {
+				if !w.running || w.pds == nil || w.pds.md == nil || w.isAction() || !wanted(w.cfg.DataSetWriterID) {
 					continue
 				}
 				add(key(req.InformationType, w.cfg.DataSetWriterID), &message.Discovery{

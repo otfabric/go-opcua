@@ -173,6 +173,24 @@ type Counters struct {
 	DiscoveryRequestsIgnored   uint64
 	DiscoveryResponsesSent     uint64
 	DiscoveryResponsesReceived uint64
+
+	// PubSub Actions (Part 14 §6.2.11.2 in 1.05). The Requestor counts
+	// the ActionRequestsSent (every request message, resends and Idle
+	// acknowledgements included), the ActionResponsesReceived for its
+	// calls and the ActionTimeouts of calls that got no Done response in
+	// time. The Responder counts the ActionRequestsReceived for its
+	// Action writers, the ActionResponsesSent, and the
+	// ActionRequestsRejected: requests for an unknown writer or Action
+	// target, without the security the writer group requires, beyond the
+	// rate or concurrency limits, or whose response could not be
+	// addressed. Duplicates of a running or completed request are counted
+	// as received but not executed again.
+	ActionRequestsSent      uint64
+	ActionRequestsReceived  uint64
+	ActionRequestsRejected  uint64
+	ActionResponsesSent     uint64
+	ActionResponsesReceived uint64
+	ActionTimeouts          uint64
 }
 
 func (c *Counters) add(o *Counters) {
@@ -205,6 +223,12 @@ func (c *Counters) add(o *Counters) {
 	c.DiscoveryRequestsIgnored += o.DiscoveryRequestsIgnored
 	c.DiscoveryResponsesSent += o.DiscoveryResponsesSent
 	c.DiscoveryResponsesReceived += o.DiscoveryResponsesReceived
+	c.ActionRequestsSent += o.ActionRequestsSent
+	c.ActionRequestsReceived += o.ActionRequestsReceived
+	c.ActionRequestsRejected += o.ActionRequestsRejected
+	c.ActionResponsesSent += o.ActionResponsesSent
+	c.ActionResponsesReceived += o.ActionResponsesReceived
+	c.ActionTimeouts += o.ActionTimeouts
 }
 
 // Status is the state and the diagnostics of a component.

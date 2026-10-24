@@ -35,6 +35,14 @@ func (d *decoder) decode() (*message.NetworkMessage, error) {
 		}
 		body = body[:len(body)-n]
 	}
+	if nm.Action != nil {
+		a, n, err := decodeActionHeader(body)
+		if err != nil {
+			return nil, err
+		}
+		nm.Action = a
+		body = body[n:]
+	}
 	switch {
 	case nm.Chunk != nil:
 		nm.Chunk, err = decodeChunk(body)
@@ -43,7 +51,9 @@ func (d *decoder) decode() (*message.NetworkMessage, error) {
 	case nm.Type == message.NetworkMessageDiscoveryRequest:
 		nm.Request, err = decodeDiscoveryRequest(body)
 	default:
-		err = d.decodePayload(nm, body)
+		if err = d.decodePayload(nm, body); err == nil {
+			err = checkActionMessages(nm)
+		}
 	}
 	if err != nil {
 		return nil, err
@@ -99,6 +109,17 @@ func decodeHeaders(data []byte) (*message.NetworkMessage, int, error) {
 			return nil, 0, malformed("chunk of a discovery probe")
 		}
 		nm.Chunk = &message.Chunk{}
+	}
+	if ext2&ext2Action != 0 {
+		// The ActionHeader follows the security header; it is decoded
+		// with the payload (decodeActionHeader).
+		if nm.Type != message.NetworkMessageDataSet {
+			return nil, 0, malformed("ActionHeader in a NetworkMessage of type %d", nm.Type)
+		}
+		if nm.Chunk != nil {
+			return nil, 0, unsupported("chunked action messages")
+		}
+		nm.Action = &message.ActionHeader{}
 	}
 
 	mask := ua.UADPNetworkMessageContentMaskNone
@@ -255,7 +276,8 @@ func (d *decoder) decodeDataSetMessage(nm *message.NetworkMessage, m *message.Da
 		f2 = b.ReadUint8()
 	}
 	m.Type = message.DataSetMessageType(f2 & dsf2TypeMask)
-	if m.Type > message.DataSetMessageKeepAlive {
+	isAction := m.Type == message.DataSetMessageActionRequest || m.Type == message.DataSetMessageActionResponse
+	if m.Type > message.DataSetMessageKeepAlive && !isAction {
 		return unsupported("DataSetMessage type %d", m.Type)
 	}
 	for _, f := range dsmFields {
@@ -287,6 +309,8 @@ func (d *decoder) decodeDataSetMessage(nm *message.NetworkMessage, m *message.Da
 		err = decodeKeyFrame(b, m, md)
 	case message.DataSetMessageDeltaFrame:
 		err = decodeDeltaFrame(b, m, md)
+	case message.DataSetMessageActionRequest, message.DataSetMessageActionResponse:
+		err = decodeAction(b, m, md)
 	default: // keep-alive: no payload
 	}
 	if err != nil {

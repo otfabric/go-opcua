@@ -22,6 +22,9 @@ func (e *encoder) has(m ua.UADPNetworkMessageContentMask) bool {
 // check validates the type and the body of the NetworkMessage.
 func (e *encoder) check() error {
 	nm := e.nm
+	if nm.Chunk != nil && nm.Action != nil {
+		return unsupported("chunked action messages")
+	}
 	if nm.Chunk != nil {
 		switch nm.Type {
 		case message.NetworkMessageDataSet:
@@ -33,6 +36,14 @@ func (e *encoder) check() error {
 			return malformed("chunk of a NetworkMessage of type %d", nm.Type)
 		}
 		return nil
+	}
+	if nm.Action != nil {
+		return checkAction(nm)
+	}
+	for _, m := range nm.Messages {
+		if m != nil && (m.Type == message.DataSetMessageActionRequest || m.Type == message.DataSetMessageActionResponse) {
+			return malformed("an %v DataSetMessage needs the ActionHeader", m.Type)
+		}
 	}
 	switch nm.Type {
 	case message.NetworkMessageDataSet:
@@ -75,7 +86,14 @@ func (e *encoder) encode() ([]byte, error) {
 	if b.Error() != nil {
 		return nil, malformed("header: %v", b.Error())
 	}
+	// The ActionHeader follows the security header: it is encrypted with
+	// the payload.
 	payloadStart := b.Len()
+	if nm.Action != nil {
+		if err := writeActionHeader(b, nm.Action); err != nil {
+			return nil, err
+		}
+	}
 
 	var err error
 	switch {
@@ -114,6 +132,9 @@ func (e *encoder) writeHeader(b *ua.Buffer, payloadHeader bool) error {
 	}
 	if nm.Chunk != nil {
 		ext2 |= ext2Chunk
+	}
+	if nm.Action != nil {
+		ext2 |= ext2Action
 	}
 	var ext1 byte
 	if e.has(ua.UADPNetworkMessageContentMaskPublisherID) {
@@ -279,7 +300,7 @@ func (e *encoder) encodeDataSetMessage(b *ua.Buffer, m *message.DataSetMessage) 
 	if m.FieldEncoding > message.FieldEncodingDataValue {
 		return malformed("field encoding %d", m.FieldEncoding)
 	}
-	if m.Type > message.DataSetMessageKeepAlive {
+	if m.Type > message.DataSetMessageKeepAlive && m.Type != message.DataSetMessageActionRequest && m.Type != message.DataSetMessageActionResponse {
 		return malformed("DataSetMessage type %d", m.Type)
 	}
 
@@ -317,6 +338,8 @@ func (e *encoder) encodeDataSetMessage(b *ua.Buffer, m *message.DataSetMessage) 
 		return e.encodeKeyFrame(b, m)
 	case message.DataSetMessageDeltaFrame:
 		return e.encodeDeltaFrame(b, m)
+	case message.DataSetMessageActionRequest, message.DataSetMessageActionResponse:
+		return e.encodeAction(b, m)
 	default: // keep-alive: no payload
 		return nil
 	}

@@ -123,6 +123,8 @@ type options struct {
 	diagLevel       ua.DiagnosticsLevel
 	reassembly      *uadp.ReassemblerOptions
 	discovery       DiscoveryOptions
+	actions         ActionOptions
+	actionHandlers  map[actionKey]ActionHandler
 }
 
 // WithLogger sets the logger. The default discards log output.

@@ -301,8 +301,10 @@ func (c *Conn) message(payload []byte, opts transport.PublishOptions, now time.T
 	id[6] = id[6]&0x0f | 0x40 // version 4 (RFC 9562)
 	id[8] = id[8]&0x3f | 0x80
 	p := &iamqp.Properties{MessageID: id, Subject: SubjectData, ContentType: iamqp.Symbol(c.contentType)}
-	if opts.MessageType == transport.MessageTypeMetaData {
-		p.Subject = SubjectMetaData
+	if opts.MessageType != "" {
+		// The subject is the UAMessageType (Part 14 Table B.1):
+		// ua-data, ua-metadata, ua-action-request, ...
+		p.Subject = opts.MessageType
 	}
 	if opts.ContentType != "" {
 		p.ContentType = iamqp.Symbol(opts.ContentType)

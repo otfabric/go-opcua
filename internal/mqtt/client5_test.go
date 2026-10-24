@@ -383,9 +383,19 @@ func TestV5ServerDisconnect(t *testing.T) {
 	require.Contains(t, err.Error(), "administrative action")
 	require.Contains(t, (&mqtt.DisconnectError{ReasonCode: 0x9c, ServerReference: "b2"}).Error(), "b2")
 	require.Eventually(t, c.IsConnected, 5*time.Second, time.Millisecond, "reconnects")
+}
 
-	// Session takeover.
-	dial5(t, mqtt.Options{Server: b.URL(), ClientID: "c", MaxReconnectDelay: time.Hour, MinReconnectDelay: time.Hour})
+// TestV5SessionTakeover: a second client with the same ClientID takes the
+// session over; the first one learns why. The first client does not
+// reconnect, or it would take the session back while the second dials.
+func TestV5SessionTakeover(t *testing.T) {
+	b := startBroker(t, mqttbroker.Options{})
+	lost := make(chan error, 10)
+	dial5(t, mqtt.Options{Server: b.URL(), ClientID: "c", MinReconnectDelay: time.Hour, MaxReconnectDelay: time.Hour,
+		OnConnectionLost: func(err error) { lost <- err }})
+	dial5(t, mqtt.Options{Server: b.URL(), ClientID: "c", MinReconnectDelay: time.Hour, MaxReconnectDelay: time.Hour})
+	var err error
+	var de *mqtt.DisconnectError
 	select {
 	case err = <-lost:
 		require.ErrorAs(t, err, &de)

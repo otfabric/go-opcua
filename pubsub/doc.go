@@ -47,4 +47,14 @@
 // [github.com/otfabric/go-opcua/pubsub/transport]). Secured groups get the
 // keys of their SecurityGroup from a [security.KeySource] given with
 // [WithKeySource] or [WithKeySourceLookup].
+//
+// # Actions
+//
+// PubSub Actions (Part 14 §6.2.11.2 in 1.05) call Action targets over
+// PubSub. A Responder is a DataSetWriter of a PublishedAction
+// ([PublishedActions]) whose targets run the [ActionHandler]s registered
+// with [WithActionHandler] or [PubSub.SetActionHandler]; a Requestor calls
+// them with [PubSub.CallAction]. Both work over UDP and over MQTT and AMQP
+// brokers, with the UADP (secured or not) and JSON mappings; [ActionOptions]
+// bound what a Responder accepts.
 package pubsub

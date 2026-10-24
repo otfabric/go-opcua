@@ -486,7 +486,7 @@ func TestDecodeErrors(t *testing.T) {
 	}
 
 	var ute *UnsupportedMessageTypeError
-	for _, typ := range []string{"ua-metadata", "ua-status", "ua-application", "ua-endpoints", "ua-connection", "ua-action-request"} {
+	for _, typ := range []string{"ua-metadata", "ua-status", "ua-application", "ua-endpoints", "ua-connection", "ua-action-metadata"} {
 		_, err := Decode([]byte(`{"MessageType":"`+typ+`"}`), nil)
 		require.ErrorAs(t, err, &ute)
 		require.Equal(t, typ, ute.MessageType)

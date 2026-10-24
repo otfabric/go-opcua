@@ -621,6 +621,10 @@ func (m *pubsubModel) addPDSNodes(c *psComp, info pubsub.ComponentInfo) error {
 		if src.Filter != nil {
 			m.prop(c, c.obj, "Filter", id.ContentFilter, -1, eo(src.Filter))
 		}
+	case *ua.PublishedActionDataType, *ua.PublishedActionMethodDataType:
+		// The nodeset has no PublishedActionType (Part 14 v1.05):
+		// a PublishedAction shows as a PublishedDataSet.
+		c.obj = m.object(c, m.pdsDir, id.HasComponent, info.Name, m.ns.ID(), id.PublishedDataSetType)
 	default:
 		c.obj = m.object(c, m.pdsDir, id.HasComponent, info.Name, m.ns.ID(), id.PublishedDataItemsType)
 		var items []*ua.PublishedVariableDataType

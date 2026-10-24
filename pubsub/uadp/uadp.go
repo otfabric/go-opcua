@@ -47,6 +47,15 @@
 // are encoded and decoded in the layout of the spec or of the .NET stack 2.x
 // ([message.DiscoveryLayout]); Decode recognises both. The ActionResponder
 // and ActionMetaData announcements of PubSub Actions are not supported.
+//
+// # Actions
+//
+// The ActionRequest and ActionResponse NetworkMessages of PubSub Actions
+// (Part 14 §6.2.11.2 and Tables 154, 166 and 167 in 1.05) are DataSet
+// NetworkMessages with [message.NetworkMessage.Action] set: the ActionHeader
+// (bit 5 of ExtendedFlags2) follows the security header and is secured with
+// the payload, the DataSetMessages are of type ActionRequest or
+// ActionResponse. [PeekAction] recognises them without decoding.
 package uadp
 
 import (
@@ -124,7 +133,9 @@ type DecodeOptions struct {
 	// (publisher id, group header, payload header, security header)
 	// before the payload is verified, decrypted and decoded. Returning
 	// false stops decoding with ErrFiltered. The DataSetMessages of the
-	// header carry only their DataSetWriterID.
+	// header carry only their DataSetWriterID; the Action of an action
+	// message is set but still empty (the ActionHeader follows the
+	// security header).
 	Accept func(header *message.NetworkMessage) bool
 	// Security returns the security mode the receiver requires for a
 	// message and the keys to verify and decrypt it. It is called after

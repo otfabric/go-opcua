@@ -40,14 +40,22 @@ func (p *PubSub) reconcileConnection(c *connection, parentOp bool) {
 	for _, g := range c.rgs {
 		p.reconcileReaderGroup(g, op)
 	}
-	if c.cancel != nil {
-		want := p.wantTopics(c)
-		if !maps.Equal(want, c.topics) {
-			c.topics = want
-			select {
-			case c.kick <- struct{}{}:
-			default:
-			}
+	p.updateTopics(c)
+}
+
+// updateTopics brings the subscriptions a running connection should have up
+// to date and wakes its goroutine if they changed.
+func (p *PubSub) updateTopics(c *connection) {
+	if c.cancel == nil {
+		return
+	}
+	want := p.wantTopics(c)
+	if !maps.Equal(want, c.topics) {
+		c.topics = want
+		c.topicsSeq++
+		select {
+		case c.kick <- struct{}{}:
+		default:
 		}
 	}
 }
@@ -61,6 +69,7 @@ func (p *PubSub) wantTopics(c *connection) map[string]byte {
 	if p.listensForProbes(c) {
 		want[""] = 0
 	}
+	p.actionTopics(c, want)
 	for _, g := range c.rgs {
 		for _, r := range g.readers {
 			if !r.running {
@@ -97,6 +106,8 @@ func (p *PubSub) startConnection(c *connection) {
 	c.cancel = cancel
 	c.kick = make(chan struct{}, 1)
 	c.topics = nil
+	c.subsCh = make(chan struct{})
+	c.subscribed = nil
 	p.setState(&c.base, ua.PubSubStatePreOperational, nil)
 	gen, kick := c.gen, c.kick
 	p.wg.Add(1)
@@ -114,6 +125,9 @@ func (p *PubSub) stopConnection(c *connection) {
 	c.topics = nil
 	c.gen++
 	c.reasm.Reset()
+	p.stopActions(c)
+	close(c.subsCh)
+	c.subsCh, c.subscribed = nil, nil
 }
 
 // transportConfig builds the transport configuration of a connection.
@@ -208,6 +222,7 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 			return
 		}
 		want := maps.Clone(c.topics)
+		seq := c.topicsSeq
 		p.unlock()
 		for topic, cancel := range subs {
 			if _, ok := want[topic]; !ok {
@@ -247,6 +262,18 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 		} else if failed {
 			retry.Reset(p.opts.retryInterval)
 		}
+		// Tell the waiters (CallAction) which subscriptions are in place.
+		p.lock()
+		if c.gen == gen {
+			c.syncedSeq = seq
+			c.subscribed = make(map[string]bool, len(subs))
+			for topic := range subs {
+				c.subscribed[topic] = true
+			}
+			close(c.subsCh)
+			c.subsCh = make(chan struct{})
+		}
+		p.unlock()
 	}
 	sync()
 	for {
@@ -487,10 +514,14 @@ func (p *PubSub) readerTimeout(r *dataSetReader, ref *timerRef) {
 		return
 	}
 	r.ctr.Timeouts++
-	// Forget the sequence numbers of the writers: a publisher that was
-	// restarted meanwhile starts again at 1, and its messages would be
-	// discarded as older than the last ones of its previous run.
-	r.streams = map[streamKey]*stream{}
+	// A publisher that was restarted meanwhile starts its sequence
+	// numbers again at 1, and its messages would be discarded as older
+	// than the last ones of its previous run: mark the streams expired
+	// (processDSM resynchronises them) and drop the merged fields, a key
+	// frame starts the stream again.
+	for _, st := range r.streams {
+		st.expired, st.fields, st.key = true, nil, false
+	}
 	wasOp := r.state == ua.PubSubStateOperational
 	p.setState(&r.base, ua.PubSubStateError, ua.StatusBadTimeout)
 	if wasOp {
