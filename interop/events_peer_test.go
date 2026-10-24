@@ -55,25 +55,23 @@ var baseEventSelectClauses = []string{
 	"EventId", "EventType", "SourceName", "Message", "Severity", "Time",
 }
 
-// pulsePeerEvents emits BaseEvents on a short interval so slow adapter clients
-// (notably Milo JVM cold-start on CI) still observe at least one notification
-// after CreateMonitoredItems completes.
-func pulsePeerEvents(t *testing.T, srv *server.Server, source *ua.NodeID, forDur time.Duration) {
+// pulsePeerEvents emits BaseEvents on a short interval until the test ends,
+// so slow adapter clients (notably Milo JVM cold-start on CI) still observe
+// at least one notification after CreateMonitoredItems completes, however
+// long the container takes to get there. (A fixed pulse duration counted
+// from before docker run could end before the client subscribed.)
+func pulsePeerEvents(t *testing.T, srv *server.Server, source *ua.NodeID) {
 	t.Helper()
-	done := make(chan struct{})
-	t.Cleanup(func() { close(done) })
+	done, stopped := make(chan struct{}), make(chan struct{})
+	// emitPeerEvent logs to t: the goroutine ends before the test does.
+	t.Cleanup(func() { close(done); <-stopped })
 	go func() {
+		defer close(stopped)
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
-		deadline := time.After(forDur)
-		// First emit after a short delay so the client can subscribe.
-		time.Sleep(500 * time.Millisecond)
-		emitPeerEvent(t, srv, source)
 		for {
 			select {
 			case <-done:
-				return
-			case <-deadline:
 				return
 			case <-ticker.C:
 				emitPeerEvent(t, srv, source)
@@ -87,7 +85,7 @@ func runPeerEventSubscribe(t *testing.T, endpoint string, srv *server.Server, ru
 	_, nsIdx := findNSFromServer(t, srv)
 	source := ua.NewStringNodeID(nsIdx, "Events.Source")
 	node := "nsu=" + interopNamespaceURI + ";s=Events.Source"
-	pulsePeerEvents(t, srv, source, 14*time.Second)
+	pulsePeerEvents(t, srv, source)
 	result := run(t, endpoint, "event-subscribe",
 		"--node", node,
 		"--events", "1",
@@ -284,7 +282,7 @@ func runPeerEventSubscribeFiltered(t *testing.T, endpoint string, srv *server.Se
 	_, nsIdx := findNSFromServer(t, srv)
 	source := ua.NewStringNodeID(nsIdx, "Events.Source")
 	node := "nsu=" + interopNamespaceURI + ";s=Events.Source"
-	pulsePeerEvents(t, srv, source, 14*time.Second)
+	pulsePeerEvents(t, srv, source)
 	args := []string{"--node", node, "--events", "1", "--timeout-ms", "15000"}
 	args = append(args, extra...)
 	result := run(t, endpoint, "event-subscribe", args...)

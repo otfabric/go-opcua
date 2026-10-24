@@ -1374,7 +1374,7 @@ func assertPeerEventSeverityRejects(t *testing.T, run func(*testing.T, string, s
 	t.Helper()
 	endpoint, srv := startGoServerWithEvents(t)
 	_, nsIdx := findNSFromServer(t, srv)
-	pulsePeerEvents(t, srv, ua.NewStringNodeID(nsIdx, "Events.Source"), 12*time.Second)
+	pulsePeerEvents(t, srv, ua.NewStringNodeID(nsIdx, "Events.Source"))
 
 	result := run(t, endpoint, "event-subscribe",
 		"--node", "nsu="+interopNamespaceURI+";s=Events.Source",
