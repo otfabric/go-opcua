@@ -109,13 +109,26 @@ func TestChaosPubSubConfigurationFile(t *testing.T) {
 							file := &ua.PubSubConfiguration2DataType{Connections: []*ua.PubSubConnectionDataType{conn},
 								PublishedDataSets: []*ua.PublishedDataSetDataType{action}}
 							var refs []*ua.PubSubConfigurationRefDataType
-							for range 1 + rng.Intn(4) {
-								kind := ua.PubSubConfigurationRefMask(1) << (4 + rng.Intn(9))
-								op := ops[rng.Intn(len(ops))]
-								if rng.Intn(10) == 0 {
-									op = ua.PubSubConfigurationRefMask(rng.Intn(16))
+							if rng.Intn(2) == 0 {
+								// A well-formed update: a group of its own on a
+								// connection of its own (fails only if another
+								// worker removed the connection meanwhile).
+								own := pubsub.UDPConnection(fmt.Sprintf("w%d", g), connURL, nil)
+								own.WriterGroups = []*ua.WriterGroupDataType{pubsub.WriterGroup(fmt.Sprintf("g%d-%d-%d", g, n, k), 0, 100*time.Millisecond)}
+								file.Connections = []*ua.PubSubConnectionDataType{own}
+								refs = append(refs, remote.Ref(ua.PubSubConfigurationRefMaskElementAdd|ua.PubSubConfigurationRefMaskElementMatch,
+									ua.PubSubConfigurationRefMaskReferenceConnection, 0, 0, 0),
+									remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceWriterGroup, 0, 0, 0))
+							}
+							if len(refs) == 0 {
+								for range 1 + rng.Intn(4) {
+									kind := ua.PubSubConfigurationRefMask(1) << (4 + rng.Intn(9))
+									op := ops[rng.Intn(len(ops))]
+									if rng.Intn(10) == 0 {
+										op = ua.PubSubConfigurationRefMask(rng.Intn(16))
+									}
+									refs = append(refs, remote.Ref(op, kind, uint16(rng.Intn(2)), uint16(rng.Intn(2)), uint16(rng.Intn(2))))
 								}
-								refs = append(refs, remote.Ref(op, kind, uint16(rng.Intn(2)), uint16(rng.Intn(2)), uint16(rng.Intn(2))))
 							}
 							res, err := r.UpdateConfiguration(ctx, file, refs, rng.Intn(2) == 0)
 							if err != nil {
@@ -146,7 +159,22 @@ func TestChaosPubSubConfigurationFile(t *testing.T) {
 	wd.wait("configuration file", &wg)
 	sink.report(t)
 	t.Logf("updates applied %d, refused %d", applied.Load(), refused.Load())
-	require.Positive(t, applied.Load(), "no update was applied")
+
+	// After the storm a valid update applies, whatever the workers did.
+	fr := remote.New(testutil.NewTestClient(t, surl))
+	fc := pubsub.UDPConnection("Final", connURL, uint16(99))
+	fc.WriterGroups = []*ua.WriterGroupDataType{pubsub.WriterGroup("FinalGroup", 0, 100*time.Millisecond)}
+	ures, err := fr.UpdateConfiguration(context.Background(), &ua.PubSubConfiguration2DataType{Connections: []*ua.PubSubConnectionDataType{fc}},
+		[]*ua.PubSubConfigurationRefDataType{
+			remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceConnection, 0, 0, 0),
+			remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceWriterGroup, 0, 0, 0),
+		}, true)
+	require.NoError(t, err)
+	require.True(t, ures.ChangesApplied, "%v", ures.Results)
+	fid, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "Final")
+	require.True(t, ok)
+	_, ok = rt.Lookup(pubsub.KindWriterGroup, fid, "FinalGroup")
+	require.True(t, ok)
 
 	// The runtime took only valid configurations, and the file shows it.
 	final := rt.Configuration()
