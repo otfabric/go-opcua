@@ -55,11 +55,11 @@ func runReconnectRecovery(t *testing.T, peerEndpoint string) opcua.SubscriptionR
 		opcua.AutoReconnect(true),
 		opcua.ReconnectInterval(500*time.Millisecond),
 		opcua.WithSubscriptionRecoveryHandler(func(ev opcua.SubscriptionRecoveryEvent) {
+			// Recorded, not logged: the handler runs on a client
+			// goroutine that may outlive the test.
 			mu.Lock()
 			outcomes = append(outcomes, ev)
 			mu.Unlock()
-			t.Logf("recovery event: id=%d outcome=%s detail=%s",
-				ev.SubscriptionID, ev.Outcome, ev.Detail)
 		}),
 	)
 	if err != nil {
@@ -89,6 +89,23 @@ func runReconnectRecovery(t *testing.T, peerEndpoint string) opcua.SubscriptionR
 	// Ensure at least one live notification before disruption.
 	_ = collectDataChange(t, notifyCh, 1, 10*time.Second)
 
+	// The client delivers notifications, the republished ones as well, by
+	// blocking on notifyCh: keep reading it, or a full buffer stalls the
+	// recovery this waits for.
+	drained := make(chan struct{})
+	stopDrain := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for {
+			select {
+			case <-notifyCh:
+			case <-stopDrain:
+				return
+			}
+		}
+	}()
+	defer func() { close(stopDrain); <-drained }()
+
 	proxy.Disrupt()
 
 	deadline := time.After(45 * time.Second)
@@ -107,6 +124,11 @@ func runReconnectRecovery(t *testing.T, peerEndpoint string) opcua.SubscriptionR
 				opcua.SubscriptionRecoveryRecreated,
 				opcua.SubscriptionRecoveryPartial,
 				opcua.SubscriptionRecoveryUnrecoverableGap:
+				mu.Lock()
+				for _, ev := range outcomes {
+					t.Logf("recovery event: id=%d outcome=%s detail=%s", ev.SubscriptionID, ev.Outcome, ev.Detail)
+				}
+				mu.Unlock()
 				return last.Outcome
 			}
 		}
