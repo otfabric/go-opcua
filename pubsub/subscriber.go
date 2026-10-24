@@ -135,6 +135,11 @@ func (s *readerSnap) matches(nm *message.NetworkMessage, dsm *message.DataSetMes
 			return false
 		}
 	}
+	if nm.Type != message.NetworkMessageDataSet {
+		// Announcements have no group header and describe writers by
+		// themselves.
+		return true
+	}
 	if s.wgid != 0 && enc == encUADP {
 		wg, ok := wgOf(nm)
 		if !ok || wg != s.wgid {
@@ -164,23 +169,35 @@ var errDecodePanic = errors.New("pubsub: decoding the message panicked")
 
 // receive handles a message received on a connection.
 func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
+	enc := payloadEncoding(m.Payload)
+	probe := false
+	if enc == encUADP {
+		t, chunk, err := uadp.PeekType(m.Payload)
+		probe = err == nil && !chunk && t == message.NetworkMessageDiscoveryRequest
+	}
 	p.lock()
 	if c.gen != gen {
 		p.unlock()
 		return
 	}
+	snap := p.snapshotReaders(c)
+	if len(snap) == 0 && !probe {
+		// A publisher listening for probes on its address hears its
+		// own messages as well.
+		p.unlock()
+		return
+	}
 	c.ctr.NetworkMessagesReceived++
 	c.ctr.BytesReceived += uint64(len(m.Payload))
-	snap := p.snapshotReaders(c)
 	p.unlock()
-	if len(snap) == 0 {
+	if probe {
+		p.handleProbe(c, gen, m.Payload)
 		return
 	}
 	recv := m.Received
 	if recv.IsZero() {
 		recv = time.Now()
 	}
-	enc := payloadEncoding(m.Payload)
 	if enc == encJSON {
 		// The JSON mapping has no message security: its messages are
 		// only for the readers that require none.
@@ -286,8 +303,21 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		p.decodeFailed(c, err)
 		return
 	}
+	if nm.Chunk != nil {
+		if nm, err = p.reassemble(c, gen, cd, nm, opts, recv); nm == nil {
+			if err != nil {
+				p.decodeFailed(c, err)
+			}
+			return
+		}
+	}
 	if nm.Type == message.NetworkMessageDiscoveryResponse {
-		if d := nm.Discovery; d != nil && d.Type == message.DiscoveryDataSetMetaData && d.MetaData != nil {
+		p.lock()
+		if c.gen == gen {
+			c.ctr.DiscoveryResponsesReceived++
+		}
+		p.unlock()
+		if d := nm.Discovery; d != nil && d.Type == message.DiscoveryDataSetMetaData && d.MetaData != nil && isGood(d.StatusCode) {
 			p.applyMetaData(c, gen, nm.PublisherID, d.DataSetWriterID, d.MetaData, securityOf(nm), keyGroup)
 		}
 		return
@@ -315,6 +345,52 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		}
 	}
 }
+
+// reassemble adds a received chunk to the reassembly of its connection
+// (Part 14 §7.2.4.4.4) and, with the last chunk of a message, decodes the
+// message. It returns nil while the message is incomplete or if the chunk
+// was discarded; err is the decoding error of a complete message.
+func (p *PubSub) reassemble(c *connection, gen uint64, cd codec, chunk *message.NetworkMessage, opts *decodeOptions, recv time.Time) (*message.NetworkMessage, error) {
+	payload := p.addChunk(c, gen, chunk, recv)
+	if payload == nil {
+		return nil, nil
+	}
+	var nm *message.NetworkMessage
+	var err error
+	if p.protect("decode", func() { nm, err = cd.DecodeReassembled(chunk, payload, opts) }) {
+		err = errDecodePanic
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.lock()
+	if c.gen == gen {
+		c.ctr.ChunkedMessagesReceived++
+	}
+	p.unlock()
+	return nm, nil
+}
+
+// addChunk adds a chunk to the reassembly and counts it. It returns the
+// payload of the message the chunk completes.
+func (p *PubSub) addChunk(c *connection, gen uint64, chunk *message.NetworkMessage, recv time.Time) []byte {
+	payload, dropped, err := c.reasm.Add(chunk, recv)
+	discarded := uint64(dropped)
+	if err != nil {
+		discarded++
+		payload = nil
+		p.log.Debug("pubsub: chunk discarded", "connection", c.name, "error", err)
+	}
+	p.lock()
+	if c.gen == gen {
+		c.ctr.ChunksReceived++
+		c.ctr.ChunksDiscarded += discarded
+	}
+	p.unlock()
+	return payload
+}
+
+func isGood(s ua.StatusCode) bool { return uint32(s)&0xc0000000 == 0 }
 
 // securityOf returns the security mode of a received NetworkMessage.
 func securityOf(nm *message.NetworkMessage) ua.MessageSecurityMode {
@@ -407,9 +483,11 @@ func (p *PubSub) applyMetaData(c *connection, gen uint64, pub message.PublisherI
 				continue
 			}
 			r.ctr.MetaDataReceived++
+			r.needMeta = false
 			if r.md != nil && len(r.md.Fields) > 0 && sameVersion(r.md.ConfigurationVersion, md.ConfigurationVersion) {
 				continue
 			}
+			r.probeWait = 0
 			cp, err := clone(md)
 			if err != nil {
 				continue
@@ -522,6 +600,7 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	if !keepAlive && r.md != nil && r.md.ConfigurationVersion != nil && r.md.ConfigurationVersion.MajorVersion != 0 &&
 		hasMajorVersion(dsm, enc) && dsm.MetaDataVersion.MajorVersion != r.md.ConfigurationVersion.MajorVersion {
 		r.ctr.VersionMismatches++
+		p.metaDataMismatch(r)
 		return
 	}
 

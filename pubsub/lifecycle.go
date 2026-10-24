@@ -54,9 +54,13 @@ func (p *PubSub) reconcileConnection(c *connection, parentOp bool) {
 
 // wantTopics returns the subscriptions a connection needs: for a datagram
 // transport the address (topic ""), for a broker the queues of the running
-// readers, with their QoS.
+// readers, with their QoS. A publisher on a shared datagram address listens
+// on it for discovery probes.
 func (p *PubSub) wantTopics(c *connection) map[string]byte {
 	want := map[string]byte{}
+	if p.listensForProbes(c) {
+		want[""] = 0
+	}
 	for _, g := range c.rgs {
 		for _, r := range g.readers {
 			if !r.running {
@@ -106,8 +110,10 @@ func (p *PubSub) stopConnection(c *connection) {
 	c.cancel()
 	c.cancel = nil
 	c.tc = nil
+	c.dtc = nil
 	c.topics = nil
 	c.gen++
+	c.reasm.Reset()
 }
 
 // transportConfig builds the transport configuration of a connection.
@@ -177,6 +183,8 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 		}
 	}
 	defer func() { _ = tc.Close() }()
+	dtc, stopDiscovery := p.openDiscovery(ctx, c, gen, tcfg)
+	defer stopDiscovery()
 
 	p.lock()
 	if c.gen != gen {
@@ -184,6 +192,7 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 		return
 	}
 	c.tc = tc
+	c.dtc = dtc
 	p.setState(&c.base, ua.PubSubStateOperational, nil)
 	p.reconcileLocked()
 	p.unlock()
@@ -329,7 +338,7 @@ func (p *PubSub) startWriter(w *dataSetWriter) {
 	w.sinceKey = 0
 	w.last = nil
 	w.lastSent = time.Time{}
-	w.metaPending = w.brokerTS != nil && w.brokerTS.MetaDataQueueName != ""
+	w.metaPending = (w.brokerTS != nil && w.brokerTS.MetaDataQueueName != "") || p.announceRate(w.group) > 0
 	w.events = nil
 	if w.pds == nil || w.pds.events == nil {
 		return
@@ -424,8 +433,13 @@ func (p *PubSub) startReader(r *dataSetReader) {
 	r.running = true
 	r.streams = map[streamKey]*stream{}
 	r.lastRecv = time.Now()
+	r.needMeta = false
+	r.probeWait = 0
 	p.setState(&r.base, ua.PubSubStatePreOperational, nil)
 	p.armTimer(r)
+	if p.wantsProbe(r) {
+		p.scheduleProbe(r, firstProbeDelay())
+	}
 }
 
 // stopReader stops a reader. override applies the OverrideValueHandling of
@@ -438,6 +452,10 @@ func (p *PubSub) stopReader(r *dataSetReader, override bool) {
 	if r.timer != nil {
 		r.timer.t.Stop()
 		r.timer = nil
+	}
+	if r.probe != nil {
+		r.probe.t.Stop()
+		r.probe = nil
 	}
 	if override && r.state == ua.PubSubStateOperational {
 		p.applyOverrides(r)
