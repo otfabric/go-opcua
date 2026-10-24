@@ -97,3 +97,34 @@ func TestRegressionChunkedActionDataSetMessageToReader(t *testing.T) {
 		return err == nil && st.Counters.ChunkedMessagesReceived == 1
 	}, 3*time.Second, time.Millisecond)
 }
+
+// Regression: an ExtensionObject whose body is a nil pointer of a known
+// structure type (ua.NewExtensionObject((*T)(nil))) passed the type
+// switches on eoValue as that structure, and New panicked on it.
+func TestRegressionNilExtensionObjectBodies(t *testing.T) {
+	t.Parallel()
+	conn := func() *ua.PubSubConnectionDataType { return UDPConnection("c", "opc.udp://239.0.0.1:4840", uint16(1)) }
+	var cfgs []*ua.PubSubConfigurationDataType
+	for _, src := range []any{(*ua.PublishedDataItemsDataType)(nil), (*ua.PublishedEventsDataType)(nil),
+		(*ua.PublishedActionDataType)(nil), (*ua.PublishedActionMethodDataType)(nil)} {
+		cfgs = append(cfgs, NewConfiguration([]*ua.PublishedDataSetDataType{{Name: "x", DataSetSource: ua.NewExtensionObject(src)}}))
+	}
+	r := DataSetReader("r", uint16(7), 1, 1, nil)
+	r.SubscribedDataSet = ua.NewExtensionObject((*ua.TargetVariablesDataType)(nil))
+	cfgs = append(cfgs, NewConfiguration(nil, AttachReaderGroups(conn(), ReaderGroup("rg", r))))
+	r = DataSetReader("r", uint16(7), 1, 1, nil)
+	r.MessageSettings = ua.NewExtensionObject((*ua.UADPDataSetReaderMessageDataType)(nil))
+	cfgs = append(cfgs, NewConfiguration(nil, AttachReaderGroups(conn(), ReaderGroup("rg", r))))
+	g := WriterGroup("wg", 1, time.Second, DataSetWriter("w", 1, ""))
+	g.MessageSettings = ua.NewExtensionObject((*ua.UADPWriterGroupMessageDataType)(nil))
+	g.TransportSettings = ua.NewExtensionObject((*ua.DatagramWriterGroupTransport2DataType)(nil))
+	cfgs = append(cfgs, NewConfiguration(nil, AttachWriterGroups(conn(), g)))
+	for i, cfg := range cfgs {
+		require.NotPanics(t, func() {
+			p, err := New(cfg)
+			if err == nil {
+				require.NoError(t, p.Close())
+			}
+		}, "configuration %d", i)
+	}
+}
