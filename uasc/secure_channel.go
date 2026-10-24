@@ -1667,6 +1667,14 @@ func (s *SecureChannel) close() error {
 	default:
 	}
 
+	// CloseSecureChannel is a request only a client sends (Part 6 §7.1.4).
+	// A server ends the channel by closing the connection, after an Error
+	// message that tells the client why (§7.1.5).
+	if s.kind == server {
+		s.sendCloseError()
+		return io.EOF
+	}
+
 	// Best-effort: try to send CloseSecureChannelRequest but don't
 	// fail the close if the connection is already dead. A token renewal in
 	// progress holds the gate until the server answers or the request times
@@ -1679,6 +1687,27 @@ func (s *SecureChannel) close() error {
 	}
 
 	return io.EOF
+}
+
+// closeErrorTimeout bounds the write of the Error message a server channel
+// sends when it is closed. A server channel's RequestTimeout is usually zero,
+// so it cannot be used for this.
+const closeErrorTimeout = 5 * time.Second
+
+// sendCloseError tells the client of an open server channel that the channel
+// is being closed. It is best-effort: the connection may be dead already. The
+// lock of the active instance keeps the Error message from landing between
+// the chunks of a response that is being sent.
+func (s *SecureChannel) sendCloseError() {
+	active, err := s.getActiveChannelInstance()
+	if err != nil {
+		return
+	}
+	active.Lock()
+	defer active.Unlock()
+	_ = s.c.SetWriteDeadline(time.Now().Add(closeErrorTimeout))
+	s.c.SendError(ua.StatusBadSecureChannelClosed)
+	_ = s.c.SetWriteDeadline(time.Time{})
 }
 
 func (s *SecureChannel) timeNow() time.Time {
