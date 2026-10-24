@@ -246,13 +246,19 @@ func assertPublisherHeaders(t *testing.T, c psLiveCase, nm *message.NetworkMessa
 // TestPubSubUDP_Open62541Publishes_GoReceives: open62541 publishes UADP over
 // UDP unicast to the host; go-opcua decodes, verifies and decrypts.
 func TestPubSubUDP_Open62541Publishes_GoReceives(t *testing.T) {
-	requirePubSubServer(t)
+	psPeerPublishesUDP(t, psOpen62541)
+}
+
+// psPeerPublishesUDP: the peer publishes UADP over UDP unicast to the host;
+// go-opcua decodes, verifies and decrypts every case of psUDPCases.
+func psPeerPublishesUDP(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	for _, c := range psUDPCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			port := freeUDPPort(t)
 			ch := psListen(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", port)}, "")
-			pub := startPubSubServer(t, pubsubServerOpts{config: psUDPPublisherConfig(c, port)})
+			pub := startPubSubServer(t, pubsubServerOpts{peer: p, config: psUDPPublisherConfig(c, port)})
 			values := psValues(c.vars, psFresh())
 			writePubSubVars(t, pub.endpoint, c.vars, values)
 			nm := psReceive(t, ch, psDecodeUADP(c, c.keys(t)), values, psReceiveTimeout)
@@ -411,12 +417,18 @@ func psUADPEncoder(t *testing.T, c psLiveCase, values []any) func(uint16) ([]byt
 // UDP unicast to an open62541 subscriber, which writes the fields into its
 // TargetVariables.
 func TestPubSubUDP_GoPublishes_Open62541Subscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psGoPublishesUDP(t, psOpen62541)
+}
+
+// psGoPublishesUDP: go-opcua sends every case of psUDPCases over UDP unicast
+// to the peer subscriber, which writes the fields into its TargetVariables.
+func psGoPublishesUDP(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	for _, c := range psUDPCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			port := freeUDPPort(t)
-			sub := startPubSubServer(t, pubsubServerOpts{
+			sub := startPubSubServer(t, pubsubServerOpts{peer: p,
 				config:   psSubscriberConfig(c, psProfileUDP, fmt.Sprintf("opc.udp://0.0.0.0:%d", port), nil, false),
 				udpPorts: []int{port},
 			})
@@ -435,7 +447,13 @@ func TestPubSubUDP_GoPublishes_Open62541Subscribes(t *testing.T) {
 // TestPubSubMQTT_Open62541Publishes_GoReceives: open62541 publishes UADP and
 // JSON NetworkMessages to Mosquitto; go-opcua subscribes the topic.
 func TestPubSubMQTT_Open62541Publishes_GoReceives(t *testing.T) {
-	requirePubSubServer(t)
+	psPeerPublishesMQTT(t, psOpen62541)
+}
+
+// psPeerPublishesMQTT: the peer publishes UADP and JSON over MQTT 3.1.1 to
+// Mosquitto; go-opcua subscribes the topic.
+func psPeerPublishesMQTT(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	broker := startMosquitto(t)
 	for _, json := range []bool{false, true} {
 		name, profile := "uadp", psProfileMQTTUADP
@@ -447,7 +465,7 @@ func TestPubSubMQTT_Open62541Publishes_GoReceives(t *testing.T) {
 			c := psLiveCase{name: name, vars: psVars}
 			topic := fmt.Sprintf("go-opcua-interop/%s/%d", name, psFresh())
 			ch := psListen(t, transport.Config{ProfileURI: profile, URL: fmt.Sprintf("mqtt://127.0.0.1:%d", broker)}, topic)
-			pub := startPubSubServer(t, pubsubServerOpts{config: psPublisherConfig(c, profile,
+			pub := startPubSubServer(t, pubsubServerOpts{peer: p, mqtt311: !p.mqtt5Publisher, config: psPublisherConfig(c, profile,
 				fmt.Sprintf("mqtt://host.docker.internal:%d", broker), eo("i=15667", jobj{"QueueName": topic}), json)})
 			values := psValues(c.vars, psFresh())
 			writePubSubVars(t, pub.endpoint, c.vars, values)
@@ -481,7 +499,13 @@ func TestPubSubMQTT_Open62541Publishes_GoReceives(t *testing.T) {
 // and JSON NetworkMessages to Mosquitto; open62541 subscribes the topic and
 // writes the TargetVariables.
 func TestPubSubMQTT_GoPublishes_Open62541Subscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psGoPublishesMQTT(t, psOpen62541)
+}
+
+// psGoPublishesMQTT: go-opcua publishes UADP and JSON to Mosquitto; the peer
+// subscribes the topic over MQTT 3.1.1 and writes its TargetVariables.
+func psGoPublishesMQTT(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	broker := startMosquitto(t)
 	for _, json := range []bool{false, true} {
 		name, profile := "uadp", psProfileMQTTUADP
@@ -492,7 +516,7 @@ func TestPubSubMQTT_GoPublishes_Open62541Subscribes(t *testing.T) {
 			t.Parallel()
 			c := psLiveCase{name: name, vars: psVars}
 			topic := fmt.Sprintf("go-opcua-interop/%s/%d", name, psFresh())
-			sub := startPubSubServer(t, pubsubServerOpts{config: psSubscriberConfig(c, profile,
+			sub := startPubSubServer(t, pubsubServerOpts{peer: p, mqtt311: true, config: psSubscriberConfig(c, profile,
 				fmt.Sprintf("mqtt://host.docker.internal:%d", broker), eo("i=15670", jobj{"QueueName": topic}), json)})
 			values := psValues(c.vars, psFresh())
 			conn := psDial(t, transport.Config{ProfileURI: profile, URL: fmt.Sprintf("mqtt://127.0.0.1:%d", broker)})
@@ -519,10 +543,16 @@ func TestPubSubMQTT_GoPublishes_Open62541Subscribes(t *testing.T) {
 // go-opcua messages that are unsecured or secured with another key, and
 // accept the same values once they are secured with its key.
 func TestPubSubUDP_Open62541Subscriber_RejectsInsecure(t *testing.T) {
-	requirePubSubServer(t)
+	psPeerSubscriberRejectsInsecure(t, psOpen62541)
+}
+
+// psPeerSubscriberRejectsInsecure: a SignAndEncrypt reader group of the peer
+// drops unsecured messages and messages under another key.
+func psPeerSubscriberRejectsInsecure(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	c := psLiveCase{name: "reject", mode: ua.MessageSecurityModeSignAndEncrypt, policy: security.Aes256CTR(), key: psStaticKey256, tokenID: 1, vars: psVars}
 	port := freeUDPPort(t)
-	sub := startPubSubServer(t, pubsubServerOpts{
+	sub := startPubSubServer(t, pubsubServerOpts{peer: p,
 		config:   psSubscriberConfig(c, psProfileUDP, fmt.Sprintf("opc.udp://0.0.0.0:%d", port), nil, false),
 		udpPorts: []int{port},
 	})
