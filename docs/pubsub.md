@@ -348,6 +348,60 @@ err = r.Enable(ctx, connID)
 The helpers find the methods by browse name and work with go-opcua and
 open62541 servers.
 
+### The PubSubConfiguration file
+
+The server also has the PubSubConfiguration object
+(`PublishSubscribe.PubSubConfiguration`, Part 14 §9.1.3.7): a FileType whose
+content is the configuration as a UABinaryFileDataType with a
+PubSubConfiguration2DataType Body. It is how a client adds elements the
+methods above do not cover, such as PublishedActions:
+
+```go
+ids, err := r.ReserveIDs(ctx, transport.ProfileUDPUADP, 1, 1) // ids 0x8000-0xFFFF for this session
+res, err := r.UpdateConfiguration(ctx, &ua.PubSubConfiguration2DataType{
+	PublishedDataSets: []*ua.PublishedDataSetDataType{action},
+	Connections:       []*ua.PubSubConnectionDataType{conn}, // with its group and writer
+}, []*ua.PubSubConfigurationRefDataType{
+	remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferencePubDataset, 0, 0, 0),
+	remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceConnection, 0, 0, 0),
+	remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceWriterGroup, 0, 0, 0),
+	remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceWriter, 0, 0, 0),
+}, true) // RequireCompleteUpdate
+cfg, err := r.ReadConfiguration(ctx)
+```
+
+- **Open** accepts Read (0x01), Read + Write (0x03) and Write +
+  EraseExisting (0x06). Readers share the file and see the configuration at
+  Open; a writer is exclusive (Bad_NotWritable / Bad_NotReadable otherwise).
+  Handles belong to their session and end with it. Close discards what was
+  written.
+- **CloseAndUpdate** applies the referenced elements of the file:
+  removals first, then parents before children. ElementAdd adds the element
+  without its children (they need their own references), assigns a name, a
+  WriterGroupId / DataSetWriterId and the default PublisherId when the file
+  leaves them empty. ElementMatch finds a connection or group by the
+  parameters of §9.1.3.7.2 to add children to it. ElementModify replaces the
+  parameters of the element of that name and keeps its children.
+  ElementRemove removes it with its children (and a published data set with
+  its writers). Each element gets a result (Bad_BrowseNameDuplicated,
+  Bad_NoMatch, Bad_NotFound for a missing parent, Bad_InvalidArgument,
+  Bad_ConfigurationError when the result would not be valid). With
+  RequireCompleteUpdate nothing is applied unless all are. The runtime then
+  changes only the components that differ: the others keep running.
+  ConfigurationValues name the added and matched elements with their
+  PublisherId, WriterGroupId or DataSetWriterId, ConfigurationObjects are
+  their nodes.
+- **ReserveIds** returns WriterGroupIds and DataSetWriterIds that neither the
+  configuration nor another reservation uses (at most 1024 per session),
+  and the default PublisherId: that of the first connection with one, else a
+  UInt64 derived from the ApplicationUri.
+- `server.WithPubSubAuthorizer` gets the method names (Open, Read, Write,
+  CloseAndUpdate, ReserveIds, ...).
+
+Not supported: SubscribedDataSets, SecurityGroups and PubSubKeyPushTargets
+references (Bad_NotSupported); the DefaultSecurityKeyServices,
+ConfigurationProperties and ConfigurationVersion of the file are ignored.
+
 ## Security
 
 A secured group has a `SecurityMode` (Sign or SignAndEncrypt) and a
@@ -567,6 +621,9 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
   ActionRequestsRejected, ActionResponsesSent, ActionResponsesReceived and
   ActionTimeouts in `Status(id).Counters` (writers count what they serve,
   connections what they request or reject).
+
+A client adds a PublishedAction to a server with the PubSubConfiguration file
+(see [Configure a remote server](#configure-a-remote-server)).
 
 Not supported: the MQTT 5.0 ResponseTopic / CorrelationData properties
 (the addresses travel in the ActionHeader). The server shows a PublishedAction as a PublishedDataSetType

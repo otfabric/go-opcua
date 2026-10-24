@@ -30,6 +30,7 @@ type pubsubModel struct {
 	pdsDir *Node // PublishSubscribe.PublishedDataSets (i=17371)
 	comps  map[pubsub.ComponentID]*psComp
 	byNode map[string]pubsub.ComponentID
+	file   *configFile // PublishSubscribe.PubSubConfiguration
 }
 
 // psComp is the representation of one component.
@@ -126,6 +127,7 @@ func (s *Server) buildPubSubModel() error {
 	s.RegisterMethod(status.ID(), ua.NewNumericNodeID(0, id.PubSubStatusTypeEnable), m.enableMethod(pubsub.Root, true))
 	s.RegisterMethod(status.ID(), ua.NewNumericNodeID(0, id.PubSubStatusTypeDisable), m.enableMethod(pubsub.Root, false))
 
+	m.buildConfigFile()
 	s.RegisterMethod(root.ID(), ua.NewNumericNodeID(0, id.PublishSubscribeAddConnection), m.method("AddConnection", m.addConnection))
 	s.RegisterMethod(root.ID(), ua.NewNumericNodeID(0, id.PublishSubscribeRemoveConnection), m.method("RemoveConnection", m.removeConnection))
 	for _, mid := range []uint32{id.DataSetFolderTypeAddPublishedDataItems, id.DataSetFolderTypeAddPublishedDataItemsTemplate, id.DataSetFolderTypeRemovePublishedDataSet} {

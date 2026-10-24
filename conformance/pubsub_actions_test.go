@@ -12,6 +12,8 @@ import (
 
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/pubsub"
+	"github.com/otfabric/go-opcua/pubsub/remote"
+	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -162,6 +164,55 @@ func TestPubSub_ActionMethodServerResponder(t *testing.T) {
 	require.Equal(t, ua.StatusGood, res.Status)
 	require.Equal(t, int32(-1), res.Outputs[0].Value())
 	require.Equal(t, ua.StatusBadTypeMismatch, call(1, "nine").Status)
+}
+
+// TestPubSub_ActionConfigurationFile: a client configures a
+// PublishedActionMethod with its connection, group and writer through the
+// PubSubConfiguration file (ReserveIds, then CloseAndUpdate, Part 14
+// §9.1.3.7); a Requestor calls the Method with the ids the client reserved.
+func TestPubSub_ActionConfigurationFile(t *testing.T) {
+	parallel(t)
+	respURL, reqURL := psUDPURL(t), psUDPURL(t)
+	srv, url := newServer(t, server.WithPubSub(nil))
+	f := testutil.AddFixture(t, srv)
+	ctx := context.Background()
+	r := remote.New(newClient(t, url))
+
+	ids, err := r.ReserveIDs(ctx, transport.ProfileUDPUADP, 1, 1)
+	require.NoError(t, err)
+	pds := pubsub.PublishedActionMethods("Square",
+		[]pubsub.Field{{Name: "n", Type: ua.TypeIDInt32}},
+		[]pubsub.Field{{Name: "result", Type: ua.TypeIDInt32}},
+		[]*ua.ActionTargetDataType{pubsub.ActionTargetOf(1, "Square")},
+		[]*ua.ActionMethodDataType{pubsub.ActionMethodOf(f.MethodObject, f.SquareMethod)})
+	conn := pubsub.AttachWriterGroups(pubsub.UDPConnection("Responder", respURL, nil),
+		pubsub.WriterGroup("Actions", ids.WriterGroupIDs[0], 50*time.Millisecond, pubsub.DataSetWriter("SquareWriter", ids.DataSetWriterIDs[0], "Square")))
+	res, err := r.UpdateConfiguration(ctx, &ua.PubSubConfiguration2DataType{
+		PublishedDataSets: []*ua.PublishedDataSetDataType{pds},
+		Connections:       []*ua.PubSubConnectionDataType{conn},
+	}, []*ua.PubSubConfigurationRefDataType{
+		remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferencePubDataset, 0, 0, 0),
+		remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceConnection, 0, 0, 0),
+		remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceWriterGroup, 0, 0, 0),
+		remote.Ref(ua.PubSubConfigurationRefMaskElementAdd, ua.PubSubConfigurationRefMaskReferenceWriter, 0, 0, 0),
+	}, true)
+	require.NoError(t, err)
+	require.True(t, res.ChangesApplied)
+	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusOK, ua.StatusOK, ua.StatusOK}, res.Results)
+	// The connection got the default PublisherId.
+	require.Equal(t, ids.DefaultPublisherID.Value(), res.Values[1].Identifier.Value())
+	cfg, err := r.ReadConfiguration(ctx)
+	require.NoError(t, err)
+	require.Equal(t, "Square", cfg.PublishedDataSets[0].Name)
+	require.Equal(t, ids.WriterGroupIDs[0], cfg.Connections[0].WriterGroups[0].WriterGroupID)
+
+	req := psRuntime(t, pubsub.NewConfiguration(nil, pubsub.UDPConnection("Requestor", reqURL, uint16(9))))
+	require.Eventually(t, func() bool {
+		out, err := req.CallAction(ctx, pubsub.ActionTarget{Connection: "Requestor", PublisherID: ids.DefaultPublisherID.Value(),
+			DataSetWriterID: ids.DataSetWriterIDs[0], ActionTargetID: 1, RequestAddress: respURL,
+			Timeout: time.Second, ResendInterval: 200 * time.Millisecond}, []*ua.Variant{ua.MustVariant(int32(7))})
+		return err == nil && out.Status == ua.StatusGood && out.Outputs[0].Value() == int32(49)
+	}, 20*time.Second, 50*time.Millisecond)
 }
 
 // TestPubSub_ActionDiscoveryServerBroker: a server Responder publishes the
