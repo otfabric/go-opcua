@@ -66,10 +66,14 @@ type sendStats struct {
 	lastErr                    error
 	dsm, ka                    map[*dataSetWriter]uint64
 	meta                       map[*dataSetWriter]bool
+	// secErr counts the encode errors of the message security.
+	secErr uint64
 	// lost are the writers of messages that could not be encoded or
 	// sent: their next message is a key frame, so that a change carried
 	// by a lost delta frame is not missing until the next regular one.
 	lost map[*dataSetWriter]bool
+	// failed counts the DataSetMessages per writer that were not sent.
+	failed map[*dataSetWriter]uint64
 }
 
 // publishCycle samples the writers of a group, builds their DataSetMessages
@@ -178,7 +182,7 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	}
 	p.unlock()
 
-	st := &sendStats{dsm: map[*dataSetWriter]uint64{}, ka: map[*dataSetWriter]uint64{}, meta: map[*dataSetWriter]bool{}, lost: map[*dataSetWriter]bool{}}
+	st := &sendStats{dsm: map[*dataSetWriter]uint64{}, ka: map[*dataSetWriter]uint64{}, meta: map[*dataSetWriter]bool{}, lost: map[*dataSetWriter]bool{}, failed: map[*dataSetWriter]uint64{}}
 	lookup := func(_ message.PublisherID, _ uint16, dswID uint16) *ua.DataSetMetaDataType {
 		if md := mds[dswID]; md != nil {
 			return md
@@ -203,6 +207,15 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	g.ctr.BytesSent += st.bytes
 	g.ctr.EncodeErrors += st.encErr
 	g.ctr.SendErrors += st.sendErr
+	// Part 14 §9.1.11.9: the failures of the message security count as
+	// EncryptionErrors, the other encode and send failures as
+	// FailedTransmissions.
+	p.count(&g.base, CounterSentNetworkMessages, st.nm)
+	p.count(&g.base, CounterFailedTransmissions, st.encErr-st.secErr+st.sendErr)
+	p.count(&g.base, CounterEncryptionErrors, st.secErr)
+	for w, n := range st.failed {
+		p.count(&w.base, CounterFailedDataSetMessages, n)
+	}
 	if st.lastErr != nil {
 		g.err = st.lastErr
 	}
@@ -344,6 +357,7 @@ func (p *PubSub) buildMessages(w *dataSetWriter, vals []*ua.DataValue, now time.
 			// open62541 rejects JSON sequence numbers above 65535.
 			dsm.SequenceNumber &= 0xffff
 		}
+		w.diag.lastSeq, w.diag.lastStatus = uint16(dsm.SequenceNumber), dsm.Status
 	}
 	if len(out) > 0 {
 		w.lastSent = now
@@ -586,6 +600,7 @@ func (e *encoder) encode(nm *message.NetworkMessage) ([]byte, error) {
 // lose records the writers of DataSetMessages that were not sent.
 func (e *encoder) lose(chunk []*outDSM) {
 	for _, o := range chunk {
+		e.st.failed[o.w]++
 		if o.dsm.Type != message.DataSetMessageKeepAlive {
 			e.st.lost[o.w] = true
 		}
@@ -595,6 +610,9 @@ func (e *encoder) lose(chunk []*outDSM) {
 func (e *encoder) fail(err error, encode bool) {
 	if encode {
 		e.st.encErr++
+		if isSecurityError(err) {
+			e.st.secErr++
+		}
 	} else {
 		e.st.sendErr++
 	}
