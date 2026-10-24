@@ -8,6 +8,7 @@
 package interop
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -241,9 +242,7 @@ func imageCapabilities(t *testing.T, imageEnv, defaultImage string) (*adapterCap
 			t.Skip(msg)
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	raw, err := exec.CommandContext(ctx, "docker", "run", "--rm", image, "print-capabilities").Output()
+	raw, err := printCapabilities(image)
 	if err != nil {
 		capabilityUnavailable(t, "print-capabilities failed for %s: %v", image, err)
 	}
@@ -256,6 +255,31 @@ func imageCapabilities(t *testing.T, imageEnv, defaultImage string) (*adapterCap
 	}
 	adapterCapsCache[image] = caps
 	return caps, image
+}
+
+// printCapabilities runs the print-capabilities command of an adapter
+// image. The first container of an image on a busy runner can take long to
+// start (the layers are unpacked then), so an attempt gets 90 seconds and a
+// failed or timed-out one is repeated twice.
+func printCapabilities(image string) ([]byte, error) {
+	var err error
+	for attempt := range 3 {
+		if attempt > 0 {
+			time.Sleep(2 * time.Second)
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+		var stderr bytes.Buffer
+		cmd := exec.CommandContext(ctx, "docker", "run", "--rm", image, "print-capabilities")
+		cmd.Stderr = &stderr
+		var raw []byte
+		raw, err = cmd.Output()
+		cancel()
+		if err == nil {
+			return raw, nil
+		}
+		err = fmt.Errorf("attempt %d: %w: %s", attempt+1, err, strings.TrimSpace(stderr.String()))
+	}
+	return nil, err
 }
 
 // requireOptionalPeer skips the test when imageEnv names an opt-in peer whose
