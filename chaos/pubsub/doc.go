@@ -40,10 +40,42 @@
 // on six connections publish into as many reader groups while their
 // components are toggled.
 //
+// MQTT 5.0 (mqtt5_test.go): persistent sessions with QoS 1 and 2 while the
+// broker restarts, disconnects clients with reason codes and refuses
+// publications; every publication the broker took reaches the
+// DataSetHandler exactly once.
+//
+// AMQP 1.0 (amqp_test.go): the in-process broker restarts, drops and closes
+// connections, detaches links, withholds dispositions and stops sending
+// heartbeats (UADP, SignAndEncrypt, JSON, metadata from a queue); every
+// message a queue accepted reaches the DataSetHandler exactly once; runtimes
+// close while their AMQP and MQTT connections reconnect.
+//
+// Chunks and discovery (chunks_test.go, discovery_test.go): over an
+// in-memory datagram network (memnet_test.go, the "chaosmem" transport)
+// that drops, duplicates, reorders, delays, truncates and corrupts, with
+// floods of forged chunks, probes of every kind and layout and forged
+// announcements. The Reassembler stays within its limits and frees the
+// state of incomplete messages after the timeout; announcements stay within
+// the rate limits; readers learn their DataSetMetaData.
+//
+// Diagnostics (diagnostics_test.go): Reset, SetDiagnosticsLevel and reads of
+// the diagnostics objects through the Go API and through OPC UA clients
+// while components come and go; every snapshot is consistent and the
+// objects of removed components leave the address space.
+//
+// Many runtimes (parallel_brokers_test.go): five publishers and five
+// subscribers on one AMQP and one MQTT 5.0 broker, with runtimes starting
+// and closing next to them.
+//
 // Fuzzing (fuzz_test.go): random bytes and mutated valid messages (UADP with
 // every field encoding, key and delta frames, SignAndEncrypt; JSON data and
 // metadata) are fed through the real UDP and MQTT transports into
 // subscribers with filtered, unfiltered, RawData and secured readers.
+// fuzz_runtime_test.go has native fuzz targets: the receive path of a
+// runtime (chunks, discovery, secured and RawData readers;
+// FuzzRuntimeReceive), the discovery codec (FuzzDiscoveryRoundTrip) and the
+// connection configurations a client can send (FuzzValidateConnection).
 //
 // Regression tests for the product bugs the suite found live next to the
 // code they concern (pubsub/*_regress_test.go).
