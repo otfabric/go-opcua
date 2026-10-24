@@ -315,8 +315,122 @@ func TestNextFetch(t *testing.T) {
 	}
 	require.NoError(t, ring.SetKeys(security.PolicyURIAes128CTR, 1, keys, time.Second, 10*time.Second))
 	d := s.nextFetch()
-	// 3 future keys: fetch after the second key change from now.
-	require.InDelta(t, float64(time.Second+20*time.Second+500*time.Millisecond), float64(d), float64(50*time.Millisecond))
+	// 3 future keys: fetch after the second key change from now, which
+	// leaves one future key.
+	require.InDelta(t, float64(time.Second+10*time.Second+500*time.Millisecond), float64(d), float64(50*time.Millisecond))
 	require.NoError(t, ring.SetKeys(security.PolicyURIAes128CTR, 1, keys[:1], time.Second, 10*time.Second))
 	require.InDelta(t, float64(time.Second+500*time.Millisecond), float64(s.nextFetch()), float64(50*time.Millisecond))
+}
+
+// TestNextFetchLeavesAFutureKey checks the refresh schedule on a fake clock:
+// when the SKS hands out two or more future keys, the scheduled fetch
+// happens while the ring still holds one, so that a fetch may take up to a
+// key lifetime without the ring ever running out of keys. With fewer future
+// keys the fetch is right after the next key change, when the SKS has the
+// next key.
+func TestNextFetchLeavesAFutureKey(t *testing.T) {
+	const life = 10 * time.Second
+	for future := 0; future <= 5; future++ {
+		for _, ttnk := range []time.Duration{time.Millisecond, 3 * time.Second, life} {
+			now := time.Unix(1_000_000, 0)
+			ring := security.NewKeyRing("sg", security.Aes128CTR(), security.WithClock(func() time.Time { return now }))
+			s := &KeySource{ring: ring}
+			keys := make([][]byte, future+1)
+			for i := range keys {
+				keys[i] = make([]byte, 52)
+			}
+			require.NoError(t, ring.SetKeys(security.PolicyURIAes128CTR, 7, keys, ttnk, life))
+			d := s.nextFetch()
+			require.Greater(t, d, ttnk, "future=%d ttnk=%v: fetch after the next key change", future, ttnk)
+			now = now.Add(d)
+			want := min(future-1, 1)
+			if future == 0 {
+				want = 0 // the ring keeps using its only key until the fetch
+			}
+			require.Equal(t, max(want, 0), ring.FutureKeyCount(), "future=%d ttnk=%v: future keys left at the fetch", future, ttnk)
+			require.False(t, ring.Stale() && future > 0, "future=%d ttnk=%v: ring stale at the fetch", future, ttnk)
+			// The fetch has (almost) a whole key lifetime before the ring
+			// would need a key it does not hold.
+			if future >= 2 {
+				require.Greater(t, ring.TimeToNextKey()+life, life+life/2, "future=%d ttnk=%v", future, ttnk)
+			}
+		}
+	}
+}
+
+// TestKeySourceSlowSKS pulls the keys of a group with a short key lifetime
+// from an SKS that takes a whole key lifetime to answer: the source must
+// hold the key of every token the SKS uses and never run out of keys.
+func TestKeySourceSlowSKS(t *testing.T) {
+	t.Parallel()
+	const life = 600 * time.Millisecond
+	ks := newKeyService(t, life, 2)
+	s := startSKS(t, ks)
+	src, err := NewKeySource(context.Background(), Config{
+		SecurityGroupID: "sg",
+		MinRetry:        50 * time.Millisecond,
+		Dial: func(ctx context.Context) (*opcua.Client, error) {
+			select {
+			case <-time.After(life):
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+			return dial(ctx, s.url, false)
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = src.Close() })
+	svc, err := ks.KeySource("sg")
+	require.NoError(t, err)
+	first := src.Ring().CurrentTokenID()
+	deadline := time.Now().Add(8 * life)
+	for time.Now().Before(deadline) {
+		want, err := svc.CurrentKeys()
+		require.NoError(t, err)
+		_, err = src.Ring().KeysForToken(want.TokenID)
+		require.NoError(t, err, "the SKS uses token %d, the source holds %v", want.TokenID, src.Ring().TokenIDs())
+		require.False(t, src.Ring().Stale(), "the source ran out of future keys")
+		time.Sleep(life / 12)
+	}
+	require.GreaterOrEqual(t, src.Ring().CurrentTokenID(), first+5)
+	require.NoError(t, src.Err())
+}
+
+// TestKeySourceRefreshOnUnknownToken: a message with a token just ahead of
+// the source's keys makes it fetch now; tokens far ahead (or behind) do
+// not, and neither does a burst of them within MinRetry.
+func TestKeySourceRefreshOnUnknownToken(t *testing.T) {
+	ks := newKeyService(t, time.Hour, 0)
+	s := startSKS(t, ks)
+	var fetches atomic.Int32
+	src, err := NewKeySource(context.Background(), Config{
+		SecurityGroupID: "sg",
+		MinRetry:        time.Hour,
+		Dial: func(ctx context.Context) (*opcua.Client, error) {
+			fetches.Add(1)
+			return dial(ctx, s.url, false)
+		},
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = src.Close() })
+	require.Equal(t, int32(1), fetches.Load())
+	cur := src.Ring().CurrentTokenID()
+
+	_, err = src.KeysForToken(cur + missWindow + 1)
+	require.ErrorIs(t, err, security.ErrNoKeys)
+	_, err = src.KeysForToken(cur - 1)
+	require.ErrorIs(t, err, security.ErrNoKeys)
+	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, int32(1), fetches.Load(), "tokens outside the window do not fetch")
+
+	for range 10 {
+		_, err = src.KeysForToken(cur + 1)
+		require.ErrorIs(t, err, security.ErrNoKeys)
+	}
+	require.Eventually(t, func() bool { return fetches.Load() == 2 }, 10*time.Second, 5*time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+	require.Equal(t, int32(2), fetches.Load(), "one fetch per MinRetry")
+	require.True(t, src.ahead(cur+1))
+	require.False(t, src.ahead(0))
+	require.False(t, (&KeySource{ring: security.NewKeyRing("x", security.Aes128CTR())}).ahead(1), "empty ring")
 }

@@ -1,5 +1,19 @@
 # go-opcua Releases
 
+## v1.7.1
+
+**Date:** unreleased
+**Previous release:** v1.7.0
+
+### Fixed
+
+- **pubsub/sks:** `KeySource` refetched the keys one key change too late: after the change that left it with no future key instead of the one that leaves it with one, as documented. A fetch that took longer than one key lifetime (an SKS under load, a new SignAndEncrypt session per fetch) let the ring run out of keys, and a subscriber rejected the messages of a publisher that had fetched first. A fetch now has two key lifetimes to complete when the SKS hands out two or more future keys.
+- **pubsub/sks:** a received message whose token is just ahead of the keys a `KeySource` holds (the peer fetched first) now triggers a fetch, at most once per `MinRetry`.
+
+### Tests
+
+- Fake-clock test of the refresh schedule for 0–5 future keys, a test against an SKS that takes a whole key lifetime to answer, and a test of the token-triggered fetch; each fails on the old schedule.
+
 ## v1.7.0
 
 **Date:** 2026-10-24
