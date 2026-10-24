@@ -816,6 +816,7 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 	peers := []struct{ name, imageEnv, defaultImage string }{
 		{"open62541", "OPEN62541_IMAGE", defaultOpen62541Image},
 		{"milo", "MILO_IMAGE", defaultMiloImage},
+		{"async-opcua", "ASYNC_OPCUA_IMAGE", defaultAsyncOpcuaImage},
 	}
 	for _, p := range peers {
 		t.Run("coverage/discovery.find-servers-on-network/"+p.name+"-client-to-go-lds", func(t *testing.T) {
