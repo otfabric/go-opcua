@@ -381,7 +381,7 @@ func (d *decoder) field(raw json.RawMessage, fmd *ua.FieldMetaData) (*ua.DataVal
 		ms, err := objectMembers(raw, 64)
 		structure := fmd != nil && fmd.BuiltInType == byte(ua.TypeIDExtensionObject)
 		if err == nil && isDataValueShape(ms) && (len(ms) > 0 || !structure) {
-			return d.dataValue(raw, ms)
+			return d.dataValue(raw, ms, fmd)
 		}
 	}
 	v, err := d.rawValue(raw, fmd)
@@ -400,7 +400,7 @@ func isDataValueShape(ms []member) bool {
 	return true
 }
 
-func (d *decoder) dataValue(raw json.RawMessage, ms []member) (*ua.DataValue, ua.DataSetFieldContentMask, error) {
+func (d *decoder) dataValue(raw json.RawMessage, ms []member, fmd *ua.FieldMetaData) (*ua.DataValue, ua.DataSetFieldContentMask, error) {
 	// The 1.04 reversible Variant {"Type":..,"Body":..} at the top level.
 	if _, ok := lookup(ms, "Type"); ok {
 		var v ua.Variant
@@ -411,7 +411,23 @@ func (d *decoder) dataValue(raw json.RawMessage, ms []member) (*ua.DataValue, ua
 	}
 	var dv ua.DataValue
 	if err := ua.DecodeJSON(raw, &dv, d.co...); err != nil {
-		return nil, 0, err
+		// A Value without UaType: encoders leave the type out when the
+		// DataSetMetaData implies it (Opc.Ua.PubSub's JsonEncoder). The
+		// Value is typed like a RawData field, the rest is the DataValue.
+		val, hasValue := lookup(ms, "Value")
+		if _, typed := lookup(ms, "UaType"); typed || !hasValue {
+			return nil, 0, err
+		}
+		v, verr := d.rawValue(val, fmd)
+		if verr != nil {
+			return nil, 0, err
+		}
+		dv = ua.DataValue{}
+		if derr := ua.DecodeJSON(withoutMember(ms, "Value"), &dv, d.co...); derr != nil {
+			return nil, 0, derr
+		}
+		dv.Value = v
+		dv.EncodingMask |= ua.DataValueValue
 	}
 	var fm ua.DataSetFieldContentMask
 	if dv.Has(ua.DataValueStatusCode) {
@@ -592,4 +608,21 @@ func isDecimal(s string) bool {
 		}
 	}
 	return true
+}
+
+// withoutMember is the JSON object of ms without the member key.
+func withoutMember(ms []member, key string) []byte {
+	b := []byte{'{'}
+	for _, m := range ms {
+		if m.key == key {
+			continue
+		}
+		if len(b) > 1 {
+			b = append(b, ',')
+		}
+		b = strconv.AppendQuote(b, m.key)
+		b = append(b, ':')
+		b = append(b, m.val...)
+	}
+	return append(b, '}')
 }
