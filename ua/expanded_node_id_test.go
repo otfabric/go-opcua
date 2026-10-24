@@ -91,6 +91,8 @@ func TestParseExpandedNodeID(t *testing.T) {
 		{s: "nsu=abc;b=YWJj", ns: []string{"", "abc"}, n: NewExpandedNodeID(NewByteStringNodeID(1, []byte{'a', 'b', 'c'}), "abc", 0)},
 		{s: "nsu=abc;a", ns: []string{"", "abc"}, n: NewExpandedNodeID(NewStringNodeID(1, "a"), "abc", 0)},
 		{s: "nsu=abc;s=a", ns: []string{"", "abc"}, n: NewExpandedNodeID(NewStringNodeID(1, "a"), "abc", 0)},
+		{s: "nsu=urn:a%3Bb%25c;i=2", ns: []string{"", "urn:a;b%c"}, n: NewExpandedNodeID(NewFourByteNodeID(1, 2), "urn:a;b%c", 0)},
+		{s: "nsu=urn:a%20b;i=2", ns: []string{"", "urn:a%20b"}, n: NewExpandedNodeID(NewFourByteNodeID(1, 2), "urn:a%20b", 0)},
 
 		// nsu error flows
 		{s: "nsu=abc;i=2253", ns: []string{}, err: fmt.Errorf("%w: namespace uri nsu=abc not found in %#v", errors.ErrNamespaceNotFound, []string{})},
