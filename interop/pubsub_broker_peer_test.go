@@ -69,14 +69,22 @@ func psMQTT5Cases() []psRuntimeCase {
 // subscriber (MQTT 3.1.1) writes the values into its TargetVariables, and
 // an MQTT 5.0 listener sees the content type and UAMessageType.
 func TestPubSubMQTT5_GoPublishes_Open62541Subscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psMQTT5GoPublishes(t, psOpen62541)
+}
+
+// psMQTT5GoPublishes: a go-opcua server publishes over MQTT 5.0 with
+// ExactlyOnce (QoS 2); the peer subscriber (on its default MQTT version)
+// writes the values into its TargetVariables, and an MQTT 5.0 listener sees
+// the content type and UAMessageType.
+func psMQTT5GoPublishes(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	broker := startMosquitto(t)
 	for _, c := range psMQTT5Cases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			topic := fmt.Sprintf("go-opcua-interop/mqtt5/%s/%d", c.name, psFresh())
 			connURL := fmt.Sprintf("mqtt://127.0.0.1:%d", broker)
-			sub := startPubSubServer(t, pubsubServerOpts{config: psSubscriberConfig(c.psLiveCase, c.profile(),
+			sub := startPubSubServer(t, pubsubServerOpts{peer: p, config: psSubscriberConfig(c.psLiveCase, c.profile(),
 				fmt.Sprintf("mqtt://host.docker.internal:%d", broker), eo("i=15670", jobj{"QueueName": topic}), c.json)})
 			listen := psListen(t, transport.Config{ProfileURI: c.profile(), URL: connURL, MQTTVersion: pubsub.MQTTVersion5}, topic)
 
@@ -124,13 +132,19 @@ func TestPubSubMQTT5_GoPublishes_Open62541Subscribes(t *testing.T) {
 // over MQTT 3.1.1; a go-opcua runtime subscribed over MQTT 5.0 receives the
 // DataSets although the messages carry no content type.
 func TestPubSubMQTT5_Open62541Publishes_GoSubscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psMQTT5PeerPublishes(t, psOpen62541)
+}
+
+// psMQTT5PeerPublishes: the peer publishes on its default MQTT version; a
+// go-opcua runtime subscribed over MQTT 5.0 receives the DataSets.
+func psMQTT5PeerPublishes(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	broker := startMosquitto(t)
 	for _, c := range psMQTT5Cases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			topic := fmt.Sprintf("go-opcua-interop/mqtt5-sub/%s/%d", c.name, psFresh())
-			pub, url := psStartAdapterPublisher(t, c, broker, topic)
+			pub, url := psStartPeerPublisherOn(t, p, c, broker, topic, false)
 			rec := newPSDataSets()
 			conn := pubsub.SetMQTTVersion(psRuntimeSubConnection(c, url), pubsub.MQTTVersion5)
 			startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(conn, psRuntimeReader(c, topic, 0))),

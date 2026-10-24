@@ -178,7 +178,14 @@ func (c psRuntimeCase) profile() string {
 // WithPubSub publishes its PubSub.* variables; the open62541 subscriber
 // writes them into its TargetVariables.
 func TestPubSubRuntime_GoPublishes_Open62541Subscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psRuntimeGoPublishes(t, psOpen62541)
+}
+
+// psRuntimeGoPublishes: a go-opcua server with WithPubSub publishes its
+// PubSub.* variables over every transport of psRuntimeCases; the peer
+// subscriber writes them into its TargetVariables.
+func psRuntimeGoPublishes(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	broker := 0
 	for _, c := range psRuntimeCases() {
 		if c.mqtt && broker == 0 {
@@ -192,12 +199,12 @@ func TestPubSubRuntime_GoPublishes_Open62541Subscribes(t *testing.T) {
 			var sub *pubsubServer
 			var connURL string
 			if c.mqtt {
-				sub = startPubSubServer(t, pubsubServerOpts{config: psSubscriberConfig(c.psLiveCase, c.profile(),
+				sub = startPubSubServer(t, pubsubServerOpts{peer: p, mqtt311: true, config: psSubscriberConfig(c.psLiveCase, c.profile(),
 					fmt.Sprintf("mqtt://host.docker.internal:%d", broker), eo("i=15670", jobj{"QueueName": topic}), c.json)})
 				connURL = fmt.Sprintf("mqtt://127.0.0.1:%d", broker)
 			} else {
 				port := freeUDPPort(t)
-				sub = startPubSubServer(t, pubsubServerOpts{
+				sub = startPubSubServer(t, pubsubServerOpts{peer: p,
 					config:   psSubscriberConfig(c.psLiveCase, psProfileUDP, fmt.Sprintf("opc.udp://0.0.0.0:%d", port), nil, false),
 					udpPorts: []int{port},
 				})
@@ -340,13 +347,27 @@ func psRuntimeSubConnection(c psRuntimeCase, url string) *ua.PubSubConnectionDat
 // returns it with the URL the go-opcua subscriber connects to.
 func psStartAdapterPublisher(t *testing.T, c psRuntimeCase, broker int, topic string) (*pubsubServer, string) {
 	t.Helper()
+	return psStartPeerPublisher(t, psOpen62541, c, broker, topic)
+}
+
+// psStartPeerPublisher starts the publisher of case c on the peer (MQTT
+// 3.1.1 unless psPeer.mqtt5Publisher) and returns it with the URL the go-opcua subscriber connects to.
+func psStartPeerPublisher(t *testing.T, p *psPeer, c psRuntimeCase, broker int, topic string) (*pubsubServer, string) {
+	t.Helper()
+	return psStartPeerPublisherOn(t, p, c, broker, topic, !p.mqtt5Publisher)
+}
+
+// psStartPeerPublisherOn is psStartPeerPublisher with MQTT 3.1.1 (mqtt311) or
+// the peer's default MQTT version.
+func psStartPeerPublisherOn(t *testing.T, p *psPeer, c psRuntimeCase, broker int, topic string, mqtt311 bool) (*pubsubServer, string) {
+	t.Helper()
 	if c.mqtt {
-		pub := startPubSubServer(t, pubsubServerOpts{config: psPublisherConfig(c.psLiveCase, c.profile(),
+		pub := startPubSubServer(t, pubsubServerOpts{peer: p, mqtt311: mqtt311, config: psPublisherConfig(c.psLiveCase, c.profile(),
 			fmt.Sprintf("mqtt://host.docker.internal:%d", broker), eo("i=15667", jobj{"QueueName": topic}), c.json)})
 		return pub, fmt.Sprintf("mqtt://127.0.0.1:%d", broker)
 	}
 	port := freeUDPPort(t)
-	return startPubSubServer(t, pubsubServerOpts{config: psUDPPublisherConfig(c.psLiveCase, port)}), fmt.Sprintf("opc.udp://localhost:%d", port)
+	return startPubSubServer(t, pubsubServerOpts{peer: p, config: psUDPPublisherConfig(c.psLiveCase, port)}), fmt.Sprintf("opc.udp://localhost:%d", port)
 }
 
 func startRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...pubsub.Option) *pubsub.PubSub {
@@ -365,13 +386,19 @@ func startRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...pub
 // TestPubSubRuntime_Open62541Publishes_GoSubscribes: a go-opcua runtime
 // receives the DataSets of the open62541 publisher (DataSetHandler).
 func TestPubSubRuntime_Open62541Publishes_GoSubscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psRuntimePeerPublishes(t, psOpen62541)
+}
+
+// psRuntimePeerPublishes: a go-opcua runtime receives the DataSets of the
+// peer publisher (DataSetHandler).
+func psRuntimePeerPublishes(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	broker := startMosquitto(t)
 	for _, c := range psRuntimeCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			topic := fmt.Sprintf("go-opcua-interop/runtime-sub/%s/%d", c.name, psFresh())
-			pub, url := psStartAdapterPublisher(t, c, broker, topic)
+			pub, url := psStartPeerPublisher(t, p, c, broker, topic)
 			rec := newPSDataSets()
 			opts := []pubsub.Option{pubsub.WithDataSetHandler(rec.handle)}
 			if keys := c.keys(t); keys != nil {
@@ -396,17 +423,23 @@ func TestPubSubRuntime_Open62541Publishes_GoSubscribes(t *testing.T) {
 // with WithPubSub writes the DataSet of the open62541 publisher into its
 // PubSub.* variables (TargetVariables).
 func TestPubSubRuntime_Open62541Publishes_GoTargetVariables(t *testing.T) {
-	requirePubSubServer(t)
+	psRuntimePeerPublishesTargetVariables(t, psOpen62541)
+}
+
+// psRuntimePeerPublishesTargetVariables: a go-opcua server with WithPubSub
+// writes the DataSet of the peer's publisher into its PubSub.* variables.
+func psRuntimePeerPublishesTargetVariables(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	c := psRuntimeCase{psLiveCase: psLiveCase{name: "target-variables", vars: psVars}}
-	pub, url := psStartAdapterPublisher(t, c, 0, "")
-	sub := startGoPubSubServer(t, goPubSubOpts{}, func(p *pubsub.PubSub, ns uint16) {
+	pub, url := psStartPeerPublisher(t, p, c, 0, "")
+	sub := startGoPubSubServer(t, goPubSubOpts{}, func(ps *pubsub.PubSub, ns uint16) {
 		rg := psRuntimeReader(c, "", 0)
 		var targets []*ua.FieldTargetDataType
 		for _, v := range c.vars {
 			targets = append(targets, pubsub.Target(ua.NewStringNodeID(ns, "PubSub."+v.name)))
 		}
 		pubsub.SetTargetVariables(rg.DataSetReaders[0], targets...)
-		mustOK[pubsub.ComponentID](t)(p.AddConnection(pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), rg)))
+		mustOK[pubsub.ComponentID](t)(ps.AddConnection(pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), rg)))
 	})
 	values := psValues(c.vars, psFresh())
 	writePubSubVars(t, pub.endpoint, c.vars, values)

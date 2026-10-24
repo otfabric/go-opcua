@@ -50,8 +50,14 @@ import (
 // open62541 adapter (opcua-interop v0.8.0).
 func requirePubSubCodec(t *testing.T) {
 	t.Helper()
-	requireAdapterOp(t, "OPEN62541_IMAGE", defaultOpen62541Image, "codec")
-	requireAdapterClientFeature(t, "OPEN62541_IMAGE", defaultOpen62541Image, "codec-pubsub")
+	psOpen62541.requireCodec(t)
+}
+
+// requireCodec gates on the codec-pubsub client feature of the peer.
+func (p *psPeer) requireCodec(t *testing.T) {
+	t.Helper()
+	requireAdapterOp(t, p.env, p.image, "codec")
+	requireAdapterClientFeature(t, p.env, p.image, "codec-pubsub")
 }
 
 // pubsubCodecResult is the result of a codec pubsub-* operation.
@@ -65,10 +71,17 @@ type pubsubCodecResult struct {
 	ReencodeStatusCode statusCodeObj   `json:"reencodeStatusCode"`
 }
 
-// runPubSubCodec runs a codec pubsub-* operation with input on stdin.
+// runPubSubCodec runs a codec pubsub-* operation of open62541 with input on
+// stdin.
 func runPubSubCodec(t *testing.T, op string, input []byte, metadata string) pubsubCodecResult {
 	t.Helper()
-	image := getEnvOr("OPEN62541_IMAGE", defaultOpen62541Image)
+	return psOpen62541.runCodec(t, op, input, metadata)
+}
+
+// runCodec runs a codec pubsub-* operation of the peer with input on stdin.
+func (p *psPeer) runCodec(t *testing.T, op string, input []byte, metadata string) pubsubCodecResult {
+	t.Helper()
+	image := getEnvOr(p.env, p.image)
 	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
 	defer cancel()
 	args := []string{"run", "--rm", "-i", image, "client", "codec", op}
@@ -151,9 +164,6 @@ type psCodecCase struct {
 	name string
 	nm   *message.NetworkMessage
 	md   *ua.DataSetMetaDataType
-	// byteDivergence: why open62541's encoding of the case is not
-	// go-opcua's byte for byte although both decode it to the same message.
-	byteDivergence string
 }
 
 const (
@@ -276,13 +286,11 @@ func uadpCodecCases() []psCodecCase {
 	add("rawdata", raw, rawMeta)
 
 	// The empty String: go-opcua has no null String and encodes "" as the
-	// null String (length -1); open62541 encodes a zero-length String.
-	// Both decode either to "" (the same finding as "string/empty" in
-	// corpusDivergences, ua/open62541_corpus_test.go).
+	// null String (length -1); a peer may encode a zero-length String
+	// (psPeer.byteDivergences).
 	empty := pub(message.NewPublisherID(message.PublisherIDUInt16, 2234))
 	empty.Messages[0].Fields = psFields("", []string{"", "x"})
-	cases = append(cases, psCodecCase{name: "empty-string", nm: empty,
-		byteDivergence: "go-opcua encodes the empty String as the null String (length -1), open62541 as a zero-length String"})
+	add("empty-string", empty, nil)
 
 	// KeepAlive, multiple DataSetMessages, delta frames.
 	keepAlive := pub(message.NewPublisherID(message.PublisherIDUInt16, 2234))
@@ -325,9 +333,24 @@ func uadpCodecCases() []psCodecCase {
 // decodes; the description and open62541's re-encoding must match.
 func TestPubSubCodec_GoEncodesUADP_Open62541Decodes(t *testing.T) {
 	requirePubSubCodec(t)
+	psGoEncodesUADP(t, psOpen62541)
+}
+
+// psSkipUnsupported skips a codec case the peer cannot handle.
+func psSkipUnsupported(t *testing.T, p *psPeer, name string) {
+	t.Helper()
+	if why, ok := p.codecUnsupported[name]; ok {
+		t.Skipf("%s: %s", p.name, why)
+	}
+}
+
+// psGoEncodesUADP: go-opcua encodes every UADP case, the peer decodes it;
+// its description must be the message and its re-encoding the same bytes.
+func psGoEncodesUADP(t *testing.T, p *psPeer) {
 	for _, c := range uadpCodecCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
+			psSkipUnsupported(t, p, c.name)
 			md := psLookup(c.md)
 			b, err := uadp.Encode(c.nm, &uadp.EncodeOptions{MetaData: md})
 			if err != nil {
@@ -337,16 +360,16 @@ func TestPubSubCodec_GoEncodesUADP_Open62541Decodes(t *testing.T) {
 			if c.md != nil {
 				meta = metaJSON(t, c.md)
 			}
-			r := runPubSubCodec(t, "pubsub-uadp-decode", []byte(base64.StdEncoding.EncodeToString(b)), meta)
+			r := p.runCodec(t, "pubsub-uadp-decode", []byte(base64.StdEncoding.EncodeToString(b)), meta)
 			if r.NetworkMessage == nil {
 				t.Fatalf("no description: %+v", r)
 			}
-			assertSameDesc(t, "open62541's decoding of the go-opcua message", describeUADP(t, c.nm, md), *r.NetworkMessage)
+			assertSameDesc(t, p.name+"'s decoding of the go-opcua message", describeUADP(t, c.nm, md), *r.NetworkMessage)
 			if r.Reencoded == nil {
-				t.Fatalf("open62541 could not re-encode what it decoded: %s", r.ReencodeStatusCode)
+				t.Fatalf("%s could not re-encode what it decoded: %s", p.name, r.ReencodeStatusCode)
 			}
 			if re, _ := base64.StdEncoding.DecodeString(*r.Reencoded); !bytes.Equal(re, b) {
-				t.Errorf("open62541 re-encodes the message differently\n go-opcua  %s\n open62541 %s", hex.EncodeToString(b), hex.EncodeToString(re))
+				t.Errorf("%s re-encodes the message differently\n go-opcua %s\n %s %s", p.name, hex.EncodeToString(b), p.name, hex.EncodeToString(re))
 			}
 		})
 	}
@@ -356,9 +379,16 @@ func TestPubSubCodec_GoEncodesUADP_Open62541Decodes(t *testing.T) {
 // description, go-opcua decodes it; the bytes must be go-opcua's encoding.
 func TestPubSubCodec_Open62541EncodesUADP_GoDecodes(t *testing.T) {
 	requirePubSubCodec(t)
+	psPeerEncodesUADP(t, psOpen62541)
+}
+
+// psPeerEncodesUADP: the peer encodes the description of every UADP case,
+// go-opcua decodes it; the bytes must be go-opcua's encoding.
+func psPeerEncodesUADP(t *testing.T, p *psPeer) {
 	for _, c := range uadpCodecCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
+			psSkipUnsupported(t, p, c.name)
 			md := psLookup(c.md)
 			want := describeUADP(t, c.nm, md)
 			doc, err := json.Marshal(want)
@@ -369,7 +399,7 @@ func TestPubSubCodec_Open62541EncodesUADP_GoDecodes(t *testing.T) {
 			if c.md != nil {
 				meta = metaJSON(t, c.md)
 			}
-			r := runPubSubCodec(t, "pubsub-uadp-encode", doc, meta)
+			r := p.runCodec(t, "pubsub-uadp-encode", doc, meta)
 			var b64 string
 			if err := json.Unmarshal(r.Encoded, &b64); err != nil {
 				t.Fatalf("encoded %s: %v", r.Encoded, err)
@@ -380,7 +410,7 @@ func TestPubSubCodec_Open62541EncodesUADP_GoDecodes(t *testing.T) {
 			}
 			got, err := uadp.Decode(b, &uadp.DecodeOptions{MetaData: md})
 			if err != nil {
-				t.Fatalf("uadp.Decode of open62541's %x: %v", b, err)
+				t.Fatalf("uadp.Decode of %s's %x: %v", p.name, b, err)
 			}
 			// Part 14 (DataSetFlags1 bit 0): the content of an invalid DataSetMessage
 			// is to be ignored; go-opcua's decoder skips its fields.
@@ -391,17 +421,18 @@ func TestPubSubCodec_Open62541EncodesUADP_GoDecodes(t *testing.T) {
 					wantDecoded.Messages[i].Fields = nil
 				}
 			}
-			assertSameDesc(t, "go-opcua's decoding of the open62541 message", wantDecoded, describeUADP(t, got, md))
+			assertSameDesc(t, "go-opcua's decoding of the "+p.name+" message", wantDecoded, describeUADP(t, got, md))
 			ours, err := uadp.Encode(c.nm, &uadp.EncodeOptions{MetaData: md})
+			why, known := p.byteDivergences[c.name]
 			switch {
 			case err != nil:
 				t.Fatalf("uadp.Encode: %v", err)
-			case c.byteDivergence != "" && bytes.Equal(ours, b):
-				t.Errorf("listed as a known divergence (%s) but the encodings are equal", c.byteDivergence)
-			case c.byteDivergence != "":
-				t.Logf("known divergence: %s\n go-opcua  %x\n open62541 %x", c.byteDivergence, ours, b)
+			case known && bytes.Equal(ours, b):
+				t.Errorf("listed as a known divergence (%s) but the encodings are equal", why)
+			case known:
+				t.Logf("known divergence: %s\n go-opcua %x\n %s %x", why, ours, p.name, b)
 			case !bytes.Equal(ours, b):
-				t.Errorf("the encodings differ\n go-opcua  %x\n open62541 %x", ours, b)
+				t.Errorf("the encodings differ\n go-opcua %x\n %s %x", ours, p.name, b)
 			}
 		})
 	}
@@ -490,13 +521,10 @@ func jsonCodecCases() []psCodecCase {
 	return cases
 }
 
-func jsonCaseMeta(t *testing.T, nm *message.NetworkMessage) string {
-	t.Helper()
-	type entry struct {
-		DataSetWriterID uint16          `json:"dataSetWriterId"`
-		MetaData        json.RawMessage `json:"metaData"`
-	}
-	var out []entry
+// jsonCaseMetaData is the DataSetMetaData of every DataSetMessage of nm
+// (by DataSetWriterId): its fields with their names, types and ranks.
+func jsonCaseMetaData(nm *message.NetworkMessage) map[uint16]*ua.DataSetMetaDataType {
+	out := map[uint16]*ua.DataSetMetaDataType{}
 	for _, d := range nm.Messages {
 		md := &ua.DataSetMetaDataType{Name: "ds"}
 		for _, f := range d.Fields {
@@ -507,7 +535,28 @@ func jsonCaseMeta(t *testing.T, nm *message.NetworkMessage) string {
 			}
 			md.Fields = append(md.Fields, psFieldMeta(f.Name, typ, rank))
 		}
-		out = append(out, entry{d.DataSetWriterID, json.RawMessage(metaJSON(t, md))})
+		out[d.DataSetWriterID] = md
+	}
+	return out
+}
+
+// jsonCaseLookup is jsonCaseMetaData as a MetaDataLookup.
+func jsonCaseLookup(nm *message.NetworkMessage) message.MetaDataLookup {
+	mds := jsonCaseMetaData(nm)
+	return func(_ message.PublisherID, _, w uint16) *ua.DataSetMetaDataType { return mds[w] }
+}
+
+// jsonCaseMeta is jsonCaseMetaData as the --metadata argument of the codec.
+func jsonCaseMeta(t *testing.T, nm *message.NetworkMessage) string {
+	t.Helper()
+	type entry struct {
+		DataSetWriterID uint16          `json:"dataSetWriterId"`
+		MetaData        json.RawMessage `json:"metaData"`
+	}
+	var out []entry
+	mds := jsonCaseMetaData(nm)
+	for _, d := range nm.Messages {
+		out = append(out, entry{d.DataSetWriterID, json.RawMessage(metaJSON(t, mds[d.DataSetWriterID]))})
 	}
 	b, _ := json.Marshal(out)
 	return string(b)
@@ -517,27 +566,44 @@ func jsonCaseMeta(t *testing.T, nm *message.NetworkMessage) string {
 // NetworkMessages decoded by open62541.
 func TestPubSubCodec_GoEncodesJSON_Open62541Decodes(t *testing.T) {
 	requirePubSubCodec(t)
+	psGoEncodesJSON(t, psOpen62541)
+}
+
+// psGoEncodesJSON: go-opcua's JSON NetworkMessages decoded by the peer; its
+// description must be the message, and go-opcua must decode its re-encoding
+// to the same message.
+func psGoEncodesJSON(t *testing.T, p *psPeer) {
 	for _, c := range jsonCodecCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
+			psSkipUnsupported(t, p, "json/"+c.name)
 			b, err := jsonmsg.Encode(c.nm, nil)
 			if err != nil {
 				t.Fatalf("jsonmsg.Encode: %v", err)
 			}
-			r := runPubSubCodec(t, "pubsub-json-decode", b, jsonCaseMeta(t, c.nm))
+			r := p.runCodec(t, "pubsub-json-decode", b, jsonCaseMeta(t, c.nm))
 			if r.NetworkMessage == nil {
 				t.Fatalf("no description")
 			}
-			assertSameDesc(t, "open62541's decoding of "+string(b), describeJSON(t, c.nm), *r.NetworkMessage)
-			// open62541's re-encoding decodes to the same message in go-opcua.
+			assertSameDesc(t, p.name+"'s decoding of "+string(b), describeJSON(t, c.nm), *r.NetworkMessage)
 			if r.Reencoded == nil {
-				t.Fatalf("open62541 could not re-encode: %s", r.ReencodeStatusCode)
+				t.Fatalf("%s could not re-encode: %s", p.name, r.ReencodeStatusCode)
 			}
-			back, err := jsonmsg.Decode([]byte(*r.Reencoded), nil)
+			// The peer has the DataSetMetaData (--metadata), so may leave
+			// out what it implies (UaType): decode with it too.
+			back, err := jsonmsg.Decode([]byte(*r.Reencoded), &jsonmsg.DecodeOptions{MetaData: jsonCaseLookup(c.nm)})
+			if gap, known := p.goDecodeGaps["json/"+c.name]; known {
+				if err == nil {
+					t.Errorf("listed as a go-opcua gap (%s) but go-opcua decodes %s", gap, *r.Reencoded)
+				} else {
+					t.Logf("known go-opcua gap: %s: %v", gap, err)
+				}
+				return
+			}
 			if err != nil {
-				t.Fatalf("jsonmsg.Decode of open62541's re-encoding %s: %v", *r.Reencoded, err)
+				t.Fatalf("jsonmsg.Decode of %s's re-encoding %s: %v", p.name, *r.Reencoded, err)
 			}
-			assertSameDesc(t, "go-opcua's decoding of open62541's re-encoding "+*r.Reencoded, describeJSON(t, c.nm), describeJSON(t, back))
+			assertSameDesc(t, "go-opcua's decoding of "+p.name+"'s re-encoding "+*r.Reencoded, describeJSON(t, c.nm), describeJSON(t, back))
 		})
 	}
 }
@@ -546,9 +612,16 @@ func TestPubSubCodec_GoEncodesJSON_Open62541Decodes(t *testing.T) {
 // NetworkMessages decoded by go-opcua.
 func TestPubSubCodec_Open62541EncodesJSON_GoDecodes(t *testing.T) {
 	requirePubSubCodec(t)
+	psPeerEncodesJSON(t, psOpen62541)
+}
+
+// psPeerEncodesJSON: the peer encodes the description of every JSON case,
+// go-opcua decodes it to the same message.
+func psPeerEncodesJSON(t *testing.T, p *psPeer) {
 	for _, c := range jsonCodecCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
+			psSkipUnsupported(t, p, "json/"+c.name)
 			want := describeJSON(t, c.nm)
 			in := want
 			in.Messages = append([]psDSM(nil), want.Messages...)
@@ -564,16 +637,16 @@ func TestPubSubCodec_Open62541EncodesJSON_GoDecodes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r := runPubSubCodec(t, "pubsub-json-encode", doc, "")
+			r := p.runCodec(t, "pubsub-json-encode", doc, "")
 			var text string
 			if err := json.Unmarshal(r.Encoded, &text); err != nil {
 				t.Fatalf("encoded %s: %v", r.Encoded, err)
 			}
 			got, err := jsonmsg.Decode([]byte(text), nil)
 			if err != nil {
-				t.Fatalf("jsonmsg.Decode of open62541's %s: %v", text, err)
+				t.Fatalf("jsonmsg.Decode of %s's %s: %v", p.name, text, err)
 			}
-			assertSameDesc(t, "go-opcua's decoding of open62541's "+text, want, describeJSON(t, got))
+			assertSameDesc(t, "go-opcua's decoding of "+p.name+"'s "+text, want, describeJSON(t, got))
 		})
 	}
 }

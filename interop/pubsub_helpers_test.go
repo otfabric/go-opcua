@@ -31,6 +31,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -73,11 +74,53 @@ const (
 	psReceiveTimeout = 20 * time.Second
 )
 
+// psPeer is an opcua-interop adapter as PubSub peer (contract §14): open62541
+// (opcua-interop v0.8.0) or, in dotnet_pubsub_peer_test.go, UA-.NETStandard.
+type psPeer struct {
+	name  string // in test messages and logs
+	env   string // the image env variable
+	image string // the default image
+	// byteDivergences are the UADP codec cases (uadpCodecCases) the peer
+	// encodes other than go-opcua byte for byte although both decode
+	// them to the same message, with the reason.
+	byteDivergences map[string]string
+	// codecUnsupported are the codec cases the peer cannot encode or
+	// decode at all, with the reason; they are skipped.
+	codecUnsupported map[string]string
+	// goDecodeGaps are the JSON codec cases ("json/<case>") whose
+	// re-encoding by the peer go-opcua cannot decode, with the reason: a
+	// go-opcua gap, pinned until it is closed.
+	goDecodeGaps map[string]string
+	// mqttVersionMember: the peer takes the MQTT protocol version from the
+	// --pubsub-config member mqtt.protocolVersion (dotnet, contract
+	// §14.13); open62541 speaks only MQTT 3.1.1 and has no such member.
+	mqttVersionMember bool
+	// mqtt5Publisher: the peer publishes over MQTT 5.0 only. The MQTT
+	// 3.1.1 tests in which the peer publishes keep it on 5.0, with
+	// go-opcua subscribing over 3.1.1 through the same broker.
+	mqtt5Publisher bool
+}
+
+var psOpen62541 = &psPeer{name: "open62541", env: "OPEN62541_IMAGE", image: defaultOpen62541Image,
+	byteDivergences: map[string]string{
+		// go-opcua has no null String and encodes "" as the null String
+		// (length -1); open62541 encodes a zero-length String. Both decode
+		// either to "" (the same finding as "string/empty" in
+		// corpusDivergences, ua/open62541_corpus_test.go).
+		"empty-string": "go-opcua encodes the empty String as the null String (length -1), open62541 as a zero-length String",
+	}}
+
+// requireServer gates on the pubsub server feature of the peer.
+func (p *psPeer) requireServer(t *testing.T) {
+	t.Helper()
+	requireServerFeature(t, p.env, p.image, "pubsub")
+}
+
 // requirePubSubServer gates on the pubsub server feature of the open62541
 // adapter (opcua-interop v0.8.0).
 func requirePubSubServer(t *testing.T) {
 	t.Helper()
-	requireServerFeature(t, "OPEN62541_IMAGE", defaultOpen62541Image, "pubsub")
+	psOpen62541.requireServer(t)
 }
 
 // ---------------------------------------------------------------------------
@@ -342,9 +385,14 @@ type pubsubServer struct {
 }
 
 type pubsubServerOpts struct {
+	// peer is the adapter; nil is open62541.
+	peer *psPeer
+	// mqtt311 makes a peer whose MQTT default is 5.0 speak MQTT 3.1.1
+	// (psPeer.mqttVersionMember).
+	mqtt311  bool
 	config   jobj  // the --pubsub-config document
 	udpPorts []int // published as <p>:<p>/udp
-	// secure starts the server with the open62541-server certificate of
+	// secure starts the server with the <peer>-server certificate of
 	// the test PKI (needed for sksClient, serveSks and SetSecurityKeys).
 	secure bool
 	// hostNetwork runs the container in the host's network namespace
@@ -358,15 +406,24 @@ type pubsubServerOpts struct {
 	root bool
 }
 
-// startPubSubServer starts the open62541 adapter with a PubSub
-// configuration. The adapter applies it before it writes its ready file
-// and exits when it rejects it.
+// startPubSubServer starts the adapter (open62541 unless o.peer) with a
+// PubSub configuration. The adapter applies it before it writes its ready
+// file and exits when it rejects it.
 func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 	t.Helper()
-	requirePubSubServer(t)
+	p := o.peer
+	if p == nil {
+		p = psOpen62541
+	}
+	p.requireServer(t)
 
 	dir := containerScratchDir(t)
-	doc, err := json.MarshalIndent(o.config, "", "  ")
+	config := o.config
+	if o.mqtt311 && p.mqttVersionMember {
+		config = maps.Clone(config)
+		config["mqtt"] = jobj{"protocolVersion": "3.1.1"}
+	}
+	doc, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		t.Fatalf("pubsub config: %v", err)
 	}
@@ -408,19 +465,20 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 	if o.secure {
 		pki := pkiDir(t)
 		runtimePKI := filepath.Join(containerScratchDir(t), "pki")
-		if err := copyDir(filepath.Join(pki, "open62541-server", "pki"), runtimePKI); err != nil {
+		identity := p.name + "-server"
+		if err := copyDir(filepath.Join(pki, identity, "pki"), runtimePKI); err != nil {
 			t.Fatalf("copy PKI: %v", err)
 		}
 		if err := shareWithContainers(runtimePKI); err != nil {
 			t.Fatal(err)
 		}
 		args = append(args,
-			"-v", filepath.Join(pki, "open62541-server", "cert.crt")+":/certs/cert.crt:ro",
-			"-v", filepath.Join(pki, "open62541-server", "cert.key")+":/certs/cert.key:ro",
+			"-v", filepath.Join(pki, identity, "cert.crt")+":/certs/cert.crt:ro",
+			"-v", filepath.Join(pki, identity, "cert.key")+":/certs/cert.key:ro",
 			"-v", runtimePKI+":/certs/pki")
 		serverArgs = append(serverArgs, "--certificate", "/certs/cert.crt", "--private-key", "/certs/cert.key", "--pki-dir", "/certs/pki")
 	}
-	args = append(args, getEnvOr("OPEN62541_IMAGE", defaultOpen62541Image))
+	args = append(args, getEnvOr(p.env, p.image))
 	args = append(args, serverArgs...)
 
 	var logs bytes.Buffer
@@ -428,7 +486,7 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 	cmd.Stdout = &logs
 	cmd.Stderr = &logs
 	if err := cmd.Start(); err != nil {
-		t.Fatalf("start the open62541 PubSub server: %v", err)
+		t.Fatalf("start the %s PubSub server: %v", p.name, err)
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- cmd.Wait() }()
@@ -450,7 +508,7 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 	t.Cleanup(func() {
 		stop()
 		if t.Failed() {
-			t.Logf("open62541 PubSub server %s log:\n%s", name, logs.String())
+			t.Logf("%s PubSub server %s log:\n%s", p.name, name, logs.String())
 		}
 	})
 
@@ -459,7 +517,7 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 		select {
 		case err := <-exited:
 			exited <- err
-			t.Fatalf("the open62541 PubSub server exited (%v) — the configuration was rejected?\nconfig: %s\nlog:\n%s", err, doc, logs.String())
+			t.Fatalf("the %s PubSub server exited (%v) — the configuration was rejected?\nconfig: %s\nlog:\n%s", p.name, err, doc, logs.String())
 		default:
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -469,7 +527,7 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for the open62541 PubSub server\nlog:\n%s", logs.String())
+			t.Fatalf("timed out waiting for the %s PubSub server\nlog:\n%s", p.name, logs.String())
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
