@@ -36,6 +36,13 @@ func startServer() *server.Server {
 	opts = append(opts,
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
+		// Test credentials: without a validator every username is rejected.
+		server.WithUsernameValidator(func(user, pass string) error {
+			if user == "user" && pass == "pass" {
+				return nil
+			}
+			return ua.StatusBadUserAccessDenied
+		}),
 		server.EnableAuthMode(ua.UserTokenTypeCertificate),
 		//		server.EnableAuthWithoutEncryption(), // Dangerous and not recommended, shown for illustration only
 	)

@@ -8,6 +8,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -538,6 +539,12 @@ func TestSecurity_IdentityReachesRoleMapper(t *testing.T) {
 	_, url := newServer(t,
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
 		server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
+		server.WithUsernameValidator(func(user, pass string) error {
+			if user == "bob" && pass == "builder" {
+				return nil
+			}
+			return ua.StatusBadUserAccessDenied
+		}),
 		server.WithIssuedTokenValidator(func(tok *ua.IssuedIdentityToken) error {
 			if bytes.HasPrefix(tok.TokenData, []byte("opaque-jwt")) {
 				return nil
@@ -580,6 +587,12 @@ func TestSecurity_IdentityReachesRoleMapper(t *testing.T) {
 		require.True(t, ok, "got %T", last())
 		require.Equal(t, []byte("opaque-jwt"), tok.TokenData)
 		require.Equal(t, "issuedtoken_none", tok.PolicyID)
+	})
+
+	t.Run("UserNameRejected", func(t *testing.T) {
+		c, err := opcua.NewClient(url, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName), opcua.AuthUsername("bob", "wrong"), opcua.AutoReconnect(false))
+		require.NoError(t, err)
+		require.ErrorIs(t, c.Connect(context.Background()), ua.StatusBadUserAccessDenied)
 	})
 
 	t.Run("IssuedTokenRejected", func(t *testing.T) {
@@ -729,3 +742,51 @@ func TestSecurity_OnlyEnabledSecurityAccepted(t *testing.T) {
 		require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, eps[0].SecurityMode)
 	})
 }
+
+// TestSecurity_NoValidatorRejects: an auth mode without its validator is
+// advertised, but every token of that type is rejected, and the server says
+// so when it is created.
+func TestSecurity_NoValidatorRejects(t *testing.T) {
+	var logBuf bytes.Buffer
+	var logMu sync.Mutex
+	logger := slog.New(slog.NewTextHandler(writerFunc(func(p []byte) (int, error) {
+		logMu.Lock()
+		defer logMu.Unlock()
+		return logBuf.Write(p)
+	}), nil))
+	_, url := newServer(t,
+		server.SetLogger(logger),
+		server.EnableAuthMode(ua.UserTokenTypeUserName),
+		server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
+		server.EnableAuthMode(ua.UserTokenTypeCertificate),
+		server.AllowUsernameOnNone(),
+	)
+	logMu.Lock()
+	logged := logBuf.String()
+	logMu.Unlock()
+	for _, opt := range []string{"WithUsernameValidator", "WithIssuedTokenValidator", "WithX509UserValidator"} {
+		require.Contains(t, logged, opt, "New warns about the mode without its validator")
+	}
+
+	ep := endpointFor(t, url, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)
+	for _, tc := range []struct {
+		name string
+		opts []opcua.Option
+		want ua.StatusCode
+	}{
+		{"UserName", []opcua.Option{opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName), opcua.AuthUsername("anyone", "anything")}, ua.StatusBadUserAccessDenied},
+		{"IssuedToken", []opcua.Option{opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeIssuedToken), opcua.AuthIssuedToken([]byte("any-token"))}, ua.StatusBadIdentityTokenRejected},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := opcua.NewClient(url, append(tc.opts, opcua.AutoReconnect(false))...)
+			require.NoError(t, err)
+			require.ErrorIs(t, c.Connect(context.Background()), tc.want)
+		})
+	}
+	// Anonymous login is unaffected.
+	newClient(t, url, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous), opcua.AuthAnonymous())
+}
+
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }

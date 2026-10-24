@@ -1633,10 +1633,11 @@ func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discove
 | `PrivateKey(key *rsa.PrivateKey)` | Server private key (RSA) |
 | `ApplicationIdentity(cert []byte, key crypto.Signer)` | Add an application instance certificate with its key; repeat per key type (RSA, ECDSA P-256, ECDSA P-384). The server uses, and each endpoint advertises, the certificate that fits the security policy |
 | `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate). An ECC policy needs a matching `ApplicationIdentity` |
-| `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate) |
+| `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate). `UserName`, `Certificate` and `IssuedToken` also need their validator: without it every token of that type is rejected and `New` logs a warning |
 | `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only |
-| `WithUsernameValidator(v UsernameValidator)` | Callback `func(username, password string) error` called during `ActivateSession` for `UserNameIdentityToken` |
-| `WithX509UserValidator(v X509UserValidator)` | Callback `func(certDER []byte) error` called during `ActivateSession` for `X509IdentityToken`; must also call `EnableAuthMode(ua.UserTokenTypeCertificate)` |
+| `WithUsernameValidator(v UsernameValidator)` | Callback `func(username, password string) error` called during `ActivateSession` for `UserNameIdentityToken`; without one, username tokens are rejected with `BadUserAccessDenied` |
+| `WithX509UserValidator(v X509UserValidator)` | Callback `func(certDER []byte) error` called during `ActivateSession` for `X509IdentityToken`; must also call `EnableAuthMode(ua.UserTokenTypeCertificate)`; without one, X.509 user tokens are rejected |
+| `WithIssuedTokenValidator(v IssuedTokenValidator)` | Callback `func(tok *ua.IssuedIdentityToken) error` called during `ActivateSession` for `IssuedIdentityToken` (token data decrypted where the policy encrypts it); must also call `EnableAuthMode(ua.UserTokenTypeIssuedToken)`; without one, issued tokens are rejected with `BadIdentityTokenRejected` |
 | `WithClientCertificateTrustList(caCertDER ...[]byte)` | Verify the client application certificate (DER) at `OpenSecureChannel` (and again at `CreateSession`) against the provided CA pool; rejects untrusted certs with `BadCertificateUntrusted` |
 | `ServerName(name string)` | Application name |
 | `ManufacturerName(s string)` | Manufacturer name |
@@ -1864,6 +1865,14 @@ type DefaultAccessController struct{}  // allows all operations
 // UsernameValidator is called during ActivateSession for UserNameIdentityToken.
 // Return nil to accept, or an error (e.g. ua.StatusBadUserAccessDenied) to reject.
 type UsernameValidator func(username, password string) error
+
+// IssuedTokenValidator is called during ActivateSession for IssuedIdentityToken
+// (a JWT, SAML or Kerberos token); TokenData is decrypted where the security
+// policy encrypts it. Return nil to accept, or ua.StatusBadIdentityTokenRejected.
+type IssuedTokenValidator func(tok *ua.IssuedIdentityToken) error
+
+// Without a configured validator the server rejects every UserName, X.509 and
+// issued identity token: credentials nobody checks are never accepted.
 
 // X509UserValidator is called during ActivateSession for X509IdentityToken.
 // certDER is the DER-encoded client user certificate.

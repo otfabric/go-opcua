@@ -59,9 +59,12 @@ func main() {
 	opts = append(opts,
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		/*
-			These authentication modes are not implemented yet
+			Username and X.509 user logins each need a validator; without
+			one the server rejects every token of that type:
 			server.EnableAuthMode(ua.UserTokenTypeUserName),
+			server.WithUsernameValidator(func(user, password string) error { ... }),
 			server.EnableAuthMode(ua.UserTokenTypeCertificate),
+			server.WithX509UserValidator(func(certDER []byte) error { ... }),
 		*/
 		//		server.EnableAuthWithoutEncryption(), // Dangerous and not recommended, shown for illustration only
 	)

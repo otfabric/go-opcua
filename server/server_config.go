@@ -254,6 +254,10 @@ type UsernameValidator func(username, password string) error
 // WithUsernameValidator registers a username/password validator called during
 // ActivateSession when the client presents a UserNameIdentityToken.
 // EnableAuthMode(ua.UserTokenTypeUserName) must also be called.
+//
+// If no validator is registered the server rejects all username tokens with
+// Bad_UserAccessDenied: credentials nobody checks are not accepted. Compare
+// passwords in constant time (crypto/subtle) or against a password hash.
 func WithUsernameValidator(v UsernameValidator) Option {
 	return func(s *serverConfig) error {
 		s.usernameValidator = v
@@ -377,6 +381,11 @@ func AllowUsernameOnNone() Option {
 // EnableAuthMode registers a new user authentication mode to the server.
 // All AuthModes except Anonymous require encryption by default, so EnableSecurity()
 // must also be called with at least one non-"None" SecurityPolicy.
+//
+// The UserName, Certificate and IssuedToken modes also need their validator
+// (WithUsernameValidator, WithX509UserValidator, WithIssuedTokenValidator):
+// without it the server advertises the token type but rejects every token
+// of that type, and New logs a warning.
 func EnableAuthMode(tokenType ua.UserTokenType) Option {
 	return func(s *serverConfig) error {
 		for _, a := range s.enabledAuth {
@@ -493,5 +502,25 @@ func WithSlogLogger(l *slog.Logger) Option {
 		}
 		s.logger = l
 		return nil
+	}
+}
+
+// warnUnvalidatedAuthModes logs the enabled authentication modes that have no
+// validator: the server rejects every token of such a mode.
+func (s *serverConfig) warnUnvalidatedAuthModes() {
+	for _, a := range s.enabledAuth {
+		var missing string
+		switch {
+		case a.tokenType == ua.UserTokenTypeUserName && s.usernameValidator == nil:
+			missing = "WithUsernameValidator"
+		case a.tokenType == ua.UserTokenTypeCertificate && s.x509UserValidator == nil:
+			missing = "WithX509UserValidator"
+		case a.tokenType == ua.UserTokenTypeIssuedToken && s.issuedTokenValidator == nil:
+			missing = "WithIssuedTokenValidator"
+		default:
+			continue
+		}
+		s.logger.Warn("server: auth mode enabled without a validator; every token of this type is rejected",
+			"token_type", a.tokenType.String(), "option", missing)
 	}
 }
