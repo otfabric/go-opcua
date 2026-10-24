@@ -80,6 +80,10 @@ var (
 	// CONNACK) that it does not support what is asked: retained messages,
 	// wildcard subscriptions or a packet of that size.
 	ErrNotSupported = errors.New("mqtt: not supported by the broker")
+	// ErrNoPacketID is returned when nearly every packet identifier is
+	// taken by publications, subscriptions or unsubscriptions the broker
+	// has not acknowledged yet.
+	ErrNoPacketID = errors.New("mqtt: no free packet identifier: too many unacknowledged packets")
 )
 
 // ConnectError is a CONNACK with a return code (3.1.1) or reason code
@@ -773,7 +777,9 @@ func (c *Client) attach(l *link, sessionPresent bool) bool {
 	var subID uint16
 	var subAck chan Packet
 	if len(resub) > 0 {
-		subID = c.allocID()
+		// The acks of the last connection are gone and at most
+		// maxInflight publications are pending: there is a free one.
+		subID, _ = c.allocID()
 		subAck = make(chan Packet, 1)
 		c.acks[subID] = subAck
 	}
@@ -948,7 +954,12 @@ func (c *Client) resubscribe(l *link, gen uint64, filters []TopicFilter, id uint
 			c.mu.Unlock()
 			return
 		}
-		id = c.allocID()
+		var ok bool
+		if id, ok = c.allocID(); !ok {
+			c.mu.Unlock()
+			c.log.Warn("mqtt: cannot subscribe again after reconnect", "error", ErrNoPacketID)
+			return
+		}
 		ack = make(chan Packet, 1)
 		c.acks[id] = ack
 		c.mu.Unlock()
@@ -970,9 +981,14 @@ func (c *Client) detach(l *link) {
 	}
 }
 
-// allocID returns a packet identifier that is not in use. c.mu is held.
-func (c *Client) allocID() uint16 {
-	for {
+// maxInflight is the most unfinished QoS 1 and 2 publications: the packet
+// identifiers above it stay free for SUBSCRIBE and UNSUBSCRIBE.
+const maxInflight = 65535 - 1024
+
+// allocID returns a packet identifier that is not in use; false if all
+// are. c.mu is held.
+func (c *Client) allocID() (uint16, bool) {
+	for range 65535 {
 		c.nextID++
 		if c.nextID == 0 {
 			c.nextID = 1
@@ -983,8 +999,9 @@ func (c *Client) allocID() uint16 {
 		if _, ok := c.acks[c.nextID]; ok {
 			continue
 		}
-		return c.nextID
+		return c.nextID, true
 	}
+	return 0, false
 }
 
 // write sends a packet on l. A packet above the broker's Maximum Packet
@@ -1417,7 +1434,12 @@ func (c *Client) PublishWith(ctx context.Context, topic string, payload []byte, 
 		}
 		return c.write(l, pkt)
 	}
-	pkt.PacketID = c.allocID()
+	id, ok := c.allocID()
+	if !ok || len(c.inflight) >= maxInflight {
+		c.mu.Unlock()
+		return ErrNoPacketID
+	}
+	pkt.PacketID = id
 	c.seq++
 	pd := &pending{seq: c.seq, pkt: pkt, done: make(chan error, 1)}
 	c.inflight[pkt.PacketID] = pd
@@ -1528,7 +1550,12 @@ func (c *Client) SubscribeWith(ctx context.Context, filter string, opts Subscrib
 		return sub, nil
 	}
 	tf := c.filterFor(l, e.tf)
-	id := c.allocID()
+	id, ok := c.allocID()
+	if !ok {
+		c.mu.Unlock()
+		sub.remove()
+		return nil, ErrNoPacketID
+	}
 	ch := make(chan Packet, 1)
 	c.acks[id] = ch
 	c.mu.Unlock()
@@ -1601,7 +1628,12 @@ func (s *Subscription) Unsubscribe(ctx context.Context) error {
 			c.mu.Unlock()
 			return
 		}
-		id := c.allocID()
+		id, ok := c.allocID()
+		if !ok {
+			c.mu.Unlock()
+			err = ErrNoPacketID
+			return
+		}
 		ch := make(chan Packet, 1)
 		c.acks[id] = ch
 		c.mu.Unlock()

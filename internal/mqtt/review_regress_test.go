@@ -3,6 +3,9 @@
 package mqtt_test
 
 import (
+	"context"
+	"errors"
+	"net"
 	"testing"
 	"time"
 
@@ -56,5 +59,52 @@ func TestCloseWaitsForHandler(t *testing.T) {
 	case <-finished:
 	default:
 		t.Fatal("Close returned before the handler")
+	}
+}
+
+// Regression: with every packet identifier taken by publications the
+// broker never acknowledged, allocID looped forever holding the client's
+// mutex: Publish, Subscribe and even Close hung.
+func TestPacketIdentifiersExhausted(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	go fakeBroker(t, l, func(_ net.Conn, read func() mqtt.Packet, _ func(mqtt.Packet)) {
+		for read() != nil { // never acknowledges
+		}
+	})
+	c := dial(t, mqtt.Options{Server: "mqtt://" + l.Addr().String()})
+	gone, cancel := context.WithCancel(bg)
+	cancel()
+	// Written publications keep their identifiers until the broker
+	// acknowledges them, after their callers gave up.
+	for i := 0; ; i++ {
+		err := c.Publish(gone, "t", []byte("x"), 1, false)
+		if errors.Is(err, mqtt.ErrNoPacketID) {
+			require.Greater(t, i, 60000)
+			break
+		}
+		require.ErrorIs(t, err, context.Canceled)
+		require.Less(t, i, 1<<16, "no limit")
+	}
+	done := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(bg, time.Second)
+		defer cancel()
+		_, err := c.Subscribe(ctx, "s", 1, func(*mqtt.Message) {})
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, context.DeadlineExceeded) // the broker does not answer
+	case <-time.After(5 * time.Second):
+		t.Fatal("Subscribe hung")
+	}
+	closed := make(chan struct{})
+	go func() { _ = c.Close(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close hung")
 	}
 }
