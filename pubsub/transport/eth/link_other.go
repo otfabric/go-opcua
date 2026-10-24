@@ -12,6 +12,7 @@ import "net"
 const (
 	privilegeHint       = "an OS this package supports"
 	tagCountsAgainstMTU = false
+	outgoingTap         = false
 	// Supported reports whether the OS has an implementation.
 	Supported = false
 )

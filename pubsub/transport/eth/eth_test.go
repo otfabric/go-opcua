@@ -402,6 +402,31 @@ func TestReceiveLoopbackInterface(t *testing.T) {
 	col.none(t)
 }
 
+// A frame this host sent that the network reflects back (Docker's networks,
+// a bridge in hairpin mode) arrives once as outgoing and once as received
+// from the interface's own address. Where the tap marks outgoing frames
+// (Linux) the received copy is dropped: every frame is delivered once.
+// Found with opcuactl pubsub publish / subscribe in one container, which
+// printed every message twice.
+func TestReceiveReflectedFrame(t *testing.T) {
+	env := useFakes(t)
+	c := openFake(t, transport.Config{URL: "opc.eth://01-00-5e-7f-00-01"})
+	col := newCollector()
+	_, err := c.Subscribe(context.Background(), "", 0, col.handle)
+	require.NoError(t, err)
+	l := env.link(t, true)
+	own := append(header(grp, macA, Address{}), "own"...)
+	l.in <- fakeFrame{b: own, outgoing: outgoingTap}
+	l.in <- fakeFrame{b: own} // reflected
+	l.in <- fakeFrame{b: frameTo(grp, Address{}, "end")}
+	require.Equal(t, "own", string(col.next(t).Payload))
+	if !outgoingTap {
+		require.Equal(t, "own", string(col.next(t).Payload))
+	}
+	require.Equal(t, "end", string(col.next(t).Payload))
+	col.none(t)
+}
+
 func TestSubscribeErrors(t *testing.T) {
 	env := useFakes(t)
 	c := openFake(t, transport.Config{URL: "opc.eth://01-00-5e-7f-00-01"})
