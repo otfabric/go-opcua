@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -192,7 +193,7 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			}
 		}
 		if n == 0 {
-			p.decodeFailed(c, fmt.Errorf("%w: unsecured JSON message, the readers require message security", uadp.ErrSecurityMode))
+			p.decodeFailed(c, gen, snap, nil, fmt.Errorf("%w: unsecured JSON message, the readers require message security", uadp.ErrSecurityMode))
 			return
 		}
 		snap = snap[:n]
@@ -200,15 +201,19 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	cd := p.codecs(enc)
 	// keyGroup is the SecurityGroup whose keys verified the message.
 	var keyGroup string
+	// hdr are the readers whose filter the header of the message matched,
+	// for the diagnostics.
+	var hdr []*readerSnap
 	opts := &decodeOptions{}
 	opts.DecodeOptions = uadp.DecodeOptions{
 		Accept: func(h *message.NetworkMessage) bool {
+			hdr = hdr[:0]
 			for i := range snap {
 				if snap[i].matches(h, nil, enc, m.Topic) {
-					return true
+					hdr = append(hdr, &snap[i])
 				}
 			}
-			return false
+			return len(hdr) > 0
 		},
 		// The decoder requires the least security a matching reader
 		// requires and verifies with the keys of the first secured one;
@@ -250,7 +255,7 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			err = errDecodePanic
 		}
 		if err != nil {
-			p.decodeFailed(c, err)
+			p.decodeFailed(c, gen, snap, hdr, err)
 			return
 		}
 		p.applyMetaData(c, gen, md.PublisherID, md.DataSetWriterID, md.MetaData, ua.MessageSecurityModeNone, "")
@@ -283,10 +288,16 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		if errors.Is(err, uadp.ErrFiltered) {
 			return
 		}
-		p.decodeFailed(c, err)
+		p.decodeFailed(c, gen, snap, hdr, err)
 		return
 	}
+	got := securityOf(nm)
 	if nm.Type == message.NetworkMessageDiscoveryResponse {
+		p.lock()
+		if c.gen == gen {
+			p.countReceived(hdr, got, keyGroup)
+		}
+		p.unlock()
 		if d := nm.Discovery; d != nil && d.Type == message.DiscoveryDataSetMetaData && d.MetaData != nil {
 			p.applyMetaData(c, gen, nm.PublisherID, d.DataSetWriterID, d.MetaData, securityOf(nm), keyGroup)
 		}
@@ -295,12 +306,12 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	if nm.Type != message.NetworkMessageDataSet {
 		return
 	}
-	got := securityOf(nm)
 	p.lock()
 	defer p.unlock()
 	if c.gen != gen {
 		return
 	}
+	p.countReceived(hdr, got, keyGroup)
 	for _, dsm := range nm.Messages {
 		for i := range snap {
 			s := &snap[i]
@@ -337,10 +348,58 @@ func (s *readerSnap) secured(mode ua.MessageSecurityMode, keyGroup string) bool 
 	return mode >= s.mode && s.groupID == keyGroup
 }
 
-func (p *PubSub) decodeFailed(c *connection, err error) {
+// countReceived counts a received NetworkMessage for the reader groups of the
+// readers whose filter its header matched and whose security it satisfies
+// (ReceivedNetworkMessages, Part 14 §9.1.11.10). p.mu is held.
+func (p *PubSub) countReceived(hdr []*readerSnap, got ua.MessageSecurityMode, keyGroup string) {
+	var done []*readerGroup
+	for _, s := range hdr {
+		g := s.r.group
+		if !s.secured(got, keyGroup) || slices.Contains(done, g) {
+			continue
+		}
+		done = append(done, g)
+		p.count(&g.base, CounterReceivedNetworkMessages, 1)
+	}
+}
+
+// decodeFailed records a message that could not be decoded. hdr are the
+// readers whose filter its header matched (none if the header could not be
+// decoded: then all readers of the connection are concerned). A failure of
+// the message security counts as a DecryptionError of the secured readers
+// and of their groups, any other as a ReceivedInvalidNetworkMessage of the
+// groups (Part 14 §9.1.11.10, §9.1.11.12).
+func (p *PubSub) decodeFailed(c *connection, gen uint64, snap []readerSnap, hdr []*readerSnap, err error) {
+	if len(hdr) == 0 {
+		for i := range snap {
+			hdr = append(hdr, &snap[i])
+		}
+	}
+	sec := isSecurityError(err)
 	p.lock()
 	c.ctr.DecodeErrors++
 	c.err = err
+	if c.gen == gen {
+		var done []*readerGroup
+		for _, s := range hdr {
+			if sec && s.mode <= ua.MessageSecurityModeNone {
+				continue
+			}
+			if sec {
+				p.count(&s.r.base, CounterDecryptionErrors, 1)
+			}
+			g := s.r.group
+			if slices.Contains(done, g) {
+				continue
+			}
+			done = append(done, g)
+			if sec {
+				p.count(&g.base, CounterDecryptionErrors, 1)
+			} else {
+				p.count(&g.base, CounterReceivedInvalidNetworkMessages, 1)
+			}
+		}
+	}
 	p.unlock()
 	p.log.Debug("pubsub: decode failed", "connection", c.name, "error", err)
 }
@@ -522,6 +581,7 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	if !keepAlive && r.md != nil && r.md.ConfigurationVersion != nil && r.md.ConfigurationVersion.MajorVersion != 0 &&
 		hasMajorVersion(dsm, enc) && dsm.MetaDataVersion.MajorVersion != r.md.ConfigurationVersion.MajorVersion {
 		r.ctr.VersionMismatches++
+		p.count(&r.base, CounterFailedDataSetMessages, 1)
 		return
 	}
 
@@ -564,6 +624,11 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	}
 	if len(msgFields) < len(dsm.Fields) {
 		r.ctr.DecodeErrors++
+		p.count(&r.base, CounterFailedDataSetMessages, 1)
+	}
+	r.diag.lastStatus = dsm.Status
+	if hasSeq(dsm, enc) {
+		r.diag.lastSeq = uint16(dsm.SequenceNumber)
 	}
 	var fields []*ua.DataValue
 	complete := true

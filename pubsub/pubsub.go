@@ -61,6 +61,7 @@ type base struct {
 	state   ua.PubSubState
 	err     error
 	ctr     Counters
+	diag    diagState
 }
 
 func (b *base) b() *base { return b }
@@ -174,6 +175,7 @@ func (p *PubSub) setState(b *base, s ua.PubSubState, err error) {
 	old := b.state
 	b.state = s
 	b.ctr.StateChanges++
+	p.countTransition(b, old, s)
 	if s == ua.PubSubStateError {
 		p.log.Warn("pubsub: state change", "kind", b.kind.String(), "name", b.name, "from", old.String(), "to", s.String(), "error", err)
 	} else {
@@ -345,7 +347,12 @@ func (p *PubSub) setEnabled(id ComponentID, on bool) error {
 	if id == Root {
 		p.enabled = on
 	}
+	// The transitions this causes count as caused by the method (Part 14
+	// §9.1.11.2); one to Operational may only follow later, when the
+	// transport is open.
+	b.diag.enableReq, b.diag.disableReq = on, !on
 	p.reconcileLocked()
+	b.diag.disableReq = false
 	return nil
 }
 
