@@ -1,5 +1,21 @@
 # go-opcua Releases
 
+## v1.8.1
+
+**Date:** 2026-10-24
+**Previous release:** v1.8.0
+
+### Summary
+
+Interop pin update: the interop suite runs against opcua-interop **v0.8.2**.
+
+### Tests
+
+- Interop images pinned to the opcua-interop v0.8.2 multi-arch digests (open62541 `e035d078…06d48866`, Milo `2d84fa47…ddc9a15e`; release run https://github.com/otfabric/opcua-interop/actions/runs/40055105259). v0.8.2 fixes the intermittent `mqtt-json` interop failure: the open62541 adapter re-enables PubSub components that went to Error when an MQTT send failed before the broker accepted the connection, and no longer aborts with a double free when the broker refuses connections.
+- `interop/coverage.json` and the coverage ledger name v0.8.2.
+
+---
+
 ## v1.8.0
 
 **Date:** 2026-10-24

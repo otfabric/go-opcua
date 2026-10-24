@@ -31,7 +31,7 @@ jobs:
       # opcua-interop release the suite and interop/coverage.json are written
       # against (interopVersion in interop/harness_test.go). Keep in step
       # with the image digests below.
-      OPCUA_INTEROP_REF: v0.8.1
+      OPCUA_INTEROP_REF: v0.8.2
 
     steps:
       - uses: actions/checkout@v7
@@ -68,12 +68,12 @@ jobs:
 
       - name: Run interop matrix
         env:
-          # Digest-pinned opcua-interop v0.8.1 multi-arch indexes:
-          # https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1
-          # Release run: https://github.com/otfabric/opcua-interop/actions/runs/40031915713
+          # Digest-pinned opcua-interop v0.8.2 multi-arch indexes:
+          # https://github.com/otfabric/opcua-interop/releases/tag/v0.8.2
+          # Release run: https://github.com/otfabric/opcua-interop/actions/runs/40055105259
           # Set OPEN62541_IMAGE / MILO_IMAGE in the env to test local builds.
-          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:2f008620c41ca6f752abe5d9a470cdba2742afed92d93b7ec6332750e20b9e84
-          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:0fbbf7624ce59d7e8e0ff866570e1cdb6fc8f3aadd6900d3d29e6d21b2a823ed
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:e035d07896a650a820a552e778202bc847c78855ff3d4ae0de1f172606d48866
+          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:2d84fa47b67d785fe84ebeb3e4d41ec75841e459fd43fd689bf45c1fddc9a15e
           OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
         run: |
           # Pull both adapter images once, up front, instead of inside the

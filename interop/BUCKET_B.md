@@ -4,16 +4,16 @@ Counts from `go run ./internal/cmd/render-interop-coverage -summary`.
 
 ## Publication
 
-opcua-interop **v0.8.1** published:
-https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1
-(release run https://github.com/otfabric/opcua-interop/actions/runs/40031915713)
+opcua-interop **v0.8.2** published:
+https://github.com/otfabric/opcua-interop/releases/tag/v0.8.2
+(release run https://github.com/otfabric/opcua-interop/actions/runs/40055105259)
 
 Pinned digests (multi-arch indexes) in `harness_test.go` / CI:
 
 | Image | Digest |
 |---|---|
-| open62541 | `sha256:2f008620c41ca6f752abe5d9a470cdba2742afed92d93b7ec6332750e20b9e84` |
-| milo | `sha256:0fbbf7624ce59d7e8e0ff866570e1cdb6fc8f3aadd6900d3d29e6d21b2a823ed` |
+| open62541 | `sha256:e035d07896a650a820a552e778202bc847c78855ff3d4ae0de1f172606d48866` |
+| milo | `sha256:2d84fa47b67d785fe84ebeb3e4d41ec75841e459fd43fd689bf45c1fddc9a15e` |
 
 ## Promoted on published v0.5.0
 
