@@ -141,6 +141,7 @@ func (s *Server) buildPubSubModel() error {
 		n.mu.Unlock()
 	}
 	m.setCapabilities()
+	m.bindRootDiagnostics()
 
 	// Published data sets first: writers reference them.
 	comps := rt.Components()
@@ -286,6 +287,11 @@ func (m *pubsubModel) variableNS(c *psComp, parent *Node, refType uint32, nsInde
 	if refType == id.HasProperty {
 		typeDef = id.PropertyType
 	}
+	return m.variableT(c, parent, refType, nsIndex, name, dataType, valueRank, typeDef, val)
+}
+
+// variableT creates a variable of the given VariableType.
+func (m *pubsubModel) variableT(c *psComp, parent *Node, refType uint32, nsIndex uint16, name string, dataType uint32, valueRank int32, typeDef uint32, val ValueFunc) *Node {
 	n := NewNode(m.nextID(), Attributes{
 		ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
 		ua.AttributeIDBrowseName:      DataValueFromValue(&ua.QualifiedName{NamespaceIndex: nsIndex, Name: name}),
@@ -446,6 +452,7 @@ func (m *pubsubModel) addConnectionNodes(c *psComp, info pubsub.ComponentInfo) e
 	m.variable(c, addr, id.HasComponent, "NetworkInterface", id.String, -1, static(iface))
 	m.variable(c, addr, id.HasComponent, "Url", id.String, -1, static(url))
 	m.status(c)
+	m.diagnostics(c)
 	for _, mid := range []uint32{id.PubSubConnectionTypeAddWriterGroup, id.PubSubConnectionTypeAddReaderGroup, id.PubSubConnectionTypeRemoveGroup} {
 		m.s.addMethodRef(c.obj, mid)
 	}
@@ -495,6 +502,7 @@ func (m *pubsubModel) addWriterGroupNodes(c *psComp, info pubsub.ComponentInfo) 
 		m.prop(c, o, "NetworkMessageContentMask", id.JSONNetworkMessageContentMask, -1, uint32(ms.NetworkMessageContentMask))
 	}
 	m.status(c)
+	m.diagnostics(c)
 	m.s.addMethodRef(c.obj, id.WriterGroupTypeAddDataSetWriter)
 	m.s.addMethodRef(c.obj, id.WriterGroupTypeRemoveDataSetWriter)
 	gid := info.ID
@@ -516,6 +524,7 @@ func (m *pubsubModel) addReaderGroupNodes(c *psComp, info pubsub.ComponentInfo) 
 	c.obj = m.object(c, p.obj, id.HasReaderGroup, info.Name, m.ns.ID(), id.ReaderGroupType)
 	m.groupProps(c, cfg.SecurityMode, cfg.SecurityGroupID, cfg.SecurityKeyServices, cfg.MaxNetworkMessageSize, cfg.GroupProperties)
 	m.status(c)
+	m.diagnostics(c)
 	m.s.addMethodRef(c.obj, id.ReaderGroupTypeAddDataSetReader)
 	m.s.addMethodRef(c.obj, id.ReaderGroupTypeRemoveDataSetReader)
 	gid := info.ID
@@ -540,6 +549,7 @@ func (m *pubsubModel) addWriterNodes(c *psComp, info pubsub.ComponentInfo) error
 	m.prop(c, c.obj, "KeyFrameCount", id.UInt32, -1, cfg.KeyFrameCount)
 	m.prop(c, c.obj, "DataSetWriterProperties", id.KeyValuePair, 1, eos(cfg.DataSetWriterProperties))
 	m.status(c)
+	m.diagnostics(c)
 	if cfg.DataSetName != "" {
 		if pid, ok := m.rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, cfg.DataSetName); ok {
 			if pds, err := m.ensure(pid); err == nil {
@@ -582,6 +592,7 @@ func (m *pubsubModel) addReaderNodes(c *psComp, info pubsub.ComponentInfo) error
 	m.prop(c, c.obj, "SecurityKeyServices", id.EndpointDescription, 1, eos(cfg.SecurityKeyServices))
 	m.prop(c, c.obj, "DataSetReaderProperties", id.KeyValuePair, 1, eos(cfg.DataSetReaderProperties))
 	m.status(c)
+	m.diagnostics(c)
 	switch sds := cfg.SubscribedDataSet.Value.(type) {
 	case *ua.TargetVariablesDataType:
 		c.sds = m.object(c, c.obj, id.HasComponent, "SubscribedDataSet", 0, id.TargetVariablesType)
