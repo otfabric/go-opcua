@@ -2119,8 +2119,8 @@ Options: `WithDataSource`, `WithEventSource`, `WithDataSetHandler`,
 `WithKeySourceLookup`, `WithTransportConfig`, `WithRetryInterval`,
 `WithDiagnosticsLevel`, `WithLogger`.
 
-Builders: `NewConfiguration`, `UDPConnection`, `MQTTConnection` (`MappingUADP`,
-`MappingJSON`), `AttachWriterGroups`, `AttachReaderGroups`, `WriterGroup`,
+Builders: `NewConfiguration`, `UDPConnection`, `EthernetConnection`,
+`MQTTConnection` (`MappingUADP`, `MappingJSON`), `AttachWriterGroups`, `AttachReaderGroups`, `WriterGroup`,
 `JSONWriterGroup`, `Secure`, `DataSetWriter`, `SetWriterQueue`,
 `PublishedDataItems` / `Var`, `MetaData` / `Field`, `DataSetMetaDataOf`,
 `ReaderGroup`, `DataSetReader`, `SetReaderQueue`, `Target`,
@@ -2134,7 +2134,7 @@ configuration (`*ConfigError`), `NewMemoryDataSource` holds values to publish.
 | `pubsub/message` | `NetworkMessage`, `DataSetMessage`, `Field`, `PublisherID`, `MetaDataLookup` |
 | `pubsub/uadp` | `Encode(nm, *EncodeOptions)`, `Decode(b, *DecodeOptions)`; errors `ErrFiltered`, `ErrMalformed`, `ErrUnsupported`, `ErrSecurityMode`, `ErrSecurityChecksFailed`, `ErrNoMetaData` |
 | `pubsub/jsonmsg` | `Encode`, `Decode`, `DecodeAny`, `EncodeMetaData` / `DecodeMetaData`, `EncodeStatus` / `DecodeStatus`, `MessageType` |
-| `pubsub/transport` | `Open(ctx, Config)`, `Connection`, `Register`; `udp` registers `opc.udp`, `mqtt` registers `mqtt` and `mqtts` |
+| `pubsub/transport` | `Open(ctx, Config)`, `Connection`, `Register`; `udp` registers `opc.udp`, `eth` registers `opc.eth` (`ParseURL`, `Address`, `EtherType`, `MaxPayload`, `ErrNotSupported`, `Supported`), `mqtt` registers `mqtt` and `mqtts` |
 | `pubsub/security` | `Aes128CTR()`, `Aes256CTR()`, `PolicyByURI`, `KeyRing`, `KeyRings`, `KeyService` (`AddSecurityGroup`, `GetSecurityKeys`, `KeySource`) |
 | `pubsub/sks` | `GetSecurityKeys`, `SetSecurityKeys`, `Push`, `NewKeySource(ctx, Config)` |
 | `pubsub/remote` | `New(*opcua.Client)`; `AddConnection`, `AddWriterGroup`, `AddReaderGroup`, `AddDataSetWriter`, `AddDataSetReader`, `AddPublishedDataItems`, `AddPublishedDataItemsTemplate`, `Remove*`, `Enable`, `Disable`, `State`, `Property`, `Connections`, `WriterGroups`, `ReaderGroups`, `DataSetWriters`, `DataSetReaders`, `PublishedDataSets` |

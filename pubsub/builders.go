@@ -65,6 +65,21 @@ func UDPConnection(name, url string, publisherID any) *ua.PubSubConnectionDataTy
 	}
 }
 
+// EthernetConnection returns a connection with the Ethernet UADP transport
+// profile (Part 14 §7.3.3): url is opc.eth://<MAC>[:<VID>[.<PCP>]] (a
+// multicast MAC address joins the group, a VID adds an IEEE 802.1Q tag),
+// iface the network interface the frames are sent and received on.
+// publisherID is as for [UDPConnection].
+func EthernetConnection(name, url, iface string, publisherID any) *ua.PubSubConnectionDataType {
+	return &ua.PubSubConnectionDataType{
+		Name:                name,
+		Enabled:             true,
+		PublisherID:         mustPublisherID(publisherID),
+		TransportProfileURI: transport.ProfileEthUADP,
+		Address:             ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: url, NetworkInterface: iface}),
+	}
+}
+
 // MQTTConnection returns a connection to an MQTT broker (mqtt://host:port or
 // mqtts://host:port) with the MQTT UADP or MQTT JSON transport profile.
 func MQTTConnection(name, url string, publisherID any, mapping MessageMapping) *ua.PubSubConnectionDataType {

@@ -51,3 +51,29 @@ jobs:
             git diff --stat
             exit 1
           fi
+
+  # The Ethernet transport (pubsub/transport/eth) with real AF_PACKET raw
+  # sockets: the tests skip without CAP_NET_RAW, so build the test binary as
+  # the runner user and run it as root, on the loopback interface and on a
+  # veth pair (publisher on veth0, subscriber on veth1). GO_OPCUA_ETH_REQUIRE
+  # makes a test that would skip fail.
+  pubsub-eth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+      - name: Create a veth pair
+        run: |
+          sudo ip link add veth0 type veth peer name veth1
+          sudo ip link set veth0 up
+          sudo ip link set veth1 up
+      - name: Build the test binary
+        run: go test -c -race -o eth.test ./pubsub/transport/eth
+      - name: Run the Ethernet tests as root
+        working-directory: pubsub/transport/eth
+        run: |
+          sudo GO_OPCUA_ETH_REQUIRE=1 GO_OPCUA_ETH_PAIR=veth0,veth1 ../../../eth.test -test.v -test.count=1 -test.run 'Real|E2E'
+          sudo GO_OPCUA_ETH_REQUIRE=1 GO_OPCUA_ETH_PAIR=veth0,veth1 GO_OPCUA_ETH_IFACE=veth0 ../../../eth.test -test.count=5

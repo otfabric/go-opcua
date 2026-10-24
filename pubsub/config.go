@@ -10,6 +10,7 @@ import (
 
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	"github.com/otfabric/go-opcua/pubsub/transport/eth"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -334,20 +335,29 @@ func validateConnection(path string, c *ua.PubSubConnectionDataType, pds map[str
 		return configErr(path, "a connection with writer groups needs a PublisherId")
 	}
 	switch c.TransportProfileURI {
-	case transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON:
-	case transport.ProfileEthUADP:
-		return configErr(path, "TransportProfileUri %q is not supported", c.TransportProfileURI)
+	case transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON, transport.ProfileEthUADP:
 	case "":
 		return configErr(path, "TransportProfileUri is empty")
 	default:
 		return configErr(path, "unknown TransportProfileUri %q", c.TransportProfileURI)
 	}
-	url, _, ok := connectionURL(c)
+	url, iface, ok := connectionURL(c)
 	if !ok {
 		return configErr(path, "Address must be a NetworkAddressUrlDataType with a Url")
 	}
 	if _, err := transport.Scheme(url); err != nil {
 		return configErr(path, "Address: %v", err)
+	}
+	if c.TransportProfileURI == transport.ProfileEthUADP {
+		// Part 14 §7.3.3: opc.eth://<host>[:<VID>[.<PCP>]] on the
+		// interface the NetworkInterface names. UADP only: the JSON
+		// mapping needs a broker, which the checks below enforce.
+		if _, err := eth.ParseURL(url); err != nil {
+			return configErr(path, "Address: %v", err)
+		}
+		if iface == "" {
+			return configErr(path, "Address: an Ethernet connection needs a NetworkInterface")
+		}
 	}
 	broker := isBroker(c.TransportProfileURI, url)
 	wgNames := map[string]bool{}
