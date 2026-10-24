@@ -7,7 +7,7 @@
 
 ### Summary
 
-Fixes in the library for the key timing of SKS KeySources, URIs with a `;` in NodeId strings, MQTT clients that take a session from each other, a data race in the server's secure channel, a server that closed channels with a client's CloseSecureChannel request, PubSub writer groups that published before their connection listened, and a client test hook race, and a sweep of the test suites for scheduling-dependent tests: every test that passed or failed depending on timing (on a loaded CI runner, under the race detector, or on Linux) now waits for the event it asserts on. The suites were run 25 times in parallel on CI to find them.
+Fixes in the library for the key timing of SKS KeySources, URIs with a `;` in NodeId strings, MQTT clients that take a session from each other, a data race in the server's secure channel, a server that closed channels with a client's CloseSecureChannel request, PubSub writer groups that published before their connection listened, and a client test hook race, and a sweep of the test suites for scheduling-dependent tests: every test that passed or failed depending on timing (on a loaded CI runner, under the race detector, or on Linux) now waits for the event it asserts on. The suites were run in rounds of 25 parallel CI runs until a round came back clean, then 50 more: the release commit passed 75 of 75.
 
 ### Fixed
 
