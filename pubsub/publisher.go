@@ -590,8 +590,14 @@ func (e *encoder) sendData(ctx context.Context, outs []*outDSM) {
 		if chunk[0].own {
 			own = chunk[0].w
 		}
+		b, ct, err := e.p.body(g.conn, e.tc, g.enc, b)
+		if err != nil {
+			e.fail(err, true)
+			e.lose(chunk)
+			continue
+		}
 		opts := transport.PublishOptions{Topic: chunk[0].topic, QoS: chunk[0].qos,
-			ContentType: g.enc.contentType(), MessageType: transport.MessageTypeData, Properties: messageProperties(g, own)}
+			ContentType: ct, MessageType: transport.MessageTypeData, Properties: messageProperties(g, own)}
 		if !e.send(ctx, b, opts) {
 			e.lose(chunk)
 			continue
@@ -853,8 +859,13 @@ func (e *encoder) sendMetaData(ctx context.Context, w *dataSetWriter) {
 	// The body of a metadata message is a JSON ua-metadata message or a
 	// UADP discovery response: the content type is that of the mapping
 	// (Part 14 §7.3.4.9).
+	b, ct, err := e.p.body(g.conn, e.tc, g.enc, b)
+	if err != nil {
+		e.fail(err, true)
+		return
+	}
 	opts := transport.PublishOptions{Topic: w.brokerTS.MetaDataQueueName, QoS: 1, Retain: true,
-		ContentType: g.enc.contentType(), MessageType: transport.MessageTypeMetaData, Properties: messageProperties(g, w)}
+		ContentType: ct, MessageType: transport.MessageTypeMetaData, Properties: messageProperties(g, w)}
 	if e.send(ctx, b, opts) {
 		e.st.meta[w] = true
 	}

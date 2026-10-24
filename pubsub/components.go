@@ -65,6 +65,11 @@ type connection struct {
 	reasm   *uadp.Reassembler
 	annSeq  atomic.Uint32
 	limiter *discoveryLimiter
+	// gzip compresses the JSON messages the connection sends
+	// (JsonCompression); gzipWarned is set once it was logged that the
+	// transport cannot carry the compressed content type.
+	gzip       bool
+	gzipWarned atomic.Bool
 
 	// subsCh is closed (and replaced) whenever the connection goroutine
 	// updated its subscriptions; subscribed are the topics it has. Both
@@ -482,6 +487,7 @@ func (p *PubSub) addConnectionLocked(in *ua.PubSubConnectionDataType) (Component
 	c.shared = !c.broker && sharedAddress(c.url)
 	c.reasm = uadp.NewReassembler(p.opts.reassembly)
 	c.limiter = newDiscoveryLimiter()
+	c.gzip = jsonCompressed(cfg)
 	p.conns = append(p.conns, c)
 	p.comps[c.id] = c
 	p.emit(Event{Type: EventAdded, Component: c.info()})

@@ -127,6 +127,7 @@ type options struct {
 	discovery       DiscoveryOptions
 	actions         ActionOptions
 	actionHandlers  map[actionKey]ActionHandler
+	inflateLimit    int
 }
 
 // WithLogger sets the logger. The default discards log output.
@@ -212,6 +213,14 @@ func WithTransportConfig(f func(conn *ua.PubSubConnectionDataType, cfg *transpor
 // open (state Error) waits before it tries again. The default is 5 seconds.
 func WithRetryInterval(d time.Duration) Option {
 	return func(o *options) { o.retryInterval = d }
+}
+
+// WithJSONDecompressionLimit sets the largest JSON NetworkMessage a
+// subscriber decompresses from a gzip compressed message (Part 14
+// §7.3.4.9.1); larger ones are decode errors. The default is
+// [DefaultJSONDecompressionLimit].
+func WithJSONDecompressionLimit(n int) Option {
+	return func(o *options) { o.inflateLimit = n }
 }
 
 // WithChunkReassembly sets the limits of the reassembly of chunked UADP

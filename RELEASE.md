@@ -1,5 +1,28 @@
 # go-opcua Releases
 
+## v1.10.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.9.1
+
+### Summary
+
+PubSub sends and receives gzip compressed JSON NetworkMessages over MQTT 5.0, the content type `application/json+gzip` of Part 14 §7.3.4.9.1.
+
+### Added
+
+- **pubsub: gzip compressed JSON over MQTT 5.0.** `SetJSONCompression(conn, "gzip")` sets the go-opcua connection property `JsonCompression` (Part 14 defines no property for it; it is not sent to the broker): the connection's JSON data, metadata and Action messages go out gzip compressed (RFC 1952) with the Content Type `application/json+gzip`. `Validate` accepts the property only on MQTT connections with the JSON mapping (values `gzip` and `none`). A connection that runs MQTT 3.1.1 cannot say that a message is compressed and sends it uncompressed, logging a warning once.
+- **pubsub: subscribers decompress gzip compressed JSON.** By the content type on MQTT 5.0, and by the gzip header on 3.1.1, where the broker forwards no content type (a UADP NetworkMessage cannot start like a gzip stream). A subscriber decompresses at most 16 MiB of a message (`DefaultJSONDecompressionLimit`, set with `WithJSONDecompressionLimit`); a larger message (a decompression bomb), a truncated or corrupt stream and compressed garbage are decode errors. Before, a subscriber rejected every compressed message.
+
+### Tests
+
+- **Unit and e2e:** compressed data and metadata on the wire with MQTT 5.0 and 3.1.1 subscribers, the uncompressed fallback on 3.1.1, the decompression limit at its boundary and against a 64 MiB bomb, broken streams, validation, and PubSub Actions with and without compression.
+- **Chaos:** `TestChaosGzipJSON` runs a compressing publisher to an MQTT 5.0 and an MQTT 3.1.1 subscriber while an attacker floods their queues with decompression bombs, truncated and corrupt gzip streams, compressed garbage and mismatched content types, and the broker restarts and drops connections: no corrupt, duplicate or stale data set is delivered and every forgery is counted as a decode error. `TestChaosMQTT5Broker` gains a compressed JSON QoS 2 case.
+- **Conformance:** `TestPubSub_BrokerTransportsServerToServer` configures a compressing connection through the server's AddConnection method; the server-to-server subscriber and the standalone runtime decompress it, and the broker sees `application/json+gzip` and no `JsonCompression` user property.
+- **Interop:** `TestPubSubMQTT5_GzipJSON` runs go-opcua to go-opcua through Eclipse Mosquitto with subscribers on MQTT 5.0 and 3.1.1, which learn the DataSetMetaData from compressed metadata messages. No other stack compresses PubSub messages (ledger capability `pubsub.mqtt5.gzip`).
+
+---
+
 ## v1.9.1
 
 **Date:** 2026-10-24

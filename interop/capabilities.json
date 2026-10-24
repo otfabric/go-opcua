@@ -1644,6 +1644,17 @@
       ]
     },
     {
+      "id": "pubsub.mqtt5.gzip",
+      "title": "gzip compressed JSON (application/json+gzip, Part 14 §7.3.4.9.1) over MQTT 5.0 through Eclipse Mosquitto (C→ = go-opcua publishes compressed, peer subscribes; →S = peer publishes compressed, go-opcua subscribes)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "pubsub.amqp",
       "title": "UADP and JSON over AMQP 1.0 (RabbitMQ 4, ActiveMQ Artemis) (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
       "profile": "pubsub",

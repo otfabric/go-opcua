@@ -6860,6 +6860,56 @@
       "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
     },
     {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 compresses no PubSub messages (it uses gzip only in its HTTPS JSON transport) and its MQTT transport speaks 3.1.1, which carries no content type; go-opcua’s compression is tested go-opcua to go-opcua through Mosquitto with subscribers on MQTT 5.0 and 3.1.1 (TestPubSubMQTT5_GzipJSON)"
+    },
+    {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 compresses no PubSub messages (it uses gzip only in its HTTPS JSON transport) and its MQTT transport speaks 3.1.1, which carries no content type; go-opcua’s compression is tested go-opcua to go-opcua through Mosquitto with subscribers on MQTT 5.0 and 3.1.1 (TestPubSubMQTT5_GzipJSON)"
+    },
+    {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
       "capability": "pubsub.amqp",
       "direction": "go-client-to-open62541-server",
       "status": "unsupported",
