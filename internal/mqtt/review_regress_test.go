@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -106,5 +107,41 @@ func TestPacketIdentifiersExhausted(t *testing.T) {
 	case <-closed:
 	case <-time.After(5 * time.Second):
 		t.Fatal("Close hung")
+	}
+}
+
+// Regression: Close sent DISCONNECT under the write lock, so with a broker
+// that stopped reading it waited for a blocked write's deadline: the
+// keep-alive (or the broker's Server Keep Alive, up to 18 hours).
+func TestCloseWithStalledBroker(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	stop := make(chan struct{})
+	defer close(stop)
+	go fakeBroker(t, l, func(net.Conn, func() mqtt.Packet, func(mqtt.Packet)) { <-stop }) // reads nothing
+	c, err := mqtt.Dial(bg, mqtt.Options{Server: "mqtt://" + l.Addr().String(), KeepAlive: 300 * time.Second})
+	require.NoError(t, err)
+	var written atomic.Int64
+	go func() {
+		payload := make([]byte, 256<<10)
+		for c.Publish(bg, "t", payload, 0, false) == nil {
+			written.Add(1)
+		}
+	}()
+	// Wait until a write blocks: the socket buffers are full.
+	last := int64(-1)
+	require.Eventually(t, func() bool {
+		n := written.Load()
+		stalled := n > 0 && n == last
+		last = n
+		return stalled
+	}, 10*time.Second, 200*time.Millisecond)
+	closed := make(chan struct{})
+	go func() { _ = c.Close(); close(closed) }()
+	select {
+	case <-closed:
+	case <-time.After(10 * time.Second):
+		t.Fatal("Close waited for the blocked write")
 	}
 }

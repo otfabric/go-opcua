@@ -56,6 +56,9 @@ const (
 // and falls back to 3.1.1 when the broker refuses the protocol version.
 const VersionBestAvailable byte = 0xff
 
+// closeTimeout bounds the DISCONNECT that Close writes.
+const closeTimeout = time.Second
+
 // noQuota is the send quota of a connection without flow control (3.1.1):
 // more than there are packet identifiers.
 const noQuota = 1 << 20
@@ -1671,7 +1674,12 @@ func (c *Client) Close() error {
 	close(c.done)
 	c.mu.Unlock()
 	if l != nil {
+		// A write blocked by a broker that does not read holds the write
+		// lock until its deadline (the keep-alive or longer): close the
+		// connection if the DISCONNECT cannot be written soon.
+		t := time.AfterFunc(closeTimeout, func() { _ = l.conn.Close() })
 		_ = c.write(l, &Disconnect{})
+		t.Stop()
 		_ = l.conn.Close()
 	}
 	c.wg.Wait()
