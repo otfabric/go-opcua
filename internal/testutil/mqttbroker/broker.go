@@ -102,7 +102,9 @@ type Broker struct {
 	clientsWG sync.WaitGroup
 
 	ignorePings atomic.Bool
-	published   atomic.Int64
+	// afterSubscribe, if set, runs after a SUBSCRIBE was handled (tests).
+	afterSubscribe atomic.Pointer[func()]
+	published      atomic.Int64
 }
 
 type retainedMsg struct {
@@ -811,12 +813,14 @@ func (c *client) handle(p mqtt.Packet) bool {
 			isNew[i] = !had
 			c.sess.subs[s.Filter] = subOpts{qos: codes[i], noLocal: s.NoLocal, rap: s.RetainAsPublished}
 		}
-		b.mu.Unlock()
 		ack := &mqtt.Suback{PacketID: p.PacketID, ReturnCodes: codes}
 		if reason != "" && !c.noInfo {
 			ack.Props.ReasonString = &reason
 		}
 		c.send(ack)
+		// The retained messages go out in the critical section that added
+		// the subscription: a message published after it is routed to the
+		// subscription, one published before is in the store, never both.
 		for i, s := range p.Topics {
 			if codes[i] >= mqtt.SubackFailure {
 				continue
@@ -826,6 +830,10 @@ func (c *client) handle(p mqtt.Packet) bool {
 				continue
 			}
 			b.sendRetained(c, s.Filter, codes[i])
+		}
+		b.mu.Unlock()
+		if f := b.afterSubscribe.Load(); f != nil {
+			(*f)()
 		}
 	case *mqtt.Unsubscribe:
 		codes := make([]byte, len(p.Filters))
@@ -994,9 +1002,9 @@ func (b *Broker) deliver(s *session, src *mqtt.Publish, qos byte, retain bool, a
 	}
 }
 
+// sendRetained delivers the retained messages that match filter. b.mu is
+// held.
 func (b *Broker) sendRetained(c *client, filter string, granted byte) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
 	topics := make([]string, 0, len(b.retained))
 	for t := range b.retained {
 		if mqtt.MatchTopic(filter, t) {

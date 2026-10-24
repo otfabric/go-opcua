@@ -417,3 +417,39 @@ func TestResumedSessionKeepsOrder(t *testing.T) {
 		b.Close()
 	}
 }
+
+// TestRetainedOnceToNewSubscription: a retained message published right
+// after a SUBSCRIBE was acknowledged reaches the new subscription once. The
+// broker sent the store's retained messages after the SUBACK, outside the
+// critical section that added the subscription, and a message routed in
+// between was delivered live and then again as retained
+// (TestV5ContentTypeAndMessageType).
+func TestRetainedOnceToNewSubscription(t *testing.T) {
+	b := start(t, Options{})
+	pub := rawDial(t, b)
+	pub.connect(&mqtt.Connect{ClientID: "pub", CleanSession: true})
+	published := make(chan error, 1)
+	hook := func() {
+		pkt, err := mqtt.EncodeVersion(&mqtt.Publish{Topic: "r", Retain: true, Payload: []byte("v"), QoS: 1, PacketID: 1}, mqtt.Version311)
+		if err == nil {
+			_, err = pub.conn.Write(pkt)
+		}
+		if err == nil {
+			_ = pub.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+			_, err = mqtt.ReadPacketVersion(pub.br, 0, mqtt.Version311)
+		}
+		published <- err
+	}
+	b.afterSubscribe.Store(&hook)
+
+	sub := rawDial(t, b)
+	sub.connect(&mqtt.Connect{ClientID: "sub", CleanSession: true})
+	sub.subscribe(1, "r", 1)
+	require.NoError(t, <-published)
+	b.afterSubscribe.Store(nil)
+	m, ok := sub.read().(*mqtt.Publish)
+	require.True(t, ok)
+	require.Equal(t, "v", string(m.Payload))
+	sub.send(&mqtt.Ack{Kind: mqtt.TypePuback, PacketID: m.PacketID})
+	sub.quiet(300 * time.Millisecond)
+}
