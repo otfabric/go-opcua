@@ -15,10 +15,12 @@ var (
 		asyncOpcuaEnv: true,
 		dotnetEnv:     true,
 		nodeOpcuaEnv:  true,
+		asyncuaEnv:    true,
 	}
 	peerInteropVersion = map[string]string{
 		asyncOpcuaEnv: asyncOpcuaInteropVersion,
 		dotnetEnv:     dotnetInteropVersion,
 		nodeOpcuaEnv:  nodeOpcuaInteropVersion,
+		asyncuaEnv:    asyncuaInteropVersion,
 	}
 )
