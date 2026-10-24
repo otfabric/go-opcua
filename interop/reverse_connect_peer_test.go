@@ -56,6 +56,7 @@ const (
 // reach the server is the connection it opens itself.
 func startAdapterReverseServer(t *testing.T, imageEnvVar, defaultImage string, clientPort int) {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	image := getEnvOr(imageEnvVar, defaultImage)
 	containerName := dockerContainerName(t)
@@ -115,6 +116,7 @@ func runAdapterReverseClient(t *testing.T, imageEnvVar, defaultImage, endpoint s
 // `docker run` arguments (certificate mounts).
 func runAdapterReverseClientWith(t *testing.T, imageEnvVar, defaultImage, endpoint string, hostPort int, dockerArgs []string, subcmd string, args ...string) adapterResult {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	image := getEnvOr(imageEnvVar, defaultImage)
 	containerName := dockerContainerName(t) + "-" + subcmd

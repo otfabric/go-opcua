@@ -66,6 +66,7 @@ const discoveryWait = 60 * time.Second
 // arguments (before the image) and extra adapter arguments (after "server").
 func startAdapterServerWith(t *testing.T, imageEnvVar, defaultImage string, dockerArgs, serverArgs []string) (*serverHandle, string) {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	port := freePort(t)
 	image := getEnvOr(imageEnvVar, defaultImage)
@@ -232,21 +233,26 @@ func TestOpen62541LDS_GoServerRegisters(t *testing.T) {
 			}
 		})
 
-		awaitDiscovery(t, "the open62541 LDS to list the go-opcua server", func() bool {
+		// The LDS can list the server before the RegisterServer2 response, and
+		// with it the registration event, reaches the registrant: wait for both.
+		var accepted *server.RegistrationEvent
+		acceptedEvent := func() *server.RegistrationEvent {
+			mu.Lock()
+			defer mu.Unlock()
+			for i := range events {
+				if events[i].Err == nil && events[i].Online {
+					e := events[i]
+					return &e
+				}
+			}
+			return nil
+		}
+		awaitDiscovery(t, "the open62541 LDS to list the go-opcua server and the registration to succeed", func() bool {
+			if accepted = acceptedEvent(); accepted == nil {
+				return false
+			}
 			return slices.Contains(foundServerURIs(lds.endpoint), uri)
 		})
-		mu.Lock()
-		var accepted *server.RegistrationEvent
-		for i := range events {
-			if events[i].Err == nil && events[i].Online {
-				accepted = &events[i]
-				break
-			}
-		}
-		mu.Unlock()
-		if accepted == nil {
-			t.Fatalf("the LDS lists the server but no registration attempt succeeded: %+v", events)
-		}
 		if accepted.Service != "RegisterServer2" {
 			t.Errorf("registered with %s, want RegisterServer2 (open62541 implements it)", accepted.Service)
 		}
@@ -670,6 +676,7 @@ func startGoPeerContainer(t *testing.T, network, image, binDir string, peerArgs 
 // returned as the adapter reported it.
 func runAdapterClientOnNetwork(t *testing.T, imageEnv, defaultImage, network, subcmd string, args ...string) adapterResult {
 	t.Helper()
+	requireOptionalPeer(t, imageEnv, defaultImage)
 	image := getEnvOr(imageEnv, defaultImage)
 	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
 	defer cancel()
@@ -685,7 +692,7 @@ func runAdapterClientOnNetwork(t *testing.T, imageEnv, defaultImage, network, su
 // TestMulticast_GoAndPeers puts a go-opcua LDS and the open62541 LDS on one
 // network segment (both in containers, see the file comment) and checks that
 // each finds the other with mDNS and reports it from FindServersOnNetwork,
-// that the open62541 and the Milo client get the records of the go-opcua LDS,
+// that the open62541, Milo, async-opcua and dotnet clients get the records of the go-opcua LDS,
 // and that RegisterServer2 with an MdnsDiscoveryConfiguration makes a server
 // appear in them.
 func TestMulticast_GoAndPeers(t *testing.T) {
@@ -817,6 +824,7 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 		{"open62541", "OPEN62541_IMAGE", defaultOpen62541Image},
 		{"milo", "MILO_IMAGE", defaultMiloImage},
 		{"async-opcua", "ASYNC_OPCUA_IMAGE", defaultAsyncOpcuaImage},
+		{"dotnet", dotnetEnv, defaultDotnetImage},
 	}
 	for _, p := range peers {
 		t.Run("coverage/discovery.find-servers-on-network/"+p.name+"-client-to-go-lds", func(t *testing.T) {

@@ -432,9 +432,12 @@ func historyReadPage(t *testing.T, ctx context.Context, c *opcua.Client, node *u
 		HistoryReadDetails: &ua.ExtensionObject{
 			TypeID:       ua.NewFourByteExpandedNodeID(0, id.ReadRawModifiedDetailsEncodingDefaultBinary),
 			EncodingMask: ua.ExtensionObjectBinary,
+			// EndTime is one second past the last sample (10:00:20): Part 11
+			// leaves the end time out of the interval and UA-.NETStandard does
+			// so, open62541 and Milo include it; either way all five are inside.
 			Value: &ua.ReadRawModifiedDetails{
 				StartTime:        time.Date(2026, 7, 24, 10, 0, 0, 0, time.UTC),
-				EndTime:          time.Date(2026, 7, 24, 10, 0, 20, 0, time.UTC),
+				EndTime:          time.Date(2026, 7, 24, 10, 0, 21, 0, time.UTC),
 				NumValuesPerNode: 2,
 			},
 		},
