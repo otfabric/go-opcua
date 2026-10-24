@@ -227,9 +227,11 @@ func TestOrderingSplittingAndRepeat(t *testing.T) {
 		wg.TransportSettings = ua.NewExtensionObject(&ua.DatagramWriterGroupTransportDataType{MessageRepeatCount: 1, MessageRepeatDelay: 1})
 		return AttachWriterGroups(memConnection("c", url, uint16(1)), wg)
 	}, []*ua.PublishedDataSetDataType{testPDS("pds")})
-	f.waitSent(4)
-	time.Sleep(20 * time.Millisecond)
-	nms := f.sent()
+	// Four NetworkMessages (one DataSetMessage each fits the size limit),
+	// each sent twice; the repeats go out MessageRepeatDelay later, so wait
+	// for all of them rather than for a guess at how long they take.
+	nms := f.waitSent(8)
+	require.Len(t, nms, 8)
 	var ids []uint16
 	var numbers []uint16
 	for i, nm := range nms {
