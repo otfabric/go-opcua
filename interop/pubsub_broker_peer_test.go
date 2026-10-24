@@ -176,37 +176,54 @@ type amqpBroker struct {
 func startBrokerContainer(t *testing.T, suffix, image string, env []string, containerPorts ...int) []int {
 	t.Helper()
 	name := dockerContainerName(t) + "-" + suffix
-	args := []string{"run", "--rm", "--name", name}
-	var ports []int
-	for _, cp := range containerPorts {
-		hp := freePort(t)
-		ports = append(ports, hp)
-		args = append(args, "-p", fmt.Sprintf("%d:%d", hp, cp))
-	}
-	for _, e := range env {
-		args = append(args, "-e", e)
-	}
-	args = append(args, image)
-	var logs bytes.Buffer
-	var mu sync.Mutex
-	cmd := exec.Command("docker", args...)
-	cmd.Stdout = lockedWriter{&mu, &logs}
-	cmd.Stderr = lockedWriter{&mu, &logs}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start %s: %v", suffix, err)
-	}
-	done := make(chan struct{})
-	go func() { _ = cmd.Wait(); close(done) }()
-	t.Cleanup(func() {
-		dockerStop(name)
-		<-done
-		if t.Failed() {
-			mu.Lock()
-			t.Logf("%s log:\n%s", suffix, logs.String())
-			mu.Unlock()
+	for attempt := 1; ; attempt++ {
+		args := []string{"run", "--rm", "--name", name}
+		var ports []int
+		for _, cp := range containerPorts {
+			hp := freePort(t)
+			ports = append(ports, hp)
+			args = append(args, "-p", fmt.Sprintf("%d:%d", hp, cp))
 		}
-	})
-	return ports
+		for _, e := range env {
+			args = append(args, "-e", e)
+		}
+		args = append(args, image)
+		var logs bytes.Buffer
+		var mu sync.Mutex
+		cmd := exec.Command("docker", args...)
+		cmd.Stdout = lockedWriter{&mu, &logs}
+		run, err := startDockerRun(cmd, lockedWriter{&mu, &logs})
+		if err != nil {
+			t.Fatalf("start %s: %v", suffix, err)
+		}
+		// The ports are published once the container runs; a taken one
+		// makes docker run fail before that.
+		deadline := time.Now().Add(60 * time.Second)
+		for !run.exited() && !dockerRunning(name) && time.Now().Before(deadline) {
+			time.Sleep(200 * time.Millisecond)
+		}
+		if run.portTaken() && attempt < publishAttempts {
+			dockerRemove(name)
+			t.Logf("a host port of %s was taken: other ones", suffix)
+			continue
+		}
+		t.Cleanup(func() {
+			dockerStop(name)
+			run.wait()
+			if t.Failed() {
+				mu.Lock()
+				t.Logf("%s log:\n%s", suffix, logs.String())
+				mu.Unlock()
+			}
+		})
+		return ports
+	}
+}
+
+// dockerRunning reports whether the container name runs.
+func dockerRunning(name string) bool {
+	out, err := exec.Command("docker", "inspect", "-f", "{{.State.Running}}", name).Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
 }
 
 // waitAMQP waits until the broker at u completes an AMQP open with PLAIN.

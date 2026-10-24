@@ -181,7 +181,7 @@ func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 		t.Fatalf("Enable the connection: %v", err)
 	}
 	readerValues := psValues(readerVars, psFresh())
-	send := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", readerPort)})
+	send := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", srv.udpPort(t, readerPort))})
 	psSendLoop(t, send, transport.PublishOptions{}, psUADPEncoder(t, psLiveCase{vars: readerVars}, readerValues))
 	waitPubSubVars(t, srv.endpoint, []psVar{{"ViaMethod", 11, -1}}, readerValues, psReceiveTimeout)
 

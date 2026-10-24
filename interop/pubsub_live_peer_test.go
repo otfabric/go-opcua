@@ -432,7 +432,7 @@ func psGoPublishesUDP(t *testing.T, p *psPeer) {
 				udpPorts: []int{port},
 			})
 			values := psValues(c.vars, psFresh())
-			conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port)})
+			conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port))})
 			psSendLoop(t, conn, transport.PublishOptions{}, psUADPEncoder(t, c, values))
 			waitPubSubVars(t, sub.endpoint, c.vars, values, psReceiveTimeout)
 		})
@@ -556,7 +556,7 @@ func psPeerSubscriberRejectsInsecure(t *testing.T, p *psPeer) {
 		udpPorts: []int{port},
 	})
 	values := psValues(c.vars, psFresh())
-	conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port)})
+	conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port))})
 
 	wrongKey := append([]byte(nil), psStaticKey256...)
 	wrongKey[40] ^= 0xFF // another encrypting key, same token id

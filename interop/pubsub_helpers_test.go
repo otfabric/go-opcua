@@ -30,6 +30,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"os"
@@ -382,6 +383,7 @@ func psSecurityGroupJSON(groupID, policyURI string, tokenID uint32, key []byte) 
 type pubsubServer struct {
 	name     string
 	endpoint string // opc.tcp://localhost:<port>/opcua-interop
+	udpHost  map[int]int
 }
 
 type pubsubServerOpts struct {
@@ -389,9 +391,11 @@ type pubsubServerOpts struct {
 	peer *psPeer
 	// mqtt311 makes a peer whose MQTT default is 5.0 speak MQTT 3.1.1
 	// (psPeer.mqttVersionMember).
-	mqtt311  bool
-	config   jobj  // the --pubsub-config document
-	udpPorts []int // published as <p>:<p>/udp
+	mqtt311 bool
+	config  jobj // the --pubsub-config document
+	// udpPorts are published as <p>:<p>/udp, or on another host port
+	// when <p> is taken: pubsubServer.udpPort.
+	udpPorts []int
 	// secure starts the server with the <peer>-server certificate of
 	// the test PKI (needed for sksClient, serveSks and SetSecurityKeys).
 	secure bool
@@ -439,99 +443,125 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 		fixtureDir = filepath.Join(cwd, fixtureDir)
 	}
 
-	port := freePort(t)
 	name := dockerContainerName(t)
-	args := []string{"run", "--rm", "--name", name,
-		"-v", fixtureDir + ":/fixtures:ro",
-		"-v", dir + ":/pubsub:ro",
+	// udpHost maps the container's UDP ports to the host ports they are
+	// published on: the same number unless Docker found that one taken.
+	udpHost := map[int]int{}
+	for _, up := range o.udpPorts {
+		udpHost[up] = up
 	}
-	serverArgs := []string{"server", "--fixture", "/fixtures/baseline.json", "--pubsub-config", "/pubsub/pubsub.json"}
-	if o.hostNetwork {
-		// No port mapping: the server binds the host port itself.
-		args = append(args, "--network", "host")
-		serverArgs = append(serverArgs, "--bind-port", fmt.Sprint(port), "--advertised-host", "localhost")
-	} else {
-		args = append(args, "--add-host=host.docker.internal:host-gateway", "-p", fmt.Sprintf("%d:4840", port))
-		if o.network != "" {
-			args = append(args, "--network", o.network)
+	for attempt := 1; ; attempt++ {
+		port := freePort(t)
+		args := []string{"run", "--rm", "--name", name,
+			"-v", fixtureDir + ":/fixtures:ro",
+			"-v", dir + ":/pubsub:ro",
 		}
-		for _, p := range o.udpPorts {
-			args = append(args, "-p", fmt.Sprintf("%d:%d/udp", p, p))
-		}
-	}
-	if o.root {
-		args = append(args, "--user", "0")
-	}
-	if o.secure {
-		pki := pkiDir(t)
-		runtimePKI := filepath.Join(containerScratchDir(t), "pki")
-		identity := p.name + "-server"
-		if err := copyDir(filepath.Join(pki, identity, "pki"), runtimePKI); err != nil {
-			t.Fatalf("copy PKI: %v", err)
-		}
-		if err := shareWithContainers(runtimePKI); err != nil {
-			t.Fatal(err)
-		}
-		args = append(args,
-			"-v", filepath.Join(pki, identity, "cert.crt")+":/certs/cert.crt:ro",
-			"-v", filepath.Join(pki, identity, "cert.key")+":/certs/cert.key:ro",
-			"-v", runtimePKI+":/certs/pki")
-		serverArgs = append(serverArgs, "--certificate", "/certs/cert.crt", "--private-key", "/certs/cert.key", "--pki-dir", "/certs/pki")
-	}
-	args = append(args, getEnvOr(p.env, p.image))
-	args = append(args, serverArgs...)
-
-	var logs bytes.Buffer
-	cmd := exec.Command("docker", args...)
-	cmd.Stdout = &logs
-	cmd.Stderr = &logs
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start the %s PubSub server: %v", p.name, err)
-	}
-	exited := make(chan error, 1)
-	go func() { exited <- cmd.Wait() }()
-	var once sync.Once
-	stop := func() {
-		once.Do(func() {
-			if o.secure {
-				dockerReleaseMount(name, "/certs/pki")
+		serverArgs := []string{"server", "--fixture", "/fixtures/baseline.json", "--pubsub-config", "/pubsub/pubsub.json"}
+		if o.hostNetwork {
+			// No port mapping: the server binds the host port itself.
+			args = append(args, "--network", "host")
+			serverArgs = append(serverArgs, "--bind-port", fmt.Sprint(port), "--advertised-host", "localhost")
+		} else {
+			args = append(args, "--add-host=host.docker.internal:host-gateway", "-p", fmt.Sprintf("%d:4840", port))
+			if o.network != "" {
+				args = append(args, "--network", o.network)
 			}
-			dockerStop(name)
-			select {
-			case err := <-exited:
-				_ = err // docker run exits non-zero when stopped
-			case <-time.After(15 * time.Second):
-				_ = cmd.Process.Kill()
+			for _, up := range o.udpPorts {
+				args = append(args, "-p", fmt.Sprintf("%d:%d/udp", udpHost[up], up))
+			}
+		}
+		if o.root {
+			args = append(args, "--user", "0")
+		}
+		if o.secure {
+			pki := pkiDir(t)
+			runtimePKI := filepath.Join(containerScratchDir(t), "pki")
+			identity := p.name + "-server"
+			if err := copyDir(filepath.Join(pki, identity, "pki"), runtimePKI); err != nil {
+				t.Fatalf("copy PKI: %v", err)
+			}
+			if err := shareWithContainers(runtimePKI); err != nil {
+				t.Fatal(err)
+			}
+			args = append(args,
+				"-v", filepath.Join(pki, identity, "cert.crt")+":/certs/cert.crt:ro",
+				"-v", filepath.Join(pki, identity, "cert.key")+":/certs/cert.key:ro",
+				"-v", runtimePKI+":/certs/pki")
+			serverArgs = append(serverArgs, "--certificate", "/certs/cert.crt", "--private-key", "/certs/cert.key", "--pki-dir", "/certs/pki")
+		}
+		args = append(args, getEnvOr(p.env, p.image))
+		args = append(args, serverArgs...)
+
+		// The log is written by docker run's output copiers while the test
+		// may read it.
+		var mu sync.Mutex
+		var logs bytes.Buffer
+		cmd := exec.Command("docker", args...)
+		cmd.Stdout = lockedWriter{&mu, &logs}
+		run, err := startDockerRun(cmd, lockedWriter{&mu, &logs})
+		if err != nil {
+			t.Fatalf("start the %s PubSub server: %v", p.name, err)
+		}
+		logString := func() string {
+			mu.Lock()
+			defer mu.Unlock()
+			return logs.String()
+		}
+		var once sync.Once
+		stop := func() {
+			once.Do(func() {
+				if o.secure {
+					dockerReleaseMount(name, "/certs/pki")
+				}
+				dockerStop(name)
+				select {
+				case <-run.done: // docker run exits non-zero when stopped
+				case <-time.After(15 * time.Second):
+					_ = cmd.Process.Kill()
+				}
+			})
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), serverReadyTimeout)
+		err = waitDockerReady(ctx, run, name)
+		cancel()
+		// With --network host the adapter binds the port itself and exits
+		// when it is taken.
+		if run.exited() && dockerPortTaken(logString()) && attempt < publishAttempts {
+			dockerRemove(name)
+			t.Logf("a host port of the %s PubSub server was taken: other ones\n%s", p.name, logString())
+			for _, up := range o.udpPorts {
+				if strings.Contains(logString(), fmt.Sprintf(":%d", udpHost[up])) {
+					udpHost[up] = freeUDPPort(t)
+				}
+			}
+			continue
+		}
+		t.Cleanup(func() {
+			stop()
+			if t.Failed() {
+				t.Logf("%s PubSub server %s log:\n%s", p.name, name, logString())
 			}
 		})
-	}
-	t.Cleanup(func() {
-		stop()
-		if t.Failed() {
-			t.Logf("%s PubSub server %s log:\n%s", p.name, name, logs.String())
+		if errors.Is(err, errDockerExited) {
+			t.Fatalf("the %s PubSub server exited — the configuration was rejected?\nconfig: %s\nlog:\n%s", p.name, doc, logString())
 		}
-	})
+		if err != nil {
+			t.Fatalf("waiting for the %s PubSub server: %v\nlog:\n%s", p.name, err, logString())
+		}
+		return &pubsubServer{name: name, endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath), udpHost: udpHost}
+	}
+}
 
-	deadline := time.Now().Add(serverReadyTimeout)
-	for {
-		select {
-		case err := <-exited:
-			exited <- err
-			t.Fatalf("the %s PubSub server exited (%v) — the configuration was rejected?\nconfig: %s\nlog:\n%s", p.name, err, doc, logs.String())
-		default:
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		ready := exec.CommandContext(ctx, "docker", "exec", name, "test", "-f", "/run/opcua-interop/ready").Run() == nil
-		cancel()
-		if ready {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for the %s PubSub server\nlog:\n%s", p.name, logs.String())
-		}
-		time.Sleep(300 * time.Millisecond)
+// udpPort returns the host port the container's UDP port p (one of
+// pubsubServerOpts.udpPorts) is published on: go-opcua sends there.
+func (s *pubsubServer) udpPort(t *testing.T, p int) int {
+	t.Helper()
+	hp, ok := s.udpHost[p]
+	if !ok {
+		t.Fatalf("UDP port %d is not published", p)
 	}
-	return &pubsubServer{name: name, endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath)}
+	return hp
 }
 
 // freeUDPPort returns a UDP port that is free on the host.
@@ -551,45 +581,51 @@ func startMosquitto(t *testing.T) int {
 	if err := shareWithContainers(dir); err != nil {
 		t.Fatal(err)
 	}
-	port := freePort(t)
 	name := dockerContainerName(t) + "-mosquitto"
-	var logs bytes.Buffer
-	cmd := exec.Command("docker", "run", "--rm", "--name", name, "-p", fmt.Sprintf("%d:1883", port),
-		"-v", conf+":/mosquitto-interop.conf:ro", mosquittoImage, "mosquitto", "-c", "/mosquitto-interop.conf")
-	var mu sync.Mutex
-	cmd.Stdout = lockedWriter{&mu, &logs}
-	cmd.Stderr = lockedWriter{&mu, &logs}
-	if err := cmd.Start(); err != nil {
-		t.Fatalf("start mosquitto: %v", err)
-	}
-	done := make(chan struct{})
-	go func() { _ = cmd.Wait(); close(done) }()
-	t.Cleanup(func() {
-		dockerStop(name)
-		<-done
-		if t.Failed() {
+	for attempt := 1; ; attempt++ {
+		port := freePort(t)
+		var logs bytes.Buffer
+		var mu sync.Mutex
+		logString := func() string {
 			mu.Lock()
-			t.Logf("mosquitto log:\n%s", logs.String())
-			mu.Unlock()
+			defer mu.Unlock()
+			return logs.String()
 		}
-	})
-	deadline := time.Now().Add(30 * time.Second)
-	for {
-		mu.Lock()
-		up := strings.Contains(logs.String(), "running")
-		mu.Unlock()
-		if up {
-			return port
+		cmd := exec.Command("docker", "run", "--rm", "--name", name, "-p", fmt.Sprintf("%d:1883", port),
+			"-v", conf+":/mosquitto-interop.conf:ro", mosquittoImage, "mosquitto", "-c", "/mosquitto-interop.conf")
+		cmd.Stdout = lockedWriter{&mu, &logs}
+		run, err := startDockerRun(cmd, lockedWriter{&mu, &logs})
+		if err != nil {
+			t.Fatalf("start mosquitto: %v", err)
 		}
-		select {
-		case <-done:
-			t.Fatalf("mosquitto exited:\n%s", logs.String())
-		default:
+		deadline := time.Now().Add(30 * time.Second)
+		for !strings.Contains(logString(), "running") {
+			if run.exited() {
+				break
+			}
+			if time.Now().After(deadline) {
+				dockerStop(name)
+				run.wait()
+				t.Fatalf("mosquitto did not start:\n%s", logString())
+			}
+			time.Sleep(200 * time.Millisecond)
 		}
-		if time.Now().After(deadline) {
-			t.Fatalf("mosquitto did not start:\n%s", logs.String())
+		if run.portTaken() && attempt < publishAttempts {
+			dockerRemove(name)
+			t.Logf("host port %d taken: another one", port)
+			continue
 		}
-		time.Sleep(200 * time.Millisecond)
+		if run.exited() {
+			t.Fatalf("mosquitto exited:\n%s", logString())
+		}
+		t.Cleanup(func() {
+			dockerStop(name)
+			run.wait()
+			if t.Failed() {
+				t.Logf("mosquitto log:\n%s", logString())
+			}
+		})
+		return port
 	}
 }
 

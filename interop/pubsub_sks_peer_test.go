@@ -346,7 +346,7 @@ func TestPubSubSKS_GoPushes_Open62541Subscriber(t *testing.T) {
 		t.Fatal(err)
 	}
 	values := psValues(c.vars, psFresh())
-	conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port)})
+	conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port))})
 	md := psLookup(psMetaData(c.vars, 0))
 	var nonce uint32
 	psSendLoop(t, conn, transport.PublishOptions{}, func(seq uint16) ([]byte, error) {

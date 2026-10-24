@@ -68,9 +68,7 @@ func startAdapterServerWith(t *testing.T, imageEnvVar, defaultImage string, dock
 	t.Helper()
 	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
-	port := freePort(t)
 	image := getEnvOr(imageEnvVar, defaultImage)
-	containerName := dockerContainerName(t) + fmt.Sprintf("-%d", port)
 	fixtureDir := getEnvOr("OPCUA_INTEROP_FIXTURE_DIR", defaultFixtureDir)
 	if !filepath.IsAbs(fixtureDir) {
 		cwd, err := os.Getwd()
@@ -80,49 +78,56 @@ func startAdapterServerWith(t *testing.T, imageEnvVar, defaultImage string, dock
 		fixtureDir = filepath.Join(cwd, fixtureDir)
 	}
 
-	args := []string{"run", "--rm", "--name", containerName,
-		"-p", fmt.Sprintf("%d:4840", port),
-		"-v", fixtureDir + ":/fixtures:ro",
-		"--add-host=host.docker.internal:host-gateway",
-	}
-	args = append(args, dockerArgs...)
-	args = append(args, image, "server", "--fixture", "/fixtures/baseline.json")
-	for _, a := range serverArgs {
-		// {port} is the host port the server is published on.
-		args = append(args, strings.ReplaceAll(a, "{port}", fmt.Sprint(port)))
-	}
-
-	cmdCtx, cmdCancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(cmdCtx, "docker", args...)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		cmdCancel()
-		t.Fatalf("start adapter server (%s): %v", image, err)
-	}
-	var once sync.Once
-	stop := func() {
-		once.Do(func() {
-			// SIGTERM with a grace period: an adapter that registered with
-			// a discovery server unregisters on the way out.
-			exec.Command("docker", "stop", "-t", "15", containerName).Run() //nolint:errcheck
-			cmdCancel()
-			_ = cmd.Wait()
-		})
-	}
-
-	startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
-	defer startCancel()
-	for exec.CommandContext(startCtx, "docker", "exec", containerName, "test", "-f", "/run/opcua-interop/ready").Run() != nil {
-		select {
-		case <-startCtx.Done():
-			stop()
-			t.Fatalf("timed out waiting for adapter server (container: %s)", containerName)
-		default:
-			time.Sleep(500 * time.Millisecond)
+	for range publishAttempts {
+		port := freePort(t)
+		containerName := dockerContainerName(t) + fmt.Sprintf("-%d", port)
+		args := []string{"run", "--rm", "--name", containerName,
+			"-p", fmt.Sprintf("%d:4840", port),
+			"-v", fixtureDir + ":/fixtures:ro",
+			"--add-host=host.docker.internal:host-gateway",
 		}
+		args = append(args, dockerArgs...)
+		args = append(args, image, "server", "--fixture", "/fixtures/baseline.json")
+		for _, a := range serverArgs {
+			// {port} is the host port the server is published on.
+			args = append(args, strings.ReplaceAll(a, "{port}", fmt.Sprint(port)))
+		}
+
+		cmdCtx, cmdCancel := context.WithCancel(context.Background())
+		run, err := startDockerRun(exec.CommandContext(cmdCtx, "docker", args...), nil)
+		if err != nil {
+			cmdCancel()
+			t.Fatalf("start adapter server (%s): %v", image, err)
+		}
+		var once sync.Once
+		stop := func() {
+			once.Do(func() {
+				// SIGTERM with a grace period: an adapter that registered with
+				// a discovery server unregisters on the way out.
+				exec.Command("docker", "stop", "-t", "15", containerName).Run() //nolint:errcheck
+				cmdCancel()
+				run.wait()
+			})
+		}
+
+		startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
+		err = waitDockerReady(startCtx, run, containerName)
+		startCancel()
+		if run.portTaken() {
+			cmdCancel()
+			dockerRemove(containerName)
+			t.Logf("host port %d taken: another one", port)
+			continue
+		}
+		if err != nil {
+			stop()
+			t.Fatalf("waiting for adapter server (container: %s): %v", containerName, err)
+		}
+		t.Cleanup(stop)
+		return &serverHandle{endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath), stopFn: stop}, containerName
 	}
-	t.Cleanup(stop)
-	return &serverHandle{endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath), stopFn: stop}, containerName
+	t.Fatalf("no host port Docker could publish the adapter server on in %d attempts", publishAttempts)
+	return nil, ""
 }
 
 // startGoLDS starts an in-process go-opcua Local Discovery Server that
@@ -646,17 +651,30 @@ func buildDiscoveryPeer(t *testing.T) string {
 // unreachable from the host.
 func startGoPeerContainer(t *testing.T, network, image, binDir string, peerArgs ...string) (hostURL, netURL, hostname string) {
 	t.Helper()
-	port := freePort(t)
-	hostname = fmt.Sprintf("gopeer%d", port)
-	name := strings.ToLower(dockerContainerName(t)) + "-" + hostname
-	args := []string{"run", "--rm", "-d", "--name", name, "--hostname", hostname, "--network", network,
-		"-p", fmt.Sprintf("%d:%d", port, port),
-		"-v", binDir + ":/peer:ro",
-		"--entrypoint", "/peer/discoverypeer",
-		image, "-port", fmt.Sprint(port), "-host", hostname,
-	}
-	args = append(args, peerArgs...)
-	if out, err := exec.Command("docker", args...).CombinedOutput(); err != nil {
+	var port int
+	var name string
+	for attempt := 1; ; attempt++ {
+		port = freePort(t)
+		hostname = fmt.Sprintf("gopeer%d", port)
+		name = strings.ToLower(dockerContainerName(t)) + "-" + hostname
+		args := []string{"run", "--rm", "-d", "--name", name, "--hostname", hostname, "--network", network,
+			"-p", fmt.Sprintf("%d:%d", port, port),
+			"-v", binDir + ":/peer:ro",
+			"--entrypoint", "/peer/discoverypeer",
+			image, "-port", fmt.Sprint(port), "-host", hostname,
+		}
+		args = append(args, peerArgs...)
+		out, err := exec.Command("docker", args...).CombinedOutput()
+		if err == nil {
+			break
+		}
+		// docker run -d returns once the ports are published: a taken
+		// host port fails it here, before anything knows the port.
+		if dockerPortTaken(string(out)) && attempt < publishAttempts {
+			dockerRemove(name)
+			t.Logf("host port %d taken: another one", port)
+			continue
+		}
 		t.Fatalf("start go-opcua peer container: %v\n%s", err, out)
 	}
 	t.Cleanup(func() {
