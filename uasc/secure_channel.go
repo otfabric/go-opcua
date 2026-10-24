@@ -1125,7 +1125,11 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 
 	instance := s.openingInstance
 	instance.algo = algo
-	instance.sc.requestID = req.RequestHeader.RequestHandle // server echoes client's RequestHandle for correlation
+	// The server echoes the client's RequestHandle for correlation. Under
+	// requestIDMu: Close draws a request id from another goroutine.
+	instance.sc.requestIDMu.Lock()
+	instance.sc.requestID = req.RequestHeader.RequestHandle
+	instance.sc.requestIDMu.Unlock()
 
 	// Renewal: issue a new token on the same channel. The outgoing token's
 	// send lock is held across the hand-over so sequence numbers stay
