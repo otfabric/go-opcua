@@ -94,7 +94,7 @@ func TestSessionBrokerReapsExpiredSessions(t *testing.T) {
 
 	// "busy" is used shortly before the others expire: looking a session up,
 	// as every request does, restarts its timeout.
-	busy.lastActivity.Store(now.Add(900 * time.Millisecond).UnixNano())
+	busy.touchAt(now.Add(900 * time.Millisecond))
 
 	got := s.sb.reapExpired(now.Add(1500 * time.Millisecond))
 	if len(got) != 1 || got[0] != idle {

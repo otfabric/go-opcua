@@ -55,9 +55,11 @@ type session struct {
 	// session cannot be used for anything but activating or closing it.
 	activated atomic.Bool
 
-	// lastActivity is the time (UnixNano) the session was last used. timeout
-	// is the revised session timeout in nanoseconds. Both are accessed by the
-	// request handlers and by the session reaper.
+	// lastActivity is when the session was last used, in nanoseconds since
+	// monoEpoch (monotonic: a step of the wall clock neither expires a session
+	// nor keeps one alive). timeout is the revised session timeout in
+	// nanoseconds. Both are accessed by the channels' read loops, the request
+	// handlers and the session reaper.
 	lastActivity atomic.Int64
 	timeout      atomic.Int64
 }
@@ -95,9 +97,23 @@ func (s *session) takeStatusChange() (pendingStatusChange, bool) {
 	return c, true
 }
 
+// monoEpoch is the reference of session activity times. time.Since and
+// Time.Sub of times that carry a monotonic reading use the monotonic clock.
+var monoEpoch = time.Now()
+
 // touch records activity on the session, restarting its timeout.
 func (s *session) touch() {
-	s.lastActivity.Store(time.Now().UnixNano())
+	s.touchAt(time.Now())
+}
+
+// touchAt records activity at t.
+func (s *session) touchAt(t time.Time) {
+	s.lastActivity.Store(int64(t.Sub(monoEpoch)))
+}
+
+// idle returns how long the session has been unused at now.
+func (s *session) idle(now time.Time) time.Duration {
+	return now.Sub(monoEpoch) - time.Duration(s.lastActivity.Load())
 }
 
 // setTimeout sets the revised session timeout (Part 4 §5.6.2).
@@ -113,7 +129,7 @@ func (s *session) expired(now time.Time) bool {
 	if timeout <= 0 {
 		timeout = sessionTimeoutDefault
 	}
-	return now.Sub(time.Unix(0, s.lastActivity.Load())) > timeout
+	return s.idle(now) > timeout
 }
 
 type sessionConfig struct {
@@ -223,6 +239,23 @@ func (sb *sessionBroker) Session(authToken *ua.NodeID) *session {
 	s.touch()
 
 	return s
+}
+
+// touchToken restarts the timeout of the session with the given
+// authentication token, if there is one. The channels call it when a request
+// arrives: Part 4 §5.6.2 counts the time since the server received a request,
+// and requests are handled one at a time, so a request waiting behind slow
+// ones must already keep its session alive.
+func (sb *sessionBroker) touchToken(authToken *ua.NodeID) {
+	if authToken == nil {
+		return
+	}
+	sb.mu.Lock()
+	s := sb.s[authToken.String()]
+	sb.mu.Unlock()
+	if s != nil {
+		s.touch()
+	}
 }
 
 // reapExpired removes and returns the sessions whose timeout has elapsed.

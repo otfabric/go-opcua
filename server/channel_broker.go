@@ -67,6 +67,10 @@ type channelBroker struct {
 	// a new channel from the security policy the client opens it with. Nil
 	// means every channel uses the certificate passed to RegisterConn.
 	localIdentity func(securityPolicyURI string) ([]byte, crypto.Signer, error)
+
+	// onRequest is called with the header of every request as it arrives,
+	// before it waits for the request handler (session activity).
+	onRequest func(*ua.RequestHeader)
 }
 
 func newChannelBroker(l *slog.Logger, endpointURL string, clientCertValidator ClientCertificateValidator) *channelBroker {
@@ -227,6 +231,12 @@ func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *
 				c.logger.Error("server received a response", "secure_channel_id", secureChannelID, "type", fmt.Sprintf("%T", resp))
 			}
 			continue
+		}
+
+		if c.onRequest != nil {
+			if hdr := msg.Request().Header(); hdr != nil {
+				c.onRequest(hdr)
+			}
 		}
 
 		// Take an in-flight slot before handing the request over. This is

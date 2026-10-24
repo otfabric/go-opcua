@@ -40,7 +40,7 @@ func init() {
 		for _, sess := range s.sb.s {
 			out = append(out, fmt.Sprintf("%v timeout=%v idle=%v activated=%v", sess.ID,
 				time.Duration(sess.timeout.Load()),
-				time.Since(time.Unix(0, sess.lastActivity.Load())).Round(time.Millisecond),
+				sess.idle(time.Now()).Round(time.Millisecond),
 				sess.activated.Load()))
 		}
 		return out
