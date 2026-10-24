@@ -6,16 +6,13 @@ on:
     branches: ["**"]
   pull_request:
     branches: ["**"]
-  workflow_dispatch: # TEMPORARY: parallel stress runs
 
 permissions:
   contents: read
   packages: read
 
 concurrency:
-  # TEMPORARY: one group per run, so that dispatched stress runs do not
-  # replace each other.
-  group: interop-${{ github.ref }}-${{ github.run_id }}
+  group: interop-${{ github.ref }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
