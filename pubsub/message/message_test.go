@@ -61,3 +61,20 @@ func TestStrings(t *testing.T) {
 		require.Equal(t, want, m.String())
 	}
 }
+
+func TestDiscoveryStrings(t *testing.T) {
+	for typ, want := range map[DiscoveryType]string{
+		DiscoveryPublisherEndpoints: "PublisherEndpoints", DiscoveryDataSetMetaData: "DataSetMetaData",
+		DiscoveryDataSetWriterConfig: "DataSetWriterConfiguration", DiscoveryPubSubConnection: "PubSubConnection",
+		DiscoveryApplicationInformation: "ApplicationInformation", 9: "DiscoveryType(9)",
+	} {
+		require.Equal(t, want, typ.String())
+	}
+	for typ, want := range map[InformationType]string{
+		InformationPublisherEndpoints: "PublisherEndpoints", InformationDataSetMetaData: "DataSetMetaData",
+		InformationDataSetWriterConfig: "DataSetWriterConfiguration", InformationWriterGroupConfig: "WriterGroupConfiguration",
+		InformationPubSubConnections: "PubSubConnections", 9: "InformationType(9)",
+	} {
+		require.Equal(t, want, typ.String())
+	}
+}

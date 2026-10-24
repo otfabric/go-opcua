@@ -78,7 +78,8 @@ func TestDecodeMalformed(t *testing.T) {
 		{"version 0", "00", ErrMalformed},
 		{"truncated ext1", "81", ErrMalformed},
 		{"truncated ext2", "81 80", ErrMalformed},
-		{"chunk", "81 80 01", ErrUnsupported},
+		{"chunk", "81 80 01", ErrMalformed},
+		{"chunk of a probe", "81 80 05", ErrMalformed},
 		{"reserved type", "81 80 0c", ErrMalformed},
 		{"truncated publisher", "91 02 0102", ErrMalformed},
 		{"truncated class id", "81 08 0102", ErrMalformed},
@@ -251,4 +252,31 @@ func TestRawDataStructures(t *testing.T) {
 	require.Equal(t, nm, got)
 	_, err = Decode(h(t, "01 03 3f"), &DecodeOptions{MetaData: metaLookup(mdv)})
 	require.ErrorIs(t, err, ErrMalformed)
+}
+
+func TestPeekType(t *testing.T) {
+	for _, tc := range []struct {
+		hex   string
+		typ   message.NetworkMessageType
+		chunk bool
+		err   bool
+	}{
+		{"", 0, false, true},
+		{"02", 0, false, true},
+		{"01", message.NetworkMessageDataSet, false, false},
+		{"81", message.NetworkMessageDataSet, false, false},
+		{"81 01", message.NetworkMessageDataSet, false, false},
+		{"81 80", 0, false, true},
+		{"91 80 04", message.NetworkMessageDiscoveryRequest, false, false},
+		{"91 80 09", message.NetworkMessageDiscoveryResponse, true, false},
+	} {
+		typ, chunk, err := PeekType(h(t, tc.hex))
+		if tc.err {
+			require.ErrorIs(t, err, ErrMalformed, tc.hex)
+			continue
+		}
+		require.NoError(t, err, tc.hex)
+		require.Equal(t, tc.typ, typ, tc.hex)
+		require.Equal(t, tc.chunk, chunk, tc.hex)
+	}
 }
