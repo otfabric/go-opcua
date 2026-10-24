@@ -122,11 +122,14 @@ func TestE2EActionChunksUDP(t *testing.T) {
 
 			gid := mustID(t, resp, KindWriterGroup, mustID(t, resp, KindConnection, Root, "Responder"), "Actions")
 			rc := actCounters(resp, mustID(t, resp, KindConnection, Root, "Responder"))
-			require.Positive(t, actCounters(resp, gid).ChunksSent, "the responses are chunked")
+			// The chunks are counted once sent, which may be after the
+			// other side has the message.
+			eventuallyPositive(t, func() uint64 { return actCounters(resp, gid).ChunksSent }, "the responses are chunked")
 			require.GreaterOrEqual(t, rc.ChunkedMessagesReceived, uint64(8), "the requests are reassembled")
 			for _, req := range reqs {
-				c := actCounters(req, mustID(t, req, KindConnection, Root, "Requestor"))
-				require.Positive(t, c.ChunksSent, "the requests are chunked")
+				cid := mustID(t, req, KindConnection, Root, "Requestor")
+				eventuallyPositive(t, func() uint64 { return actCounters(req, cid).ChunksSent }, "the requests are chunked")
+				c := actCounters(req, cid)
 				require.Positive(t, c.ChunkedMessagesReceived, "the responses are reassembled")
 				require.Zero(t, c.DecodeErrors)
 			}
@@ -160,9 +163,9 @@ func TestE2EActionChunksMQTT(t *testing.T) {
 		tg.RequestAddress = queue
 		return tg
 	}, req)
-	c := actCounters(req, mustID(t, req, KindConnection, Root, "Requestor"))
-	require.Positive(t, c.ChunksSent)
-	require.Positive(t, c.ChunkedMessagesReceived)
+	cid := mustID(t, req, KindConnection, Root, "Requestor")
+	eventuallyPositive(t, func() uint64 { return actCounters(req, cid).ChunksSent }, "the requests are chunked")
+	require.Positive(t, actCounters(req, cid).ChunkedMessagesReceived)
 
 	// JSON: a request beyond the MaxNetworkMessageSize is not sent.
 	jq := ActionRequestTopic("chunks", MappingJSON, "1", "Actions")
@@ -173,4 +176,10 @@ func TestE2EActionChunksMQTT(t *testing.T) {
 	tg.Timeout = time.Second
 	_, err := jreq.CallAction(context.Background(), tg, []*ua.Variant{ua.MustVariant(blob(1))})
 	require.ErrorIs(t, err, errTooLarge)
+}
+
+// eventuallyPositive waits for a counter to become positive.
+func eventuallyPositive(t *testing.T, counter func() uint64, msg string) {
+	t.Helper()
+	require.Eventually(t, func() bool { return counter() > 0 }, 5*time.Second, 5*time.Millisecond, msg)
 }
