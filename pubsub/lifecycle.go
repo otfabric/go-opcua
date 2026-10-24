@@ -412,6 +412,15 @@ func (p *PubSub) stopWriter(w *dataSetWriter) {
 		p.later(w.evCancel)
 		w.evCancel = nil
 	}
+	// The requests of a stopped Action writer end: their handlers are
+	// cancelled and nothing more is sent for them.
+	c := w.group.conn
+	for k, ex := range c.act.exchanges {
+		if ex.w == w {
+			delete(c.act.exchanges, k)
+			ex.stop()
+		}
+	}
 }
 
 // reconcileReaderGroup runs or stops a reader group and its readers.
