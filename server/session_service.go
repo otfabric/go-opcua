@@ -212,6 +212,20 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		issued.EncryptionAlgorithm = ""
 	}
 
+	// An issued token is only accepted by a configured validator: without
+	// one nobody has checked it.
+	if issued, ok := sess.identityToken.(*ua.IssuedIdentityToken); ok {
+		v := s.srv.cfg.issuedTokenValidator
+		if v == nil {
+			s.srv.cfg.logger.Warn("ActivateSession issued token rejected: no IssuedTokenValidator configured")
+			return nil, ua.StatusBadIdentityTokenRejected
+		}
+		if err := v(issued); err != nil {
+			s.srv.cfg.logger.Info("ActivateSession issued token rejected by validator", "error", err)
+			return nil, ua.StatusBadIdentityTokenRejected
+		}
+	}
+
 	// Validate X.509 identity token (OPC UA Part 4 §5.6.3.3).
 	if x509tok, ok := sess.identityToken.(*ua.X509IdentityToken); ok {
 		if err := s.validateX509UserToken(sc, sess, req, x509tok); err != nil {

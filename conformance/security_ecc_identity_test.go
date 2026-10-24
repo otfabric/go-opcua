@@ -3,6 +3,7 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
 	"strings"
 	"sync"
@@ -85,6 +86,14 @@ func TestECC_IssuedToken(t *testing.T) {
 	var tokens []ua.IdentityToken
 	_, url := mixedServer(t,
 		server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
+		// The validator sees the decrypted token: an encrypted one would
+		// not carry the prefix.
+		server.WithIssuedTokenValidator(func(tok *ua.IssuedIdentityToken) error {
+			if bytes.HasPrefix(tok.TokenData, []byte("opaque-jwt-")) {
+				return nil
+			}
+			return ua.StatusBadIdentityTokenRejected
+		}),
 		server.WithRoleMapper(func(tok ua.IdentityToken) []*ua.NodeID {
 			mu.Lock()
 			tokens = append(tokens, tok)

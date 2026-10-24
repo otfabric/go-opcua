@@ -133,6 +133,7 @@ type serverConfig struct {
 	roleMapper                 RoleMapper
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
+	issuedTokenValidator       IssuedTokenValidator
 	clientCertificateValidator ClientCertificateValidator
 	allowUsernameOnNone        bool
 	metrics                    ServerMetrics

@@ -70,6 +70,12 @@ func newECCSessionFixture(t *testing.T) *eccSessionFixture {
 		}
 		return ua.StatusBadUserAccessDenied
 	}
+	srv.cfg.issuedTokenValidator = func(tok *ua.IssuedIdentityToken) error {
+		if string(tok.TokenData) == "jwt" { // the decrypted token
+			return nil
+		}
+		return ua.StatusBadIdentityTokenRejected
+	}
 	srv.cfg.roleMapper = func(tok ua.IdentityToken) []*ua.NodeID {
 		f.tokens = append(f.tokens, tok)
 		return DefaultRoleMapper(tok)

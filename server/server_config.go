@@ -288,6 +288,29 @@ func WithX509UserValidator(v X509UserValidator) Option {
 	}
 }
 
+// IssuedTokenValidator validates an IssuedIdentityToken (a JWT, a Kerberos
+// ticket or another token from an authorization service) presented by a
+// client during ActivateSession. TokenData holds the token as the issuer
+// created it: the server has already decrypted it where the security policy
+// encrypts it.
+//
+// Return nil to accept the token, or an error to reject it
+// (ua.StatusBadIdentityTokenRejected or ua.StatusBadUserAccessDenied).
+type IssuedTokenValidator func(tok *ua.IssuedIdentityToken) error
+
+// WithIssuedTokenValidator registers the validator called during
+// ActivateSession when the client presents an IssuedIdentityToken.
+// EnableAuthMode(ua.UserTokenTypeIssuedToken) must also be called.
+//
+// If no validator is registered the server rejects all issued tokens, as it
+// does X.509 user tokens without an X509UserValidator.
+func WithIssuedTokenValidator(v IssuedTokenValidator) Option {
+	return func(s *serverConfig) error {
+		s.issuedTokenValidator = v
+		return nil
+	}
+}
+
 // ClientCertificateValidator validates the application certificate presented
 // by a connecting client during OpenSecureChannel (and again at CreateSession
 // as defense-in-depth). The certificate is provided as DER-encoded bytes.

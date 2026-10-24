@@ -3,6 +3,7 @@
 package conformance
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
@@ -537,6 +538,12 @@ func TestSecurity_IdentityReachesRoleMapper(t *testing.T) {
 	_, url := newServer(t,
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
 		server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
+		server.WithIssuedTokenValidator(func(tok *ua.IssuedIdentityToken) error {
+			if bytes.HasPrefix(tok.TokenData, []byte("opaque-jwt")) {
+				return nil
+			}
+			return ua.StatusBadIdentityTokenRejected
+		}),
 		server.AllowUsernameOnNone(),
 		server.WithRoleMapper(mapper),
 	)
@@ -573,6 +580,12 @@ func TestSecurity_IdentityReachesRoleMapper(t *testing.T) {
 		require.True(t, ok, "got %T", last())
 		require.Equal(t, []byte("opaque-jwt"), tok.TokenData)
 		require.Equal(t, "issuedtoken_none", tok.PolicyID)
+	})
+
+	t.Run("IssuedTokenRejected", func(t *testing.T) {
+		c, err := opcua.NewClient(url, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeIssuedToken), opcua.AuthIssuedToken([]byte("forged")), opcua.AutoReconnect(false))
+		require.NoError(t, err)
+		require.ErrorIs(t, c.Connect(context.Background()), ua.StatusBadIdentityTokenRejected)
 	})
 }
 

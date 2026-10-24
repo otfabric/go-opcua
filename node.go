@@ -183,7 +183,11 @@ func (n *Node) BrowseName(ctx context.Context) (*ua.QualifiedName, error) {
 	if err != nil {
 		return nil, err
 	}
-	return v.Value().(*ua.QualifiedName), nil
+	qn, ok := v.Value().(*ua.QualifiedName)
+	if !ok {
+		return nil, fmt.Errorf("opcua: unexpected BrowseName type %T", v.Value())
+	}
+	return qn, nil
 }
 
 // Description returns the description of the node.
@@ -205,7 +209,11 @@ func (n *Node) DisplayName(ctx context.Context) (*ua.LocalizedText, error) {
 	if err != nil {
 		return nil, err
 	}
-	return v.Value().(*ua.LocalizedText), nil
+	lt, ok := v.Value().(*ua.LocalizedText)
+	if !ok {
+		return nil, fmt.Errorf("opcua: unexpected DisplayName type %T", v.Value())
+	}
+	return lt, nil
 }
 
 // AccessLevel returns the access level of the node.
@@ -216,7 +224,11 @@ func (n *Node) AccessLevel(ctx context.Context) (ua.AccessLevelType, error) {
 	if err != nil {
 		return 0, err
 	}
-	return ua.AccessLevelType(v.Value().(uint8)), nil
+	al, ok := v.Value().(uint8)
+	if !ok {
+		return 0, fmt.Errorf("opcua: unexpected AccessLevel type %T", v.Value())
+	}
+	return ua.AccessLevelType(al), nil
 }
 
 // HasAccessLevel returns true if all bits from mask are
@@ -235,7 +247,11 @@ func (n *Node) UserAccessLevel(ctx context.Context) (ua.AccessLevelType, error) 
 	if err != nil {
 		return 0, err
 	}
-	return ua.AccessLevelType(v.Value().(uint8)), nil
+	al, ok := v.Value().(uint8)
+	if !ok {
+		return 0, fmt.Errorf("opcua: unexpected UserAccessLevel type %T", v.Value())
+	}
+	return ua.AccessLevelType(al), nil
 }
 
 // HasUserAccessLevel returns true if all bits from mask are
@@ -461,6 +477,11 @@ func (n *Node) References(ctx context.Context, refType uint32, dir ua.BrowseDire
 }
 
 func (n *Node) browseNext(ctx context.Context, results []*ua.BrowseResult) ([]*ua.ReferenceDescription, error) {
+	// A server that answers without the one result asked for would make
+	// results[0] panic.
+	if len(results) != 1 || results[0] == nil {
+		return nil, ua.StatusBadUnknownResponse
+	}
 	refs := results[0].References
 	for len(results[0].ContinuationPoint) > 0 {
 		req := &ua.BrowseNextRequest{
@@ -472,6 +493,9 @@ func (n *Node) browseNext(ctx context.Context, results []*ua.BrowseResult) ([]*u
 			return nil, err
 		}
 		results = resp.Results
+		if len(results) != 1 || results[0] == nil {
+			return nil, ua.StatusBadUnknownResponse
+		}
 		refs = append(refs, results[0].References...)
 	}
 	return refs, nil
