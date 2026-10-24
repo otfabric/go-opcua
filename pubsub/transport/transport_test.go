@@ -12,6 +12,13 @@ import (
 
 func TestRegistry(t *testing.T) {
 	var got Config
+	// The registry is global: remove the scheme again so the test can run
+	// more than once in a process (-count).
+	t.Cleanup(func() {
+		mu.Lock()
+		delete(openers, "test.fake")
+		mu.Unlock()
+	})
 	Register("test.fake", func(_ context.Context, cfg Config) (Connection, error) {
 		got = cfg
 		return nil, errors.New("fake")

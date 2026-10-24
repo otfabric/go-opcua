@@ -19,39 +19,106 @@ func (e *encoder) has(m ua.UADPNetworkMessageContentMask) bool {
 	return e.nm.UADPMask&m != 0
 }
 
-func (e *encoder) encode() ([]byte, error) {
+// check validates the type and the body of the NetworkMessage.
+func (e *encoder) check() error {
 	nm := e.nm
+	if nm.Chunk != nil {
+		switch nm.Type {
+		case message.NetworkMessageDataSet:
+			if e.has(ua.UADPNetworkMessageContentMaskPayloadHeader) && (len(nm.Messages) != 1 || nm.Messages[0] == nil) {
+				return malformed("a chunk with PayloadHeader needs the one DataSetMessage it is a piece of")
+			}
+		case message.NetworkMessageDiscoveryResponse:
+		default:
+			return malformed("chunk of a NetworkMessage of type %d", nm.Type)
+		}
+		return nil
+	}
 	switch nm.Type {
 	case message.NetworkMessageDataSet:
 		switch n := len(nm.Messages); {
 		case n == 0:
-			return nil, malformed("a DataSet NetworkMessage needs a DataSetMessage")
+			return malformed("a DataSet NetworkMessage needs a DataSetMessage")
 		case n > maxMessages:
-			return nil, malformed("%d DataSetMessages, at most %d fit into a NetworkMessage", n, maxMessages)
+			return malformed("%d DataSetMessages, at most %d fit into a NetworkMessage", n, maxMessages)
 		case n > 1 && !e.has(ua.UADPNetworkMessageContentMaskPayloadHeader):
-			return nil, malformed("%d DataSetMessages need the PayloadHeader", n)
+			return malformed("%d DataSetMessages need the PayloadHeader", n)
 		}
 	case message.NetworkMessageDiscoveryResponse:
 		if nm.Discovery == nil {
-			return nil, malformed("discovery response without body")
+			return malformed("discovery announcement without body")
 		}
 	case message.NetworkMessageDiscoveryRequest:
-		return nil, unsupported("encoding of discovery requests")
+		if nm.Request == nil {
+			return malformed("discovery probe without body")
+		}
 	default:
-		return nil, malformed("NetworkMessage type %d", nm.Type)
+		return malformed("NetworkMessage type %d", nm.Type)
+	}
+	return nil
+}
+
+func (e *encoder) encode() ([]byte, error) {
+	nm := e.nm
+	if err := e.check(); err != nil {
+		return nil, err
 	}
 	payloadHeader := nm.Type == message.NetworkMessageDataSet && e.has(ua.UADPNetworkMessageContentMaskPayloadHeader)
 
+	b := ua.NewBuffer(make([]byte, 0, 256))
+	if err := e.writeHeader(b, payloadHeader); err != nil {
+		return nil, err
+	}
+	if e.sec != nil {
+		e.sec.writeHeader(b)
+	}
+	if b.Error() != nil {
+		return nil, malformed("header: %v", b.Error())
+	}
+	payloadStart := b.Len()
+
+	var err error
+	switch {
+	case nm.Chunk != nil:
+		writeChunk(b, nm.Chunk)
+	case nm.Type == message.NetworkMessageDataSet:
+		err = e.encodePayload(b, payloadHeader)
+	case nm.Type == message.NetworkMessageDiscoveryResponse:
+		err = encodeDiscovery(b, nm.Discovery)
+	default:
+		err = encodeDiscoveryRequest(b, nm.Request)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if b.Error() != nil {
+		return nil, malformed("payload: %v", b.Error())
+	}
+
+	out := b.Bytes()
+	if e.sec != nil {
+		return e.sec.protect(out, payloadStart)
+	}
+	return out, nil
+}
+
+// writeHeader writes the NetworkMessage header up to the PromotedFields, the
+// security header excluded.
+func (e *encoder) writeHeader(b *ua.Buffer, payloadHeader bool) error {
+	nm := e.nm
 	// Flags. ExtendedFlags1 and 2 are written only if a bit of them is set
 	// (open62541: UA_NetworkMessage_ExtendedFlags1Enabled).
 	ext2 := byte(nm.Type) << ext2TypeShift
 	if e.has(ua.UADPNetworkMessageContentMaskPromotedFields) {
 		ext2 |= ext2PromotedFields
 	}
+	if nm.Chunk != nil {
+		ext2 |= ext2Chunk
+	}
 	var ext1 byte
 	if e.has(ua.UADPNetworkMessageContentMaskPublisherID) {
 		if nm.PublisherID.Type > message.PublisherIDString {
-			return nil, malformed("PublisherId type %d", nm.PublisherID.Type)
+			return malformed("PublisherId type %d", nm.PublisherID.Type)
 		}
 		ext1 = byte(nm.PublisherID.Type)
 	}
@@ -84,7 +151,6 @@ func (e *encoder) encode() ([]byte, error) {
 		flags |= flagsExtended1
 	}
 
-	b := ua.NewBuffer(make([]byte, 0, 256))
 	b.WriteUint8(flags)
 	if ext1 != 0 {
 		b.WriteUint8(ext1)
@@ -114,11 +180,17 @@ func (e *encoder) encode() ([]byte, error) {
 		}
 	}
 
-	if payloadHeader {
+	switch {
+	case !payloadHeader:
+	case nm.Chunk != nil:
+		// The PayloadHeader of a chunk is the DataSetWriterId of the
+		// DataSetMessage it is a piece of (Part 14 Table 158 in 1.05).
+		b.WriteUint16(nm.Messages[0].DataSetWriterID)
+	default:
 		b.WriteUint8(uint8(len(nm.Messages)))
 		for _, m := range nm.Messages {
 			if m == nil {
-				return nil, malformed("nil DataSetMessage")
+				return malformed("nil DataSetMessage")
 			}
 			b.WriteUint16(m.DataSetWriterID)
 		}
@@ -136,41 +208,15 @@ func (e *encoder) encode() ([]byte, error) {
 			pf.WriteStruct(v)
 		}
 		if pf.Error() != nil {
-			return nil, malformed("promoted fields: %v", pf.Error())
+			return malformed("promoted fields: %v", pf.Error())
 		}
 		if pf.Len() > math.MaxUint16 {
-			return nil, malformed("promoted fields of %d bytes", pf.Len())
+			return malformed("promoted fields of %d bytes", pf.Len())
 		}
 		b.WriteUint16(uint16(pf.Len()))
 		b.Write(pf.Bytes())
 	}
-
-	if e.sec != nil {
-		e.sec.writeHeader(b)
-	}
-	if b.Error() != nil {
-		return nil, malformed("header: %v", b.Error())
-	}
-	payloadStart := b.Len()
-
-	var err error
-	if nm.Type == message.NetworkMessageDataSet {
-		err = e.encodePayload(b, payloadHeader)
-	} else {
-		err = encodeDiscovery(b, nm.Discovery)
-	}
-	if err != nil {
-		return nil, err
-	}
-	if b.Error() != nil {
-		return nil, malformed("payload: %v", b.Error())
-	}
-
-	out := b.Bytes()
-	if e.sec != nil {
-		return e.sec.protect(out, payloadStart)
-	}
-	return out, nil
+	return nil
 }
 
 func writePublisherID(b *ua.Buffer, p message.PublisherID) {

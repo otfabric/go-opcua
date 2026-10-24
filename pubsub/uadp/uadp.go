@@ -31,9 +31,22 @@
 //
 // # Chunks
 //
-// Chunked NetworkMessages (ExtendedFlags2 bit 0) are not supported: open62541
-// 1.5.9 neither sends nor accepts them. Decode rejects them with
-// [ErrUnsupported].
+// A DataSetMessage or a discovery announcement too large for one
+// NetworkMessage is sent as chunk NetworkMessages (Part 14 §7.2.4.4.4 in
+// 1.05, ExtendedFlags2 bit 0): [EncodeChunks] splits it, every chunk secured
+// on its own. Decode returns a chunk with [message.NetworkMessage.Chunk] set,
+// after its security was checked; a [Reassembler] collects the chunks within
+// bounded memory and [DecodeReassembled] decodes the complete message. The
+// layout is that of the OPC Foundation .NET stack 2.x (UadpChunker,
+// UadpReassembler); open62541 1.5.9 neither sends nor accepts chunks.
+//
+// # Discovery
+//
+// Discovery probes (NetworkMessage type 1, [message.DiscoveryRequest]) and
+// announcements (type 2, [message.Discovery]) of Part 14 §7.2.4.6 in 1.05
+// are encoded and decoded in the layout of the spec or of the .NET stack 2.x
+// ([message.DiscoveryLayout]); Decode recognises both. The ActionResponder
+// and ActionMetaData announcements of PubSub Actions are not supported.
 package uadp
 
 import (
@@ -57,8 +70,8 @@ var (
 	// encoded.
 	ErrMalformed = errors.New("pubsub/uadp: malformed message")
 	// ErrUnsupported is returned for valid UADP features this package does
-	// not implement (chunked messages, discovery messages other than
-	// DataSetMetaData announcements).
+	// not implement (discovery messages of PubSub Actions, reserved
+	// DataSetMessage types).
 	ErrUnsupported = errors.New("pubsub/uadp: unsupported")
 	// ErrSecurityMode is returned by Decode when the security of a message
 	// is weaker than required, or when a secured message arrives and no
@@ -94,6 +107,10 @@ type EncodeOptions struct {
 	// NonceSequence is the sender's message counter used to build unique
 	// MessageNonces; the caller increments it for every secured message.
 	NonceSequence uint32
+	// NextNonceSequence, if set, replaces NonceSequence: it is called for
+	// every secured NetworkMessage Encode and EncodeChunks build (each
+	// chunk is secured on its own) and returns a new counter value.
+	NextNonceSequence func() uint32
 	// MetaData supplies the DataSetMetaData of RawData DataSetMessages:
 	// the MaxStringLength padding of String and ByteString fields, the
 	// number of array dimensions and their upper bounds. Without it,
@@ -124,8 +141,10 @@ type DecodeOptions struct {
 // A NetworkMessage of type NetworkMessageDataSet needs at least one
 // DataSetMessage, and the PayloadHeader when it has more than one. A
 // NetworkMessage of type NetworkMessageDiscoveryResponse carries
-// nm.Discovery; only DataSetMetaData announcements are supported, and the
-// PayloadHeader bit of the mask is ignored for them. The WriterGroupId,
+// nm.Discovery, one of type NetworkMessageDiscoveryRequest nm.Request; the
+// PayloadHeader bit of the mask is ignored for them. With nm.Chunk set Encode
+// writes that one chunk: the PayloadHeader is then the DataSetWriterId of the
+// single DataSetMessage of nm. The WriterGroupId,
 // GroupVersion, NetworkMessageNumber and SequenceNumber bits only take effect
 // together with the GroupHeader bit. nm.Security is ignored: the security
 // header follows from opts. Encode does not modify nm.
@@ -149,7 +168,9 @@ func Encode(nm *message.NetworkMessage, opts *EncodeOptions) ([]byte, error) {
 }
 
 // Decode decodes a NetworkMessage. It never modifies b; the returned message
-// does not reference b.
+// does not reference b. A chunk is returned with nm.Chunk set and, for a
+// DataSetMessage chunk, nm.Messages holding the DataSetWriterId of its
+// PayloadHeader; pass it to a [Reassembler].
 func Decode(b []byte, opts *DecodeOptions) (*message.NetworkMessage, error) {
 	if opts == nil {
 		opts = &DecodeOptions{}

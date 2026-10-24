@@ -35,15 +35,35 @@ func (d *decoder) decode() (*message.NetworkMessage, error) {
 		}
 		body = body[:len(body)-n]
 	}
-	if nm.Type == message.NetworkMessageDiscoveryResponse {
+	switch {
+	case nm.Chunk != nil:
+		nm.Chunk, err = decodeChunk(body)
+	case nm.Type == message.NetworkMessageDiscoveryResponse:
 		nm.Discovery, err = decodeDiscovery(body)
-	} else {
+	case nm.Type == message.NetworkMessageDiscoveryRequest:
+		nm.Request, err = decodeDiscoveryRequest(body)
+	default:
 		err = d.decodePayload(nm, body)
 	}
 	if err != nil {
 		return nil, err
 	}
 	return nm, nil
+}
+
+// PeekType returns the NetworkMessage type of an encoded UADP NetworkMessage
+// from its flags, without decoding it, and whether it is a chunk.
+func PeekType(b []byte) (t message.NetworkMessageType, chunk bool, err error) {
+	if len(b) == 0 || b[0]&flagsVersionMask != UADPVersion {
+		return 0, false, malformed("not a UADP NetworkMessage")
+	}
+	if b[0]&flagsExtended1 == 0 || len(b) < 2 || b[1]&ext1Extended2 == 0 {
+		return message.NetworkMessageDataSet, false, nil
+	}
+	if len(b) < 3 {
+		return 0, false, malformed("truncated ExtendedFlags2")
+	}
+	return message.NetworkMessageType((b[2] & ext2TypeMask) >> ext2TypeShift), b[2]&ext2Chunk != 0, nil
 }
 
 // decodeHeaders decodes everything up to and including the security header.
@@ -66,16 +86,19 @@ func decodeHeaders(data []byte) (*message.NetworkMessage, int, error) {
 			ext2 = b.ReadUint8()
 		}
 	}
-	if ext2&ext2Chunk != 0 {
-		return nil, 0, unsupported("chunked NetworkMessages")
-	}
 	switch t := message.NetworkMessageType((ext2 & ext2TypeMask) >> ext2TypeShift); t {
-	case message.NetworkMessageDataSet, message.NetworkMessageDiscoveryResponse:
+	case message.NetworkMessageDataSet, message.NetworkMessageDiscoveryResponse, message.NetworkMessageDiscoveryRequest:
 		nm.Type = t
-	case message.NetworkMessageDiscoveryRequest:
-		return nil, 0, unsupported("discovery requests")
 	default:
 		return nil, 0, malformed("NetworkMessage type %d", t)
+	}
+	if ext2&ext2Chunk != 0 {
+		// A chunk of a DataSetMessage or of an announcement (Part 14
+		// §7.2.4.4.4 in 1.05); its payload is decoded after the security.
+		if nm.Type == message.NetworkMessageDiscoveryRequest {
+			return nil, 0, malformed("chunk of a discovery probe")
+		}
+		nm.Chunk = &message.Chunk{}
 	}
 
 	mask := ua.UADPNetworkMessageContentMaskNone
@@ -119,15 +142,21 @@ func decodeHeaders(data []byte) (*message.NetworkMessage, int, error) {
 			return nil, 0, malformed("PayloadHeader in a discovery message")
 		}
 		mask |= ua.UADPNetworkMessageContentMaskPayloadHeader
-		n := int(b.ReadUint8())
-		if b.Error() == nil && n == 0 {
-			return nil, 0, malformed("PayloadHeader without DataSetMessages")
-		}
-		ids := b.ReadN(2 * n)
-		if b.Error() == nil {
-			nm.Messages = make([]*message.DataSetMessage, n)
-			for i := range nm.Messages {
-				nm.Messages[i] = &message.DataSetMessage{DataSetWriterID: uint16(ids[2*i]) | uint16(ids[2*i+1])<<8}
+		if nm.Chunk != nil {
+			// The PayloadHeader of a chunk is the DataSetWriterId
+			// (Part 14 Table 158 in 1.05).
+			nm.Messages = []*message.DataSetMessage{{DataSetWriterID: b.ReadUint16()}}
+		} else {
+			n := int(b.ReadUint8())
+			if b.Error() == nil && n == 0 {
+				return nil, 0, malformed("PayloadHeader without DataSetMessages")
+			}
+			ids := b.ReadN(2 * n)
+			if b.Error() == nil {
+				nm.Messages = make([]*message.DataSetMessage, n)
+				for i := range nm.Messages {
+					nm.Messages[i] = &message.DataSetMessage{DataSetWriterID: uint16(ids[2*i]) | uint16(ids[2*i+1])<<8}
+				}
 			}
 		}
 	} else if nm.Type == message.NetworkMessageDataSet {
