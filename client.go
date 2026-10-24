@@ -124,6 +124,12 @@ type Client struct {
 	// atomicSession is the active atomicSession.
 	atomicSession atomic.Value // *Session
 
+	// leaving is the session ActivateSession is replacing: from the moment
+	// it is being closed, faults of its requests are those of a session
+	// the client has left, although it is still the active one until the
+	// new session is set.
+	leaving atomic.Pointer[Session]
+
 	// subMux guards subs and pendingAcks.
 	subMux sync.RWMutex
 
@@ -1066,6 +1072,9 @@ func (c *Client) leftSession(authToken *ua.NodeID) bool {
 	if authToken == nil {
 		return false
 	}
+	if l := c.leaving.Load(); l != nil && l.resp.AuthenticationToken.Equal(authToken) {
+		return true
+	}
 	s := c.Session()
 	return s == nil || !s.resp.AuthenticationToken.Equal(authToken)
 }
@@ -1083,6 +1092,9 @@ func (c *Client) Session() *Session {
 
 func (c *Client) setSession(s *Session) {
 	c.atomicSession.Store(s)
+	if s != nil {
+		c.leaving.CompareAndSwap(s, nil)
+	}
 	stats.Client().Add("Session", 1)
 }
 
@@ -1479,6 +1491,7 @@ func (c *Client) doActivateSession(ctx context.Context, s *Session, replaced *bo
 		// with BadSessionIdInvalid and sets off the reconnect logic.
 		if prev := c.Session(); prev != s {
 			*replaced = true
+			c.leaving.Store(prev)
 			stats.Client().Add("CloseSession", 1)
 			_ = c.closeSession(ctx, prev)
 		}

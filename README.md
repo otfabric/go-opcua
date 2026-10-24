@@ -88,7 +88,7 @@ For full API details see [API.md](API.md).
 | [Server Guide](docs/server-guide.md) | Building servers, namespaces, custom nodes, methods, events, access control |
 | [Security Guide](docs/security.md) | Certificates, encryption policies, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
-| [PubSub](docs/pubsub.md) | Publishers and subscribers over UDP and MQTT, UADP and JSON, message security, Security Key Service, PublishSubscribe information model |
+| [PubSub](docs/pubsub.md) | Publishers and subscribers over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, UADP and JSON, message security, Security Key Service, chunks, discovery, Actions, diagnostics, PublishSubscribe information model |
 | [JSON and XML Data Encodings](docs/encodings.md) | `ua.EncodeJSON` / `ua.EncodeXML`: supported forms, namespace tables, custom structures, open62541 interoperability |
 | [Errors](ERRORS.md) | Go sentinels vs wire `ua.StatusCode` |
 | [Observability](OBSERVABILITY.md) | Silent slog default and metrics callbacks |
@@ -461,7 +461,7 @@ you rely on.
 | `uacp` | OPC-UA Connection Protocol (TCP transport); `ParseEndpoint`, `DialWithTimeout` |
 | `uasc` | OPC-UA Secure Conversation (secure channel) |
 | `uapolicy` | Security policy implementations (encryption, signing) |
-| `pubsub` | PubSub runtime (Part 14): publishers, subscribers, configuration builders; sub-packages `message`, `uadp`, `jsonmsg`, `transport` (`udp`, `mqtt`), `security`, `sks`, `remote` |
+| `pubsub` | PubSub runtime (Part 14): publishers, subscribers, configuration builders; sub-packages `message`, `uadp`, `jsonmsg`, `transport` (`udp`, `eth`, `mqtt`, `amqp`), `security`, `sks`, `remote` |
 | `internal/stats` | Expvar-based statistics collection (internal) |
 
 Test-only packages (`interop/`, `conformance/`, `tests/`) are not part of the public library surface.
@@ -519,8 +519,9 @@ go-opcua is continuously interoperability-tested in all applicable client/server
 - **Coverage**: `make coverage` writes `coverage.out` for core library packages (90% gate); CI passes the same `COVER_PKGS` list as `coverpkg` to the shared workflow so Codecov matches. `make cover` opens the report.
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
 - **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541 and Milo by default; async-opcua, UA-.NETStandard, node-opcua and asyncua with `ASYNC_OPCUA_IMAGE`, `DOTNET_IMAGE`, `NODE_OPCUA_IMAGE`, `ASYNCUA_IMAGE`). See [INTEROP.md](INTEROP.md).
-- **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
-- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`.
+- **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values, `chaos/pubsub` PubSub over lossy UDP and in-memory networks, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0 broker faults, key rotation and the SKS, chunks, discovery, Actions and diagnostics, and many runtimes on shared brokers. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
+- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`; PubSub: the UADP, JSON, chunk, discovery and Action decoders (`pubsub/uadp`, `pubsub/jsonmsg`), the runtime receive path and connection validation (`chaos/pubsub`), the MQTT and AMQP clients (`internal/mqtt`, `internal/amqp`) and the Ethernet frame, URL and BPF parsers (`pubsub/transport/eth`).
+- **PubSub end to end**: `conformance/pubsub_*_test.go` run server-to-server PubSub configured by OPC UA clients through the PublishSubscribe methods, over UDP (plain, secured, chunked), MQTT 5.0, AMQP 1.0 and an in-memory Ethernet link, with discovery and diagnostics read through a client.
 - **Linting**: `make lint` (staticcheck), `make lint-ci` (golangci-lint); full local gate is `make check` (fmt + lint + verify + coverage).
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.

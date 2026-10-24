@@ -279,3 +279,29 @@ func TestMarkSubscriptionsBroken(t *testing.T) {
 	assert.Empty(t, intact)
 	assert.ElementsMatch(t, []uint32{1, 2}, broken)
 }
+
+// ActivateSession closes the session it replaces while that session is
+// still the active one. A fault of a request in it (a Publish answered
+// with Bad_SessionIdInvalid by the closing session) is one of a session
+// the client has left: it must not set off a reconnect. Found by an
+// intermittent TestClientCovActivateSessionRecreatesSubscriptions failure
+// (Disconnected, Reconnecting after a session switch).
+func TestLeftSession_SessionBeingReplaced(t *testing.T) {
+	c := newNotifyTestClient(t)
+	prev := &Session{resp: &ua.CreateSessionResponse{AuthenticationToken: ua.NewNumericNodeID(0, 1)}}
+	next := &Session{resp: &ua.CreateSessionResponse{AuthenticationToken: ua.NewNumericNodeID(0, 2)}}
+	c.setSession(prev)
+	require.False(t, c.leftSession(prev.resp.AuthenticationToken))
+
+	c.leaving.Store(prev) // being closed, still active
+	require.True(t, c.leftSession(prev.resp.AuthenticationToken))
+
+	c.setSession(next)
+	require.True(t, c.leftSession(prev.resp.AuthenticationToken))
+	require.False(t, c.leftSession(next.resp.AuthenticationToken))
+
+	// A session that is set again is no longer being left.
+	c.setSession(prev)
+	require.Nil(t, c.leaving.Load())
+	require.False(t, c.leftSession(prev.resp.AuthenticationToken))
+}
