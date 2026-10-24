@@ -339,9 +339,13 @@ func TestSecuredGroup(t *testing.T) {
 	require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, a.Secured)
 	require.Equal(t, uint32(3), a.Token)
 	require.Equal(t, a.Nonce+1, b.Nonce, "the nonce sequence increments per message")
+	// sub2 receives on its own goroutine: wait for it to have refused a
+	// message rather than read its counter once.
+	require.Eventually(t, func() bool {
+		st, _ := sub2.Status(Root)
+		return st.Counters.DecodeErrors > 0
+	}, 2*time.Second, time.Millisecond)
 	require.Empty(t, noKeys.dataSets())
-	st, _ := sub2.Status(Root)
-	require.Positive(t, st.Counters.DecodeErrors)
 
 	// Keys gone: back to PreOperational.
 	keys.setFail(true)

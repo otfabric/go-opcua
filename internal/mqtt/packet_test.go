@@ -37,7 +37,7 @@ func TestPacketRoundTrip(t *testing.T) {
 		&Unsubscribe{PacketID: 10, Filters: []string{"a/+/c", "#"}},
 		&Simple{Kind: TypePingreq},
 		&Simple{Kind: TypePingresp},
-		&Simple{Kind: TypeDisconnect},
+		&Disconnect{},
 	}
 	var stream bytes.Buffer
 	for _, p := range packets {

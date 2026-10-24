@@ -19,6 +19,7 @@ type raw struct {
 	t    *testing.T
 	conn net.Conn
 	br   *bufio.Reader
+	v    byte // protocol level, 0: 3.1.1
 }
 
 func rawDial(t *testing.T, b *Broker) *raw {
@@ -31,7 +32,7 @@ func rawDial(t *testing.T, b *Broker) *raw {
 
 func (r *raw) send(p mqtt.Packet) {
 	r.t.Helper()
-	b, err := mqtt.Encode(p)
+	b, err := mqtt.EncodeVersion(p, r.level())
 	require.NoError(r.t, err)
 	_, err = r.conn.Write(b)
 	require.NoError(r.t, err)
@@ -40,29 +41,43 @@ func (r *raw) send(p mqtt.Packet) {
 func (r *raw) read() mqtt.Packet {
 	r.t.Helper()
 	_ = r.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	p, err := mqtt.ReadPacket(r.br, 0)
+	p, err := mqtt.ReadPacketVersion(r.br, 0, r.level())
 	require.NoError(r.t, err)
 	return p
+}
+
+func (r *raw) level() byte {
+	if r.v == 0 {
+		return mqtt.Version311
+	}
+	return r.v
 }
 
 // closed reports whether the broker closed the connection.
 func (r *raw) closed() bool {
 	_ = r.conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-	_, err := mqtt.ReadPacket(r.br, 0)
-	return err != nil
+	for {
+		p, err := mqtt.ReadPacketVersion(r.br, 0, r.level())
+		if err != nil {
+			return true
+		}
+		if _, ok := p.(*mqtt.Disconnect); !ok {
+			return false
+		}
+	}
 }
 
 func (r *raw) quiet(d time.Duration) {
 	r.t.Helper()
 	_ = r.conn.SetReadDeadline(time.Now().Add(d))
-	p, err := mqtt.ReadPacket(r.br, 0)
+	p, err := mqtt.ReadPacketVersion(r.br, 0, r.level())
 	require.Error(r.t, err, "unexpected %#v", p)
 }
 
 func (r *raw) connect(c *mqtt.Connect) *mqtt.Connack {
 	r.t.Helper()
 	if c.ProtocolName == "" {
-		c.ProtocolName, c.ProtocolLevel = "MQTT", 4
+		c.ProtocolName, c.ProtocolLevel = "MQTT", r.level()
 	}
 	r.send(c)
 	ack, ok := r.read().(*mqtt.Connack)
@@ -98,7 +113,7 @@ func TestConnectRefusals(t *testing.T) {
 		c    *mqtt.Connect
 		code byte
 	}{
-		{&mqtt.Connect{ProtocolName: "MQTT", ProtocolLevel: 5, CleanSession: true}, mqtt.ConnRefusedProtocolVersion},
+		{&mqtt.Connect{ProtocolName: "MQTT", ProtocolLevel: 6, CleanSession: true}, mqtt.ConnRefusedProtocolVersion},
 		{&mqtt.Connect{ProtocolName: "XX", ProtocolLevel: 4, CleanSession: true}, mqtt.ConnRefusedProtocolVersion},
 		{&mqtt.Connect{CleanSession: true}, mqtt.ConnRefusedNotAuthorized},
 		{&mqtt.Connect{CleanSession: true, Username: &bad, Password: []byte("p")}, mqtt.ConnRefusedBadCredentials},
@@ -125,7 +140,7 @@ func TestRoutingQoSAndRetain(t *testing.T) {
 	b := start(t, Options{})
 	sub := rawDial(t, b)
 	sub.connect(&mqtt.Connect{ClientID: "sub", CleanSession: true})
-	require.Equal(t, []byte{1}, sub.subscribe(1, "a/+", 2)) // granted QoS 1
+	require.Equal(t, []byte{2}, sub.subscribe(1, "a/+", 2))
 	require.Equal(t, []byte{0}, sub.subscribe(2, "a/#", 0))
 
 	pub := rawDial(t, b)
