@@ -197,6 +197,13 @@ type NetworkMessage struct {
 	// type NetworkMessageDiscoveryRequest).
 	Request *DiscoveryRequest
 
+	// Action is the action header of an ActionRequest or ActionResponse
+	// NetworkMessage (Part 14 §7.2.4.4.2 Table 154 in 1.05; the header of
+	// the JSON action NetworkMessage, §7.2.5.6.1), nil for any other
+	// message. Its Messages are then of type DataSetMessageActionRequest
+	// or DataSetMessageActionResponse, as Action.Type says.
+	Action *ActionHeader
+
 	// Chunk is set for one chunk of a chunked UADP NetworkMessage
 	// (Part 14 §7.2.4.4.4 in 1.05). Its NetworkMessage carries the headers
 	// of the chunk; the DataSetMessage or the discovery announcement it is
@@ -252,6 +259,11 @@ const (
 	DataSetMessageDeltaFrame DataSetMessageType = 1
 	DataSetMessageEvent      DataSetMessageType = 2
 	DataSetMessageKeepAlive  DataSetMessageType = 3
+	// DataSetMessageActionRequest and DataSetMessageActionResponse are the
+	// DataSetMessages of PubSub Actions (Part 14 §7.2.4.5.9 and
+	// §7.2.4.5.10 in 1.05; UADP DataSetFlags2 type 0101 and 0110).
+	DataSetMessageActionRequest  DataSetMessageType = 5
+	DataSetMessageActionResponse DataSetMessageType = 6
 )
 
 func (t DataSetMessageType) String() string {
@@ -264,6 +276,10 @@ func (t DataSetMessageType) String() string {
 		return "Event"
 	case DataSetMessageKeepAlive:
 		return "KeepAlive"
+	case DataSetMessageActionRequest:
+		return "ActionRequest"
+	case DataSetMessageActionResponse:
+		return "ActionResponse"
 	}
 	return "DataSetMessageType(" + strconv.Itoa(int(t)) + ")"
 }
@@ -313,7 +329,59 @@ type DataSetMessage struct {
 	PublisherID       *PublisherID
 	WriterGroupName   string
 
+	// ActionTargetID, RequestID and ActionState of an ActionRequest or
+	// ActionResponse DataSetMessage (Part 14 Tables 166 and 167 in 1.05).
+	// The Status of a response is Status.
+	ActionTargetID uint16
+	RequestID      uint16
+	ActionState    ua.ActionState
+
 	Fields []*Field
+}
+
+// ActionMessageType tells an ActionRequest from an ActionResponse
+// NetworkMessage (UADP ActionFlags bit 0; JSON "ua-action-request" and
+// "ua-action-response").
+type ActionMessageType uint8
+
+const (
+	ActionRequest  ActionMessageType = 1
+	ActionResponse ActionMessageType = 2
+)
+
+func (t ActionMessageType) String() string {
+	switch t {
+	case ActionRequest:
+		return "ActionRequest"
+	case ActionResponse:
+		return "ActionResponse"
+	}
+	return "ActionMessageType(" + strconv.Itoa(int(t)) + ")"
+}
+
+// ActionHeader is the action header of a PubSub Action NetworkMessage
+// (Part 14 Table 154 in 1.05, the ActionHeader of UADP; Table 195, the
+// header of the JSON action NetworkMessage). The PublisherId of the
+// NetworkMessage is the one of the Responder, in requests and responses.
+//
+// The optional members are written when they are set: ResponseAddress when
+// not empty (requests only), CorrelationData when not nil, RequestorID when
+// not nil, TimeoutHint when positive (requests only). A decoder leaves the
+// members the message does not carry at their zero value.
+type ActionHeader struct {
+	Type ActionMessageType
+	// ResponseAddress is where the Responder sends the responses; empty
+	// selects the default of the transport mapping.
+	ResponseAddress string
+	// CorrelationData is chosen by the Requestor and returned unchanged in
+	// the responses.
+	CorrelationData []byte
+	// RequestorID is the PublisherId of the Requestor.
+	RequestorID *PublisherID
+	// TimeoutHint (Duration, milliseconds) is how long the Requestor waits
+	// for the response; the Responder stops processing after it. It is
+	// mandatory in requests.
+	TimeoutHint float64
 }
 
 // DiscoveryType is the AnnouncementType of a UADP discovery announcement
