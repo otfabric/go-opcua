@@ -593,11 +593,26 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 	rec.waitFor(t, "r", func(d *pubsub.ReceivedDataSet) bool { return d.MessageType == message.DataSetMessageKeyFrame })
 	psWaitState(t, sub, rid, ua.PubSubStateOperational)
 
-	// Nothing changes for longer than the timeout: keep-alives only.
-	time.Sleep(1500 * time.Millisecond)
-	st, err := sub.Status(rid)
-	require.NoError(t, err)
-	require.Equal(t, ua.PubSubStateOperational, st.State, "keep-alives keep the reader Operational")
+	// Nothing changes for longer than the timeout: keep-alives only. A
+	// process that does not run for most of the timeout (a loaded runner
+	// under the race detector) cannot receive them either: the window is
+	// tried again then, and only a timeout without such a stall fails.
+	var st pubsub.Status
+	var err error
+	for attempt := 1; ; attempt++ {
+		stall := psMaxStall(1500 * time.Millisecond)
+		st, err = sub.Status(rid)
+		require.NoError(t, err)
+		if st.State == ua.PubSubStateOperational {
+			break
+		}
+		if stall < time.Duration(r.MessageReceiveTimeout)*time.Millisecond/2 || attempt == 3 {
+			t.Fatalf("keep-alives keep the reader Operational: state %v after %d attempt(s), longest stall %v, counters %+v, last error %v",
+				st.State, attempt, stall, st.Counters, st.LastError)
+		}
+		t.Logf("the reader timed out during a stall of %v; trying again", stall)
+		psWaitState(t, sub, rid, ua.PubSubStateOperational)
+	}
 	require.GreaterOrEqual(t, st.Counters.KeepAlivesReceived, uint64(4))
 	require.Len(t, rec.of("r"), 1, "no DataSet without a change")
 	// The publisher counts a keep-alive once its send returned, which can be
@@ -658,3 +673,21 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 }
 
 var _ = opcua.AutoReconnect
+
+// psMaxStall waits for d and returns the longest time the process did not
+// get to run in it: how much later than its 10 ms period a ticker fired.
+func psMaxStall(d time.Duration) time.Duration {
+	const period = 10 * time.Millisecond
+	tk := time.NewTicker(period)
+	defer tk.Stop()
+	var worst time.Duration
+	last := time.Now()
+	for end := last.Add(d); last.Before(end); {
+		now := <-tk.C
+		if late := now.Sub(last) - period; late > worst {
+			worst = late
+		}
+		last = now
+	}
+	return worst
+}
