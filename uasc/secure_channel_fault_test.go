@@ -783,7 +783,16 @@ func TestRequest_SendFailures(t *testing.T) {
 	unencodable := &ua.AddNodesRequest{NodesToAdd: []*ua.AddNodesItem{{}}} // nil ExpandedNodeIDs
 	for _, pol := range []covPolicy{covRSA, covAEAD} {
 		t.Run(pol.name, func(t *testing.T) {
-			p := newCovPair(t, pol, covOpts{})
+			// gate, when set, holds the server's answers: the duplicate
+			// request id below must be sent while the first request is
+			// still waiting for its response.
+			var gate atomic.Pointer[chan struct{}]
+			p := newCovPair(t, pol, covOpts{handle: func(_ *covPair, _ *MessageBody) bool {
+				if g := gate.Load(); g != nil {
+					<-*g
+				}
+				return false
+			}})
 			ignore := func(ua.Response) error { return nil }
 
 			err := p.client.SendRequest(context.Background(), &covUnknownRequest{}, nil, ignore)
@@ -809,9 +818,13 @@ func TestRequest_SendFailures(t *testing.T) {
 			// Two requests with the same id.
 			act := p.client.activeInstanceOrNil()
 			reqID := p.client.nextRequestID()
+			hold := make(chan struct{})
+			gate.Store(&hold)
 			ch, err := p.client.sendAsyncWithTimeout(context.Background(), covReadRequest(1), reqID, act, nil, true, time.Minute)
 			require.NoError(t, err)
 			_, err = p.client.sendAsyncWithTimeout(context.Background(), covReadRequest(1), reqID, act, nil, true, time.Minute)
+			gate.Store(nil)
+			close(hold)
 			require.ErrorIs(t, err, errors.ErrDuplicateHandler)
 			select {
 			case msg := <-ch:

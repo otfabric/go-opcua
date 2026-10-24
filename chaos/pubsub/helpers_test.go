@@ -58,7 +58,24 @@ func fieldNode(ds, field string) *ua.NodeID {
 	return ua.NewStringNodeID(1, ds+"."+field)
 }
 
-func checkString(ds string, n int64) string { return fmt.Sprintf("%s#%d", ds, n) }
+// bigPrefix marks the data sets whose check string is padded to bigSize
+// bytes: their DataSetMessages do not fit a small MaxNetworkMessageSize
+// and are sent as chunks.
+const (
+	bigPrefix = "big"
+	bigSize   = 3000
+)
+
+func checkString(ds string, n int64) string {
+	s := fmt.Sprintf("%s#%d", ds, n)
+	if strings.HasPrefix(ds, bigPrefix) {
+		// The padding repeats the counter, so that a chunk of another
+		// message of the same data set cannot go unnoticed.
+		pad := fmt.Sprintf("|%d", n)
+		s += strings.Repeat(pad, (bigSize-len(s))/len(pad)+1)
+	}
+	return s
+}
 
 // counterPDS returns the published data set ds with the fields n, chk and f.
 func counterPDS(ds string) *ua.PublishedDataSetDataType {

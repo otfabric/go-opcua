@@ -171,8 +171,11 @@ func (e *xmlEncoder) content(x *xmlElem, v reflect.Value) error {
 		}
 		return nil
 	case kindStructPtr:
+		// A structure has no null in XML (an array element or the
+		// document root always decodes to a value), so a nil pointer
+		// is written as the zero structure, as the binary encoding does.
 		if v.IsNil() {
-			return nil
+			return e.structure(x, reflect.New(v.Type().Elem()).Elem())
 		}
 		return e.structure(x, v.Elem())
 	case kindStruct:

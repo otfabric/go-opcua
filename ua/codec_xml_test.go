@@ -88,11 +88,11 @@ func TestXMLEncode(t *testing.T) {
 		{"Structure", &Argument{Name: "n", DataType: NewTwoByteNodeID(6), ValueRank: 1, ArrayDimensions: []uint32{3}, Description: NewLocalizedText("d")},
 			`<Argument><Name>n</Name><DataType><Identifier>i=6</Identifier></DataType><ValueRank>1</ValueRank><ArrayDimensions><UInt32>3</UInt32></ArrayDimensions><Description><Text>d</Text></Description></Argument>`, nil},
 		{"Structure with null fields", &Argument{Name: "n"}, `<Argument><Name>n</Name><ValueRank>0</ValueRank></Argument>`, nil},
-		{"Structure nil", (*Range)(nil), `<Range></Range>`, nil},
+		{"Structure nil", (*Range)(nil), `<Range><Low>0</Low><High>0</High></Range>`, nil},
 		{"Structure array field", &ApplicationDescription{DiscoveryURLs: []string{"a", "b"}, ApplicationType: ApplicationTypeClient},
 			`<ApplicationDescription><ApplicationUri></ApplicationUri><ProductUri></ProductUri><ApplicationType>Client_1</ApplicationType>` +
 				`<GatewayServerUri></GatewayServerUri><DiscoveryProfileUri></DiscoveryProfileUri><DiscoveryUrls><String>a</String><String>b</String></DiscoveryUrls></ApplicationDescription>`, nil},
-		{"Array", []*Range{{Low: 1}, nil}, `<ListOfRange><Range><Low>1</Low><High>0</High></Range><Range></Range></ListOfRange>`, nil},
+		{"Array", []*Range{{Low: 1}, nil}, `<ListOfRange><Range><Low>1</Low><High>0</High></Range><Range><Low>0</Low><High>0</High></Range></ListOfRange>`, nil},
 		{"root name", int32(1), `<Value>1</Value>`, []CodecOption{WithXMLRootName("Value")}},
 		{"nil", nil, `<Null></Null>`, nil},
 		{"namespace table", NewFourByteNodeID(2, 7), `<NodeId><Identifier>nsu=urn:two;i=7</Identifier></NodeId>`,
@@ -494,4 +494,19 @@ func TestXMLElementNamespace(t *testing.T) {
 	var x XMLElement
 	require.NoError(t, DecodeXML([]byte(`<XmlElement><a xmlns="">1</a><b xmlns="" y="2"><c xmlns="">3</c></b></XmlElement>`), &x))
 	require.Equal(t, XMLElement(`<a>1</a><b y="2"><c xmlns="">3</c></b>`), x, "only top-level resets are removed")
+}
+
+// A nil structure in an array has no null form in XML; it is written as
+// the zero structure so that the document is a fixed point of
+// decode/encode (found by chaos/codec TestHostile_ConcurrentMutations).
+func TestXMLNilStructureElementIsStable(t *testing.T) {
+	first, err := EncodeXML(EventFilter{SelectClauses: []*SimpleAttributeOperand{nil}})
+	require.NoError(t, err)
+	var back EventFilter
+	require.NoError(t, DecodeXML(first, &back))
+	require.Len(t, back.SelectClauses, 1)
+	require.NotNil(t, back.SelectClauses[0])
+	second, err := EncodeXML(back)
+	require.NoError(t, err)
+	require.Equal(t, string(first), string(second))
 }
