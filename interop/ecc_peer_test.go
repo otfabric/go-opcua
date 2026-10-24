@@ -162,57 +162,62 @@ func startOpen62541ECCServerWith(t *testing.T, serverArgs ...string) *serverHand
 		t.Fatalf("share PKI with the container: %v", err)
 	}
 
-	port := freePort(t)
 	image := getEnvOr("OPEN62541_IMAGE", defaultOpen62541Image)
 	containerName := dockerContainerName(t)
-	cmdCtx, cmdCancel := context.WithCancel(context.Background())
+	for range publishAttempts {
+		port := freePort(t)
+		cmdCtx, cmdCancel := context.WithCancel(context.Background())
+		cmd := exec.CommandContext(cmdCtx, "docker", append([]string{"run", "--rm",
+			"--name", containerName,
+			"--add-host=host.docker.internal:host-gateway",
+			"-p", fmt.Sprintf("%d:4840", port),
+			"-v", interopFixtureDir(t) + ":/fixtures:ro",
+			"-v", certFile + ":/certs/cert.crt:ro",
+			"-v", keyFile + ":/certs/cert.key:ro",
+			"-v", runtimePKI + ":/certs/pki",
+			"-v", identity + ":/certs/ecc:ro",
+			image,
+			"server",
+			"--fixture", "/fixtures/baseline.json",
+			"--certificate", "/certs/cert.crt",
+			"--private-key", "/certs/cert.key",
+			"--pki-dir", "/certs/pki",
+			"--ecc-dir", "/certs/ecc",
+		}, serverArgs...)...)
+		run, err := startDockerRun(cmd, nil)
+		if err != nil {
+			cmdCancel()
+			t.Fatalf("start ECC adapter server (%s): %v", image, err)
+		}
+		stop := func() {
+			dockerReleaseMount(containerName, "/certs/pki")
+			dockerStop(containerName)
+			cmdCancel()
+			run.wait()
+		}
 
-	cmd := exec.CommandContext(cmdCtx, "docker", append([]string{"run", "--rm",
-		"--name", containerName,
-		"--add-host=host.docker.internal:host-gateway",
-		"-p", fmt.Sprintf("%d:4840", port),
-		"-v", interopFixtureDir(t) + ":/fixtures:ro",
-		"-v", certFile + ":/certs/cert.crt:ro",
-		"-v", keyFile + ":/certs/cert.key:ro",
-		"-v", runtimePKI + ":/certs/pki",
-		"-v", identity + ":/certs/ecc:ro",
-		image,
-		"server",
-		"--fixture", "/fixtures/baseline.json",
-		"--certificate", "/certs/cert.crt",
-		"--private-key", "/certs/cert.key",
-		"--pki-dir", "/certs/pki",
-		"--ecc-dir", "/certs/ecc",
-	}, serverArgs...)...)
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		cmdCancel()
-		t.Fatalf("start ECC adapter server (%s): %v", image, err)
-	}
-	stop := func() {
-		dockerReleaseMount(containerName, "/certs/pki")
-		dockerStop(containerName)
-		cmdCancel()
-		_ = cmd.Wait()
-	}
-
-	startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
-	defer startCancel()
-	for exec.CommandContext(startCtx, "docker", "exec", containerName, "test", "-f", "/run/opcua-interop/ready").Run() != nil {
-		select {
-		case <-startCtx.Done():
+		startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
+		err = waitDockerReady(startCtx, run, containerName)
+		startCancel()
+		if run.portTaken() {
+			cmdCancel()
+			dockerRemove(containerName)
+			t.Logf("host port %d taken: another one", port)
+			continue
+		}
+		if err != nil {
 			stop()
-			t.Fatalf("timed out waiting for ECC adapter server (container: %s)", containerName)
-		default:
-			time.Sleep(500 * time.Millisecond)
+			t.Fatalf("waiting for ECC adapter server (container: %s): %v", containerName, err)
+		}
+
+		t.Cleanup(stop)
+		return &serverHandle{
+			endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
+			stopFn:   stop,
 		}
 	}
-
-	t.Cleanup(stop)
-	return &serverHandle{
-		endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
-		stopFn:   stop,
-	}
+	t.Fatalf("no host port Docker could publish the ECC adapter server on in %d attempts", publishAttempts)
+	return nil
 }
 
 // eccEndpoint returns the endpoint the server advertises for the profile.

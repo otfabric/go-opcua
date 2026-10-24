@@ -36,6 +36,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -117,6 +118,93 @@ func freePort(t *testing.T) int {
 	return testport.TCP(t)
 }
 
+// publishAttempts bounds how often a container is started again on other
+// host ports because Docker found one taken.
+const publishAttempts = 5
+
+// dockerPortTaken reports whether the output of a failed `docker run` says
+// that a host port it was to publish is taken ("Bind for 0.0.0.0:<port>
+// failed: port is already allocated", "… bind: address already in use"), or
+// that the adapter of a --network host container could not bind one.
+// testport finds a port free, but another socket can take it before Docker
+// binds it; nothing depends on the port yet, so the container is started
+// again on another one.
+func dockerPortTaken(out string) bool {
+	out = strings.ToLower(out)
+	return strings.Contains(out, "port is already allocated") || strings.Contains(out, "address already in use")
+}
+
+// dockerRun is a `docker run` (without -d) in the background. Its stderr is
+// kept, and copied to os.Stderr or to the given writer, so that a failed
+// start can be told apart (portTaken).
+type dockerRun struct {
+	cmd    *exec.Cmd
+	mu     sync.Mutex
+	stderr bytes.Buffer
+	done   chan struct{}
+}
+
+// startDockerRun starts cmd (a `docker run`), whose Stdout the caller set;
+// its Stderr goes to stderr (os.Stderr if nil) as well.
+func startDockerRun(cmd *exec.Cmd, stderr io.Writer) (*dockerRun, error) {
+	d := &dockerRun{cmd: cmd, done: make(chan struct{})}
+	if stderr == nil {
+		stderr = os.Stderr
+	}
+	cmd.Stderr = io.MultiWriter(stderr, lockedWriter{&d.mu, &d.stderr})
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	go func() { _ = cmd.Wait(); close(d.done) }()
+	return d, nil
+}
+
+// exited reports whether `docker run` returned.
+func (d *dockerRun) exited() bool {
+	select {
+	case <-d.done:
+		return true
+	default:
+		return false
+	}
+}
+
+// portTaken reports whether `docker run` returned because Docker could not
+// publish a host port.
+func (d *dockerRun) portTaken() bool {
+	if !d.exited() {
+		return false
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return dockerPortTaken(d.stderr.String())
+}
+
+// wait waits until `docker run` returned.
+func (d *dockerRun) wait() { <-d.done }
+
+// waitDockerReady polls the opcua-interop ready file of container name
+// until it exists (nil), `docker run` returned (errDockerExited; check
+// portTaken) or ctx ends.
+func waitDockerReady(ctx context.Context, d *dockerRun, name string) error {
+	for {
+		if d.exited() {
+			return errDockerExited
+		}
+		if exec.CommandContext(ctx, "docker", "exec", name, "test", "-f", "/run/opcua-interop/ready").Run() == nil {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-d.done:
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+}
+
+var errDockerExited = errors.New("docker run exited")
+
 // ---------------------------------------------------------------------------
 // Docker helpers
 // ---------------------------------------------------------------------------
@@ -129,6 +217,13 @@ func dockerContainerName(t *testing.T) string {
 
 func dockerStop(name string) {
 	exec.Command("docker", "stop", "-t", "2", name).Run() //nolint:errcheck
+}
+
+// dockerRemove removes the container name if it is left over (created but
+// not started, as after a failed docker run), so that the name can be used
+// again.
+func dockerRemove(name string) {
+	exec.Command("docker", "rm", "-f", name).Run() //nolint:errcheck
 }
 
 // containerScratchDir returns a directory that is bind-mounted writable into
@@ -173,7 +268,6 @@ func startAdapterServer(t *testing.T, imageEnvVar, defaultImage string) *serverH
 	t.Helper()
 	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
-	port := freePort(t)
 	image := getEnvOr(imageEnvVar, defaultImage)
 	containerName := dockerContainerName(t)
 	fixtureDir := getEnvOr("OPCUA_INTEROP_FIXTURE_DIR", defaultFixtureDir)
@@ -187,51 +281,53 @@ func startAdapterServer(t *testing.T, imageEnvVar, defaultImage string) *serverH
 		fixtureDir = cwd + "/" + fixtureDir
 	}
 
-	cmdCtx, cmdCancel := context.WithCancel(context.Background())
-
-	cmd := exec.CommandContext(cmdCtx, "docker", "run", "--rm",
-		"--name", containerName,
-		"-p", fmt.Sprintf("%d:4840", port),
-		"-v", fixtureDir+":/fixtures:ro",
-		image,
-		"server",
-		"--fixture", "/fixtures/baseline.json",
-	)
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		cmdCancel()
-		t.Fatalf("start adapter server (%s): %v", image, err)
-	}
-
-	stop := func() {
-		dockerStop(containerName)
-		cmdCancel()
-		_ = cmd.Wait()
-	}
-
-	// Poll for the ready file written by the adapter inside the container.
-	startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
-	defer startCancel()
-
-	for exec.CommandContext(startCtx, "docker", "exec",
-		containerName, "test", "-f", "/run/opcua-interop/ready").Run() != nil {
-
-		select {
-		case <-startCtx.Done():
-			stop()
-			t.Fatalf("timed out waiting for adapter server (container: %s)", containerName)
-		default:
-			time.Sleep(500 * time.Millisecond)
+	for range publishAttempts {
+		port := freePort(t)
+		cmdCtx, cmdCancel := context.WithCancel(context.Background())
+		cmd := exec.CommandContext(cmdCtx, "docker", "run", "--rm",
+			"--name", containerName,
+			"-p", fmt.Sprintf("%d:4840", port),
+			"-v", fixtureDir+":/fixtures:ro",
+			image,
+			"server",
+			"--fixture", "/fixtures/baseline.json",
+		)
+		run, err := startDockerRun(cmd, nil)
+		if err != nil {
+			cmdCancel()
+			t.Fatalf("start adapter server (%s): %v", image, err)
 		}
-	}
 
-	h := &serverHandle{
-		endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
-		stopFn:   stop,
+		stop := func() {
+			dockerStop(containerName)
+			cmdCancel()
+			run.wait()
+		}
+
+		// Poll for the ready file written by the adapter inside the container.
+		startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
+		err = waitDockerReady(startCtx, run, containerName)
+		startCancel()
+		if run.portTaken() {
+			cmdCancel()
+			dockerRemove(containerName)
+			t.Logf("host port %d taken: another one", port)
+			continue
+		}
+		if err != nil {
+			stop()
+			t.Fatalf("waiting for adapter server (container: %s): %v", containerName, err)
+		}
+
+		h := &serverHandle{
+			endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
+			stopFn:   stop,
+		}
+		t.Cleanup(stop)
+		return h
 	}
-	t.Cleanup(stop)
-	return h
+	t.Fatalf("no host port Docker could publish the adapter server on in %d attempts", publishAttempts)
+	return nil
 }
 
 // startOpen62541Server starts the open62541 adapter container in server mode.
@@ -1220,7 +1316,6 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 		t.Fatalf("share PKI with the container: %v", err)
 	}
 
-	port := freePort(t)
 	image := getEnvOr(imageEnvVar, defaultImage)
 	containerName := dockerContainerName(t)
 	fixtureDir := getEnvOr("OPCUA_INTEROP_FIXTURE_DIR", defaultFixtureDir)
@@ -1232,57 +1327,59 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 		fixtureDir = cwd + "/" + fixtureDir
 	}
 
-	cmdCtx, cmdCancel := context.WithCancel(context.Background())
-
-	cmd := exec.CommandContext(cmdCtx, "docker", "run", "--rm",
-		"--name", containerName,
-		"-p", fmt.Sprintf("%d:4840", port),
-		"-v", fixtureDir+":/fixtures:ro",
-		"-v", certFile+":/certs/cert.crt:ro",
-		"-v", keyFile+":/certs/cert.key:ro",
-		"-v", runtimePKI+":/certs/pki",
-		image,
-		"server",
-		"--fixture", "/fixtures/baseline.json",
-		"--certificate", "/certs/cert.crt",
-		"--private-key", "/certs/cert.key",
-		"--pki-dir", "/certs/pki",
-	)
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		cmdCancel()
-		t.Fatalf("start secure adapter server (%s): %v", image, err)
-	}
-
-	stop := func() {
-		dockerReleaseMount(containerName, "/certs/pki")
-		dockerStop(containerName)
-		cmdCancel()
-		_ = cmd.Wait()
-	}
-
-	startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
-	defer startCancel()
-
-	for exec.CommandContext(startCtx, "docker", "exec",
-		containerName, "test", "-f", "/run/opcua-interop/ready").Run() != nil {
-
-		select {
-		case <-startCtx.Done():
-			stop()
-			t.Fatalf("timed out waiting for secure adapter server (container: %s)", containerName)
-		default:
-			time.Sleep(500 * time.Millisecond)
+	for range publishAttempts {
+		port := freePort(t)
+		cmdCtx, cmdCancel := context.WithCancel(context.Background())
+		cmd := exec.CommandContext(cmdCtx, "docker", "run", "--rm",
+			"--name", containerName,
+			"-p", fmt.Sprintf("%d:4840", port),
+			"-v", fixtureDir+":/fixtures:ro",
+			"-v", certFile+":/certs/cert.crt:ro",
+			"-v", keyFile+":/certs/cert.key:ro",
+			"-v", runtimePKI+":/certs/pki",
+			image,
+			"server",
+			"--fixture", "/fixtures/baseline.json",
+			"--certificate", "/certs/cert.crt",
+			"--private-key", "/certs/cert.key",
+			"--pki-dir", "/certs/pki",
+		)
+		run, err := startDockerRun(cmd, nil)
+		if err != nil {
+			cmdCancel()
+			t.Fatalf("start secure adapter server (%s): %v", image, err)
 		}
-	}
 
-	h := &serverHandle{
-		endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
-		stopFn:   stop,
+		stop := func() {
+			dockerReleaseMount(containerName, "/certs/pki")
+			dockerStop(containerName)
+			cmdCancel()
+			run.wait()
+		}
+
+		startCtx, startCancel := context.WithTimeout(context.Background(), serverReadyTimeout)
+		err = waitDockerReady(startCtx, run, containerName)
+		startCancel()
+		if run.portTaken() {
+			cmdCancel()
+			dockerRemove(containerName)
+			t.Logf("host port %d taken: another one", port)
+			continue
+		}
+		if err != nil {
+			stop()
+			t.Fatalf("waiting for secure adapter server (container: %s): %v", containerName, err)
+		}
+
+		h := &serverHandle{
+			endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath),
+			stopFn:   stop,
+		}
+		t.Cleanup(stop)
+		return h
 	}
-	t.Cleanup(stop)
-	return h
+	t.Fatalf("no host port Docker could publish the secure adapter server on in %d attempts", publishAttempts)
+	return nil
 }
 
 // startOpen62541SecureServer starts the open62541 adapter with OPC UA SecureChannel enabled.

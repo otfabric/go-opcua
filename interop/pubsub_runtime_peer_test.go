@@ -212,7 +212,7 @@ func psRuntimeGoPublishes(t *testing.T, p *psPeer) {
 					config:   psSubscriberConfig(c.psLiveCase, psProfileUDP, fmt.Sprintf("opc.udp://0.0.0.0:%d", port), nil, false),
 					udpPorts: []int{port},
 				})
-				connURL = fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
+				connURL = fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port))
 			}
 
 			var popts []pubsub.Option
@@ -606,13 +606,14 @@ func TestPubSubRuntime_Open62541SubscriberPullsKeys_GoSKS(t *testing.T) {
 	// published UDP port) runs: Docker Desktop's UDP port forwarding is
 	// unreliable for a flow that started before the port was published.
 	pub := startGoPubSubServer(t, goPubSubOpts{secure: true, ks: ks, pubsubOpts: []pubsub.Option{pubsub.WithKeySource(psSKSGroup, keys)}}, nil)
+	var sub *pubsubServer
 	configure := func() {
 		p := pub.srv.PubSub()
 		mustOK[pubsub.ComponentID](t)(p.AddPublishedDataSet(psRuntimeDataSet(c.vars, pub.ns, 0)))
 		wg := pubsub.Secure(pubsub.WriterGroup("InteropWriterGroup", psWriterGroupID, 100*time.Millisecond,
 			pubsub.DataSetWriter("InteropWriter", psWriterID, "InteropDataSet")), c.mode, psSKSGroup)
 		mustOK[pubsub.ComponentID](t)(p.AddConnection(pubsub.AttachWriterGroups(
-			pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", port), uint16(psPubID)), wg)))
+			pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port)), uint16(psPubID)), wg)))
 	}
 	cfg := psSubscriberConfig(c.psLiveCase, psProfileUDP, fmt.Sprintf("opc.udp://0.0.0.0:%d", port), nil, false)
 	cfg["securityGroups"] = []jobj{psSecurityGroupJSON(psSKSGroup, c.policy.URI(), 0, nil)}
@@ -621,7 +622,7 @@ func TestPubSubRuntime_Open62541SubscriberPullsKeys_GoSKS(t *testing.T) {
 		"securityPolicyUri": "http://opcfoundation.org/UA/SecurityPolicy#Basic256Sha256",
 		"securityMode":      "SignAndEncrypt", "username": psSKSUser, "password": psSKSPassword,
 	}
-	sub := startPubSubServer(t, pubsubServerOpts{config: cfg, udpPorts: []int{port}, secure: true})
+	sub = startPubSubServer(t, pubsubServerOpts{config: cfg, udpPorts: []int{port}, secure: true})
 	configure()
 	values := psValues(c.vars, psFresh())
 	writePubSubVars(t, pub.endpoint, c.vars, values)
@@ -683,7 +684,7 @@ func TestPubSubRuntime_ReceiveTimeout_Open62541Reader(t *testing.T) {
 	pub := startGoPubSubServer(t, goPubSubOpts{}, func(p *pubsub.PubSub, ns uint16) {
 		mustOK[pubsub.ComponentID](t)(p.AddPublishedDataSet(psRuntimeDataSet(c.vars, ns, 0)))
 		conn := mustOK[pubsub.ComponentID](t)(p.AddConnection(pubsub.AttachWriterGroups(
-			pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", port), uint16(psPubID)),
+			pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port)), uint16(psPubID)),
 			pubsub.WriterGroup("InteropWriterGroup", psWriterGroupID, 100*time.Millisecond, pubsub.DataSetWriter("InteropWriter", psWriterID, "InteropDataSet")))))
 		var ok bool
 		wgID, ok = p.Lookup(pubsub.KindWriterGroup, conn, "InteropWriterGroup")
@@ -793,7 +794,7 @@ func TestPubSubRuntime_KeepAlive_GoPublishes(t *testing.T) {
 		wg := pubsub.WriterGroup("InteropWriterGroup", psWriterGroupID, 100*time.Millisecond, pubsub.DataSetWriter("InteropWriter", psWriterID, ""))
 		wg.KeepAliveTime = 200
 		conn := mustOK[pubsub.ComponentID](t)(p.AddConnection(pubsub.AttachWriterGroups(
-			pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", port), uint16(psPubID)), wg)))
+			pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port)), uint16(psPubID)), wg)))
 		wgID, _ = p.Lookup(pubsub.KindWriterGroup, conn, "InteropWriterGroup")
 	})
 	waitState(t, "open62541 reader receiving keep-alive messages", ua.PubSubStateOperational, 10*time.Second,
