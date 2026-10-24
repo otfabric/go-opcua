@@ -118,6 +118,7 @@ type options struct {
 	transportConfig []func(conn *ua.PubSubConnectionDataType, cfg *transport.Config)
 	retryInterval   time.Duration
 	codecs          func(encoding) codec
+	diagLevel       ua.DiagnosticsLevel
 }
 
 // WithLogger sets the logger. The default discards log output.
