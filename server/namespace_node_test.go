@@ -367,3 +367,44 @@ func TestDataType_NilReferenceTypeID(t *testing.T) {
 		_ = n.DataType()
 	})
 }
+
+// Browse reports the TypeDefinition of a target Object or Variable — the
+// target of its HasTypeDefinition reference — and the null NodeId for other
+// node classes (Part 4 §7.30). It reported the DataType of a Variable.
+func TestBrowse_TypeDefinition(t *testing.T) {
+	srv := newTestServer()
+	ns := NewNodeNameSpace(srv, "urn:test:typedef")
+	root := NewFolderNode(ua.NewStringNodeID(ns.ID(), "root"), "root")
+	ns.AddNode(root)
+	v := NewVariableNode(ua.NewStringNodeID(ns.ID(), "v"), "v", int32(1))
+	v.refs = append(v.refs, &ua.ReferenceDescription{
+		ReferenceTypeID: ua.NewNumericNodeID(0, id.HasTypeDefinition),
+		IsForward:       true,
+		NodeID:          ua.NewNumericExpandedNodeID(0, id.AnalogItemType),
+		BrowseName:      &ua.QualifiedName{Name: "AnalogItemType"},
+		DisplayName:     &ua.LocalizedText{Text: "AnalogItemType"},
+		TypeDefinition:  ua.NewTwoByteExpandedNodeID(0),
+	})
+	v.invalidateTypeDef()
+	ns.AddNode(v)
+	m := NewFolderNode(ua.NewStringNodeID(ns.ID(), "m"), "m")
+	m.SetNodeClass(ua.NodeClassMethod)
+	ns.AddNode(m)
+	root.AddRef(v, RefType(id.HasComponent), true)
+	root.AddRef(m, RefType(id.HasComponent), true)
+
+	res := ns.Browse(&ua.BrowseDescription{
+		NodeID:          root.ID(),
+		BrowseDirection: ua.BrowseDirectionForward,
+		ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences),
+		IncludeSubtypes: true,
+		ResultMask:      uint32(ua.BrowseResultMaskAll),
+	})
+	require.Equal(t, ua.StatusGood, res.StatusCode)
+	got := map[string]*ua.ExpandedNodeID{}
+	for _, r := range res.References {
+		got[r.BrowseName.Name] = r.TypeDefinition
+	}
+	require.Equal(t, ua.NewNumericExpandedNodeID(0, id.AnalogItemType), got["v"], "the Variable's type definition, not its DataType")
+	require.Equal(t, ua.NewTwoByteExpandedNodeID(0), got["m"], "a Method has no type definition")
+}

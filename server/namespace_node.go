@@ -287,12 +287,7 @@ func (as *NodeNameSpace) Browse(bd *ua.BrowseDescription) *ua.BrowseResult {
 		// reference left behind by DeleteNode). A nil ExpandedNodeID cannot
 		// be encoded and would make the whole Browse response unsendable, so
 		// report the null NodeId instead.
-		typeDefinition := ua.NewTwoByteExpandedNodeID(0)
-		if td != nil {
-			if dt := td.DataType(); dt != nil {
-				typeDefinition = dt
-			}
-		}
+		typeDefinition := browseTypeDefinition(td)
 
 		isTypeDef := r.ReferenceTypeID != nil && r.ReferenceTypeID.IntID() == id.HasTypeDefinition && r.IsForward
 		rf := applyBrowseResultMask(&ua.ReferenceDescription{
@@ -353,4 +348,21 @@ func (as *NodeNameSpace) SetAttribute(id *ua.NodeID, attr ua.AttributeID, val *u
 	}
 
 	return ua.StatusOK
+}
+
+// browseTypeDefinition is the TypeDefinition of a ReferenceDescription to n:
+// the target of its HasTypeDefinition reference if n is an Object or a
+// Variable, the null NodeId otherwise (Part 4 §7.30).
+func browseTypeDefinition(n *Node) *ua.ExpandedNodeID {
+	if n == nil {
+		return ua.NewTwoByteExpandedNodeID(0)
+	}
+	switch n.NodeClass() {
+	case ua.NodeClassObject, ua.NodeClassVariable:
+		if td := n.typeDefinition(); td != nil {
+			return td
+		}
+	default:
+	}
+	return ua.NewTwoByteExpandedNodeID(0)
 }

@@ -106,16 +106,23 @@ func TestMapNamespace_Browse(t *testing.T) {
 	root := ns.Browse(&ua.BrowseDescription{
 		NodeID:          ua.NewNumericNodeID(0, id.RootFolder),
 		BrowseDirection: ua.BrowseDirectionForward,
+		ResultMask:      uint32(ua.BrowseResultMaskAll),
 	})
 	require.Equal(t, ua.StatusGood, root.StatusCode)
 	require.Len(t, root.References, 1)
+	require.Equal(t, ua.NewNumericNodeID(0, id.Organizes), root.References[0].ReferenceTypeID)
+	require.Equal(t, ua.NewNumericExpandedNodeID(0, id.FolderType), root.References[0].TypeDefinition)
 
 	objects := ns.Browse(&ua.BrowseDescription{
 		NodeID:          ua.NewNumericNodeID(0, id.ObjectsFolder),
 		BrowseDirection: ua.BrowseDirectionForward,
+		ResultMask:      uint32(ua.BrowseResultMaskAll),
 	})
 	require.Equal(t, ua.StatusGood, objects.StatusCode)
 	require.Len(t, objects.References, 2)
+	for _, r := range objects.References {
+		require.Equal(t, ua.NewNumericExpandedNodeID(0, id.BaseDataVariableType), r.TypeDefinition)
+	}
 
 	unknown := ns.Browse(&ua.BrowseDescription{
 		NodeID:          ua.NewNumericNodeID(0, 9999),
