@@ -251,7 +251,7 @@ func MessageType(b []byte) (string, error) {
 
 // DecodeAny decodes a JSON PubSub message of any supported type: it returns
 // a *message.NetworkMessage for "ua-data" (and messages without network
-// message header), a *MetaDataMessage for "ua-metadata" and a
+// message header), "ua-action-request" and "ua-action-response", a *MetaDataMessage for "ua-metadata" and a
 // *StatusMessage for "ua-status". Other types return an
 // [*UnsupportedMessageTypeError].
 func DecodeAny(b []byte, opts *DecodeOptions) (interface{}, error) {

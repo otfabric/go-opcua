@@ -2,7 +2,9 @@
 
 // Package jsonmsg implements the JSON message mapping of OPC UA PubSub
 // (Part 14 §7.2.5): NetworkMessages and DataSetMessages ("ua-data"),
-// DataSetMetaData messages ("ua-metadata") and status messages ("ua-status").
+// DataSetMetaData messages ("ua-metadata"), status messages ("ua-status")
+// and the messages of PubSub Actions ("ua-action-request",
+// "ua-action-response").
 //
 // # Wire shapes
 //
@@ -33,6 +35,31 @@
 // use the Compact JSON encoding of OPC UA 1.05.04 (see [ua.EncodeJSON]),
 // or the Verbose encoding when the FieldEncoding2 bit of the DataSetMessage
 // content mask is set.
+//
+// # Actions
+//
+// A NetworkMessage with [message.NetworkMessage.Action] set is a message of
+// PubSub Actions (Part 14 §7.2.5.6 in 1.05), always an object with header,
+//
+//	{"MessageId":"..","MessageType":"ua-action-request","PublisherId":"..",
+//	 "Timestamp":"..","ResponseAddress":"..","CorrelationData":"..",
+//	 "RequestorId":"..","TimeoutHint":1500,"Messages":[..]}
+//
+// whose PublisherId is the one of the Responder, and whose Messages are
+// ActionRequest or ActionResponse DataSetMessages with header,
+//
+//	{"DataSetWriterId":1,"ActionTargetId":2,"DataSetWriterName":"..",
+//	 "WriterGroupName":"..","MetaDataVersion":{..},"Timestamp":"..",
+//	 "Status":{..},"MessageType":"ua-action-response","RequestId":7,
+//	 "ActionState":2,"Payload":{"Out":..}}
+//
+// DataSetWriterId, ActionTargetId, RequestId, ActionState and Payload are
+// always written, Status in responses; the other DataSetMessage members
+// follow the JSONMask of the DataSetMessage. The fields of the Payload are
+// Variants, or bare values with the RawData bit of the FieldContentMask
+// (DataValue fields are not allowed, §7.2.5.6.2). The ActionState is the
+// number of the Compact encoding; Decode also accepts the Verbose form
+// ("Executing_1") and the bare name.
 //
 // # PublisherId
 //
@@ -72,6 +99,11 @@ const (
 	MessageTypeEndpoints   = "ua-endpoints"
 	MessageTypeConnection  = "ua-connection"
 
+	// The NetworkMessages of PubSub Actions (Part 14 §7.2.5.6 in 1.05);
+	// their DataSetMessages carry the same MessageType.
+	MessageTypeActionRequest  = "ua-action-request"
+	MessageTypeActionResponse = "ua-action-response"
+
 	MessageTypeKeyFrame   = "ua-keyframe"
 	MessageTypeDeltaFrame = "ua-deltaframe"
 	MessageTypeEvent      = "ua-event"
@@ -95,7 +127,7 @@ var ErrDecode = errors.New("pubsub/jsonmsg: malformed message")
 
 // UnsupportedMessageTypeError is returned for a well-formed message of a
 // type this package does not decode (ua-application, ua-endpoints,
-// ua-connection, actions, ...), or of a type the called function does not
+// ua-connection, ua-action-metadata, ...), or of a type the called function does not
 // handle (a "ua-metadata" message passed to Decode).
 type UnsupportedMessageTypeError struct {
 	MessageType string
