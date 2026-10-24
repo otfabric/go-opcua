@@ -46,8 +46,12 @@ func hasToken(s *SecureChannel, tokenID uint32) bool {
 func TestRenewal_Automatic(t *testing.T) {
 	for _, pol := range []covPolicy{covRSA, covAEAD} {
 		t.Run(pol.name, func(t *testing.T) {
-			p := newCovPair(t, pol, covOpts{tweakClient: func(c *Config) { c.Lifetime = 400 }})
-			require.Equal(t, 400*time.Millisecond, p.server.activeInstanceOrNil().revisedLifetime)
+			// The client renews after 75% of the lifetime, the server closes
+			// the channel 25% after it: with 1.5 s a renewal (an asymmetric
+			// OpenSecureChannel under the race detector) has 750 ms, where
+			// 400 ms left 200 ms on a loaded runner.
+			p := newCovPair(t, pol, covOpts{tweakClient: func(c *Config) { c.Lifetime = 1500 }})
+			require.Equal(t, 1500*time.Millisecond, p.server.activeInstanceOrNil().revisedLifetime)
 
 			const renewals = 3
 			for deadline := time.Now().Add(30 * time.Second); ; {

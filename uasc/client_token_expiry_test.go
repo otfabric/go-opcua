@@ -65,11 +65,11 @@ func TestClientToken_SupersededTokenIsRetiredAfterItsGracePeriod(t *testing.T) {
 	s := newExpiryTestChannel()
 	defer s.ReleaseTokens()
 
-	s.testInstall(1, 200*time.Millisecond, time.Now())
+	s.testInstall(1, time.Second, time.Now())
 	second := s.testInstall(2, time.Hour, time.Now())
 
 	// During the grace period messages secured with the old token are still
-	// accepted (it was installed a moment ago; 250ms have not passed).
+	// accepted (it was installed a moment ago; 1.25 s have not passed).
 	if !s.testHas(1) || !s.testHas(2) {
 		t.Fatalf("tokens right after the renewal: %v, want both", s.testTokens())
 	}
@@ -127,7 +127,7 @@ func TestClientToken_ServerCreatedAtIsIgnored(t *testing.T) {
 			defer s.ReleaseTokens()
 
 			serverNow := time.Now().Add(skew)
-			s.testInstall(1, 300*time.Millisecond, serverNow)
+			s.testInstall(1, time.Second, serverNow)
 			second := s.testInstall(2, time.Hour, serverNow)
 
 			// Not retired early: both tokens are there right after the
