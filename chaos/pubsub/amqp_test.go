@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -156,9 +157,25 @@ func TestChaosAMQPBroker(t *testing.T) {
 			chk.waitGrowth(t, 5, readers...)
 
 			end := time.Now().Add(chaoskit.Duration(t, defaultDuration+time.Second))
+			lostOutcome := false
 			for time.Now().Before(end) {
-				t.Logf("%s: %s", time.Now().Format("15:04:05.000"), amqpFault(t, rng, b, addresses))
+				f := amqpFault(t, rng, b, addresses)
+				t.Logf("%s: %s", time.Now().Format("15:04:05.000"), f)
+				switch {
+				case strings.HasPrefix(f, "withhold"):
+					lostOutcome = true
+				case !strings.HasPrefix(f, "detach"):
+					lostOutcome = false // the connection was renewed
+				}
 				time.Sleep(time.Duration(100+rng.Intn(400)) * time.Millisecond)
+			}
+			if lostOutcome {
+				// The outcomes the broker withheld never come: the
+				// publisher waits for them (at least once, without a
+				// time limit) until a new connection sends the messages
+				// again.
+				b.DropConnections()
+				t.Logf("%s: drop connections (withheld outcomes)", time.Now().Format("15:04:05.000"))
 			}
 
 			chk.waitGrowth(t, 20, readers...)
