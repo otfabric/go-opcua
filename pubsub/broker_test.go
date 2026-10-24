@@ -72,10 +72,15 @@ func TestBrokerJSONWithMetaData(t *testing.T) {
 				require.Equal(t, uint16(2), d.DataSetWriterID)
 				require.Equal(t, "publisher-1", d.PublisherID.Str)
 			}
+			// JSON DataSetMessages carry their field names, so with the JSON
+			// mapping a data message can be complete before the retained
+			// announcement has arrived: wait for the metadata on its own.
 			rid := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, mustID(t, sub, KindConnection, Root, "sub"), "rg"), "r")
-			cfg, err := sub.DataSetReaderConfig(rid)
-			require.NoError(t, err)
-			require.Len(t, cfg.DataSetMetaData.Fields, 3)
+			require.Eventually(t, func() bool {
+				cfg, err := sub.DataSetReaderConfig(rid)
+				require.NoError(t, err)
+				return len(cfg.DataSetMetaData.Fields) == 3
+			}, 2*time.Second, time.Millisecond)
 			st, err := sub.Status(rid)
 			require.NoError(t, err)
 			require.Positive(t, st.Counters.MetaDataReceived)
