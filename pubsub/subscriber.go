@@ -185,7 +185,7 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		probe = err == nil && !chunk && t == message.NetworkMessageDiscoveryRequest
 	}
 	if encErr == nil && !probe && isActionMessage(enc, m) {
-		p.receiveAction(c, gen, enc, m)
+		p.receiveAction(c, gen, enc, m, false)
 		return
 	}
 	p.lock()
@@ -324,6 +324,13 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 			return
 		}
 		p.decodeFailed(c, gen, snap, hdr, err)
+		return
+	}
+	if nm.Action != nil && nm.Chunk == nil {
+		// An action message isActionMessage did not recognise: a JSON
+		// MessageType beyond the bytes it looks at or escaped, or an
+		// MQTT 5.0 message type that says otherwise.
+		p.receiveAction(c, gen, enc, m, true)
 		return
 	}
 	if nm.Chunk != nil {
@@ -638,6 +645,13 @@ func hasMajorVersion(dsm *message.DataSetMessage, enc encoding) bool {
 // held.
 func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *message.DataSetMessage, enc encoding, recv time.Time) {
 	if enc == encUADP && !dsm.Valid {
+		return
+	}
+	switch dsm.Type {
+	case message.DataSetMessageKeyFrame, message.DataSetMessageDeltaFrame, message.DataSetMessageEvent, message.DataSetMessageKeepAlive:
+	default:
+		// Action messages are handled by receiveAction; one that gets
+		// here (a reassembled chunk without ActionHeader) is malformed.
 		return
 	}
 	pub, _ := pubOf(nm, dsm)

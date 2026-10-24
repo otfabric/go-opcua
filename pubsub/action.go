@@ -496,14 +496,17 @@ func (p *PubSub) snapshotActions(c *connection) actionSnap {
 }
 
 // receiveAction handles a received ActionRequest or ActionResponse.
-func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *transport.Message) {
+// counted tells whether receive counted the message already.
+func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *transport.Message, counted bool) {
 	p.lock()
 	if c.gen != gen {
 		p.unlock()
 		return
 	}
-	c.ctr.NetworkMessagesReceived++
-	c.ctr.BytesReceived += uint64(len(m.Payload))
+	if !counted {
+		c.ctr.NetworkMessagesReceived++
+		c.ctr.BytesReceived += uint64(len(m.Payload))
+	}
 	snap := p.snapshotActions(c)
 	ownPub, hasPub := c.pubID, c.hasPub
 	p.unlock()
