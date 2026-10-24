@@ -1,0 +1,101 @@
+# TEMPORARY: the jobs of ci.yml (with otfabric/.github go-ci.yml@v2 inlined)
+# without a concurrency group, so that many dispatched runs on main run side
+# by side to shake out flaky tests. Remove once the stress runs pass.
+name: CI parallel
+run-name: "CI parallel #${{ github.run_number }} on ${{ github.ref_name }}"
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  GOPRIVATE: github.com/otfabric/*
+  COVERPKG: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
+  EXCLUDE_REGEX: "(/example(s)?($|/)|/cmd($|/))"
+
+jobs:
+  lint-and-coverage:
+    name: Lint & Coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Configure private module access
+        env:
+          TOKEN: ${{ secrets.OTFABRIC_READ_TOKEN }}
+        run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: go vet
+        run: go vet ./...
+      - name: golangci-lint
+        run: |
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6"
+          golangci-lint run --timeout=5m
+      - name: Run tests with coverage
+        run: |
+          set -euo pipefail
+          mapfile -t pkgs < <(go list ./... | grep -Ev "${EXCLUDE_REGEX}")
+          go test -count=1 -timeout=120s -coverprofile=coverage.out -covermode=set -coverpkg="${COVERPKG}" "${pkgs[@]}"
+
+  test-matrix:
+    name: ${{ matrix.race && 'Race' || 'Test' }} (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.26", "1.27"]
+        race: [false, true]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go-version }}
+      - name: Configure private module access
+        env:
+          TOKEN: ${{ secrets.OTFABRIC_READ_TOKEN }}
+        run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
+      - name: Test
+        env:
+          RACE: ${{ matrix.race && '-race' || '' }}
+        run: |
+          set -euo pipefail
+          mapfile -t pkgs < <(go list ./... | grep -Ev "${EXCLUDE_REGEX}")
+          # shellcheck disable=SC2086 # RACE is empty or one flag
+          go test -count=1 -timeout=120s $RACE "${pkgs[@]}"
+
+  coverage-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+      - name: Per-package coverage gate
+        run: make coverage-gate
+
+  pubsub-eth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
+      - name: Create a veth pair
+        run: |
+          sudo ip link add veth0 type veth peer name veth1
+          sudo ip link set veth0 up
+          sudo ip link set veth1 up
+      - name: Build the test binary
+        run: go test -c -race -o eth.test ./pubsub/transport/eth
+      - name: Run the Ethernet tests as root
+        working-directory: pubsub/transport/eth
+        run: |
+          sudo GO_OPCUA_ETH_REQUIRE=1 GO_OPCUA_ETH_PAIR=veth0,veth1 ../../../eth.test -test.v -test.count=1 -test.run 'Real|E2E'
+          sudo GO_OPCUA_ETH_REQUIRE=1 GO_OPCUA_ETH_PAIR=veth0,veth1 GO_OPCUA_ETH_IFACE=veth0 ../../../eth.test -test.count=5
