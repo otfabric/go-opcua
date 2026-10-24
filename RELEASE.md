@@ -1,5 +1,20 @@
 # go-opcua Releases
 
+## v1.9.0
+
+**Date:** 2026-10-24
+**Previous release:** v1.8.1
+
+### Summary
+
+PubSub (Part 14) completes its transport and message model: diagnostics objects in the information model.
+
+### Fixed
+
+- **server: Browse reports the type definition of a target, not its DataType.** The `TypeDefinition` of a ReferenceDescription to a Variable was the Variable's DataType (e.g. `i=6` for an Int32 variable); it is the target of the Variable's HasTypeDefinition reference, and the null NodeId for node classes other than Object and Variable (Part 4 §7.30). `MapNamespace` returned the variable itself as its type definition and its Objects folder reference had a NodeId of its own namespace as reference type; they are BaseDataVariableType, FolderType and Organizes now.
+
+---
+
 ## v1.8.1
 
 **Date:** 2026-10-24
