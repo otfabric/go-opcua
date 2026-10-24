@@ -203,8 +203,10 @@ func TestPubSub_DiscoveryServerPublisher(t *testing.T) {
 	require.NotZero(t, sst.Counters.DiscoveryRequestsSent)
 	require.NotZero(t, sst.Counters.DiscoveryResponsesReceived)
 	require.Zero(t, sst.Counters.DecodeErrors)
-	pst, err := pub.Status(pubsub.Root)
-	require.NoError(t, err)
-	require.NotZero(t, pst.Counters.DiscoveryRequestsReceived)
-	require.NotZero(t, pst.Counters.DiscoveryResponsesSent)
+	// The publisher counts a response once the send returned, which can
+	// be after the subscriber took it.
+	eventually(t, func() bool {
+		pst, err := pub.Status(pubsub.Root)
+		return err == nil && pst.Counters.DiscoveryRequestsReceived > 0 && pst.Counters.DiscoveryResponsesSent > 0
+	}, "the publisher counts the probe and its answer")
 }
