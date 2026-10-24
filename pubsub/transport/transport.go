@@ -4,10 +4,11 @@
 // it moves encoded NetworkMessages between publishers and subscribers.
 //
 // A [Connection] is opened for a PubSubConnection from its transport profile
-// and network address. The UDP (opc.udp://, unicast and multicast) and MQTT
-// (mqtt://, mqtts://) transports are implemented by the sub-packages and
-// register themselves with [Register]; import them for their side effect or
-// use [github.com/otfabric/go-opcua/pubsub], which imports both.
+// and network address. The UDP (opc.udp://, unicast and multicast),
+// Ethernet (opc.eth://) and MQTT (mqtt://, mqtts://) transports are
+// implemented by the sub-packages and register themselves with [Register];
+// import them for their side effect or use
+// [github.com/otfabric/go-opcua/pubsub], which imports all of them.
 package transport
 
 import (
@@ -80,10 +81,12 @@ type Config struct {
 	// ProfileURI is the TransportProfileUri of the PubSubConnection.
 	ProfileURI string
 	// URL is the address: opc.udp://host:port for UDP (a multicast group
-	// joins the group), mqtt://host:port or mqtts://host:port for MQTT.
+	// joins the group), opc.eth://MAC[:VID[.PCP]] for Ethernet,
+	// mqtt://host:port or mqtts://host:port for MQTT.
 	URL string
-	// Interface is the network interface for UDP multicast (NetworkInterface
-	// of NetworkAddressDataType); empty selects the system default.
+	// Interface is the network interface (NetworkInterface of
+	// NetworkAddressDataType): for UDP multicast, empty selects the system
+	// default; Ethernet requires it.
 	Interface string
 
 	// MQTT settings.
@@ -95,6 +98,7 @@ type Config struct {
 
 	// UDP settings: the TTL of multicast datagrams (default 1) and whether
 	// this host receives its own multicast datagrams (default true).
+	// Ethernet uses MulticastLoopback for the frames this host sends.
 	MulticastTTL      int
 	MulticastLoopback *bool
 	// ListenAddress overrides the local address a UDP subscriber binds;
@@ -108,8 +112,9 @@ type Config struct {
 
 	// MaxMessageSize limits the size of the NetworkMessages the connection
 	// sends and receives. Zero selects the transport default: the largest
-	// UDP payload (65507 bytes over IPv4, 65527 over IPv6) for UDP, 1 MiB
-	// for MQTT.
+	// UDP payload (65507 bytes over IPv4, 65527 over IPv6) for UDP, the
+	// payload of one frame (1500 bytes or the smaller MTU) for Ethernet,
+	// 1 MiB for MQTT. Ethernet does not go above the frame payload.
 	MaxMessageSize int
 
 	Logger *slog.Logger
@@ -133,7 +138,7 @@ var (
 )
 
 // Register makes a transport available for a URL scheme ("opc.udp",
-// "mqtt", "mqtts"). It panics if the scheme is registered twice.
+// "opc.eth", "mqtt", "mqtts"). It panics if the scheme is registered twice.
 func Register(scheme string, open Opener) {
 	mu.Lock()
 	defer mu.Unlock()

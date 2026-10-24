@@ -12,6 +12,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	"github.com/otfabric/go-opcua/pubsub/transport/eth"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -135,7 +136,7 @@ func (s *Server) buildPubSubModel() error {
 	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeRemovePublishedDataSet), m.method("RemovePublishedDataSet", m.removePublishedDataSet))
 
 	if n := s.ownNode(id.PublishSubscribeSupportedTransportProfiles); n != nil {
-		dv := DataValueFromValue([]string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON})
+		dv := DataValueFromValue(supportedTransportProfiles())
 		n.mu.Lock()
 		n.val = func() *ua.DataValue { return dv }
 		n.mu.Unlock()
@@ -1021,4 +1022,14 @@ func (m *pubsubModel) removePublishedDataSet(_ context.Context, _ *ua.NodeID, ar
 		return nil, ua.StatusBadNodeIDUnknown
 	}
 	return nil, statusOf(m.rt.RemovePublishedDataSet(info.ID))
+}
+
+// supportedTransportProfiles lists the transport profiles of the
+// PublishSubscribe object: Ethernet only on an OS where the transport works.
+func supportedTransportProfiles() []string {
+	profiles := []string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON}
+	if eth.Supported {
+		profiles = append(profiles, transport.ProfileEthUADP)
+	}
+	return profiles
 }

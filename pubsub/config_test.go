@@ -71,7 +71,19 @@ func TestValidate(t *testing.T) {
 		"profile empty":   func(c *ua.PubSubConfigurationDataType) { conn(c).TransportProfileURI = "" },
 		"profile eth":     func(c *ua.PubSubConfigurationDataType) { conn(c).TransportProfileURI = transport.ProfileEthUADP },
 		"profile unknown": func(c *ua.PubSubConfigurationDataType) { conn(c).TransportProfileURI = "x" },
-		"no address":      func(c *ua.PubSubConfigurationDataType) { conn(c).Address = nil },
+		"eth no iface": func(c *ua.PubSubConfigurationDataType) {
+			conn(c).TransportProfileURI = transport.ProfileEthUADP
+			conn(c).Address = ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: "opc.eth://01-00-5e-00-00-01"})
+		},
+		"eth bad url": func(c *ua.PubSubConfigurationDataType) {
+			conn(c).TransportProfileURI = transport.ProfileEthUADP
+			conn(c).Address = ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: "opc.eth://01-00-5e-00-00-01:5000", NetworkInterface: "eth0"})
+		},
+		"eth json": func(c *ua.PubSubConfigurationDataType) {
+			*conn(c) = *AttachWriterGroups(EthernetConnection("c", "opc.eth://01-00-5e-00-00-01", "eth0", uint16(1)),
+				JSONWriterGroup("wg", 1, time.Second, "", DataSetWriter("w", 1, "pds")))
+		},
+		"no address": func(c *ua.PubSubConfigurationDataType) { conn(c).Address = nil },
 		"no scheme": func(c *ua.PubSubConfigurationDataType) {
 			conn(c).Address = ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: "noscheme"})
 		},
@@ -174,6 +186,22 @@ func TestValidate(t *testing.T) {
 		require.Error(t, err, name)
 	}
 	require.Error(t, Validate(nil))
+}
+
+func TestValidateEthernet(t *testing.T) {
+	t.Parallel()
+	c := EthernetConnection("eth", "opc.eth://01-00-5e-00-00-01:100.3", "eth0", uint16(1))
+	require.Equal(t, transport.ProfileEthUADP, c.TransportProfileURI)
+	addr := c.Address.Value.(*ua.NetworkAddressURLDataType)
+	require.Equal(t, "eth0", addr.NetworkInterface)
+	cfg := NewConfiguration([]*ua.PublishedDataSetDataType{testPDS("pds")},
+		AttachReaderGroups(AttachWriterGroups(c, WriterGroup("wg", 1, time.Second, DataSetWriter("w", 1, "pds"))),
+			ReaderGroup("rg", DataSetReader("r", uint16(1), 1, 1, MetaData("x", Field{Name: "a"})))))
+	require.NoError(t, Validate(cfg))
+
+	// JSON is not defined over Ethernet (Part 14 §7.3.3: UADP only).
+	c.WriterGroups[0].MessageSettings = ua.NewExtensionObject(&ua.JSONWriterGroupMessageDataType{})
+	require.ErrorContains(t, Validate(cfg), "the JSON message mapping needs a broker transport")
 }
 
 func TestPublisherIDVariant(t *testing.T) {
