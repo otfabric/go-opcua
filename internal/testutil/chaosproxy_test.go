@@ -19,7 +19,8 @@ type sink struct {
 	echo bool
 
 	mu    sync.Mutex
-	got   bytes.Buffer
+	got   bytes.Buffer    // all connections
+	each  []*bytes.Buffer // per connection, in the order they were accepted
 	reads int
 	eof   atomic.Int32
 	conns []net.Conn
@@ -40,8 +41,10 @@ func newSink(t *testing.T, echo bool) *sink {
 			}
 			s.mu.Lock()
 			s.conns = append(s.conns, c)
+			own := &bytes.Buffer{}
+			s.each = append(s.each, own)
 			s.mu.Unlock()
-			go s.serve(c)
+			go s.serve(c, own)
 		}
 	}()
 	t.Cleanup(func() {
@@ -55,7 +58,7 @@ func newSink(t *testing.T, echo bool) *sink {
 	return s
 }
 
-func (s *sink) serve(c net.Conn) {
+func (s *sink) serve(c net.Conn, own *bytes.Buffer) {
 	defer func() { _ = c.Close() }()
 	buf := make([]byte, 4096)
 	for {
@@ -63,6 +66,7 @@ func (s *sink) serve(c net.Conn) {
 		if n > 0 {
 			s.mu.Lock()
 			s.got.Write(buf[:n])
+			own.Write(buf[:n])
 			s.reads++
 			s.mu.Unlock()
 			if s.echo {
@@ -84,6 +88,17 @@ func (s *sink) received() []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]byte(nil), s.got.Bytes()...)
+}
+
+// receivedOn returns what the i-th accepted connection received, nil if
+// there is no such connection yet.
+func (s *sink) receivedOn(i int) []byte {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if i >= len(s.each) {
+		return nil
+	}
+	return append([]byte(nil), s.each[i].Bytes()...)
 }
 
 func (s *sink) readCalls() int {
@@ -355,7 +370,7 @@ func TestChaosProxyTruncateNext(t *testing.T) {
 	waitFor(t, "link reset after truncation", func() bool { return p.ActiveLinks() == 0 })
 	// The link is reset right behind the prefix, so the backend sees at most
 	// the prefix (a reset may discard bytes that were not read yet).
-	if got := s.received(); len(got) > 5 || !bytes.HasPrefix([]byte("01234"), got) {
+	if got := s.receivedOn(0); len(got) > 5 || !bytes.HasPrefix([]byte("01234"), got) {
 		t.Fatalf("backend received %q, want a prefix of %q", got, "01234")
 	}
 	_ = c.SetReadDeadline(time.Now().Add(proxyWait))
@@ -368,7 +383,9 @@ func TestChaosProxyTruncateNext(t *testing.T) {
 	if _, err := c2.Write([]byte("0123456789")); err != nil {
 		t.Fatal(err)
 	}
-	waitFor(t, "untruncated data", func() bool { return bytes.HasSuffix(s.received(), []byte("0123456789")) })
+	// Per connection: the first one's goroutine in the sink may still read
+	// its prefix after the second connection's data arrived.
+	waitFor(t, "untruncated data", func() bool { return bytes.Equal(s.receivedOn(1), []byte("0123456789")) })
 }
 
 // corruptOnce sends msg through a fresh proxy with the given seed and returns
