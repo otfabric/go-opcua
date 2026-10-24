@@ -9,6 +9,11 @@
 
 PubSub (Part 14) completes its transport and message model: diagnostics objects in the information model.
 
+### Added
+
+- **pubsub, server: PubSub diagnostics objects (Part 14 §9.1.11).** `PublishSubscribe.Diagnostics` (PubSubDiagnosticsRootType, i=17409) and a Diagnostics object on every connection, writer group, reader group, DataSetWriter and DataSetReader (PubSubDiagnosticsConnectionType / WriterGroupType / ReaderGroupType / DataSetWriterType / DataSetReaderType), added and removed with the component: DiagnosticsLevel, TotalInformation, TotalError, SubError, the Reset method (through the PubSub authorizer), the state counters by cause (StateError, StateOperationalByMethod / ByParent / FromError, StatePausedByParent, StateDisabledByMethod), SentNetworkMessages, FailedTransmissions, EncryptionErrors, ReceivedNetworkMessages, ReceivedInvalidNetworkMessages, DecryptionErrors and FailedDataSetMessages, each with Active, Classification, DiagnosticsLevel and TimeFirstChange, and the LiveValues (Configured / Operational DataSetWriters and DataSetReaders, ResolvedAddress, MessageSequenceNumber, StatusCode, MajorVersion, MinorVersion, SecurityTokenID, TimeToNextTokenID). Counters and LiveValues above the DiagnosticsLevel of their object do not count and read `Bad_OutOfService`; the optional TimeFirstChange properties of the root object, which the standard nodeset leaves out, are added with their standard NodeIds.
+- **pubsub: `Diagnostics`, `ResetDiagnostics`, `SetDiagnosticsLevel`, `WithDiagnosticsLevel`.** The runtime keeps the Part 14 counters per component next to the cumulative `Counters` of `Status`, which a Reset does not touch; `DiagnosticsCountersOf` lists the counters of a component kind with their classification and level.
+
 ### Fixed
 
 - **server: Browse reports the type definition of a target, not its DataType.** The `TypeDefinition` of a ReferenceDescription to a Variable was the Variable's DataType (e.g. `i=6` for an Int32 variable); it is the target of the Variable's HasTypeDefinition reference, and the null NodeId for node classes other than Object and Variable (Part 4 §7.30). `MapNamespace` returned the variable itself as its type definition and its Objects folder reference had a NodeId of its own namespace as reference type; they are BaseDataVariableType, FolderType and Organizes now.
