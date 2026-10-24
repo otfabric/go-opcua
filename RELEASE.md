@@ -7,7 +7,7 @@
 
 ### Summary
 
-Interop pin update (the suite runs against opcua-interop **v0.8.2**) and a fix for the first sequence number of server channels.
+Interop pin update (the suite runs against opcua-interop **v0.8.2**), async-opcua (Rust) as an opt-in interop peer, and a fix for the first sequence number of server channels.
 
 ### Fixed
 
@@ -17,6 +17,7 @@ Interop pin update (the suite runs against opcua-interop **v0.8.2**) and a fix f
 
 - Interop images pinned to the opcua-interop v0.8.2 multi-arch digests (open62541 `e035d078…06d48866`, Milo `2d84fa47…ddc9a15e`; release run https://github.com/otfabric/opcua-interop/actions/runs/40055105259). v0.8.2 fixes the intermittent `mqtt-json` interop failure: the open62541 adapter re-enables PubSub components that went to Error when an MQTT send failed before the broker accepted the connection, and no longer aborts with a double free when the broker refuses connections.
 - `interop/coverage.json` and the coverage ledger name v0.8.2.
+- **Interop:** an opt-in peer, the FreeOpcUa async-opcua 0.19.0 Rust stack (opcua-interop v0.9.0 `async-opcua` adapter, `ASYNC_OPCUA_IMAGE`), in both directions with its own ledger `interop/testdata/ledger-async-opcua.json`, checked by `TestAsyncOpcuaLedgerValid` (see INTEROP.md). What async-opcua lacks (ECC, LDS and mDNS, PubSub, the 1.05 JSON / Part 6 XML encodings) is `unsupported` in the ledger and skipped by the tests; the stack deviations it showed (a type-mismatched Write is accepted, Browse of an unknown node is `Good`, no event queue overflow event) are skips with the reason. Without `ASYNC_OPCUA_IMAGE` and without the default image present locally, the async-opcua tests skip.
 
 ---
 

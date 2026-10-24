@@ -195,6 +195,9 @@ type adapterCaps struct {
 var (
 	adapterCapsMu    sync.Mutex
 	adapterCapsCache = map[string]*adapterCaps{}
+	// adapterAbsent caches why an opt-in peer image is not available, so
+	// every later test of that peer skips without asking Docker again.
+	adapterAbsent = map[string]string{}
 )
 
 // capabilityUnavailable skips the test, or fails it when
@@ -212,6 +215,10 @@ func capabilityUnavailable(t *testing.T, format string, args ...any) {
 
 // imageCapabilities returns the print-capabilities output of the adapter
 // image selected by imageEnv (cached per image).
+//
+// An opt-in peer (optionalPeerImageEnv) whose image env variable is unset
+// runs only when its default image is already present locally: it is never
+// pulled, and its tests skip, also with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1.
 func imageCapabilities(t *testing.T, imageEnv, defaultImage string) (*adapterCaps, string) {
 	t.Helper()
 	image := getEnvOr(imageEnv, defaultImage)
@@ -219,6 +226,20 @@ func imageCapabilities(t *testing.T, imageEnv, defaultImage string) (*adapterCap
 	defer adapterCapsMu.Unlock()
 	if c, ok := adapterCapsCache[image]; ok {
 		return c, image
+	}
+	if msg, ok := adapterAbsent[image]; ok {
+		t.Skip(msg)
+	}
+	if optionalPeerImageEnv[imageEnv] && os.Getenv(imageEnv) == "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		err := exec.CommandContext(ctx, "docker", "image", "inspect", "--format", "{{.Id}}", image).Run()
+		cancel()
+		if err != nil {
+			msg := fmt.Sprintf("opt-in peer: %s is not set and the default image %s is not present locally "+
+				"(set %s to an image to run these tests)", imageEnv, image, imageEnv)
+			adapterAbsent[image] = msg
+			t.Skip(msg)
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -237,6 +258,16 @@ func imageCapabilities(t *testing.T, imageEnv, defaultImage string) (*adapterCap
 	return caps, image
 }
 
+// requireOptionalPeer skips the test when imageEnv names an opt-in peer whose
+// image is not available (see imageCapabilities); for the other peers it does
+// nothing. Every helper that starts an adapter container calls it.
+func requireOptionalPeer(t *testing.T, imageEnv, defaultImage string) {
+	t.Helper()
+	if optionalPeerImageEnv[imageEnv] {
+		imageCapabilities(t, imageEnv, defaultImage)
+	}
+}
+
 // requirePinnedVersion fails a capability-gated test when the image in use is
 // the default pin (no OPEN62541_IMAGE / MILO_IMAGE override) and that pin is
 // not the opcua-interop release the suite and the ledger are written against.
@@ -244,12 +275,16 @@ func imageCapabilities(t *testing.T, imageEnv, defaultImage string) (*adapterCap
 // coverage.json claims evidence for the newer release.
 func requirePinnedVersion(t *testing.T, imageEnv string, caps *adapterCaps, image string) {
 	t.Helper()
-	if os.Getenv(imageEnv) != "" || "v"+caps.Adapter.Version == interopVersion {
+	want := interopVersion
+	if v, ok := peerInteropVersion[imageEnv]; ok {
+		want = v
+	}
+	if os.Getenv(imageEnv) != "" || "v"+caps.Adapter.Version == want {
 		return
 	}
-	t.Fatalf("the default image %s is opcua-interop v%s, but this suite and interop/coverage.json are written against %s: "+
+	t.Fatalf("the default image %s is opcua-interop v%s, but this suite and its ledger are written against %s: "+
 		"re-pin the default images (harness_test.go, .github/workflows/interop.yml) or set %s to a %s image",
-		image, caps.Adapter.Version, interopVersion, imageEnv, interopVersion)
+		image, caps.Adapter.Version, want, imageEnv, want)
 }
 
 // requireAdapterOp skips (or fails when REQUIRE_CAPABILITIES=1) when the

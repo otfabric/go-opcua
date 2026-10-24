@@ -175,6 +175,10 @@ func assertPeerDataChangeFilter(t *testing.T, endpoint, direction string) {
 
 	t.Run("coverage/monitoreditem.deadband/"+direction, func(t *testing.T) {
 		for _, h := range []int{dcDeadbandSV, dcDeadbandSVT} {
+			if why := peerDeadbandSVTDeviation[direction]; h == dcDeadbandSVT && why != "" {
+				t.Logf("handle %d (StatusValueTimestamp + absolute deadband) not asserted, peer deviation: %s: %v", h, why, run.floats(h))
+				continue
+			}
 			vals := run.floats(h)
 			t.Logf("handle %d (absolute deadband 10): %v", h, vals)
 			// Positive: changes beyond the deadband are reported.

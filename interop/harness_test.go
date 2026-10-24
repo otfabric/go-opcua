@@ -169,6 +169,7 @@ type serverHandle struct {
 // registers cleanup with t.
 func startAdapterServer(t *testing.T, imageEnvVar, defaultImage string) *serverHandle {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	port := freePort(t)
 	image := getEnvOr(imageEnvVar, defaultImage)
@@ -370,6 +371,7 @@ func parseAdapterOutput(raw []byte) (adapterResult, error) {
 // stdout which is parsed and returned.
 func runAdapterClient(t *testing.T, imageEnvVar, defaultImage, endpoint, subcmd string, args ...string) adapterResult {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	image := getEnvOr(imageEnvVar, defaultImage)
 
@@ -409,6 +411,7 @@ func runAdapterClient(t *testing.T, imageEnvVar, defaultImage, endpoint, subcmd 
 // JSON result is found in the output.
 func runAdapterClientResult(t *testing.T, imageEnvVar, defaultImage, endpoint, subcmd string, args ...string) adapterResult {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	image := getEnvOr(imageEnvVar, defaultImage)
 	dockerEndpoint := strings.ReplaceAll(endpoint, "localhost", "host.docker.internal")
@@ -1190,6 +1193,7 @@ func loadCACert(t *testing.T, caPath string) *x509.Certificate {
 // mutating the checked-in source tree.
 func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPKIName string) *serverHandle {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	pki := pkiDir(t)
 	certFile := filepath.Join(pki, adapterPKIName, "cert.crt")
@@ -1581,6 +1585,7 @@ func startSecureGoServer(t *testing.T) string {
 // clientPKIName is the subdirectory under pkiDir (e.g. "open62541-client").
 func runSecureAdapterClient(t *testing.T, imageEnvVar, defaultImage, clientPKIName, endpoint, subcmd, policy, mode string, extraArgs ...string) adapterResult {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	pki := pkiDir(t)
 	certFile := filepath.Join(pki, clientPKIName, "cert.crt")
@@ -1636,6 +1641,7 @@ func runSecureAdapterClient(t *testing.T, imageEnvVar, defaultImage, clientPKINa
 // connection or service failure.
 func runSecureAdapterClientResult(t *testing.T, imageEnvVar, defaultImage, clientPKIName, endpoint, subcmd, policy, mode string, extraArgs ...string) adapterResult {
 	t.Helper()
+	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	pki := pkiDir(t)
 	certFile := filepath.Join(pki, clientPKIName, "cert.crt")

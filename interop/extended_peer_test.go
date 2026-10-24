@@ -459,7 +459,8 @@ func historyReadPage(t *testing.T, ctx context.Context, c *opcua.Client, node *u
 
 func historyDoubles(t *testing.T, res *ua.HistoryReadResult) []float64 {
 	t.Helper()
-	if res.HistoryData == nil {
+	if res.HistoryData == nil || res.HistoryData.Value == nil {
+		// No HistoryData, or a null ExtensionObject (e.g. on release).
 		return nil
 	}
 	hd, ok := res.HistoryData.Value.(*ua.HistoryData)
