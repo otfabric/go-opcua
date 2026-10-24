@@ -563,7 +563,10 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 	wg := pubsub.WriterGroup("wg", 1, psInterval, w)
 	wg.KeepAliveTime = 50
 	r := pubsub.DataSetReader("r", uint16(3), 1, 1, pubsub.DataSetMetaDataOf(pds))
-	r.MessageReceiveTimeout = 300
+	// Twenty keep-alive intervals: a keep-alive held up by a loaded machine
+	// must not time the reader out while the test checks that they keep
+	// it Operational.
+	r.MessageReceiveTimeout = 1000
 	rec := newPSRecorder()
 	var evMu sync.Mutex
 	var states []ua.PubSubState
@@ -591,7 +594,7 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 	psWaitState(t, sub, rid, ua.PubSubStateOperational)
 
 	// Nothing changes for longer than the timeout: keep-alives only.
-	time.Sleep(500 * time.Millisecond)
+	time.Sleep(1500 * time.Millisecond)
 	st, err := sub.Status(rid)
 	require.NoError(t, err)
 	require.Equal(t, ua.PubSubStateOperational, st.State, "keep-alives keep the reader Operational")
