@@ -109,9 +109,12 @@ func TestRemoteConfiguration(t *testing.T) {
 		v, err := c.Node(dst.ID()).Value(ctx)
 		return err == nil && v.Value() == int32(7)
 	}, 5*time.Second, 5*time.Millisecond)
-	st, err := r.State(ctx, rd)
-	require.NoError(t, err)
-	require.Equal(t, ua.PubSubStateOperational, st)
+	// Polled: the messages held up past the 200 ms MessageReceiveTimeout
+	// put the reader in Error until the next one.
+	require.Eventually(t, func() bool {
+		st, err := r.State(ctx, rd)
+		return err == nil && st == ua.PubSubStateOperational
+	}, 10*time.Second, 5*time.Millisecond)
 
 	// Disabling the writer group makes the reader time out.
 	require.NoError(t, r.Disable(ctx, wg))
@@ -120,7 +123,7 @@ func TestRemoteConfiguration(t *testing.T) {
 		st, err := r.State(ctx, rd)
 		return err == nil && st == ua.PubSubStateError
 	}, 5*time.Second, 5*time.Millisecond)
-	st, err = r.State(ctx, w)
+	st, err := r.State(ctx, w)
 	require.NoError(t, err)
 	require.Equal(t, ua.PubSubStatePaused, st)
 	require.NoError(t, r.Enable(ctx, wg))
