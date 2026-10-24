@@ -37,7 +37,10 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/goid"
 )
 
 // Defaults of [Options].
@@ -348,7 +351,11 @@ type Client struct {
 
 	done    chan struct{} // closed by Close
 	deliver chan inbound
-	wg      sync.WaitGroup
+	wg      sync.WaitGroup // the goroutines but the delivery goroutine
+	// deliverDone is closed when the delivery goroutine ends; deliverID is
+	// its goroutine id, so a Close from a handler does not wait for itself.
+	deliverDone chan struct{}
+	deliverID   atomic.Uint64
 
 	mu        sync.Mutex
 	closed    bool
@@ -379,7 +386,7 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 		return nil, err
 	}
 	first := make(chan error, 1)
-	c.wg.Add(2)
+	c.wg.Add(1)
 	go c.deliverLoop()
 	go c.run(ctx, first)
 	select {
@@ -401,13 +408,14 @@ func newClient(opts Options) (*Client, error) {
 		return nil, fmt.Errorf("amqp: server %q: %w", opts.Server, err)
 	}
 	c := &Client{
-		opts:      opts,
-		log:       opts.Logger,
-		done:      make(chan struct{}),
-		deliver:   make(chan inbound, 256),
-		changed:   make(chan struct{}),
-		senders:   map[senderKey]*link{},
-		receivers: map[*link]struct{}{},
+		opts:        opts,
+		log:         opts.Logger,
+		done:        make(chan struct{}),
+		deliver:     make(chan inbound, 256),
+		deliverDone: make(chan struct{}),
+		changed:     make(chan struct{}),
+		senders:     map[senderKey]*link{},
+		receivers:   map[*link]struct{}{},
 	}
 	port := "5672"
 	switch strings.ToLower(u.Scheme) {
@@ -1426,13 +1434,19 @@ func (c *Client) fillFlow(cs *conn, f *Flow, l *link) bool {
 }
 
 func (c *Client) deliverLoop() {
-	defer c.wg.Done()
+	defer close(c.deliverDone)
+	c.deliverID.Store(goid.ID())
 	for {
 		var in inbound
 		select {
 		case in = <-c.deliver:
 		case <-c.done:
 			return
+		}
+		select {
+		case <-c.done:
+			return // closed: no handler runs any more
+		default:
 		}
 		c.mu.Lock()
 		active, h := in.l.active, in.l.handler
@@ -1641,7 +1655,8 @@ func (s *Subscription) Unsubscribe(ctx context.Context) error {
 }
 
 // Close closes the connection (sending close, §2.4.3) and stops the client.
-// Pending calls return ErrClosed.
+// Pending calls return ErrClosed. It waits for a handler that is running,
+// unless it is called from that handler.
 func (c *Client) Close() error {
 	c.mu.Lock()
 	if c.closed {
@@ -1662,5 +1677,8 @@ func (c *Client) Close() error {
 		cs.kill()
 	}
 	c.wg.Wait()
+	if goid.ID() != c.deliverID.Load() {
+		<-c.deliverDone
+	}
 	return nil
 }
