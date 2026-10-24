@@ -499,11 +499,16 @@ func TestBrokerClosesConnection(t *testing.T) {
 }
 
 func TestIdleTimeout(t *testing.T) {
-	b := startBroker(t, amqpbroker.Options{IdleTimeout: 200 * time.Millisecond})
+	// Time-outs of a second or two: the heartbeats come at a quarter to a
+	// half of them, and a goroutine of the client or the broker held up for
+	// some 100 ms (race detector, loaded runner) must not drop the
+	// connection.
+	b := startBroker(t, amqpbroker.Options{IdleTimeout: 2 * time.Second})
 	var lost atomic.Int32
-	c := dial(t, amqp.Options{Server: b.URL(), IdleTimeout: 100 * time.Millisecond, OnConnectionLost: func(error) { lost.Add(1) }})
-	// Heartbeats in both directions keep the idle connection up.
-	time.Sleep(500 * time.Millisecond)
+	c := dial(t, amqp.Options{Server: b.URL(), IdleTimeout: time.Second, OnConnectionLost: func(error) { lost.Add(1) }})
+	// Heartbeats in both directions keep the idle connection up, for
+	// longer than either time-out.
+	time.Sleep(2500 * time.Millisecond)
 	require.Zero(t, lost.Load())
 	require.True(t, c.IsConnected())
 	// A broker that falls silent is dropped and reconnected.
