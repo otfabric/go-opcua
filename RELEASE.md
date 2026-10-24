@@ -7,7 +7,11 @@
 
 ### Summary
 
-Interop pin update: the interop suite runs against opcua-interop **v0.8.2**.
+Interop pin update (the suite runs against opcua-interop **v0.8.2**) and a fix for the first sequence number of server channels.
+
+### Fixed
+
+- **server: the first sequence number of a channel is below 1024.** The channel broker seeded new channels with 1..1023 and the first chunk carries seed+1, so about one channel in 1023 started at 1024. With the RSA security policies the first sequence number must be below 1024 (Part 6 §6.7.2.4); clients that check it (async-opcua) closed the channel with `Bad_SequenceNumberInvalid`. Found by the async-opcua interop peer.
 
 ### Tests
 
