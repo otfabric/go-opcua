@@ -293,11 +293,12 @@ func (p *PubSub) handleProbe(c *connection, gen uint64, payload []byte) {
 	if c.tc != nil {
 		maxSize = discoveryMaxSize(c, c.tc)
 	}
+	ctx := p.ctx
 	p.unlock()
 
 	var sent, chunks uint64
 	for _, a := range answers {
-		if n, ok := p.sendAnnouncement(a, maxSize); ok {
+		if n, ok := p.sendAnnouncement(ctx, a, maxSize); ok {
 			sent++
 			chunks += n
 		}
@@ -497,7 +498,7 @@ func (p *PubSub) applicationInformation(now time.Time) *message.ApplicationInfor
 // sendAnnouncement encodes an announcement, secured like its writer group
 // and chunked above maxSize, and sends it. It returns the number of chunks
 // sent (0 for an unchunked message) and whether it was sent.
-func (p *PubSub) sendAnnouncement(a announcement, maxSize int) (uint64, bool) {
+func (p *PubSub) sendAnnouncement(ctx context.Context, a announcement, maxSize int) (uint64, bool) {
 	opts := &uadp.EncodeOptions{}
 	if g := a.g; g != nil && g.mode > ua.MessageSecurityModeNone {
 		ks := p.KeySource(g.cfg.SecurityGroupID)
@@ -517,7 +518,7 @@ func (p *PubSub) sendAnnouncement(a announcement, maxSize int) (uint64, bool) {
 		return 0, false
 	}
 	for _, b := range parts {
-		if err := a.tc.Send(p.ctx, b, transport.PublishOptions{}); err != nil {
+		if err := a.tc.Send(ctx, b, transport.PublishOptions{}); err != nil {
 			return 0, false
 		}
 	}
@@ -603,13 +604,14 @@ func (p *PubSub) probeTimer(r *dataSetReader, ref *timerRef) {
 	p.scheduleProbe(r, p.nextProbeWait(r))
 	c.ctr.DiscoveryRequestsSent++
 	p.wg.Add(1)
+	ctx := p.ctx
 	p.unlock()
 	defer p.wg.Done()
 	b, err := p.codecs(encUADP).Encode(nm, nil)
 	if err == nil {
-		err = ch.Send(p.ctx, b, transport.PublishOptions{})
+		err = ch.Send(ctx, b, transport.PublishOptions{})
 	}
-	if err != nil && p.ctx.Err() == nil {
+	if err != nil && ctx.Err() == nil {
 		p.log.Debug("pubsub: discovery probe failed", "reader", r.name, "error", err)
 	}
 }

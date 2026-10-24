@@ -166,12 +166,18 @@ func TestActionHandlerTimeoutAndPanic(t *testing.T) {
 	require.Equal(t, ua.StatusBadInternalError, res.Status)
 
 	// The Requestor resends and is answered with Executing meanwhile; the
-	// request runs once, with the TimeoutHint as deadline.
+	// request runs once, with the TimeoutHint as deadline. At the deadline
+	// the Responder answers Bad_Timeout, which may beat the Requestor's
+	// own timeout.
 	tg = calcTarget()
 	tg.Timeout = 300 * time.Millisecond
 	tg.ResendInterval = 20 * time.Millisecond
-	_, err = req.CallAction(context.Background(), tg, int32s(1, 2))
-	require.ErrorIs(t, err, ErrActionTimeout)
+	res, err = req.CallAction(context.Background(), tg, int32s(1, 2))
+	if err == nil {
+		require.Equal(t, ua.StatusBadTimeout, res.Status)
+	} else {
+		require.ErrorIs(t, err, ErrActionTimeout)
+	}
 	require.Equal(t, int32(1), calls.Load())
 	require.True(t, deadline.Load())
 }

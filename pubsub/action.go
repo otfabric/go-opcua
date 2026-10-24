@@ -64,8 +64,9 @@ import (
 // sent.
 //
 // ctx ends with the TimeoutHint of the request (at most
-// ActionOptions.MaxTimeout) and when the runtime stops; a handler must
-// return then, since [PubSub.Close] waits for it. [ActionInvocationFrom]
+// ActionOptions.MaxTimeout), when the runtime or the writer stops; a
+// handler must return then, since [PubSub.Close] waits for it (and so a
+// handler must not call Close itself). [ActionInvocationFrom]
 // tells which request it serves. A panic is recovered and answered with
 // Bad_InternalError.
 type ActionHandler func(ctx context.Context, inputs []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
@@ -128,9 +129,17 @@ const (
 	// actionDuplicateGuard is the least time between two answers to
 	// repeated requests of an exchange.
 	actionDuplicateGuard = 100 * time.Millisecond
+	// actionLinger is how long a Responder remembers an ended exchange
+	// (expired or acknowledged) for the late copies of its requests, and
+	// maxActionTombstones how many it remembers per connection.
+	actionLinger        = 5 * time.Second
+	maxActionTombstones = 256
 	// maxActionSenders bounds the transports a connection keeps open to
 	// datagram ResponseAddresses and RequestAddresses.
 	maxActionSenders = 8
+	// actionSendTimeout bounds the sending of a response, which a broker
+	// transport may hold until the broker acknowledges it.
+	actionSendTimeout = 10 * time.Second
 	// actionReplyBuffer is the number of responses a call buffers.
 	actionReplyBuffer = 16
 	// correlationLength is the length of the random CorrelationData of
@@ -325,7 +334,13 @@ var ErrActionTimeout = fmt.Errorf("pubsub: no response to the Action request: %w
 // connection. It is guarded by PubSub.mu.
 type actionState struct {
 	// Responder: the exchanges and the token bucket of new requests.
+	// The exchanges count toward MaxConcurrent: those executing (a
+	// handler that is still running included, past its deadline) and
+	// those Done but not acknowledged. tombs are the ended exchanges,
+	// kept for actionLinger so that late copies of their requests are
+	// answered and not executed again.
 	exchanges map[exchangeKey]*exchange
+	tombs     map[exchangeKey]*exchange
 	bucket    tokenBucket
 	// Requestor: the pending calls and the response topics they listen
 	// on ("" for the address of a datagram connection), counted.
@@ -340,6 +355,7 @@ type actionState struct {
 func (s *actionState) init() {
 	if s.exchanges == nil {
 		s.exchanges = map[exchangeKey]*exchange{}
+		s.tombs = map[exchangeKey]*exchange{}
 		s.calls = map[callKey]*actionCall{}
 		s.listen = map[string]int{}
 		s.senders = map[string]transport.Connection{}
@@ -350,6 +366,9 @@ func (s *actionState) init() {
 // are cancelled, calls fail. p.mu is held.
 func (p *PubSub) stopActions(c *connection) {
 	for _, ex := range c.act.exchanges {
+		ex.stop()
+	}
+	for _, ex := range c.act.tombs {
 		ex.stop()
 	}
 	for _, call := range c.act.calls {
@@ -496,18 +515,21 @@ func (p *PubSub) snapshotActions(c *connection) actionSnap {
 }
 
 // receiveAction handles a received ActionRequest or ActionResponse.
-func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *transport.Message) {
+// counted tells whether receive counted the message already.
+func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *transport.Message, counted bool) {
 	p.lock()
 	if c.gen != gen {
 		p.unlock()
 		return
 	}
-	c.ctr.NetworkMessagesReceived++
-	c.ctr.BytesReceived += uint64(len(m.Payload))
+	if !counted {
+		c.ctr.NetworkMessagesReceived++
+		c.ctr.BytesReceived += uint64(len(m.Payload))
+	}
 	snap := p.snapshotActions(c)
 	ownPub, hasPub := c.pubID, c.hasPub
 	p.unlock()
-	if len(snap.writers) == 0 && len(snap.calls) == 0 {
+	if !hasPub && len(snap.calls) == 0 {
 		return
 	}
 	// The MessageType of a JSON message tells requests from responses
@@ -553,11 +575,15 @@ func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *trans
 		}
 	}
 	var keyGroup string
+	// unknown is set for a request to this PublisherId for none of its
+	// running Action writers: it is rejected (counted, not answered).
+	unknown := false
 	opts := &decodeOptions{}
 	opts.DecodeOptions = uadp.DecodeOptions{
 		Accept: func(h *message.NetworkMessage) bool {
 			found := false
 			forUs(h, func(ua.MessageSecurityMode, string) { found = true })
+			unknown = !found && kind != message.ActionResponse && hasPub && samePublisher(h.PublisherID, ownPub)
 			return found
 		},
 		// The least security a writer or call the message may be for
@@ -605,6 +631,13 @@ func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *trans
 	}
 	if err != nil {
 		if errors.Is(err, uadp.ErrFiltered) {
+			if unknown {
+				p.lock()
+				if c.gen == gen {
+					c.ctr.ActionRequestsRejected++
+				}
+				p.unlock()
+			}
 			return
 		}
 		p.lock()
@@ -664,6 +697,8 @@ type exchange struct {
 	lastSent time.Time
 	cancel   context.CancelFunc
 	timer    *time.Timer
+	// running tells that the handler has not returned yet.
+	running bool
 }
 
 func (ex *exchange) stop() {
@@ -677,6 +712,9 @@ func (ex *exchange) stop() {
 
 // actionSend is a response (or a request) ready to be encoded and sent.
 type actionSend struct {
+	// ctx bounds the sending: the call of a request, the run of the
+	// runtime for a response (see sendAction).
+	ctx context.Context
 	c   *connection
 	gen uint64
 	nm  *message.NetworkMessage
@@ -745,6 +783,9 @@ func hasActionTarget(a *ua.PublishedActionDataType, id uint16) bool {
 func (p *PubSub) actionRequestLocked(c *connection, gen uint64, enc encoding, w *dataSetWriter, key exchangeKey, nm *message.NetworkMessage, dsm *message.DataSetMessage, m *transport.Message, now time.Time) *actionSend {
 	o := &p.opts.actions
 	ex := c.act.exchanges[key]
+	if ex == nil {
+		ex = c.act.tombs[key]
+	}
 	switch dsm.ActionState {
 	case ua.ActionStateExecuting:
 		if ex != nil {
@@ -792,14 +833,20 @@ func (p *PubSub) actionRequestLocked(c *connection, gen uint64, enc encoding, w 
 		}
 		return nil
 	case ua.ActionStateIdle:
-		// The acknowledgement of a Done response: confirmed with Idle.
+		// The acknowledgement of a Done response: confirmed with Idle,
+		// and again for a repeated acknowledgement.
 		if ex != nil {
-			if ex.state != ua.ActionStateDone {
+			switch ex.state {
+			case ua.ActionStateDone:
+				ex.state, ex.status, ex.outputs = ua.ActionStateIdle, ua.StatusGood, nil
+				p.buryExchange(c, gen, ex)
+			case ua.ActionStateIdle:
+				if now.Sub(ex.lastSent) < actionDuplicateGuard {
+					return nil
+				}
+			default:
 				return nil
 			}
-			delete(c.act.exchanges, key)
-			ex.stop()
-			ex.state, ex.status, ex.outputs = ua.ActionStateIdle, ua.StatusGood, nil
 			return p.responseLocked(c, gen, ex, now)
 		}
 		if !c.act.bucket.allow(now, o.Rate, o.Burst) {
@@ -943,6 +990,7 @@ func (p *PubSub) startAction(c *connection, gen uint64, ex *exchange, h ActionHa
 	ctx, cancel := context.WithDeadline(p.ctx, ex.deadline)
 	ctx = context.WithValue(ctx, invocationKey{}, inv)
 	ex.cancel = cancel
+	ex.running = true
 	md := w.pds.md
 	p.wg.Add(1)
 	go func() {
@@ -955,6 +1003,14 @@ func (p *PubSub) startAction(c *connection, gen uint64, ex *exchange, h ActionHa
 		}
 		p.lock()
 		if c.gen != gen || c.act.exchanges[ex.key] != ex {
+			p.unlock()
+			return
+		}
+		ex.running = false
+		if ex.state == ua.ActionStateDone {
+			// Expired while the handler ran: answered with
+			// Bad_Timeout, it ends now.
+			p.buryExchange(c, gen, ex)
 			p.unlock()
 			return
 		}
@@ -988,9 +1044,24 @@ func (p *PubSub) exchangeTimer(c *connection, gen uint64, ex *exchange) {
 	}
 	now := time.Now()
 	if !now.Before(ex.deadline) {
-		delete(c.act.exchanges, ex.key)
-		ex.stop()
+		if !ex.running {
+			p.buryExchange(c, gen, ex)
+			p.unlock()
+			return
+		}
+		// The handler outlives the TimeoutHint: it is cancelled, the
+		// request is Done with Bad_Timeout, and the exchange stays (and
+		// counts toward MaxConcurrent) until the handler returns.
+		ex.cancel()
+		var s *actionSend
+		if ex.state == ua.ActionStateExecuting {
+			ex.finish(ua.StatusBadTimeout, nil, nil)
+			s = p.responseLocked(c, gen, ex, now)
+		}
 		p.unlock()
+		if s != nil {
+			_ = p.sendAction(s)
+		}
 		return
 	}
 	var s *actionSend
@@ -1002,6 +1073,33 @@ func (p *PubSub) exchangeTimer(c *connection, gen uint64, ex *exchange) {
 	if s != nil {
 		_ = p.sendAction(s)
 	}
+}
+
+// buryExchange ends an exchange: it moves to the tombstones of its
+// connection for actionLinger. p.mu is held.
+func (p *PubSub) buryExchange(c *connection, gen uint64, ex *exchange) {
+	delete(c.act.exchanges, ex.key)
+	ex.stop()
+	if len(c.act.tombs) >= maxActionTombstones {
+		var oldest *exchange
+		for _, t := range c.act.tombs {
+			if oldest == nil || t.deadline.Before(oldest.deadline) {
+				oldest = t
+			}
+		}
+		delete(c.act.tombs, oldest.key)
+		oldest.stop()
+	}
+	// The deadline of a tombstone is when it is forgotten.
+	ex.deadline = time.Now().Add(actionLinger)
+	c.act.tombs[ex.key] = ex
+	ex.timer = time.AfterFunc(actionLinger, func() {
+		p.lock()
+		defer p.unlock()
+		if c.gen == gen && c.act.tombs[ex.key] == ex {
+			delete(c.act.tombs, ex.key)
+		}
+	})
 }
 
 // responseLocked builds the response of an exchange in its current state:
@@ -1055,7 +1153,7 @@ func (p *PubSub) responseLocked(c *connection, gen uint64, ex *exchange, now tim
 	} else {
 		nm.MessageID = uuid.NewString()
 	}
-	s := &actionSend{c: c, gen: gen, nm: nm, enc: ex.reply.enc, mode: g.mode, groupID: g.cfg.SecurityGroupID, g: g, w: w, md: md,
+	s := &actionSend{ctx: p.ctx, c: c, gen: gen, nm: nm, enc: ex.reply.enc, mode: g.mode, groupID: g.cfg.SecurityGroupID, g: g, w: w, md: md,
 		topic: ex.reply.topic, dest: ex.reply.dest, msgType: transport.MessageTypeActionResponse, qos: 1}
 	if g.brokerTS != nil {
 		s.qos = max(qosOf(g.brokerTS.RequestedDeliveryGuarantee, 1), 1)
@@ -1082,7 +1180,7 @@ func namedFields(values []*ua.Variant, md *ua.DataSetMetaDataType) []*message.Fi
 
 // actionTransport returns the transport to send an action message on: the
 // connection's, or one to another datagram address. p.mu is not held.
-func (p *PubSub) actionTransport(c *connection, gen uint64, dest string) (transport.Connection, error) {
+func (p *PubSub) actionTransport(ctx context.Context, c *connection, gen uint64, dest string) (transport.Connection, error) {
 	p.lock()
 	if c.gen != gen || c.tc == nil {
 		p.unlock()
@@ -1101,7 +1199,7 @@ func (p *PubSub) actionTransport(c *connection, gen uint64, dest string) (transp
 	cfg := p.transportConfig(c)
 	p.unlock()
 	cfg.URL, cfg.ListenAddress = dest, ""
-	octx, cancel := context.WithTimeout(context.Background(), openTimeout)
+	octx, cancel := context.WithTimeout(ctx, openTimeout)
 	tc, err := transport.Open(octx, cfg)
 	cancel()
 	if err != nil {
@@ -1162,13 +1260,16 @@ func (p *PubSub) encodeAction(s *actionSend) ([]byte, error) {
 // nextActionNonce numbers the secured requests of the Requestor.
 func (p *PubSub) nextActionNonce() uint32 { return p.actNonce.Add(1) }
 
-// sendAction encodes and sends an action message and counts it.
+// sendAction encodes and sends an action message and counts it. The
+// sending ends with s.ctx and, for a response, after actionSendTimeout.
 func (p *PubSub) sendAction(s *actionSend) error {
+	ctx, cancel := context.WithTimeout(s.ctx, actionSendTimeout)
+	defer cancel()
 	b, err := p.encodeAction(s)
 	if err == nil {
 		var tc transport.Connection
-		if tc, err = p.actionTransport(s.c, s.gen, s.dest); err == nil {
-			err = tc.Send(context.Background(), b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
+		if tc, err = p.actionTransport(ctx, s.c, s.gen, s.dest); err == nil {
+			err = tc.Send(ctx, b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
 				ContentType: s.enc.contentType(), MessageType: s.msgType})
 		}
 	}
@@ -1439,7 +1540,7 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 		return fail(err)
 	}
 
-	request := func(state ua.ActionState) *actionSend {
+	request := func(ctx context.Context, state ua.ActionState) *actionSend {
 		now := time.Now()
 		dsm := &message.DataSetMessage{
 			DataSetWriterID: t.DataSetWriterID, Type: message.DataSetMessageActionRequest, Valid: true,
@@ -1462,10 +1563,10 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 				ua.JSONNetworkMessageContentMaskPublisherID
 			nm.MessageID = uuid.NewString()
 		}
-		return &actionSend{c: c, gen: gen, nm: nm, enc: enc, mode: mode, groupID: t.SecurityGroupID,
+		return &actionSend{ctx: ctx, c: c, gen: gen, nm: nm, enc: enc, mode: mode, groupID: t.SecurityGroupID,
 			topic: reqTopic, qos: 1, dest: dest, msgType: transport.MessageTypeActionRequest}
 	}
-	if err := p.sendAction(request(ua.ActionStateExecuting)); err != nil {
+	if err := p.sendAction(request(cctx, ua.ActionStateExecuting)); err != nil {
 		return fail(err)
 	}
 	var tick <-chan time.Time
@@ -1487,7 +1588,7 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 			// Part 14 Table 83: resent while neither Executing nor Done
 			// arrives.
 			if time.Since(heard) >= t.ResendInterval {
-				_ = p.sendAction(request(ua.ActionStateExecuting))
+				_ = p.sendAction(request(cctx, ua.ActionStateExecuting))
 			}
 		case <-call.gone:
 			return fail(nil)
@@ -1497,13 +1598,15 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 	}
 	// Acknowledge the Done response; on a non-reliable transport until the
 	// Responder confirms it.
-	_ = p.sendAction(request(ua.ActionStateIdle))
+	_ = p.sendAction(request(cctx, ua.ActionStateIdle))
 	if t.ResendInterval > 0 {
 		p.lock()
 		if !p.closed && c.gen == gen {
 			released = true // the acknowledgement releases the call
 			p.wg.Add(1)
-			go p.acknowledge(c, gen, call, listen, t.ResendInterval, time.Now().Add(timeout), func() *actionSend { return request(ua.ActionStateIdle) })
+			go p.acknowledge(c, gen, call, listen, t.ResendInterval, time.Now().Add(timeout), func(ctx context.Context) *actionSend {
+				return request(ctx, ua.ActionStateIdle)
+			})
 		}
 		p.unlock()
 	}
@@ -1513,7 +1616,7 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 // acknowledge resends the Idle acknowledgement of a call every interval
 // until the Responder confirms it or the deadline passes, then releases the
 // call.
-func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen string, interval time.Duration, deadline time.Time, idle func() *actionSend) {
+func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen string, interval time.Duration, deadline time.Time, idle func(context.Context) *actionSend) {
 	defer p.wg.Done()
 	defer func() {
 		p.lock()
@@ -1527,10 +1630,10 @@ func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen
 		}
 		p.updateTopics(c)
 	}()
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
 	tk := time.NewTicker(interval)
 	defer tk.Stop()
-	end := time.NewTimer(time.Until(deadline))
-	defer end.Stop()
 	for {
 		select {
 		case r := <-call.ch:
@@ -1538,10 +1641,10 @@ func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen
 				return
 			}
 		case <-tk.C:
-			_ = p.sendAction(idle())
+			_ = p.sendAction(idle(ctx))
 		case <-call.gone:
 			return
-		case <-end.C:
+		case <-ctx.Done():
 			return
 		}
 	}

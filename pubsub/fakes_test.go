@@ -34,15 +34,23 @@ type memBus struct {
 	maxSize  map[string]int
 	failOpen map[string]int
 	failSend map[string]bool
-	opened   map[string]int
+	// blockSend makes Send block until its context ends or the
+	// connection is closed, like a broker transport waiting for an
+	// acknowledgement during an outage.
+	blockSend map[string]bool
+	// failSub refuses the subscriptions to a topic.
+	failSub map[string]bool
+	opened  map[string]int
 }
 
 type memSent struct {
-	Topic   string
-	QoS     byte
-	Retain  bool
-	Payload []byte
-	At      time.Time
+	Topic       string
+	QoS         byte
+	Retain      bool
+	Payload     []byte
+	At          time.Time
+	ContentType string
+	MessageType string
 }
 
 type memSub struct {
@@ -55,13 +63,15 @@ type memSub struct {
 }
 
 var bus = &memBus{
-	subs:     map[string][]*memSub{},
-	retained: map[string]map[string][]byte{},
-	sent:     map[string][]memSent{},
-	maxSize:  map[string]int{},
-	failOpen: map[string]int{},
-	failSend: map[string]bool{},
-	opened:   map[string]int{},
+	subs:      map[string][]*memSub{},
+	retained:  map[string]map[string][]byte{},
+	sent:      map[string][]memSent{},
+	maxSize:   map[string]int{},
+	failOpen:  map[string]int{},
+	failSend:  map[string]bool{},
+	blockSend: map[string]bool{},
+	failSub:   map[string]bool{},
+	opened:    map[string]int{},
 }
 
 func init() {
@@ -130,7 +140,24 @@ func (c *memConn) Send(ctx context.Context, payload []byte, opts transport.Publi
 		bus.mu.Unlock()
 		return errors.New("mem: send refused")
 	}
-	bus.sent[c.url] = append(bus.sent[c.url], memSent{Topic: opts.Topic, QoS: opts.QoS, Retain: opts.Retain, Payload: append([]byte(nil), payload...), At: time.Now()})
+	if bus.blockSend[c.url] {
+		bus.mu.Unlock()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Millisecond):
+			}
+			c.mu.Lock()
+			closed := c.closed
+			c.mu.Unlock()
+			if closed {
+				return errors.New("mem: closed")
+			}
+		}
+	}
+	bus.sent[c.url] = append(bus.sent[c.url], memSent{Topic: opts.Topic, QoS: opts.QoS, Retain: opts.Retain, Payload: append([]byte(nil), payload...), At: time.Now(),
+		ContentType: opts.ContentType, MessageType: opts.MessageType})
 	if opts.Retain {
 		if bus.retained[c.url] == nil {
 			bus.retained[c.url] = map[string][]byte{}
@@ -143,7 +170,10 @@ func (c *memConn) Send(ctx context.Context, payload []byte, opts transport.Publi
 }
 
 func (c *memConn) Subscribe(ctx context.Context, topic string, qos byte, h transport.Handler) (func() error, error) {
-	if strings.Contains(topic, "fail") {
+	bus.mu.Lock()
+	refuse := bus.failSub[topic]
+	bus.mu.Unlock()
+	if strings.Contains(topic, "fail") || refuse {
 		return nil, errors.New("mem: subscribe refused")
 	}
 	s := &memSub{url: c.url, topic: topic, h: h, ch: make(chan *transport.Message, 4096), done: make(chan struct{})}
