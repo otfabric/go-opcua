@@ -42,11 +42,13 @@ type memBus struct {
 }
 
 type memSent struct {
-	Topic   string
-	QoS     byte
-	Retain  bool
-	Payload []byte
-	At      time.Time
+	Topic       string
+	QoS         byte
+	Retain      bool
+	Payload     []byte
+	At          time.Time
+	ContentType string
+	MessageType string
 }
 
 type memSub struct {
@@ -151,7 +153,8 @@ func (c *memConn) Send(ctx context.Context, payload []byte, opts transport.Publi
 			}
 		}
 	}
-	bus.sent[c.url] = append(bus.sent[c.url], memSent{Topic: opts.Topic, QoS: opts.QoS, Retain: opts.Retain, Payload: append([]byte(nil), payload...), At: time.Now()})
+	bus.sent[c.url] = append(bus.sent[c.url], memSent{Topic: opts.Topic, QoS: opts.QoS, Retain: opts.Retain, Payload: append([]byte(nil), payload...), At: time.Now(),
+		ContentType: opts.ContentType, MessageType: opts.MessageType})
 	if opts.Retain {
 		if bus.retained[c.url] == nil {
 			bus.retained[c.url] = map[string][]byte{}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/pubsub/message"
+	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/pubsub/uadp"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -291,4 +292,27 @@ func TestRegressionDiscoveryContextRace(t *testing.T) {
 	}
 	close(stop)
 	<-done
+}
+
+// Regression: the chunks of a large DataSetMessage were sent without the
+// content type and the message type the unchunked messages have (MQTT 5.0
+// properties, Part 14 §7.3.4.8).
+func TestRegressionChunksCarryMessageProperties(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	ds, pds := e2eData(t)
+	require.NoError(t, ds.Set(nodeB, strings.Repeat("chunk", 200)))
+	wg := WriterGroup("wg", 1, 20*time.Millisecond, DataSetWriter("w", 1, "pds"))
+	wg.MaxNetworkMessageSize = 300
+	pub := startReal(t, NewConfiguration([]*ua.PublishedDataSetDataType{pds}, AttachWriterGroups(memConnection("pub", url, uint16(5)), wg)), WithDataSource(ds))
+	require.Eventually(t, func() bool {
+		st, err := pub.Status(Root)
+		return err == nil && st.Counters.ChunksSent >= 4
+	}, 5*time.Second, time.Millisecond)
+	sent := bus.sentTo(url)
+	require.NotEmpty(t, sent)
+	for _, m := range sent {
+		require.Equal(t, transport.ContentTypeUADP, m.ContentType)
+		require.Equal(t, transport.MessageTypeData, m.MessageType)
+	}
 }
