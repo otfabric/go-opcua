@@ -1128,7 +1128,8 @@ func (c *Client) handle(l *link, p Packet) error {
 		case TypePuback:
 			c.mu.Lock()
 			pd := c.inflight[p.PacketID]
-			if pd == nil || pd.pkt.QoS != 1 {
+			// A publication not sent yet cannot be acknowledged.
+			if pd == nil || pd.pkt.QoS != 1 || !pd.written {
 				c.mu.Unlock()
 				return nil
 			}
@@ -1146,7 +1147,7 @@ func (c *Client) handle(l *link, p Packet) error {
 		case TypePubrec:
 			c.mu.Lock()
 			pd := c.inflight[p.PacketID]
-			if pd != nil && pd.pkt.QoS != 2 {
+			if pd != nil && (pd.pkt.QoS != 2 || !pd.written) {
 				c.mu.Unlock()
 				return nil
 			}

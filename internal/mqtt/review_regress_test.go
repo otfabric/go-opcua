@@ -110,6 +110,58 @@ func TestPacketIdentifiersExhausted(t *testing.T) {
 	}
 }
 
+// Regression: a PUBACK (or PUBREC) for the packet identifier of a
+// publication still waiting for send quota completed it, as delivered,
+// although it had never been sent.
+func TestAckOfUnsentPublicationIgnored(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	pubs := make(chan *mqtt.Publish, 10)
+	acks := make(chan mqtt.Packet, 10)
+	go fakeBroker5(t, l, &mqtt.Connack{Props: mqtt.Properties{ReceiveMaximum: mqtt.Ptr(uint16(1))}},
+		func(read func() mqtt.Packet, write func(mqtt.Packet)) {
+			go func() {
+				for a := range acks {
+					write(a)
+				}
+			}()
+			defer close(acks)
+			for {
+				p := read()
+				if p == nil {
+					return
+				}
+				if pub, ok := p.(*mqtt.Publish); ok {
+					pubs <- pub
+				}
+			}
+		})
+	c := dial5(t, mqtt.Options{Server: "mqtt://" + l.Addr().String()})
+	first, second := make(chan error, 1), make(chan error, 1)
+	go func() { first <- c.Publish(bg, "t", []byte("1"), 1, false) }()
+	p1 := <-pubs
+	go func() { second <- c.Publish(bg, "t", []byte("2"), 2, false) }()
+	require.Eventually(t, func() bool { return mqtt.InflightCount(c) == 2 }, 5*time.Second, time.Millisecond)
+	// The second one waits for quota; its identifier follows the first's.
+	acks <- &mqtt.Ack{Kind: mqtt.TypePubrec, PacketID: p1.PacketID + 1}
+	acks <- &mqtt.Ack{Kind: mqtt.TypePuback, PacketID: p1.PacketID + 1}
+	acks <- &mqtt.Ack{Kind: mqtt.TypePubcomp, PacketID: p1.PacketID + 1}
+	select {
+	case err := <-second:
+		t.Fatalf("an unsent publication completed: %v", err)
+	case <-time.After(200 * time.Millisecond):
+	}
+	acks <- &mqtt.Ack{Kind: mqtt.TypePuback, PacketID: p1.PacketID}
+	require.NoError(t, <-first)
+	p2 := <-pubs
+	require.Equal(t, "2", string(p2.Payload))
+	require.False(t, p2.Dup)
+	acks <- &mqtt.Ack{Kind: mqtt.TypePubrec, PacketID: p2.PacketID}
+	acks <- &mqtt.Ack{Kind: mqtt.TypePubcomp, PacketID: p2.PacketID}
+	require.NoError(t, <-second)
+}
+
 // Regression: Close sent DISCONNECT under the write lock, so with a broker
 // that stopped reading it waited for a blocked write's deadline: the
 // keep-alive (or the broker's Server Keep Alive, up to 18 hours).
