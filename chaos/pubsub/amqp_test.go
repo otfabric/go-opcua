@@ -138,8 +138,19 @@ func TestChaosAMQPBroker(t *testing.T) {
 				pubsub.Secure(rg, tc.mode, "sg")
 				keys = append(keys, pubsub.WithKeySource("sg", keySource(t, ks, "sg")))
 			}
+			// A MessageReceiveTimeout starts a reader over (Part 14
+			// §7.2.2.3.4). A message whose outcome the broker withheld is
+			// sent again after the reconnect (at least once), and a reader
+			// that timed out meanwhile takes it a second time: the order is
+			// not checked across a timeout.
+			onEvent := func(ev pubsub.Event) {
+				states.handle(ev)
+				if ev.Type == pubsub.EventStateChanged && ev.Component.Kind == pubsub.KindDataSetReader && ev.Component.State == ua.PubSubStateError {
+					chk.restart(func() {})
+				}
+			}
 			sub := startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(amqpIdle(pubsub.AMQPConnection("sub", b.URL(), nil, tc.mapping)), rg)),
-				append([]pubsub.Option{pubsub.WithDataSetHandler(chk.handle), pubsub.WithEventHandler(states.handle)}, keys...)...)
+				append([]pubsub.Option{pubsub.WithDataSetHandler(chk.handle), pubsub.WithEventHandler(onEvent)}, keys...)...)
 			pub := startRuntime(t, pubsub.NewConfiguration(pdss, pubsub.AttachWriterGroups(amqpIdle(pubsub.AMQPConnection("pub", b.URL(), uint16(7), tc.mapping)), wg)),
 				append([]pubsub.Option{pubsub.WithDataSource(newCounterSource())}, keys...)...)
 			chk.waitGrowth(t, 5, readers...)

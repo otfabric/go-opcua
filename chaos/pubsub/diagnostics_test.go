@@ -149,6 +149,12 @@ func (c *churn) remoteDiagWorker(rng *rand.Rand, cl *opcua.Client, stop <-chan s
 				if err == nil {
 					switch res.StatusCode {
 					case ua.StatusOK, ua.StatusBadNodeIDUnknown, ua.StatusBadNotFound:
+					case ua.StatusBadMethodInvalid:
+						// Removed in between: the server found the
+						// object, then its method was unregistered.
+						if _, err := c.rt.Diagnostics(x.ID); err == nil {
+							c.sink.Addf("Reset of %v (present): %v", diag, res.StatusCode)
+						}
 					default:
 						c.sink.Addf("Reset of %v: %v", diag, res.StatusCode)
 					}
