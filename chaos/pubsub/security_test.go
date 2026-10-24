@@ -202,29 +202,37 @@ func TestChaosKeyRotationStorm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// inject sends an old message and waits until the subscriber has
+	// rejected it. UDP may drop a datagram (loopback too, under load): one
+	// that is not counted within a while is sent again.
+	decodeErrors := func() uint64 { return status(t, p.sub, sub).Counters.DecodeErrors }
 	var injected int
+	inject := func(msg []byte) {
+		before := decodeErrors()
+		for range 5 {
+			p.relay.inject(msg)
+			deadline := time.Now().Add(time.Second)
+			for time.Now().Before(deadline) {
+				if decodeErrors() > before {
+					injected++
+					return
+				}
+				time.Sleep(5 * time.Millisecond)
+			}
+		}
+		t.Errorf("an old message injected 5 times was never rejected")
+	}
 	end := time.Now().Add(chaoskit.Duration(t, defaultDuration))
 	for time.Now().Before(end) {
 		time.Sleep(time.Duration(20+rng.Intn(80)) * time.Millisecond)
 		// Recorded at least 5 key lifetimes ago: past MaxPastKeyCount.
 		if cur, _ := ks.CurrentTokenID("sg"); cur-first > 5 && len(old) > 0 {
-			p.relay.inject(old[rng.Intn(len(old))])
-			injected++
+			inject(old[rng.Intn(len(old))])
 		}
 	}
 	last, _ := ks.CurrentTokenID("sg")
 	p.chk.waitGrowth(t, 10, p.readers...)
-	// The last injected datagrams may still be on their way: wait until
-	// every one of them was counted (or a while has passed).
-	var ctr pubsub.Counters
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		ctr = status(t, p.sub, sub).Counters
-		if ctr.DecodeErrors >= uint64(injected) || time.Now().After(deadline) {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	ctr := status(t, p.sub, sub).Counters
 	t.Logf("tokens %d..%d, injected %d old messages, subscriber %+v", first, last, injected, ctr)
 	if last-first < 10 {
 		t.Errorf("only %d key changes", last-first)

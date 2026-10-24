@@ -462,11 +462,32 @@ func TestChannelWriterCov_WriteTimeout(t *testing.T) {
 	big := &ua.ReadResponse{ResponseHeader: cwHeader(ua.StatusOK), Results: []*ua.DataValue{
 		DataValueFromValue(make([]byte, 1500*1024)),
 	}}
+	// The socket buffers are sized by the kernel (autotuned, often several
+	// MB on loopback): queue responses until they are full and a write
+	// blocks past its deadline, whatever their size.
 	start := time.Now()
-	require.NoError(t, p.w.sendUnslotted(1, big))
+	sent := 0
+queue:
+	for ; sent < 64; sent++ {
+		err := p.w.sendUnslotted(uint32(sent+1), big)
+		switch {
+		case errors.Is(err, errChannelGone), errors.Is(err, errChannelBacklog):
+			break queue // timed out already, or the queue is full: wait
+		case err != nil:
+			t.Fatalf("send: %v", err)
+		}
+		select {
+		case <-p.w.done:
+			break queue
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
 	cwClosed(t, p.w.done, "writer done")
 	require.GreaterOrEqual(t, time.Since(start), 200*time.Millisecond, "dropped before the timeout")
+	t.Logf("the write timed out after %d response(s) of 1.5 MB", sent)
 	cwClosed(t, p.w.exited, "writer")
 	cwClosed(t, p.recvDn, "server read loop")
-	require.Zero(t, p.w.unslotted.Load())
+	// A torn-down writer refuses new responses instead of queueing them.
+	require.ErrorIs(t, p.w.sendUnslotted(1000, big), errChannelGone)
+	require.ErrorIs(t, p.w.send(1001, big), errChannelGone)
 }
