@@ -120,7 +120,7 @@ func TestPubSubInformationModel(t *testing.T) {
 	require.Equal(t, int32(ua.PubSubStateOperational), v.Value())
 	v, err = c.Node(nid(id.PublishSubscribeSupportedTransportProfiles)).Value(ctx)
 	require.NoError(t, err)
-	require.Len(t, v.Value(), 3)
+	require.Len(t, v.Value(), 5)
 	v, err = c.Node(nid(id.PublishSubscribePubSubCapablitiesMaxPubSubConnections)).Value(ctx)
 	require.NoError(t, err)
 	require.Equal(t, uint32(0), v.Value())

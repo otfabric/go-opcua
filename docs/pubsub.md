@@ -2,7 +2,7 @@
 
 OPC UA PubSub sends data from publishers to any number of subscribers without
 sessions: a publisher samples a *DataSet* at a fixed interval and sends it as a
-*NetworkMessage* over UDP or through an MQTT broker, and subscribers pick the
+*NetworkMessage* over UDP or through an MQTT or AMQP broker, and subscribers pick the
 DataSets they are interested in from what arrives. go-opcua implements both
 sides, standalone (no OPC UA server needed) and inside the server, where
 published fields come from the address space and received fields are written
@@ -11,7 +11,7 @@ to variables.
 | Area | Supported |
 |------|-----------|
 | Message mappings | UADP (binary) and JSON (`ua-data`, `ua-metadata`, `ua-status`) |
-| Transports | UDP unicast and multicast (`opc.udp://`), MQTT 3.1.1 (`mqtt://`, `mqtts://`) with UADP or JSON |
+| Transports | UDP unicast and multicast (`opc.udp://`), MQTT 3.1.1 (`mqtt://`, `mqtts://`) and AMQP 1.0 (`amqp://`, `amqps://`) with UADP or JSON |
 | UADP field encodings | Variant, DataValue, RawData |
 | DataSetMessages | key frames, delta frames, keep-alive, events (PublishedEvents) |
 | Message security | Sign and SignAndEncrypt with PubSub-Aes128-CTR and PubSub-Aes256-CTR (UADP) |
@@ -19,7 +19,7 @@ to variables.
 | Configuration | the standard `ua.PubSubConfigurationDataType`, builders for common setups, runtime add / remove / enable / disable |
 | Information model | `Server/PublishSubscribe` with connections, groups, writers, readers, published data sets, status and the configuration methods |
 | Remote configuration | package `pubsub/remote` calls the PubSub methods of any Part 14 server |
-| Not implemented | Ethernet (`opc.eth://`), AMQP, chunked NetworkMessages, UADP discovery requests, Diagnostics objects, PubSub actions |
+| Not implemented | Ethernet (`opc.eth://`), AMQP over WebSockets (`wss://`), chunked NetworkMessages, UADP discovery requests, Diagnostics objects, PubSub actions |
 
 Interoperability is tested against open62541 v1.5.9 (see the interop ledger,
 profile `pubsub`), the only peer with PubSub in the interop suite: Eclipse Milo
@@ -35,7 +35,7 @@ opcua-interop adapter does not drive (not tested).
 | `pubsub/message` | encoding-independent NetworkMessage / DataSetMessage model |
 | `pubsub/uadp` | UADP message mapping incl. message security |
 | `pubsub/jsonmsg` | JSON message mapping |
-| `pubsub/transport`, `/udp`, `/mqtt` | transport registry and the UDP and MQTT transports |
+| `pubsub/transport`, `/udp`, `/mqtt`, `/amqp` | transport registry and the UDP, MQTT and AMQP transports |
 | `pubsub/security` | security policies, key rings, the key service (SKS logic) |
 | `pubsub/sks` | SKS client: GetSecurityKeys, SetSecurityKeys, a key source that pulls and refreshes |
 | `pubsub/remote` | client helpers for the PublishSubscribe methods of a server |
@@ -114,6 +114,69 @@ Topics are the `QueueName` of the writer (or group) and of the reader;
 `SetWriterQueue` / `SetReaderQueue` also set the metadata queue, on which the
 publisher sends retained `ua-metadata` messages. `WithTransportConfig` sets
 broker credentials and TLS (`mqtts://`).
+
+## AMQP
+
+```go
+conn := pubsub.AMQPConnection("Broker", "amqps://broker:5671", "urn:my:publisher", pubsub.MappingUADP)
+writer := pubsub.SetWriterQueue(pubsub.DataSetWriter("Writer", 1, "Measurements"),
+    "/exchanges/amq.topic/plant.line1", "/queues/plant.line1.meta")
+group := pubsub.WriterGroup("Group", 1, time.Second, writer)
+```
+
+The AMQP transport (Part 14 §7.3.4, Annex B.3, profiles `pubsub-amqp-uadp` and
+`pubsub-amqp-json`) runs on an AMQP 1.0 client of its own (`internal/amqp`, no
+dependencies): SASL ANONYMOUS, PLAIN and EXTERNAL (TLS client certificates),
+TLS, idle time-outs with heartbeats, multi-frame messages, credit-based flow
+control and reconnection with backoff, after which the links are attached
+again and unsettled messages are sent again.
+
+Queue names are AMQP addresses: the publisher sends to the target address
+`QueueName` (`MetaDataQueueName` for metadata), the subscriber receives from
+the source address of its reader. Wildcards do not exist in AMQP; how an
+address is resolved depends on the broker:
+
+| Broker | Send to | Receive from |
+|--------|---------|--------------|
+| RabbitMQ 4 (native AMQP 1.0) | `/queues/<queue>`, or `/exchanges/<exchange>/<routing-key>` (e.g. `/exchanges/amq.topic/plant.line1`) | `/queues/<queue>`; the queue must exist and, for an exchange, be bound to it |
+| ActiveMQ Artemis | a plain address (`plant/line1`), created on first use | the same address |
+
+For Artemis the routing type of an auto-created address follows the broker
+configuration, or the capabilities set with the connection properties
+`target-capabilities` and `source-capabilities` (`queue` for anycast, `topic`
+for multicast).
+
+Each message has one data section with the NetworkMessage and the properties
+of Table B.1: a random UUID as `message-id`, the `subject` `ua-data` or
+`ua-metadata` and the `content-type` `application/opcua+uadp` or
+`application/json`. The WriterGroupProperties and DataSetWriterProperties
+named in Table B.2 (`message-to`, `message-reply-to`, `message-correlation-id`,
+`message-group-id`, `message-user-id`, `message-content-encoding`,
+`message-absolute-expiry-time`, `message-creation-time`, ...) set the
+corresponding message properties; other properties are sent as
+application-properties. Received messages may carry their bytes in data
+sections or, leniently, in an amqp-value or amqp-sequence.
+
+Delivery guarantees (B.3.5): BestEffort and AtMostOnce send pre-settled
+messages (fire and forget; Send fails while the connection is down);
+AtLeastOnce sends unsettled messages, and the publisher waits for the broker
+to accept each one (after a reconnect a message can arrive twice);
+ExactlyOnce is downgraded to AtLeastOnce. Metadata is sent at least once.
+AMQP has no retained messages: send the metadata to a queue (as above) so
+that a subscriber that starts later finds it, or set `MetaDataUpdateTime`.
+
+Connection settings come from `WithTransportConfig` (credentials, TLS, the
+container-id as `ClientID`) and from the connection properties (B.3.4):
+`connection-hostname` (RabbitMQ virtual hosts: `vhost:<name>`),
+`connection-max-frame-size`, `connection-idle-time-out` (milliseconds) and
+`link-max-message-size` set those AMQP fields, other `connection-*`,
+`session-*` and `link-*` names become properties of the open, begin and attach
+frames, and `container-id`, `username`, `password`, `sasl-mechanism`,
+`credit` and `idle-timeout` (seconds) are honoured as well.
+
+The AMQP transport has been tested with the in-process test broker
+(`internal/testutil/amqpbroker`) only so far; tests against RabbitMQ and
+ActiveMQ Artemis are pending.
 
 ## In the server
 
