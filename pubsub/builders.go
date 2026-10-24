@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	mqtttransport "github.com/otfabric/go-opcua/pubsub/transport/mqtt"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -79,6 +80,41 @@ func MQTTConnection(name, url string, publisherID any, mapping MessageMapping) *
 		TransportProfileURI: profile,
 		Address:             ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: url}),
 	}
+}
+
+// MQTT versions of [SetMQTTVersion]: the values of the MqttVersion
+// connection property (Part 14 §7.3.4.4, Table 201).
+const (
+	MQTTVersion311           = mqtttransport.Version311
+	MQTTVersion5             = mqtttransport.Version5
+	MQTTVersionBestAvailable = mqtttransport.VersionBestAvailable
+)
+
+// SetMQTTVersion selects the MQTT version of a broker connection with its
+// MqttVersion connection property (Part 14 §7.3.4.4): MQTTVersion311 (the
+// default of go-opcua), MQTTVersion5 or MQTTVersionBestAvailable (5.0 if
+// the broker accepts it, else 3.1.1). With MQTT 5.0 the messages carry
+// their content type and message type.
+func SetMQTTVersion(c *ua.PubSubConnectionDataType, version string) *ua.PubSubConnectionDataType {
+	return SetConnectionProperty(c, mqtttransport.PropMqttVersion, version)
+}
+
+// SetConnectionProperty sets a connection property (a KeyValuePair of
+// ConnectionProperties, key in namespace 0), replacing one of the same
+// name. The MQTT transport understands the properties of Part 14 §7.3.4.4
+// (MqttVersion, "connection-Receive Maximum", ...; see package
+// pubsub/transport/mqtt) and sends the others as MQTT 5.0 User Properties
+// of the CONNECT. It panics if value cannot be a Variant.
+func SetConnectionProperty(c *ua.PubSubConnectionDataType, name string, value any) *ua.PubSubConnectionDataType {
+	kv := &ua.KeyValuePair{Key: &ua.QualifiedName{Name: name}, Value: ua.MustVariant(value)}
+	for i, p := range c.ConnectionProperties {
+		if p != nil && p.Key != nil && p.Key.NamespaceIndex == 0 && p.Key.Name == name {
+			c.ConnectionProperties[i] = kv
+			return c
+		}
+	}
+	c.ConnectionProperties = append(c.ConnectionProperties, kv)
+	return c
 }
 
 func millis(d time.Duration) float64 { return float64(d) / float64(time.Millisecond) }

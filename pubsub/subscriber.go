@@ -180,7 +180,11 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	if recv.IsZero() {
 		recv = time.Now()
 	}
-	enc := payloadEncoding(m.Payload)
+	enc, encErr := messageEncoding(m)
+	if encErr != nil {
+		p.decodeFailed(c, encErr)
+		return
+	}
 	if enc == encJSON {
 		// The JSON mapping has no message security: its messages are
 		// only for the readers that require none.
@@ -237,7 +241,9 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		},
 	}
 
-	isMeta := false
+	// With MQTT 5.0 the message says what it is (Part 14 §7.3.4.8).
+	mt, _ := m.UserProperty(transport.UAMessageTypeProperty)
+	isMeta := mt == transport.MessageTypeMetaData
 	for i := range snap {
 		if snap[i].metaTopic != "" && m.Topic != "" && topicMatch(snap[i].metaTopic, m.Topic) {
 			isMeta = true
