@@ -736,10 +736,13 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 	// open62541 browses, go-opcua announces: the open62541 LDS learned about
 	// the go-opcua server through mDNS.
 	t.Run("coverage/discovery.multicast/open62541-lds-discovers-go", func(t *testing.T) {
+		// The record the wait found: a second query can fail (nil) or, with
+		// mDNS records coming and going, miss it.
+		var rec *ua.ServerOnNetwork
 		awaitDiscovery(t, "the open62541 LDS to discover the go-opcua server with mDNS", func() bool {
-			return find(serversOnNetwork(adapter.endpoint), isGo) != nil
+			rec = find(serversOnNetwork(adapter.endpoint), isGo)
+			return rec != nil
 		})
-		rec := find(serversOnNetwork(adapter.endpoint), isGo)
 		t.Logf("open62541 LDS: id=%d name=%q url=%s caps=%v", rec.RecordID, rec.ServerName, rec.DiscoveryURL, rec.ServerCapabilities)
 		// The record carries the mDNS host name (<hostname>.local) and port.
 		if !strings.Contains(rec.DiscoveryURL, goHost) || !strings.HasSuffix(strings.TrimSuffix(rec.DiscoveryURL, "/"), goNetURL[strings.LastIndex(goNetURL, ":"):]) {
@@ -753,11 +756,13 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 	// The go-opcua client calls FindServersOnNetwork on the open62541 LDS:
 	// records, capability filter, paging.
 	t.Run("coverage/discovery.find-servers-on-network/go-client-to-open62541-lds", func(t *testing.T) {
+		var all []*ua.ServerOnNetwork
+		var rec *ua.ServerOnNetwork
 		awaitDiscovery(t, "the open62541 LDS to list the go-opcua server", func() bool {
-			return find(serversOnNetwork(adapter.endpoint), isGo) != nil
+			all = serversOnNetwork(adapter.endpoint)
+			rec = find(all, isGo)
+			return rec != nil
 		})
-		all := serversOnNetwork(adapter.endpoint)
-		rec := find(all, isGo)
 		// The LDS lists itself as well.
 		if find(all, func(r *ua.ServerOnNetwork) bool { return !isGo(r) && slices.Contains(r.ServerCapabilities, "LDS") }) == nil {
 			t.Errorf("the open62541 LDS does not list itself: %d records", len(all))
@@ -802,10 +807,11 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 		isAdapter := func(r *ua.ServerOnNetwork) bool {
 			return r.ServerName != goInstance && strings.Contains(r.DiscoveryURL, adapterHost)
 		}
+		var rec *ua.ServerOnNetwork
 		awaitDiscovery(t, "the go-opcua server to discover the open62541 LDS with mDNS", func() bool {
-			return find(serversOnNetwork(goURL), isAdapter) != nil
+			rec = find(serversOnNetwork(goURL), isAdapter)
+			return rec != nil
 		})
-		rec := find(serversOnNetwork(goURL), isAdapter)
 		t.Logf("go-opcua: id=%d name=%q url=%s caps=%v", rec.RecordID, rec.ServerName, rec.DiscoveryURL, rec.ServerCapabilities)
 		if !slices.Contains(rec.ServerCapabilities, "LDS") {
 			t.Errorf("capabilities of the open62541 LDS: %v", rec.ServerCapabilities)
