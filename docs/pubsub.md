@@ -471,7 +471,10 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
   (`ActionTarget.RequestAddress`, default the Requestor's own address, e.g. a
   shared multicast group) and the responses to the ResponseAddress, which a
   Responder only accepts for the host the request came from or a multicast
-  group, else to its own connection address.
+  group, else to its own connection address. The writer group of a
+  Responder (and its Action writers) is PreOperational until its connection
+  is subscribed to where the requests arrive (the request queue on a broker,
+  after the SUBACK or attach): once it is Operational, requests are heard.
 - **States (Tables 83, 84).** The Requestor sends the request with
   ActionState Executing and, on the Done response, acknowledges it with Idle.
   With `ActionTarget.ResendInterval` (the PublishingInterval of the Responder,
@@ -481,7 +484,11 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
   and writer; a repeated request is answered with the current state.
   While running it sends Executing, and it repeats Done until the
   acknowledgement or the end of the TimeoutHint, every PublishingInterval of
-  a datagram group.
+  a datagram group. A handler still running at the end of the TimeoutHint is
+  cancelled and the request answered Done with Bad_Timeout; the exchange
+  counts toward `MaxConcurrent` until the handler returns. Ended exchanges
+  are remembered for 5 seconds, so that late copies of their requests are
+  answered and not executed again.
 - **Results.** Missing or surplus inputs are answered with
   Bad_ArgumentsMissing / Bad_TooManyArguments, inputs of another built-in type
   than the request DataSetMetaData with Bad_TypeMismatch, targets without

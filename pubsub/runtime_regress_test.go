@@ -452,3 +452,42 @@ func TestRegressionReaderSecurityGroupIDDoesNotDowngrade(t *testing.T) {
 	}, 3*time.Second, time.Millisecond)
 	require.Empty(t, rec.dataSets())
 }
+
+// Regression: a Responder's writer group (and its Action writers) became
+// Operational before its connection was subscribed to the request queue:
+// requests sent as soon as it was Operational were lost. The group is
+// PreOperational until the subscription is in place.
+func TestRegressionResponderOperationalWhenSubscribed(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	rcfg, qcfg, queue := brokerActionConfigs(url, MappingUADP)
+	bus.mu.Lock()
+	bus.failSub[queue] = true
+	bus.mu.Unlock()
+	resp := startReal(t, rcfg, WithActionHandler("Calc", 1, addHandler))
+	waitRunning(t, resp, "Responder")
+	gid := mustID(t, resp, KindWriterGroup, mustID(t, resp, KindConnection, Root, "Responder"), "Actions")
+	wid := mustID(t, resp, KindDataSetWriter, gid, "CalcWriter")
+	require.Never(t, func() bool {
+		s, _ := resp.State(gid)
+		w, _ := resp.State(wid)
+		return s == ua.PubSubStateOperational || w == ua.PubSubStateOperational
+	}, 200*time.Millisecond, 5*time.Millisecond)
+	s, err := resp.State(gid)
+	require.NoError(t, err)
+	require.Equal(t, ua.PubSubStatePreOperational, s)
+
+	bus.mu.Lock()
+	delete(bus.failSub, queue)
+	bus.mu.Unlock()
+	waitState(t, resp, wid, ua.PubSubStateOperational)
+	// Operational means it hears requests: the first call is answered.
+	req := startReal(t, qcfg)
+	waitRunning(t, req, "Requestor")
+	tg := calcTarget()
+	tg.RequestAddress = queue
+	tg.RequestMetaData = MetaData("CalcRequest", Field{Name: "A", Type: ua.TypeIDInt32}, Field{Name: "B", Type: ua.TypeIDInt32})
+	res, err := req.CallAction(context.Background(), tg, int32s(2, 3))
+	require.NoError(t, err)
+	require.Equal(t, int32(5), res.Outputs[0].Value())
+}
