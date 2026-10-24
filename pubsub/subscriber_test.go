@@ -418,3 +418,28 @@ func TestMirror(t *testing.T) {
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 2, 1, 2, 3))
 	require.Eventually(t, func() bool { return f.counters().TargetWriteErrors == 1 }, 5*time.Second, time.Millisecond)
 }
+
+// TestSequenceNumbersAcrossMetaData: a reader that learns new DataSetMetaData
+// keeps the sequence numbers of its writers. A late copy of a message
+// delivered before stays stale (it was delivered again, out of order, when
+// a discovery announcement arrived between the two copies).
+func TestSequenceNumbersAcrossMetaData(t *testing.T) {
+	t.Parallel()
+	f := subscriberOnly(t, nil)
+	f.sendSync(msg(message.DataSetMessageKeyFrame, 7, 1, 1, 1))
+
+	md, _ := clone(testMD)
+	md.ConfigurationVersion = &ua.ConfigurationVersionDataType{MajorVersion: md.ConfigurationVersion.MajorVersion, MinorVersion: md.ConfigurationVersion.MinorVersion + 1}
+	f.send(&message.NetworkMessage{
+		Type: message.NetworkMessageDiscoveryResponse, UADPMask: ua.UADPNetworkMessageContentMaskPublisherID,
+		PublisherID: message.NewPublisherID(message.PublisherIDUInt16, 7),
+		Discovery:   &message.Discovery{Type: message.DiscoveryDataSetMetaData, DataSetWriterID: 20, MetaData: md, StatusCode: ua.StatusGood},
+	})
+	require.Eventually(t, func() bool { return f.counters().MetaDataReceived == 1 && bus.settled(f.url) }, 2*time.Second, time.Millisecond)
+
+	f.sendSync(msg(message.DataSetMessageKeyFrame, 6, 2, 2, 2))
+	require.Equal(t, uint64(1), f.counters().SequenceDiscards)
+	require.Len(t, f.rec.dataSets(), 1)
+	f.sendSync(msg(message.DataSetMessageKeyFrame, 8, 3, 3, 3))
+	require.Equal(t, []int32{3, 3, 3}, int32Values(f.last()))
+}

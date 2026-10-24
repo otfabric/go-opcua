@@ -583,7 +583,12 @@ func (p *PubSub) applyMetaData(c *connection, gen uint64, pub message.PublisherI
 				continue
 			}
 			r.md = cp
-			r.streams = map[streamKey]*stream{}
+			// The fields of earlier frames follow the old metadata; the
+			// sequence numbers of the writers go on, and a late or
+			// duplicated copy of a message delivered before stays stale.
+			for _, st := range r.streams {
+				st.fields, st.key = nil, false
+			}
 			p.log.Info("pubsub: reader metadata updated", "reader", r.name, "fields", len(cp.Fields))
 		}
 	}
