@@ -1269,8 +1269,11 @@ func (p *PubSub) sendAction(s *actionSend) error {
 	if err == nil {
 		var tc transport.Connection
 		if tc, err = p.actionTransport(ctx, s.c, s.gen, s.dest); err == nil {
-			err = tc.Send(ctx, b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
-				ContentType: s.enc.contentType(), MessageType: s.msgType})
+			var ct string
+			if b, ct, err = p.body(s.c, tc, s.enc, b); err == nil {
+				err = tc.Send(ctx, b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
+					ContentType: ct, MessageType: s.msgType})
+			}
 		}
 	}
 	p.lock()

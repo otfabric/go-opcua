@@ -152,15 +152,9 @@ func messageEncoding(m *transport.Message) (encoding, error) {
 		return encJSON, nil
 	case transport.ContentTypeUADP:
 		return encUADP, nil
-	case transport.ContentTypeJSONGzip:
-		return 0, errCompressedJSON
 	}
 	return payloadEncoding(m.Payload), nil
 }
-
-// errCompressedJSON is the decode error of gzip compressed JSON messages
-// (Part 14 §7.3.4.9.1), which are not supported.
-var errCompressedJSON = errors.New("pubsub: gzip compressed JSON messages (" + transport.ContentTypeJSONGzip + ") are not supported")
 
 // contentType is the MIME type of the NetworkMessages of an encoding.
 func (e encoding) contentType() string {

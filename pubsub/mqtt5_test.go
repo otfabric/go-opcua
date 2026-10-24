@@ -126,13 +126,13 @@ func TestMessageEncodingByContentType(t *testing.T) {
 	got, err := messageEncoding(&transport.Message{ContentType: "text/plain", Payload: []byte(" {}")})
 	require.NoError(t, err)
 	require.Equal(t, encJSON, got, "unknown content types: guessed from the payload")
-	_, err = messageEncoding(&transport.Message{ContentType: transport.ContentTypeJSONGzip})
-	require.ErrorIs(t, err, errCompressedJSON)
 	require.Equal(t, transport.ContentTypeJSON, encJSON.contentType())
 	require.Equal(t, transport.ContentTypeUADP, encUADP.contentType())
 }
 
-func TestMQTT5CompressedJSONIsADecodeError(t *testing.T) {
+// A gzip compressed JSON message that does not decompress is a decode
+// error of the connection.
+func TestMQTT5BrokenGzipIsADecodeError(t *testing.T) {
 	t.Parallel()
 	url := memURL(t)
 	sub := start(t, NewConfiguration(nil, AttachReaderGroups(brokerConnection("sub", url, nil, MappingJSON),

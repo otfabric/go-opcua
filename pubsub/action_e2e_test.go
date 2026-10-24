@@ -5,13 +5,16 @@ package pubsub
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	imqtt "github.com/otfabric/go-opcua/internal/mqtt"
 	"github.com/otfabric/go-opcua/internal/testutil/amqpbroker"
 	"github.com/otfabric/go-opcua/internal/testutil/mqttbroker"
+	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -101,18 +104,43 @@ func TestE2EActionMQTT(t *testing.T) {
 
 func TestE2EActionMQTT5(t *testing.T) {
 	t.Parallel()
-	b := mqttbroker.New(mqttbroker.Options{})
-	require.NoError(t, b.Start())
-	t.Cleanup(b.Close)
-	queue := ActionRequestTopic("e2e5", MappingJSON, "1", "Actions")
-	rcfg, qcfg := brokerActionPair(SetMQTTVersion(MQTTConnection("Responder", b.URL(), uint16(1), MappingJSON), MQTTVersion5),
-		SetMQTTVersion(MQTTConnection("Requestor", b.URL(), uint16(2), MappingJSON), MQTTVersion5), MappingJSON, queue)
-	resp := startReal(t, rcfg, WithActionHandler("Calc", 1, addHandler))
-	req := startReal(t, qcfg)
-	tg := calcTarget()
-	tg.RequestAddress = queue
-	tg.ResponseAddress = "e2e5/replies/requestor-2"
-	e2eCall(t, resp, req, tg)
+	for _, compression := range []string{"none", "gzip"} {
+		t.Run(compression, func(t *testing.T) {
+			t.Parallel()
+			// The content types of the requests and responses on the wire:
+			// with JsonCompression gzip both sides compress (Part 14
+			// §7.3.4.9.1).
+			var mu sync.Mutex
+			types := map[string]bool{}
+			b := mqttbroker.New(mqttbroker.Options{OnPublish: func(_ string, p *imqtt.Publish) {
+				if p.Props.ContentType != nil {
+					mu.Lock()
+					types[*p.Props.ContentType] = true
+					mu.Unlock()
+				}
+			}})
+			require.NoError(t, b.Start())
+			t.Cleanup(b.Close)
+			queue := ActionRequestTopic("e2e5"+compression, MappingJSON, "1", "Actions")
+			conn := func(name string, id uint16) *ua.PubSubConnectionDataType {
+				return SetJSONCompression(SetMQTTVersion(MQTTConnection(name, b.URL(), id, MappingJSON), MQTTVersion5), compression)
+			}
+			rcfg, qcfg := brokerActionPair(conn("Responder", 1), conn("Requestor", 2), MappingJSON, queue)
+			resp := startReal(t, rcfg, WithActionHandler("Calc", 1, addHandler))
+			req := startReal(t, qcfg)
+			tg := calcTarget()
+			tg.RequestAddress = queue
+			tg.ResponseAddress = "e2e5" + compression + "/replies/requestor-2"
+			e2eCall(t, resp, req, tg)
+			want := transport.ContentTypeJSON
+			if compression == "gzip" {
+				want = transport.ContentTypeJSONGzip
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			require.Equal(t, map[string]bool{want: true}, types)
+		})
+	}
 }
 
 func TestE2EActionAMQP(t *testing.T) {

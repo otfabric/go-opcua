@@ -552,6 +552,11 @@ func validateConnection(path string, c *ua.PubSubConnectionDataType, pds dataSet
 			return configErr(path, "ConnectionProperties: %v", err)
 		}
 	}
+	if jsonCompressed(c) && c.TransportProfileURI != transport.ProfileMQTTJSON {
+		// Part 14 §7.3.4.9.1 defines the compressed content type for
+		// MQTT 5.0 only.
+		return configErr(path, "ConnectionProperties: JsonCompression %q needs the transport profile %s", "gzip", transport.ProfileMQTTJSON)
+	}
 	if _, err := connectionDiscovery(c, broker); err != nil {
 		return configErr(path, "TransportSettings: %v", err)
 	}

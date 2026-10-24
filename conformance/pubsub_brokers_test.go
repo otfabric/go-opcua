@@ -130,6 +130,7 @@ type psBrokerRoute struct {
 	mapping pubsub.MessageMapping
 	mode    ua.MessageSecurityMode
 	qos     ua.BrokerTransportQoS
+	gzip    bool // JsonCompression gzip
 
 	gid, wid     uint16
 	data, meta   string
@@ -142,6 +143,9 @@ type psBrokerRoute struct {
 func (r *psBrokerRoute) readerName() string { return "r-" + r.name }
 
 func (r *psBrokerRoute) contentType() string {
+	if r.gzip {
+		return transport.ContentTypeJSONGzip
+	}
 	if r.mapping == pubsub.MappingJSON {
 		return transport.ContentTypeJSON
 	}
@@ -166,7 +170,9 @@ func psBrokerConn(name string, amqpURL, mqttURL string, mapping pubsub.MessageMa
 // standalone runtime without DataSetMetaData learns it from the metadata
 // queues. The brokers see the content types, UAMessageTypes and subjects
 // of Part 14 §7.3.4.8 and Annex B.3, QoS 2 for ExactlyOnce, and the
-// connection properties in the CONNECT and the open frame.
+// connection properties in the CONNECT and the open frame. A connection
+// with JsonCompression gzip sends application/json+gzip (Part 14
+// §7.3.4.9.1), which both subscribers decompress.
 func TestPubSub_BrokerTransportsServerToServer(t *testing.T) {
 	parallel(t)
 	wire := newPSWire()
@@ -186,6 +192,7 @@ func TestPubSub_BrokerTransportsServerToServer(t *testing.T) {
 		{name: "mqtt5-uadp", conn: "mqtt5-uadp", mapping: pubsub.MappingUADP, qos: ua.BrokerTransportQoSExactlyOnce},
 		{name: "mqtt5-uadp-sec", conn: "mqtt5-uadp", mapping: pubsub.MappingUADP, mode: ua.MessageSecurityModeSignAndEncrypt, qos: ua.BrokerTransportQoSAtLeastOnce},
 		{name: "mqtt5-json", conn: "mqtt5-json", mapping: pubsub.MappingJSON, qos: ua.BrokerTransportQoSExactlyOnce},
+		{name: "mqtt5-json-gzip", conn: "mqtt5-json-gzip", mapping: pubsub.MappingJSON, gzip: true, qos: ua.BrokerTransportQoSAtLeastOnce},
 		{name: "amqp-uadp", conn: "amqp-uadp", amqp: true, mapping: pubsub.MappingUADP, qos: ua.BrokerTransportQoSAtLeastOnce},
 		{name: "amqp-uadp-sec", conn: "amqp-uadp", amqp: true, mapping: pubsub.MappingUADP, mode: ua.MessageSecurityModeSignAndEncrypt, qos: ua.BrokerTransportQoSAtLeastOnce},
 		{name: "amqp-json", conn: "amqp-json", amqp: true, mapping: pubsub.MappingJSON, qos: ua.BrokerTransportQoSAtLeastOnce},
@@ -227,6 +234,9 @@ func TestPubSub_BrokerTransportsServerToServer(t *testing.T) {
 			pubsub.SetConnectionProperty(c, "connection-ClientID", "pub-"+r.conn)
 			pubsub.SetConnectionProperty(c, "connection-Receive Maximum", uint16(10))
 			pubsub.SetConnectionProperty(c, "connection-Session Expiry Interval", uint32(30))
+		}
+		if r.gzip {
+			pubsub.SetJSONCompression(c, "gzip")
 		}
 		n, err := rc.AddConnection(ctx, c)
 		require.NoError(t, err, r.conn)
@@ -373,7 +383,7 @@ func TestPubSub_BrokerTransportsServerToServer(t *testing.T) {
 	}
 
 	// The connection properties reached the brokers.
-	for _, name := range []string{"mqtt5-uadp", "mqtt5-json"} {
+	for _, name := range []string{"mqtt5-uadp", "mqtt5-json", "mqtt5-json-gzip"} {
 		c, ok := wire.connect("pub-" + name)
 		require.True(t, ok, "CONNECT of pub-%s", name)
 		require.Equal(t, imqtt.Version5, c.ProtocolLevel)
@@ -381,6 +391,10 @@ func TestPubSub_BrokerTransportsServerToServer(t *testing.T) {
 		require.Equal(t, uint16(10), *c.Props.ReceiveMaximum)
 		require.NotNil(t, c.Props.SessionExpiry)
 		require.Equal(t, uint32(30), *c.Props.SessionExpiry)
+		// JsonCompression is go-opcua's own: the broker does not see it.
+		for _, u := range c.Props.User {
+			require.NotEqual(t, "JsonCompression", u.Key, name)
+		}
 	}
 	wire.mu.Lock()
 	frameSizes := map[uint32]bool{}
@@ -394,11 +408,11 @@ func TestPubSub_BrokerTransportsServerToServer(t *testing.T) {
 	// TransportProfileUris.
 	conns, err := rc.Connections(ctx)
 	require.NoError(t, err)
-	require.Len(t, conns, 4)
+	require.Len(t, conns, 5)
 	for _, c := range conns {
 		v, err := rc.Property(ctx, c.NodeID, "TransportProfileUri")
 		require.NoError(t, err)
-		want := map[string]string{"mqtt5-uadp": transport.ProfileMQTTUADP, "mqtt5-json": transport.ProfileMQTTJSON, "amqp-uadp": transport.ProfileAMQPUADP, "amqp-json": transport.ProfileAMQPJSON}[c.Name]
+		want := map[string]string{"mqtt5-uadp": transport.ProfileMQTTUADP, "mqtt5-json": transport.ProfileMQTTJSON, "mqtt5-json-gzip": transport.ProfileMQTTJSON, "amqp-uadp": transport.ProfileAMQPUADP, "amqp-json": transport.ProfileAMQPJSON}[c.Name]
 		require.Equal(t, want, v.Value(), c.Name)
 	}
 

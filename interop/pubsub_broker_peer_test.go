@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // PubSub through real brokers (Part 14 §7.3.4, Annex B.3).
-// COVERAGE.md: pubsub / pubsub.mqtt5, pubsub.amqp
+// COVERAGE.md: pubsub / pubsub.mqtt5, pubsub.mqtt5.gzip, pubsub.amqp
 //
 // MQTT 5.0: go-opcua speaks MQTT 5.0 to Eclipse Mosquitto while the
 // open62541 adapter speaks 3.1.1 to the same broker, in both directions.
@@ -153,6 +153,72 @@ func psMQTT5PeerPublishes(t *testing.T, p *psPeer) {
 			writePubSubVars(t, pub.endpoint, c.vars, values)
 			rec.wait(t, c.vars, values, psReceiveTimeout)
 		})
+	}
+}
+
+// TestPubSubMQTT5_GzipJSON: a go-opcua runtime with JsonCompression gzip
+// publishes its JSON data and metadata messages gzip compressed with the
+// Content Type application/json+gzip (Part 14 §7.3.4.9.1) through
+// Mosquitto. A go-opcua subscriber on MQTT 5.0 decompresses them by the
+// content type, one on MQTT 3.1.1, which Mosquitto gives no content type,
+// by the gzip header; both learn the DataSetMetaData from the compressed
+// metadata messages. An MQTT 5.0 listener sees what Mosquitto forwards.
+// No other stack compresses PubSub messages, so this is go-opcua to
+// go-opcua through a real broker.
+func TestPubSubMQTT5_GzipJSON(t *testing.T) {
+	broker := startMosquitto(t)
+	connURL := fmt.Sprintf("mqtt://127.0.0.1:%d", broker)
+	n := psFresh()
+	data := fmt.Sprintf("go-opcua-interop/gzip/%d", n)
+	meta := data + "/meta"
+	listen := psListen(t, transport.Config{ProfileURI: transport.ProfileMQTTJSON, URL: connURL, MQTTVersion: pubsub.MQTTVersion5}, data)
+
+	var subs []*pubsub.PubSub
+	var recs []*psDataSets
+	for _, v := range []string{pubsub.MQTTVersion5, pubsub.MQTTVersion311} {
+		r := pubsub.SetReaderQueue(pubsub.DataSetReader("InteropReader", uint16(psPubID), 0, psWriterID, nil), data, meta)
+		conn := pubsub.SetMQTTVersion(pubsub.MQTTConnection("InteropSubscriber", connURL, nil, pubsub.MappingJSON), v)
+		rec := newPSDataSets()
+		subs = append(subs, startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(conn, pubsub.ReaderGroup("InteropReaderGroup", r))),
+			pubsub.WithDataSetHandler(rec.handle)))
+		recs = append(recs, rec)
+	}
+
+	values := psValues(psVars, n)
+	ds := pubsub.NewMemoryDataSource()
+	for i, v := range psVars {
+		if err := ds.Set(ua.NewStringNodeID(1, "PubSub."+v.name), values[i]); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := pubsub.SetWriterQueue(pubsub.DataSetWriter("InteropWriter", psWriterID, "InteropDataSet"), data, meta)
+	conn := pubsub.SetJSONCompression(pubsub.SetMQTTVersion(pubsub.MQTTConnection("InteropPublisher", connURL, uint16(psPubID), pubsub.MappingJSON), pubsub.MQTTVersion5), "gzip")
+	startRuntime(t, pubsub.NewConfiguration([]*ua.PublishedDataSetDataType{psRuntimeDataSet(psVars, 1, 0)},
+		pubsub.AttachWriterGroups(conn, pubsub.JSONWriterGroup("InteropWriterGroup", psWriterGroupID, 100*time.Millisecond, data, w))),
+		pubsub.WithDataSource(ds))
+
+	for _, rec := range recs {
+		rec.wait(t, psVars, values, psReceiveTimeout)
+	}
+	select {
+	case m := <-listen:
+		if m.ContentType != transport.ContentTypeJSONGzip {
+			t.Errorf("content type %q, want %q", m.ContentType, transport.ContentTypeJSONGzip)
+		}
+		if !bytes.HasPrefix(m.Payload, []byte{0x1f, 0x8b}) {
+			t.Errorf("payload %x... is not gzip", m.Payload[:min(len(m.Payload), 8)])
+		}
+	case <-time.After(psReceiveTimeout):
+		t.Fatal("the MQTT 5.0 listener received nothing")
+	}
+	for i, sub := range subs {
+		st, err := sub.Status(pubsub.Root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if st.Counters.DecodeErrors != 0 {
+			t.Errorf("subscriber %d: %d decode errors", i, st.Counters.DecodeErrors)
+		}
 	}
 }
 

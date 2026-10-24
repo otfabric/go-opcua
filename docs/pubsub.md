@@ -141,6 +141,27 @@ Topic aliases are never used. Each message carries its content type
 subscriber uses the content type to pick the decoder. Broker refusals (reason
 codes) are reported as errors with the broker's reason string.
 
+A JSON connection on MQTT 5.0 can send its messages gzip compressed (RFC
+1952) with the content type `application/json+gzip` of §7.3.4.9.1. Part 14
+defines no property to ask for it, so go-opcua has its own connection
+property `JsonCompression` (`gzip` or `none`), which is not sent to the
+broker:
+
+```go
+pubsub.SetJSONCompression(conn, "gzip") // data, metadata and Action messages
+```
+
+`Validate` accepts it only on MQTT connections with the JSON mapping. A
+connection that runs 3.1.1 (`BestAvailable` with a broker without 5.0)
+cannot say that a message is compressed and sends it uncompressed, with a
+warning in the log. Subscribers decompress whatever compressed messages
+they receive, whatever their own setting: by the content type on 5.0, by
+the gzip header on 3.1.1 (where the broker forwards no content type; a UADP
+message cannot start like one). A subscriber decompresses at most
+`DefaultJSONDecompressionLimit` (16 MiB) of a message, or what
+`WithJSONDecompressionLimit` sets; a larger, truncated or corrupt message
+is a decode error. No other OPC UA stack compresses PubSub messages yet.
+
 ## Ethernet
 
 The Ethernet transport (Part 14 §7.3.3, profile

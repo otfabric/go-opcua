@@ -121,13 +121,15 @@ func mqtt5Fault(t *testing.T, rng *rand.Rand, b *mqttbroker.Broker, refuse *atom
 func TestChaosMQTT5Broker(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name    string
-		mapping pubsub.MessageMapping
-		qos     ua.BrokerTransportQoS
+		name        string
+		mapping     pubsub.MessageMapping
+		qos         ua.BrokerTransportQoS
+		compression string
 	}{
-		{"UADP-QoS1", pubsub.MappingUADP, ua.BrokerTransportQoSAtLeastOnce},
-		{"UADP-QoS2", pubsub.MappingUADP, ua.BrokerTransportQoSExactlyOnce},
-		{"JSON-QoS2", pubsub.MappingJSON, ua.BrokerTransportQoSExactlyOnce},
+		{"UADP-QoS1", pubsub.MappingUADP, ua.BrokerTransportQoSAtLeastOnce, ""},
+		{"UADP-QoS2", pubsub.MappingUADP, ua.BrokerTransportQoSExactlyOnce, ""},
+		{"JSON-QoS2", pubsub.MappingJSON, ua.BrokerTransportQoSExactlyOnce, ""},
+		{"JSON-gzip-QoS2", pubsub.MappingJSON, ua.BrokerTransportQoSExactlyOnce, "gzip"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -164,7 +166,7 @@ func TestChaosMQTT5Broker(t *testing.T) {
 			}
 			sub := startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(mqtt5Conn("sub", b.URL(), "chaos-sub", nil, tc.mapping),
 				pubsub.ReaderGroup("rg", rs...))), pubsub.WithDataSetHandler(chk.handle), pubsub.WithEventHandler(states.handle), mqttKeepAlive)
-			pub := startRuntime(t, pubsub.NewConfiguration(pdss, pubsub.AttachWriterGroups(mqtt5Conn("pub", b.URL(), "chaos-pub", uint16(7), tc.mapping), wg)),
+			pub := startRuntime(t, pubsub.NewConfiguration(pdss, pubsub.AttachWriterGroups(pubsub.SetJSONCompression(mqtt5Conn("pub", b.URL(), "chaos-pub", uint16(7), tc.mapping), tc.compression), wg)),
 				pubsub.WithDataSource(newCounterSource()), mqttKeepAlive)
 			chk.waitGrowth(t, 5, readers...)
 

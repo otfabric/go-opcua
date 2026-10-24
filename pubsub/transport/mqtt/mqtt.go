@@ -91,12 +91,27 @@ const (
 	PropRequestProblemInformation  = "connection-Request Problem Information"
 )
 
+// PropJSONCompression is the connection property of go-opcua that
+// compresses the JSON NetworkMessages a connection sends: [CompressionGzip]
+// sends them gzip compressed (RFC 1952) with the Content Type
+// application/json+gzip of Part 14 §7.3.4.9.1, [CompressionNone] (the
+// default) uncompressed. Part 14 defines the compressed content type for
+// MQTT 5.0 only: a connection that runs MQTT 3.1.1 cannot say that a
+// message is compressed and sends it uncompressed.
+const PropJSONCompression = "JsonCompression"
+
+// Values of [PropJSONCompression].
+const (
+	CompressionNone = "none"
+	CompressionGzip = "gzip"
+)
+
 // ownProps are the connection properties that are not User Properties:
 // those of Part 14 and those of go-opcua.
 var ownProps = map[string]bool{
 	PropMqttVersion: true, PropMqttTopicPrefix: true, PropClientID: true, PropReceiveMaximum: true,
 	PropMaximumPacketSize: true, PropSessionExpiryInterval: true, PropTopicAliasMaximum: true,
-	PropRequestResponseInformation: true, PropRequestProblemInformation: true,
+	PropRequestResponseInformation: true, PropRequestProblemInformation: true, PropJSONCompression: true,
 	"client-id": true, "username": true, "password": true, "keep-alive": true,
 }
 
@@ -169,6 +184,11 @@ func CheckProperties(props map[string]string) error {
 				return fmt.Errorf("pubsub/transport/mqtt: connection property %q must not be 0", name)
 			}
 		}
+	}
+	switch v := strings.TrimSpace(props[PropJSONCompression]); v {
+	case "", CompressionNone, CompressionGzip:
+	default:
+		return fmt.Errorf("pubsub/transport/mqtt: connection property %q: %q is not %q or %q", PropJSONCompression, v, CompressionGzip, CompressionNone)
 	}
 	for _, name := range []string{PropRequestResponseInformation, PropRequestProblemInformation} {
 		if v, ok := props[name]; ok {

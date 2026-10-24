@@ -186,7 +186,21 @@ var errDecodePanic = errors.New("pubsub: decoding the message panicked")
 
 // receive handles a message received on a connection.
 func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
-	enc, encErr := messageEncoding(m)
+	var enc encoding
+	var encErr error
+	if isGzipped(m) {
+		limit := p.opts.inflateLimit
+		if limit <= 0 {
+			limit = DefaultJSONDecompressionLimit
+		}
+		var dm *transport.Message
+		if dm, encErr = decompress(m, limit); encErr == nil {
+			m = dm
+		}
+	}
+	if encErr == nil {
+		enc, encErr = messageEncoding(m)
+	}
 	probe := false
 	if encErr == nil && enc == encUADP {
 		t, chunk, err := uadp.PeekType(m.Payload)
