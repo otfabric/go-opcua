@@ -941,11 +941,8 @@ func TestAsyncOpcuaServer_UntrustedCert_Rejected(t *testing.T) {
 		opcua.AuthAnonymous(),
 	)
 	if err != nil {
-		if isCertRejectionError(err) {
-			t.Logf("NewClient correctly rejected untrusted cert at config stage: %v", err)
-			return
-		}
-		t.Fatalf("NewClient returned unexpected error (not a certificate rejection): %v", err)
+		// A local rejection would leave the server's trust check untested.
+		t.Fatalf("NewClient: %v", err)
 	}
 
 	connectCtx, connectCancel := context.WithTimeout(context.Background(), dialTimeout)

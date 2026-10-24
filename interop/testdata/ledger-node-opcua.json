@@ -335,8 +335,9 @@
     {
       "capability": "write.encoding-mask",
       "direction": "go-client-to-node-opcua-server",
-      "status": "verified",
+      "status": "unsupported",
       "test": "TestNodeOpcuaServer_WriteEncodingMask",
+      "nextAction": "node-opcua soft-accepts EncodingMask timestamp Writes (StatusGood); claim requires BadWriteNotSupported",
       "fixture": "baseline"
     },
     {
