@@ -31,6 +31,12 @@ Interop pin update (the suite runs against opcua-interop **v0.8.2**), async-opcu
 - **Interop: client services against every peer server** (`interop/c2p_services_peer_test.go`, 10 new capabilities). They cover: multi-chunk messages of about 200 KB over Basic256Sha256 and Aes256_Sha256_RsaPss SignAndEncrypt, sized from the negotiated limits, with the chunk counts asserted; SetTriggering and RemoveLinks with the linked item in Sampling; the TransferSubscriptions identity rules; AddReferences / DeleteReferences; ServerDiagnosticsSummary and SessionDiagnosticsArray; and a Read with ReturnDiagnostics, whose DiagnosticInfos are decoded. A JSON Verbose codec round trip runs with Milo and UA-.NETStandard in both directions. What a peer lacks is `unsupported` in the ledgers, never faked: Add/DeleteReferences on Milo, async-opcua and node-opcua; server diagnostics on Milo, async-opcua and UA-.NETStandard; operation DiagnosticInfos everywhere except UA-.NETStandard; and the Verbose form on open62541.
 - `TestOpen62541LDS_GoServerRegisters` waits for the registration event as well as the FindServers listing; the LDS can list the server before the RegisterServer2 response reaches the registrant.
 
+### Docs
+
+- **README:** the comparison covers all six interop peers (open62541, Eclipse Milo, async-opcua, UA-.NETStandard, node-opcua, asyncua) in one feature table, followed by the interop evidence per peer ledger.
+- **New [docs/interop-gaps.md](docs/interop-gaps.md):** what go-opcua does not implement and what to use instead, go-opcua behaviour you may notice, the deviations of each peer stack the interop suite found, and the go-opcua defects interop found, with the version that fixed them.
+- `docs/encodings.md` lists the live codec peers per encoding, `docs/pubsub.md` what the other stacks have, and `docs/server-guide.md` what the server does not implement.
+
 ---
 
 ## v1.8.0

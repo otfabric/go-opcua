@@ -1,0 +1,123 @@
+# Interop gaps and workarounds
+
+What go-opcua does not implement, where it behaves differently from what an
+older version or another stack might lead you to expect, and the deviations
+of other OPC UA stacks you may meet when you connect go-opcua to them. Every
+peer entry comes from the interop suite ([INTEROP.md](../INTEROP.md)): the
+test that found it skips with the reason or pins the behaviour, and the
+ledger row says `unsupported` with the same reason.
+
+Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
+0.19.0, UA-.NETStandard 2.0.1, node-opcua 2.187.12 and opcua-asyncio
+(`asyncua`) 2.1.0, as packaged by opcua-interop v0.9.0.
+
+## What go-opcua does not implement
+
+| Gap | Who has it | Workaround |
+|---|---|---|
+| **Alarms & Conditions** (Part 9: condition state machines, Acknowledge, Confirm, ConditionRefresh). The server exposes the type NodeIds only. | UA-.NETStandard, node-opcua; open62541 (experimental) | Emit `BaseEventType` or your own event types with `Server.EmitBaseEvent` and keep the condition state in the application. The client subscribes to the A&C events of other servers like any event. |
+| **HTTPS and WebSocket transports** | UA-.NETStandard (HTTPS); open62541 (WebSocket server, build option) | Use `opc.tcp`. |
+| **GDS and certificate management** (Part 12 push and pull), CRLs, a file-based PKI store | UA-.NETStandard (push and pull); open62541 and node-opcua (push) | Manage certificates out of band. Trust is configured in code (`opcua.TrustedCertificates`, `server.WithClientCertificateTrustList`); a new client or a restarted server picks up rotated files. |
+| **ECC_brainpoolP256r1 / P384r1, ECC_curve448** | open62541 (with OpenSSL) | Use ECC_nistP256 / ECC_nistP384 or the AEAD policies. go-opcua refuses the unimplemented policies cleanly. |
+| **Historical events on the server.** The history provider interfaces cover data only; the client has `HistoryReadEvent`. | UA-.NETStandard (framework), asyncua | Store events in the application, or keep event history in another historian. |
+| **Live server diagnostics.** No ServerDiagnosticsSummary or session diagnostics counters; responses carry an empty `DiagnosticInfo` even when the request sets `ReturnDiagnostics`. | open62541, UA-.NETStandard, node-opcua | Use the metrics callbacks and `log/slog` ([OBSERVABILITY.md](../OBSERVABILITY.md)). The go-opcua client does send `ReturnDiagnostics` (since v1.8.1) and decodes what a server returns. |
+| **Dynamic decoding of custom structures** from the server's DataTypeDefinition | Milo, UA-.NETStandard, node-opcua, asyncua | Generate or register Go types (`ua.RegisterExtensionObject`); unknown structures stay ExtensionObject bodies. |
+| **PubSub: Ethernet, AMQP, chunked NetworkMessages, UADP discovery, PubSub diagnostics** | open62541 (Ethernet / TSN) | Use UDP or MQTT. |
+
+## go-opcua behaviour you may notice
+
+| Behaviour | Why | What to do |
+|---|---|---|
+| Username logins are refused with `BadUserAccessDenied` unless the server has `WithUsernameValidator`; issued tokens unless it has `WithIssuedTokenValidator` (since v1.8.0). | Part 4 leaves acceptance to the server; accepting unchecked credentials is unsafe. | Register a validator. `server.New` logs a warning per unvalidated token type. |
+| A peer that leaves gaps in sequence numbers on a secured channel loses the channel (`BadSequenceNumberInvalid`). | Part 6 §6.7.2.4. | Nothing for compliant peers. |
+| A server in a container refuses the Hello with `BadTcpEndpointUrlInvalid` when it is published on another host port (`-p 5000:4840`). | The server checks the port of the EndpointUrl in the Hello against its listen port. | Publish the same port number. |
+| Writing the same value again produces no data-change notification; a timestamp-only change needs trigger `StatusValueTimestamp`. | DataChangeFilter semantics (Part 4 §7.22.2). | Use `StatusValueTimestamp`. |
+| A discovery server registration does not validate the LDS certificate unless asked to. | Opt-in. | Pass `server.RegisterCertificateValidator`. |
+| Raw history deletes (DeleteRawModified) remove the sample at the end time, while a raw read excludes it. | Known limitation of the built-in historian. | Pass an end time just past the last sample to delete. |
+| Triggering links (SetTriggering) are not restored when the client re-creates a subscription after a reconnect. | Recovery re-creates subscriptions and monitored items only. | Call `Subscription.SetTriggering` again after recovery. |
+| mDNS has no probing or conflict resolution, and real multicast is verified on Linux only. | Scope of the built-in responder. | Prefer the LDS registry over mDNS on untrusted networks. |
+| ECC: where open62541 1.5.9 and Part 6 1.05.07 differ (curve25519 key material, Sign-mode key derivation, ChannelThumbprint), go-opcua follows open62541. | open62541 is the only ECC peer that can be tested. | Prefer SignAndEncrypt with ECC_nistP256 / P384 or the AEAD policies with other stacks. See [Security](security.md). |
+
+## Peer deviations
+
+What each stack does differently from Part 4 / Part 6, as observed by the
+interop suite. None of these needs a change in go-opcua; the workaround is
+on the side of the application that talks to the peer.
+
+### open62541 1.5.9
+
+- **XML codec:** cannot encode structures, enumerations, DataValue, DiagnosticInfo, matrices or a null Variant, and cannot decode DataValue, DiagnosticInfo or XmlElement. **JSON:** cannot decode a structure encoded in place in an ExtensionObject (its own 1.05 output) and rejects unknown members. go-opcua writes the Part 6 forms and reads open62541's ([encodings](encodings.md)).
+- **Clients** must send the certificate's SAN URI as ApplicationUri, otherwise `BadCertificateUriInvalid`.
+- **ECC endpoints** all have the same SecurityLevel: pin the policy rather than relying on `opcua.SelectEndpoint`.
+- **PubSub:** publishes its own ConfigurationVersion, discards KeepAlive and delta frames, wraps JSON sequence numbers at 65535, MQTT is QoS 0 without TLS, GetSecurityKeys may return a negative TimeToNextKey, and a reader in Error after its MessageReceiveTimeout stays there. go-opcua handles the sequence numbers and the TimeToNextKey ([PubSub](pubsub.md)).
+- **MQTT publisher** started before its broker accepts connections stays in Error, and a refusing broker can crash it (double free); fixed in the opcua-interop adapter (v0.8.2), not upstream. Start the broker first.
+- **Client** stalls its subscription when a node-opcua server answers a request under the token that was current when the request was sent (see node-opcua below).
+
+### Eclipse Milo 1.1.8
+
+- A Write of a DataValue with a SourceTimestamp or StatusCode is accepted (`Good`) instead of `BadWriteNotSupported`. Read back to confirm.
+- JSON DataValue: Milo decodes only its own form with the Variant nested in `"Value"`. Send Variants rather than DataValues to Milo; go-opcua reads Milo's form.
+- XML DateTime keeps milliseconds only.
+- `ReleaseContinuationPoints` of a HistoryRead does not reach the history backend.
+- The server refuses more than 4 connection attempts per second from one address (`Stack.ConnectionLimits`); many clients behind one NAT address can hit it.
+- No NodeManagement in the reference server, no ECC, no reverse connect, no LDS or mDNS, no PubSub.
+
+### async-opcua 0.19.0
+
+- A String written to an Int32 is accepted (want `BadTypeMismatch`); Browse of an unknown NodeId returns `Good` with no references (want `BadNodeIdUnknown`). Validate types on the client; read the NodeClass to check that a node exists.
+- No EventQueueOverflowEventType; the oldest events are dropped silently. Size event queues generously.
+- A Write with a SourceTimestamp is accepted (`Good`).
+- Under `StatusValueTimestamp`, a timestamp change inside a deadband is reported; a percent deadband without EURange answers `BadDeadbandFilterInvalid` where go-opcua returns `BadMonitoredItemFilterUnsupported`. Treat both as "filter refused".
+- Over SecurityPolicy None, ActivateSession carries a null ServerNonce (open62541 rejects that, go-opcua accepts it).
+- Certificates are trusted by exact match only, no CA chains: put the go-opcua leaf certificate into its trust store.
+- MaxByteStringLength is 65535.
+- JSON is the 1.04 `{"Type":..,"Body":..}` form (go-opcua reads it with `ua.WithJSONForm`); no ECC, LDS, mDNS or PubSub.
+
+### UA-.NETStandard 2.0.1
+
+- The client refuses to send a UserName token over SecurityPolicy None: offer username on a secured endpoint or with a token policy that has its own SecurityPolicyUri.
+- The end time of a raw HistoryRead is exclusive, and releasing a continuation point answers with a null HistoryData.
+- The XmlDecoder reads namespace-qualified elements only: do not use `ua.WithoutXMLNamespace` with .NET peers.
+- ECC application certificates issued by an RSA CA are refused; ECC between go-opcua and .NET is untested.
+- The OPC Foundation LDS is a separate product; there is no multicast discovery.
+
+### node-opcua 2.187.12
+
+- After a SecureChannel renewal the server answers a request under the token the request used. The go-opcua client copes; open62541's client stalls.
+- A Read with an IndexRange on a scalar returns `Good` (want `BadIndexRangeNoData`).
+- Event queues are revised to at least 100, so a small event queue overflows late.
+- A Write with a SourceTimestamp is accepted (`Good`).
+- UserName over a None endpoint works only with an encrypted password.
+- The server registers only with a discovery server that has a certificate, and reports success when the registration failed: give the go-opcua LDS a secured endpoint (the default) and check `Server.RegisteredServers()`.
+- The server answers AddNodes, DeleteNodes, AddReferences, DeleteReferences, HistoryUpdate and Query with `BadServiceUnsupported`; no ECC, no open-source PubSub, no Part 6 XML codec.
+
+### opcua-asyncio (asyncua) 2.1.0
+
+- **Read and Browse:** TimestampsToReturn and IndexRange are ignored; Browse ignores RequestedMaxReferencesPerNode (no continuation points); a Write to an unknown node answers `BadUserAccessDenied` and a Browse of one `BadNodeIdInvalid` (want `BadNodeIdUnknown`); a Write with a SourceTimestamp is accepted.
+- **Subscriptions:** no sampling (every write is reported, the revised SamplingInterval is the publishing interval); MonitoringMode Sampling still reports, so the effect of SetTriggering cannot be observed; ModifySubscription and ModifyMonitoredItems are not applied; the absolute deadband is compared with the previous sample, a percent deadband is accepted and not applied; no EventQueueOverflow event.
+- **Republish** of a sequence number the server does not hold answers `Good` with an empty message (want `BadMessageNotAvailable`).
+- **TransferSubscriptions** checks no identity: a user's subscription moves to an anonymous session.
+- **HistoryRead** with NumValuesPerNode truncates without a continuation point.
+- **Discovery:** RegisterServer with IsOnline=false keeps the server listed; no mDNS.
+- **Sessions:** MaxRequestMessageSize is revised to 65536; there are no server diagnostics.
+- **Strings:** go-opcua encodes an empty Go string as a null String, which asyncua reads as `None`.
+- Node management is served to the `Admin` role only; no ECC, no reverse connect, no Part 6 JSON codec, PubSub is experimental (UADP over UDP).
+
+## go-opcua defects found by interop
+
+Fixed; listed so that you can tell whether an upgrade helps with a symptom.
+
+| Symptom | Found with | Fixed in |
+|---|---|---|
+| Strict clients (UaExpert, Prosys) reject encrypted channels: empty ReceiverCertificateThumbprint in OPN responses | UaExpert, Prosys | v1.1.1 |
+| Sessions die at 75 % of the channel lifetime (`could not verify signature`): server-side renewal reused the TokenId and swapped keys in place | open62541, Milo | v1.5.0 |
+| An open62541 renewal is rejected with `BadSecureChannelTokenUnknown` | open62541 | v1.5.0 |
+| A Variable added through AddNodes reads back null (SpecifiedAttributes 0 means all) | open62541, Milo | v1.5.0 |
+| An XmlElement inherits the document's default namespace | Milo | v1.6.0 |
+| About one channel in 1023 starts at sequence number 1024 (must be below 1024 for the RSA policies) | async-opcua | v1.8.1 |
+| Aes256_Sha256_RsaPss asymmetric messages split into blocks of the wrong size (SHA-512 padding for RSA-OAEP-SHA256) | UA-.NETStandard | v1.8.1 |
+| CreateSession returns no ServerEndpoints when the client dialled a host name no endpoint matches | UA-.NETStandard | v1.8.1 |
+| `WithClientCertificateTrustList` reads only the first certificate of a client's chain | UA-.NETStandard | v1.8.1 |
+| The client drops the caller's `ReturnDiagnostics` and `AuditEntryId` | all peers (no diagnostics returned) | v1.8.1 |
+| A scheduled renewal renews a token that `Renew` already replaced, from a used sequence number | asyncua | v1.8.1 |
+| A Republish answered without the requested message rewinds the subscription's sequence numbers | asyncua | v1.8.1 |

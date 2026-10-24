@@ -36,7 +36,9 @@ Requires **Go 1.26** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
     - [Subscribe to changes](#subscribe-to-changes)
     - [Browse the address space](#browse-the-address-space)
     - [Run a server](#run-a-server)
-  - [go-opcua vs open62541 and Eclipse Milo](#go-opcua-vs-open62541-and-eclipse-milo)
+  - [go-opcua compared with other OPC UA stacks](#go-opcua-compared-with-other-opc-ua-stacks)
+    - [Features](#features)
+    - [Interop evidence](#interop-evidence)
   - [Client Features](#client-features)
   - [Server Features](#server-features)
   - [Service Support Matrix](#service-support-matrix)
@@ -67,8 +69,9 @@ Requires **Go 1.26** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
 - **Resilience** — Automatic reconnect, retry policies,
   and subscription recovery.
 - **Observability** — Structured logging and pluggable metrics.
-- **Interoperability tested** — Independently tested against
-  open62541 (C) and Eclipse Milo (Java).
+- **Interoperability tested** — Tested in both directions against
+  open62541 (C), Eclipse Milo (Java), async-opcua (Rust),
+  UA-.NETStandard (C#), node-opcua (TypeScript) and asyncua (Python).
 
 Built for developers integrating PLCs, industrial gateways,
 SCADA systems, and industrial IoT applications.
@@ -89,7 +92,8 @@ For full API details see [API.md](API.md).
 | [JSON and XML Data Encodings](docs/encodings.md) | `ua.EncodeJSON` / `ua.EncodeXML`: supported forms, namespace tables, custom structures, open62541 interoperability |
 | [Errors](ERRORS.md) | Go sentinels vs wire `ua.StatusCode` |
 | [Observability](OBSERVABILITY.md) | Silent slog default and metrics callbacks |
-| [Interop](INTEROP.md) | Cross-stack testing vs open62541 / Milo; fixture layout, pins, local iteration |
+| [Interop](INTEROP.md) | Cross-stack testing against six other stacks; fixture layout, pins, local iteration |
+| [Interop gaps and workarounds](docs/interop-gaps.md) | What go-opcua lacks, peer deviations you may meet, and how to work around them |
 | [API Reference](API.md) | Complete reference for all public types and functions |
 
 ## Quickstart
@@ -201,108 +205,153 @@ func main() {
 }
 ```
 
-## go-opcua vs open62541 and Eclipse Milo
+## go-opcua compared with other OPC UA stacks
 
-go-opcua is tested against two other implementations in every applicable
+go-opcua is tested against six other implementations in every applicable
 client/server direction (see
 [Testing and production readiness](#testing-and-production-readiness)):
-[open62541](https://github.com/open62541/open62541) and
-[Eclipse Milo](https://github.com/eclipse-milo/milo). Both are mature,
-widely deployed stacks; this table shows where the three differ so you can
-pick the right one for your project.
+[open62541](https://github.com/open62541/open62541) (C),
+[Eclipse Milo](https://github.com/eclipse-milo/milo) (Java),
+[async-opcua](https://github.com/freeopcua/async-opcua) (Rust), the OPC
+Foundation [UA-.NETStandard](https://github.com/OPCFoundation/UA-.NETStandard)
+reference stack (C#), [node-opcua](https://github.com/node-opcua/node-opcua)
+(TypeScript) and [opcua-asyncio](https://github.com/FreeOpcUa/opcua-asyncio)
+(Python, `asyncua`). Each runs as a container from
+[opcua-interop](https://github.com/otfabric/opcua-interop). The tables show
+where the stacks differ, so you can pick the right one for your project, and
+what the interop suite has actually exercised.
 
-| Capability | otfabric/go-opcua | open62541 | Eclipse Milo |
-|---|:---:|:---:|:---:|
-| Language | Go | C (C99) | Java 17+ |
-| License | MIT | MPL-2.0 | EPL-2.0 |
-| Client | ✅ | ✅ | ✅ |
-| Server | ✅ | ✅ | ✅ |
-| Client/Server over UA-TCP, OPC UA Binary | ✅ | ✅ | ✅ |
-| JSON / XML data encoding (Part 6 §5.4, §5.3) | ✅ all built-in types and structures; JSON Compact, Verbose and 1.04 reversible ⁵ | ✅ JSON 1.05 or 1.04; XML for built-in types and arrays ⁵ | ✅ JSON Compact and Verbose, XML |
-| PubSub (Part 14) | ✅ UADP and JSON over UDP and MQTT, PubSub-Aes128/256-CTR, Security Key Service, PublishSubscribe information model ⁶ | ✅ UDP, Ethernet, MQTT | — |
-| Reverse connect (client and server) | ✅ ¹ | ✅ | — |
-| RSA security policies (Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss; Basic128Rsa15 and Basic256 for legacy peers) | ✅ | ✅ | ✅ |
-| ECC security policies | ✅ ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519 | ✅ with OpenSSL (also Brainpool and Curve448) | — |
-| User identity: anonymous, username, X.509 | ✅ | ✅ | ✅ |
-| User identity: issued token | ✅ carried to the application | ✅ | server side |
-| SecureChannel renewal with token rotation | ✅ | ✅ | ✅ |
-| Discovery: FindServers, GetEndpoints | ✅ | ✅ | ✅ |
-| Discovery: local discovery server, mDNS (FindServersOnNetwork, RegisterServer, RegisterServer2) | ✅ LDS, registration, built-in mDNS (LDS-ME) | ✅ | client RegisterServer only |
-| Attribute, View, Method service sets | ✅ | ✅ | ✅ |
-| RegisterNodes / UnregisterNodes | ✅ | ✅ | ✅ |
-| NodeManagement (AddNodes, DeleteNodes, references) | ✅ | ✅ | — delegated to the application ² |
-| Query (QueryFirst, QueryNext) | ✅ client and server | — client request only | — |
-| Subscriptions: data change, Republish, TransferSubscriptions | ✅ | ✅ | ✅ |
-| DataChangeFilter (deadband, trigger) | ✅ ³ | ✅ | ✅ |
-| Events: emission, SelectClauses, WhereClause | ✅ | ✅ | ✅ |
-| Alarms & Conditions | — | experimental | types only |
-| HistoryRead raw, built-in store | ✅ | ✅ | — delegated to the application ² |
-| HistoryRead modified / at-time / processed, HistoryUpdate | ✅ built-in in-memory historian, pluggable provider | raw and update; rest via backend plugin | — delegated to the application ² |
-| NodeSet2 XML import at run time | ✅ nodes, references, values ⁴ | ✅ optional loader, plus build-time compiler | — |
-| Custom structured DataTypes | ✅ registered Go types | ✅ generated or runtime type descriptions | ✅ decoded dynamically from the server's type system |
-| Automatic reconnect with subscription recovery | ✅ | reconnect; subscriptions re-created by the application | ✅ |
-| Cancellation and deadlines per call | ✅ `context.Context` | — timeouts | ✅ futures and timeouts |
-| Retry policy for requests | ✅ pluggable | — | — |
-| Structured logging | ✅ `log/slog` | ✅ logger plugin | ✅ SLF4J |
-| Metrics hooks (client and server) | ✅ | — | — |
-| Concurrency model | goroutines | single-threaded event loop (multithreading optional) | Netty, asynchronous |
-| Runs without an OS / on microcontrollers | — | ✅ | — |
-| Native dependencies | none (pure Go, no cgo; one Go module besides the standard library for cryptography: `golang.org/x/crypto`) | none; mbedTLS or OpenSSL for encryption | JVM; Netty, Bouncy Castle |
-| OPC Foundation certification | — | ✅ example server, Standard Server 2017 profile (v1.4) | — |
-| Cross-tested against other stacks in CI | ✅ against both, [393 verified ledger rows](interop/COVERAGE.md) | CTT, fuzzing (OSS-Fuzz) | — not documented |
+### Features
+
+| Capability | go-opcua | open62541 | Milo | async-opcua | UA-.NETStandard | node-opcua | asyncua |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
+| Version tested | main | 1.5.9 | 1.1.8 | 0.19.0 | 2.0.1 | 2.187.12 | 2.1.0 |
+| Language | Go | C (C99) | Java 17+ | Rust | C# (.NET) | TypeScript (Node.js) | Python 3 |
+| License | MIT | MPL-2.0 | EPL-2.0 | MPL-2.0 | GPL-2.0 or OPC Foundation RCL | MIT | LGPL-3.0 |
+| Client and server | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| UA-TCP, OPC UA Binary | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| HTTPS / WebSockets transport | — | WebSocket server (build option) | — | — | HTTPS | — | — |
+| Reverse connect (ReverseHello) ¹ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — |
+| RSA security policies (Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss; Basic128Rsa15 and Basic256 for legacy peers) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ECC security policies ² | ✅ nistP256/384, nistP256_AesGcm, nistP256_ChaChaPoly, curve25519 | ✅ also Brainpool, Curve448 (OpenSSL) | — | — | ✅ | — | — |
+| User identity: anonymous, username, X.509 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| User identity: issued token | ✅ carried to the application | ✅ | server side | · | ✅ | · | · |
+| Discovery: FindServers, GetEndpoints, RegisterServer2 as registrant | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ³ | ✅ |
+| Local Discovery Server, mDNS (LDS-ME, FindServersOnNetwork) | ✅ built in | ✅ | — | — | separate LDS product | separate discovery server | registry only, no mDNS |
+| Attribute, View, Method service sets, RegisterNodes | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ⁴ |
+| NodeManagement served (AddNodes, DeleteNodes, references) | ✅ | ✅ | delegated to the application ⁵ | ✅ | ✅ | — | Admin role only |
+| Query (QueryFirst, QueryNext) | ✅ client and server | client request only | — | delegated to node managers | — | — | — |
+| Subscriptions: data change, Republish, TransferSubscriptions | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ⁴ |
+| DataChangeFilter (deadband, trigger), sampling interval ⁶ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | client; server partial ⁴ |
+| Events: emission, SelectClauses, WhereClause | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Alarms & Conditions (Part 9) | — | experimental | types only | · | ✅ | ✅ | · |
+| HistoryRead raw with a built-in store | ✅ | ✅ | delegated ⁵ | delegated | delegated | ✅ | ✅ |
+| HistoryRead modified / at-time / processed, HistoryUpdate | ✅ built-in historian, pluggable provider | raw and update; rest via backend plugin | delegated ⁵ | delegated | delegated | raw only | raw and events |
+| Server diagnostics (ServerDiagnostics, DiagnosticInfo) | — | ✅ | — | — | ✅ | ✅ | — |
+| PubSub (Part 14) ⁷ | ✅ UADP and JSON over UDP and MQTT, security, SKS | ✅ UDP, Ethernet, MQTT | — | — | ✅ UDP, MQTT | commercial add-on | experimental UADP over UDP |
+| JSON / XML data encoding of values ⁸ | ✅ JSON 1.05 Compact and Verbose, 1.04; XML | ✅ JSON; XML for built-in types | ✅ JSON Compact and Verbose; XML | JSON 1.04 form; NodeSet2 XML | ✅ JSON Compact and Verbose; XML | JSON | — NodeSet2 XML only |
+| NodeSet2 XML import at run time | ✅ | ✅ loader, plus build-time compiler | — | ✅ | ✅ | ✅ | ✅ |
+| Custom structured DataTypes | registered Go types | generated or runtime descriptions | decoded dynamically | generated | decoded dynamically | decoded dynamically | decoded dynamically |
+| GDS / certificate management (Part 12) | — | push (build option) | · | — | ✅ push and pull | push | — |
+| Automatic reconnect with subscription recovery | ✅ | reconnect; application re-creates subscriptions | ✅ | ✅ | ✅ | ✅ | application reconnects |
+| Cancellation and deadlines per call | ✅ `context.Context` | timeouts | futures, timeouts | async, timeouts | `CancellationToken` | promises, timeouts | asyncio, timeouts |
+| Native dependencies | none (pure Go, no cgo) | mbedTLS or OpenSSL for encryption | JVM; Netty, Bouncy Castle | none (pure Rust, RustCrypto) | .NET runtime | Node.js (OpenSSL) | CPython, `cryptography` (OpenSSL) |
+| Runs without an OS / on microcontrollers | — | ✅ | — | — | — | — | — |
+| OPC Foundation certification | — | ✅ example server, Standard Server 2017 profile (v1.4) | — | — | reference implementation | — | — |
+
+✅ = available · — = not available · · = not documented or not verified here.
+"Delegated" means the server SDK routes the service to the application and has
+no built-in implementation. The peer columns describe the stacks at the
+versions above, from their public sources, documentation and adapter behaviour
+as of October 2026; what the interop suite has proven is in the next table.
+If you spot an inaccuracy, please
+[open an issue](https://github.com/otfabric/go-opcua/issues) and we will
+correct it.
 
 ¹ Part 6 §7.1.3: the server opens the connection to a listening client and
 announces itself with ReverseHello (`server.WithReverseConnect`,
-`opcua.ReverseConnect`). Wire-compatible with open62541 in both directions.
-Milo's transport has no ReverseHello message.
+`opcua.ReverseConnect`). Verified against open62541, async-opcua and
+node-opcua in both directions; the UA-.NETStandard adapter does not wire it.
 
-² Milo's server SDK routes these service sets to the application's
-`AddressSpace`; there is no built-in implementation. In the reference server
-used for go-opcua's interop tests, AddNodes returns `BadNotSupported`.
+² go-opcua follows open62541 1.5.9 where it and Part 6 1.05.07 differ (see
+[Security](docs/security.md)); open62541 is the only ECC peer the suite can
+test, because UA-.NETStandard 2.0.1 refuses ECC certificates from the RSA test
+CA. ECC_brainpoolP256r1/P384r1 and ECC_curve448 are not implemented.
 
-³ Client and server. The go-opcua server applies all three triggers, absolute
-deadband on numeric scalars and arrays, and percent deadband on variables with
-an `EURange` property; it also honours the sampling interval and the
+³ node-opcua registers only with a discovery server that has a certificate,
+and reports success when the registration failed.
+
+⁴ asyncua 2.1.0 ignores TimestampsToReturn, IndexRange, the sampling interval,
+MonitoringMode Sampling and ModifySubscription, applies the absolute deadband
+against the previous sample and does not apply a percent deadband, and moves a
+user's subscription to an anonymous session on TransferSubscriptions. See
+[Interop gaps](docs/interop-gaps.md).
+
+⁵ Milo's server SDK routes these service sets to the application's
+`AddressSpace`; in the reference server used for the interop tests, AddNodes
+returns `BadNotSupported`.
+
+⁶ The go-opcua server applies all three triggers, absolute deadband on
+numeric scalars and arrays, and percent deadband on variables with an
+`EURange` property; it also honours the sampling interval and the
 `IndexRange` of a monitored item.
 
-⁴ Nodes, references, role permissions and, for variables, the Value,
-DataType, ValueRank, ArrayDimensions and access levels are imported.
+⁷ Publisher and subscriber, standalone (`pubsub.New`) or in the server
+(`server.WithPubSub`); UADP with Variant, DataValue and RawData fields, delta
+frames, keep-alive and events; JSON `ua-data`, `ua-metadata`, `ua-status`;
+PubSub-Aes128/256-CTR with keys from a static key ring, a Security Key Service
+or SetSecurityKeys push; remote configuration with `pubsub/remote`. No
+Ethernet or AMQP transport and no chunked messages. Interoperability-tested
+against open62541, the only peer whose adapter offers PubSub. See
+[PubSub](docs/pubsub.md).
 
-⁵ An encoding of values (`ua.EncodeJSON`, `ua.EncodeXML`), not a transport:
-the wire stays UA-TCP with the binary encoding. go-opcua's codecs are verified
-against open62541 with a recorded corpus and, live, against open62541 and
-Eclipse Milo in both directions (interop ledger, `encoding.*`); open62541
-v1.5.9 does not encode structures, enumerations, DataValue, DiagnosticInfo or
-matrices to XML. See
+⁸ An encoding of values (`ua.EncodeJSON`, `ua.EncodeXML`), not a transport.
+Verified live in both directions against open62541, Milo and
+UA-.NETStandard, and against a recorded open62541 corpus. See
 [JSON and XML Data Encodings](docs/encodings.md).
 
-⁶ Publisher and subscriber, standalone (`pubsub.New`) or in the server
-(`server.WithPubSub`, address space as data source and target variables);
-UADP with Variant, DataValue and RawData fields, delta frames, keep-alive and
-events; JSON `ua-data`, `ua-metadata`, `ua-status`; signed and encrypted UADP
-with keys from a static key ring, a local or remote Security Key Service, or
-SetSecurityKeys push; remote configuration with `pubsub/remote`. No Ethernet
-or AMQP transport and no chunked messages. Interoperability-tested against
-open62541 (interop ledger, profile `pubsub`). See [PubSub](docs/pubsub.md).
+### Interop evidence
 
-✅ = available · — = not available or not documented. For open62541 v1.5.9
-and Eclipse Milo 1.1.8, the versions go-opcua is tested against, from their
-public sources and documentation as of October 2026. If you spot an
-inaccuracy, please [open an issue](https://github.com/otfabric/go-opcua/issues)
-and we will correct it.
+Each ledger row is one capability in one direction (go-opcua client → peer
+server, or peer client → go-opcua server), checked by a test. `unsupported`
+rows record what the peer (or its adapter) lacks or where it deviates from the
+specification; the test pins that behaviour or skips with the reason.
+
+| Peer | Ledger | Verified | Unsupported | Deferred | Not applicable |
+|---|---|---:|---:|---:|---:|
+| open62541 and Eclipse Milo (default peers) | [`interop/coverage.json`](interop/COVERAGE.md) | 407 | 148 | 64 | 44 |
+| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 136 | 140 | 30 | 22 |
+| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 148 | 128 | 34 | 22 |
+| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 136 | 144 | 27 | 22 |
+| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 111 | 165 | 34 | 22 |
+
+Interop with these stacks found and fixed go-opcua defects that a Go-to-Go
+test cannot show, among them the RSA-OAEP-SHA256 block size (UA-.NETStandard),
+the first sequence number of a channel (async-opcua), the renewal of a
+superseded token (asyncua) and in-place key swaps on renewal (open62541,
+Milo). The known gaps, the peer deviations you may meet and their workarounds
+are listed in [Interop gaps and workarounds](docs/interop-gaps.md).
 
 **Choose go-opcua if** you write Go and want client and server in one
 library with no cgo and a permissive license, `context` control on every
 call, reconnect with subscription recovery, retries and observability built
-in, and a server that includes history and query out of the box.
+in, and a server that includes discovery, history and query out of the box.
 
 **Choose open62541 if** you need a C library for embedded or bare-metal
-targets, PubSub over Ethernet (TSN), the Brainpool / Curve448 ECC security policies,
-or a stack with an OPC Foundation certified server profile.
+targets, PubSub over Ethernet (TSN), the Brainpool / Curve448 ECC security
+policies, or a stack with an OPC Foundation certified server profile.
 
 **Choose Eclipse Milo if** you are on the JVM and want asynchronous client
 and server SDKs with strong support for dynamically decoded custom data
 types.
+
+**Choose UA-.NETStandard if** you build on .NET and need the OPC Foundation
+reference implementation, Alarms & Conditions, or GDS certificate management.
+
+**Choose async-opcua, node-opcua or asyncua if** you work in Rust,
+JavaScript / TypeScript or Python; check the footnotes and
+[Interop gaps and workarounds](docs/interop-gaps.md) for the server behaviour
+you rely on.
 
 ## Client Features
 
@@ -459,13 +508,13 @@ go run examples/datetime/datetime.go -endpoint opc.tcp://localhost:4840
 
 ## Testing and production readiness
 
-go-opcua is continuously interoperability-tested in all applicable client/server directions against open62541 and Eclipse Milo. The directional evidence ledger is maintained in [interop/COVERAGE.md](interop/COVERAGE.md).
+go-opcua is continuously interoperability-tested in all applicable client/server directions against open62541 and Eclipse Milo (default peers, every CI run) and against async-opcua, UA-.NETStandard, node-opcua and asyncua (opt-in peers with their own ledgers). The directional evidence ledger is maintained in [interop/COVERAGE.md](interop/COVERAGE.md) and `interop/testdata/ledger-*.json`; see [Interop evidence](#interop-evidence).
 
 - **Verify gate**: `make verify` — `go vet`, unit tests, race tests, and interop (`make vet`, `make test-norace`, `make test`, `make interop`).
 - **Unit tests**: `make test-norace` (`go test -count=1 ./...`), `make test` (same with `-race`).
 - **Coverage**: `make coverage` writes `coverage.out` for core library packages (90% gate); CI passes the same `COVER_PKGS` list as `coverpkg` to the shared workflow so Codecov matches. `make cover` opens the report.
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
-- **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541, Milo). See [INTEROP.md](INTEROP.md).
+- **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541 and Milo by default; async-opcua, UA-.NETStandard, node-opcua and asyncua with `ASYNC_OPCUA_IMAGE`, `DOTNET_IMAGE`, `NODE_OPCUA_IMAGE`, `ASYNCUA_IMAGE`). See [INTEROP.md](INTEROP.md).
 - **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
 - **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`.
 - **Linting**: `make lint` (staticcheck), `make lint-ci` (golangci-lint); full local gate is `make check` (fmt + lint + verify + coverage).
