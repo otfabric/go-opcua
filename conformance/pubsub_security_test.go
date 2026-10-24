@@ -216,7 +216,13 @@ func psDialSKS(ctx context.Context, url string) (*opcua.Client, error) {
 // message before and every message after the push.
 func TestPubSub_SecurityKeyService(t *testing.T) {
 	parallel(t)
-	ks := psKeyService(t, security.PolicyURIAes128CTR, 300*time.Millisecond, "pull")
+	// The key sources fetch right after a key change that leaves them one
+	// future key, so a fetch has about two key lifetimes before the
+	// publisher uses a key the subscriber does not hold. Every fetch dials
+	// a new Basic256Sha256 SignAndEncrypt session: with 300 ms keys a fetch
+	// slowed down past 600 ms by the race detector on a loaded machine got
+	// messages rejected at a key change.
+	ks := psKeyService(t, security.PolicyURIAes128CTR, time.Second, "pull")
 	require.NoError(t, ks.AddSecurityGroup(security.SecurityGroupConfig{
 		SecurityGroupID: "push", SecurityPolicyURI: security.PolicyURIAes256CTR, KeyLifetime: time.Hour, MaxFutureKeyCount: 1,
 	}))
