@@ -1,5 +1,5 @@
 {
-  "interopVersion": "v0.9.0",
+  "interopVersion": "v0.10.0",
   "peer": {
     "stack": "opcfoundation-uanetstandard",
     "version": "2.0.1"
@@ -1349,476 +1349,476 @@
       "capability": "security.ecc-nistp256.sign",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.sign",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.sign-encrypt",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.sign-encrypt",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.subscription",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.subscription",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.valid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.valid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.invalid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.invalid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.renewal",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.renewal",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign-encrypt",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign-encrypt",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.subscription",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.subscription",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.valid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.valid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.invalid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.invalid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.renewal",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.renewal",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.write",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.write",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.subscription",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.subscription",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.valid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.valid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.invalid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.invalid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.renewal",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.renewal",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.write",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.write",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.subscription",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.subscription",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.valid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.valid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.invalid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.invalid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.renewal",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.renewal",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.sign-encrypt",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.sign-encrypt",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.write",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.write",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.subscription",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.subscription",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.valid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.valid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.invalid",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.invalid",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.renewal",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.renewal",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc.unimplemented-policy",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc.unimplemented-policy",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "nextAction": "opcua-interop dotnet v0.10.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
       "fixture": "baseline"
     },
     {
       "capability": "transport.reverse-connect",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "nextAction": "opcua-interop dotnet v0.10.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
       "fixture": "baseline"
     },
     {
       "capability": "transport.reverse-connect",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "nextAction": "opcua-interop dotnet v0.10.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
       "fixture": "baseline"
     },
     {
       "capability": "transport.reverse-connect.subscription",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "nextAction": "opcua-interop dotnet v0.10.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
       "fixture": "baseline"
     },
     {
       "capability": "transport.reverse-connect.subscription",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "nextAction": "opcua-interop dotnet v0.10.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
       "fixture": "baseline"
     },
     {
       "capability": "transport.reverse-connect.secure",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "nextAction": "opcua-interop dotnet v0.10.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
       "fixture": "baseline"
     },
     {
       "capability": "transport.reverse-connect.secure",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "nextAction": "opcua-interop dotnet v0.10.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
       "fixture": "baseline"
     },
     {
@@ -1965,14 +1965,14 @@
       "capability": "discovery.multicast",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 has no mDNS (multicast extension): UA-.NETStandard 2.0.1 implements no multicast discovery in its server or client",
+      "nextAction": "opcua-interop dotnet v0.10.0 has no mDNS (multicast extension): UA-.NETStandard 2.0.1 implements no multicast discovery in its server or client",
       "fixture": "baseline"
     },
     {
       "capability": "discovery.multicast",
       "direction": "dotnet-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "opcua-interop dotnet v0.9.0 has no mDNS (multicast extension): UA-.NETStandard 2.0.1 implements no multicast discovery in its server or client",
+      "nextAction": "opcua-interop dotnet v0.10.0 has no mDNS (multicast extension): UA-.NETStandard 2.0.1 implements no multicast discovery in its server or client",
       "fixture": "baseline"
     },
     {
@@ -1981,7 +1981,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_GoEncodesUADP_DotnetDecodes",
       "case": "*; dataset-message-invalid skipped: Opc.Ua.PubSub drops an invalid DataSetMessage (Part 14 §7.2.4.5.4)",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -1990,7 +1989,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_DotnetEncodesUADP_GoDecodes",
       "case": "*; empty-string: Opc.Ua.PubSub encodes the empty String with length 0, go-opcua with length -1 (both decode alike); dataset-message-invalid skipped",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -1999,7 +1997,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_GoEncodesUADP_DotnetDecodes",
       "case": "delta-frame-*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2008,7 +2005,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_DotnetEncodesUADP_GoDecodes",
       "case": "delta-frame-*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2017,7 +2013,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_GoEncodesUADP_DotnetDecodes",
       "case": "keep-alive",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2026,7 +2021,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_DotnetEncodesUADP_GoDecodes",
       "case": "keep-alive",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2035,7 +2029,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "sign*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2044,7 +2037,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "sign*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2053,7 +2045,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_GoEncodesJSON_DotnetDecodes",
       "case": "*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2062,7 +2053,6 @@
       "status": "verified",
       "test": "TestPubSubCodec_DotnetEncodesJSON_GoDecodes",
       "case": "*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2071,7 +2061,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "variant",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2080,7 +2069,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "variant",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2089,7 +2077,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "datavalue",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2098,7 +2085,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "datavalue",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2107,7 +2093,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "rawdata",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2116,7 +2101,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "rawdata",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2125,7 +2109,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2134,7 +2117,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2159,7 +2141,6 @@
       "status": "verified",
       "test": "TestPubSubChunk_GoPublishes_DotnetReassembles",
       "case": "*; MaxNetworkMessageSize 80 unsecured, 128 with PubSub-Aes256-CTR",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2168,7 +2149,6 @@
       "status": "verified",
       "test": "TestPubSubChunk_DotnetPublishes_GoReassembles",
       "case": "*; MaxNetworkMessageSize 80 unsecured, 128 with PubSub-Aes256-CTR",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2177,7 +2157,6 @@
       "status": "verified",
       "test": "TestPubSubDiscovery_GoProbes_DotnetAnswers",
       "case": "*; the .NET layout (message.DiscoveryLayoutDotNet)",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2186,7 +2165,6 @@
       "status": "verified",
       "test": "TestPubSubDiscovery_DotnetProbes_GoAnswers",
       "case": "*; client pubsub-discover, the .NET layout",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2209,7 +2187,6 @@
       "status": "verified",
       "test": "TestPubSubMQTT_GoPublishes_DotnetSubscribes",
       "case": "uadp; dotnet on MQTT 3.1.1",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2218,7 +2195,6 @@
       "status": "verified",
       "test": "TestPubSubMQTT_DotnetPublishes_GoReceives",
       "case": "uadp; dotnet publishes on MQTT 5.0 (Opc.Ua.PubSub.Mqtt cannot publish below 5.0), go-opcua subscribes on 3.1.1",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2227,7 +2203,6 @@
       "status": "verified",
       "test": "TestPubSubMQTT_GoPublishes_DotnetSubscribes",
       "case": "json; dotnet on MQTT 3.1.1",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2236,7 +2211,6 @@
       "status": "verified",
       "test": "TestPubSubMQTT_DotnetPublishes_GoReceives",
       "case": "json; dotnet publishes on MQTT 5.0 (Opc.Ua.PubSub.Mqtt cannot publish below 5.0), go-opcua subscribes on 3.1.1",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2245,7 +2219,6 @@
       "status": "verified",
       "test": "TestPubSubMQTT5_GoPublishes_DotnetSubscribes",
       "case": "uadp, json; Mosquitto 2.0.22, dotnet on MQTT 5.0",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2254,7 +2227,6 @@
       "status": "verified",
       "test": "TestPubSubMQTT5_DotnetPublishes_GoSubscribes",
       "case": "uadp, json; Mosquitto 2.0.22, dotnet on MQTT 5.0",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2277,7 +2249,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "sign-aes128-ctr",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2286,7 +2257,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "sign-aes128-ctr",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2295,7 +2265,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "sign-and-encrypt-aes128-ctr",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2304,7 +2273,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "sign-and-encrypt-aes128-ctr",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2313,7 +2281,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_GoPublishes_DotnetSubscribes",
       "case": "sign-and-encrypt-aes256-ctr",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2322,7 +2289,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "sign-and-encrypt-aes256-ctr",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2330,7 +2296,6 @@
       "direction": "go-client-to-dotnet-server",
       "status": "verified",
       "test": "TestPubSubUDP_DotnetSubscriber_RejectsInsecure",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2339,7 +2304,6 @@
       "status": "verified",
       "test": "TestPubSubUDP_DotnetPublishes_GoReceives",
       "case": "sign*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2404,7 +2368,6 @@
       "status": "verified",
       "test": "TestPubSubRuntime_GoPublishes_DotnetSubscribes",
       "case": "*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2413,7 +2376,6 @@
       "status": "verified",
       "test": "TestPubSubRuntime_DotnetPublishes_GoSubscribes",
       "case": "*",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2422,7 +2384,6 @@
       "status": "verified",
       "test": "TestPubSubRuntime_GoPublishes_DotnetSubscribes",
       "case": "variant",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
@@ -2430,7 +2391,6 @@
       "direction": "dotnet-client-to-go-server",
       "status": "verified",
       "test": "TestPubSubRuntime_DotnetPublishes_GoTargetVariables",
-      "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
     {
