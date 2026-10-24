@@ -479,3 +479,20 @@ func TestPubSubTargetErrors(t *testing.T) {
 		return err == nil && st.Counters.TargetWriteErrors >= 3
 	}, 5*time.Second, 5*time.Millisecond)
 }
+
+func TestPubSubPublishedActionNode(t *testing.T) {
+	t.Parallel()
+	pds := pubsub.PublishedActions("calc", []pubsub.Field{{Name: "A", Type: ua.TypeIDInt32}}, nil, pubsub.ActionTargetOf(1, "Run"))
+	cfg := pubsub.NewConfiguration([]*ua.PublishedDataSetDataType{pds},
+		pubsub.AttachWriterGroups(pubsub.UDPConnection("conn", pubsubUDPURL(t), uint16(4)),
+			pubsub.WriterGroup("wg", 2, time.Second, pubsub.DataSetWriter("w", 3, "calc"))))
+	_, surl := testutil.NewTestServer(t, server.WithPubSub(cfg))
+	c := testutil.NewTestClient(t, surl)
+	pdsRefs := browseNames(t, c, nid(id.PublishSubscribePublishedDataSets))
+	require.Contains(t, pdsRefs, "calc")
+	require.Equal(t, uint32(id.PublishedDataSetType), pdsRefs["calc"].TypeDefinition.NodeID.IntID())
+	pn := browseNames(t, c, pdsRefs["calc"].NodeID.NodeID)
+	require.Contains(t, pn, "DataSetMetaData")
+	require.Contains(t, pn, "w")
+	require.NotContains(t, pn, "PublishedData")
+}
