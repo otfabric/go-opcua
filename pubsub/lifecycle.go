@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	"github.com/otfabric/go-opcua/pubsub/uadp"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -276,14 +277,35 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 		p.unlock()
 	}
 	sync()
+	// Incomplete chunked messages expire as chunks arrive; without
+	// chunks the ticker releases them.
+	expire := time.NewTicker(p.reassemblyTimeout())
+	defer expire.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-kick:
 			sync()
+		case now := <-expire.C:
+			if n := c.reasm.Expire(now); n > 0 {
+				p.lock()
+				if c.gen == gen {
+					c.ctr.ChunksDiscarded += uint64(n)
+				}
+				p.unlock()
+			}
 		}
 	}
+}
+
+// reassemblyTimeout is how long an incomplete chunked message waits for its
+// chunks.
+func (p *PubSub) reassemblyTimeout() time.Duration {
+	if o := p.opts.reassembly; o != nil && o.Timeout > 0 {
+		return o.Timeout
+	}
+	return uadp.DefaultReassemblyTimeout
 }
 
 // reconcileWriterGroup runs or stops a writer group and its writers.
