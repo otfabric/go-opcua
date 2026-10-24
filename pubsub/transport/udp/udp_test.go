@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -274,8 +275,11 @@ func TestCloseSemantics(t *testing.T) {
 	// Close waited for the receive goroutine. The connections of earlier
 	// tests are closed by their cleanups, so no receive loop may be left.
 	// (Counting goroutines is not exact: other goroutines of the test binary
-	// come and go.)
-	require.NotContains(t, leakcheck.AllStacks(), "udp.(*Conn).receive")
+	// come and go.) A receive loop that has signalled its end may still be
+	// returning when Close returns, so the stacks are polled briefly.
+	require.Eventually(t, func() bool {
+		return !strings.Contains(leakcheck.AllStacks(), "udp.(*Conn).receive")
+	}, 2*time.Second, time.Millisecond, "a receive loop outlived Close")
 
 	// The port is free again.
 	c2 := open(t, transport.Config{URL: url})
