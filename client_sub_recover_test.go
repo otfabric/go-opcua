@@ -66,7 +66,10 @@ func TestPublicRepublish_DoesNotDeliverToNotifyChan(t *testing.T) {
 	// Trigger a change notification so the server buffers at least one message.
 	srv.ChangeNotification(nodeID)
 
-	// Drain all notifications so the channel is idle before calling Republish.
+	// Drain all notifications so the channel is idle before calling Republish;
+	// the initial value first, which a loaded runner can deliver later than
+	// the idle time of the drain.
+	waitDataChange(t, notifyCh, 10*time.Second)
 	drainNotifyCh(notifyCh, 600*time.Millisecond)
 
 	// Snapshot the notify-channel length before calling Republish.
