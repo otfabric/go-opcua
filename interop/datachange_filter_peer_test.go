@@ -174,6 +174,9 @@ func assertPeerDataChangeFilter(t *testing.T, endpoint, direction string) {
 	}
 
 	t.Run("coverage/monitoreditem.deadband/"+direction, func(t *testing.T) {
+		if why := peerDataChangeDeviation[direction]["deadband"]; why != "" {
+			t.Skipf("absolute deadband not asserted, peer deviation: %s", why)
+		}
 		for _, h := range []int{dcDeadbandSV, dcDeadbandSVT} {
 			if why := peerDeadbandSVTDeviation[direction]; h == dcDeadbandSVT && why != "" {
 				t.Logf("handle %d (StatusValueTimestamp + absolute deadband) not asserted, peer deviation: %s: %v", h, why, run.floats(h))
@@ -229,6 +232,9 @@ func assertPeerDataChangeFilter(t *testing.T, endpoint, direction string) {
 	})
 
 	t.Run("coverage/monitoreditem.sampling-interval/"+direction, func(t *testing.T) {
+		if why := peerDataChangeDeviation[direction]["sampling-interval"]; why != "" {
+			t.Skipf("sampling interval not asserted, peer deviation: %s", why)
+		}
 		slow := run.floats(dcSlow)
 		t.Logf("sampling interval 1000 ms (revised %v ms): %v", run.revised[dcSlow], slow)
 		if run.revised[dcSlow] < 500 {

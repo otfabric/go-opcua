@@ -1,0 +1,2385 @@
+{
+  "interopVersion": "v0.9.0",
+  "peer": {
+    "stack": "opcua-asyncio",
+    "version": "2.1.0"
+  },
+  "entries": [
+    {
+      "capability": "session.connect",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Connect",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.connect",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Endpoints",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.namespace",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.namespace",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.endpoints",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Connect",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.endpoints",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Endpoints",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_FindServers",
+      "case": "coverage/discovery.find-servers/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_FindServers",
+      "case": "coverage/discovery.find-servers/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers-on-network",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_DiscoveryServer",
+      "nextAction": "asyncua 2.1.0's Server is no LDS-ME: it serves no FindServersOnNetwork (pinned by TestAsyncuaServer_DiscoveryServer) and has no mDNS, so a RegisterServer2 with an mDNS configuration cannot be announced",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers-on-network",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.find-servers-on-network/asyncua-client-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.lds-registration",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_DiscoveryServer",
+      "case": "coverage/discovery.lds-registration/go-client-to-asyncua-server",
+      "reason": "RegisterServer with IsOnline=false is stored like a registration (InternalServer.register_server ignores IsOnline): the unregistered server is still in FindServers after 1m0s",
+      "nextAction": "asyncua 2.1.0 accepts RegisterServer / RegisterServer2 from the go-opcua server and lists it in FindServers, but keeps it listed after the unregistration (IsOnline=false); the case skips with the deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.lds-registration",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_AsyncuaServerRegisters",
+      "case": "coverage/discovery.lds-registration/asyncua-server-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.objects",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.objects",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.namespace",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_BrowseInteropNamespace",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.namespace",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BrowseObjectsNodes",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.scalars-folder",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_BrowseScalarsFolder",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.scalars-folder",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BrowseScalarsFolder",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_BrowseNext",
+      "reason": "Browse ignores RequestedMaxReferencesPerNode (ViewService.browse returns every reference, never a ContinuationPoint), so BrowseNext cannot be exercised",
+      "nextAction": "TestAsyncuaServer_BrowseNext skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BrowseNext",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next-release",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_BrowseNextRelease",
+      "reason": "Browse ignores RequestedMaxReferencesPerNode: no ContinuationPoint to release",
+      "nextAction": "TestAsyncuaServer_BrowseNextRelease skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next-release",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BrowseNextRelease",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.result-mask",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_BrowseResultMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.result-mask",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BrowseResultMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.filtering",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_BrowseFiltering",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.filtering",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BrowseFiltering",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.scalar",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_ReadScalarInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.scalar",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_ReadScalarInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.array",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_ReadArrayInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.array",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_ReadArrayInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.batch",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_BatchRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.batch",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BatchRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.dynamic",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_ReadDynamicCounter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.dynamic",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_ReadDynamicCounter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.timestamps",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_TimestampsToReturn",
+      "reason": "the server ignores TimestampsToReturn (asyncua/server never reads it): Read with Neither returned mask=0xf (source and server timestamps)",
+      "nextAction": "TestAsyncuaServer_TimestampsToReturn skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.timestamps",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_TimestampsToReturn",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.index-range",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_IndexRangeSubset",
+      "reason": "Read ignores ReadValueId.IndexRange: IndexRange 0:1 returned the whole array [0 1 -1 2147483647 -2147483648 -123456789]",
+      "nextAction": "TestAsyncuaServer_IndexRangeSubset skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.index-range",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_IndexRangeSubset",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.invalid-node",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_InvalidNodeId",
+      "reason": "Read of an unknown node answers BadNodeIdUnknown, but Write answers BadUserAccessDenied and Browse BadNodeIdInvalid",
+      "nextAction": "TestAsyncuaServer_InvalidNodeId asserts Read and skips Write and Browse with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.invalid-node",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_InvalidNodeId",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.value",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_WriteAndReadBack",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.value",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Write",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.batch",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_BatchWrite",
+      "reason": "Write to an unknown node answers BadUserAccessDenied (AttributeService.write checks the AccessLevel of the missing node first), want BadNodeIdUnknown",
+      "nextAction": "TestAsyncuaServer_BatchWrite skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.batch",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_BatchWrite",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.type-mismatch",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_WriteTypeMismatch",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.type-mismatch",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_WriteTypeMismatch",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.encoding-mask",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_WriteEncodingMask",
+      "reason": "a Write with a SourceTimestamp in the DataValue is accepted (Good) instead of BadWriteNotSupported",
+      "nextAction": "TestAsyncuaServer_WriteEncodingMask skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.encoding-mask",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_WriteEncodingMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.timestamps",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_DataValue_GoodWithTimestamps",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.timestamps",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_DataValue_GoodWithTimestamps",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.uncertain",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_DataValue_Uncertain",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.uncertain",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_DataValue_Uncertain",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.read-only",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Access_ReadOnly_WriteRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.read-only",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Access_ReadOnly_WriteRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.write-only",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Access_WriteOnly_ReadRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.write-only",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Access_WriteOnly_ReadRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.call",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_CallMethodAdd",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.call",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_CallMethod",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.validation",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_MethodValidation",
+      "case": "coverage/method.validation/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.validation",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_MethodValidation",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.data-change",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Subscribe",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.data-change",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Subscribe",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.queue-window",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Subscribe_DiscardOldest",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.queue-window",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Subscribe_DiscardOldest",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.timestamps",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_SubscribeTimestampsToReturn",
+      "case": "coverage/subscription.timestamps/go-client-to-asyncua-server",
+      "reason": "the server ignores TimestampsToReturn (asyncua/server never reads it; Read with Neither returned timestamp bits 0xc): monitored items report both timestamps",
+      "nextAction": "TestAsyncuaServer_SubscribeTimestampsToReturn skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.timestamps",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_SubscribeTimestamps",
+      "case": "coverage/subscription.timestamps/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.revise",
+      "direction": "go-client-to-asyncua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.revise",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_SubscriptionLifecycle_Revise",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.delete",
+      "direction": "go-client-to-asyncua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.delete",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_SubscriptionLifecycle_Delete",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.republish",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_ClientRepublish",
+      "case": "coverage/subscription.client.republish/go-client-to-asyncua-server",
+      "reason": "Republish of unknown sequence number 4242 answered Good with an empty NotificationMessage (InternalSubscription.republish), want BadMessageNotAvailable",
+      "nextAction": "TestAsyncuaServer_ClientRepublish skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.republish",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.republish",
+      "direction": "go-client-to-asyncua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.republish",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Republish",
+      "case": "coverage/subscription.server.republish/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_ClientTransferSubscriptions",
+      "case": "coverage/subscription.client.transfer/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.transfer",
+      "direction": "go-client-to-asyncua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.transfer",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_TransferSubscriptions",
+      "case": "coverage/subscription.server.transfer/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.recovery.reconnect",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_SubscriptionRecoveryReconnect",
+      "case": "coverage/subscription.recovery.reconnect/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.recovery.reconnect",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_ModifySubscription",
+      "case": "coverage/subscription.modify/go-client-to-asyncua-server",
+      "reason": "ModifySubscription ignores the requested parameters and returns the create-time values (revisedPublishingInterval=250, revisedMaxKeepAliveCount=3000; SubscriptionService.modify_subscription)",
+      "nextAction": "TestAsyncuaServer_ModifySubscription skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_ModifySubscription",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_SubscriptionLifecycle_PublishingMode",
+      "case": "coverage/subscription.publishing-mode/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_ModifyMonitoredItems",
+      "case": "coverage/monitoreditem.modify/go-client-to-asyncua-server",
+      "reason": "ModifyMonitoredItems does not apply the new ClientHandle: 4 notifications still carry the old handle (MonitoredItemService._modify_monitored_item)",
+      "nextAction": "TestAsyncuaServer_ModifyMonitoredItems skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_SetMonitoringMode",
+      "case": "coverage/monitoreditem.monitoring-mode/go-client-to-asyncua-server",
+      "reason": "MonitoringMode Sampling still reports: 12 data changes in 3 s (MonitoredItemService.datachange_callback only checks for Disabled)",
+      "nextAction": "TestAsyncuaServer_SetMonitoringMode skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_SubscriptionLifecycle_MonitoringMode",
+      "case": "coverage/monitoreditem.monitoring-mode/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_EventSubscription",
+      "case": "coverage/event.subscription/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_EventSubscribe",
+      "case": "coverage/event.subscription/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.select-clauses",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_EventFilterSelectClauses",
+      "case": "coverage/event.filter.select-clauses/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.select-clauses",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_EventFilterSelectClauses",
+      "case": "coverage/event.filter.select-clauses/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.of-type",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_EventFilterOfType",
+      "case": "coverage/event.filter.of-type/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.of-type",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_EventFilterOfType",
+      "case": "coverage/event.filter.of-type/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.where-clause",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_EventFilterWhereClause",
+      "case": "coverage/event.filter.where-clause/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.where-clause",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.severity-threshold",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_EventFilterSeverityThreshold",
+      "case": "coverage/event.filter.severity-threshold/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.severity-threshold",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_EventFilterSeverityThreshold",
+      "case": "coverage/event.filter.severity-threshold/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.notification.decode",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_EventNotificationDecode",
+      "case": "coverage/event.notification.decode/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.notification.decode",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.base",
+      "direction": "go-client-to-asyncua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.base",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_EventEmissionBase",
+      "case": "coverage/event.emission.base/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.custom",
+      "direction": "go-client-to-asyncua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.custom",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.queue-overflow",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_EventQueueOverflow",
+      "case": "coverage/event.queue-overflow/go-client-to-asyncua-server",
+      "reason": "no EventQueueOverflowEventType event when a queue of 2 overflows (InternalSubscription._enqueue_event drops the oldest silently); batch of 2 events",
+      "nextAction": "TestAsyncuaServer_EventQueueOverflow skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.queue-overflow",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.raw",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_HistoryReadRaw",
+      "case": "coverage/history.read.raw/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.raw",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_HistoryReadRaw",
+      "case": "coverage/history.read.raw/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.continuation",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_HistoryReadContinuation",
+      "case": "coverage/history.read.continuation/go-client-to-asyncua-server",
+      "reason": "HistoryRead with NumValuesPerNode=2 over 5 samples returns 2 values and no ContinuationPoint (HistoryDict truncates); paging cannot continue",
+      "nextAction": "TestAsyncuaServer_HistoryReadContinuation skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.continuation",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_HistoryReadContinuation",
+      "case": "coverage/history.read.continuation/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.modified",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.modified",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.at-time",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.at-time",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.processed",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.processed",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.data",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.data",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.events",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.events",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.delete",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.delete",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Basic256Sha256_Sign_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Basic256Sha256_Sign_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Basic256Sha256_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Basic256Sha256_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes128.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes128.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes256.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes256.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.untrusted",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_UntrustedCert_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.untrusted",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_UntrustedCert_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.trusted",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_TrustedCert_Accepted",
+      "case": "coverage/security.cert.trusted/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.trusted",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_TrustedCert_Accepted",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Username_ValidCredentials",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Username_ValidCredentials",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_Username_InvalidPassword_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Username_InvalidPassword_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.issued-token",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.issued-token",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.chains",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.chains",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.crl",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.crl",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.channel.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_SecureChannelRenewal",
+      "case": "coverage/security.channel.renewal/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.channel.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_SecureChannelRenewal",
+      "case": "coverage/security.channel.renewal/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.first",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.first",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.next",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.next",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-nodes",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_NodeManagementUnsupported",
+      "nextAction": "asyncua 2.1.0 serves AddNodes / DeleteNodes only to its Admin role, which also bypasses the AccessLevel checks of Write; the adapter gives every session the User role, so AddNodes answers BadUserAccessDenied (pinned by TestAsyncuaServer_NodeManagementUnsupported). Verify once the adapter can grant a node-management role without the Write bypass",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-nodes",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_AddNodes",
+      "case": "coverage/nodemgmt.add-nodes/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-nodes",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 serves AddNodes / DeleteNodes only to its Admin role, which also bypasses the AccessLevel checks of Write; the adapter gives every session the User role, so AddNodes answers BadUserAccessDenied (DeleteNodes sits behind the same role check; AddNodes is pinned by TestAsyncuaServer_NodeManagementUnsupported). Verify once the adapter can grant a node-management role without the Write bypass",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-nodes",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_DeleteNodes",
+      "case": "coverage/nodemgmt.delete-nodes/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "translate.browse-path",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_TranslateBrowsePath",
+      "case": "coverage/translate.browse-path/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "translate.browse-path",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_TranslateBrowsePath",
+      "case": "coverage/translate.browse-path/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_RegisterNodes",
+      "case": "coverage/view.register-nodes/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_RegisterNodes",
+      "case": "coverage/view.register-nodes/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.registered",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.registered",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.dynamic",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.dynamic",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.acknowledgeable",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.acknowledgeable",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodeset2.import",
+      "direction": "go-client-to-asyncua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodeset2.import",
+      "direction": "asyncua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.deadband/go-client-to-asyncua-server",
+      "reason": "asyncua 2.1.0 compares the absolute deadband with the previous sample (MonitoredItemService._is_deadband_exceeded), not with the last reported value, so a slow ramp is never reported",
+      "nextAction": "The adapter does not advertise the deadband server feature and assertPeerDataChangeFilter skips the case (peerDataChangeDeviation); promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Deadband",
+      "case": "coverage/monitoreditem.deadband/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.percent-deadband/go-client-to-asyncua-server",
+      "reason": "asyncua 2.1.0 accepts a PercentDeadband (also on a node without EURange) but does not apply it",
+      "nextAction": "The adapter does not advertise the percent-deadband server feature, so the case skips; the opcua-interop smoke pins the acceptance (check_asyncua_deadband_deviation); promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_PercentDeadband",
+      "case": "coverage/monitoreditem.percent-deadband/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.trigger/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Trigger",
+      "case": "coverage/monitoreditem.trigger/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.sampling-interval/go-client-to-asyncua-server",
+      "reason": "asyncua 2.1.0 does not sample: it revises the SamplingInterval to the publishing interval and reports every write of the value",
+      "nextAction": "assertPeerDataChangeFilter skips the case (peerDataChangeDeviation); promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_SamplingInterval",
+      "case": "coverage/monitoreditem.sampling-interval/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.9.0 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no reverse connect (no ReverseHello in its client or server), so opcua-interop asyncua v0.9.0 offers no --reverse-connect server option or reverse client listener",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no reverse connect (no ReverseHello in its client or server), so opcua-interop asyncua v0.9.0 offers no --reverse-connect server option or reverse client listener",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no reverse connect (no ReverseHello in its client or server), so opcua-interop asyncua v0.9.0 offers no --reverse-connect server option or reverse client listener",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no reverse connect (no ReverseHello in its client or server), so opcua-interop asyncua v0.9.0 offers no --reverse-connect server option or reverse client listener",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no reverse connect (no ReverseHello in its client or server), so opcua-interop asyncua v0.9.0 offers no --reverse-connect server option or reverse client listener",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no reverse connect (no ReverseHello in its client or server), so opcua-interop asyncua v0.9.0 offers no --reverse-connect server option or reverse client listener",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue, and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "go-client-to-asyncua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_AsyncuaClient_RegisterServer",
+      "case": "coverage/discovery.register-server/asyncua-client-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's Server is no LDS-ME: it serves no FindServersOnNetwork (pinned by TestAsyncuaServer_DiscoveryServer) and has no mDNS, so a RegisterServer2 with an mDNS configuration cannot be announced",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.register-server2.mdns/asyncua-client-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no mDNS (multicast extension) in its server or client, so opcua-interop asyncua v0.9.0 has none",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no mDNS (multicast extension) in its server or client, so opcua-interop asyncua v0.9.0 has none",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.codec",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.codec",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.delta-frame",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.delta-frame",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.keep-alive-message",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.keep-alive-message",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.security-header",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.security-header",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.codec",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.codec",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.variant",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.variant",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.datavalue",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.datavalue",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.rawdata",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.rawdata",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp-multicast",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp-multicast",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.mqtt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.mqtt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.mqtt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.mqtt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.sign",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.sign",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes128-ctr",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes128-ctr",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes256-ctr",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes256-ctr",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.reject",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.reject",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.get-security-keys",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.get-security-keys",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.pull",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.pull",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.push",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.push",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.security-groups",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.security-groups",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.target-variables",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.target-variables",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.sks-pull",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.sks-pull",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.keepalive",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.keepalive",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.receive-timeout",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.receive-timeout",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.methods",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.methods",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.browse",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.browse",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "go-client-to-asyncua-server",
+      "status": "verified",
+      "test": "TestAsyncuaServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.anonymous/go-client-to-asyncua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.other-identity/go-client-to-asyncua-server",
+      "reason": "TransferSubscriptions moves a subscription of test-user to an anonymous session (Good): SubscriptionService.transfer_subscriptions checks no identity, Part 4 §5.14.7 requires BadUserAccessDenied",
+      "nextAction": "The case skips with the asyncua 2.1.0 deviation; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_SetTriggering",
+      "case": "coverage/monitoreditem.set-triggering/go-client-to-asyncua-server",
+      "reason": "MonitoringMode Sampling still reports (MonitoredItemService.datachange_callback only checks for Disabled), so the linked item of a trigger reports without it",
+      "nextAction": "The case skips with the asyncua 2.1.0 deviation before SetTriggering is asserted; promote the row to verified when a pinned asyncua release fixes it",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-references",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_ReferencesUnsupported",
+      "nextAction": "asyncua 2.1.0 serves AddReferences / DeleteReferences only to its Admin role, as AddNodes / DeleteNodes; the adapter gives every session the User role, so both answer BadUserAccessDenied (pinned by TestAsyncuaServer_ReferencesUnsupported). Verify once the adapter can grant a node-management role without the Write bypass",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-references",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_ReferencesUnsupported",
+      "nextAction": "asyncua 2.1.0 serves AddReferences / DeleteReferences only to its Admin role, as AddNodes / DeleteNodes; the adapter gives every session the User role, so both answer BadUserAccessDenied (pinned by TestAsyncuaServer_ReferencesUnsupported). Verify once the adapter can grant a node-management role without the Write bypass",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.chunking.secure",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_ChunkedSecureMessages",
+      "reason": "asyncua 2.1.0 revises CreateSession.MaxRequestMessageSize to 65536, so a request fits into one chunk of the 65535-byte buffer and no multi-chunk message can be provoked; the policy cases skip",
+      "nextAction": "Raise the server's max message size in the adapter (or a pinned asyncua release that negotiates a larger one), then the case asserts the chunk counts",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.chunking.secure",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue (verbose or compact), and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue (verbose or compact), and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue (verbose or compact), and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.9.0 has no codec operation: asyncua 2.1.0 has no Part 6 JSON encoding of a Variant / DataValue (verbose or compact), and its XML support is nodeset import / export only (xmlimporter / xmlexporter)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/go-client-to-asyncua-server",
+      "reason": "the asyncua 2.1.0 server has no diagnostics: ServerDiagnostics.EnabledFlag has a null value and the summary is not maintained",
+      "nextAction": "The case skips (assertPeerServerDiagnostics); verify when a pinned asyncua release maintains ServerDiagnostics",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "test": "TestAsyncuaServer_Diagnostics",
+      "case": "coverage/diagnostics.return-diagnostics/go-client-to-asyncua-server",
+      "reason": "with ReturnDiagnostics 0x3ff asyncua 2.1.0 returns no DiagnosticInfos, also for a BadNodeIdUnknown operation",
+      "nextAction": "The case skips (assertPeerReturnDiagnostics); verify when a pinned asyncua release returns operation diagnostics",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "asyncua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    }
+  ]
+}
