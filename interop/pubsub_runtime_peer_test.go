@@ -424,7 +424,7 @@ func psBindRuntimeUDP(t *testing.T, sub psGoSubscriber) int {
 		t.Fatal(err)
 	}
 	defer func() { _ = snd.Close() }()
-	for range 10 {
+	for range 3 {
 		port := freeUDPPort(t)
 		p, stop := sub(fmt.Sprintf("opc.udp://localhost:%d", port))
 		conn, ok := p.Lookup(pubsub.KindConnection, pubsub.Root, "InteropSubscriber")
@@ -441,19 +441,18 @@ func psBindRuntimeUDP(t *testing.T, sub psGoSubscriber) int {
 			if st.Counters.NetworkMessagesReceived > 0 {
 				return port
 			}
-			if testport.InUse(st.LastError) {
-				t.Logf("UDP port %d was taken (%v): another one", port, st.LastError)
+			// A later state change can clear LastError again: a subscriber
+			// that receives nothing by the deadline moves on as well.
+			if testport.InUse(st.LastError) || time.Now().After(deadline) {
+				t.Logf("the go-opcua subscriber does not receive on UDP port %d (%v): another one", port, st.LastError)
 				stop()
 				break
-			}
-			if time.Now().After(deadline) {
-				t.Fatalf("the go-opcua subscriber does not receive on UDP port %d: %+v", port, st)
 			}
 			_, _ = snd.WriteToUDP(b, dst)
 			time.Sleep(100 * time.Millisecond)
 		}
 	}
-	t.Fatal("no UDP port the go-opcua subscriber could bind")
+	t.Fatal("the go-opcua subscriber received on none of 3 UDP ports")
 	return 0
 }
 
