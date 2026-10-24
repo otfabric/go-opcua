@@ -28,13 +28,16 @@
 package interop
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -278,7 +281,7 @@ func TestPubSubChunk_GoPublishes_DotnetReassembles(t *testing.T) {
 				udpPorts: []int{port},
 			})
 			values := psValues(c.vars, psFresh())
-			conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", port)})
+			conn := psDial(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://127.0.0.1:%d", sub.udpPort(t, port))})
 			keys := c.keys(t)
 			md := psLookup(psMetaData(c.vars, 0))
 			if b, err := uadp.Encode(psGoMessage(c, 1, values), &uadp.EncodeOptions{SecurityMode: c.mode, Keys: keys, MetaData: md}); err != nil {
@@ -337,14 +340,13 @@ func TestPubSubDiscovery_GoProbes_DotnetAnswers(t *testing.T) {
 	port := freeUDPPort(t)
 	pub := startPubSubServer(t, pubsubServerOpts{peer: psDotnet, udpPorts: []int{port},
 		config: psPublisherConfig(c, psProfileUDP, fmt.Sprintf("opc.udp://0.0.0.0:%d", port), nil, false)})
-	_ = pub
 
 	sock, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sock.Close() })
-	dest := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}
+	dest := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: pub.udpPort(t, port)}
 
 	// probe sends req until an announcement of want arrives.
 	probe := func(req *message.DiscoveryRequest, want message.DiscoveryType) *message.Discovery {
@@ -456,31 +458,148 @@ type psDiscoverResult struct {
 	} `json:"writerConfigurations"`
 }
 
-// runDotnetDiscover runs client pubsub-discover with the container port
-// probePort published on the host port hostPort: the probe goes to
-// host.docker.internal:probePort, the answers come back to hostPort.
-func runDotnetDiscover(t *testing.T, probePort, hostPort int, args ...string) psDiscoverResult {
+// runDotnetDiscover runs client pubsub-discover (container name: name) with
+// the container port probePort published on the host port hostPort: the
+// probe goes to host.docker.internal:probePort, the answers come back to
+// hostPort. ok is false when no announcement arrived within the client's
+// --timeout-ms (BadTimeout); taken is true when Docker could not publish
+// hostPort.
+func runDotnetDiscover(t *testing.T, name string, probePort, hostPort int, args ...string) (r psDiscoverResult, ok, taken bool) {
 	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", append([]string{"run", "--rm", "--name", dockerContainerName(t),
+	cmd := exec.CommandContext(ctx, "docker", append([]string{"run", "--rm", "--name", name,
 		"--add-host=host.docker.internal:host-gateway", "-p", fmt.Sprintf("%d:%d/udp", hostPort, probePort),
 		getEnvOr(psDotnet.env, psDotnet.image), "client", "pubsub-discover",
 		"--url", fmt.Sprintf("opc.udp://host.docker.internal:%d", probePort)}, args...)...)
-	cmd.Stderr = os.Stderr
+	var stderr bytes.Buffer
+	cmd.Stderr = io.MultiWriter(os.Stderr, &stderr)
 	raw, _ := cmd.Output()
+	if ctx.Err() != nil {
+		dockerStop(name) // the CLI was killed, the container may still run
+	}
+	if dockerPortTaken(stderr.String()) {
+		return r, false, true
+	}
 	res, err := parseAdapterOutput(raw)
 	if err != nil {
 		t.Fatalf("pubsub-discover: %v\nraw: %s", err, raw)
 	}
 	if !res.Success {
+		if statusCodeIs(res.ServiceResult, ua.StatusBadTimeout) {
+			return r, false, false
+		}
 		t.Fatalf("pubsub-discover %v failed: %s %s", args, res.ServiceResult, res.Error)
 	}
 	var items []psDiscoverResult
 	if err := json.Unmarshal(res.Results, &items); err != nil || len(items) != 1 {
 		t.Fatalf("pubsub-discover results: %v\n%s", err, res.Results)
 	}
-	return items[0]
+	return items[0], true, false
+}
+
+// psDiscoveryAttempts bounds the probes of dotnetDiscover.
+const psDiscoveryAttempts = 3
+
+// dotnetDiscover runs client pubsub-discover with args against a go-opcua
+// publisher of its own (startGoDiscoveryPublisher) and returns the
+// announcements.
+//
+// The client sends a single probe and waits --timeout-ms for answers; it has
+// no option to repeat the probe. UDP may lose the probe or the answer, and a
+// subscriber is to probe again when no announcement arrives (Part 14
+// §7.2.4.6.12.2): so does this, up to psDiscoveryAttempts times. Every
+// attempt has a new publisher on new ports, so no datagram flow of an
+// earlier client container (Docker's conntrack or proxy state for
+// 127.0.0.1:<host port>) carries over.
+func dotnetDiscover(t *testing.T, args ...string) psDiscoverResult {
+	t.Helper()
+	var tried []string
+	for attempt, run := 1, 1; attempt <= psDiscoveryAttempts; run++ {
+		pub := startGoDiscoveryPublisher(t)
+		r, ok, taken := runDotnetDiscover(t, fmt.Sprintf("%s-%d", dockerContainerName(t), run), pub.probePort, pub.hostPort, args...)
+		st := mustOK[pubsub.Status](t)(pub.p.Status(pub.conn))
+		pub.stop()
+		if ok {
+			return r
+		}
+		if taken {
+			// The client never ran: not an attempt.
+			if run >= 10 {
+				t.Fatalf("Docker could not publish a UDP port in %d runs", run)
+			}
+			t.Logf("Docker could not publish UDP port %d: another one", pub.hostPort)
+			continue
+		}
+		// The counters include the ping probes of startGoDiscoveryPublisher,
+		// received and ignored: the client's probe arrived if more probes
+		// were received than ignored.
+		c := st.Counters
+		tried = append(tried, fmt.Sprintf("attempt %d: probes received %d, ignored %d, announcements sent %d (last error %v)",
+			attempt, c.DiscoveryRequestsReceived, c.DiscoveryRequestsIgnored, c.DiscoveryResponsesSent, st.LastError))
+		t.Logf("pubsub-discover %v: no announcement (%s)", args, tried[len(tried)-1])
+		attempt++
+	}
+	t.Fatalf("pubsub-discover %v: no announcement in %d attempts:\n%s", args, psDiscoveryAttempts, strings.Join(tried, "\n"))
+	return psDiscoverResult{}
+}
+
+// goDiscoveryPublisher is a go-opcua server whose runtime publishes
+// InteropDataSet to 127.0.0.1:hostPort and listens for probes on
+// opc.udp://0.0.0.0:probePort (its DiscoveryAddress).
+type goDiscoveryPublisher struct {
+	hostPort, probePort int
+	p                   *pubsub.PubSub
+	conn                pubsub.ComponentID
+	stop                func()
+}
+
+// startGoDiscoveryPublisher starts a goDiscoveryPublisher on new ports and
+// returns it once its runtime receives probes on probePort, so that the
+// client container is only started on a port the runtime holds. A probe for
+// a DataSetWriter it does not have (psPingPublisherID) is counted and
+// answered with nothing. When the runtime does not receive (the port was
+// taken; the runtime only logs that) it is started again on other ports.
+func startGoDiscoveryPublisher(t *testing.T) *goDiscoveryPublisher {
+	t.Helper()
+	ping, err := uadp.Encode(&message.NetworkMessage{Type: message.NetworkMessageDiscoveryRequest, Request: &message.DiscoveryRequest{
+		ProbeType: message.ProbePublisherInformation, InformationType: message.InformationDataSetMetaData,
+		DataSetWriterIDs: []uint16{psPingPublisherID}, Layout: message.DiscoveryLayoutDotNet}}, nil)
+	if err != nil {
+		t.Fatalf("encode the ping probe: %v", err)
+	}
+	snd, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = snd.Close() }()
+	for range 10 {
+		d := &goDiscoveryPublisher{hostPort: freeUDPPort(t), probePort: freeUDPPort(t)}
+		srv := startGoPubSubServer(t, goPubSubOpts{}, func(p *pubsub.PubSub, ns uint16) {
+			mustOK[pubsub.ComponentID](t)(p.AddPublishedDataSet(psRuntimeDataSet(psVars, ns, 0)))
+			conn := pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", d.hostPort), uint16(psPubID))
+			conn.TransportSettings = ua.NewExtensionObject(&ua.DatagramConnectionTransport2DataType{
+				DiscoveryAddress: ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: fmt.Sprintf("opc.udp://0.0.0.0:%d", d.probePort)}),
+			})
+			wg := pubsub.WriterGroup("InteropWriterGroup", psWriterGroupID, time.Second,
+				pubsub.DataSetWriter("InteropWriter", psWriterID, "InteropDataSet"))
+			d.conn = mustOK[pubsub.ComponentID](t)(p.AddConnection(pubsub.AttachWriterGroups(conn, wg)))
+		})
+		d.p, d.stop = srv.srv.PubSub(), func() { _ = srv.srv.Close() }
+		dst := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: d.probePort}
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			if st := mustOK[pubsub.Status](t)(d.p.Status(d.conn)); st.Counters.DiscoveryRequestsReceived > 0 {
+				return d
+			}
+			_, _ = snd.WriteToUDP(ping, dst)
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Logf("the go-opcua runtime does not receive probes on UDP port %d: other ports", d.probePort)
+		d.stop()
+	}
+	t.Fatal("no UDP port the go-opcua runtime could receive probes on")
+	return nil
 }
 
 // TestPubSubDiscovery_DotnetProbes_GoAnswers: the dotnet client probes a
@@ -492,23 +611,17 @@ func runDotnetDiscover(t *testing.T, probePort, hostPort int, args ...string) ps
 // opc.udp://0.0.0.0:<probe port> receives the probes the client sends to
 // host.docker.internal:<probe port>. The DataSetMetaData and DataSetWriter
 // configuration announcements go to the connection address (§7.2.4.6.12).
+//
+// Each probe has a publisher and ports of its own (dotnetDiscover): with
+// one publisher for both, the second client container was answered from
+// the same socket to the same 127.0.0.1:<host port> as the first, removed
+// one, and its answers were lost (CI, opcua-interop v0.10.1 images).
 func TestPubSubDiscovery_DotnetProbes_GoAnswers(t *testing.T) {
 	psDotnet.requireServer(t)
 	requireAdapterOp(t, psDotnet.env, psDotnet.image, "pubsub-discover")
-	hostPort, probePort := freeUDPPort(t), freeUDPPort(t)
-	startGoPubSubServer(t, goPubSubOpts{}, func(p *pubsub.PubSub, ns uint16) {
-		mustOK[pubsub.ComponentID](t)(p.AddPublishedDataSet(psRuntimeDataSet(psVars, ns, 0)))
-		conn := pubsub.UDPConnection("InteropPublisher", fmt.Sprintf("opc.udp://127.0.0.1:%d", hostPort), uint16(psPubID))
-		conn.TransportSettings = ua.NewExtensionObject(&ua.DatagramConnectionTransport2DataType{
-			DiscoveryAddress: ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: fmt.Sprintf("opc.udp://0.0.0.0:%d", probePort)}),
-		})
-		wg := pubsub.WriterGroup("InteropWriterGroup", psWriterGroupID, time.Second,
-			pubsub.DataSetWriter("InteropWriter", psWriterID, "InteropDataSet"))
-		mustOK[pubsub.ComponentID](t)(p.AddConnection(pubsub.AttachWriterGroups(conn, wg)))
-	})
 
 	t.Run("dataset-metadata", func(t *testing.T) {
-		r := runDotnetDiscover(t, probePort, hostPort, "--type", "DataSetMetaData", "--writer-ids", fmt.Sprint(psWriterID), "--timeout-ms", "5000")
+		r := dotnetDiscover(t, "--type", "DataSetMetaData", "--writer-ids", fmt.Sprint(psWriterID), "--timeout-ms", "5000")
 		if len(r.DataSetMetaData) == 0 {
 			t.Fatalf("no DataSetMetaData announcement: %+v", r)
 		}
@@ -530,7 +643,7 @@ func TestPubSubDiscovery_DotnetProbes_GoAnswers(t *testing.T) {
 		}
 	})
 	t.Run("dataset-writer-configuration", func(t *testing.T) {
-		r := runDotnetDiscover(t, probePort, hostPort, "--type", "DataSetWriterConfiguration", "--writer-ids", fmt.Sprint(psWriterID), "--timeout-ms", "5000")
+		r := dotnetDiscover(t, "--type", "DataSetWriterConfiguration", "--writer-ids", fmt.Sprint(psWriterID), "--timeout-ms", "5000")
 		if len(r.WriterConfigurations) == 0 || r.WriterConfigurations[0].WriterGroup == nil {
 			t.Fatalf("no DataSetWriter configuration announcement: %+v", r)
 		}
