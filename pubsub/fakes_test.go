@@ -272,6 +272,9 @@ func (f fakeCodec) Encode(nm *message.NetworkMessage, opts *uadp.EncodeOptions) 
 			return nil, err
 		}
 		out.Secured, out.Token, out.Nonce = opts.SecurityMode, k.TokenID, opts.NonceSequence
+		if opts.NextNonceSequence != nil {
+			out.Nonce = opts.NextNonceSequence()
+		}
 	}
 	if f.enc == encUADP && nm.Type == message.NetworkMessageDataSet && len(nm.Messages) > 1 && nm.UADPMask&ua.UADPNetworkMessageContentMaskPayloadHeader == 0 {
 		return nil, fmt.Errorf("%w: several DataSetMessages without PayloadHeader", uadp.ErrMalformed)
@@ -386,6 +389,14 @@ func (f fakeCodec) Decode(b []byte, opts *decodeOptions) (*message.NetworkMessag
 		nm.Messages = append(nm.Messages, dsm)
 	}
 	return nm, nil
+}
+
+func (f fakeCodec) EncodeChunks(*message.NetworkMessage, *uadp.EncodeOptions, int) ([][]byte, error) {
+	return nil, errors.New("fake: no chunks")
+}
+
+func (f fakeCodec) DecodeReassembled(*message.NetworkMessage, []byte, *decodeOptions) (*message.NetworkMessage, error) {
+	return nil, errors.New("fake: no chunks")
 }
 
 type fakeMeta struct {

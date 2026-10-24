@@ -5,10 +5,12 @@ package pubsub
 import (
 	"context"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	"github.com/otfabric/go-opcua/pubsub/uadp"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -45,6 +47,20 @@ type connection struct {
 	kick   chan struct{}
 	// topics are the subscriptions the connection should have.
 	topics map[string]byte
+
+	// disc is the discovery configuration; shared tells whether the
+	// connection address reaches the publishers and the subscribers alike
+	// (multicast). dtc is the open transport of the DiscoveryAddress, nil
+	// without.
+	disc   datagramDiscovery
+	shared bool
+	dtc    transport.Connection
+	// reasm reassembles the chunked NetworkMessages the connection
+	// receives; annSeq numbers its discovery announcements and limiter
+	// bounds those sent in answer to probes.
+	reasm   *uadp.Reassembler
+	annSeq  atomic.Uint32
+	limiter *discoveryLimiter
 }
 
 func (c *connection) config() *ua.PubSubConnectionDataType {
@@ -61,13 +77,16 @@ func (c *connection) config() *ua.PubSubConnectionDataType {
 
 type writerGroup struct {
 	base
-	conn      *connection
-	cfg       *ua.WriterGroupDataType // without writers
-	enc       encoding
-	uadpMsg   *ua.UADPWriterGroupMessageDataType
-	jsonMsg   *ua.JSONWriterGroupMessageDataType
-	brokerTS  *ua.BrokerWriterGroupTransportDataType
-	dgramTS   *ua.DatagramWriterGroupTransportDataType
+	conn     *connection
+	cfg      *ua.WriterGroupDataType // without writers
+	enc      encoding
+	uadpMsg  *ua.UADPWriterGroupMessageDataType
+	jsonMsg  *ua.JSONWriterGroupMessageDataType
+	brokerTS *ua.BrokerWriterGroupTransportDataType
+	dgramTS  *ua.DatagramWriterGroupTransportDataType
+	// announce is the DiscoveryAnnounceRate of the group
+	// (DatagramWriterGroupTransport2DataType), 0 if it has none.
+	announce  time.Duration
 	interval  time.Duration
 	keepAlive time.Duration
 	offset    time.Duration
@@ -78,12 +97,17 @@ type writerGroup struct {
 	cancel context.CancelFunc
 	keysOK bool
 
-	// pubMu serialises the publish cycles; nmSeq and nonceSeq belong to
-	// the cycle.
+	// pubMu serialises the publish cycles; nmSeq belongs to the cycle.
+	// nonceSeq is shared with the discovery announcements, which are
+	// sent from the receive loop.
 	pubMu    chanMutex
 	nmSeq    uint16
-	nonceSeq uint32
+	nonceSeq atomic.Uint32
 }
+
+// nextNonce is the sequence number of the next secured message of the
+// group (Part 14 §7.2.4.4.3: unique for each message under a key).
+func (g *writerGroup) nextNonce() uint32 { return g.nonceSeq.Add(1) }
 
 func (g *writerGroup) config() *ua.WriterGroupDataType {
 	out, _ := clone(g.cfg)
@@ -161,6 +185,16 @@ type dataSetReader struct {
 	streams  map[streamKey]*stream
 	// lastGood is the last usable value per target variable.
 	lastGood []*ua.DataValue
+	// Discovery (Part 14 §7.2.4.6.12): needMeta is set by a
+	// DataSetMessage of another MajorVersion; probe is the timer of the
+	// next probe, probeWait the current interval between probes,
+	// probeSent and probeSeen when this reader and another subscriber
+	// last asked for the DataSetMetaData.
+	needMeta  bool
+	probe     *timerRef
+	probeWait time.Duration
+	probeSent time.Time
+	probeSeen time.Time
 }
 
 func (r *dataSetReader) config() *ua.DataSetReaderDataType {
@@ -409,6 +443,10 @@ func (p *PubSub) addConnectionLocked(in *ua.PubSubConnectionDataType) (Component
 	c.pubID, c.hasPub, _ = publisherIDOf(cfg.PublisherID)
 	c.url, c.iface, _ = connectionURL(cfg)
 	c.broker = isBroker(cfg.TransportProfileURI, c.url)
+	c.disc, _ = connectionDiscovery(cfg, c.broker)
+	c.shared = !c.broker && sharedAddress(c.url)
+	c.reasm = uadp.NewReassembler(p.opts.reassembly)
+	c.limiter = newDiscoveryLimiter()
 	p.conns = append(p.conns, c)
 	p.comps[c.id] = c
 	p.emit(Event{Type: EventAdded, Component: c.info()})
@@ -552,6 +590,9 @@ func (p *PubSub) addWriterGroupLocked(c *connection, in *ua.WriterGroupDataType)
 		g.brokerTS = ts
 	case *ua.DatagramWriterGroupTransportDataType:
 		g.dgramTS = ts
+	case *ua.DatagramWriterGroupTransport2DataType:
+		g.dgramTS = &ua.DatagramWriterGroupTransportDataType{MessageRepeatCount: ts.MessageRepeatCount, MessageRepeatDelay: ts.MessageRepeatDelay}
+		g.announce = time.Duration(ts.DiscoveryAnnounceRate) * time.Second
 	}
 	c.wgs = append(c.wgs, g)
 	p.comps[g.id] = g

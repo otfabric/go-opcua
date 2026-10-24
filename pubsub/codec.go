@@ -37,6 +37,12 @@ type codec interface {
 	// Decode decodes a NetworkMessage. It returns uadp.ErrFiltered if
 	// opts.Accept rejected the message.
 	Decode(b []byte, opts *decodeOptions) (*message.NetworkMessage, error)
+	// EncodeChunks encodes a NetworkMessage of one DataSetMessage (or an
+	// announcement) as UADP chunks of at most maxSize bytes;
+	// DecodeReassembled decodes the message reassembled from the chunks
+	// of header. The JSON mapping has no chunks.
+	EncodeChunks(nm *message.NetworkMessage, opts *uadp.EncodeOptions, maxSize int) ([][]byte, error)
+	DecodeReassembled(header *message.NetworkMessage, payload []byte, opts *decodeOptions) (*message.NetworkMessage, error)
 	// EncodeMetaData and DecodeMetaData handle the "ua-metadata" messages
 	// of the JSON mapping.
 	EncodeMetaData(m *jsonmsg.MetaDataMessage) ([]byte, error)
@@ -73,6 +79,17 @@ func (uadpCodec) Decode(b []byte, opts *decodeOptions) (*message.NetworkMessage,
 	return uadp.Decode(b, &opts.DecodeOptions)
 }
 
+func (uadpCodec) EncodeChunks(nm *message.NetworkMessage, opts *uadp.EncodeOptions, maxSize int) ([][]byte, error) {
+	return uadp.EncodeChunks(nm, opts, maxSize)
+}
+
+func (uadpCodec) DecodeReassembled(header *message.NetworkMessage, payload []byte, opts *decodeOptions) (*message.NetworkMessage, error) {
+	if opts == nil {
+		return uadp.DecodeReassembled(header, payload, nil)
+	}
+	return uadp.DecodeReassembled(header, payload, &opts.DecodeOptions)
+}
+
 func (uadpCodec) EncodeMetaData(*jsonmsg.MetaDataMessage) ([]byte, error) {
 	return nil, errNoJSONMetaData
 }
@@ -96,6 +113,16 @@ func (jsonCodec) Decode(b []byte, opts *decodeOptions) (*message.NetworkMessage,
 		return nil, uadp.ErrFiltered
 	}
 	return nm, nil
+}
+
+var errNoJSONChunks = errors.New("pubsub: the JSON mapping has no chunks")
+
+func (jsonCodec) EncodeChunks(*message.NetworkMessage, *uadp.EncodeOptions, int) ([][]byte, error) {
+	return nil, errNoJSONChunks
+}
+
+func (jsonCodec) DecodeReassembled(*message.NetworkMessage, []byte, *decodeOptions) (*message.NetworkMessage, error) {
+	return nil, errNoJSONChunks
 }
 
 func (jsonCodec) EncodeMetaData(m *jsonmsg.MetaDataMessage) ([]byte, error) {
