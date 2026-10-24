@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -106,4 +107,56 @@ func TestPubSub_ActionChunksServerResponder(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, qc.Counters.ChunkedMessagesReceived, uint64(4))
 	require.Zero(t, qc.Counters.DecodeErrors)
+}
+
+// TestPubSub_ActionMethodServerResponder calls the targets of a
+// PublishedActionMethod of a server (Part 14 §6.2.3.10.4): each calls its
+// Method of the address space. A target whose Method does not exist
+// answers like the Call service; a handler registered for a target takes
+// precedence over its Method.
+func TestPubSub_ActionMethodServerResponder(t *testing.T) {
+	parallel(t)
+	respURL, reqURL := psUDPURL(t), psUDPURL(t)
+	srv, _ := newServer(t, server.WithPubSub(nil))
+	f := testutil.AddFixture(t, srv)
+	resp := srv.PubSub()
+	missing := ua.NewStringNodeID(f.NSIndex, "NoSuchMethod")
+	_, err := resp.AddPublishedDataSet(pubsub.PublishedActionMethods("Square",
+		[]pubsub.Field{{Name: "n", Type: ua.TypeIDInt32}},
+		[]pubsub.Field{{Name: "result", Type: ua.TypeIDInt32}},
+		[]*ua.ActionTargetDataType{pubsub.ActionTargetOf(1, "Square"), pubsub.ActionTargetOf(2, "Missing"), pubsub.ActionTargetOf(3, "Overridden")},
+		[]*ua.ActionMethodDataType{
+			pubsub.ActionMethodOf(f.MethodObject, f.SquareMethod),
+			pubsub.ActionMethodOf(f.MethodObject, missing),
+			pubsub.ActionMethodOf(f.MethodObject, f.SquareMethod),
+		}))
+	require.NoError(t, err)
+	resp.SetActionHandler("Square", 3, func(context.Context, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		return []*ua.Variant{ua.MustVariant(int32(-1))}, ua.StatusGood
+	})
+	conn, err := resp.AddConnection(pubsub.UDPConnection("Responder", respURL, uint16(1)))
+	require.NoError(t, err)
+	gid, err := resp.AddWriterGroup(conn, pubsub.WriterGroup("Actions", 1, 50*time.Millisecond, pubsub.DataSetWriter("SquareWriter", 100, "Square")))
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		st, err := resp.Status(gid)
+		return err == nil && st.State == ua.PubSubStateOperational
+	}, 10*time.Second, 10*time.Millisecond)
+
+	req := psRuntime(t, pubsub.NewConfiguration(nil, pubsub.UDPConnection("Requestor", reqURL, uint16(9))))
+	call := func(target uint16, in any) *pubsub.ActionResult {
+		t.Helper()
+		res, err := req.CallAction(context.Background(), pubsub.ActionTarget{Connection: "Requestor", PublisherID: uint16(1), DataSetWriterID: 100,
+			ActionTargetID: target, RequestAddress: respURL, Timeout: 5 * time.Second, ResendInterval: 200 * time.Millisecond}, []*ua.Variant{ua.MustVariant(in)})
+		require.NoError(t, err)
+		return res
+	}
+	res := call(1, int32(9))
+	require.Equal(t, ua.StatusGood, res.Status)
+	require.Equal(t, []*ua.Variant{ua.MustVariant(int32(81))}, res.Outputs)
+	require.Equal(t, ua.StatusBadMethodInvalid, call(2, int32(9)).Status)
+	res = call(3, int32(9))
+	require.Equal(t, ua.StatusGood, res.Status)
+	require.Equal(t, int32(-1), res.Outputs[0].Value())
+	require.Equal(t, ua.StatusBadTypeMismatch, call(1, "nine").Status)
 }

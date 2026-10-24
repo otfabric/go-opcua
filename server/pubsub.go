@@ -41,8 +41,9 @@ type pubsubState struct {
 //
 // cfg may be nil for an empty, enabled runtime that clients configure. The
 // runtime reads published variables from the address space and writes the
-// target variables of readers to it; opts can replace these sources and add
-// handlers and key sources. The runtime is available with [Server.PubSub].
+// target variables of readers to it, and the targets of its
+// PublishedActionMethods call the Methods of the address space; opts can
+// replace these sources and add handlers and key sources. The runtime is available with [Server.PubSub].
 func WithPubSub(cfg *ua.PubSubConfigurationDataType, opts ...pubsub.Option) Option {
 	return func(c *serverConfig) error {
 		if cfg != nil {
@@ -84,10 +85,21 @@ func (s *Server) PubSub() *pubsub.PubSub {
 			pubsub.WithTargetWriter(serverTargetWriter{s}),
 			pubsub.WithEventSource(serverEventSource{s}),
 			pubsub.WithEventHandler(s.onPubSubEvent),
+			pubsub.WithActionMethodCaller(s.callActionMethod),
 		}
 		s.ps.rt, s.ps.err = pubsub.New(s.cfg.pubsub.cfg, append(opts, s.cfg.pubsub.opts...)...)
 	})
 	return s.ps.rt
+}
+
+// callActionMethod calls a Method of the address space for the target of
+// a PublishedActionMethod, like the Call service does but without a
+// session: the request was authorized by the security of the writer group.
+// The handler finds no MethodCaller in its context;
+// pubsub.ActionInvocationFrom tells the request it serves.
+func (s *Server) callActionMethod(ctx context.Context, objectID, methodID *ua.NodeID, inputs []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	res := (&MethodService{srv: s}).callMethod(ctx, &ua.CallMethodRequest{ObjectID: objectID, MethodID: methodID, InputArguments: inputs})
+	return res.OutputArguments, res.StatusCode
 }
 
 // startPubSub builds the information model and starts the runtime.
