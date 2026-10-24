@@ -1356,8 +1356,8 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 	}
 
 	// A request that is not sent must not leave its handler behind, nor use
-	// up the sequence numbers of the chunks that were not sent: the peer
-	// refuses every chunk of a secured channel that follows a gap.
+	// up the sequence numbers of the chunks that were never written: the
+	// peer refuses every chunk of a secured channel that follows a gap.
 	seq, seqStarted := instance.sequenceNumber, instance.seqStarted
 	fail := func(err error) (<-chan *MessageBody, error) {
 		instance.sequenceNumber, instance.seqStarted = seq, seqStarted
@@ -1397,6 +1397,10 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 		var n int
 		_ = s.c.SetWriteDeadline(time.Now().Add(timeout))
 		if n, err = s.c.Write(chunk); err != nil {
+			// A failed write may still have put (part of) the chunk on
+			// the wire: its number is used up. Giving it back would make
+			// the next chunk reuse it, which an AEAD policy cannot open.
+			seq, seqStarted = instance.sequenceNumber, instance.seqStarted
 			return fail(err)
 		}
 		_ = s.c.SetWriteDeadline(time.Time{})
