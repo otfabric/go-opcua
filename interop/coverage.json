@@ -1570,6 +1570,78 @@
       }
     },
     {
+      "capability": "nodemgmt.add-references",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_AddDeleteReferences",
+      "case": "coverage/nodemgmt.add-references/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "nodemgmt.add-references",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestMiloServer_ReferencesUnsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "The Milo reference server implements no NodeManagement: AddReferences / DeleteReferences operations are answered BadNotSupported (pinned by TestMiloServer_ReferencesUnsupported)"
+    },
+    {
+      "capability": "nodemgmt.add-references",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "nodemgmt.add-references",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_AddDeleteReferences",
+      "case": "coverage/nodemgmt.delete-references/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestMiloServer_ReferencesUnsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "The Milo reference server implements no NodeManagement: AddReferences / DeleteReferences operations are answered BadNotSupported (pinned by TestMiloServer_ReferencesUnsupported)"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-open62541-server",
       "status": "deferred"
@@ -2622,6 +2694,78 @@
       "status": "not-applicable"
     },
     {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.anonymous/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.anonymous/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.other-identity/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.other-identity/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
       "capability": "subscription.data-change",
       "direction": "go-client-to-open62541-server",
       "status": "verified",
@@ -3225,6 +3369,81 @@
       }
     },
     {
+      "capability": "diagnostics.server-summary",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestMiloServer_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "The Milo adapter server runs with server diagnostics off (Server.ServerDiagnostics.EnabledFlag = false); the test skips. Milo has a diagnostics feature: an adapter that enables it would let the row be verified"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestOpen62541Server_Diagnostics",
+      "case": "coverage/diagnostics.return-diagnostics/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 returns no DiagnosticInfos for a failed Read operation with ReturnDiagnostics set (and none for the service); the test skips"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestMiloServer_Diagnostics",
+      "case": "coverage/diagnostics.return-diagnostics/go-client-to-milo-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 returns no DiagnosticInfos for a failed Read operation with ReturnDiagnostics set; the test skips"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
       "capability": "subscription.modify",
       "direction": "go-client-to-open62541-server",
       "status": "verified",
@@ -3289,6 +3508,40 @@
     },
     {
       "capability": "monitoreditem.modify",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_SetTriggering",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_SetTriggering",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
       "direction": "milo-client-to-go-server",
       "status": "not-applicable"
     },
@@ -5293,6 +5546,40 @@
       "nextAction": "Eclipse Milo 1.1.8 has no ReverseHello in its transports (MessageType knows only Hello / Acknowledge / Error); the Milo adapter refuses --reverse-connect and has no --reverse-listen"
     },
     {
+      "capability": "transport.chunking.secure",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ChunkedSecureMessages",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "transport.chunking.secure",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestMiloServer_ChunkedSecureMessages",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "transport.chunking.secure",
+      "direction": "open62541-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
+      "capability": "transport.chunking.secure",
+      "direction": "milo-client-to-go-server",
+      "status": "not-applicable"
+    },
+    {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-open62541-server",
       "status": "verified",
@@ -5389,6 +5676,107 @@
       "direction": "milo-client-to-go-server",
       "status": "verified",
       "test": "TestCodec_MiloEncodes_GoDecodes",
+      "case": "dataValueJson (Variant nested)",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 implements the compact form of the 1.05 JSON encoding only (adapter codec jsonModes [\"compact\"]; --json-mode verbose exits 2)"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "go-client-to-milo-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodesVerbose_MiloDecodes",
+      "case": "variant/*/json",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 implements the compact form of the 1.05 JSON encoding only (adapter codec jsonModes [\"compact\"]; --json-mode verbose exits 2)"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_MiloEncodesVerbose_GoDecodes",
+      "case": "json",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 implements the compact form of the 1.05 JSON encoding only (adapter codec jsonModes [\"compact\"]; --json-mode verbose exits 2)"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestCodec_GoEncodesVerbose_MiloDecodes",
+      "case": "datavalue/*/json (asserts the rejection)",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 does not decode a JSON DataValue with the Variant members inlined (the Part 6 1.05 form go-opcua emits), in the Verbose form as in the compact one; it nests the Variant in a \"Value\" object"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.8.2",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 implements the compact form of the 1.05 JSON encoding only (adapter codec jsonModes [\"compact\"]; --json-mode verbose exits 2)"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_MiloEncodesVerbose_GoDecodes",
       "case": "dataValueJson (Variant nested)",
       "fixture": "baseline",
       "interopVersion": "v0.8.2",

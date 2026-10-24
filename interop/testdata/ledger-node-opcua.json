@@ -545,6 +545,34 @@
       "fixture": "baseline"
     },
     {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.anonymous/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.other-identity/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
       "capability": "subscription.server.transfer",
       "direction": "go-client-to-node-opcua-server",
       "status": "not-applicable",
@@ -611,6 +639,20 @@
     },
     {
       "capability": "monitoreditem.modify",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_SetTriggering",
+      "case": "coverage/monitoreditem.set-triggering/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
       "direction": "node-opcua-client-to-go-server",
       "status": "not-applicable",
       "fixture": "baseline"
@@ -1112,6 +1154,34 @@
       "fixture": "baseline"
     },
     {
+      "capability": "nodemgmt.add-references",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_ReferencesUnsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers AddReferences / DeleteReferences with BadServiceUnsupported, as AddNodes / DeleteNodes (pinned by TestNodeOpcuaServer_ReferencesUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-references",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_ReferencesUnsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers AddReferences / DeleteReferences with BadServiceUnsupported, as AddNodes / DeleteNodes (pinned by TestNodeOpcuaServer_ReferencesUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
       "capability": "translate.browse-path",
       "direction": "go-client-to-node-opcua-server",
       "status": "verified",
@@ -1141,6 +1211,35 @@
       "status": "verified",
       "test": "TestGoServer_NodeOpcuaClient_RegisterNodes",
       "case": "coverage/view.register-nodes/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_Diagnostics",
+      "case": "coverage/diagnostics.return-diagnostics/go-client-to-node-opcua-server",
+      "nextAction": "node-opcua 2.187.12 returns no DiagnosticInfos for a failed Read operation with ReturnDiagnostics set; the test skips",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
       "fixture": "baseline"
     },
     {
@@ -1733,6 +1832,20 @@
       "fixture": "baseline"
     },
     {
+      "capability": "transport.chunking.secure",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ChunkedSecureMessages",
+      "case": "coverage/transport.chunking.secure/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.chunking.secure",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
@@ -1755,6 +1868,34 @@
     },
     {
       "capability": "encoding.json.datavalue",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",

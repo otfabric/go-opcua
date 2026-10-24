@@ -1210,3 +1210,48 @@ func TestNodeOpcuaAdapter_CodecUnsupported(t *testing.T) {
 		t.Errorf("client codec result: %v %+v", perr, r)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// C→P services (c2p_services_peer_test.go): chunked secure messages,
+// SetTriggering, TransferSubscriptions identity rules, AddReferences /
+// DeleteReferences, server diagnostics
+// ---------------------------------------------------------------------------
+
+func TestNodeOpcuaServer_ChunkedSecureMessages(t *testing.T) {
+	t.Run("coverage/transport.chunking.secure/go-client-to-node-opcua-server", func(t *testing.T) {
+		assertPeerChunkedSecure(t, startNodeOpcuaSecureServer(t).endpoint)
+	})
+}
+
+func TestNodeOpcuaServer_SetTriggering(t *testing.T) {
+	t.Run("coverage/monitoreditem.set-triggering/go-client-to-node-opcua-server", func(t *testing.T) {
+		requireSetTriggering(t, startNodeOpcuaServer(t).endpoint)
+	})
+}
+
+func TestNodeOpcuaServer_TransferSubscriptionsIdentity(t *testing.T) {
+	t.Run("coverage/subscription.client.transfer.anonymous/go-client-to-node-opcua-server", func(t *testing.T) {
+		assertPeerTransferAnonymous(t, startNodeOpcuaSecureServer(t).endpoint, ua.StatusOK)
+	})
+	t.Run("coverage/subscription.client.transfer.other-identity/go-client-to-node-opcua-server", func(t *testing.T) {
+		assertPeerTransferOtherIdentity(t, startNodeOpcuaSecureServer(t).endpoint, ua.StatusBadUserAccessDenied)
+	})
+}
+
+// TestNodeOpcuaServer_ReferencesUnsupported pins why nodemgmt.*-references
+// are unsupported for node-opcua: like AddNodes / DeleteNodes, its
+// OPCUAServer refuses AddReferences / DeleteReferences with
+// BadServiceUnsupported.
+func TestNodeOpcuaServer_ReferencesUnsupported(t *testing.T) {
+	assertPeerReferencesRefused(t, startNodeOpcuaServer(t).endpoint)
+}
+
+func TestNodeOpcuaServer_Diagnostics(t *testing.T) {
+	h := startNodeOpcuaServer(t)
+	t.Run("coverage/diagnostics.server-summary/go-client-to-node-opcua-server", func(t *testing.T) {
+		assertPeerServerDiagnostics(t, h.endpoint)
+	})
+	t.Run("coverage/diagnostics.return-diagnostics/go-client-to-node-opcua-server", func(t *testing.T) {
+		assertPeerReturnDiagnostics(t, h.endpoint)
+	})
+}

@@ -65,6 +65,13 @@ Go↔Go tests never earn ✅.
 | Registered custom DataTypes | Deferred | Deferred | Deferred | Deferred | — |
 | Dynamic structure decoding | Deferred | Deferred | N/A | N/A | — |
 
+## diagnostics
+
+| Capability | C→O | C→M | O→S | M→S | Evidence |
+|---|:---:|:---:|:---:|:---:|---|
+| Server diagnostics: ServerDiagnosticsSummary counts the client's sessions; the client's session in SessionDiagnosticsArray where it is exposed (go-opcua client) | ✅ | N/A | N/A | N/A | C→O: `TestOpen62541Server_Diagnostics / coverage/diagnostics.server-summary/go-client-to-open62541-server` |
+| RequestHeader.ReturnDiagnostics: operation DiagnosticInfos returned for a failed Read and decoded against the string table, none without the mask (go-opcua client) | N/A | N/A | N/A | N/A | — |
+
 ## discovery
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
@@ -83,6 +90,8 @@ Go↔Go tests never earn ✅.
 |---|:---:|:---:|:---:|:---:|---|
 | JSON DataEncoding (1.05): built-in scalars, arrays, matrix (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes) | ✅ | ✅ | ✅ | ✅ | C→O: `TestCodec_GoEncodes_Open62541Decodes / variant/*/json`; C→M: `TestCodec_GoEncodes_MiloDecodes / variant/*/json`; O→S: `TestCodec_Open62541Encodes_GoDecodes / json`; M→S: `TestCodec_MiloEncodes_GoDecodes / json` |
 | JSON DataEncoding (1.05): DataValue with timestamps (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes) | ✅ | N/A | ✅ | ✅ | C→O: `TestCodec_GoEncodes_Open62541Decodes / datavalue/*/json`; O→S: `TestCodec_Open62541Encodes_GoDecodes / dataValueJson`; M→S: `TestCodec_MiloEncodes_GoDecodes / dataValueJson (Variant nested)` |
+| JSON DataEncoding (1.05.04), Verbose form: built-in scalars, arrays, matrix; C→ also a Bad StatusCode with its Symbol (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes) | N/A | ✅ | N/A | ✅ | C→M: `TestCodec_GoEncodesVerbose_MiloDecodes / variant/*/json`; M→S: `TestCodec_MiloEncodesVerbose_GoDecodes / json` |
+| JSON DataEncoding (1.05.04), Verbose form: DataValue with timestamps; C→ also an Uncertain status with its Symbol (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes) | N/A | N/A | N/A | ✅ | M→S: `TestCodec_MiloEncodesVerbose_GoDecodes / dataValueJson (Variant nested)` |
 | XML DataEncoding: built-in scalars, arrays, matrix (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes) | ✅ | ✅ | ✅ | ✅ | C→O: `TestCodec_GoEncodes_Open62541Decodes / variant/*/xml (open62541 gap: XmlElement)`; C→M: `TestCodec_GoEncodes_MiloDecodes / variant/*/xml`; O→S: `TestCodec_Open62541Encodes_GoDecodes / xml (open62541 gap: matrix)`; M→S: `TestCodec_MiloEncodes_GoDecodes / xml` |
 | XML DataEncoding: DataValue with timestamps (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes) | N/A | ✅ | N/A | ✅ | C→M: `TestCodec_GoEncodes_MiloDecodes / datavalue/*/xml (timestamps to the millisecond: Milo XML decoder)`; M→S: `TestCodec_MiloEncodes_GoDecodes / dataValueXml` |
 
@@ -133,6 +142,8 @@ Go↔Go tests never earn ✅.
 |---|:---:|:---:|:---:|:---:|---|
 | AddNodes | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541Server_AddNodes`; O→S: `TestGoServer_Open62541Client_AddNodes`; M→S: `TestGoServer_MiloClient_AddNodes` |
 | DeleteNodes | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541Server_DeleteNodes`; O→S: `TestGoServer_Open62541Client_DeleteNodes`; M→S: `TestGoServer_MiloClient_DeleteNodes` |
+| AddReferences: the added reference is browsable (go-opcua client) | ✅ | N/A | N/A | N/A | C→O: `TestOpen62541Server_AddDeleteReferences / coverage/nodemgmt.add-references/go-client-to-open62541-server` |
+| DeleteReferences: the deleted reference is gone from Browse (go-opcua client) | ✅ | N/A | N/A | N/A | C→O: `TestOpen62541Server_AddDeleteReferences / coverage/nodemgmt.delete-references/go-client-to-open62541-server` |
 
 ## pubsub
 
@@ -240,11 +251,14 @@ Go↔Go tests never earn ✅.
 | Client Republish helper | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ClientRepublish`; C→M: `TestMiloServer_ClientRepublish` |
 | Server Republish handler | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_Republish`; M→S: `TestGoServer_MiloClient_Republish` |
 | Client TransferSubscriptions helper | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ClientTransferSubscriptions`; C→M: `TestMiloServer_ClientTransferSubscriptions` |
+| TransferSubscriptions between two anonymous sessions of the same client application certificate (Basic256Sha256 SignAndEncrypt; go-opcua client) | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_TransferSubscriptionsIdentity / coverage/subscription.client.transfer.anonymous/go-client-to-open62541-server`; C→M: `TestMiloServer_TransferSubscriptionsIdentity / coverage/subscription.client.transfer.anonymous/go-client-to-milo-server` |
+| TransferSubscriptions to a session of another user identity refused with Bad_UserAccessDenied (the fixture's only user, test-user, to an anonymous session; go-opcua client) | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_TransferSubscriptionsIdentity / coverage/subscription.client.transfer.other-identity/go-client-to-open62541-server`; C→M: `TestMiloServer_TransferSubscriptionsIdentity / coverage/subscription.client.transfer.other-identity/go-client-to-milo-server` |
 | Server TransferSubscriptions handler | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_TransferSubscriptions`; M→S: `TestGoServer_MiloClient_TransferSubscriptions` |
 | Automatic subscription recovery | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_SubscriptionRecoveryReconnect`; C→M: `TestMiloServer_SubscriptionRecoveryReconnect` |
 | ModifySubscription | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ModifySubscription`; C→M: `TestMiloServer_ModifySubscription` |
 | SetPublishingMode | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_ModifySubscription`; C→M: `TestMiloServer_ModifySubscription`; O→S: `TestGoServer_Open62541Client_SubscriptionLifecycle_PublishingMode`; M→S: `TestGoServer_MiloClient_SubscriptionLifecycle_PublishingMode` |
 | ModifyMonitoredItems | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ModifyMonitoredItems`; C→M: `TestMiloServer_ModifyMonitoredItems` |
+| SetTriggering: a linked item in Sampling mode reports only after its triggering item reports; RemoveLinks (go-opcua client) | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_SetTriggering`; C→M: `TestMiloServer_SetTriggering` |
 | SetMonitoringMode | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_SetMonitoringMode`; C→M: `TestMiloServer_SetMonitoringMode`; O→S: `TestGoServer_Open62541Client_SubscriptionLifecycle_MonitoringMode`; M→S: `TestGoServer_MiloClient_SubscriptionLifecycle_MonitoringMode` |
 | DataChangeFilter absolute deadband | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_DataChangeFilter / coverage/monitoreditem.deadband/go-client-to-open62541-server`; C→M: `TestMiloServer_DataChangeFilter / coverage/monitoreditem.deadband/go-client-to-milo-server`; O→S: `TestGoServer_PeerClient_Deadband / coverage/monitoreditem.deadband/open62541-client-to-go-server`; M→S: `TestGoServer_PeerClient_Deadband / coverage/monitoreditem.deadband/milo-client-to-go-server` |
 | DataChangeFilter percent deadband (AnalogItem EURange) | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_DataChangeFilter / coverage/monitoreditem.percent-deadband/go-client-to-open62541-server`; C→M: `TestMiloServer_DataChangeFilter / coverage/monitoreditem.percent-deadband/go-client-to-milo-server`; O→S: `TestGoServer_PeerClient_PercentDeadband / coverage/monitoreditem.percent-deadband/open62541-client-to-go-server`; M→S: `TestGoServer_PeerClient_PercentDeadband / coverage/monitoreditem.percent-deadband/milo-client-to-go-server` |
@@ -258,6 +272,7 @@ Go↔Go tests never earn ✅.
 | Reverse connect (ReverseHello): session, Read, GetEndpoints. C→ = Go client listens, peer server dials; →S = Go server dials, peer client listens | ✅ | N/A | ✅ | N/A | C→O: `TestOpen62541Server_ReverseConnect`; O→S: `TestGoServer_Open62541Client_ReverseConnect_Read` |
 | Reverse connect: subscription over the reverse connection | ✅ | N/A | ✅ | N/A | C→O: `TestOpen62541Server_ReverseConnect`; O→S: `TestGoServer_Open62541Client_ReverseConnect_Subscribe` |
 | Reverse connect secured (Basic256Sha256, ECC_nistP256, ECC_nistP384) | ✅ | N/A | ✅ | N/A | C→O: `TestOpen62541Server_ReverseConnect_Secure / coverage/transport.reverse-connect.secure/go-client-to-open62541-server/{Basic256Sha256,ECC_nistP256,ECC_nistP384}`; O→S: `TestGoServer_Open62541Client_ReverseConnect_Secure / coverage/transport.reverse-connect.secure/open62541-client-to-go-server/{Basic256Sha256,ECC_nistP256,ECC_nistP384}` |
+| Multi-chunk messages on secured channels: a ByteString of about 200 KB (sized to the server's limits) written and read back over Basic256Sha256 and Aes256_Sha256_RsaPss SignAndEncrypt, request and response in several chunks (go-opcua client) | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ChunkedSecureMessages`; C→M: `TestMiloServer_ChunkedSecureMessages` |
 
 ## view
 

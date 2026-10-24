@@ -5,7 +5,15 @@
 // JSON and XML DataEncoding evidence against open62541 and Eclipse Milo
 // (Part 6 §5.4, §5.3).
 // COVERAGE.md: encoding / encoding.json.variant, encoding.json.datavalue,
-// encoding.xml.variant, encoding.xml.datavalue
+// encoding.xml.variant, encoding.xml.datavalue, encoding.json-verbose.variant,
+// encoding.json-verbose.datavalue
+//
+// The Verbose form (OPC UA 1.05.04, --json-mode verbose; Milo and dotnet) is
+// run on the JSON half of the same tests. For the fixture's values Milo 1.1.8
+// and UA-.NETStandard 2.0.1 write exactly their compact documents (no
+// StatusCode Symbol either, also not for an Uncertain status), so the
+// go-opcua → peer direction adds a Bad StatusCode and an Uncertain DataValue,
+// which go-opcua's Verbose form writes with their Symbol.
 //
 // The transport in these tests is still OPC UA TCP with the binary encoding:
 // values are read over the wire in binary by both stacks, and each stack's
@@ -90,6 +98,22 @@ type codecPeer struct {
 	// xmlMillisecondDateTime: the peer's XML decoder keeps a DateTime to the
 	// millisecond only.
 	xmlMillisecondDateTime bool
+	// jsonMode "verbose" runs the JSON half of the tests in the Verbose form
+	// of OPC UA 1.05.04 (adapter flag --json-mode verbose, client feature
+	// codec-json-verbose; go-opcua ua.JSONVerbose); empty is the compact
+	// form, together with XML.
+	jsonMode string
+}
+
+// verbose reports whether p runs the JSON Verbose form (and no XML).
+func (p codecPeer) verbose() bool { return p.jsonMode == "verbose" }
+
+// jsonModeArgs are the adapter flags that select p's JSON form.
+func (p codecPeer) jsonModeArgs() []string {
+	if p.jsonMode == "" {
+		return nil
+	}
+	return []string{"--json-mode", p.jsonMode}
 }
 
 var codecOpen62541 = codecPeer{
@@ -139,6 +163,10 @@ func (p codecPeer) require(t *testing.T) {
 	t.Helper()
 	requireAdapterOp(t, p.imageEnv, p.defaultImage, "codec")
 	requireAdapterClientFeature(t, p.imageEnv, p.defaultImage, "codec-json")
+	if p.verbose() {
+		requireAdapterClientFeature(t, p.imageEnv, p.defaultImage, "codec-json-verbose")
+		return
+	}
 	requireAdapterClientFeature(t, p.imageEnv, p.defaultImage, "codec-xml")
 }
 
@@ -208,7 +236,7 @@ func assertPeerEncodesGoDecodes(t *testing.T, p codecPeer) {
 	endpoint := startGoServer(t)
 	ref, names := codecReference(t, endpoint)
 
-	args := make([]string, 0, 2*len(names))
+	args := p.jsonModeArgs()
 	for _, name := range names {
 		args = append(args, "--node", codecNodeArg(name))
 	}
@@ -253,6 +281,9 @@ func assertPeerEncodesGoDecodes(t *testing.T, p codecPeer) {
 				decode func([]byte, interface{}, ...ua.CodecOption) error
 			}
 			for _, d := range []variantDoc{{"json", item.JSON, ua.DecodeJSON}, {"xml", item.XML, ua.DecodeXML}} {
+				if p.verbose() && d.kind == "xml" {
+					continue
+				}
 				doc := document(t, name, d.kind, d.doc)
 				if doc == nil {
 					continue
@@ -269,6 +300,9 @@ func assertPeerEncodesGoDecodes(t *testing.T, p codecPeer) {
 				docs[d.kind]++
 			}
 			for _, d := range []variantDoc{{"dataValueJson", item.DataValueJSON, ua.DecodeJSON}, {"dataValueXml", item.DataValueXML, ua.DecodeXML}} {
+				if p.verbose() && d.kind == "dataValueXml" {
+					continue
+				}
 				doc := document(t, name, d.kind, d.doc)
 				if doc == nil {
 					continue
@@ -300,6 +334,26 @@ func assertPeerEncodesGoDecodes(t *testing.T, p codecPeer) {
 	if docs["json"] != len(names) {
 		t.Errorf("%d of %d JSON documents were verified", docs["json"], len(names))
 	}
+	if p.verbose() && docs["dataValueJson"] != len(names) {
+		t.Errorf("%d of %d JSON DataValue documents were verified", docs["dataValueJson"], len(names))
+	}
+}
+
+// Values the JSON Verbose tests add to the fixture's (go-opcua encodes, the
+// peer decodes): a Bad StatusCode and a DataValue with an Uncertain status.
+const (
+	verboseBadStatus = "Verbose.BadStatusCode"
+	verboseUncertain = "Verbose.UncertainDataValue"
+)
+
+// requireVerboseSymbol: the Verbose form writes a StatusCode other than Good
+// with its Symbol, which the compact form leaves out. It makes sure the
+// values meant to tell the forms apart do.
+func requireVerboseSymbol(t *testing.T, p codecPeer, name string, doc []byte) {
+	t.Helper()
+	if p.verbose() && (name == verboseBadStatus || name == verboseUncertain) && !bytes.Contains(doc, []byte(`"Symbol"`)) {
+		t.Fatalf("the verbose document of %s has no Symbol: %s", name, doc)
+	}
 }
 
 // runCodecDecode hands a document to the adapter on stdin.
@@ -308,8 +362,11 @@ func runCodecDecode(t *testing.T, p codecPeer, format, typ string, doc []byte) (
 	image := getEnvOr(p.imageEnv, p.defaultImage)
 	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", "run", "--rm", "-i", image,
-		"client", "codec", "--decode", format, "--type", typ)
+	args := []string{"run", "--rm", "-i", image, "client", "codec", "--decode", format, "--type", typ}
+	if format == "json" {
+		args = append(args, p.jsonModeArgs()...)
+	}
+	cmd := exec.CommandContext(ctx, "docker", args...)
 	cmd.Stdin = bytes.NewReader(doc)
 	if p.name != "milo" { // the JVM warns about netty on every start
 		cmd.Stderr = os.Stderr
@@ -356,6 +413,25 @@ func assertGoEncodesPeerDecodes(t *testing.T, p codecPeer) {
 		encode func(interface{}, ...ua.CodecOption) ([]byte, error)
 	}
 	encoders := []encoder{{"json", ua.EncodeJSON}, {"xml", ua.EncodeXML}}
+	dataValueNames := []string{"Scalar.Int32", "Scalar.Double", "Scalar.LocalizedText", "Array.Double", "Array.Matrix2D", "DataValues.GoodWithTimestamps"}
+	if p.verbose() {
+		// The fixture's values encode the same in both forms (their
+		// StatusCodes are Good). These two carry a StatusCode that the
+		// Verbose form writes with its Symbol.
+		now := time.Now().UTC().Truncate(time.Millisecond)
+		ref[verboseBadStatus] = &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(ua.StatusBadNodeIDUnknown)}
+		names = append(names, verboseBadStatus)
+		ref[verboseUncertain] = &ua.DataValue{
+			EncodingMask:    ua.DataValueValue | ua.DataValueStatusCode | ua.DataValueSourceTimestamp | ua.DataValueServerTimestamp,
+			Value:           ua.MustVariant(int32(7)),
+			Status:          ua.StatusUncertainInitialValue,
+			SourceTimestamp: now, ServerTimestamp: now,
+		}
+		dataValueNames = append(dataValueNames, verboseUncertain)
+		encoders = []encoder{{"json", func(v interface{}, opts ...ua.CodecOption) ([]byte, error) {
+			return ua.EncodeJSON(v, append(opts, ua.WithJSONForm(ua.JSONVerbose))...)
+		}}}
+	}
 
 	// The adapter runs are independent of each other and of the server:
 	// run them in parallel (a Milo run is a JVM start).
@@ -369,6 +445,7 @@ func assertGoEncodesPeerDecodes(t *testing.T, p codecPeer) {
 					if err != nil {
 						t.Fatalf("encode: %v", err)
 					}
+					requireVerboseSymbol(t, p, name, doc)
 					result, raw := runCodecDecode(t, p, enc.format, "Variant", doc)
 					if reason, gap := p.gap(p.decodeGaps, name, enc.format); gap {
 						if result.Success {
@@ -399,7 +476,7 @@ func assertGoEncodesPeerDecodes(t *testing.T, p codecPeer) {
 	// what the peer decoded must be the binary encoding of the DataValue
 	// go-opcua encoded.
 	t.Run("datavalue", func(t *testing.T) {
-		for _, name := range []string{"Scalar.Int32", "Scalar.Double", "Scalar.LocalizedText", "Array.Double", "Array.Matrix2D", "DataValues.GoodWithTimestamps"} {
+		for _, name := range dataValueNames {
 			for _, enc := range encoders {
 				dv := *ref[name]
 				if enc.format == "xml" && p.xmlMillisecondDateTime {
@@ -415,6 +492,7 @@ func assertGoEncodesPeerDecodes(t *testing.T, p codecPeer) {
 					if err != nil {
 						t.Fatalf("encode: %v", err)
 					}
+					requireVerboseSymbol(t, p, name, doc)
 					result, raw := runCodecDecode(t, p, enc.format, "DataValue", doc)
 					if reason, gap := p.dataValueDecodeGaps[enc.format]; gap {
 						if result.Success {
@@ -455,3 +533,17 @@ func TestCodec_GoEncodes_Open62541Decodes(t *testing.T) {
 }
 func TestCodec_MiloEncodes_GoDecodes(t *testing.T) { assertPeerEncodesGoDecodes(t, codecMilo) }
 func TestCodec_GoEncodes_MiloDecodes(t *testing.T) { assertGoEncodesPeerDecodes(t, codecMilo) }
+
+// codecMiloVerbose: Milo's encoder and decoder in the JSON Verbose form.
+var codecMiloVerbose = func() codecPeer {
+	p := codecMilo
+	p.jsonMode = "verbose"
+	return p
+}()
+
+func TestCodec_MiloEncodesVerbose_GoDecodes(t *testing.T) {
+	assertPeerEncodesGoDecodes(t, codecMiloVerbose)
+}
+func TestCodec_GoEncodesVerbose_MiloDecodes(t *testing.T) {
+	assertGoEncodesPeerDecodes(t, codecMiloVerbose)
+}

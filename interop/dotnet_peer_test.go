@@ -667,3 +667,68 @@ func TestCodec_GoEncodes_DotnetDecodes(t *testing.T) {
 	requireDotnetImage(t)
 	assertGoEncodesPeerDecodes(t, codecDotnet)
 }
+
+// codecDotnetVerbose: JsonEncoderOptions.Verbose of the UA-.NETStandard
+// JsonEncoder.
+var codecDotnetVerbose = func() codecPeer {
+	p := codecDotnet
+	p.jsonMode = "verbose"
+	return p
+}()
+
+func TestCodec_DotnetEncodesVerbose_GoDecodes(t *testing.T) {
+	requireDotnetImage(t)
+	assertPeerEncodesGoDecodes(t, codecDotnetVerbose)
+}
+
+func TestCodec_GoEncodesVerbose_DotnetDecodes(t *testing.T) {
+	requireDotnetImage(t)
+	assertGoEncodesPeerDecodes(t, codecDotnetVerbose)
+}
+
+// ---------------------------------------------------------------------------
+// C→P services (c2p_services_peer_test.go): chunked secure messages,
+// SetTriggering, TransferSubscriptions identity rules, AddReferences /
+// DeleteReferences, server diagnostics
+// ---------------------------------------------------------------------------
+
+func TestDotnetServer_ChunkedSecureMessages(t *testing.T) {
+	t.Run("coverage/transport.chunking.secure/go-client-to-dotnet-server", func(t *testing.T) {
+		assertPeerChunkedSecure(t, startDotnetSecureServer(t).endpoint)
+	})
+}
+
+func TestDotnetServer_SetTriggering(t *testing.T) {
+	t.Run("coverage/monitoreditem.set-triggering/go-client-to-dotnet-server", func(t *testing.T) {
+		requireSetTriggering(t, startDotnetServer(t).endpoint)
+	})
+}
+
+func TestDotnetServer_TransferSubscriptionsIdentity(t *testing.T) {
+	t.Run("coverage/subscription.client.transfer.anonymous/go-client-to-dotnet-server", func(t *testing.T) {
+		assertPeerTransferAnonymous(t, startDotnetSecureServer(t).endpoint, ua.StatusOK)
+	})
+	t.Run("coverage/subscription.client.transfer.other-identity/go-client-to-dotnet-server", func(t *testing.T) {
+		assertPeerTransferOtherIdentity(t, startDotnetSecureServer(t).endpoint, ua.StatusBadUserAccessDenied)
+	})
+}
+
+func TestDotnetServer_AddDeleteReferences(t *testing.T) {
+	h := startDotnetServer(t)
+	t.Run("coverage/nodemgmt.add-references/go-client-to-dotnet-server", func(t *testing.T) {
+		assertPeerAddDeleteReferences(t, h.endpoint)
+	})
+	t.Run("coverage/nodemgmt.delete-references/go-client-to-dotnet-server", func(t *testing.T) {
+		assertPeerAddDeleteReferences(t, h.endpoint)
+	})
+}
+
+func TestDotnetServer_Diagnostics(t *testing.T) {
+	h := startDotnetServer(t)
+	t.Run("coverage/diagnostics.server-summary/go-client-to-dotnet-server", func(t *testing.T) {
+		assertPeerServerDiagnostics(t, h.endpoint)
+	})
+	t.Run("coverage/diagnostics.return-diagnostics/go-client-to-dotnet-server", func(t *testing.T) {
+		assertPeerReturnDiagnostics(t, h.endpoint)
+	})
+}
