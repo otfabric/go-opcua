@@ -16,22 +16,23 @@ concurrency:
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
-  # The suite (~470 tests, mostly sequential docker containers) runs as six
-  # parallel shards; `make interop-shard` deals the tests out round-robin by
-  # name. Run the whole suite locally with `make interop`.
+  # The suite (~1300 tests against six peer stacks, mostly sequential docker
+  # containers) runs as ten parallel shards; `make interop-shard` deals the
+  # tests out round-robin by name. Run the whole suite locally with
+  # `make interop`.
   shard:
-    name: Interop shard ${{ matrix.shard }}/6
+    name: Interop shard ${{ matrix.shard }}/10
     runs-on: ubuntu-latest
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
     env:
       # opcua-interop release the suite and interop/coverage.json are written
       # against (interopVersion in interop/harness_test.go). Keep in step
       # with the image digests below.
-      OPCUA_INTEROP_REF: v0.8.2
+      OPCUA_INTEROP_REF: v0.9.0
 
     steps:
       - uses: actions/checkout@v7
@@ -68,20 +69,27 @@ jobs:
 
       - name: Run interop matrix
         env:
-          # Digest-pinned opcua-interop v0.8.2 multi-arch indexes:
-          # https://github.com/otfabric/opcua-interop/releases/tag/v0.8.2
-          # Release run: https://github.com/otfabric/opcua-interop/actions/runs/40055105259
-          # Set OPEN62541_IMAGE / MILO_IMAGE in the env to test local builds.
-          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:e035d07896a650a820a552e778202bc847c78855ff3d4ae0de1f172606d48866
-          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:2d84fa47b67d785fe84ebeb3e4d41ec75841e459fd43fd689bf45c1fddc9a15e
+          # Digest-pinned opcua-interop v0.9.0 multi-arch indexes, the same as
+          # the harness defaults:
+          # https://github.com/otfabric/opcua-interop/releases/tag/v0.9.0
+          # Release run: https://github.com/otfabric/opcua-interop/actions/runs/40071233368
+          # Set the *_IMAGE variables in the env to test local builds.
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:9c5757d5dc810deb1e917f22e114bb4f94b068dd31959ef19a83b7844a811f88
+          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:68f450b0eddf4951b0d7f678df4996bc32aabd106716381e0bd9e9c0e34579e1
+          ASYNC_OPCUA_IMAGE: ghcr.io/otfabric/opcua-interop-async-opcua@sha256:6a9361938bb31c89f7dfd4f91df73e9b4810e4f357cfa5fb2faf2dade2d405d7
+          DOTNET_IMAGE: ghcr.io/otfabric/opcua-interop-dotnet@sha256:57b41e14303aeaecf3437941ea25876bf9357a37153178b841d0ab292099bc6d
+          NODE_OPCUA_IMAGE: ghcr.io/otfabric/opcua-interop-node-opcua@sha256:98be675fb46836c940fda375f4d36bb5cfd93774d7af26c3b3abc271cecede37
+          ASYNCUA_IMAGE: ghcr.io/otfabric/opcua-interop-asyncua@sha256:725d9d1f47ad285589104141453a50ad4f4144c93b6b406089c463bb85ac471c
           OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
         run: |
-          # Pull both adapter images once, up front, instead of inside the
+          # Pull the adapter images once, up front, instead of inside the
           # first test that starts each of them.
-          docker pull --quiet "${OPEN62541_IMAGE}" &
-          docker pull --quiet "${MILO_IMAGE}" &
+          for image in "${OPEN62541_IMAGE}" "${MILO_IMAGE}" "${ASYNC_OPCUA_IMAGE}" \
+              "${DOTNET_IMAGE}" "${NODE_OPCUA_IMAGE}" "${ASYNCUA_IMAGE}"; do
+            docker pull --quiet "${image}" &
+          done
           wait
-          make interop-shard SHARD=${{ matrix.shard }} SHARDS=6
+          make interop-shard SHARD=${{ matrix.shard }} SHARDS=10
 
       - name: Collect Docker diagnostics
         if: failure()

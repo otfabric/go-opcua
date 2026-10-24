@@ -8,13 +8,9 @@
 //
 //	DOTNET_IMAGE   Docker image of the dotnet adapter (default: defaultDotnetImage)
 //
-// The dotnet adapter is new in opcua-interop v0.9.0, and the dotnet peer is
-// opt-in: with DOTNET_IMAGE unset its tests run only when defaultDotnetImage
-// is already present locally (it is never pulled) and skip otherwise, also
-// with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1, so the open62541 / Milo suite
-// pinned to interopVersion is unaffected. With DOTNET_IMAGE set the usual
-// capability gating applies (missing operations or features fail under
-// OPCUA_INTEROP_REQUIRE_CAPABILITIES=1).
+// The dotnet peer runs with every interop run against the image pinned by
+// digest below (opcua-interop interopVersion); set DOTNET_IMAGE to test another
+// build. The usual capability gating applies.
 //
 //	DOTNET_IMAGE=ghcr.io/otfabric/opcua-interop-dotnet:dev \
 //	    go test -tags=interop -run Dotnet ./interop/
@@ -37,16 +33,11 @@ import (
 	"testing"
 )
 
-// defaultDotnetImage is the v0.9.0 tag until the release is published; then
-// pin its multi-arch digest here (and in INTEROP.md), as for the other peers.
-const defaultDotnetImage = "ghcr.io/otfabric/opcua-interop-dotnet:v0.9.0"
+// defaultDotnetImage is the dotnet adapter of the opcua-interop release
+// named by interopVersion (multi-arch index digest; see harness_test.go).
+const defaultDotnetImage = "ghcr.io/otfabric/opcua-interop-dotnet@sha256:57b41e14303aeaecf3437941ea25876bf9357a37153178b841d0ab292099bc6d"
 
-// dotnetInteropVersion is the opcua-interop release the dotnet tests and
-// testdata/ledger-dotnet.json are written against.
-const dotnetInteropVersion = "v0.9.0"
-
-// dotnetEnv is the image env variable of the dotnet peer, an opt-in peer
-// (optional_peers_test.go).
+// dotnetEnv is the image env variable of the dotnet peer, see harness_test.go.
 const dotnetEnv = "DOTNET_IMAGE"
 
 const (

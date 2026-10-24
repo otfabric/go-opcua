@@ -7,12 +7,9 @@
 //
 //	ASYNC_OPCUA_IMAGE   Docker image of the async-opcua adapter (default: defaultAsyncOpcuaImage)
 //
-// The async-opcua peer is opt-in: with ASYNC_OPCUA_IMAGE unset its tests run
-// only when defaultAsyncOpcuaImage is already present locally (it is never
-// pulled) and skip otherwise, also with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1,
-// so the open62541 / Milo suite pinned to interopVersion is unaffected (see
-// optionalPeerImageEnv). With ASYNC_OPCUA_IMAGE set the usual capability
-// gating applies.
+// The async-opcua peer runs with every interop run against the image pinned by
+// digest below (opcua-interop interopVersion); set ASYNC_OPCUA_IMAGE to test another
+// build. The usual capability gating applies.
 //
 //	ASYNC_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-async-opcua:dev \
 //	    go test -tags=interop -run AsyncOpcua ./interop/
@@ -45,14 +42,9 @@ import (
 	"time"
 )
 
-// defaultAsyncOpcuaImage is the v0.9.0 tag until the release is published;
-// then pin its multi-arch digest here (and in INTEROP.md), as for the other
-// peers.
-const defaultAsyncOpcuaImage = "ghcr.io/otfabric/opcua-interop-async-opcua:v0.9.0"
-
-// asyncOpcuaInteropVersion is the opcua-interop release the async-opcua tests
-// and testdata/ledger-async-opcua.json are written against.
-const asyncOpcuaInteropVersion = "v0.9.0"
+// defaultAsyncOpcuaImage is the async-opcua adapter of the opcua-interop release
+// named by interopVersion (multi-arch index digest; see harness_test.go).
+const defaultAsyncOpcuaImage = "ghcr.io/otfabric/opcua-interop-async-opcua@sha256:6a9361938bb31c89f7dfd4f91df73e9b4810e4f357cfa5fb2faf2dade2d405d7"
 
 // requireAsyncOpcuaImage skips (or fails with
 // OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 when ASYNC_OPCUA_IMAGE is set) when

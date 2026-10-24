@@ -8,12 +8,9 @@
 //
 //	NODE_OPCUA_IMAGE   Docker image of the node-opcua adapter (default: defaultNodeOpcuaImage)
 //
-// The node-opcua peer is opt-in: with NODE_OPCUA_IMAGE unset its tests run
-// only when defaultNodeOpcuaImage is already present locally (it is never
-// pulled) and skip otherwise, also with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1,
-// so the open62541 / Milo suite pinned to interopVersion is unaffected (see
-// optionalPeerImageEnv). With NODE_OPCUA_IMAGE set the usual capability
-// gating applies.
+// The node-opcua peer runs with every interop run against the image pinned by
+// digest below (opcua-interop interopVersion); set NODE_OPCUA_IMAGE to test another
+// build. The usual capability gating applies.
 //
 //	NODE_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-node-opcua:dev \
 //	    go test -tags=interop -run NodeOpcua ./interop/
@@ -44,14 +41,9 @@ import (
 	"time"
 )
 
-// defaultNodeOpcuaImage is the v0.9.0 tag until the release is published;
-// then pin its multi-arch digest here (and in INTEROP.md), as for the other
-// peers.
-const defaultNodeOpcuaImage = "ghcr.io/otfabric/opcua-interop-node-opcua:v0.9.0"
-
-// nodeOpcuaInteropVersion is the opcua-interop release the node-opcua tests
-// and testdata/ledger-node-opcua.json are written against.
-const nodeOpcuaInteropVersion = "v0.9.0"
+// defaultNodeOpcuaImage is the node-opcua adapter of the opcua-interop release
+// named by interopVersion (multi-arch index digest; see harness_test.go).
+const defaultNodeOpcuaImage = "ghcr.io/otfabric/opcua-interop-node-opcua@sha256:98be675fb46836c940fda375f4d36bb5cfd93774d7af26c3b3abc271cecede37"
 
 // requireNodeOpcuaImage skips (or fails with
 // OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 when NODE_OPCUA_IMAGE is set) when
