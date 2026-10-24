@@ -69,7 +69,7 @@ func TestAsyncOpcuaLedgerValid(t *testing.T) {
 		} `json:"entries"`
 	}](t, filepath.Join(dir, "testdata", "ledger-async-opcua.json"))
 
-	// Keep in step with asyncOpcuaInteropVersion (asyncopcua_harness_test.go).
+	// Keep in step with interopVersion (harness_test.go).
 	if ledger.InteropVersion != "v0.9.0" {
 		t.Errorf("interopVersion = %q, want v0.9.0", ledger.InteropVersion)
 	}

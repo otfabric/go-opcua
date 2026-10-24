@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 )
 
-const pin = "v0.8.2"
+const pin = "v0.9.0"
 
 var dirs = []string{
 	"go-client-to-open62541-server",

@@ -319,7 +319,7 @@ specification; the test pins that behaviour or skips with the reason.
 
 | Peer | Ledger | Verified | Unsupported | Deferred | Not applicable |
 |---|---|---:|---:|---:|---:|
-| open62541 and Eclipse Milo (default peers) | [`interop/coverage.json`](interop/COVERAGE.md) | 407 | 148 | 64 | 44 |
+| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 407 | 148 | 64 | 44 |
 | async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 136 | 140 | 30 | 22 |
 | UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 148 | 128 | 34 | 22 |
 | node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 136 | 144 | 27 | 22 |
@@ -508,7 +508,7 @@ go run examples/datetime/datetime.go -endpoint opc.tcp://localhost:4840
 
 ## Testing and production readiness
 
-go-opcua is continuously interoperability-tested in all applicable client/server directions against open62541 and Eclipse Milo (default peers, every CI run) and against async-opcua, UA-.NETStandard, node-opcua and asyncua (opt-in peers with their own ledgers). The directional evidence ledger is maintained in [interop/COVERAGE.md](interop/COVERAGE.md) and `interop/testdata/ledger-*.json`; see [Interop evidence](#interop-evidence).
+go-opcua is continuously interoperability-tested in all applicable client/server directions against open62541, Eclipse Milo, async-opcua, UA-.NETStandard, node-opcua and asyncua, all six in every interop CI run. The directional evidence ledger is maintained in [interop/COVERAGE.md](interop/COVERAGE.md) and `interop/testdata/ledger-*.json`; see [Interop evidence](#interop-evidence).
 
 - **Verify gate**: `make verify` — `go vet`, unit tests, race tests, and interop (`make vet`, `make test-norace`, `make test`, `make interop`).
 - **Unit tests**: `make test-norace` (`go test -count=1 ./...`), `make test` (same with `-race`).

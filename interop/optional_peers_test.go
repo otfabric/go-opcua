@@ -9,18 +9,10 @@ package interop
 // image env variables (see imageCapabilities: with the variable unset the
 // peer runs only when its default image is present locally, and skips
 // otherwise); peerInteropVersion the release each of them is written against
-// (see requirePinnedVersion).
+// (see requirePinnedVersion). A new adapter starts here and moves to the
+// pinned peers with the release that publishes it; all six peers of
+// opcua-interop v0.9.0 are pinned.
 var (
-	optionalPeerImageEnv = map[string]bool{
-		asyncOpcuaEnv: true,
-		dotnetEnv:     true,
-		nodeOpcuaEnv:  true,
-		asyncuaEnv:    true,
-	}
-	peerInteropVersion = map[string]string{
-		asyncOpcuaEnv: asyncOpcuaInteropVersion,
-		dotnetEnv:     dotnetInteropVersion,
-		nodeOpcuaEnv:  nodeOpcuaInteropVersion,
-		asyncuaEnv:    asyncuaInteropVersion,
-	}
+	optionalPeerImageEnv = map[string]bool{}
+	peerInteropVersion   = map[string]string{}
 )

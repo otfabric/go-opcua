@@ -19,7 +19,7 @@
 //	                                     DiagnosticInfo decoded
 //
 // The assertions are shared; each peer's Test function (here for open62541
-// and Milo, in the peer's *_peer_test.go for the opt-in peers) names the
+// and Milo, in the peer's *_peer_test.go for the other peers) names the
 // ledger row in its subtest and says what the peer was observed to decide
 // where the specification leaves room or the peer deviates from it.
 
