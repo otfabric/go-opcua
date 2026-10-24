@@ -18,8 +18,9 @@ to variables.
 | Keys | static keys, Security Key Service (SKS) server, SKS pull client, SetSecurityKeys push |
 | Configuration | the standard `ua.PubSubConfigurationDataType`, builders for common setups, runtime add / remove / enable / disable |
 | Information model | `Server/PublishSubscribe` with connections, groups, writers, readers, published data sets, status and the configuration methods |
+| Diagnostics | Part 14 §9.1.11 diagnostics objects on PublishSubscribe and every connection, group, writer and reader (`pubsub.Diagnostics`, Reset, DiagnosticsLevel) |
 | Remote configuration | package `pubsub/remote` calls the PubSub methods of any Part 14 server |
-| Not implemented | Ethernet (`opc.eth://`), AMQP, chunked NetworkMessages, UADP discovery requests, Diagnostics objects, PubSub actions |
+| Not implemented | Ethernet (`opc.eth://`), AMQP, chunked NetworkMessages, UADP discovery requests, PubSub actions |
 
 Interoperability is tested against open62541 v1.5.9 (see the interop ledger,
 profile `pubsub`), the only peer with PubSub in the interop suite: Eclipse Milo
@@ -135,6 +136,39 @@ broker credentials and TLS (`mqtts://`).
 `(*Server).PubSub()` returns the runtime; `PubSubNodeID` and
 `PubSubComponentID` map between components and their nodes. See
 `examples/pubsub/server`.
+
+## Diagnostics
+
+`(*PubSub).Diagnostics(id)` returns the diagnostics object of a component (Part
+14 §9.1.11): the counters with their value, `Active`, `Classification`,
+`DiagnosticsLevel` and `TimeFirstChange`, `TotalInformation`, `TotalError`,
+`SubError` and the LiveValues. `ResetDiagnostics(id)` is the Reset method,
+`SetDiagnosticsLevel(id, level)` and `pubsub.WithDiagnosticsLevel` set the
+level (default Basic). In a server they appear as the `Diagnostics` object of
+`PublishSubscribe` (i=17409, PubSubDiagnosticsRootType) and of every
+connection, group, writer and reader, added and removed with them. The
+DiagnosticsLevel is read-only in the address space.
+
+| Object | Counters (besides the state counters) | LiveValues |
+|--------|----------------------------------------|------------|
+| PublishSubscribe | | Configured / Operational DataSetWriters and DataSetReaders |
+| Connection | | ResolvedAddress |
+| WriterGroup | SentNetworkMessages, FailedTransmissions, EncryptionErrors (Advanced) | Configured / Operational DataSetWriters, SecurityTokenID, TimeToNextTokenID (Info) |
+| ReaderGroup | ReceivedNetworkMessages, ReceivedInvalidNetworkMessages (Advanced), DecryptionErrors (Advanced) | Configured / Operational DataSetReaders |
+| DataSetWriter | FailedDataSetMessages | MessageSequenceNumber, StatusCode, MajorVersion, MinorVersion (Info) |
+| DataSetReader | FailedDataSetMessages, DecryptionErrors (Advanced) | MessageSequenceNumber, StatusCode, MajorVersion, MinorVersion, SecurityTokenID, TimeToNextTokenID (Info) |
+
+Every object counts its state transitions by cause: StateError,
+StateOperationalByMethod / ByParent / FromError, StatePausedByParent and
+StateDisabledByMethod (Start and the end of the runtime count as caused by
+the parent of PublishSubscribe). Counters and LiveValues above the
+DiagnosticsLevel of their object do not count and read Bad_OutOfService; a
+counter starts again at 0 when it becomes active. A NetworkMessage that cannot
+be decoded counts for the reader groups whose readers its header matched (all
+of the connection when the header itself is broken): as DecryptionErrors when
+the message security failed (also for the secured readers), else as
+ReceivedInvalidNetworkMessages. The `Counters` of `Status` stay cumulative and
+are not reset.
 
 ## Configure a remote server
 
