@@ -163,3 +163,71 @@ func TestPubSub_ActionMethodServerResponder(t *testing.T) {
 	require.Equal(t, int32(-1), res.Outputs[0].Value())
 	require.Equal(t, ua.StatusBadTypeMismatch, call(1, "nine").Status)
 }
+
+// TestPubSub_ActionDiscoveryServerBroker: a server Responder publishes the
+// ActionMetaData of its PublishedActionMethod writer retained on an MQTT
+// broker (Part 14 §7.3.4.7.12), UADP and JSON; a Requestor that starts
+// later discovers it - targets, request and response DataSetMetaData and
+// the Methods - and calls the Method with it.
+func TestPubSub_ActionDiscoveryServerBroker(t *testing.T) {
+	parallel(t)
+	b := psBroker(t)
+	srv, _ := newServer(t, server.WithPubSub(nil))
+	f := testutil.AddFixture(t, srv)
+	resp := srv.PubSub()
+	_, err := resp.AddPublishedDataSet(pubsub.PublishedActionMethods("Square",
+		[]pubsub.Field{{Name: "n", Type: ua.TypeIDInt32}},
+		[]pubsub.Field{{Name: "result", Type: ua.TypeIDInt32}},
+		[]*ua.ActionTargetDataType{pubsub.ActionTargetOf(1, "Square")},
+		[]*ua.ActionMethodDataType{pubsub.ActionMethodOf(f.MethodObject, f.SquareMethod)}))
+	require.NoError(t, err)
+	for i, m := range []pubsub.MessageMapping{pubsub.MappingUADP, pubsub.MappingJSON} {
+		name := []string{"uadp", "json"}[i]
+		t.Run(name, func(t *testing.T) {
+			pub := fmt.Sprint("srv-", name)
+			queue := pubsub.ActionRequestTopic("conf", m, pub, "Actions")
+			meta := pubsub.ActionMetaDataTopic("conf", m, pub, "Actions", "SquareWriter")
+			w := pubsub.SetWriterQueue(pubsub.DataSetWriter("SquareWriter", 100, "Square"), "", meta)
+			var g *ua.WriterGroupDataType
+			if m == pubsub.MappingJSON {
+				g = pubsub.JSONWriterGroup("Actions", uint16(1+i), 0, queue, w)
+			} else {
+				g = pubsub.WriterGroup("Actions", uint16(1+i), 0, w)
+				g.TransportSettings = ua.NewExtensionObject(&ua.BrokerWriterGroupTransportDataType{QueueName: queue,
+					RequestedDeliveryGuarantee: ua.BrokerTransportQoSAtLeastOnce})
+			}
+			conn, err := resp.AddConnection(pubsub.MQTTConnection(name, b.URL(), pub, m))
+			require.NoError(t, err)
+			gid, err := resp.AddWriterGroup(conn, g)
+			require.NoError(t, err)
+			require.Eventually(t, func() bool {
+				st, err := resp.Status(gid)
+				return err == nil && st.State == ua.PubSubStateOperational
+			}, 10*time.Second, 10*time.Millisecond)
+
+			req := psRuntime(t, pubsub.NewConfiguration(nil, pubsub.MQTTConnection("Requestor", b.URL(), "req-"+name, m)))
+			require.Eventually(t, func() bool {
+				for _, c := range req.Components() {
+					if st, err := req.Status(c.ID); c.Kind == pubsub.KindConnection && err == nil && st.State == ua.PubSubStateOperational {
+						return true
+					}
+				}
+				return false
+			}, 10*time.Second, 10*time.Millisecond)
+			tg := pubsub.ActionTarget{Connection: "Requestor", PublisherID: pub, DataSetWriterID: 100, ActionTargetID: 1,
+				RequestAddress: queue, MetaDataAddress: meta, Timeout: 5 * time.Second}
+			md, err := req.DiscoverAction(context.Background(), tg)
+			require.NoError(t, err)
+			require.Equal(t, "Square", md.Target(1).Name)
+			require.Equal(t, "n", md.Request.Fields[0].Name)
+			require.Equal(t, "result", md.Response.Fields[0].Name)
+			require.Equal(t, md.Response.ConfigurationVersion, md.Request.ConfigurationVersion)
+			require.Len(t, md.ActionMethods, 1)
+			require.Equal(t, f.SquareMethod.String(), md.ActionMethods[0].MethodID.String())
+			res, err := req.CallAction(context.Background(), md.Apply(tg), []*ua.Variant{ua.MustVariant(int32(7))})
+			require.NoError(t, err)
+			require.Equal(t, ua.StatusGood, res.Status)
+			require.Equal(t, int32(49), res.Outputs[0].Value())
+		})
+	}
+}

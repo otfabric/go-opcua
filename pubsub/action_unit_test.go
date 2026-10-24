@@ -97,12 +97,15 @@ func TestActionHelpers(t *testing.T) {
 	require.True(t, b.allow(now.Add(time.Second), 1, 2))
 	require.True(t, b.allow(now.Add(-time.Second), 1, 2)) // clock going back refills
 
-	md := completeActionMetaData(&ua.DataSetMetaDataType{Fields: []*ua.FieldMetaData{{}}}, "X")
+	md := completeActionMetaData(&ua.DataSetMetaDataType{Fields: []*ua.FieldMetaData{{}}}, "X", nil)
 	require.Equal(t, "X", md.Name)
 	require.Equal(t, "Field0", md.Fields[0].Name)
 	require.NotNil(t, md.Fields[0].DataType)
 	require.NotNil(t, md.ConfigurationVersion)
-	require.Equal(t, "Y", completeActionMetaData(nil, "Y").Name)
+	require.Equal(t, "Y", completeActionMetaData(nil, "Y", nil).Name)
+	// The version of the response.
+	v := &ua.ConfigurationVersionDataType{MajorVersion: 7, MinorVersion: 8}
+	require.Equal(t, v, completeActionMetaData(nil, "Z", v).ConfigurationVersion)
 
 	src := &net.UDPAddr{IP: net.ParseIP("10.0.0.1"), Port: 1}
 	require.True(t, replyAllowed("opc.udp://10.0.0.1:4840", src))

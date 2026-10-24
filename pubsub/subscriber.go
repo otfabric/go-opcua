@@ -210,6 +210,9 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		p.receiveAction(c, gen, enc, m, false)
 		return
 	}
+	if encErr == nil && !probe && isActionMetaData(enc, m) && p.receiveActionMetaData(c, gen, enc, m) {
+		return
+	}
 	p.lock()
 	if c.gen != gen {
 		p.unlock()

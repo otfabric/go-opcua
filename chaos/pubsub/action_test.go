@@ -245,3 +245,174 @@ func TestChaosActionChunks(t *testing.T) {
 		})
 	}
 }
+
+// forgedActionMetaData encodes an unsigned ActionMetaData announcement of
+// writer w of publisher pub with a forged target, or random bytes after a
+// discovery header.
+func forgedActionMetaData(rng *rand.Rand, pub uint64, w uint16) ([]byte, error) {
+	if rng.Intn(4) == 0 {
+		b := []byte{0x91, 0x80, 0x08, 0x01, 0x07}
+		junk := make([]byte, rng.Intn(200))
+		rng.Read(junk)
+		return append(b, junk...), nil
+	}
+	return uadp.Encode(&message.NetworkMessage{
+		Type:        message.NetworkMessageDiscoveryResponse,
+		UADPMask:    ua.UADPNetworkMessageContentMaskPublisherID,
+		PublisherID: message.NewPublisherID(message.PublisherIDUInt16, pub),
+		Discovery: &message.Discovery{
+			Type: message.DiscoveryActionMetaData, SequenceNumber: uint16(rng.Intn(1 << 16)), DataSetWriterID: w,
+			ActionTargets:   []*ua.ActionTargetDataType{{ActionTargetID: 1, Name: "Forged"}},
+			RequestMetaData: &ua.DataSetMetaDataType{Name: "Forged"}, MetaData: &ua.DataSetMetaDataType{Name: "Forged"},
+		},
+	}, nil)
+}
+
+// TestChaosActionDiscovery: Requestors discover the ActionMetaData of a
+// Responder over an in-memory network with random faults, unsecured and
+// SignAndEncrypt, while forged ActionMetaData announcements come in: of
+// other writers and publishers and - secured, unsigned - of the real
+// writer. A discovery either returns the real ActionMetaData or times out,
+// and once the faults stop every discovery succeeds.
+func TestChaosActionDiscovery(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []ua.MessageSecurityMode{ua.MessageSecurityModeNone, ua.MessageSecurityModeSignAndEncrypt} {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Parallel()
+			seed := chaoskit.Seed(t)
+			rng := rand.New(rand.NewSource(seed))
+			secured := mode > ua.MessageSecurityModeNone
+			url := memURL(t)
+			seg := mnet.segment(url)
+			seg.seed(seed)
+
+			opts := []pubsub.Option{pubsub.WithDiscovery(pubsub.DiscoveryOptions{MinInterval: 50 * time.Millisecond, MaxProbeInterval: 200 * time.Millisecond})}
+			g := pubsub.WriterGroup("Actions", 10, 50*time.Millisecond, pubsub.DataSetWriter("BlobWriter", 100, "Blob"))
+			if secured {
+				ks := keyService(t, "sg", security.PolicyURIAes256CTR, time.Hour, 2, 2)
+				pubsub.Secure(g, mode, "sg")
+				opts = append(opts, pubsub.WithKeySource("sg", keySource(t, ks, "sg")))
+			}
+			resp := startRuntime(t, pubsub.NewConfiguration([]*ua.PublishedDataSetDataType{pubsub.PublishedActions("Blob",
+				[]pubsub.Field{{Name: "Data", Type: ua.TypeIDString}},
+				[]pubsub.Field{{Name: "Reversed", Type: ua.TypeIDString}},
+				pubsub.ActionTargetOf(1, "Reverse"))},
+				pubsub.AttachWriterGroups(pubsub.UDPConnection("Responder", url, uint16(1)), g)),
+				append(opts, pubsub.WithActionHandler("Blob", 1, reverseAction))...)
+			var reqs []*pubsub.PubSub
+			for i := range 2 {
+				reqs = append(reqs, startRuntime(t, pubsub.NewConfiguration(nil, pubsub.UDPConnection("Requestor", url, uint16(2+i))), opts...))
+			}
+			waitState(t, resp, compID(t, resp, pubsub.KindWriterGroup, "Actions"), ua.PubSubStateOperational)
+			for _, req := range reqs {
+				waitState(t, req, compID(t, req, pubsub.KindConnection, "Requestor"), ua.PubSubStateOperational)
+			}
+			target := pubsub.ActionTarget{Connection: "Requestor", PublisherID: uint16(1), DataSetWriterID: 100, Timeout: time.Second}
+			if secured {
+				target.SecurityMode, target.SecurityGroupID = mode, "sg"
+			}
+
+			sink := &chaoskit.ErrSink{}
+			var found, timeouts atomic.Int64
+			discover := func(req *pubsub.PubSub) error {
+				m, err := req.DiscoverAction(context.Background(), target)
+				switch {
+				case errors.Is(err, ua.StatusBadTimeout):
+					timeouts.Add(1)
+					return err
+				case err != nil:
+					sink.Addf("discover: %v", err)
+					return err
+				case m.Target(1) == nil || m.Target(1).Name != "Reverse" || len(m.Request.Fields) != 1 || m.Request.Fields[0].Name != "Data" ||
+					len(m.Response.Fields) != 1 || m.Response.Fields[0].Name != "Reversed":
+					sink.Addf("discovered forged ActionMetaData: %+v", m.ActionTargets)
+					return errors.New("forged")
+				}
+				found.Add(1)
+				return nil
+			}
+
+			// The flooder: forged announcements at about 1 kHz; the
+			// real writer only when secured (unsigned, so rejected).
+			stop := make(chan struct{})
+			var wg sync.WaitGroup
+			var forged atomic.Int64
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				frng := rand.New(rand.NewSource(seed + 1))
+				tk := time.NewTicker(time.Millisecond)
+				defer tk.Stop()
+				for {
+					select {
+					case <-stop:
+						return
+					case <-tk.C:
+					}
+					pub, w := uint64(1), uint16(101+frng.Intn(5))
+					switch {
+					case secured && frng.Intn(2) == 0:
+						w = 100
+					case frng.Intn(2) == 0:
+						pub, w = uint64(100+frng.Intn(100)), 100
+					}
+					b, err := forgedActionMetaData(frng, pub, w)
+					if err != nil {
+						continue
+					}
+					seg.inject(b)
+					forged.Add(1)
+				}
+			}()
+
+			callers := make(chan struct{})
+			var cwg sync.WaitGroup
+			for _, req := range reqs {
+				for range 2 {
+					cwg.Add(1)
+					go func() {
+						defer cwg.Done()
+						for {
+							select {
+							case <-callers:
+								return
+							default:
+							}
+							_ = discover(req)
+						}
+					}()
+				}
+			}
+			end := time.Now().Add(chaoskit.Duration(t, defaultDuration))
+			for time.Now().Before(end) {
+				f, hold := randomFaults(rng, secured, time.Second)
+				if f.blackhole {
+					f, hold = faults{drop: 0.5}, 300*time.Millisecond
+				}
+				t.Logf("%s: %v for %v", time.Now().Format("15:04:05.000"), f, hold)
+				seg.set(f)
+				time.Sleep(hold)
+			}
+			seg.set(faults{})
+			close(callers)
+			if !chaoskit.WaitGroupTimeout(&cwg, 10*time.Second) {
+				t.Fatalf("callers stuck\n%s", chaoskit.AllStacks())
+			}
+			close(stop)
+			wg.Wait()
+
+			for i, req := range reqs {
+				if err := discover(req); err != nil {
+					t.Errorf("requestor %d after the faults: %v", i, err)
+				}
+			}
+			rc := status(t, resp, pubsub.Root).Counters
+			t.Logf("discoveries: found %d, timed out %d; forged %d", found.Load(), timeouts.Load(), forged.Load())
+			t.Logf("responder: %+v", rc)
+			if rc.DiscoveryResponsesSent == 0 {
+				t.Error("no ActionMetaData announcements")
+			}
+			sink.Report(t)
+		})
+	}
+}

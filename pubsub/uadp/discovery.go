@@ -26,10 +26,13 @@ import (
 //	                        1: ApplicationDescription, Capabilities String[]
 //	                        2: IsCyclic Boolean, Status PubSubState,
 //	                           NextReportTime UtcTime, Timestamp UtcTime
+//	6 ActionResponder     ActionResponder PubSubConnectionDataType[]
+//	7 ActionMetaData      DataSetWriterId UInt16, ActionTargets ActionTargetDataType[],
+//	                      Request DataSetMetaDataType, Response DataSetMetaDataType,
+//	                      ActionMethods ActionMethodDataType[]
 //
-// The ActionResponder (6) and ActionMetaData (7) announcements of PubSub
-// Actions are not supported. A discovery probe (NetworkMessage type 1) is
-// (Tables 178 to 182)
+// The announcements 6 and 7 of PubSub Actions exist in the spec layout
+// only. A discovery probe (NetworkMessage type 1) is (Tables 178 to 182)
 //
 //	ProbeType Byte  1 = publisher information, 2 = FindApplications (no fields)
 //	InformationType Byte, then
@@ -105,6 +108,26 @@ func encodeDiscovery(b *ua.Buffer, d *message.Discovery) error {
 		}
 	case message.DiscoveryApplicationInformation:
 		return encodeApplicationInformation(b, d.Application, dotnet)
+	case message.DiscoveryActionResponder:
+		if dotnet {
+			return unsupported("ActionResponder announcement in the .NET layout")
+		}
+		b.WriteStruct(nonNilSlice(d.Connections))
+	case message.DiscoveryActionMetaData:
+		if dotnet {
+			return unsupported("ActionMetaData announcement in the .NET layout")
+		}
+		if d.MetaData == nil || d.RequestMetaData == nil {
+			return malformed("ActionMetaData announcement without the request and response DataSetMetaData")
+		}
+		if len(d.ActionMethods) > 0 && len(d.ActionMethods) != len(d.ActionTargets) {
+			return malformed("%d ActionMethods for %d ActionTargets", len(d.ActionMethods), len(d.ActionTargets))
+		}
+		b.WriteUint16(d.DataSetWriterID)
+		b.WriteStruct(nonNilSlice(d.ActionTargets))
+		b.WriteStruct(d.RequestMetaData)
+		b.WriteStruct(d.MetaData)
+		b.WriteStruct(nonNilSlice(d.ActionMethods))
 	default:
 		return unsupported("discovery announcement type %d", d.Type)
 	}
@@ -213,6 +236,25 @@ func decodeAnnouncement(t message.DiscoveryType, body []byte, dotnet bool) (*mes
 			return nil, err
 		}
 		d.Application = a
+	case message.DiscoveryActionResponder:
+		if dotnet {
+			return nil, unsupported("ActionResponder announcement in the .NET layout")
+		}
+		b.ReadStruct(&d.Connections)
+	case message.DiscoveryActionMetaData:
+		if dotnet {
+			return nil, unsupported("ActionMetaData announcement in the .NET layout")
+		}
+		d.DataSetWriterID = b.ReadUint16()
+		b.ReadStruct(&d.ActionTargets)
+		d.RequestMetaData = new(ua.DataSetMetaDataType)
+		b.ReadStruct(d.RequestMetaData)
+		d.MetaData = new(ua.DataSetMetaDataType)
+		b.ReadStruct(d.MetaData)
+		b.ReadStruct(&d.ActionMethods)
+		if b.Error() == nil && len(d.ActionMethods) > 0 && len(d.ActionMethods) != len(d.ActionTargets) {
+			return nil, malformed("%d ActionMethods for %d ActionTargets", len(d.ActionMethods), len(d.ActionTargets))
+		}
 	default:
 		return nil, unsupported("discovery announcement type %d", t)
 	}

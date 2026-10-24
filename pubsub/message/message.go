@@ -396,6 +396,13 @@ const (
 	// DiscoveryApplicationInformation announces the ApplicationDescription
 	// or the status of the publisher, see [ApplicationInformation].
 	DiscoveryApplicationInformation DiscoveryType = 5
+	// DiscoveryActionResponder announces the PubSubConnections of a
+	// Responder with only their Action writer groups and writers
+	// (Table 176).
+	DiscoveryActionResponder DiscoveryType = 6
+	// DiscoveryActionMetaData announces the ActionMetaData of an Action
+	// writer (Table 177).
+	DiscoveryActionMetaData DiscoveryType = 7
 )
 
 func (t DiscoveryType) String() string {
@@ -410,6 +417,10 @@ func (t DiscoveryType) String() string {
 		return "PubSubConnection"
 	case DiscoveryApplicationInformation:
 		return "ApplicationInformation"
+	case DiscoveryActionResponder:
+		return "ActionResponder"
+	case DiscoveryActionMetaData:
+		return "ActionMetaData"
 	}
 	return "DiscoveryType(" + strconv.Itoa(int(t)) + ")"
 }
@@ -442,9 +453,16 @@ type Discovery struct {
 	// announcement of a PublisherId.
 	SequenceNumber uint16
 
-	// DataSetWriterID and MetaData of a DataSetMetaData announcement.
+	// DataSetWriterID and MetaData of a DataSetMetaData announcement; of
+	// an ActionMetaData announcement the Action writer and the response
+	// DataSetMetaData.
 	DataSetWriterID uint16
 	MetaData        *ua.DataSetMetaDataType
+	// ActionTargets, RequestMetaData and the optional ActionMethods (one
+	// per target) of an ActionMetaData announcement.
+	ActionTargets   []*ua.ActionTargetDataType
+	RequestMetaData *ua.DataSetMetaDataType
+	ActionMethods   []*ua.ActionMethodDataType
 	// StatusCode of a DataSetMetaData, PublisherEndpoints or (in the .NET
 	// layout) PubSubConnection announcement.
 	StatusCode ua.StatusCode
@@ -459,7 +477,7 @@ type Discovery struct {
 	WriterGroup      *ua.WriterGroupDataType
 	StatusCodes      []ua.StatusCode
 
-	// Connections of a PubSubConnection announcement.
+	// Connections of a PubSubConnection or ActionResponder announcement.
 	Connections []*ua.PubSubConnectionDataType
 
 	// Application of an ApplicationInformation announcement.
