@@ -557,6 +557,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cb.endpointURL = s.url
 	}
 	s.cb.localIdentity = s.cfg.localIdentity
+	s.cb.onRequest = func(hdr *ua.RequestHeader) { s.sb.touchToken(hdr.AuthenticationToken) }
 	s.cb.writeTimeout = s.cfg.responseWriteTimeout
 	s.cb.maxPending = s.cfg.maxPendingResponses
 
