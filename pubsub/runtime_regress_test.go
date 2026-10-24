@@ -415,3 +415,40 @@ func TestRegressionActionExchangeExpiry(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	require.Equal(t, int32(2), calls.Load())
 }
+
+// Regression: a DataSetReader with a SecurityGroupId but no SecurityMode
+// of its own (Invalid, the zero value) took the place of the security of
+// its ReaderGroup with None: it accepted unsecured messages although the
+// group requires signed ones.
+func TestRegressionReaderSecurityGroupIDDoesNotDowngrade(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	md := MetaData("pds", Field{Name: "a", Type: ua.TypeIDInt32})
+	r := DataSetReader("r", uint16(7), 1, 1, md)
+	r.SecurityGroupID = "sg"
+	rg := ReaderGroup("rg", r)
+	Secure(rg, ua.MessageSecurityModeSign, "sg")
+	rec := &recorder{}
+	sub, err := New(NewConfiguration(nil, AttachReaderGroups(memConnection("sub", url, nil), rg)),
+		WithDataSetHandler(rec.handler), WithKeySource("sg", testRing(t)))
+	require.NoError(t, err)
+	require.NoError(t, sub.Start(context.Background()))
+	t.Cleanup(func() { _ = sub.Close() })
+	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
+	b, err := uadp.Encode(&message.NetworkMessage{
+		Type:        message.NetworkMessageDataSet,
+		UADPMask:    DefaultUADPNetworkMessageContentMask,
+		PublisherID: message.NewPublisherID(message.PublisherIDUInt16, 7),
+		GroupHeader: message.GroupHeader{WriterGroupID: 1},
+		Messages: []*message.DataSetMessage{{DataSetWriterID: 1, Type: message.DataSetMessageKeyFrame, Valid: true,
+			Fields: []*message.Field{{Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(1))}}}}},
+	}, nil)
+	require.NoError(t, err)
+	bus.inject(url, "", b)
+	cid := mustID(t, sub, KindConnection, Root, "sub")
+	require.Eventually(t, func() bool {
+		st, err := sub.Status(cid)
+		return err == nil && st.Counters.DecodeErrors == 1
+	}, 3*time.Second, time.Millisecond)
+	require.Empty(t, rec.dataSets())
+}
