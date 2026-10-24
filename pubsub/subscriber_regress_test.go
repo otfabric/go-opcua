@@ -166,7 +166,11 @@ func TestRegressionDuplicateAfterTimeout(t *testing.T) {
 		send(seq, int32(seq))
 	}
 	require.Eventually(t, func() bool { return len(rec.dataSets()) == 2 }, 3*time.Second, time.Millisecond)
-	require.Eventually(t, func() bool { return timeouts() == 1 }, 3*time.Second, time.Millisecond)
+	// The messages made the reader Operational; wait for the timeout after
+	// them. Counting timeouts does not tell: the reader's timer runs from
+	// its start, so a slow start already timed it out once before 181.
+	waitState(t, sub, rid, ua.PubSubStateError)
+	require.NotZero(t, timeouts())
 
 	// Late copies of 182 and 181 cross the timeout: both are discarded.
 	send(182, 182)
