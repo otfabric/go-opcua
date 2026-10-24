@@ -16,6 +16,14 @@ var (
 	groupV6 = netip.MustParseAddr("ff02::fb")
 )
 
+// The operating system calls of this file, replaced in tests to exercise the
+// socket handling without depending on the multicast setup of the host.
+var (
+	netInterfaces      = net.Interfaces
+	interfaceAddrs     = (*net.Interface).Addrs
+	listenMulticastUDP = net.ListenMulticastUDP
+)
+
 // ListenOptions selects the sockets [Listen] opens.
 type ListenOptions struct {
 	// Interfaces restricts mDNS to these interfaces. Empty selects every
@@ -28,7 +36,7 @@ type ListenOptions struct {
 
 // DefaultInterfaces returns the interfaces mDNS runs on when none are named.
 func DefaultInterfaces() ([]net.Interface, error) {
-	all, err := net.Interfaces()
+	all, err := netInterfaces()
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +122,7 @@ func listenUDP(ifi net.Interface, v6 bool) (*udpConn, error) {
 	// ListenMulticastUDP binds the wildcard address with SO_REUSEADDR (and
 	// SO_REUSEPORT where it is needed), joins the group on the interface
 	// and selects the interface for outgoing multicast.
-	c, err := net.ListenMulticastUDP(network, &ifi, &net.UDPAddr{IP: group.AsSlice(), Port: Port, Zone: group.Zone()})
+	c, err := listenMulticastUDP(network, &ifi, &net.UDPAddr{IP: group.AsSlice(), Port: Port, Zone: group.Zone()})
 	if err != nil {
 		return nil, fmt.Errorf("mdns: listen on %s (%s): %w", ifi.Name, network, err)
 	}
@@ -177,7 +185,7 @@ func (u *udpConn) currentPrefixes() []netip.Prefix {
 }
 
 func interfacePrefixes(ifi *net.Interface) []netip.Prefix {
-	addrs, err := ifi.Addrs()
+	addrs, err := interfaceAddrs(ifi)
 	if err != nil {
 		return []netip.Prefix{}
 	}

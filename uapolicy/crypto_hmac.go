@@ -14,20 +14,19 @@ type HMAC struct {
 	Secret []byte
 }
 
-func (s *HMAC) Signature(msg []byte) ([]byte, error) {
+// sum returns the MAC of msg. Write of a hash.Hash never returns an error.
+func (s *HMAC) sum(msg []byte) []byte {
 	h := hmac.New(s.Hash.New, s.Secret)
-	if _, err := h.Write(msg); err != nil {
-		return nil, err
-	}
-	return h.Sum(nil), nil
+	_, _ = h.Write(msg)
+	return h.Sum(nil)
+}
+
+func (s *HMAC) Signature(msg []byte) ([]byte, error) {
+	return s.sum(msg), nil
 }
 
 func (s *HMAC) Verify(msg, signature []byte) error {
-	sig, err := s.Signature(msg)
-	if err != nil {
-		return err
-	}
-	if !hmac.Equal(sig, signature) {
+	if !hmac.Equal(s.sum(msg), signature) {
 		return errors.ErrSignatureValidationFailed
 	}
 	return nil
