@@ -825,6 +825,7 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 		{"milo", "MILO_IMAGE", defaultMiloImage},
 		{"async-opcua", "ASYNC_OPCUA_IMAGE", defaultAsyncOpcuaImage},
 		{"dotnet", dotnetEnv, defaultDotnetImage},
+		{"node-opcua", nodeOpcuaEnv, defaultNodeOpcuaImage},
 	}
 	for _, p := range peers {
 		t.Run("coverage/discovery.find-servers-on-network/"+p.name+"-client-to-go-lds", func(t *testing.T) {
