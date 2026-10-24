@@ -33,11 +33,17 @@ func startAMQPBroker(t *testing.T, opts amqpbroker.Options) *amqpbroker.Broker {
 	return b
 }
 
-// amqpIdle makes the AMQP connections of a runtime ask the broker for
-// heartbeats every half second, so that a silent broker is noticed.
+// amqpIdle makes the AMQP connections of a runtime announce an idle
+// time-out of one second: the broker sends heartbeats every half second,
+// and the client drops a connection on which nothing arrived for two
+// seconds (twice what it announces, see [amqpSilence]).
 func amqpIdle(c *ua.PubSubConnectionDataType) *ua.PubSubConnectionDataType {
 	return pubsub.SetConnectionProperty(c, "connection-idle-time-out", uint32(1000))
 }
+
+// amqpSilence is how long a silent broker sends no heartbeats: longer than
+// the two seconds after which the clients of [amqpIdle] give up on it.
+const amqpSilence = 2500 * time.Millisecond
 
 // amqpFault applies one random broker fault and returns its name.
 func amqpFault(t *testing.T, rng *rand.Rand, b *amqpbroker.Broker, addresses []string) string {
@@ -74,7 +80,7 @@ func amqpFault(t *testing.T, rng *rand.Rand, b *amqpbroker.Broker, addresses []s
 		return "withhold dispositions for " + d.String()
 	default:
 		b.SetSilent(true)
-		time.Sleep(1500 * time.Millisecond)
+		time.Sleep(amqpSilence)
 		b.SetSilent(false)
 		return "silent"
 	}
@@ -164,8 +170,11 @@ func TestChaosAMQPBroker(t *testing.T) {
 				switch {
 				case strings.HasPrefix(f, "withhold"):
 					lostOutcome = true
-				case !strings.HasPrefix(f, "detach"):
-					lostOutcome = false // the connection was renewed
+				case !strings.HasPrefix(f, "detach") && f != "silent":
+					// The connection was renewed. A silent broker only
+					// drops a client that receives nothing else, and a
+					// detach keeps the connection.
+					lostOutcome = false
 				}
 				time.Sleep(time.Duration(100+rng.Intn(400)) * time.Millisecond)
 			}
