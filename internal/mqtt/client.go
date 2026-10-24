@@ -39,6 +39,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/goid"
 )
 
 // Defaults of [Options].
@@ -282,7 +284,11 @@ type Client struct {
 
 	done    chan struct{} // closed by Close
 	deliver chan *Message
-	wg      sync.WaitGroup
+	wg      sync.WaitGroup // the goroutines but the delivery goroutine
+	// deliverDone is closed when the delivery goroutine ends; deliverID is
+	// its goroutine id, so a Close from a handler does not wait for itself.
+	deliverDone chan struct{}
+	deliverID   atomic.Uint64
 
 	writeMu sync.Mutex
 
@@ -342,7 +348,7 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 		return nil, err
 	}
 	first := make(chan error, 1)
-	c.wg.Add(2)
+	c.wg.Add(1)
 	go c.deliverLoop()
 	go c.run(ctx, first)
 	select {
@@ -364,15 +370,16 @@ func newClient(opts Options) (*Client, error) {
 		return nil, fmt.Errorf("mqtt: server %q: %w", opts.Server, err)
 	}
 	c := &Client{
-		opts:     opts,
-		network:  "tcp",
-		log:      opts.Logger,
-		done:     make(chan struct{}),
-		deliver:  make(chan *Message, 256),
-		inflight: map[uint16]*pending{},
-		acks:     map[uint16]chan Packet{},
-		subs:     map[string]*subEntry{},
-		qos2:     map[uint16]bool{},
+		opts:        opts,
+		network:     "tcp",
+		log:         opts.Logger,
+		done:        make(chan struct{}),
+		deliver:     make(chan *Message, 256),
+		deliverDone: make(chan struct{}),
+		inflight:    map[uint16]*pending{},
+		acks:        map[uint16]chan Packet{},
+		subs:        map[string]*subEntry{},
+		qos2:        map[uint16]bool{},
 	}
 	port := "1883"
 	switch strings.ToLower(u.Scheme) {
@@ -1258,7 +1265,8 @@ func (c *Client) enqueue(m *Message) {
 }
 
 func (c *Client) deliverLoop() {
-	defer c.wg.Done()
+	defer close(c.deliverDone)
+	c.deliverID.Store(goid.ID())
 	var hs []Handler
 	for {
 		var m *Message
@@ -1266,6 +1274,11 @@ func (c *Client) deliverLoop() {
 		case m = <-c.deliver:
 		case <-c.done:
 			return
+		}
+		select {
+		case <-c.done:
+			return // closed: no handler runs any more
+		default:
 		}
 		c.mu.Lock()
 		hs = hs[:0]
@@ -1613,7 +1626,8 @@ func (s *Subscription) Unsubscribe(ctx context.Context) error {
 
 // Close disconnects from the broker (sending DISCONNECT, with MQTT 5.0
 // reason Normal disconnection: the will is not published) and stops the
-// client. Pending calls return ErrClosed.
+// client. Pending calls return ErrClosed. It waits for a handler that is
+// running, unless it is called from that handler.
 func (c *Client) Close() error {
 	c.mu.Lock()
 	if c.closed {
@@ -1629,5 +1643,8 @@ func (c *Client) Close() error {
 		_ = l.conn.Close()
 	}
 	c.wg.Wait()
+	if goid.ID() != c.deliverID.Load() {
+		<-c.deliverDone
+	}
 	return nil
 }
