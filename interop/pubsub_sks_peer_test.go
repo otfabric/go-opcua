@@ -198,8 +198,7 @@ func TestPubSubSKS_GoClient_Open62541SKS(t *testing.T) {
 // pulls the keys with a pubsub/sks KeySource and decrypts the messages.
 func TestPubSubSKS_GoPulls_Open62541SKS(t *testing.T) {
 	c := psLiveCase{name: "sks", mode: ua.MessageSecurityModeSignAndEncrypt, policy: security.Aes256CTR(), vars: psVars}
-	port := freeUDPPort(t)
-	ch := psListen(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", port)}, "")
+	port, ch := psListenUDP(t)
 	pub := startPubSubServer(t, pubsubServerOpts{config: psSKSConfig(c.policy.URI(), psUDPPublisherConfig(c, port)), secure: true})
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -295,8 +294,7 @@ func TestPubSubSKS_Open62541Pulls_GoSKS(t *testing.T) {
 			}
 
 			c := psLiveCase{name: "sks", mode: ua.MessageSecurityModeSignAndEncrypt, policy: policy, vars: psVars, tokenID: tok}
-			port := freeUDPPort(t)
-			ch := psListen(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", port)}, "")
+			port, ch := psListenUDP(t)
 			cfg := psUDPPublisherConfig(c, port)
 			cfg["securityGroups"] = []jobj{psSecurityGroupJSON(psSKSGroup, policy.URI(), 0, nil)}
 			cfg["sksClient"] = jobj{

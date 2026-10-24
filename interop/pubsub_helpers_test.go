@@ -608,13 +608,38 @@ func (l lockedWriter) Write(p []byte) (int, error) {
 // receives on topic (ignored for UDP).
 func psListen(t *testing.T, cfg transport.Config, topic string) <-chan *transport.Message {
 	t.Helper()
+	ch, err := psSubscribe(t, cfg, topic)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ch
+}
+
+// psListenUDP binds a UDP port on all interfaces (opc.udp://localhost:<port>)
+// and returns it with what it receives. The port is bound before it is
+// returned, so a peer configured with it afterwards cannot lose it to
+// another socket; one taken since testport found it free is replaced.
+func psListenUDP(t *testing.T) (int, <-chan *transport.Message) {
+	t.Helper()
+	var ch <-chan *transport.Message
+	port := testport.BindUDP(t, func(port int) error {
+		var err error
+		ch, err = psSubscribe(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", port)}, "")
+		return err
+	})
+	return port, ch
+}
+
+// psSubscribe is psListen returning the open or subscribe error; the
+// connection is closed on an error and at the end of the test otherwise.
+func psSubscribe(t *testing.T, cfg transport.Config, topic string) (<-chan *transport.Message, error) {
+	t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	conn, err := transport.Open(ctx, cfg)
 	if err != nil {
-		t.Fatalf("open %s: %v", cfg.URL, err)
+		return nil, fmt.Errorf("open %s: %w", cfg.URL, err)
 	}
-	t.Cleanup(func() { _ = conn.Close() })
 	ch := make(chan *transport.Message, 256)
 	if _, err := conn.Subscribe(ctx, topic, 0, func(m *transport.Message) {
 		select {
@@ -622,9 +647,11 @@ func psListen(t *testing.T, cfg transport.Config, topic string) <-chan *transpor
 		default: // the test reads only the recent ones
 		}
 	}); err != nil {
-		t.Fatalf("subscribe %s %s: %v", cfg.URL, topic, err)
+		_ = conn.Close()
+		return nil, fmt.Errorf("subscribe %s %s: %w", cfg.URL, topic, err)
 	}
-	return ch
+	t.Cleanup(func() { _ = conn.Close() })
+	return ch, nil
 }
 
 // psDial opens a PubSub transport connection for sending.

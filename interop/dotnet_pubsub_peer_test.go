@@ -204,8 +204,7 @@ func TestPubSubChunk_DotnetPublishes_GoReassembles(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			size := psChunkSize(c)
-			port := freeUDPPort(t)
-			ch := psListen(t, transport.Config{ProfileURI: psProfileUDP, URL: fmt.Sprintf("opc.udp://localhost:%d", port)}, "")
+			port, ch := psListenUDP(t)
 			cfg := psUDPPublisherConfig(c, port)
 			psWriterGroupJSON(cfg)["MaxNetworkMessageSize"] = size
 			pub := startPubSubServer(t, pubsubServerOpts{peer: psDotnet, config: cfg})

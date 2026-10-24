@@ -23,17 +23,21 @@ package interop
 import (
 	"context"
 	"fmt"
+	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/remote"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/sks"
+	"github.com/otfabric/go-opcua/pubsub/uadp"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -343,31 +347,110 @@ func psRuntimeSubConnection(c psRuntimeCase, url string) *ua.PubSubConnectionDat
 	return pubsub.UDPConnection("InteropSubscriber", url, nil)
 }
 
-// psStartAdapterPublisher starts the open62541 publisher of case c and
-// returns it with the URL the go-opcua subscriber connects to.
-func psStartAdapterPublisher(t *testing.T, c psRuntimeCase, broker int, topic string) (*pubsubServer, string) {
-	t.Helper()
-	return psStartPeerPublisher(t, psOpen62541, c, broker, topic)
+// psGoSubscriber starts a go-opcua subscriber whose connection
+// "InteropSubscriber" receives on url, and returns its runtime and a
+// function that stops it.
+type psGoSubscriber func(url string) (*pubsub.PubSub, func())
+
+// psRuntimeSubscriber is the psGoSubscriber of a runtime (startRuntime)
+// with cfg(url); started receives the runtime.
+func psRuntimeSubscriber(t *testing.T, cfg func(url string) *ua.PubSubConfigurationDataType, started *(*pubsub.PubSub), opts ...pubsub.Option) psGoSubscriber {
+	return func(url string) (*pubsub.PubSub, func()) {
+		p := startRuntime(t, cfg(url), opts...)
+		if started != nil {
+			*started = p
+		}
+		return p, func() { _ = p.Close() }
+	}
 }
 
-// psStartPeerPublisher starts the publisher of case c on the peer (MQTT
-// 3.1.1 unless psPeer.mqtt5Publisher) and returns it with the URL the go-opcua subscriber connects to.
-func psStartPeerPublisher(t *testing.T, p *psPeer, c psRuntimeCase, broker int, topic string) (*pubsubServer, string) {
+// psStartAdapterPublisher starts the go-opcua subscriber sub and the
+// open62541 publisher of case c, and returns the publisher.
+func psStartAdapterPublisher(t *testing.T, c psRuntimeCase, broker int, topic string, sub psGoSubscriber) *pubsubServer {
 	t.Helper()
-	return psStartPeerPublisherOn(t, p, c, broker, topic, !p.mqtt5Publisher)
+	return psStartPeerPublisher(t, psOpen62541, c, broker, topic, sub)
+}
+
+// psStartPeerPublisher starts the go-opcua subscriber sub and the publisher
+// of case c on the peer (MQTT 3.1.1 unless psPeer.mqtt5Publisher), and
+// returns the publisher.
+func psStartPeerPublisher(t *testing.T, p *psPeer, c psRuntimeCase, broker int, topic string, sub psGoSubscriber) *pubsubServer {
+	t.Helper()
+	return psStartPeerPublisherOn(t, p, c, broker, topic, !p.mqtt5Publisher, sub)
 }
 
 // psStartPeerPublisherOn is psStartPeerPublisher with MQTT 3.1.1 (mqtt311) or
 // the peer's default MQTT version.
-func psStartPeerPublisherOn(t *testing.T, p *psPeer, c psRuntimeCase, broker int, topic string, mqtt311 bool) (*pubsubServer, string) {
+//
+// Over UDP the subscriber is started first and the publisher is told its
+// port only once it receives on it (psBindRuntimeUDP).
+func psStartPeerPublisherOn(t *testing.T, p *psPeer, c psRuntimeCase, broker int, topic string, mqtt311 bool, sub psGoSubscriber) *pubsubServer {
 	t.Helper()
 	if c.mqtt {
-		pub := startPubSubServer(t, pubsubServerOpts{peer: p, mqtt311: mqtt311, config: psPublisherConfig(c.psLiveCase, c.profile(),
+		sub(fmt.Sprintf("mqtt://127.0.0.1:%d", broker))
+		return startPubSubServer(t, pubsubServerOpts{peer: p, mqtt311: mqtt311, config: psPublisherConfig(c.psLiveCase, c.profile(),
 			fmt.Sprintf("mqtt://host.docker.internal:%d", broker), eo("i=15667", jobj{"QueueName": topic}), c.json)})
-		return pub, fmt.Sprintf("mqtt://127.0.0.1:%d", broker)
 	}
-	port := freeUDPPort(t)
-	return startPubSubServer(t, pubsubServerOpts{peer: p, config: psUDPPublisherConfig(c.psLiveCase, port)}), fmt.Sprintf("opc.udp://localhost:%d", port)
+	port := psBindRuntimeUDP(t, sub)
+	return startPubSubServer(t, pubsubServerOpts{peer: p, config: psUDPPublisherConfig(c.psLiveCase, port)})
+}
+
+// psPingPublisherID is the PublisherId of the datagrams psBindRuntimeUDP
+// sends: no reader of the suite matches it, so the runtime drops them
+// after counting them (uadp.ErrFiltered).
+const psPingPublisherID = 0xFFFE
+
+// psBindRuntimeUDP starts the go-opcua subscriber sub on
+// opc.udp://localhost:<port> and returns the port once the subscriber
+// receives on it: a peer configured with the port afterwards cannot lose it
+// to another socket. The runtime binds the port asynchronously and retries a
+// failed bind, so a port taken since testport found it free shows as the
+// connection's LastError; the subscriber is then stopped and started again
+// on another port, before any peer knows the port.
+func psBindRuntimeUDP(t *testing.T, sub psGoSubscriber) int {
+	t.Helper()
+	ping := psGoMessage(psLiveCase{vars: psVars}, 1, psValues(psVars, 0))
+	ping.PublisherID = message.NewPublisherID(message.PublisherIDUInt16, psPingPublisherID)
+	b, err := uadp.Encode(ping, &uadp.EncodeOptions{MetaData: psLookup(psMetaData(psVars, 0))})
+	if err != nil {
+		t.Fatalf("encode the ping: %v", err)
+	}
+	snd, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = snd.Close() }()
+	for range 10 {
+		port := freeUDPPort(t)
+		p, stop := sub(fmt.Sprintf("opc.udp://localhost:%d", port))
+		conn, ok := p.Lookup(pubsub.KindConnection, pubsub.Root, "InteropSubscriber")
+		if !ok {
+			t.Fatal("no connection InteropSubscriber")
+		}
+		dst := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: port}
+		deadline := time.Now().Add(15 * time.Second)
+		for {
+			st, err := p.Status(conn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if st.Counters.NetworkMessagesReceived > 0 {
+				return port
+			}
+			if testport.InUse(st.LastError) {
+				t.Logf("UDP port %d was taken (%v): another one", port, st.LastError)
+				stop()
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("the go-opcua subscriber does not receive on UDP port %d: %+v", port, st)
+			}
+			_, _ = snd.WriteToUDP(b, dst)
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	t.Fatal("no UDP port the go-opcua subscriber could bind")
+	return 0
 }
 
 func startRuntime(t *testing.T, cfg *ua.PubSubConfigurationDataType, opts ...pubsub.Option) *pubsub.PubSub {
@@ -398,14 +481,14 @@ func psRuntimePeerPublishes(t *testing.T, p *psPeer) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			topic := fmt.Sprintf("go-opcua-interop/runtime-sub/%s/%d", c.name, psFresh())
-			pub, url := psStartPeerPublisher(t, p, c, broker, topic)
 			rec := newPSDataSets()
 			opts := []pubsub.Option{pubsub.WithDataSetHandler(rec.handle)}
 			if keys := c.keys(t); keys != nil {
 				opts = append(opts, pubsub.WithKeySource("InteropGroup", keys))
 			}
-			startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url),
-				psRuntimeReader(c, topic, 0))), opts...)
+			pub := psStartPeerPublisher(t, p, c, broker, topic, psRuntimeSubscriber(t, func(url string) *ua.PubSubConfigurationDataType {
+				return pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), psRuntimeReader(c, topic, 0)))
+			}, nil, opts...))
 			values := psValues(c.vars, psFresh())
 			writePubSubVars(t, pub.endpoint, c.vars, values)
 			ds := rec.wait(t, c.vars, values, psReceiveTimeout)
@@ -431,15 +514,18 @@ func TestPubSubRuntime_Open62541Publishes_GoTargetVariables(t *testing.T) {
 func psRuntimePeerPublishesTargetVariables(t *testing.T, p *psPeer) {
 	p.requireServer(t)
 	c := psRuntimeCase{psLiveCase: psLiveCase{name: "target-variables", vars: psVars}}
-	pub, url := psStartPeerPublisher(t, p, c, 0, "")
-	sub := startGoPubSubServer(t, goPubSubOpts{}, func(ps *pubsub.PubSub, ns uint16) {
-		rg := psRuntimeReader(c, "", 0)
-		var targets []*ua.FieldTargetDataType
-		for _, v := range c.vars {
-			targets = append(targets, pubsub.Target(ua.NewStringNodeID(ns, "PubSub."+v.name)))
-		}
-		pubsub.SetTargetVariables(rg.DataSetReaders[0], targets...)
-		mustOK[pubsub.ComponentID](t)(ps.AddConnection(pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), rg)))
+	var sub *goPubSubServer
+	pub := psStartPeerPublisher(t, p, c, 0, "", func(url string) (*pubsub.PubSub, func()) {
+		sub = startGoPubSubServer(t, goPubSubOpts{}, func(ps *pubsub.PubSub, ns uint16) {
+			rg := psRuntimeReader(c, "", 0)
+			var targets []*ua.FieldTargetDataType
+			for _, v := range c.vars {
+				targets = append(targets, pubsub.Target(ua.NewStringNodeID(ns, "PubSub."+v.name)))
+			}
+			pubsub.SetTargetVariables(rg.DataSetReaders[0], targets...)
+			mustOK[pubsub.ComponentID](t)(ps.AddConnection(pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), rg)))
+		})
+		return sub.srv.PubSub(), func() { _ = sub.srv.Close() }
 	})
 	values := psValues(c.vars, psFresh())
 	writePubSubVars(t, pub.endpoint, c.vars, values)
@@ -456,7 +542,14 @@ func psRuntimePeerPublishesTargetVariables(t *testing.T, p *psPeer) {
 func TestPubSubRuntime_GoSubscriberPullsKeys_Open62541SKS(t *testing.T) {
 	requirePubSubServer(t)
 	c := psRuntimeCase{psLiveCase: psLiveCase{name: "sks", mode: ua.MessageSecurityModeSignAndEncrypt, policy: security.Aes256CTR(), vars: psVars}}
-	port := freeUDPPort(t)
+	// The runtime receives on its port before the publisher is told it
+	// (psBindRuntimeUDP); the keys come from the publisher, so they are
+	// handed to the runtime once it runs.
+	keys := &psLateKeys{policy: c.policy}
+	rec := newPSDataSets()
+	port := psBindRuntimeUDP(t, psRuntimeSubscriber(t, func(url string) *ua.PubSubConfigurationDataType {
+		return pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), psRuntimeReader(c, "", 0)))
+	}, nil, pubsub.WithDataSetHandler(rec.handle), pubsub.WithKeySource(psSKSGroup, keys)))
 	pub := startPubSubServer(t, pubsubServerOpts{config: psSKSConfig(c.policy.URI(), psUDPPublisherConfig(c.psLiveCase, port)), secure: true})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -467,13 +560,33 @@ func TestPubSubRuntime_GoSubscriberPullsKeys_Open62541SKS(t *testing.T) {
 		t.Fatalf("NewKeySource: %v", err)
 	}
 	t.Cleanup(func() { _ = ks.Close() })
-	rec := newPSDataSets()
-	startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(
-		psRuntimeSubConnection(c, fmt.Sprintf("opc.udp://localhost:%d", port)), psRuntimeReader(c, "", 0))),
-		pubsub.WithDataSetHandler(rec.handle), pubsub.WithKeySource(psSKSGroup, ks))
+	keys.ks.Store(ks)
 	values := psValues(c.vars, psFresh())
 	writePubSubVars(t, pub.endpoint, c.vars, values)
 	rec.wait(t, c.vars, values, psReceiveTimeout)
+}
+
+// psLateKeys is a KeySource whose keys come from ks once it is set; until
+// then it has none.
+type psLateKeys struct {
+	policy security.Policy
+	ks     atomic.Pointer[sks.KeySource]
+}
+
+func (k *psLateKeys) Policy() security.Policy { return k.policy }
+
+func (k *psLateKeys) CurrentKeys() (*security.Keys, error) {
+	if ks := k.ks.Load(); ks != nil {
+		return ks.CurrentKeys()
+	}
+	return nil, security.ErrNoKeys
+}
+
+func (k *psLateKeys) KeysForToken(tokenID uint32) (*security.Keys, error) {
+	if ks := k.ks.Load(); ks != nil {
+		return ks.KeysForToken(tokenID)
+	}
+	return nil, security.ErrNoKeys
 }
 
 // TestPubSubRuntime_Open62541SubscriberPullsKeys_GoSKS: a go-opcua server is
@@ -603,10 +716,11 @@ func psReaderOf(cfg jobj) jobj {
 func TestPubSubRuntime_ReceiveTimeout_GoReader(t *testing.T) {
 	requirePubSubServer(t)
 	c := psRuntimeCase{psLiveCase: psLiveCase{name: "timeout", vars: psVars}}
-	pub, url := psStartAdapterPublisher(t, c, 0, "")
 	rec := newPSDataSets()
-	p := startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url),
-		psRuntimeReader(c, "", time.Second))), pubsub.WithDataSetHandler(rec.handle))
+	var p *pubsub.PubSub
+	pub := psStartAdapterPublisher(t, c, 0, "", psRuntimeSubscriber(t, func(url string) *ua.PubSubConfigurationDataType {
+		return pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), psRuntimeReader(c, "", time.Second)))
+	}, &p, pubsub.WithDataSetHandler(rec.handle)))
 	conn, _ := p.Lookup(pubsub.KindConnection, pubsub.Root, "InteropSubscriber")
 	rg, _ := p.Lookup(pubsub.KindReaderGroup, conn, "InteropReaderGroup")
 	reader, ok := p.Lookup(pubsub.KindDataSetReader, rg, "InteropReader")

@@ -144,11 +144,11 @@ func psMQTT5PeerPublishes(t *testing.T, p *psPeer) {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
 			topic := fmt.Sprintf("go-opcua-interop/mqtt5-sub/%s/%d", c.name, psFresh())
-			pub, url := psStartPeerPublisherOn(t, p, c, broker, topic, false)
 			rec := newPSDataSets()
-			conn := pubsub.SetMQTTVersion(psRuntimeSubConnection(c, url), pubsub.MQTTVersion5)
-			startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(conn, psRuntimeReader(c, topic, 0))),
-				pubsub.WithDataSetHandler(rec.handle))
+			pub := psStartPeerPublisherOn(t, p, c, broker, topic, false, psRuntimeSubscriber(t, func(url string) *ua.PubSubConfigurationDataType {
+				conn := pubsub.SetMQTTVersion(psRuntimeSubConnection(c, url), pubsub.MQTTVersion5)
+				return pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(conn, psRuntimeReader(c, topic, 0)))
+			}, nil, pubsub.WithDataSetHandler(rec.handle)))
 			values := psValues(c.vars, psFresh())
 			writePubSubVars(t, pub.endpoint, c.vars, values)
 			rec.wait(t, c.vars, values, psReceiveTimeout)
