@@ -132,6 +132,24 @@ func SetConnectionProperty(c *ua.PubSubConnectionDataType, name string, value an
 	return c
 }
 
+// AMQPConnection returns a connection to an AMQP 1.0 broker
+// (amqp://host:port or amqps://host:port) with the AMQP UADP or AMQP JSON
+// transport profile. The queue names of its groups and writers are AMQP
+// addresses (see the package documentation of pubsub/transport/amqp).
+func AMQPConnection(name, url string, publisherID any, mapping MessageMapping) *ua.PubSubConnectionDataType {
+	profile := transport.ProfileAMQPUADP
+	if mapping == MappingJSON {
+		profile = transport.ProfileAMQPJSON
+	}
+	return &ua.PubSubConnectionDataType{
+		Name:                name,
+		Enabled:             true,
+		PublisherID:         mustPublisherID(publisherID),
+		TransportProfileURI: profile,
+		Address:             ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: url}),
+	}
+}
+
 func millis(d time.Duration) float64 { return float64(d) / float64(time.Millisecond) }
 
 // WriterGroup returns a UADP writer group that publishes every interval with

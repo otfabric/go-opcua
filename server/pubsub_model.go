@@ -1038,7 +1038,8 @@ func (m *pubsubModel) removePublishedDataSet(_ context.Context, _ *ua.NodeID, ar
 // supportedTransportProfiles lists the transport profiles of the
 // PublishSubscribe object: Ethernet only on an OS where the transport works.
 func supportedTransportProfiles() []string {
-	profiles := []string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON}
+	profiles := []string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON,
+		transport.ProfileAMQPUADP, transport.ProfileAMQPJSON}
 	if eth.Supported {
 		profiles = append(profiles, transport.ProfileEthUADP)
 	}

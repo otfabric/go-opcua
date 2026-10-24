@@ -159,13 +159,24 @@ func connectionProperties(kvs []*ua.KeyValuePair) map[string]string {
 	return props
 }
 
-// isBroker reports whether a connection uses a broker transport.
+// isBroker reports whether a connection uses a broker transport (MQTT,
+// Part 14 §7.3.5, or AMQP, §7.3.4).
 func isBroker(profile, url string) bool {
-	if profile == transport.ProfileMQTTJSON || profile == transport.ProfileMQTTUADP {
+	switch profile {
+	case transport.ProfileMQTTJSON, transport.ProfileMQTTUADP, transport.ProfileAMQPJSON, transport.ProfileAMQPUADP:
 		return true
 	}
-	scheme, _ := transport.Scheme(url)
-	return scheme == "mqtt" || scheme == "mqtts"
+	switch scheme, _ := transport.Scheme(url); scheme {
+	case "mqtt", "mqtts", "amqp", "amqps":
+		return true
+	}
+	return false
+}
+
+// isJSONProfile reports whether a transport profile uses the JSON message
+// mapping.
+func isJSONProfile(profile string) bool {
+	return profile == transport.ProfileMQTTJSON || profile == transport.ProfileAMQPJSON
 }
 
 // connectionURL returns the address of a connection.
@@ -262,7 +273,7 @@ func groupEncoding(profile string, ms *ua.ExtensionObject) encoding {
 	case *ua.UADPWriterGroupMessageDataType:
 		return encUADP
 	}
-	if profile == transport.ProfileMQTTJSON {
+	if isJSONProfile(profile) {
 		return encJSON
 	}
 	return encUADP
@@ -276,7 +287,7 @@ func readerEncoding(profile string, ms *ua.ExtensionObject) encoding {
 	case *ua.UADPDataSetReaderMessageDataType:
 		return encUADP
 	}
-	if profile == transport.ProfileMQTTJSON {
+	if isJSONProfile(profile) {
 		return encJSON
 	}
 	return encUADP
@@ -438,7 +449,8 @@ func validateConnection(path string, c *ua.PubSubConnectionDataType, pds map[str
 		return configErr(path, "a connection with writer groups needs a PublisherId")
 	}
 	switch c.TransportProfileURI {
-	case transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON, transport.ProfileEthUADP:
+	case transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON, transport.ProfileEthUADP,
+		transport.ProfileAMQPUADP, transport.ProfileAMQPJSON:
 	case "":
 		return configErr(path, "TransportProfileUri is empty")
 	default:
