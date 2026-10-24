@@ -473,12 +473,26 @@ func TestBrokerDetachesReceiver(t *testing.T) {
 
 func TestBrokerClosesConnection(t *testing.T) {
 	b := startBroker(t, amqpbroker.Options{})
-	var lost atomic.Value
-	c := dial(t, amqp.Options{Server: b.URL(), OnConnectionLost: func(err error) { lost.Store(err) }})
+	// The connection-lost errors have different concrete types (the
+	// broker's close, a read error): keep them behind a mutex, an
+	// atomic.Value panics on a store of another type.
+	var mu sync.Mutex
+	var lost []error
+	c := dial(t, amqp.Options{Server: b.URL(), OnConnectionLost: func(err error) {
+		mu.Lock()
+		lost = append(lost, err)
+		mu.Unlock()
+	}})
 	in, _ := subscribe(t, c, "c", false)
 	b.CloseConnections(&amqp.Error{Condition: amqp.CondConnectionForced, Description: "maintenance"})
-	require.Eventually(t, func() bool { return lost.Load() != nil }, 5*time.Second, time.Millisecond)
-	require.ErrorContains(t, lost.Load().(error), "maintenance")
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return len(lost) > 0
+	}, 5*time.Second, time.Millisecond)
+	mu.Lock()
+	require.ErrorContains(t, lost[0], "maintenance")
+	mu.Unlock()
 	require.Eventually(t, func() bool { return b.LinkCount("c") == 1 }, 5*time.Second, time.Millisecond)
 	require.NoError(t, c.Send(bg, "c", dataMsg("x"), false))
 	require.Equal(t, []byte("x"), in.next(t).Payload())

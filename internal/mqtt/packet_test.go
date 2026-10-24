@@ -223,6 +223,9 @@ func FuzzDecode(f *testing.F) {
 		if err != nil {
 			return // e.g. an empty SUBACK body decodes but a client never sends it
 		}
+		if c, ok := p.(*Connect); ok && c.ProtocolName == "" {
+			return // Encode fills in "MQTT" and the level for an empty name
+		}
 		p2, err := ReadPacket(bufio.NewReader(bytes.NewReader(out)), 0)
 		require.NoError(t, err)
 		require.Equal(t, p, p2)

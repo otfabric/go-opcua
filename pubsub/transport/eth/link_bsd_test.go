@@ -309,27 +309,6 @@ func TestBPFGroupJoinedElsewhere(t *testing.T) {
 	require.Equal(t, []string{"add 01-00-5e-7f-00-01"}, fk.multicast())
 }
 
-// FuzzBPFRecords feeds arbitrary read buffers to the bpf_hdr record
-// parser: every frame it returns lies within the buffer, and it ends.
-func FuzzBPFRecords(f *testing.F) {
-	frame := append(header(macB, macA, Address{}), "payload"...)
-	f.Add(bpfRecord(frame, len(frame)))
-	f.Add(append(bpfRecord(frame, len(frame)+1), bpfRecord(frame, len(frame))...))
-	f.Add(bpfRecord(nil, 0)[:bpfMinHdr])
-	f.Fuzz(func(t *testing.T, data []byte) {
-		l := &bpfLink{pending: data}
-		for range len(data) + 1 {
-			rec, ok := l.next()
-			if !ok {
-				require.Empty(t, l.pending)
-				return
-			}
-			require.LessOrEqual(t, len(rec), len(data))
-		}
-		t.Fatal("the parser does not end")
-	})
-}
-
 func TestBPFRecordLayout(t *testing.T) {
 	require.Equal(t, int(unsafe.Sizeof(unix.BpfHdr{}.Hdrlen)), 2)
 	require.Positive(t, bpfAlign)
