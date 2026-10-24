@@ -73,6 +73,10 @@ type connection struct {
 	// subscriptions reflect.
 	subsCh     chan struct{}
 	subscribed map[string]bool
+	// ready is closed once the run's first subscriptions are in place (or
+	// failed): the writer groups of the connection publish only then, so
+	// that its own readers and probe listener hear the first messages.
+	ready chan struct{}
 	topicsSeq  uint64
 	syncedSeq  uint64
 	// act is the state of the PubSub Actions of the current run.

@@ -110,6 +110,7 @@ func (p *PubSub) startConnection(c *connection) {
 	c.topics = nil
 	c.subsCh = make(chan struct{})
 	c.subscribed = nil
+	c.ready = make(chan struct{})
 	p.setState(&c.base, ua.PubSubStatePreOperational, nil)
 	gen, kick := c.gen, c.kick
 	p.wg.Add(1)
@@ -274,6 +275,11 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 			}
 			close(c.subsCh)
 			c.subsCh = make(chan struct{})
+			select {
+			case <-c.ready:
+			default:
+				close(c.ready)
+			}
 			// Responder groups wait for their request queue.
 			p.reconcileLocked()
 		}
@@ -366,7 +372,7 @@ func (p *PubSub) startWriterGroup(g *writerGroup) {
 	g.cancel = cancel
 	gen := g.gen
 	p.wg.Add(1)
-	go p.runWriterGroup(ctx, g, gen)
+	go p.runWriterGroup(ctx, g, gen, g.conn.ready)
 }
 
 func (p *PubSub) stopWriterGroup(g *writerGroup) {
