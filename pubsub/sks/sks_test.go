@@ -211,12 +211,16 @@ func TestKeySourceRefresh(t *testing.T) {
 			require.Same(t, security.Aes128CTR(), src.Policy())
 			// Under load the first rotation may already have happened by now
 			// (the key lifetime is short), so only bound the start state.
-			require.NotZero(t, src.Ring().CurrentTokenID())
+			first := src.Ring().CurrentTokenID()
+			require.NotZero(t, first)
 			require.LessOrEqual(t, src.Ring().FutureKeyCount(), int(tc.future))
 
 			svc, err := ks.KeySource("sg")
 			require.NoError(t, err)
-			require.Eventually(t, func() bool { return src.Ring().CurrentTokenID() >= 5 }, 10*time.Second, 10*time.Millisecond)
+			// Beyond the keys of the first fetch, relative to its first
+			// token: when the SKS was slow to start, the first fetch
+			// already returned token 5 and a fixed target took no refresh.
+			require.Eventually(t, func() bool { return src.Ring().CurrentTokenID() > first+tc.future }, 10*time.Second, 10*time.Millisecond)
 			// Whatever token the SKS uses, the source has its key.
 			for range 5 {
 				want, err := svc.CurrentKeys()
@@ -363,7 +367,11 @@ func TestNextFetchLeavesAFutureKey(t *testing.T) {
 // hold the key of every token the SKS uses and never run out of keys.
 func TestKeySourceSlowSKS(t *testing.T) {
 	t.Parallel()
-	const life = 600 * time.Millisecond
+	// A fetch starts just after a key change and has about two lifetimes
+	// before the ring runs out of keys: one goes to the slow SKS, the rest
+	// to dialling a SignAndEncrypt session, which the race detector on a
+	// loaded machine can stretch to well over half a second.
+	const life = 1200 * time.Millisecond
 	ks := newKeyService(t, life, 2)
 	s := startSKS(t, ks)
 	src, err := NewKeySource(context.Background(), Config{
