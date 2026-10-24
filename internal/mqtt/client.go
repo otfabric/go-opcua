@@ -39,6 +39,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/otfabric/go-opcua/internal/goid"
 )
 
 // Defaults of [Options].
@@ -53,6 +55,9 @@ const (
 // VersionBestAvailable is the [Options].ProtocolVersion that tries MQTT 5.0
 // and falls back to 3.1.1 when the broker refuses the protocol version.
 const VersionBestAvailable byte = 0xff
+
+// closeTimeout bounds the DISCONNECT that Close writes.
+const closeTimeout = time.Second
 
 // noQuota is the send quota of a connection without flow control (3.1.1):
 // more than there are packet identifiers.
@@ -78,6 +83,10 @@ var (
 	// CONNACK) that it does not support what is asked: retained messages,
 	// wildcard subscriptions or a packet of that size.
 	ErrNotSupported = errors.New("mqtt: not supported by the broker")
+	// ErrNoPacketID is returned when nearly every packet identifier is
+	// taken by publications, subscriptions or unsubscriptions the broker
+	// has not acknowledged yet.
+	ErrNoPacketID = errors.New("mqtt: no free packet identifier: too many unacknowledged packets")
 )
 
 // ConnectError is a CONNACK with a return code (3.1.1) or reason code
@@ -282,7 +291,11 @@ type Client struct {
 
 	done    chan struct{} // closed by Close
 	deliver chan *Message
-	wg      sync.WaitGroup
+	wg      sync.WaitGroup // the goroutines but the delivery goroutine
+	// deliverDone is closed when the delivery goroutine ends; deliverID is
+	// its goroutine id, so a Close from a handler does not wait for itself.
+	deliverDone chan struct{}
+	deliverID   atomic.Uint64
 
 	writeMu sync.Mutex
 
@@ -342,7 +355,7 @@ func Dial(ctx context.Context, opts Options) (*Client, error) {
 		return nil, err
 	}
 	first := make(chan error, 1)
-	c.wg.Add(2)
+	c.wg.Add(1)
 	go c.deliverLoop()
 	go c.run(ctx, first)
 	select {
@@ -364,15 +377,16 @@ func newClient(opts Options) (*Client, error) {
 		return nil, fmt.Errorf("mqtt: server %q: %w", opts.Server, err)
 	}
 	c := &Client{
-		opts:     opts,
-		network:  "tcp",
-		log:      opts.Logger,
-		done:     make(chan struct{}),
-		deliver:  make(chan *Message, 256),
-		inflight: map[uint16]*pending{},
-		acks:     map[uint16]chan Packet{},
-		subs:     map[string]*subEntry{},
-		qos2:     map[uint16]bool{},
+		opts:        opts,
+		network:     "tcp",
+		log:         opts.Logger,
+		done:        make(chan struct{}),
+		deliver:     make(chan *Message, 256),
+		deliverDone: make(chan struct{}),
+		inflight:    map[uint16]*pending{},
+		acks:        map[uint16]chan Packet{},
+		subs:        map[string]*subEntry{},
+		qos2:        map[uint16]bool{},
 	}
 	port := "1883"
 	switch strings.ToLower(u.Scheme) {
@@ -766,7 +780,9 @@ func (c *Client) attach(l *link, sessionPresent bool) bool {
 	var subID uint16
 	var subAck chan Packet
 	if len(resub) > 0 {
-		subID = c.allocID()
+		// The acks of the last connection are gone and at most
+		// maxInflight publications are pending: there is a free one.
+		subID, _ = c.allocID()
 		subAck = make(chan Packet, 1)
 		c.acks[subID] = subAck
 	}
@@ -941,7 +957,12 @@ func (c *Client) resubscribe(l *link, gen uint64, filters []TopicFilter, id uint
 			c.mu.Unlock()
 			return
 		}
-		id = c.allocID()
+		var ok bool
+		if id, ok = c.allocID(); !ok {
+			c.mu.Unlock()
+			c.log.Warn("mqtt: cannot subscribe again after reconnect", "error", ErrNoPacketID)
+			return
+		}
 		ack = make(chan Packet, 1)
 		c.acks[id] = ack
 		c.mu.Unlock()
@@ -963,9 +984,14 @@ func (c *Client) detach(l *link) {
 	}
 }
 
-// allocID returns a packet identifier that is not in use. c.mu is held.
-func (c *Client) allocID() uint16 {
-	for {
+// maxInflight is the most unfinished QoS 1 and 2 publications: the packet
+// identifiers above it stay free for SUBSCRIBE and UNSUBSCRIBE.
+const maxInflight = 65535 - 1024
+
+// allocID returns a packet identifier that is not in use; false if all
+// are. c.mu is held.
+func (c *Client) allocID() (uint16, bool) {
+	for range 65535 {
 		c.nextID++
 		if c.nextID == 0 {
 			c.nextID = 1
@@ -976,8 +1002,9 @@ func (c *Client) allocID() uint16 {
 		if _, ok := c.acks[c.nextID]; ok {
 			continue
 		}
-		return c.nextID
+		return c.nextID, true
 	}
+	return 0, false
 }
 
 // write sends a packet on l. A packet above the broker's Maximum Packet
@@ -1041,6 +1068,11 @@ func (c *Client) serve(l *link, br *bufio.Reader) error {
 				err = &protocolError{reason: ReasonPacketTooLarge, err: err}
 			} else {
 				c.log.Warn("mqtt: dropped a packet above the size limit", "error", err)
+				c.lastRecv.Store(time.Now().UnixNano())
+				if err := c.ackDropped(l, err); err != nil {
+					_ = l.conn.Close()
+					return err
+				}
 				continue
 			}
 		} else if errors.Is(err, ErrProtocol) {
@@ -1060,6 +1092,23 @@ func (c *Client) serve(l *link, br *bufio.Reader) error {
 			return err
 		}
 	}
+}
+
+// ackDropped acknowledges a QoS 1 or 2 PUBLISH that was dropped for its
+// size (MQTT 3.1.1): unacknowledged, the broker would keep it in flight
+// for good and, once its in-flight window is full, deliver nothing more.
+func (c *Client) ackDropped(l *link, err error) error {
+	var tl *TooLargeError
+	if !errors.As(err, &tl) || tl.PacketID == 0 {
+		return nil
+	}
+	if tl.QoS == 1 {
+		return c.write(l, &Ack{Kind: TypePuback, PacketID: tl.PacketID})
+	}
+	c.mu.Lock()
+	c.qos2[tl.PacketID] = true // its PUBREL is expected
+	c.mu.Unlock()
+	return c.write(l, &Ack{Kind: TypePubrec, PacketID: tl.PacketID})
 }
 
 func (c *Client) keepAliveLoop(l *link, stop <-chan struct{}) {
@@ -1101,7 +1150,8 @@ func (c *Client) handle(l *link, p Packet) error {
 		case TypePuback:
 			c.mu.Lock()
 			pd := c.inflight[p.PacketID]
-			if pd == nil || pd.pkt.QoS != 1 {
+			// A publication not sent yet cannot be acknowledged.
+			if pd == nil || pd.pkt.QoS != 1 || !pd.written {
 				c.mu.Unlock()
 				return nil
 			}
@@ -1119,7 +1169,7 @@ func (c *Client) handle(l *link, p Packet) error {
 		case TypePubrec:
 			c.mu.Lock()
 			pd := c.inflight[p.PacketID]
-			if pd != nil && pd.pkt.QoS != 2 {
+			if pd != nil && (pd.pkt.QoS != 2 || !pd.written) {
 				c.mu.Unlock()
 				return nil
 			}
@@ -1258,7 +1308,8 @@ func (c *Client) enqueue(m *Message) {
 }
 
 func (c *Client) deliverLoop() {
-	defer c.wg.Done()
+	defer close(c.deliverDone)
+	c.deliverID.Store(goid.ID())
 	var hs []Handler
 	for {
 		var m *Message
@@ -1266,6 +1317,11 @@ func (c *Client) deliverLoop() {
 		case m = <-c.deliver:
 		case <-c.done:
 			return
+		}
+		select {
+		case <-c.done:
+			return // closed: no handler runs any more
+		default:
 		}
 		c.mu.Lock()
 		hs = hs[:0]
@@ -1404,7 +1460,12 @@ func (c *Client) PublishWith(ctx context.Context, topic string, payload []byte, 
 		}
 		return c.write(l, pkt)
 	}
-	pkt.PacketID = c.allocID()
+	id, ok := c.allocID()
+	if !ok || len(c.inflight) >= maxInflight {
+		c.mu.Unlock()
+		return ErrNoPacketID
+	}
+	pkt.PacketID = id
 	c.seq++
 	pd := &pending{seq: c.seq, pkt: pkt, done: make(chan error, 1)}
 	c.inflight[pkt.PacketID] = pd
@@ -1515,7 +1576,12 @@ func (c *Client) SubscribeWith(ctx context.Context, filter string, opts Subscrib
 		return sub, nil
 	}
 	tf := c.filterFor(l, e.tf)
-	id := c.allocID()
+	id, ok := c.allocID()
+	if !ok {
+		c.mu.Unlock()
+		sub.remove()
+		return nil, ErrNoPacketID
+	}
 	ch := make(chan Packet, 1)
 	c.acks[id] = ch
 	c.mu.Unlock()
@@ -1588,7 +1654,12 @@ func (s *Subscription) Unsubscribe(ctx context.Context) error {
 			c.mu.Unlock()
 			return
 		}
-		id := c.allocID()
+		id, ok := c.allocID()
+		if !ok {
+			c.mu.Unlock()
+			err = ErrNoPacketID
+			return
+		}
 		ch := make(chan Packet, 1)
 		c.acks[id] = ch
 		c.mu.Unlock()
@@ -1613,7 +1684,8 @@ func (s *Subscription) Unsubscribe(ctx context.Context) error {
 
 // Close disconnects from the broker (sending DISCONNECT, with MQTT 5.0
 // reason Normal disconnection: the will is not published) and stops the
-// client. Pending calls return ErrClosed.
+// client. Pending calls return ErrClosed. It waits for a handler that is
+// running, unless it is called from that handler.
 func (c *Client) Close() error {
 	c.mu.Lock()
 	if c.closed {
@@ -1625,9 +1697,17 @@ func (c *Client) Close() error {
 	close(c.done)
 	c.mu.Unlock()
 	if l != nil {
+		// A write blocked by a broker that does not read holds the write
+		// lock until its deadline (the keep-alive or longer): close the
+		// connection if the DISCONNECT cannot be written soon.
+		t := time.AfterFunc(closeTimeout, func() { _ = l.conn.Close() })
 		_ = c.write(l, &Disconnect{})
+		t.Stop()
 		_ = l.conn.Close()
 	}
 	c.wg.Wait()
+	if goid.ID() != c.deliverID.Load() {
+		<-c.deliverDone
+	}
 	return nil
 }
