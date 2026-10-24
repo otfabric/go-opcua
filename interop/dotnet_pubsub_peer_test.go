@@ -585,7 +585,7 @@ func startGoDiscoveryPublisher(t *testing.T) *goDiscoveryPublisher {
 				pubsub.DataSetWriter("InteropWriter", psWriterID, "InteropDataSet"))
 			d.conn = mustOK[pubsub.ComponentID](t)(p.AddConnection(pubsub.AttachWriterGroups(conn, wg)))
 		})
-		d.p, d.stop = srv.srv.PubSub(), func() { _ = srv.srv.Close() }
+		d.p, d.stop = srv.srv.PubSub(), srv.close
 		dst := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: d.probePort}
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {

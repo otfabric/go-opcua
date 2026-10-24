@@ -48,6 +48,8 @@ type goPubSubServer struct {
 	endpoint string
 	srv      *server.Server
 	ns       uint16
+	// close closes the server once, before the end of the test if need be.
+	close func()
 }
 
 type goPubSubOpts struct {
@@ -108,11 +110,13 @@ func startGoPubSubServer(t *testing.T, o goPubSubOpts, configure func(p *pubsub.
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
+	var once sync.Once
+	closeServer := func() { once.Do(func() { _ = s.Close() }) }
+	t.Cleanup(closeServer)
 	if configure != nil {
 		configure(s.PubSub(), ns.ID())
 	}
-	return &goPubSubServer{endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", s.Port(), endpointPath), srv: s, ns: ns.ID()}
+	return &goPubSubServer{endpoint: fmt.Sprintf("opc.tcp://localhost:%d%s", s.Port(), endpointPath), srv: s, ns: ns.ID(), close: closeServer}
 }
 
 // psRuntimeDataSet is the PublishedDataItems of the PubSub.* variables of
@@ -525,7 +529,7 @@ func psRuntimePeerPublishesTargetVariables(t *testing.T, p *psPeer) {
 			pubsub.SetTargetVariables(rg.DataSetReaders[0], targets...)
 			mustOK[pubsub.ComponentID](t)(ps.AddConnection(pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), rg)))
 		})
-		return sub.srv.PubSub(), func() { _ = sub.srv.Close() }
+		return sub.srv.PubSub(), sub.close
 	})
 	values := psValues(c.vars, psFresh())
 	writePubSubVars(t, pub.endpoint, c.vars, values)
