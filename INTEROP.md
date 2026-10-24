@@ -642,6 +642,7 @@ PubSub (Part 14) against open62541 1.5.9 — profile `pubsub` in the ledger, 52 
 | `pubsub.uadp.codec`, `pubsub.json.codec` (byte-exact, all header options and field encodings) | C→O, O→S |
 | `pubsub.uadp.udp` (Variant, DataValue, RawData), `pubsub.uadp.mqtt`, `pubsub.json.mqtt` | C→O, O→S |
 | `pubsub.uadp.udp-multicast` | C→O, O→S (adapter with `--network host`; Linux only, skipped on macOS) |
+| `pubsub.uadp.eth` (since go-opcua v1.9.0; Variant, SignAndEncrypt) | C→O, O→S (adapter on a Docker bridge network with a named bridge interface; Linux and root only, run by the Interop job `ethernet`, skipped elsewhere) |
 | `pubsub.security.*` (Sign, SignAndEncrypt; PubSub-Aes128-CTR, PubSub-Aes256-CTR; wrong keys and unsecured messages rejected) | C→O, O→S |
 | `pubsub.sks.*` (GetSecurityKeys, SKS pull, SetSecurityKeys push, Add/RemoveSecurityGroup) | C→O, O→S |
 | `pubsub.runtime.*` (go publisher and subscriber, TargetVariables, receive timeout) | C→O, O→S |

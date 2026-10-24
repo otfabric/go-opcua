@@ -18,6 +18,7 @@ PubSub (Part 14) completes its transport and message model: the Ethernet transpo
 ### Tests
 
 - Ethernet transport: unit tests for the address grammar, frame building and parsing (fuzzed), receive filtering and the OS layers against replaceable system calls; real-socket tests on the loopback interface and a veth pair, including a publisher / subscriber runtime test with UADP and SignAndEncrypt, which skip without raw access. The new CI job `pubsub-eth` runs them as root and fails instead of skipping (`GO_OPCUA_ETH_REQUIRE`).
+- Interop: UADP over Ethernet against open62541 1.5.9 in both directions, unsecured and SignAndEncrypt (PubSub-Aes256-CTR), new ledger capability `pubsub.uadp.eth` (C→O, O→S). The adapter runs on a Docker bridge network with a named bridge interface, on which go-opcua sends and receives raw frames; the new Interop job `ethernet` runs the tests as root on Linux, and they skip elsewhere.
 
 ### Dependency
 

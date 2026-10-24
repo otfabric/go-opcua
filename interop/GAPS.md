@@ -8,9 +8,9 @@ Pinned opcua-interop version: **v0.9.0**
 
 - `deferred`: 64
 - `not-applicable`: 44
-- `unsupported`: 148
+- `unsupported`: 150
 - `unverified`: 1
-- `verified`: 407
+- `verified`: 409
 
 ## Unverified by reason
 

@@ -2116,6 +2116,20 @@
       "fixture": "baseline"
     },
     {
+      "capability": "pubsub.uadp.eth",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.eth",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
       "capability": "pubsub.uadp.mqtt",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",

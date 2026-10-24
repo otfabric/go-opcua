@@ -351,6 +351,11 @@ type pubsubServerOpts struct {
 	// (Linux only): multicast between the host and the container works
 	// there, while it does not cross Docker Desktop's VM or a bridge.
 	hostNetwork bool
+	// network attaches the container to a user-defined Docker network
+	// instead of the default bridge (the Ethernet tests).
+	network string
+	// root runs the adapter as root: raw Ethernet sockets need it.
+	root bool
 }
 
 // startPubSubServer starts the open62541 adapter with a PubSub
@@ -390,9 +395,15 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 		serverArgs = append(serverArgs, "--bind-port", fmt.Sprint(port), "--advertised-host", "localhost")
 	} else {
 		args = append(args, "--add-host=host.docker.internal:host-gateway", "-p", fmt.Sprintf("%d:4840", port))
+		if o.network != "" {
+			args = append(args, "--network", o.network)
+		}
 		for _, p := range o.udpPorts {
 			args = append(args, "-p", fmt.Sprintf("%d:%d/udp", p, p))
 		}
+	}
+	if o.root {
+		args = append(args, "--user", "0")
 	}
 	if o.secure {
 		pki := pkiDir(t)

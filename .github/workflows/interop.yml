@@ -106,18 +106,54 @@ jobs:
           path: artifacts/
           if-no-files-found: ignore
 
+  # UADP over raw Ethernet (TestPubSubEth*) needs raw sockets, so root, on a
+  # Linux host whose Docker bridges are reachable; the shards run unprivileged
+  # and skip these tests. GO_OPCUA_ETH_REQUIRE turns that skip into a failure
+  # here.
+  ethernet:
+    name: Interop — PubSub over Ethernet
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.26.x"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build the interop test binary
+        run: go test -c -tags interop -o interop.test ./interop
+
+      - name: Run the Ethernet tests as root
+        working-directory: interop
+        env:
+          # Same digest as the shards (opcua-interop v0.9.0).
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:9c5757d5dc810deb1e917f22e114bb4f94b068dd31959ef19a83b7844a811f88
+          OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
+          GO_OPCUA_ETH_REQUIRE: "1"
+        run: |
+          docker pull --quiet "${OPEN62541_IMAGE}"
+          sudo -E ../interop.test -test.v -test.count=1 -test.run 'TestPubSubEth'
+
   # One result for the whole suite (branch protection and badges). Not run
   # when the workflow was cancelled (a newer push), so a superseded run shows
   # as cancelled rather than failed.
   result:
     name: OPC UA interop — open62541
     if: ${{ !cancelled() }}
-    needs: shard
+    needs: [shard, ethernet]
     runs-on: ubuntu-latest
     steps:
       - name: All shards passed
         run: |
-          if [ "${{ needs.shard.result }}" != "success" ]; then
-            echo "::error::interop shards: ${{ needs.shard.result }}"
+          if [ "${{ needs.shard.result }}" != "success" ] || [ "${{ needs.ethernet.result }}" != "success" ]; then
+            echo "::error::interop shards: ${{ needs.shard.result }}, ethernet: ${{ needs.ethernet.result }}"
             exit 1
           fi
