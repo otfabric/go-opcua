@@ -1,0 +1,2266 @@
+{
+  "interopVersion": "v0.9.0",
+  "peer": {
+    "stack": "node-opcua",
+    "version": "2.187.12"
+  },
+  "entries": [
+    {
+      "capability": "session.connect",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Connect",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.connect",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Endpoints",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.namespace",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.namespace",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.endpoints",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Connect",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.endpoints",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Endpoints",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_FindServers",
+      "case": "coverage/discovery.find-servers/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_FindServers",
+      "case": "coverage/discovery.find-servers/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers-on-network",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_DiscoveryServerUnsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers-on-network",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.lds-registration",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_DiscoveryServerUnsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.lds-registration",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_NodeOpcuaServerRegisters",
+      "case": "coverage/discovery.lds-registration/node-opcua-server-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.objects",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.objects",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.namespace",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BrowseInteropNamespace",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.namespace",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BrowseObjectsNodes",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.scalars-folder",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BrowseScalarsFolder",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.scalars-folder",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BrowseScalarsFolder",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BrowseNext",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BrowseNext",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next-release",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BrowseNextRelease",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next-release",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BrowseNextRelease",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.result-mask",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BrowseResultMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.result-mask",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BrowseResultMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.filtering",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BrowseFiltering",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.filtering",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BrowseFiltering",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.scalar",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ReadScalarInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.scalar",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_ReadScalarInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.array",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ReadArrayInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.array",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_ReadArrayInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.batch",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BatchRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.batch",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BatchRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.dynamic",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ReadDynamicCounter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.dynamic",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_ReadDynamicCounter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.timestamps",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_TimestampsToReturn",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.timestamps",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_TimestampsToReturn",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.index-range",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_IndexRangeSubset",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.index-range",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_IndexRangeSubset",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.invalid-node",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_InvalidNodeId",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.invalid-node",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_InvalidNodeId",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.value",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_WriteAndReadBack",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.value",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Write",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.batch",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_BatchWrite",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.batch",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_BatchWrite",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.type-mismatch",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_WriteTypeMismatch",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.type-mismatch",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_WriteTypeMismatch",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.encoding-mask",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_WriteEncodingMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.encoding-mask",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_WriteEncodingMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.timestamps",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_DataValue_GoodWithTimestamps",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.timestamps",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_DataValue_GoodWithTimestamps",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.uncertain",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_DataValue_Uncertain",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.uncertain",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_DataValue_Uncertain",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.read-only",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Access_ReadOnly_WriteRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.read-only",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Access_ReadOnly_WriteRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.write-only",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Access_WriteOnly_ReadRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.write-only",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Access_WriteOnly_ReadRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.call",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_CallMethodAdd",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.call",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_CallMethod",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.validation",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_MethodValidation",
+      "case": "coverage/method.validation/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.validation",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_MethodValidation",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.data-change",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Subscribe",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.data-change",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Subscribe",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.queue-window",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Subscribe_DiscardOldest",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.queue-window",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Subscribe_DiscardOldest",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.timestamps",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_SubscribeTimestampsToReturn",
+      "case": "coverage/subscription.timestamps/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.timestamps",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_SubscribeTimestamps",
+      "case": "coverage/subscription.timestamps/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.revise",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.revise",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_SubscriptionLifecycle_Revise",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.delete",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.delete",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_SubscriptionLifecycle_Delete",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.republish",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ClientRepublish",
+      "case": "coverage/subscription.client.republish/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.republish",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.republish",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.republish",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Republish",
+      "case": "coverage/subscription.server.republish/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ClientTransferSubscriptions",
+      "case": "coverage/subscription.client.transfer/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.transfer",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.transfer",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_TransferSubscriptions",
+      "case": "coverage/subscription.server.transfer/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.recovery.reconnect",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_SubscriptionRecoveryReconnect",
+      "case": "coverage/subscription.recovery.reconnect/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.recovery.reconnect",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ModifySubscription",
+      "case": "coverage/subscription.modify/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ModifySubscription",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_SubscriptionLifecycle_PublishingMode",
+      "case": "coverage/subscription.publishing-mode/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ModifyMonitoredItems",
+      "case": "coverage/monitoreditem.modify/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_SetMonitoringMode",
+      "case": "coverage/monitoreditem.monitoring-mode/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_SubscriptionLifecycle_MonitoringMode",
+      "case": "coverage/monitoreditem.monitoring-mode/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_EventSubscription",
+      "case": "coverage/event.subscription/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_EventSubscribe",
+      "case": "coverage/event.subscription/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.select-clauses",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_EventFilterSelectClauses",
+      "case": "coverage/event.filter.select-clauses/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.select-clauses",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_EventFilterSelectClauses",
+      "case": "coverage/event.filter.select-clauses/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.of-type",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_EventFilterOfType",
+      "case": "coverage/event.filter.of-type/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.of-type",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_EventFilterOfType",
+      "case": "coverage/event.filter.of-type/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.where-clause",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_EventFilterWhereClause",
+      "case": "coverage/event.filter.where-clause/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.where-clause",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.severity-threshold",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_EventFilterSeverityThreshold",
+      "case": "coverage/event.filter.severity-threshold/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.severity-threshold",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_EventFilterSeverityThreshold",
+      "case": "coverage/event.filter.severity-threshold/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.notification.decode",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_EventNotificationDecode",
+      "case": "coverage/event.notification.decode/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.notification.decode",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.base",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.base",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_EventEmissionBase",
+      "case": "coverage/event.emission.base/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.custom",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.custom",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.queue-overflow",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "test": "TestNodeOpcuaServer_EventQueueOverflow",
+      "case": "coverage/event.queue-overflow/go-client-to-node-opcua-server",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "node-opcua 2.187.12 revises the queue size of an event monitored item to at least 100 (minimumEventQueueSize, monitored_item.js), so a queue of 2 is never granted and the fixture's event rate (one every 2 s) cannot fill it in a test; the test skips when the revised size is not 2. Needs a fixture that bursts more than 100 events",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.queue-overflow",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.raw",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_HistoryReadRaw",
+      "case": "coverage/history.read.raw/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.raw",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_HistoryReadRaw",
+      "case": "coverage/history.read.raw/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.continuation",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_HistoryReadContinuation",
+      "case": "coverage/history.read.continuation/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.continuation",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_HistoryReadContinuation",
+      "case": "coverage/history.read.continuation/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.modified",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.modified",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.at-time",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.at-time",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.processed",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.processed",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.data",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.data",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.events",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.events",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.delete",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.delete",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Basic256Sha256_Sign_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Basic256Sha256_Sign_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Basic256Sha256_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Basic256Sha256_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes128.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes128.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes256.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes256.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.untrusted",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_UntrustedCert_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.untrusted",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_UntrustedCert_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.trusted",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_TrustedCert_Accepted",
+      "case": "coverage/security.cert.trusted/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.trusted",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_TrustedCert_Accepted",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Username_ValidCredentials",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Username_ValidCredentials",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_Username_InvalidPassword_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Username_InvalidPassword_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.issued-token",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.issued-token",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.chains",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.chains",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.crl",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.crl",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.channel.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_SecureChannelRenewal",
+      "case": "coverage/security.channel.renewal/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.channel.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_SecureChannelRenewal",
+      "case": "coverage/security.channel.renewal/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.first",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers QueryFirst / QueryNext with BadServiceUnsupported (opcua_server.js _on_QueryFirst / _on_QueryNext)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.first",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "The node-opcua adapter client has no query operation (the contract defines none)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.next",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers QueryFirst / QueryNext with BadServiceUnsupported (opcua_server.js _on_QueryFirst / _on_QueryNext)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.next",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "The node-opcua adapter client has no query operation (the contract defines none)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-nodes",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_NodeManagementUnsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers AddNodes / DeleteNodes with BadServiceUnsupported (pinned by TestNodeOpcuaServer_NodeManagementUnsupported); the adapter does not declare the node-management server feature, so the generic test skips",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-nodes",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_AddNodes",
+      "case": "coverage/nodemgmt.add-nodes/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-nodes",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_NodeManagementUnsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers AddNodes / DeleteNodes with BadServiceUnsupported (pinned by TestNodeOpcuaServer_NodeManagementUnsupported); the adapter does not declare the node-management server feature, so the generic test skips",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-nodes",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_DeleteNodes",
+      "case": "coverage/nodemgmt.delete-nodes/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "translate.browse-path",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_TranslateBrowsePath",
+      "case": "coverage/translate.browse-path/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "translate.browse-path",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_TranslateBrowsePath",
+      "case": "coverage/translate.browse-path/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_RegisterNodes",
+      "case": "coverage/view.register-nodes/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_RegisterNodes",
+      "case": "coverage/view.register-nodes/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.registered",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.registered",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.dynamic",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.dynamic",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.acknowledgeable",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.acknowledgeable",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodeset2.import",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodeset2.import",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_DataChangeFilter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Deadband",
+      "case": "coverage/monitoreditem.deadband/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.percent-deadband/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_PercentDeadband",
+      "case": "coverage/monitoreditem.percent-deadband/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_DataChangeFilter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Trigger",
+      "case": "coverage/monitoreditem.trigger/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_DataChangeFilter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_SamplingInterval",
+      "case": "coverage/monitoreditem.sampling-interval/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ReverseConnect",
+      "case": "coverage/transport.reverse-connect/go-client-to-node-opcua-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_ReverseConnect_Read",
+      "case": "coverage/transport.reverse-connect/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ReverseConnect",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_ReverseConnect_Subscribe",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_ReverseConnect_Secure",
+      "case": "coverage/transport.reverse-connect.secure/go-client-to-node-opcua-server/Basic256Sha256",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_ReverseConnect_Secure",
+      "case": "coverage/transport.reverse-connect.secure/node-opcua-client-to-go-server/Basic256Sha256",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.12 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_NodeOpcuaClient_RegisterServer",
+      "case": "coverage/discovery.register-server/node-opcua-client-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestNodeOpcuaServer_DiscoveryServerUnsupported",
+      "nextAction": "node-opcua 2.187.12's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no mDNS: node-opcua multicast lives in its separate OPCUADiscoveryServer, which the adapter does not run; --mdns-name is refused with exit 2",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "The node-opcua adapter has no mDNS: node-opcua multicast lives in its separate OPCUADiscoveryServer, which the adapter does not run; --mdns-name is refused with exit 2",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.codec",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.codec",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.delta-frame",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.delta-frame",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.keep-alive-message",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.keep-alive-message",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.security-header",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.security-header",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.codec",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.codec",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.variant",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.variant",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.datavalue",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.datavalue",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.rawdata",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.rawdata",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp-multicast",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp-multicast",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.mqtt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.mqtt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.mqtt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.mqtt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.sign",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.sign",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes128-ctr",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes128-ctr",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes256-ctr",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes256-ctr",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.reject",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.reject",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.get-security-keys",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.get-security-keys",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.pull",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.pull",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.push",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.push",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.security-groups",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.security-groups",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.target-variables",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.target-variables",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.sks-pull",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.sks-pull",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.keepalive",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.keepalive",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.receive-timeout",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.receive-timeout",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.methods",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.methods",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.browse",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.browse",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_NodeOpcuaHasNoPubSub",
+      "nextAction": "node-opcua 2.187.12 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "fixture": "baseline"
+    }
+  ]
+}
