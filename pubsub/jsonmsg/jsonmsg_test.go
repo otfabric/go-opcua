@@ -759,3 +759,107 @@ func TestDecodeDataValueWithoutUaType(t *testing.T) {
 	_, err = Decode([]byte(bad), &DecodeOptions{MetaData: metaLookupTyped([]byte{byte(ua.TypeIDFloat), byte(ua.TypeIDUint16)}, "Temp", "Count")})
 	require.Error(t, err)
 }
+
+func TestActionMetaDataMessage(t *testing.T) {
+	version := &ua.ConfigurationVersionDataType{MajorVersion: 3, MinorVersion: 4}
+	in := &ActionMetaDataMessage{
+		MessageID:         "a1",
+		PublisherID:       message.StringPublisherID("responder"),
+		DataSetWriterID:   100,
+		DataSetWriterName: "CalcWriter",
+		Timestamp:         ts1,
+		ActionTargets:     []*ua.ActionTargetDataType{{ActionTargetID: 1, Name: "Add"}},
+		Request:           &ua.DataSetMetaDataType{Name: "Calc", ConfigurationVersion: version, Fields: []*ua.FieldMetaData{{Name: "A", BuiltInType: 6, DataType: ua.NewTwoByteNodeID(6), ValueRank: -1}}},
+		Response:          &ua.DataSetMetaDataType{Name: "Calc", ConfigurationVersion: version, Fields: []*ua.FieldMetaData{{Name: "Sum", BuiltInType: 6, DataType: ua.NewTwoByteNodeID(6), ValueRank: -1}}},
+		ActionMethods:     []*ua.ActionMethodDataType{{ObjectID: ua.NewStringNodeID(1, "Calc"), MethodID: ua.NewStringNodeID(1, "Add")}},
+	}
+	b, err := EncodeActionMetaData(in, nil)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(b), `{"MessageId":"a1","MessageType":"ua-action-metadata","PublisherId":"responder","DataSetWriterId":100,"DataSetWriterName":"CalcWriter","Timestamp":"2024-05-06T07:08:09.1234567Z","ActionTargets":[{"ActionTargetId":1,"Name":"Add"`), "%s", b)
+	require.Contains(t, string(b), `"ActionMethods":[{"ObjectId":"ns=1;s=Calc","MethodId":"ns=1;s=Add"}]`)
+	typ, err := MessageType(b)
+	require.NoError(t, err)
+	require.Equal(t, MessageTypeActionMetaData, typ)
+	out, err := DecodeActionMetaData(b, nil)
+	require.NoError(t, err)
+	require.Equal(t, in, out)
+	v, err := DecodeAny(b, nil)
+	require.NoError(t, err)
+	require.Equal(t, in, v)
+
+	// Without ActionMethods and Timestamp.
+	in.ActionMethods, in.Timestamp = nil, time.Time{}
+	b, err = EncodeActionMetaData(in, nil)
+	require.NoError(t, err)
+	require.NotContains(t, string(b), "ActionMethods")
+	out, err = DecodeActionMetaData(b, nil)
+	require.NoError(t, err)
+	require.False(t, out.Timestamp.IsZero())
+	require.Empty(t, out.ActionMethods)
+
+	for _, bad := range []*ActionMetaDataMessage{nil, {Request: in.Request}, {Response: in.Response},
+		{Request: in.Request, Response: in.Response, ActionMethods: []*ua.ActionMethodDataType{{}}}} {
+		_, err = EncodeActionMetaData(bad, nil)
+		require.Error(t, err)
+	}
+	pid := message.StringPublisherID("d")
+	out, err = DecodeActionMetaData([]byte(`{"MessageType":"ua-action-metadata","PublisherId":null,"Request":{},"Response":{}}`), &DecodeOptions{PublisherID: &pid})
+	require.NoError(t, err)
+	require.Equal(t, pid, out.PublisherID)
+	var ute *UnsupportedMessageTypeError
+	_, err = DecodeActionMetaData([]byte(`{"MessageType":"ua-metadata"}`), nil)
+	require.ErrorAs(t, err, &ute)
+	for _, bad := range []string{
+		`{"MessageType":"ua-action-metadata"}`,
+		`{"MessageType":"ua-action-metadata","Request":{}}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":3}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"ActionTargets":{}}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"ActionTargets":[null]}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"ActionMethods":[{}]}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"ActionMethods":7}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"DataSetWriterId":65536}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"DataSetWriterName":1}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"Timestamp":1}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"MessageId":1}`,
+		`{"MessageType":"ua-action-metadata","Request":{},"Response":{},"PublisherId":[]}`,
+	} {
+		_, err = DecodeActionMetaData([]byte(bad), nil)
+		require.ErrorIs(t, err, ErrDecode, bad)
+	}
+}
+
+func TestActionResponderMessage(t *testing.T) {
+	conn := &ua.PubSubConnectionDataType{Name: "Responder", TransportProfileURI: "http://opcfoundation.org/UA-Profile/Transport/pubsub-mqtt-json",
+		WriterGroups: []*ua.WriterGroupDataType{{Name: "Actions", WriterGroupID: 1, DataSetWriters: []*ua.DataSetWriterDataType{{Name: "Calc", DataSetWriterID: 100}}}}}
+	in := &ActionResponderMessage{MessageID: "r1", PublisherID: message.StringPublisherID("responder"), Timestamp: ts1, Connection: conn}
+	b, err := EncodeActionResponder(in, nil)
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(string(b), `{"MessageId":"r1","MessageType":"ua-action-responder","PublisherId":"responder","Timestamp":"2024-05-06T07:08:09.1234567Z","Connection":{"Name":"Responder"`), "%s", b)
+	out, err := DecodeActionResponder(b, nil)
+	require.NoError(t, err)
+	require.Equal(t, "Calc", out.Connection.WriterGroups[0].DataSetWriters[0].Name)
+	require.Equal(t, in.PublisherID, out.PublisherID)
+	require.True(t, in.Timestamp.Equal(out.Timestamp))
+	v, err := DecodeAny(b, nil)
+	require.NoError(t, err)
+	require.IsType(t, &ActionResponderMessage{}, v)
+
+	_, err = EncodeActionResponder(&ActionResponderMessage{}, nil)
+	require.Error(t, err)
+	b, err = EncodeActionResponder(&ActionResponderMessage{Connection: &ua.PubSubConnectionDataType{}}, nil)
+	require.NoError(t, err)
+	out, err = DecodeActionResponder(b, nil)
+	require.NoError(t, err)
+	require.Len(t, out.MessageID, 36)
+	for _, bad := range []string{
+		`{"MessageType":"ua-action-responder"}`,
+		`{"MessageType":"ua-action-responder","Connection":null}`,
+		`{"MessageType":"ua-action-responder","Connection":1}`,
+		`{"MessageType":"ua-action-responder","Connection":{},"Timestamp":1}`,
+		`{"MessageType":"ua-action-responder","Connection":{},"MessageId":1}`,
+		`{"MessageType":"ua-action-responder","Connection":{},"PublisherId":{}}`,
+	} {
+		_, err = DecodeActionResponder([]byte(bad), nil)
+		require.ErrorIs(t, err, ErrDecode, bad)
+	}
+}

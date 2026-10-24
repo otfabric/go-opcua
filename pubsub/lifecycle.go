@@ -319,6 +319,7 @@ func (p *PubSub) reassemblyTimeout() time.Duration {
 
 // reconcileWriterGroup runs or stops a writer group and its writers.
 func (p *PubSub) reconcileWriterGroup(g *writerGroup, parentOp bool) {
+	wasOp := g.state == ua.PubSubStateOperational
 	switch {
 	case !g.enabled:
 		p.stopWriterGroup(g)
@@ -343,6 +344,10 @@ func (p *PubSub) reconcileWriterGroup(g *writerGroup, parentOp bool) {
 	op := g.state == ua.PubSubStateOperational
 	for _, w := range g.writers {
 		p.reconcileWriter(w, op)
+	}
+	if op && !wasOp {
+		// The Actions of the group are (newly) available.
+		p.announceActions(g)
 	}
 }
 

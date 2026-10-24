@@ -231,9 +231,10 @@ func (p *PubSub) actionHandler(d *publishedDataSet, target uint16) ActionHandler
 func (w *dataSetWriter) isAction() bool { return w.pds != nil && w.pds.action != nil }
 
 // completeActionMetaData completes the request DataSetMetaData of a
-// PublishedAction like completeMetaData does the others: name, version,
-// field names ("Field0", ...) and DataTypes.
-func completeActionMetaData(md *ua.DataSetMetaDataType, name string) *ua.DataSetMetaDataType {
+// PublishedAction like completeMetaData does the others: name, field names
+// ("Field0", ...), DataTypes and the version, by default the version of
+// the response (Part 14 Table 177: they are equal).
+func completeActionMetaData(md *ua.DataSetMetaDataType, name string, version *ua.ConfigurationVersionDataType) *ua.DataSetMetaDataType {
 	if md == nil {
 		md = &ua.DataSetMetaDataType{}
 	}
@@ -247,8 +248,13 @@ func completeActionMetaData(md *ua.DataSetMetaDataType, name string) *ua.DataSet
 		md.DataSetClassID = &ua.GUID{}
 	}
 	if md.ConfigurationVersion == nil || (md.ConfigurationVersion.MajorVersion == 0 && md.ConfigurationVersion.MinorVersion == 0) {
-		v := versionTime(time.Now())
-		md.ConfigurationVersion = &ua.ConfigurationVersionDataType{MajorVersion: v, MinorVersion: v}
+		if version != nil {
+			v := *version
+			md.ConfigurationVersion = &v
+		} else {
+			v := versionTime(time.Now())
+			md.ConfigurationVersion = &ua.ConfigurationVersionDataType{MajorVersion: v, MinorVersion: v}
+		}
 	}
 	for i, f := range md.Fields {
 		if f.Name == "" {
@@ -339,6 +345,10 @@ type ActionTarget struct {
 	// waits for the Done response. Zero uses the deadline of the context
 	// or ActionOptions.DefaultTimeout.
 	Timeout time.Duration
+	// MetaDataAddress is, on a broker, where the Responder announces the
+	// ActionMetaData of the writer for [PubSub.DiscoverAction]: the
+	// MetaDataQueueName of the writer (see [ActionMetaDataTopic]).
+	MetaDataAddress string
 	// ResendInterval, if positive, is the PublishingInterval of the
 	// Responder on a non-reliable (datagram) transport: the request is
 	// resent while no response arrives within it, and the Idle
@@ -385,6 +395,10 @@ type actionState struct {
 	// connection's, in the order they were opened.
 	senders map[string]transport.Connection
 	order   []string
+	// waiters are the DiscoverAction calls; reasm reassembles chunked
+	// ActionMetaData announcements for them.
+	waiters map[*actionWaiter]struct{}
+	reasm   *uadp.Reassembler
 }
 
 func (s *actionState) init() {
@@ -394,6 +408,7 @@ func (s *actionState) init() {
 		s.calls = map[callKey]*actionCall{}
 		s.listen = map[string]int{}
 		s.senders = map[string]transport.Connection{}
+		s.waiters = map[*actionWaiter]struct{}{}
 	}
 }
 

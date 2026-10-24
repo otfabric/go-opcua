@@ -23,7 +23,10 @@ import (
 // DiscoveryAddress of the connection, if configured. It answers the
 // DataSetMetaData and DataSetWriter configuration probes on the connection
 // address, where the subscribers of its messages listen, and the other
-// probes on the DiscoveryAddress (as the .NET stack does). Answers are
+// probes on the DiscoveryAddress (as the .NET stack does); the
+// ActionMetaData of an Action writer and the ActionResponder configuration
+// go to the DiscoveryAddress too, where Requestors listen
+// (action_discovery.go). Answers are
 // secured like the messages of the writer group they describe.
 //
 // The traffic reduction of §7.2.4.6.12.2 bounds what probes can make a
@@ -383,7 +386,13 @@ func (p *PubSub) answersLocked(c *connection, req *message.DiscoveryRequest, now
 				continue
 			}
 			for _, w := range g.writers {
-				if !w.running || w.pds == nil || w.pds.md == nil || w.isAction() || !wanted(w.cfg.DataSetWriterID) {
+				if !w.running || w.pds == nil || w.pds.md == nil || !wanted(w.cfg.DataSetWriterID) {
+					continue
+				}
+				if w.isAction() {
+					// The ActionMetaData, for the Requestors on the
+					// discovery channel.
+					add(key(req.InformationType, w.cfg.DataSetWriterID), actionMetaDataOf(w, c.pubID).discovery(), g, disc)
 					continue
 				}
 				add(key(req.InformationType, w.cfg.DataSetWriterID), &message.Discovery{
@@ -428,6 +437,17 @@ func (p *PubSub) answersLocked(c *connection, req *message.DiscoveryRequest, now
 			Type:        message.DiscoveryPubSubConnection,
 			Connections: []*ua.PubSubConnectionDataType{connectionConfig(c, req.IncludeWriterGroups, req.IncludeDataSetWriters)},
 		}, nil, disc)
+		if cfg := actionResponderConfig(c); cfg != nil && req.Layout == message.DiscoveryLayoutSpec {
+			if !req.IncludeWriterGroups {
+				cfg.WriterGroups = nil
+			} else if !req.IncludeDataSetWriters {
+				for _, g := range cfg.WriterGroups {
+					g.DataSetWriters = nil
+				}
+			}
+			// info 6: the key of the ActionResponder announcement.
+			add(key(6, 0), &message.Discovery{Type: message.DiscoveryActionResponder, Connections: []*ua.PubSubConnectionDataType{cfg}}, nil, disc)
+		}
 	}
 	return out
 }

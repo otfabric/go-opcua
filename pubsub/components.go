@@ -302,7 +302,7 @@ func (p *PubSub) addPublishedDataSetLocked(in *ua.PublishedDataSetDataType) (Com
 	}
 	d.md = p.completeMetaData(cfg)
 	if d.action != nil {
-		d.action.RequestDataSetMetaData = completeActionMetaData(d.action.RequestDataSetMetaData, cfg.Name+"Request")
+		d.action.RequestDataSetMetaData = completeActionMetaData(d.action.RequestDataSetMetaData, cfg.Name+"Request", d.md.ConfigurationVersion)
 		if src, ok := eoValue(cfg.DataSetSource).(*ua.PublishedActionMethodDataType); ok {
 			src.RequestDataSetMetaData = d.action.RequestDataSetMetaData
 		}

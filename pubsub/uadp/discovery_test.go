@@ -234,6 +234,77 @@ func TestDiscoveryProbes(t *testing.T) {
 	require.ErrorIs(t, err, ErrUnsupported)
 }
 
+// TestDiscoveryActionAnnouncements: the ActionResponder (Table 176) and
+// ActionMetaData (Table 177) announcements, in the spec layout only.
+func TestDiscoveryActionAnnouncements(t *testing.T) {
+	wg := &ua.WriterGroupDataType{Name: "Actions", WriterGroupID: 10, DataSetWriters: []*ua.DataSetWriterDataType{{Name: "Calc", DataSetWriterID: 100}}}
+	conn := &ua.PubSubConnectionDataType{Name: "Responder", TransportProfileURI: "uri", WriterGroups: []*ua.WriterGroupDataType{wg}}
+	targets := []*ua.ActionTargetDataType{{ActionTargetID: 1, Name: "Add", Description: &ua.LocalizedText{}}, {ActionTargetID: 2, Name: "Sub", Description: &ua.LocalizedText{}}}
+	version := &ua.ConfigurationVersionDataType{MajorVersion: 5, MinorVersion: 6}
+	req := &ua.DataSetMetaDataType{Name: "Calc", ConfigurationVersion: version, Fields: []*ua.FieldMetaData{{Name: "A"}, {Name: "B"}}}
+	resp := &ua.DataSetMetaDataType{Name: "Calc", ConfigurationVersion: version, Fields: []*ua.FieldMetaData{{Name: "Sum"}}}
+	methods := []*ua.ActionMethodDataType{
+		{ObjectID: ua.NewStringNodeID(1, "Calc"), MethodID: ua.NewStringNodeID(1, "Add")},
+		{ObjectID: ua.NewStringNodeID(1, "Calc"), MethodID: ua.NewStringNodeID(1, "Sub")},
+	}
+	for _, tc := range []struct {
+		name string
+		d    *message.Discovery
+		body []byte
+	}{
+		{"responder", &message.Discovery{Type: message.DiscoveryActionResponder, Connections: []*ua.PubSubConnectionDataType{conn}},
+			encoded(t, []*ua.PubSubConnectionDataType{conn})},
+		{"metadata", &message.Discovery{Type: message.DiscoveryActionMetaData, DataSetWriterID: 100, ActionTargets: targets, RequestMetaData: req, MetaData: resp},
+			cat(h(t, "6400"), encoded(t, targets), encoded(t, req), encoded(t, resp), h(t, "00000000"))},
+		{"metadata with methods", &message.Discovery{Type: message.DiscoveryActionMetaData, DataSetWriterID: 100, ActionTargets: targets, RequestMetaData: req, MetaData: resp, ActionMethods: methods},
+			cat(h(t, "6400"), encoded(t, targets), encoded(t, req), encoded(t, resp), encoded(t, methods))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.d.SequenceNumber = 0x1234
+			b, err := Encode(discoveryNM(tc.d), nil)
+			require.NoError(t, err)
+			require.Equal(t, cat(h(t, "91 80 08 01"), []byte{byte(tc.d.Type), 0x34, 0x12}, tc.body), b)
+			dec, err := Decode(b, nil)
+			require.NoError(t, err)
+			got := dec.Discovery
+			require.Equal(t, message.DiscoveryLayoutSpec, got.Layout)
+			require.Equal(t, tc.d.Type, got.Type)
+			require.Equal(t, uint16(0x1234), got.SequenceNumber)
+			if tc.d.Type == message.DiscoveryActionResponder {
+				require.Equal(t, "Calc", got.Connections[0].WriterGroups[0].DataSetWriters[0].Name)
+				return
+			}
+			require.Equal(t, uint16(100), got.DataSetWriterID)
+			require.Equal(t, targets, got.ActionTargets)
+			require.Equal(t, req.Fields[1].Name, got.RequestMetaData.Fields[1].Name)
+			require.Equal(t, version, got.MetaData.ConfigurationVersion)
+			require.Equal(t, "Sum", got.MetaData.Fields[0].Name)
+			if tc.d.ActionMethods != nil {
+				require.Equal(t, methods, got.ActionMethods)
+			} else {
+				require.Empty(t, got.ActionMethods)
+			}
+		})
+	}
+
+	for _, d := range []*message.Discovery{
+		{Type: message.DiscoveryActionMetaData, MetaData: resp},
+		{Type: message.DiscoveryActionMetaData, RequestMetaData: req},
+		{Type: message.DiscoveryActionMetaData, RequestMetaData: req, MetaData: resp, ActionTargets: targets, ActionMethods: methods[:1]},
+	} {
+		_, err := Encode(discoveryNM(d), nil)
+		require.ErrorIs(t, err, ErrMalformed, "%+v", d)
+	}
+	for _, typ := range []message.DiscoveryType{message.DiscoveryActionResponder, message.DiscoveryActionMetaData} {
+		_, err := Encode(discoveryNM(&message.Discovery{Type: typ, RequestMetaData: req, MetaData: resp, Layout: message.DiscoveryLayoutDotNet}), nil)
+		require.ErrorIs(t, err, ErrUnsupported, "%v", typ)
+	}
+	// ActionMethods that do not match the targets.
+	b := cat(h(t, "91 80 08 01 07 0000 6400"), encoded(t, targets), encoded(t, req), encoded(t, resp), encoded(t, methods[:1]))
+	_, err := Decode(b, nil)
+	require.ErrorIs(t, err, ErrMalformed)
+}
+
 func TestDiscoveryMalformed(t *testing.T) {
 	for _, tc := range []struct {
 		name, hex string
@@ -247,7 +318,9 @@ func TestDiscoveryMalformed(t *testing.T) {
 		{"trailing bytes", "91 80 08 01 01 0000 00000000 00000000 00", ErrMalformed},
 		{"application type", "91 80 08 01 05 0000 0300", ErrUnsupported},
 		{"truncated application type", "91 80 08 01 05 0000 03", ErrMalformed},
-		{"unknown announcement", "91 80 08 01 07 0000", ErrUnsupported},
+		{"unknown announcement", "91 80 08 01 08 0000", ErrUnsupported},
+		{"truncated action metadata", "91 80 08 01 07 0000 0100", ErrMalformed},
+		{".NET action metadata", "91 80 08 01 07 0000", ErrMalformed},
 		{"prefix beyond the message", "91 80 08 01 02 0000 0100 ffffff00", ErrMalformed},
 		{"empty probe", "91 80 04 01", ErrMalformed},
 		{"unknown probe", "91 80 04 01 03", ErrUnsupported},

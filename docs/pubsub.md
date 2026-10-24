@@ -444,8 +444,8 @@ Set the options with `pubsub.WithDiscovery(pubsub.DiscoveryOptions{...})`;
 `Disabled` turns discovery off. Limits: probes are sent and expected
 unsecured (a secured probe is verified with the keys of the first secured
 writer group); the .NET layout cannot carry WriterGroup and PubSubConnection
-probe filters, nor its probe type 6; DataSetWriter "Actions" announcements
-(types 6 and 7) are not supported; a unicast DiscoveryAddress is only good
+probe filters, nor its probe type 6, nor the Action announcements (types 6
+and 7, spec layout only, see Actions); a unicast DiscoveryAddress is only good
 for probes (the answers that go to it reach only the publisher's host).
 
 ## Actions
@@ -539,6 +539,23 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
   messages: the Responder requires the SecurityMode and SecurityGroup of its
   writer group and answers with them, the Requestor sets them in the
   ActionTarget. The JSON mapping has no message security.
+- **Discovery.** A Responder announces the ActionMetaData of its Action
+  writers (targets, request and response DataSetMetaData, Methods; UADP
+  announcement 7, JSON `ua-action-metadata`) without a probe when their
+  group becomes Operational: on a broker retained on the writer's
+  MetaDataQueueName (`pubsub.SetWriterQueue(w, "", pubsub.ActionMetaDataTopic(...))`),
+  with the ActionResponder configuration of the connection (announcement 6,
+  `ua-action-responder`) retained on `<prefix>/<encoding>/action-responder/<responder>`
+  when the request queue has the default form; on a datagram transport on
+  the discovery channel (DiscoveryAddress or shared address), again every
+  DiscoveryAnnounceRate. It answers a DataSetMetaData probe for an Action
+  writer with the ActionMetaData and a PubSubConnections probe also with
+  the ActionResponder. A Requestor gets it with
+  `md, err := requestor.DiscoverAction(ctx, target)` (on a broker with
+  `target.MetaDataAddress`, on a datagram transport by probing its
+  discovery channel; secured like the writer group) and calls with
+  `requestor.CallAction(ctx, md.Apply(target), inputs)`. The request and
+  response DataSetMetaData share Name and ConfigurationVersion (Table 177).
 - **Chunks.** A UADP request larger than `ActionTarget.MaxNetworkMessageSize`
   (default the limit of the transport) and a response larger than the
   MaxNetworkMessageSize of the Responder's writer group go as chunks
@@ -551,10 +568,8 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
   ActionTimeouts in `Status(id).Counters` (writers count what they serve,
   connections what they request or reject).
 
-Not supported: DataSetWriter Actions discovery announcements and the
-ActionMetaData JSON messages, and the MQTT 5.0
-ResponseTopic / CorrelationData properties (the addresses travel in the
-ActionHeader). The server shows a PublishedAction as a PublishedDataSetType
+Not supported: the MQTT 5.0 ResponseTopic / CorrelationData properties
+(the addresses travel in the ActionHeader). The server shows a PublishedAction as a PublishedDataSetType
 object: the nodeset has no PublishedActionType.
 
 ## Interoperating with open62541

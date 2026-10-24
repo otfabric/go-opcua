@@ -5,7 +5,10 @@ package jsonmsg
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math"
+	"slices"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -251,8 +254,10 @@ func MessageType(b []byte) (string, error) {
 
 // DecodeAny decodes a JSON PubSub message of any supported type: it returns
 // a *message.NetworkMessage for "ua-data" (and messages without network
-// message header), "ua-action-request" and "ua-action-response", a *MetaDataMessage for "ua-metadata" and a
-// *StatusMessage for "ua-status". Other types return an
+// message header), "ua-action-request" and "ua-action-response", a
+// *MetaDataMessage for "ua-metadata", a *StatusMessage for "ua-status", an
+// *ActionMetaDataMessage for "ua-action-metadata" and an
+// *ActionResponderMessage for "ua-action-responder". Other types return an
 // [*UnsupportedMessageTypeError].
 func DecodeAny(b []byte, opts *DecodeOptions) (interface{}, error) {
 	if len(b) > opts.maxMessageSize() {
@@ -267,6 +272,210 @@ func DecodeAny(b []byte, opts *DecodeOptions) (interface{}, error) {
 		return DecodeMetaData(b, opts)
 	case MessageTypeStatus:
 		return DecodeStatus(b, opts)
+	case MessageTypeActionMetaData:
+		return DecodeActionMetaData(b, opts)
+	case MessageTypeActionResponder:
+		return DecodeActionResponder(b, opts)
 	}
 	return Decode(b, opts)
+}
+
+// EncodeActionMetaData encodes a "ua-action-metadata" message:
+//
+//	{"MessageId":"..","MessageType":"ua-action-metadata","PublisherId":"..",
+//	 "DataSetWriterId":100,"DataSetWriterName":"..","Timestamp":"..",
+//	 "ActionTargets":[..],"Request":{..},"Response":{..},"ActionMethods":[..]}
+//
+// DataSetWriterName and ActionMethods are omitted when empty, a zero
+// Timestamp is the current time; the structures use the Compact encoding.
+func EncodeActionMetaData(m *ActionMetaDataMessage, opts *EncodeOptions) ([]byte, error) {
+	if m == nil || m.Request == nil || m.Response == nil {
+		return nil, errors.New("pubsub/jsonmsg: action metadata message without Request and Response")
+	}
+	if len(m.ActionMethods) > 0 && len(m.ActionMethods) != len(m.ActionTargets) {
+		return nil, fmt.Errorf("pubsub/jsonmsg: %d ActionMethods for %d ActionTargets", len(m.ActionMethods), len(m.ActionTargets))
+	}
+	if opts == nil {
+		opts = &EncodeOptions{}
+	}
+	e := &encoder{opts: opts}
+	o := e.header(m.MessageID, MessageTypeActionMetaData, m.PublisherID)
+	o.key("DataSetWriterId")
+	e.uint(uint64(m.DataSetWriterID))
+	if m.DataSetWriterName != "" {
+		o.key("DataSetWriterName")
+		e.str(m.DataSetWriterName)
+	}
+	ts := m.Timestamp
+	if ts.IsZero() {
+		ts = time.Now()
+	}
+	o.key("Timestamp")
+	if err := e.value(ts); err != nil {
+		return nil, err
+	}
+	targets := m.ActionTargets
+	if targets == nil {
+		targets = []*ua.ActionTargetDataType{}
+	}
+	o.key("ActionTargets")
+	if err := e.value(targets); err != nil {
+		return nil, err
+	}
+	o.key("Request")
+	if err := e.value(m.Request); err != nil {
+		return nil, err
+	}
+	o.key("Response")
+	if err := e.value(m.Response); err != nil {
+		return nil, err
+	}
+	if len(m.ActionMethods) > 0 {
+		o.key("ActionMethods")
+		if err := e.value(m.ActionMethods); err != nil {
+			return nil, err
+		}
+	}
+	o.end()
+	return e.buf.Bytes(), nil
+}
+
+// DecodeActionMetaData decodes a "ua-action-metadata" message.
+func DecodeActionMetaData(b []byte, opts *DecodeOptions) (*ActionMetaDataMessage, error) {
+	ms, err := topLevel(b, opts, MessageTypeActionMetaData)
+	if err != nil {
+		return nil, err
+	}
+	d := &decoder{opts: opts, co: opts.codecOptions()}
+	out := &ActionMetaDataMessage{}
+	if opts != nil && opts.PublisherID != nil {
+		out.PublisherID = *opts.PublisherID
+	}
+	structure := func(name string, raw json.RawMessage, v any) error {
+		if derr := ua.DecodeJSON(raw, v, d.co...); derr != nil {
+			return errorf("%s: %v", name, derr)
+		}
+		return nil
+	}
+	for _, m := range ms {
+		var n uint64
+		switch m.key {
+		case "MessageId":
+			out.MessageID, err = stringValue(m.val, "MessageId")
+		case "PublisherId":
+			if !isNull(m.val) {
+				out.PublisherID, err = publisherIDValue(m.val)
+			}
+		case "DataSetWriterId":
+			n, err = uintValue(m.val, "DataSetWriterId", math.MaxUint16)
+			out.DataSetWriterID = uint16(n)
+		case "DataSetWriterName":
+			out.DataSetWriterName, err = stringValue(m.val, "DataSetWriterName")
+		case "Timestamp":
+			out.Timestamp, err = timeValue(m.val, "Timestamp", d.co)
+		case "ActionTargets":
+			if !isNull(m.val) {
+				err = structure("ActionTargets", m.val, &out.ActionTargets)
+			}
+		case "Request":
+			if !isNull(m.val) {
+				out.Request = new(ua.DataSetMetaDataType)
+				err = structure("Request", m.val, out.Request)
+			}
+		case "Response":
+			if !isNull(m.val) {
+				out.Response = new(ua.DataSetMetaDataType)
+				err = structure("Response", m.val, out.Response)
+			}
+		case "ActionMethods":
+			if !isNull(m.val) {
+				err = structure("ActionMethods", m.val, &out.ActionMethods)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	switch {
+	case out.Request == nil || out.Response == nil:
+		return nil, errorf("ua-action-metadata message without Request and Response")
+	case len(out.ActionMethods) > 0 && len(out.ActionMethods) != len(out.ActionTargets):
+		return nil, errorf("%d ActionMethods for %d ActionTargets", len(out.ActionMethods), len(out.ActionTargets))
+	case slices.Contains(out.ActionTargets, nil):
+		return nil, errorf("null ActionTarget")
+	}
+	return out, nil
+}
+
+// EncodeActionResponder encodes a "ua-action-responder" message:
+//
+//	{"MessageId":"..","MessageType":"ua-action-responder","PublisherId":"..",
+//	 "Timestamp":"..","Connection":{..}}
+//
+// A zero Timestamp is the current time; Connection uses the Compact
+// encoding.
+func EncodeActionResponder(m *ActionResponderMessage, opts *EncodeOptions) ([]byte, error) {
+	if m == nil || m.Connection == nil {
+		return nil, errors.New("pubsub/jsonmsg: action responder message without Connection")
+	}
+	if opts == nil {
+		opts = &EncodeOptions{}
+	}
+	e := &encoder{opts: opts}
+	o := e.header(m.MessageID, MessageTypeActionResponder, m.PublisherID)
+	ts := m.Timestamp
+	if ts.IsZero() {
+		ts = time.Now()
+	}
+	o.key("Timestamp")
+	if err := e.value(ts); err != nil {
+		return nil, err
+	}
+	o.key("Connection")
+	if err := e.value(m.Connection); err != nil {
+		return nil, err
+	}
+	o.end()
+	return e.buf.Bytes(), nil
+}
+
+// DecodeActionResponder decodes a "ua-action-responder" message.
+func DecodeActionResponder(b []byte, opts *DecodeOptions) (*ActionResponderMessage, error) {
+	ms, err := topLevel(b, opts, MessageTypeActionResponder)
+	if err != nil {
+		return nil, err
+	}
+	d := &decoder{opts: opts, co: opts.codecOptions()}
+	out := &ActionResponderMessage{}
+	if opts != nil && opts.PublisherID != nil {
+		out.PublisherID = *opts.PublisherID
+	}
+	for _, m := range ms {
+		switch m.key {
+		case "MessageId":
+			out.MessageID, err = stringValue(m.val, "MessageId")
+		case "PublisherId":
+			if !isNull(m.val) {
+				out.PublisherID, err = publisherIDValue(m.val)
+			}
+		case "Timestamp":
+			out.Timestamp, err = timeValue(m.val, "Timestamp", d.co)
+		case "Connection":
+			if isNull(m.val) {
+				continue
+			}
+			c := new(ua.PubSubConnectionDataType)
+			if derr := ua.DecodeJSON(m.val, c, d.co...); derr != nil {
+				return nil, errorf("Connection: %v", derr)
+			}
+			out.Connection = c
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	if out.Connection == nil {
+		return nil, errorf("ua-action-responder message without Connection")
+	}
+	return out, nil
 }

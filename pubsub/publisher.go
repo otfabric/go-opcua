@@ -124,8 +124,15 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	pubID := g.conn.pubID
 	announce := p.announceRate(g)
 	var plan []planned
+	var actions []*dataSetWriter
 	mds := map[uint16]*ua.DataSetMetaDataType{}
+	at := time.Now()
 	for _, w := range g.writers {
+		if w.running && w.state == ua.PubSubStateOperational && w.isAction() && announce > 0 && at.Sub(w.metaSentAt) >= announce {
+			// The cyclic ActionMetaData announcement.
+			actions = append(actions, w)
+			w.metaSentAt = at
+		}
 		if !w.running || w.state != ua.PubSubStateOperational || w.isAction() {
 			// Action writers send responses only (action.go).
 			continue
@@ -137,7 +144,12 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 		}
 		plan = append(plan, e)
 	}
+	anns := p.actionAnnouncementsLocked(g, actions, false, at)
+	c, cgen := g.conn, g.conn.gen
 	p.unlock()
+	if len(anns) > 0 {
+		p.sendActionAnnouncements(ctx, c, cgen, anns)
+	}
 	if len(plan) == 0 {
 		return
 	}

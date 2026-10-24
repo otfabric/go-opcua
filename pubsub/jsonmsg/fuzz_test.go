@@ -18,6 +18,8 @@ func FuzzDecode(f *testing.F) {
 		`{"MessageId":"m","MessageType":"ua-metadata","PublisherId":"7","DataSetWriterId":9,"MetaData":{"Name":"ds","Fields":[{"Name":"a","BuiltInType":6}]}}`,
 		`{"MessageType":"ua-status","Status":2,"IsCyclic":true}`,
 		`{"MessageType":"ua-endpoints"}`,
+		`{"MessageId":"m","MessageType":"ua-action-metadata","PublisherId":"7","DataSetWriterId":100,"Timestamp":"2024-01-01T00:00:00Z","ActionTargets":[{"ActionTargetId":1,"Name":"Add"}],"Request":{"Name":"Calc","Fields":[{"Name":"A","BuiltInType":6}]},"Response":{"Name":"Calc"},"ActionMethods":[{"ObjectId":"ns=1;s=Calc","MethodId":"ns=1;s=Add"}]}`,
+		`{"MessageId":"m","MessageType":"ua-action-responder","PublisherId":"7","Timestamp":"2024-01-01T00:00:00Z","Connection":{"Name":"c","WriterGroups":[{"Name":"g","DataSetWriters":[{"Name":"w","DataSetWriterId":100}]}]}}`,
 		`{"MessageId":"m","MessageType":"ua-action-request","PublisherId":"7","Timestamp":"2024-01-01T00:00:00Z","ResponseAddress":"r","CorrelationData":"AQID","RequestorId":"req","TimeoutHint":1500,"Messages":[{"DataSetWriterId":3,"ActionTargetId":1,"RequestId":9,"ActionState":1,"Payload":{"a":{"UaType":6,"Value":1}}}]}`,
 		`{"MessageId":"m","MessageType":"ua-action-response","PublisherId":"7","Timestamp":"2024-01-01T00:00:00Z","RequestorId":"req","Messages":{"DataSetWriterId":3,"ActionTargetId":1,"Status":{"Code":2150891520},"MessageType":"ua-action-response","RequestId":9,"ActionState":"Done_2","Payload":{}}}`,
 	}
