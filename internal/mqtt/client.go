@@ -1068,6 +1068,11 @@ func (c *Client) serve(l *link, br *bufio.Reader) error {
 				err = &protocolError{reason: ReasonPacketTooLarge, err: err}
 			} else {
 				c.log.Warn("mqtt: dropped a packet above the size limit", "error", err)
+				c.lastRecv.Store(time.Now().UnixNano())
+				if err := c.ackDropped(l, err); err != nil {
+					_ = l.conn.Close()
+					return err
+				}
 				continue
 			}
 		} else if errors.Is(err, ErrProtocol) {
@@ -1087,6 +1092,23 @@ func (c *Client) serve(l *link, br *bufio.Reader) error {
 			return err
 		}
 	}
+}
+
+// ackDropped acknowledges a QoS 1 or 2 PUBLISH that was dropped for its
+// size (MQTT 3.1.1): unacknowledged, the broker would keep it in flight
+// for good and, once its in-flight window is full, deliver nothing more.
+func (c *Client) ackDropped(l *link, err error) error {
+	var tl *TooLargeError
+	if !errors.As(err, &tl) || tl.PacketID == 0 {
+		return nil
+	}
+	if tl.QoS == 1 {
+		return c.write(l, &Ack{Kind: TypePuback, PacketID: tl.PacketID})
+	}
+	c.mu.Lock()
+	c.qos2[tl.PacketID] = true // its PUBREL is expected
+	c.mu.Unlock()
+	return c.write(l, &Ack{Kind: TypePubrec, PacketID: tl.PacketID})
 }
 
 func (c *Client) keepAliveLoop(l *link, stop <-chan struct{}) {
