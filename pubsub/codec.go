@@ -5,9 +5,11 @@ package pubsub
 import (
 	"bytes"
 	"errors"
+	"strings"
 
 	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
+	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/pubsub/uadp"
 )
 
@@ -112,6 +114,33 @@ func defaultCodecs(e encoding) codec {
 		return jsonCodec{}
 	}
 	return uadpCodec{}
+}
+
+// messageEncoding returns the encoding of a received message: the one its
+// MQTT 5.0 Content Type names (Part 14 §7.3.4.9), else what the payload
+// looks like.
+func messageEncoding(m *transport.Message) (encoding, error) {
+	switch ct, _, _ := strings.Cut(m.ContentType, ";"); strings.ToLower(strings.TrimSpace(ct)) {
+	case transport.ContentTypeJSON:
+		return encJSON, nil
+	case transport.ContentTypeUADP:
+		return encUADP, nil
+	case transport.ContentTypeJSONGzip:
+		return 0, errCompressedJSON
+	}
+	return payloadEncoding(m.Payload), nil
+}
+
+// errCompressedJSON is the decode error of gzip compressed JSON messages
+// (Part 14 §7.3.4.9.1), which are not supported.
+var errCompressedJSON = errors.New("pubsub: gzip compressed JSON messages (" + transport.ContentTypeJSONGzip + ") are not supported")
+
+// contentType is the MIME type of the NetworkMessages of an encoding.
+func (e encoding) contentType() string {
+	if e == encJSON {
+		return transport.ContentTypeJSON
+	}
+	return transport.ContentTypeUADP
 }
 
 // payloadEncoding guesses the mapping of a received payload: JSON messages

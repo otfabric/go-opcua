@@ -326,14 +326,15 @@ func TestFuncAdaptersAndTransportConfig(t *testing.T) {
 	url := memURL(t)
 	cfgs := make(chan transport.Config, 1)
 	c := memConnection("c", url, nil)
-	c.ConnectionProperties = []*ua.KeyValuePair{{Key: &ua.QualifiedName{Name: "k"}, Value: ua.MustVariant("v")}, nil, {Key: &ua.QualifiedName{Name: "n"}, Value: ua.MustVariant(int32(1))}}
+	c.ConnectionProperties = []*ua.KeyValuePair{{Key: &ua.QualifiedName{Name: "k"}, Value: ua.MustVariant("v")}, nil, {Key: &ua.QualifiedName{Name: "n"}, Value: ua.MustVariant(int32(1))},
+		{Key: &ua.QualifiedName{Name: "b"}, Value: ua.MustVariant(true)}, {Key: &ua.QualifiedName{Name: "f"}, Value: ua.MustVariant(1.5)}}
 	start(t, NewConfiguration(nil, c), WithTransportConfig(func(conn *ua.PubSubConnectionDataType, cfg *transport.Config) {
 		cfg.Username = "u"
 		cfgs <- *cfg
 	}))
 	got := <-cfgs
 	require.Equal(t, "u", got.Username)
-	require.Equal(t, map[string]string{"k": "v"}, got.Properties)
+	require.Equal(t, map[string]string{"k": "v", "n": "1", "b": "true"}, got.Properties, "integers and Booleans as text, other types left out")
 	require.Equal(t, url, got.URL)
 	require.Empty(t, got.ClientID, "the connection name is no MQTT client identifier")
 }

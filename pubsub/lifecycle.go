@@ -123,15 +123,7 @@ func (p *PubSub) transportConfig(c *connection) transport.Config {
 		Logger:     p.log,
 	}
 	if len(c.cfg.ConnectionProperties) > 0 {
-		cfg.Properties = map[string]string{}
-		for _, kv := range c.cfg.ConnectionProperties {
-			if kv == nil || kv.Key == nil {
-				continue
-			}
-			if s, ok := variantValue(kv.Value).(string); ok {
-				cfg.Properties[kv.Key.Name] = s
-			}
-		}
+		cfg.Properties = connectionProperties(c.cfg.ConnectionProperties)
 	}
 	for _, f := range p.opts.transportConfig {
 		f(c.cfg, &cfg)
