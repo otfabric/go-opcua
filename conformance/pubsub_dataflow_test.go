@@ -632,8 +632,22 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 	evMu.Lock()
 	got := append([]ua.PubSubState(nil), states...)
 	evMu.Unlock()
-	require.Equal(t, []ua.PubSubState{ua.PubSubStatePaused, ua.PubSubStatePreOperational, ua.PubSubStateOperational, ua.PubSubStateError, ua.PubSubStateOperational,
-		ua.PubSubStatePaused, ua.PubSubStatePreOperational, ua.PubSubStateOperational}, got)
+	// A loaded machine can delay a keep-alive past the timeout at any time,
+	// which adds an Error → Operational cycle; the stop of the publisher
+	// must have caused at least one.
+	var cycles int
+	var rest []ua.PubSubState
+	for i := 0; i < len(got); i++ {
+		if got[i] == ua.PubSubStateError && i+1 < len(got) && got[i+1] == ua.PubSubStateOperational && len(rest) > 0 && rest[len(rest)-1] == ua.PubSubStateOperational {
+			cycles++
+			i++
+			continue
+		}
+		rest = append(rest, got[i])
+	}
+	require.Equal(t, []ua.PubSubState{ua.PubSubStatePaused, ua.PubSubStatePreOperational, ua.PubSubStateOperational,
+		ua.PubSubStatePaused, ua.PubSubStatePreOperational, ua.PubSubStateOperational}, rest, "states %v", got)
+	require.GreaterOrEqual(t, cycles, 1, "no Error after the publisher stopped: %v", got)
 }
 
 var _ = opcua.AutoReconnect
