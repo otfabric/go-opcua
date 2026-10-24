@@ -25,9 +25,15 @@ import (
 const keyCheckInterval = time.Second
 
 // runWriterGroup publishes a writer group every PublishingInterval, starting
-// after its offset, until ctx ends.
-func (p *PubSub) runWriterGroup(ctx context.Context, g *writerGroup, gen uint64) {
+// after its offset once the subscriptions of its connection are in place
+// (ready), until ctx ends.
+func (p *PubSub) runWriterGroup(ctx context.Context, g *writerGroup, gen uint64, ready <-chan struct{}) {
 	defer p.wg.Done()
+	select {
+	case <-ctx.Done():
+		return
+	case <-ready:
+	}
 	first := time.NewTimer(g.offset)
 	select {
 	case <-ctx.Done():
