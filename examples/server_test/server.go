@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/subtle"
 	"crypto/tls"
 	"flag"
 	"log"
@@ -22,6 +23,8 @@ var (
 	certfile = flag.String("cert", "cert.pem", "Path to certificate file")
 	keyfile  = flag.String("key", "key.pem", "Path to PEM Private Key file")
 	gencert  = flag.Bool("gen-cert", true, "Generate a new certificate")
+	user     = flag.String("user", "", "User name accepted for username login (with -password; empty: no username login)")
+	password = flag.String("password", "", "Password of -user")
 )
 
 func main() {
@@ -52,10 +55,24 @@ func main() {
 
 	opts = append(opts,
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
-		server.EnableAuthMode(ua.UserTokenTypeUserName),
-		server.EnableAuthMode(ua.UserTokenTypeCertificate),
 		//		server.EnableAuthWithoutEncryption(), // Dangerous and not recommended, shown for illustration only
 	)
+	// Username login needs a validator: without one the server rejects
+	// every username token. Compare in constant time; a real server checks
+	// a password hash.
+	if *user != "" && *password != "" {
+		opts = append(opts,
+			server.EnableAuthMode(ua.UserTokenTypeUserName),
+			server.WithUsernameValidator(func(u, p string) error {
+				userOK := subtle.ConstantTimeCompare([]byte(u), []byte(*user)) == 1
+				passOK := subtle.ConstantTimeCompare([]byte(p), []byte(*password)) == 1
+				if userOK && passOK {
+					return nil
+				}
+				return ua.StatusBadUserAccessDenied
+			}),
+		)
+	}
 	hostname, err := os.Hostname()
 	if err != nil {
 		log.Fatalf("Error getting host name %v", err)

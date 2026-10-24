@@ -226,6 +226,7 @@ func New(opts ...Option) (*Server, error) {
 	if cfg.accessController == nil {
 		cfg.accessController = DefaultAccessController{}
 	}
+	cfg.warnUnvalidatedAuthModes()
 	// listenAddr controls where the server binds (TCP).  It defaults to the
 	// first endpoint URL, but can be overridden with ListenOn() so that the
 	// server can listen on 0.0.0.0 without advertising that address.

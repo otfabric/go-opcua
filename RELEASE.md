@@ -1,5 +1,33 @@
 # go-opcua Releases
 
+## v1.8.0
+
+**Date:** 2026-10-24
+**Previous release:** v1.7.1
+
+### Summary
+
+Security and robustness release: the server no longer accepts username or issued identity tokens that nobody validated, the secure channel keeps its sequence numbers contiguous when a send fails, and several panics on malformed server responses are now errors. Test coverage of the client, node, secure channel, server and transport code is raised to 93–100% per file.
+
+### Behaviour changes
+
+- **server: username tokens need a validator.** A server with `EnableAuthMode(ua.UserTokenTypeUserName)` and no `WithUsernameValidator` accepted every user name and password. It now rejects them with `Bad_UserAccessDenied`, as it does X.509 user tokens without an `X509UserValidator`. Part 4 leaves the decision to accept a user identity to the server, so this stays within the specification. **Servers that offer username login must register a validator.** The example servers and the integration test server now do; `examples/server_test` takes `-user` and `-password` and offers username login only when both are set.
+- **server: warning for auth modes without a validator.** `server.New` logs a warning for every enabled UserName, Certificate or IssuedToken mode that has no validator, since every token of that type will be rejected.
+- **server: issued tokens need a validator.** A server with `EnableAuthMode(ua.UserTokenTypeIssuedToken)` accepted every IssuedIdentityToken without checking it. The new `WithIssuedTokenValidator` registers a validator that receives the token as the issuer created it (decrypted where the security policy encrypts it); without one, issued tokens are rejected with `Bad_IdentityTokenRejected`, as X.509 user tokens are without an `X509UserValidator`. **Servers that use issued tokens must register a validator.**
+- **uapolicy: AES rejects bad key and IV sizes.** `AES.Encrypt` zero-padded a short key while `Decrypt` did not, and an IV that is not one block long panicked in `cipher.NewCBC*`. Both now return `ErrInvalidSecurityConfig`.
+
+### Fixed
+
+- **uasc:** a request that failed to encode or sign, or was cancelled before a chunk was written, left its response handler behind and used up the sequence numbers of the chunks it never wrote; the peer of a secured channel refuses every chunk after such a gap. The handler is removed and the numbers of unwritten chunks are given back. A chunk whose write failed keeps its number, since part of it may have reached the peer, and an AEAD policy cannot open a chunk that reuses a number. `SendMsgWithContext` did not take the send lock, so concurrent sends could interleave sequence numbers; it does now.
+- **client:** `Node.BrowseName`, `DisplayName`, `AccessLevel` and `UserAccessLevel` panicked on an attribute value of an unexpected type, and `Browse`/`BrowseNext` on a response without exactly one result; they return an error.
+
+### Tests
+
+- Fault and end-to-end tests over real channels and servers: secure channel (every policy, truncated and malformed chunks, sequence gaps, bad signatures, unknown tokens, abort chunks, chunk limits, renewals), client and node APIs, server channel writer, event monitor, historian and PubSub, uacp connections and reverse connect, mDNS sockets (through replaceable OS calls, so no host multicast is needed) and the AES/HMAC/RSA-PSS primitives.
+- Own-package coverage per file: `client.go` 61% → 93%, `node.go` 58% → 99.6%, `uasc/secure_channel.go` 51% → 97%, `uasc/secure_channel_renew.go` 69% → 100%, `server/channel_writer.go` 47% → 94%, `server/event_monitor.go` 73% → 100%, `server/historian.go` 79% → 100%, `server/pubsub.go` 84% → 99%, `uacp/conn.go` 84% → 94%, `uacp/reverse.go` 94% → 96%, `internal/mdns/conn_udp.go` 40% → 100%, `uapolicy/crypto_aes.go`, `crypto_hmac.go`, `crypto_rsapss.go` → 100%.
+
+---
+
 ## v1.7.1
 
 **Date:** 2026-10-24

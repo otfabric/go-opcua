@@ -171,8 +171,14 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	}
 
 	// Validate username/password credentials if the client presented a
-	// UserNameIdentityToken and a validator is configured.
+	// UserNameIdentityToken. Without a validator nobody can check them, so
+	// they are rejected.
 	if uname, ok := sess.identityToken.(*ua.UserNameIdentityToken); ok {
+		if s.srv.cfg.usernameValidator == nil {
+			s.srv.cfg.logger.Warn("ActivateSession username rejected: no UsernameValidator configured",
+				"username", uname.UserName)
+			return nil, ua.StatusBadUserAccessDenied
+		}
 		// On secured channels the password arrives encrypted with the server
 		// certificate (Part 4 §7.41). Decrypt it before validation.
 		password, st := s.decryptUserPassword(sc, sess, uname, prevNonce)
