@@ -94,9 +94,12 @@ func TestPubSub_ActionChunksServerResponder(t *testing.T) {
 				want, _ := psReverse(context.Background(), []*ua.Variant{ua.MustVariant(in)})
 				require.Equal(t, want[0].Value(), res.Outputs[0].Value(), "call %d", i)
 			}
-			after, err := resp.Status(ids[rt.group])
-			require.NoError(t, err)
-			require.Greater(t, after.Counters.ChunksSent, before.Counters.ChunksSent+10, "the big responses are chunked")
+			// The Responder counts the chunks once they are sent, which
+			// may be after the Requestor has the response.
+			require.Eventually(t, func() bool {
+				after, err := resp.Status(ids[rt.group])
+				return err == nil && after.Counters.ChunksSent >= before.Counters.ChunksSent+20
+			}, 5*time.Second, 5*time.Millisecond, "the big responses are chunked")
 		})
 	}
 	rc, err := resp.Status(ids["Responder"])
