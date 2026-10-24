@@ -920,8 +920,19 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 			if item := parseRegisterServer(t, result); !result.Success {
 				t.Fatalf("unregister failed: %+v (serviceResult=%s error=%s)", item, result.ServiceResult, result.Error)
 			}
-			if find(serversOnNetwork(goURL), isRegistered) != nil || slices.Contains(foundServerURIs(goURL), uri) {
-				t.Errorf("%s is still listed after it unregistered", uri)
+			if slices.Contains(foundServerURIs(goURL), uri) {
+				t.Errorf("FindServers still lists %s after it unregistered", uri)
+			}
+			// The mDNS record goes as its goodbye takes effect, a second
+			// after it (RFC 6762 §10.1): a copy of an earlier announcement
+			// the LDS hears after the withdrawal lists it until then.
+			deadline := time.Now().Add(5 * time.Second)
+			for find(serversOnNetwork(goURL), isRegistered) != nil {
+				if time.Now().After(deadline) {
+					t.Errorf("FindServersOnNetwork still lists %q 5 s after it unregistered", mdnsName)
+					break
+				}
+				time.Sleep(100 * time.Millisecond)
 			}
 		})
 	}
