@@ -347,13 +347,18 @@ func TestChaosProxyDropAllWhileConnecting(t *testing.T) {
 			})
 		}
 		p.beforeLink.Store(&hook)
-		c := dialProxy(t, p)
-		_, _ = c.Write([]byte("x"))
-		_ = c.SetReadDeadline(time.Now().Add(proxyWait))
-		if _, err := c.Read(make([]byte, 1)); err == nil {
-			t.Fatalf("refuse %v: read succeeded on a connection dropped while it was set up", refuse)
-		} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
-			t.Fatalf("refuse %v: connection dropped while it was set up was not closed", refuse)
+		// The reset can come before the dial returns (Linux): the dial
+		// fails then, which is as good as a read that fails.
+		if c, err := net.DialTimeout("tcp", p.Addr(), 10*time.Second); err == nil {
+			_, _ = c.Write([]byte("x"))
+			_ = c.SetReadDeadline(time.Now().Add(proxyWait))
+			_, err = c.Read(make([]byte, 1))
+			_ = c.Close()
+			if err == nil {
+				t.Fatalf("refuse %v: read succeeded on a connection dropped while it was set up", refuse)
+			} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				t.Fatalf("refuse %v: connection dropped while it was set up was not closed", refuse)
+			}
 		}
 		waitFor(t, "links gone", func() bool { return p.ActiveLinks() == 0 })
 	}
