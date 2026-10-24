@@ -253,6 +253,21 @@ writes:
 The complete list, with one test case per finding, is `corpusDivergences` in
 `ua/open62541_corpus_test.go`.
 
-Eclipse Milo 1.1.8 has stack-level JSON (Compact and Verbose) and XML
-encoders as well (`opc-ua-stack/encoding-json`, `encoding-xml`); they are not
-part of go-opcua's cross-stack tests yet.
+The interop suite also exchanges encoded values live with the adapters of
+open62541, Eclipse Milo 1.1.8 and UA-.NETStandard 2.0.1, in both directions
+(go-opcua encodes and the peer decodes, and the reverse; ledger rows
+`encoding.json.*` and `encoding.xml.*`, see [INTEROP.md](../INTEROP.md)):
+
+| Peer | JSON Variant | JSON DataValue | XML Variant | XML DataValue |
+|------|:---:|:---:|:---:|:---:|
+| open62541 1.5.9 | ✅ | ✅ | ✅ | — open62541 has no XML DataValue |
+| Eclipse Milo 1.1.8 | ✅ | go-opcua → Milo: — ¹ | ✅ | ✅ |
+| UA-.NETStandard 2.0.1 | ✅ | ✅ | ✅ | ✅ |
+
+¹ Milo decodes a JSON DataValue only in its own form, with the Variant nested
+in `"Value"`; Part 6 1.05 inlines the Variant members. go-opcua reads Milo's
+form.
+
+The UA-.NETStandard `XmlDecoder` reads namespace-qualified elements only: do
+not use `ua.WithoutXMLNamespace` with .NET peers. async-opcua and node-opcua
+offer no Part 6 JSON or XML codec in their adapters.

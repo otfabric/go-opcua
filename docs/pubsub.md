@@ -22,7 +22,10 @@ to variables.
 | Not implemented | Ethernet (`opc.eth://`), AMQP, chunked NetworkMessages, UADP discovery requests, Diagnostics objects, PubSub actions |
 
 Interoperability is tested against open62541 v1.5.9 (see the interop ledger,
-profile `pubsub`). Eclipse Milo 1.1.8 has no PubSub implementation.
+profile `pubsub`), the only peer with PubSub in the interop suite: Eclipse Milo
+1.1.8 and async-opcua 0.19 have no PubSub implementation, PubSub is a commercial
+add-on for node-opcua, and UA-.NETStandard 2.0.1 ships a PubSub runtime that its
+opcua-interop adapter does not drive (not tested).
 
 ## Packages
 
