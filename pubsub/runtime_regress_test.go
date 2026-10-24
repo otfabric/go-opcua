@@ -254,3 +254,41 @@ func TestRegressionCallActionTimeoutWhileSendBlocks(t *testing.T) {
 		t.Fatal("CallAction did not return at its timeout")
 	}
 }
+
+// Regression (-race): the answers to discovery probes and the probes of
+// the readers were sent with p.ctx read without the lock, while Start sets
+// it for a new run.
+func TestRegressionDiscoveryContextRace(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	ds, pds := e2eData(t)
+	pub, err := New(NewConfiguration([]*ua.PublishedDataSetDataType{pds},
+		AttachWriterGroups(memConnection("pub", url, uint16(5)), WriterGroup("wg", 7, time.Hour, DataSetWriter("w", 1, "pds")))),
+		WithDataSource(ds), WithRetryInterval(time.Millisecond),
+		WithDiscovery(DiscoveryOptions{MinInterval: time.Nanosecond, Rate: 1e9, Burst: 1 << 20}))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = pub.Close() })
+	probe := probeBytes(t, &message.DiscoveryRequest{ProbeType: message.ProbeFindApplications}, 5)
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+				bus.inject(url, "", probe)
+			}
+		}
+	}()
+	cid := mustID(t, pub, KindConnection, Root, "pub")
+	for range 30 {
+		ctx, cancel := context.WithCancel(context.Background())
+		require.NoError(t, pub.Start(ctx))
+		waitState(t, pub, cid, ua.PubSubStateOperational)
+		cancel()
+	}
+	close(stop)
+	<-done
+}
