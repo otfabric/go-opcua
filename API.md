@@ -2107,12 +2107,17 @@ func (p *PubSub) AddDataSetWriter(group ComponentID, cfg *ua.DataSetWriterDataTy
 func (p *PubSub) AddDataSetReader(group ComponentID, cfg *ua.DataSetReaderDataType) (ComponentID, error)
 // Remove*, Enable, Disable, State, Status, Components, Component, Lookup,
 // Configuration, SetKeySource, KeySource.
+
+// Part 14 §9.1.11 diagnostics objects: counters, totals, SubError, LiveValues.
+func (p *PubSub) Diagnostics(id ComponentID) (Diagnostics, error)
+func (p *PubSub) ResetDiagnostics(id ComponentID) error
+func (p *PubSub) SetDiagnosticsLevel(id ComponentID, l ua.DiagnosticsLevel) error
 ```
 
 Options: `WithDataSource`, `WithEventSource`, `WithDataSetHandler`,
 `WithTargetWriter`, `WithEventHandler`, `WithKeySource`,
 `WithKeySourceLookup`, `WithTransportConfig`, `WithRetryInterval`,
-`WithLogger`.
+`WithDiagnosticsLevel`, `WithLogger`.
 
 Builders: `NewConfiguration`, `UDPConnection`, `MQTTConnection` (`MappingUADP`,
 `MappingJSON`), `AttachWriterGroups`, `AttachReaderGroups`, `WriterGroup`,
