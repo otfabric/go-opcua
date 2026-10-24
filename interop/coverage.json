@@ -6910,6 +6910,56 @@
       "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
     },
     {
+      "capability": "pubsub.actions",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 implements no PubSub Actions (no ActionHeader, PublishedAction or action-request/response messages) and no PubSubConfiguration CloseAndUpdate; go-opcua’s Actions are tested go-opcua to go-opcua through Mosquitto, the Responder a go-opcua server configured through its PubSubConfiguration file (TestPubSubMQTT_Actions)"
+    },
+    {
+      "capability": "pubsub.actions",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.actions",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 implements no PubSub Actions (no ActionHeader, PublishedAction or action-request/response messages) and no PubSubConfiguration CloseAndUpdate; go-opcua’s Actions are tested go-opcua to go-opcua through Mosquitto, the Responder a go-opcua server configured through its PubSubConfiguration file (TestPubSubMQTT_Actions)"
+    },
+    {
+      "capability": "pubsub.actions",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
       "capability": "pubsub.amqp",
       "direction": "go-client-to-open62541-server",
       "status": "unsupported",

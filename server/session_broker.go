@@ -290,3 +290,16 @@ func (sb *sessionBroker) reapExpired(now time.Time) []*session {
 	}
 	return expired
 }
+
+// hasID reports whether the broker keeps the session with the given
+// SessionId.
+func (sb *sessionBroker) hasID(sessionID *ua.NodeID) bool {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	for _, s := range sb.s {
+		if s.ID.Equal(sessionID) {
+			return true
+		}
+	}
+	return false
+}

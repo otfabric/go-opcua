@@ -2244,6 +2244,20 @@
       "fixture": "baseline"
     },
     {
+      "capability": "pubsub.actions",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 implements no PubSub Actions (no ActionHeader or action messages); go-opcua’s Actions are tested go-opcua to go-opcua through Mosquitto (TestPubSubMQTT_Actions)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.actions",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 implements no PubSub Actions (no ActionHeader or action messages); go-opcua’s Actions are tested go-opcua to go-opcua through Mosquitto (TestPubSubMQTT_Actions)",
+      "fixture": "baseline"
+    },
+    {
       "capability": "pubsub.amqp",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
