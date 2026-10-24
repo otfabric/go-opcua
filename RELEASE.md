@@ -7,12 +7,21 @@
 
 ### Summary
 
-PubSub (Part 14) completes its transport and message model: diagnostics objects in the information model.
+PubSub (Part 14) completes its transport and message model: the Ethernet transport and diagnostics objects in the information model.
 
 ### Added
 
 - **pubsub, server: PubSub diagnostics objects (Part 14 §9.1.11).** `PublishSubscribe.Diagnostics` (PubSubDiagnosticsRootType, i=17409) and a Diagnostics object on every connection, writer group, reader group, DataSetWriter and DataSetReader (PubSubDiagnosticsConnectionType / WriterGroupType / ReaderGroupType / DataSetWriterType / DataSetReaderType), added and removed with the component: DiagnosticsLevel, TotalInformation, TotalError, SubError, the Reset method (through the PubSub authorizer), the state counters by cause (StateError, StateOperationalByMethod / ByParent / FromError, StatePausedByParent, StateDisabledByMethod), SentNetworkMessages, FailedTransmissions, EncryptionErrors, ReceivedNetworkMessages, ReceivedInvalidNetworkMessages, DecryptionErrors and FailedDataSetMessages, each with Active, Classification, DiagnosticsLevel and TimeFirstChange, and the LiveValues (Configured / Operational DataSetWriters and DataSetReaders, ResolvedAddress, MessageSequenceNumber, StatusCode, MajorVersion, MinorVersion, SecurityTokenID, TimeToNextTokenID). Counters and LiveValues above the DiagnosticsLevel of their object do not count and read `Bad_OutOfService`; the optional TimeFirstChange properties of the root object, which the standard nodeset leaves out, are added with their standard NodeIds.
+- **pubsub: Ethernet transport (`opc.eth://`, profile pubsub-eth-uadp).** UADP NetworkMessages directly in Ethernet II frames with EtherType 0xB62C (Part 14 §7.3.3), optionally with an IEEE 802.1Q tag: `opc.eth://<MAC>[:<VID>[.<PCP>]]`. The interface (NetworkInterface) is required; the new builder `pubsub.EthernetConnection(name, url, iface, publisherID)` sets it. A multicast MAC joins the group. A NetworkMessage is at most 1500 bytes or the smaller MTU of the interface, larger ones fail with `transport.ErrMessageTooLarge`. Linux uses `AF_PACKET` raw sockets (CAP_NET_RAW or root), macOS and FreeBSD BPF devices (root or access to `/dev/bpf*`; joining a multicast group needs root on macOS); other systems get `eth.ErrNotSupported`. JSON is not defined over Ethernet and `Validate` rejects it; the server lists the profile in `SupportedTransportProfiles` where it works. go-opcua does no time-scheduled (TSN) sending.
 - **pubsub: `Diagnostics`, `ResetDiagnostics`, `SetDiagnosticsLevel`, `WithDiagnosticsLevel`.** The runtime keeps the Part 14 counters per component next to the cumulative `Counters` of `Status`, which a Reset does not touch; `DiagnosticsCountersOf` lists the counters of a component kind with their classification and level.
+
+### Tests
+
+- Ethernet transport: unit tests for the address grammar, frame building and parsing (fuzzed), receive filtering and the OS layers against replaceable system calls; real-socket tests on the loopback interface and a veth pair, including a publisher / subscriber runtime test with UADP and SignAndEncrypt, which skip without raw access. The new CI job `pubsub-eth` runs them as root and fails instead of skipping (`GO_OPCUA_ETH_REQUIRE`).
+
+### Dependency
+
+- `golang.org/x/sys` is a direct dependency (raw sockets and BPF of the Ethernet transport).
 
 ### Fixed
 
