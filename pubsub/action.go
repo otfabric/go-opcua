@@ -131,6 +131,9 @@ const (
 	// maxActionSenders bounds the transports a connection keeps open to
 	// datagram ResponseAddresses and RequestAddresses.
 	maxActionSenders = 8
+	// actionSendTimeout bounds the sending of a response, which a broker
+	// transport may hold until the broker acknowledges it.
+	actionSendTimeout = 10 * time.Second
 	// actionReplyBuffer is the number of responses a call buffers.
 	actionReplyBuffer = 16
 	// correlationLength is the length of the random CorrelationData of
@@ -680,6 +683,9 @@ func (ex *exchange) stop() {
 
 // actionSend is a response (or a request) ready to be encoded and sent.
 type actionSend struct {
+	// ctx bounds the sending: the call of a request, the run of the
+	// runtime for a response (see sendAction).
+	ctx context.Context
 	c   *connection
 	gen uint64
 	nm  *message.NetworkMessage
@@ -1058,7 +1064,7 @@ func (p *PubSub) responseLocked(c *connection, gen uint64, ex *exchange, now tim
 	} else {
 		nm.MessageID = uuid.NewString()
 	}
-	s := &actionSend{c: c, gen: gen, nm: nm, enc: ex.reply.enc, mode: g.mode, groupID: g.cfg.SecurityGroupID, g: g, w: w, md: md,
+	s := &actionSend{ctx: p.ctx, c: c, gen: gen, nm: nm, enc: ex.reply.enc, mode: g.mode, groupID: g.cfg.SecurityGroupID, g: g, w: w, md: md,
 		topic: ex.reply.topic, dest: ex.reply.dest, msgType: transport.MessageTypeActionResponse, qos: 1}
 	if g.brokerTS != nil {
 		s.qos = max(qosOf(g.brokerTS.RequestedDeliveryGuarantee, 1), 1)
@@ -1085,7 +1091,7 @@ func namedFields(values []*ua.Variant, md *ua.DataSetMetaDataType) []*message.Fi
 
 // actionTransport returns the transport to send an action message on: the
 // connection's, or one to another datagram address. p.mu is not held.
-func (p *PubSub) actionTransport(c *connection, gen uint64, dest string) (transport.Connection, error) {
+func (p *PubSub) actionTransport(ctx context.Context, c *connection, gen uint64, dest string) (transport.Connection, error) {
 	p.lock()
 	if c.gen != gen || c.tc == nil {
 		p.unlock()
@@ -1104,7 +1110,7 @@ func (p *PubSub) actionTransport(c *connection, gen uint64, dest string) (transp
 	cfg := p.transportConfig(c)
 	p.unlock()
 	cfg.URL, cfg.ListenAddress = dest, ""
-	octx, cancel := context.WithTimeout(context.Background(), openTimeout)
+	octx, cancel := context.WithTimeout(ctx, openTimeout)
 	tc, err := transport.Open(octx, cfg)
 	cancel()
 	if err != nil {
@@ -1165,13 +1171,16 @@ func (p *PubSub) encodeAction(s *actionSend) ([]byte, error) {
 // nextActionNonce numbers the secured requests of the Requestor.
 func (p *PubSub) nextActionNonce() uint32 { return p.actNonce.Add(1) }
 
-// sendAction encodes and sends an action message and counts it.
+// sendAction encodes and sends an action message and counts it. The
+// sending ends with s.ctx and, for a response, after actionSendTimeout.
 func (p *PubSub) sendAction(s *actionSend) error {
+	ctx, cancel := context.WithTimeout(s.ctx, actionSendTimeout)
+	defer cancel()
 	b, err := p.encodeAction(s)
 	if err == nil {
 		var tc transport.Connection
-		if tc, err = p.actionTransport(s.c, s.gen, s.dest); err == nil {
-			err = tc.Send(context.Background(), b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
+		if tc, err = p.actionTransport(ctx, s.c, s.gen, s.dest); err == nil {
+			err = tc.Send(ctx, b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
 				ContentType: s.enc.contentType(), MessageType: s.msgType})
 		}
 	}
@@ -1442,7 +1451,7 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 		return fail(err)
 	}
 
-	request := func(state ua.ActionState) *actionSend {
+	request := func(ctx context.Context, state ua.ActionState) *actionSend {
 		now := time.Now()
 		dsm := &message.DataSetMessage{
 			DataSetWriterID: t.DataSetWriterID, Type: message.DataSetMessageActionRequest, Valid: true,
@@ -1465,10 +1474,10 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 				ua.JSONNetworkMessageContentMaskPublisherID
 			nm.MessageID = uuid.NewString()
 		}
-		return &actionSend{c: c, gen: gen, nm: nm, enc: enc, mode: mode, groupID: t.SecurityGroupID,
+		return &actionSend{ctx: ctx, c: c, gen: gen, nm: nm, enc: enc, mode: mode, groupID: t.SecurityGroupID,
 			topic: reqTopic, qos: 1, dest: dest, msgType: transport.MessageTypeActionRequest}
 	}
-	if err := p.sendAction(request(ua.ActionStateExecuting)); err != nil {
+	if err := p.sendAction(request(cctx, ua.ActionStateExecuting)); err != nil {
 		return fail(err)
 	}
 	var tick <-chan time.Time
@@ -1490,7 +1499,7 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 			// Part 14 Table 83: resent while neither Executing nor Done
 			// arrives.
 			if time.Since(heard) >= t.ResendInterval {
-				_ = p.sendAction(request(ua.ActionStateExecuting))
+				_ = p.sendAction(request(cctx, ua.ActionStateExecuting))
 			}
 		case <-call.gone:
 			return fail(nil)
@@ -1500,13 +1509,15 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 	}
 	// Acknowledge the Done response; on a non-reliable transport until the
 	// Responder confirms it.
-	_ = p.sendAction(request(ua.ActionStateIdle))
+	_ = p.sendAction(request(cctx, ua.ActionStateIdle))
 	if t.ResendInterval > 0 {
 		p.lock()
 		if !p.closed && c.gen == gen {
 			released = true // the acknowledgement releases the call
 			p.wg.Add(1)
-			go p.acknowledge(c, gen, call, listen, t.ResendInterval, time.Now().Add(timeout), func() *actionSend { return request(ua.ActionStateIdle) })
+			go p.acknowledge(c, gen, call, listen, t.ResendInterval, time.Now().Add(timeout), func(ctx context.Context) *actionSend {
+				return request(ctx, ua.ActionStateIdle)
+			})
 		}
 		p.unlock()
 	}
@@ -1516,7 +1527,7 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 // acknowledge resends the Idle acknowledgement of a call every interval
 // until the Responder confirms it or the deadline passes, then releases the
 // call.
-func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen string, interval time.Duration, deadline time.Time, idle func() *actionSend) {
+func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen string, interval time.Duration, deadline time.Time, idle func(context.Context) *actionSend) {
 	defer p.wg.Done()
 	defer func() {
 		p.lock()
@@ -1530,10 +1541,10 @@ func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen
 		}
 		p.updateTopics(c)
 	}()
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
 	tk := time.NewTicker(interval)
 	defer tk.Stop()
-	end := time.NewTimer(time.Until(deadline))
-	defer end.Stop()
 	for {
 		select {
 		case r := <-call.ch:
@@ -1541,10 +1552,10 @@ func (p *PubSub) acknowledge(c *connection, gen uint64, call *actionCall, listen
 				return
 			}
 		case <-tk.C:
-			_ = p.sendAction(idle())
+			_ = p.sendAction(idle(ctx))
 		case <-call.gone:
 			return
-		case <-end.C:
+		case <-ctx.Done():
 			return
 		}
 	}

@@ -222,3 +222,35 @@ func TestRegressionActionExchangesEndWithWriter(t *testing.T) {
 		})
 	}
 }
+
+// Regression: the action messages were sent with context.Background: a
+// transport that waits for an acknowledgement (MQTT at QoS 1 during a
+// broker outage) held CallAction beyond its timeout, until the broker came
+// back or the runtime was closed.
+func TestRegressionCallActionTimeoutWhileSendBlocks(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	req := startReal(t, requestorConfig(url))
+	waitRunning(t, req, "Requestor")
+	bus.mu.Lock()
+	bus.blockSend[url] = true
+	bus.mu.Unlock()
+	t.Cleanup(func() {
+		bus.mu.Lock()
+		delete(bus.blockSend, url)
+		bus.mu.Unlock()
+	})
+	tg := calcTarget()
+	tg.Timeout = 100 * time.Millisecond
+	done := make(chan error, 1)
+	go func() {
+		_, err := req.CallAction(context.Background(), tg, int32s(1, 2))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		require.ErrorIs(t, err, ErrActionTimeout)
+	case <-time.After(3 * time.Second):
+		t.Fatal("CallAction did not return at its timeout")
+	}
+}

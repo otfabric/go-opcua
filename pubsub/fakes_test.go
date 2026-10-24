@@ -34,7 +34,11 @@ type memBus struct {
 	maxSize  map[string]int
 	failOpen map[string]int
 	failSend map[string]bool
-	opened   map[string]int
+	// blockSend makes Send block until its context ends or the
+	// connection is closed, like a broker transport waiting for an
+	// acknowledgement during an outage.
+	blockSend map[string]bool
+	opened    map[string]int
 }
 
 type memSent struct {
@@ -55,13 +59,14 @@ type memSub struct {
 }
 
 var bus = &memBus{
-	subs:     map[string][]*memSub{},
-	retained: map[string]map[string][]byte{},
-	sent:     map[string][]memSent{},
-	maxSize:  map[string]int{},
-	failOpen: map[string]int{},
-	failSend: map[string]bool{},
-	opened:   map[string]int{},
+	subs:      map[string][]*memSub{},
+	retained:  map[string]map[string][]byte{},
+	sent:      map[string][]memSent{},
+	maxSize:   map[string]int{},
+	failOpen:  map[string]int{},
+	failSend:  map[string]bool{},
+	blockSend: map[string]bool{},
+	opened:    map[string]int{},
 }
 
 func init() {
@@ -129,6 +134,22 @@ func (c *memConn) Send(ctx context.Context, payload []byte, opts transport.Publi
 	if bus.failSend[c.url] {
 		bus.mu.Unlock()
 		return errors.New("mem: send refused")
+	}
+	if bus.blockSend[c.url] {
+		bus.mu.Unlock()
+		for {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(5 * time.Millisecond):
+			}
+			c.mu.Lock()
+			closed := c.closed
+			c.mu.Unlock()
+			if closed {
+				return errors.New("mem: closed")
+			}
+		}
 	}
 	bus.sent[c.url] = append(bus.sent[c.url], memSent{Topic: opts.Topic, QoS: opts.QoS, Retain: opts.Retain, Payload: append([]byte(nil), payload...), At: time.Now()})
 	if opts.Retain {
