@@ -2230,6 +2230,20 @@
       "fixture": "baseline"
     },
     {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 compresses no PubSub messages (its MQTT transport sends application/json); go-opcua’s compression is tested go-opcua to go-opcua through Mosquitto (TestPubSubMQTT5_GzipJSON)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "Opc.Ua.PubSub 2.0.1 compresses no PubSub messages (its MQTT transport sends application/json); go-opcua’s compression is tested go-opcua to go-opcua through Mosquitto (TestPubSubMQTT5_GzipJSON)",
+      "fixture": "baseline"
+    },
+    {
       "capability": "pubsub.amqp",
       "direction": "go-client-to-dotnet-server",
       "status": "unsupported",
