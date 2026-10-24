@@ -1578,6 +1578,28 @@
       ]
     },
     {
+      "id": "pubsub.uadp.chunk",
+      "title": "UADP chunk NetworkMessages: a WriterGroup MaxNetworkMessageSize below the NetworkMessage size, unsecured and SignAndEncrypt, reassembled by the reader (C→ = go-opcua sends chunks, peer reassembles; →S = peer sends chunks, go-opcua reassembles)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "pubsub.uadp.discovery",
+      "title": "UADP discovery request / response over UDP: DataSetMetaData and DataSetWriterConfiguration (C→ = go-opcua probes, peer publisher answers; →S = peer probes, go-opcua publisher answers)",
+      "profile": "pubsub",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "pubsub.uadp.eth",
       "title": "UADP over raw Ethernet, EtherType 0xB62C (C→ = go-opcua publishes, peer subscribes; →S = peer publishes, go-opcua subscribes)",
       "profile": "pubsub",
