@@ -1,5 +1,57 @@
 # go-opcua Releases
 
+## v1.11.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.10.0
+
+### Summary
+
+PubSub Actions are complete: requests and responses larger than a NetworkMessage go in chunks, PublishedActionMethod targets call Methods of the server, Responders announce their ActionMetaData and Requestors discover it, and a client adds a PublishedAction to a server through the new PubSubConfiguration file object with ReserveIds and CloseAndUpdate (Part 14 §9.1.3.7).
+
+### Added
+
+- **pubsub: chunked Action messages (Part 14 §7.2.4.4.4).** A UADP request larger than `ActionTarget.MaxNetworkMessageSize` (default the limit of the transport) and a response larger than the MaxNetworkMessageSize of the Responder's writer group go as chunks, each with the ActionHeader. The receiver reassembles them within the limits of `WithChunkReassembly` and keeps the chunks of different Requestors and requests apart. JSON Action messages cannot be chunked, so a larger JSON request fails.
+- **pubsub: PublishedActionMethod targets call Methods (§6.2.3.10.4).**
+  - `PublishedActionMethods(name, request, response, targets, methods)` and `ActionMethodOf(object, method)` build the data set, and `Validate` checks one Method per target.
+  - `WithActionMethodCaller` routes the calls. In a server (`server.WithPubSub`) it calls the server's own Methods with the Requestor's inputs.
+  - A handler set with `SetActionHandler` takes precedence. Without a handler or a caller, a target answers Bad_NotImplemented.
+- **pubsub: Action discovery (ActionMetaData and ActionResponder).**
+  - A Responder announces the ActionMetaData of its Action writers (UADP announcement 7, JSON `ua-action-metadata`) when their group becomes Operational. The announcement holds the targets, the request and response DataSetMetaData and the Methods.
+  - On a broker it is retained on the writer's MetaDataQueueName (`ActionMetaDataTopic`), together with the connection's ActionResponder (announcement 6, `ua-action-responder`, `ActionResponderTopic`).
+  - On a datagram transport it goes to the discovery channel every DiscoveryAnnounceRate. The Responder also answers DataSetMetaData and PubSubConnections probes.
+  - `DiscoverAction(ctx, target)` returns the `ActionMetaData`; `md.Apply(target)` completes a target for `CallAction`. The request and response DataSetMetaData share Name and ConfigurationVersion (Table 177). `ActionTarget.MetaDataAddress` is new.
+- **server: the PubSubConfiguration file (§9.1.3.7).** `PublishSubscribe.PubSubConfiguration` holds the configuration as a UABinaryFileDataType with a PubSubConfiguration2DataType Body.
+  - Open accepts Read, Read + Write and Write + EraseExisting. Readers share the file, a writer has it to itself, and handles belong to their session. Read, Write, GetPosition, SetPosition and Close work as for any FileType, and Size, OpenCount and LastModifiedTime are live.
+  - **ReserveIds** hands out WriterGroupIds and DataSetWriterIds from 0x8000–0xFFFF that are unused and not reserved by another session, at most 1024 per session. It also returns the default PublisherId.
+  - **CloseAndUpdate** applies the ElementAdd, ElementMatch, ElementModify and ElementRemove operations on PublishedDataSets, connections, writer and reader groups, writers and readers. Removals run first, then parents before children.
+  - Missing names and ids are assigned. Each element gets a result: Bad_BrowseNameDuplicated, Bad_NoMatch, Bad_NotFound, Bad_InvalidArgument, Bad_NotSupported, or Bad_ConfigurationError for an element without which the result would not be valid.
+  - RequireCompleteUpdate is honoured. The update returns ConfigurationValues and ConfigurationObjects, and the runtime restarts only the components that changed.
+  - Not supported: SubscribedDataSets, SecurityGroups and PubSubKeyPushTargets references. The file's DefaultSecurityKeyServices, ConfigurationProperties and ConfigurationVersion are ignored.
+- **pubsub/remote: the file from a client.** `ReadConfiguration`, `ReserveIDs`, `UpdateConfiguration` and `Ref`.
+
+### Tests
+
+- **Unit, e2e and fuzz:**
+  - chunked requests and responses over UDP and MQTT;
+  - Method targets with handler precedence;
+  - discovery over datagram and broker, plus the UADP and JSON discovery codecs (fuzz seeds included);
+  - the FileType modes, sharing, positions and session handles;
+  - ReserveIds, and every CloseAndUpdate operation and result;
+  - `FuzzPubSubConfigUpdate`: any file with any references leaves a valid configuration.
+- **Chaos:**
+  - `TestChaosActionChunks`: chunked calls, unsecured and SignAndEncrypt, over a network that loses, duplicates, reorders, delays and corrupts chunks, while forged chunks come in.
+  - `TestChaosActionDiscovery`: discovery under forged ActionMetaData.
+  - `TestChaosPubSubConfigurationFile`: sessions read, reserve and update the file concurrently with random and malformed references, abandon handles and drop. Contention gets Bad_NotWritable / Bad_NotReadable, the runtime only ever takes valid configurations, and the handles of closed sessions are freed.
+- **Conformance:**
+  - server Responders with chunks (`TestPubSub_ActionChunksServerResponder`) and with Method targets (`TestPubSub_ActionMethodServerResponder`);
+  - discovery through a broker (`TestPubSub_ActionDiscoveryServerBroker`);
+  - a PublishedActionMethod with its connection, group and writer added through ReserveIds and CloseAndUpdate, then called (`TestPubSub_ActionConfigurationFile`).
+- **Interop:** `TestPubSubMQTT_Actions` runs go-opcua to go-opcua through Eclipse Mosquitto over UADP (chunked) and JSON. A client configures the Responder on a go-opcua server through the PubSubConfiguration file, and a standalone Requestor discovers the Action from the retained ActionMetaData and calls it. No other stack implements PubSub Actions (ledger capability `pubsub.actions`).
+- Two counter checks no longer race: the Responder counts its chunks after its Send returns.
+
+---
+
 ## v1.10.0
 
 **Date:** 2026-10-25
