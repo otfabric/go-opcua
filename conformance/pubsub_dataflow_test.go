@@ -607,12 +607,17 @@ func TestPubSub_KeepAliveAndReceiveTimeout(t *testing.T) {
 	require.Equal(t, int32(2), d.Field("v").Value.Value())
 
 	// The publisher stops: Error after the timeout; it comes back:
-	// Operational.
+	// Operational. The timeouts are counted from here: a loaded machine
+	// can delay a keep-alive past the timeout before.
+	psWaitState(t, sub, rid, ua.PubSubStateOperational)
+	st, err = sub.Status(rid)
+	require.NoError(t, err)
+	timeouts := st.Counters.Timeouts
 	require.NoError(t, pub.Close())
 	psWaitState(t, sub, rid, ua.PubSubStateError)
 	st, err = sub.Status(rid)
 	require.NoError(t, err)
-	require.Equal(t, uint64(1), st.Counters.Timeouts)
+	require.Equal(t, timeouts+1, st.Counters.Timeouts)
 	require.ErrorIs(t, st.LastError, ua.StatusBadTimeout)
 	pub = newPub()
 	t.Cleanup(func() { _ = pub.Close() })

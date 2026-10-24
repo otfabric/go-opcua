@@ -33,6 +33,7 @@ Interop pin update (the suite runs against opcua-interop **v0.9.0**), four new i
 - `chaos/pubsub` `TestParallelStartClose`: the order check no longer spans a reader restart that fell between the runtime processing a data set and calling the handler (the handler runs after the runtime releases its lock); a restart is bounded by the Timestamp of the earlier data set instead of the handler call.
 - The asyncua `monitoreditem.percent-deadband` server case skips as a stack deviation (asyncua 2.1.0 accepts a percent deadband without applying it) instead of failing on the missing adapter feature when the capabilities are required.
 - The channel writer tests start with every in-flight slot free: the writer returns the slot of the setup round trip after the write, which can be after the client got the response (`TestChannelWriterCov_SendAfterClose` found a slot still taken).
+- `TestPubSub_KeepAliveAndReceiveTimeout` counts the receive timeout of the stopped publisher from the moment it stops; a keep-alive delayed past the 300 ms timeout earlier on a loaded machine no longer fails it.
 - `TestCloseSemantics` (UDP transport) checks that no receive loop is left after Close instead of comparing goroutine counts, which other goroutines of the test binary change.
 - `TestOpen62541LDS_GoServerRegisters` waits for the registration event as well as the FindServers listing; the LDS can list the server before the RegisterServer2 response reaches the registrant.
 
