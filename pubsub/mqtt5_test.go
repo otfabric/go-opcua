@@ -90,10 +90,16 @@ func TestMQTT5EndToEnd(t *testing.T) {
 			if mapping == MappingJSON {
 				want = transport.ContentTypeJSON
 			}
-			mu.Lock()
-			defer mu.Unlock()
-			require.Equal(t, seen{ct: want, mt: transport.MessageTypeData, qos: 2}, byTopic["m5/data"])
-			require.Equal(t, seen{ct: want, mt: transport.MessageTypeMetaData, qos: 1, retain: true}, byTopic["m5/meta"])
+			// A JSON reader decodes without the metadata, which may reach
+			// the broker after the first data.
+			get := func(topic string) seen {
+				mu.Lock()
+				defer mu.Unlock()
+				return byTopic[topic]
+			}
+			require.Eventually(t, func() bool { return get("m5/meta") != seen{} }, 5*time.Second, time.Millisecond)
+			require.Equal(t, seen{ct: want, mt: transport.MessageTypeData, qos: 2}, get("m5/data"))
+			require.Equal(t, seen{ct: want, mt: transport.MessageTypeMetaData, qos: 1, retain: true}, get("m5/meta"))
 		})
 	}
 }
