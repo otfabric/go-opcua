@@ -70,6 +70,8 @@ func Decode(b []byte, opts *DecodeOptions) (*message.NetworkMessage, error) {
 		switch t {
 		case MessageTypeData:
 			return nm, d.networkMessage(nm, ms)
+		case MessageTypeActionRequest, MessageTypeActionResponse:
+			return nm, d.actionNetworkMessage(nm, ms, t)
 		case MessageTypeKeyFrame, MessageTypeDeltaFrame, MessageTypeEvent, MessageTypeKeepAlive:
 			// A DataSetMessage without the network message header.
 			nm.JSONMask |= ua.JSONNetworkMessageContentMaskSingleDataSetMessage
@@ -89,6 +91,9 @@ func Decode(b []byte, opts *DecodeOptions) (*message.NetworkMessage, error) {
 type decoder struct {
 	opts *DecodeOptions
 	co   []ua.CodecOption
+	// action is the DataSetMessage type of the messages of an action
+	// NetworkMessage, 0 for a ua-data message.
+	action message.DataSetMessageType
 }
 
 func (d *decoder) networkMessage(nm *message.NetworkMessage, ms []member) error {
@@ -277,12 +282,18 @@ func (d *decoder) dataSetMessage(nm *message.NetworkMessage, ms []member) (*mess
 				dsm.Type = message.DataSetMessageEvent
 			case MessageTypeKeepAlive:
 				dsm.Type = message.DataSetMessageKeepAlive
+			case actionTypeName(d.action):
+				dsm.Type = d.action
 			default:
 				return nil, &UnsupportedMessageTypeError{MessageType: t}
 			}
 			dsm.JSONMask |= ua.JSONDataSetMessageContentMaskMessageType
 		case "Payload":
 			payload = m.val
+		default:
+			if d.action != 0 {
+				err = d.actionMember(dsm, m)
+			}
 		}
 		if err != nil {
 			return nil, err
