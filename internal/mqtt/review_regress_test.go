@@ -3,8 +3,10 @@
 package mqtt_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net"
 	"sync/atomic"
 	"testing"
@@ -160,6 +162,83 @@ func TestAckOfUnsentPublicationIgnored(t *testing.T) {
 	acks <- &mqtt.Ack{Kind: mqtt.TypePubrec, PacketID: p2.PacketID}
 	acks <- &mqtt.Ack{Kind: mqtt.TypePubcomp, PacketID: p2.PacketID}
 	require.NoError(t, <-second)
+}
+
+// Regression: over MQTT 3.1.1 a QoS 1 or 2 PUBLISH above MaxPacketSize was
+// skipped without an acknowledgement, so the broker kept it in flight
+// forever: after a few of them (the broker's in-flight window) it stopped
+// delivering anything to the client, and redelivered them on reconnect.
+func TestOversizedPublishIsAcknowledged(t *testing.T) {
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	got := make(chan mqtt.Packet, 10)
+	go fakeBroker(t, l, func(_ net.Conn, read func() mqtt.Packet, write func(mqtt.Packet)) {
+		big := make([]byte, 4096)
+		write(&mqtt.Publish{Topic: "a/b", QoS: 1, PacketID: 41, Payload: big})
+		write(&mqtt.Publish{Topic: "a/b", QoS: 2, PacketID: 42, Payload: big})
+		write(&mqtt.Publish{Topic: "a/b", QoS: 0, Payload: big})
+		for p := read(); p != nil; p = read() {
+			got <- p
+			if a, ok := p.(*mqtt.Ack); ok && a.Kind == mqtt.TypePubrec {
+				write(&mqtt.Ack{Kind: mqtt.TypePubrel, PacketID: a.PacketID})
+			}
+		}
+	})
+	in := newInbox()
+	dial(t, mqtt.Options{Server: "mqtt://" + l.Addr().String(), MaxPacketSize: 1024, DefaultHandler: in.handle})
+	next := func() *mqtt.Ack {
+		select {
+		case p := <-got:
+			a, ok := p.(*mqtt.Ack)
+			require.True(t, ok, "got %T", p)
+			return a
+		case <-time.After(5 * time.Second):
+			t.Fatal("no acknowledgement of the oversized PUBLISH")
+			return nil
+		}
+	}
+	require.Equal(t, mqtt.Ack{Kind: mqtt.TypePuback, PacketID: 41}, *next())
+	require.Equal(t, mqtt.Ack{Kind: mqtt.TypePubrec, PacketID: 42}, *next())
+	require.Equal(t, mqtt.Ack{Kind: mqtt.TypePubcomp, PacketID: 42}, *next())
+	in.none(t, 100*time.Millisecond) // dropped all the same
+}
+
+func TestTooLargeErrorPacketID(t *testing.T) {
+	read := func(b []byte, max int) error {
+		_, err := mqtt.ReadPacket(bufioReader(bytes.NewReader(b)), max)
+		return err
+	}
+	pub, err := mqtt.Encode(&mqtt.Publish{Topic: "a/b", QoS: 2, PacketID: 9, Payload: make([]byte, 100)})
+	require.NoError(t, err)
+	var tl *mqtt.TooLargeError
+	require.ErrorAs(t, read(pub, 50), &tl)
+	require.ErrorIs(t, tl, mqtt.ErrTooLarge)
+	require.Equal(t, mqtt.TooLargeError{Size: len(pub) - 2, Limit: 50, Type: mqtt.TypePublish, QoS: 2, PacketID: 9}, *tl)
+	require.Contains(t, tl.Error(), "bytes, limit 50")
+	// The stream goes on after the skipped packet.
+	br := bufioReader(bytes.NewReader(append(append([]byte{}, pub...), 0xd0, 0)))
+	_, err = mqtt.ReadPacket(br, 50)
+	require.ErrorIs(t, err, mqtt.ErrTooLarge)
+	p, err := mqtt.ReadPacket(br, 50)
+	require.NoError(t, err)
+	require.Equal(t, mqtt.TypePingresp, p.Type())
+
+	// QoS 0, other packets and a topic longer than the packet: no identifier.
+	pub0, err := mqtt.Encode(&mqtt.Publish{Topic: "a/b", Payload: make([]byte, 100)})
+	require.NoError(t, err)
+	require.ErrorAs(t, read(pub0, 50), &tl)
+	require.Zero(t, tl.PacketID)
+	bogus := []byte{0x32, 6, 0xff, 0xff, 1, 2, 3, 4}
+	require.ErrorAs(t, read(bogus, 5), &tl)
+	require.Zero(t, tl.PacketID)
+	sub := []byte{0x90, 10, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0}
+	require.ErrorAs(t, read(sub, 5), &tl)
+	require.Zero(t, tl.PacketID)
+	// Truncated: the stream ends.
+	for _, n := range []int{3, 5, 8, 20} {
+		require.ErrorIs(t, read(pub[:n], 50), io.ErrUnexpectedEOF, "%d bytes", n)
+	}
 }
 
 // Regression: Close sent DISCONNECT under the write lock, so with a broker

@@ -465,6 +465,49 @@ func appendVarint(b []byte, n int) []byte {
 // packet has been skipped and the stream is still usable.
 var ErrTooLarge = errors.New("mqtt: packet too large")
 
+// TooLargeError is the error of a skipped packet above the limit; it
+// wraps ErrTooLarge. For a PUBLISH with QoS 1 or 2 it has the packet
+// identifier, so the receiver can still acknowledge it.
+type TooLargeError struct {
+	Size, Limit int
+	Type, QoS   byte
+	PacketID    uint16 // 0 if it is not a PUBLISH with QoS 1 or 2
+}
+
+func (e *TooLargeError) Error() string {
+	return fmt.Sprintf("%v: %d bytes, limit %d", ErrTooLarge, e.Size, e.Limit)
+}
+
+func (e *TooLargeError) Unwrap() error { return ErrTooLarge }
+
+// skip discards the body of a packet above the limit, reading the packet
+// identifier of a PUBLISH with QoS 1 or 2 on the way (§3.3.2).
+func skip(r *bufio.Reader, h byte, n, max int) error {
+	e := &TooLargeError{Size: n, Limit: max, Type: h >> 4, QoS: h >> 1 & 3}
+	left := int64(n)
+	if e.Type == TypePublish && (e.QoS == 1 || e.QoS == 2) && n >= 4 {
+		var b [2]byte
+		if _, err := io.ReadFull(r, b[:]); err != nil {
+			return unexpected(err)
+		}
+		left -= 2
+		if tl := int64(binary.BigEndian.Uint16(b[:])); tl+2 <= left {
+			if _, err := io.CopyN(io.Discard, r, tl); err != nil {
+				return unexpected(err)
+			}
+			if _, err := io.ReadFull(r, b[:]); err != nil {
+				return unexpected(err)
+			}
+			left -= tl + 2
+			e.PacketID = binary.BigEndian.Uint16(b[:])
+		}
+	}
+	if _, err := io.CopyN(io.Discard, r, left); err != nil {
+		return unexpected(err)
+	}
+	return e
+}
+
 // ReadPacket reads one MQTT 3.1.1 packet. Packets with a remaining length
 // above max (if max > 0) are skipped and reported with ErrTooLarge.
 func ReadPacket(r *bufio.Reader, max int) (Packet, error) {
@@ -482,10 +525,7 @@ func ReadPacketVersion(r *bufio.Reader, max int, version byte) (Packet, error) {
 		return nil, err
 	}
 	if max > 0 && n > max {
-		if _, err := io.CopyN(io.Discard, r, int64(n)); err != nil {
-			return nil, unexpected(err)
-		}
-		return nil, fmt.Errorf("%w: %d bytes, limit %d", ErrTooLarge, n, max)
+		return nil, skip(r, h, n, max)
 	}
 	body := make([]byte, n)
 	if _, err := io.ReadFull(r, body); err != nil {
