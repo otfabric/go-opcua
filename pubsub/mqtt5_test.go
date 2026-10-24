@@ -90,6 +90,15 @@ func TestMQTT5EndToEnd(t *testing.T) {
 			if mapping == MappingJSON {
 				want = transport.ContentTypeJSON
 			}
+			// JSON data can be complete before the broker has the
+			// metadata announcement: wait for both publications.
+			require.Eventually(t, func() bool {
+				mu.Lock()
+				defer mu.Unlock()
+				_, data := byTopic["m5/data"]
+				_, meta := byTopic["m5/meta"]
+				return data && meta
+			}, 5*time.Second, time.Millisecond)
 			mu.Lock()
 			defer mu.Unlock()
 			require.Equal(t, seen{ct: want, mt: transport.MessageTypeData, qos: 2}, byTopic["m5/data"])
