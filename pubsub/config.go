@@ -8,6 +8,7 @@ import (
 	"math"
 	"net"
 	"net/netip"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -161,6 +162,18 @@ func connectionProperties(kvs []*ua.KeyValuePair) map[string]string {
 
 // isBroker reports whether a connection uses a broker transport (MQTT,
 // Part 14 §7.3.5, or AMQP, §7.3.4).
+// builtinSchemeProfiles are the transport profiles the URL schemes of the
+// built-in transports implement. Other schemes (transports registered by
+// the application) take any profile.
+var builtinSchemeProfiles = map[string][]string{
+	"opc.udp": {transport.ProfileUDPUADP},
+	"opc.eth": {transport.ProfileEthUADP},
+	"mqtt":    {transport.ProfileMQTTUADP, transport.ProfileMQTTJSON},
+	"mqtts":   {transport.ProfileMQTTUADP, transport.ProfileMQTTJSON},
+	"amqp":    {transport.ProfileAMQPUADP, transport.ProfileAMQPJSON},
+	"amqps":   {transport.ProfileAMQPUADP, transport.ProfileAMQPJSON},
+}
+
 func isBroker(profile, url string) bool {
 	switch profile {
 	case transport.ProfileMQTTJSON, transport.ProfileMQTTUADP, transport.ProfileAMQPJSON, transport.ProfileAMQPUADP:
@@ -460,8 +473,12 @@ func validateConnection(path string, c *ua.PubSubConnectionDataType, pds map[str
 	if !ok {
 		return configErr(path, "Address must be a NetworkAddressUrlDataType with a Url")
 	}
-	if _, err := transport.Scheme(url); err != nil {
+	scheme, err := transport.Scheme(url)
+	if err != nil {
 		return configErr(path, "Address: %v", err)
+	}
+	if ps, ok := builtinSchemeProfiles[strings.ToLower(scheme)]; ok && !slices.Contains(ps, c.TransportProfileURI) {
+		return configErr(path, "Address: a %s URL does not fit the TransportProfileUri %q", scheme, c.TransportProfileURI)
 	}
 	if c.TransportProfileURI == transport.ProfileEthUADP {
 		// Part 14 §7.3.3: opc.eth://<host>[:<VID>[.<PCP>]] on the
