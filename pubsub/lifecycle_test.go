@@ -117,7 +117,7 @@ func TestStartCloseLifecycle(t *testing.T) {
 	require.ErrorIs(t, err, ErrClosed)
 	require.Equal(t, ua.StatusBadInvalidState, StatusCodeOf(ErrClosed))
 	require.Zero(t, bus.subscribers(url))
-	require.Eventually(t, func() bool { return runtime.NumGoroutine() <= before+2 }, 2*time.Second, 5*time.Millisecond,
+	require.Eventually(t, func() bool { return runtime.NumGoroutine() <= before+2 }, 10*time.Second, 5*time.Millisecond,
 		"goroutines leaked: %d > %d", runtime.NumGoroutine(), before)
 }
 

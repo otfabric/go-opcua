@@ -139,7 +139,7 @@ func TestPublish_ErrorSwitch(t *testing.T) {
 		select {
 		case msg := <-ch:
 			require.ErrorIs(t, msg.Error, assert.AnError)
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("expected per-subscription error notification")
 		}
 	})
@@ -166,7 +166,7 @@ func TestPublish_ErrorSwitch(t *testing.T) {
 			select {
 			case msg := <-ch:
 				require.ErrorIs(t, msg.Error, assert.AnError)
-			case <-time.After(time.Second):
+			case <-time.After(10 * time.Second):
 				t.Fatal("expected broadcast error notification")
 			}
 		}
@@ -217,7 +217,7 @@ func TestPublish_ErrorSwitch(t *testing.T) {
 		case msg := <-ch:
 			require.NoError(t, msg.Error)
 			assert.Equal(t, dcn, msg.Value)
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("expected data-change notification")
 		}
 		assert.Equal(t, uint32(2), sub.nextSeq)

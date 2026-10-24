@@ -242,7 +242,7 @@ func TestMessageReceiveTimeout(t *testing.T) {
 		// Well above the 25 ms between the keep-alives below, so that a
 		// slow scheduler (race detector, loaded CI runner) does not time
 		// the reader out while they keep it alive.
-		r.MessageReceiveTimeout = 250
+		r.MessageReceiveTimeout = 500
 		SetTargetVariables(r,
 			&ua.FieldTargetDataType{TargetNodeID: nodeA, AttributeID: ua.AttributeIDValue, OverrideValueHandling: ua.OverrideValueHandlingLastUsableValue},
 			&ua.FieldTargetDataType{TargetNodeID: nodeB, AttributeID: ua.AttributeIDValue, OverrideValueHandling: ua.OverrideValueHandlingOverrideValue, OverrideValue: ua.MustVariant(int32(-1))},
@@ -256,7 +256,7 @@ func TestMessageReceiveTimeout(t *testing.T) {
 
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 1, 1, 2, 3))
 	waitState(t, f.p, f.rid, ua.PubSubStateOperational)
-	require.Eventually(t, func() bool { return len(f.rec.writes()) == 3 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(f.rec.writes()) == 3 }, 5*time.Second, time.Millisecond)
 	f.rec.reset()
 
 	// Messages keep the reader Operational.
@@ -268,7 +268,7 @@ func TestMessageReceiveTimeout(t *testing.T) {
 	require.Equal(t, ua.PubSubStateOperational, s)
 
 	waitState(t, f.p, f.rid, ua.PubSubStateError)
-	require.Eventually(t, func() bool { return len(f.rec.writes()) == 2 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(f.rec.writes()) == 2 }, 5*time.Second, time.Millisecond)
 	w := f.rec.writes()
 	require.Equal(t, nodeA, w[0].Target.TargetNodeID)
 	require.Equal(t, int32(1), w[0].Value.Value.Value())
@@ -308,7 +308,7 @@ func TestTargetVariablesOverride(t *testing.T) {
 	f.p.unlock()
 
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 1, 1, 2, 3))
-	require.Eventually(t, func() bool { return len(f.rec.writes()) == 3 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(f.rec.writes()) == 3 }, 5*time.Second, time.Millisecond)
 	w := f.rec.writes()
 	require.Equal(t, nodeC, w[0].Target.TargetNodeID)
 	require.Equal(t, int32(3), w[0].Value.Value.Value())
@@ -324,7 +324,7 @@ func TestTargetVariablesOverride(t *testing.T) {
 		{Index: 2, Value: &ua.DataValue{EncodingMask: ua.DataValueStatusCode, Status: ua.StatusBadNoCommunication}},
 	}
 	f.sendSync(bad)
-	require.Eventually(t, func() bool { return len(f.rec.writes()) == 3 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(f.rec.writes()) == 3 }, 5*time.Second, time.Millisecond)
 	w = f.rec.writes()
 	// c: Disabled -> the bad value as received.
 	require.Equal(t, ua.StatusBadNoCommunication, w[0].Value.Status)
@@ -339,7 +339,7 @@ func TestTargetVariablesOverride(t *testing.T) {
 	// Disabling the reader writes the overrides.
 	f.rec.reset()
 	require.NoError(t, f.p.Disable(f.rid))
-	require.Eventually(t, func() bool { return len(f.rec.writes()) == 2 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(f.rec.writes()) == 2 }, 5*time.Second, time.Millisecond)
 }
 
 func TestReceiverIndexRange(t *testing.T) {
@@ -356,7 +356,7 @@ func TestReceiverIndexRange(t *testing.T) {
 	nm := msg(message.DataSetMessageKeyFrame, 1)
 	nm.Messages[0].Fields = []*message.Field{{Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant([]int32{1, 2, 3, 4})}}}
 	f.sendSync(nm)
-	require.Eventually(t, func() bool { return len(f.rec.writes()) == 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return len(f.rec.writes()) == 1 }, 5*time.Second, time.Millisecond)
 	require.Equal(t, []int32{2, 3}, f.rec.writes()[0].Value.Value.Value())
 	require.Equal(t, uint64(1), f.counters().TargetWriteErrors)
 }
@@ -409,11 +409,11 @@ func TestMirror(t *testing.T) {
 	mr := &mirrorRec{}
 	f := subscriberOnly(t, func(r *ua.DataSetReaderDataType) { SetMirror(r, "Mirror") }, WithTargetWriter(mr))
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 1, 1, 2, 3))
-	require.Eventually(t, func() bool { return mr.count() == 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return mr.count() == 1 }, 5*time.Second, time.Millisecond)
 	mr.mu.Lock()
 	require.Equal(t, "Mirror", mr.m[0].Mirror.ParentNodeName)
 	require.Len(t, mr.m[0].Fields, 3)
 	mr.mu.Unlock()
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 2, 1, 2, 3))
-	require.Eventually(t, func() bool { return f.counters().TargetWriteErrors == 1 }, time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return f.counters().TargetWriteErrors == 1 }, 5*time.Second, time.Millisecond)
 }

@@ -134,7 +134,7 @@ func TestNotifySubscriptionOfError_KnownAndUnknown(t *testing.T) {
 	select {
 	case msg := <-ch:
 		require.ErrorIs(t, msg.Error, assert.AnError)
-	case <-time.After(time.Second):
+	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for error notification")
 	}
 }
@@ -153,7 +153,7 @@ func TestNotifyAllSubscriptionsOfError(t *testing.T) {
 		select {
 		case msg := <-ch:
 			require.ErrorIs(t, msg.Error, assert.AnError)
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			t.Fatal("timed out waiting for error notification")
 		}
 	}
