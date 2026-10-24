@@ -49,6 +49,9 @@ type PubSub struct {
 	// actNonce the secured action requests.
 	reqSeq   uint16
 	actNonce atomic.Uint32
+	// actSeq numbers the chunked action messages (their
+	// MessageSequenceNumber).
+	actSeq atomic.Uint32
 }
 
 // component is implemented by all components.

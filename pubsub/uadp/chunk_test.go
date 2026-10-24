@@ -415,6 +415,17 @@ func TestReassemblerKeys(t *testing.T) {
 		func(m *message.NetworkMessage) { m.Type = message.NetworkMessageDiscoveryResponse },
 		func(m *message.NetworkMessage) { m.Security = &message.SecurityHeader{Signed: true} },
 		func(m *message.NetworkMessage) { m.UADPMask &^= ua.UADPNetworkMessageContentMaskPublisherID },
+		// Action messages: the requests of two Requestors to one writer,
+		// and the responses to them, do not mix.
+		func(m *message.NetworkMessage) { m.Action = &message.ActionHeader{Type: message.ActionRequest} },
+		func(m *message.NetworkMessage) { m.Action = &message.ActionHeader{Type: message.ActionResponse} },
+		func(m *message.NetworkMessage) {
+			m.Action = &message.ActionHeader{Type: message.ActionRequest, CorrelationData: []byte{1}}
+		},
+		func(m *message.NetworkMessage) {
+			r := message.StringPublisherID("r")
+			m.Action = &message.ActionHeader{Type: message.ActionRequest, RequestorID: &r}
+		},
 	}
 	for _, v := range variants {
 		m := *base

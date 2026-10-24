@@ -528,6 +528,13 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
   messages: the Responder requires the SecurityMode and SecurityGroup of its
   writer group and answers with them, the Requestor sets them in the
   ActionTarget. The JSON mapping has no message security.
+- **Chunks.** A UADP request larger than `ActionTarget.MaxNetworkMessageSize`
+  (default the limit of the transport) and a response larger than the
+  MaxNetworkMessageSize of the Responder's writer group go as chunks
+  (Part 14 §7.2.4.4.4), each with the ActionHeader; the receiver
+  reassembles them with the limits of `WithChunkReassembly`, keeping the
+  chunks of different Requestors and requests apart. JSON action messages
+  cannot be chunked: a larger request fails.
 - **Counters.** ActionRequestsSent, ActionRequestsReceived,
   ActionRequestsRejected, ActionResponsesSent, ActionResponsesReceived and
   ActionTimeouts in `Status(id).Counters` (writers count what they serve,
@@ -535,7 +542,7 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
 
 Not supported: PublishedActionMethod targets bound to server Methods (the
 handlers run instead), DataSetWriter Actions discovery announcements and the
-ActionMetaData JSON messages, chunked action messages, and the MQTT 5.0
+ActionMetaData JSON messages, and the MQTT 5.0
 ResponseTopic / CorrelationData properties (the addresses travel in the
 ActionHeader). The server shows a PublishedAction as a PublishedDataSetType
 object: the nodeset has no PublishedActionType.

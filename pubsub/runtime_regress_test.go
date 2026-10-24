@@ -54,7 +54,8 @@ func TestRegressionJSONActionMessageToReader(t *testing.T) {
 
 // Regression: a chunked UADP message whose reassembled DataSetMessage is an
 // ActionRequest, without ActionHeader, reached processDSM like the JSON
-// messages of TestRegressionJSONActionMessageToReader.
+// messages of TestRegressionJSONActionMessageToReader. It is a decode error,
+// as it is unchunked.
 func TestRegressionChunkedActionDataSetMessageToReader(t *testing.T) {
 	t.Parallel()
 	url := memURL(t)
@@ -98,7 +99,7 @@ func TestRegressionChunkedActionDataSetMessageToReader(t *testing.T) {
 	cid := mustID(t, sub, KindConnection, Root, "sub")
 	require.Eventually(t, func() bool {
 		st, err := sub.Status(cid)
-		return err == nil && st.Counters.ChunkedMessagesReceived == 1
+		return err == nil && st.Counters.DecodeErrors == 1 && st.Counters.ChunksReceived == 1
 	}, 3*time.Second, time.Millisecond)
 }
 

@@ -314,6 +314,11 @@ type ActionTarget struct {
 	// resent while no response arrives within it, and the Idle
 	// acknowledgement until the Responder confirms it (Part 14 Table 83).
 	ResendInterval time.Duration
+	// MaxNetworkMessageSize bounds the request messages: a larger UADP
+	// request is sent as chunks (Part 14 §7.2.4.4.4), a larger JSON request
+	// fails. 0 takes the limit of the transport. The Responder chunks its
+	// responses after the MaxNetworkMessageSize of its writer group.
+	MaxNetworkMessageSize uint32
 }
 
 // ActionResult is the Done response to a call.
@@ -621,10 +626,18 @@ func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *trans
 			return nil
 		},
 	}
+	cd := p.codecs(enc)
 	var nm *message.NetworkMessage
 	var err error
-	if p.protect("decode", func() { nm, err = p.codecs(enc).Decode(m.Payload, opts) }) {
+	if p.protect("decode", func() { nm, err = cd.Decode(m.Payload, opts) }) {
 		err = errDecodePanic
+	}
+	if err == nil && nm.Chunk != nil {
+		// A chunk of a request or response (§7.2.4.4.4), verified on its
+		// own: the message is handled once its chunks are complete.
+		if nm, err = p.reassemble(c, gen, cd, nm, opts, time.Now()); nm == nil && err == nil {
+			return
+		}
 	}
 	if err == nil && nm.Action == nil {
 		err = fmt.Errorf("%w: not an action message", uadp.ErrMalformed)
@@ -729,6 +742,10 @@ type actionSend struct {
 	qos     byte
 	dest    string
 	msgType string
+	// maxSize is the largest NetworkMessage: a larger UADP message is sent
+	// as chunks (Part 14 §7.2.4.4.4), a larger JSON message not at all. 0
+	// takes the limit of the transport.
+	maxSize int
 }
 
 // actionRequests handles a received ActionRequest NetworkMessage.
@@ -1154,7 +1171,7 @@ func (p *PubSub) responseLocked(c *connection, gen uint64, ex *exchange, now tim
 		nm.MessageID = uuid.NewString()
 	}
 	s := &actionSend{ctx: p.ctx, c: c, gen: gen, nm: nm, enc: ex.reply.enc, mode: g.mode, groupID: g.cfg.SecurityGroupID, g: g, w: w, md: md,
-		topic: ex.reply.topic, dest: ex.reply.dest, msgType: transport.MessageTypeActionResponse, qos: 1}
+		topic: ex.reply.topic, dest: ex.reply.dest, msgType: transport.MessageTypeActionResponse, qos: 1, maxSize: int(g.cfg.MaxNetworkMessageSize)}
 	if g.brokerTS != nil {
 		s.qos = max(qosOf(g.brokerTS.RequestedDeliveryGuarantee, 1), 1)
 	}
@@ -1232,7 +1249,7 @@ func (p *PubSub) actionTransport(ctx context.Context, c *connection, gen uint64,
 }
 
 // encodeAction encodes an action message, secured for UADP.
-func (p *PubSub) encodeAction(s *actionSend) ([]byte, error) {
+func (p *PubSub) encodeAction(s *actionSend, maxSize int) ([][]byte, error) {
 	opts := &uadp.EncodeOptions{}
 	if md := s.md; md != nil {
 		opts.MetaData = func(message.PublisherID, uint16, uint16) *ua.DataSetMetaDataType { return md }
@@ -1249,32 +1266,68 @@ func (p *PubSub) encodeAction(s *actionSend) ([]byte, error) {
 			opts.NextNonceSequence = p.nextActionNonce
 		}
 	}
+	cd := p.codecs(s.enc)
 	var b []byte
 	var err error
-	if p.protect("encode", func() { b, err = p.codecs(s.enc).Encode(s.nm, opts) }) {
+	if p.protect("encode", func() { b, err = cd.Encode(s.nm, opts) }) {
 		err = errors.New("pubsub: encoding the action message panicked")
 	}
-	return b, err
+	if err != nil || maxSize <= 0 || len(b) <= maxSize {
+		return [][]byte{b}, err
+	}
+	if s.enc != encUADP {
+		return nil, fmt.Errorf("%w: %v of %d > %d bytes", errTooLarge, s.nm.Action.Type, len(b), maxSize)
+	}
+	// The MessageSequenceNumber of the chunks (§7.2.4.4.4): action
+	// messages carry no DataSetMessage SequenceNumber of their own.
+	nm := *s.nm
+	dsm := *nm.Messages[0]
+	dsm.SequenceNumber = uint32(uint16(p.actSeq.Add(1)))
+	nm.Messages = []*message.DataSetMessage{&dsm}
+	var parts [][]byte
+	if p.protect("encode", func() { parts, err = cd.EncodeChunks(&nm, opts, maxSize) }) {
+		err = errors.New("pubsub: encoding the action message panicked")
+	}
+	return parts, err
 }
 
 // nextActionNonce numbers the secured requests of the Requestor.
 func (p *PubSub) nextActionNonce() uint32 { return p.actNonce.Add(1) }
+
+// actionMaxSize returns the largest action NetworkMessage s may be sent
+// in over tc.
+func actionMaxSize(s *actionSend, tc transport.Connection) int {
+	if s.maxSize > 0 {
+		return s.maxSize
+	}
+	return tc.MaxMessageSize()
+}
 
 // sendAction encodes and sends an action message and counts it. The
 // sending ends with s.ctx and, for a response, after actionSendTimeout.
 func (p *PubSub) sendAction(s *actionSend) error {
 	ctx, cancel := context.WithTimeout(s.ctx, actionSendTimeout)
 	defer cancel()
-	b, err := p.encodeAction(s)
+	var parts [][]byte
+	var size int
+	tc, err := p.actionTransport(ctx, s.c, s.gen, s.dest)
 	if err == nil {
-		var tc transport.Connection
-		if tc, err = p.actionTransport(ctx, s.c, s.gen, s.dest); err == nil {
-			var ct string
-			if b, ct, err = p.body(s.c, tc, s.enc, b); err == nil {
-				err = tc.Send(ctx, b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
-					ContentType: ct, MessageType: s.msgType})
-			}
+		parts, err = p.encodeAction(s, actionMaxSize(s, tc))
+	}
+	for _, b := range parts {
+		if err != nil {
+			break
 		}
+		var ct string
+		if b, ct, err = p.body(s.c, tc, s.enc, b); err == nil {
+			err = tc.Send(ctx, b, transport.PublishOptions{Topic: s.topic, QoS: s.qos,
+				ContentType: ct, MessageType: s.msgType})
+			size += len(b)
+		}
+	}
+	chunks := uint64(0)
+	if len(parts) > 1 {
+		chunks = uint64(len(parts))
 	}
 	p.lock()
 	defer p.unlock()
@@ -1293,15 +1346,18 @@ func (p *PubSub) sendAction(s *actionSend) error {
 		}
 		return err
 	}
+	n := uint64(len(parts))
 	if resp {
 		s.w.ctr.ActionResponsesSent++
-		s.g.ctr.NetworkMessagesSent++
-		s.g.ctr.BytesSent += uint64(len(b))
-		p.count(&s.g.base, CounterSentNetworkMessages, 1)
+		s.g.ctr.NetworkMessagesSent += n
+		s.g.ctr.BytesSent += uint64(size)
+		s.g.ctr.ChunksSent += chunks
+		p.count(&s.g.base, CounterSentNetworkMessages, n)
 	} else {
 		s.c.ctr.ActionRequestsSent++
-		s.c.ctr.NetworkMessagesSent++
-		s.c.ctr.BytesSent += uint64(len(b))
+		s.c.ctr.NetworkMessagesSent += n
+		s.c.ctr.BytesSent += uint64(size)
+		s.c.ctr.ChunksSent += chunks
 	}
 	return nil
 }
@@ -1567,7 +1623,7 @@ func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Va
 			nm.MessageID = uuid.NewString()
 		}
 		return &actionSend{ctx: ctx, c: c, gen: gen, nm: nm, enc: enc, mode: mode, groupID: t.SecurityGroupID,
-			topic: reqTopic, qos: 1, dest: dest, msgType: transport.MessageTypeActionRequest}
+			topic: reqTopic, qos: 1, dest: dest, msgType: transport.MessageTypeActionRequest, maxSize: int(t.MaxNetworkMessageSize)}
 	}
 	if err := p.sendAction(request(cctx, ua.ActionStateExecuting)); err != nil {
 		return fail(err)

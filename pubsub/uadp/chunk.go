@@ -15,7 +15,8 @@ import (
 )
 
 // A chunk NetworkMessage (Part 14 §7.2.4.4.4 in 1.05) carries a piece of one
-// DataSetMessage or of one discovery announcement. It has the headers of a
+// DataSetMessage (an ActionRequest or ActionResponse among them, with the
+// ActionHeader in every chunk) or of one discovery announcement. It has the headers of a
 // NetworkMessage with the chunk bit of ExtendedFlags2; its PayloadHeader, if
 // present, is only the DataSetWriterId of the DataSetMessage (Table 158), and
 // its payload (Table 159), behind the security header, is
@@ -69,8 +70,8 @@ func decodeChunk(data []byte) (*message.Chunk, error) {
 
 // EncodeChunks encodes nm as chunk NetworkMessages of at most maxSize bytes
 // each, security included. nm is a NetworkMessage of type
-// NetworkMessageDataSet with exactly one DataSetMessage, or a discovery
-// announcement; discovery probes are not chunked. Use it for a NetworkMessage
+// NetworkMessageDataSet with exactly one DataSetMessage (an action message
+// too), or a discovery announcement; discovery probes are not chunked. Use it for a NetworkMessage
 // that Encode makes larger than maxSize.
 //
 // The MessageSequenceNumber of the chunks is the low 16 bits of the
@@ -96,6 +97,11 @@ func EncodeChunks(nm *message.NetworkMessage, opts *EncodeOptions, maxSize int) 
 	case message.NetworkMessageDataSet:
 		if len(nm.Messages) != 1 || nm.Messages[0] == nil {
 			return nil, malformed("a chunked NetworkMessage carries one DataSetMessage, not %d", len(nm.Messages))
+		}
+		if nm.Action != nil {
+			if err := checkAction(nm); err != nil {
+				return nil, err
+			}
 		}
 		e := &encoder{nm: nm, opts: opts}
 		if err := e.encodeDataSetMessage(body, nm.Messages[0]); err != nil {
@@ -201,6 +207,9 @@ func DecodeReassembled(header *message.NetworkMessage, payload []byte, opts *Dec
 		}
 		nm.Messages = []*message.DataSetMessage{m}
 		if err := d.decodeDataSetMessage(&nm, m, d.b); err != nil {
+			return nil, err
+		}
+		if err := checkActionMessages(&nm); err != nil {
 			return nil, err
 		}
 	case message.NetworkMessageDiscoveryResponse:
@@ -333,6 +342,12 @@ type reasmKey struct {
 	dsw    uint16
 	mode   ua.MessageSecurityMode
 	seq    uint16
+	// The ActionHeader of an action message: requests of several
+	// Requestors to one writer, and the responses to them, are told
+	// apart by the RequestorId and the CorrelationData.
+	act       message.ActionMessageType
+	requestor pubKey
+	corr      string
 }
 
 type pubUsage struct{ msgs, bytes int }
@@ -380,6 +395,12 @@ func keyOf(nm *message.NetworkMessage) reasmKey {
 	}
 	if nm.Type == message.NetworkMessageDataSet && nm.UADPMask&ua.UADPNetworkMessageContentMaskPayloadHeader != 0 && len(nm.Messages) > 0 && nm.Messages[0] != nil {
 		k.hasDSW, k.dsw = true, nm.Messages[0].DataSetWriterID
+	}
+	if a := nm.Action; a != nil {
+		k.act, k.corr = a.Type, string(a.CorrelationData)
+		if r := a.RequestorID; r != nil {
+			k.requestor = pubKey{has: true, typ: r.Type, num: r.Num, str: r.Str}
+		}
 	}
 	return k
 }
