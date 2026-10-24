@@ -11,7 +11,7 @@ package interop
 // otherwise); peerInteropVersion the release each of them is written against
 // (see requirePinnedVersion). A new adapter starts here and moves to the
 // pinned peers with the release that publishes it; all six peers of
-// opcua-interop v0.10.0 are pinned.
+// opcua-interop v0.10.1 are pinned.
 var (
 	optionalPeerImageEnv = map[string]bool{}
 	peerInteropVersion   = map[string]string{}
