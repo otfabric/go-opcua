@@ -315,3 +315,40 @@ func TestClientToken_NoLifetime(t *testing.T) {
 	defer s.ReleaseTokens()
 	require.Equal(t, []uint32{1, 2}, s.testTokens())
 }
+
+// TestRenewal_SupersededTokenNotRenewed: a token replaced by Renew before its
+// own scheduled renewal fires is not renewed again. Its renewal would open
+// from the sequence number of the superseded token, a number already used on
+// the channel, and peers that check sequence numbers (Part 6 §6.7.2.4; the
+// go-opcua server, opcua-asyncio) close the channel. The successor schedules
+// its own renewal.
+func TestRenewal_SupersededTokenNotRenewed(t *testing.T) {
+	for _, pol := range []covPolicy{covRSA, covAEAD} {
+		t.Run(pol.name, func(t *testing.T) {
+			// A lifetime that outlasts the test: only explicit renewals.
+			p := newCovPair(t, pol, covOpts{tweakClient: func(c *Config) { c.Lifetime = 3_600_000 }})
+			first := p.client.activeInstanceOrNil()
+			require.NotNil(t, first)
+			p.read(t, 2)
+
+			require.NoError(t, p.client.Renew(context.Background()))
+			p.read(t, 2)
+			_, renewed := token(p.client)
+			require.NotEqual(t, first.securityTokenID, renewed)
+
+			// What the scheduled renewal of the first token does when it fires.
+			require.NoError(t, p.client.renew(first))
+			_, tok := token(p.client)
+			require.Equal(t, renewed, tok, "the superseded token was renewed again")
+			p.read(t, 2)
+
+			select {
+			case err := <-p.clientErrs:
+				t.Fatalf("unexpected client error: %v", err)
+			case msg := <-p.srvErrs:
+				t.Fatalf("unexpected server error: %v", msg.Err)
+			default:
+			}
+		})
+	}
+}
