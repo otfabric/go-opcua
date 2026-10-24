@@ -5,6 +5,7 @@ package opcua
 import (
 	"context"
 
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
 )
 
@@ -36,4 +37,32 @@ func (c *Client) TestingConfiguredUserToken() any {
 // TestingSessionConfig returns the session configuration of the client.
 func (c *Client) TestingSessionConfig() *uasc.SessionConfig {
 	return c.cfg.session
+}
+
+// TestingInjectChannelError hands err to the connection monitor as if the
+// secure channel had reported it.
+func (c *Client) TestingInjectChannelError(err error) {
+	c.secureChannelErrors() <- err
+}
+
+// TestingSessionAuthToken returns the authentication token of the active
+// session, nil without one.
+func (c *Client) TestingSessionAuthToken() *ua.NodeID {
+	if s := c.Session(); s != nil {
+		return s.resp.AuthenticationToken
+	}
+	return nil
+}
+
+// TestingSubscriptionGeneration returns the count of subscriptions
+// registered so far.
+func (c *Client) TestingSubscriptionGeneration() uint64 {
+	c.subMux.RLock()
+	defer c.subMux.RUnlock()
+	return c.subGen
+}
+
+// TestingMarkSubscriptionsBrokenSince is markSubscriptionsBrokenSince.
+func (c *Client) TestingMarkSubscriptionsBrokenSince(gen uint64) int {
+	return c.markSubscriptionsBrokenSince(gen)
 }

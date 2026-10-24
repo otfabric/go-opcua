@@ -19,7 +19,7 @@ func TestAwaitResponse_DeliveredErrorWinsOverDisconnect(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		s := &SecureChannel{
 			disconnected: make(chan struct{}),
-			handlers:     map[uint32]chan *MessageBody{},
+			handlers:     map[uint32]pendingRequest{},
 		}
 		ch := make(chan *MessageBody, 1)
 		ch <- &MessageBody{Err: ua.StatusBadSecurityPolicyRejected}
@@ -38,7 +38,7 @@ func TestAwaitResponse_DeliveredResponseWinsOverCancel(t *testing.T) {
 	for i := 0; i < 500; i++ {
 		s := &SecureChannel{
 			disconnected: make(chan struct{}),
-			handlers:     map[uint32]chan *MessageBody{},
+			handlers:     map[uint32]pendingRequest{},
 		}
 		ch := make(chan *MessageBody, 1)
 		ch <- &MessageBody{Err: ua.StatusBadNonceInvalid}

@@ -97,7 +97,9 @@ func subscribe(t *testing.T, c *opcua.Client) uint32 {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
 	ch := make(chan *opcua.PublishNotificationData, 64)
-	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, ch)
+	// A keep-alive every 150 ms: the server answers a Publish request, and the
+	// client sends the next one, at least that often.
+	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond, MaxKeepAliveCount: 3}, ch)
 	require.NoError(t, err)
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -139,6 +141,7 @@ type triggerServer struct {
 	republishOne atomic.Bool  // answer the next Republish with a made-up message
 	createFails  atomic.Bool  // fail CreateSubscription
 	createCalls  atomic.Int32 // failed CreateSubscription calls
+	noSub        atomic.Bool  // answer the next Publish with BadNoSubscription
 }
 
 var triggerCodes = map[string]ua.StatusCode{
@@ -146,7 +149,6 @@ var triggerCodes = map[string]ua.StatusCode{
 	"SessionIdInvalid":       ua.StatusBadSessionIDInvalid,
 	"SubscriptionIdInvalid":  ua.StatusBadSubscriptionIDInvalid,
 	"CertificateInvalid":     ua.StatusBadCertificateInvalid,
-	"NoSubscription":         ua.StatusBadNoSubscription,
 }
 
 func newTriggerServer(t *testing.T) *triggerServer {
@@ -194,7 +196,14 @@ func newTriggerServer(t *testing.T) *triggerServer {
 		}
 		return ts.srv.Load().SubscriptionService.CreateSubscription(ctx, sc, r, reqID)
 	}
+	publish := func(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
+		if ts.noSub.CompareAndSwap(true, false) {
+			return nil, ua.StatusBadNoSubscription
+		}
+		return ts.srv.Load().SubscriptionService.Publish(ctx, sc, r, reqID)
+	}
 	srv, url := newScriptedServer(t, map[uint16]server.Handler{
+		id.PublishRequestEncodingDefaultBinary:               publish,
 		id.ReadRequestEncodingDefaultBinary:                  read,
 		id.TransferSubscriptionsRequestEncodingDefaultBinary: transfer,
 		id.RepublishRequestEncodingDefaultBinary:             republish,
@@ -204,6 +213,11 @@ func newTriggerServer(t *testing.T) *triggerServer {
 	ts.url = url
 	return ts
 }
+
+// noSubscription makes the server answer the next Publish request with
+// BadNoSubscription, as it does when the session has no subscription (only a
+// Publish request gets that status code).
+func (ts *triggerServer) noSubscription() { ts.noSub.Store(true) }
 
 // trigger makes the server fail a Read with the given status code.
 func trigger(t *testing.T, c *opcua.Client, code string) {
@@ -290,7 +304,7 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 	t.Run("no subscription", func(t *testing.T) {
 		rec.reset()
 		before := c.SubscriptionIDs()
-		trigger(t, c, "NoSubscription")
+		ts.noSubscription()
 		// not a connection problem: the subscriptions are recreated, the
 		// connection stays up
 		rec.waitEvent(t, opcua.SubscriptionRecoveryRecreated)
@@ -308,7 +322,7 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 		ts.createFails.Store(true)
 		ts.createCalls.Store(0)
 		rec.reset()
-		trigger(t, c, "NoSubscription")
+		ts.noSubscription()
 		require.Eventually(t, func() bool { return ts.createCalls.Load() >= 3 }, recoveryTimeout, 5*time.Millisecond)
 		_, events := rec.snapshot()
 		require.Empty(t, events, "no recovery while the server refuses")
