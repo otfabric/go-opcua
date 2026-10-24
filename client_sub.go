@@ -734,7 +734,7 @@ func (c *Client) publish(ctx context.Context) error {
 	res, err := c.sendPublishRequest(ctx)
 	stats.RecordError(err)
 	switch {
-	case err != nil && session != c.Session() && staleSessionError(err):
+	case err != nil && (session != c.Session() || session != nil && session == c.leaving.Load()) && staleSessionError(err):
 		// The request was sent in a session the client has left in the
 		// meantime (the application activated another one, or the reconnect
 		// logic replaced it), and the server says that this session is

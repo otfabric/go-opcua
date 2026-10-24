@@ -128,21 +128,11 @@ func (c *churn) remoteDiagWorker(rng *rand.Rand, cl *opcua.Client, stop <-chan s
 			continue
 		}
 		_ = c.wd.Do("remote diagnostics", func() error {
-			diag, err := childNode(ctx, cl, node, "Diagnostics")
-			if err != nil {
+			dn, ok := browseDiagNode(ctx, cl, x.ID, node)
+			if !ok {
 				return nil // removed in between
 			}
-			ctrs, err := childNode(ctx, cl, diag, "Counters")
-			if err != nil {
-				return nil
-			}
-			se, err1 := childNode(ctx, cl, ctrs, "StateError")
-			lvl, err2 := childNode(ctx, cl, diag, "DiagnosticsLevel")
-			te, err3 := childNode(ctx, cl, diag, "TotalError")
-			if err1 != nil || err2 != nil || err3 != nil {
-				return nil
-			}
-			dn := &diagNode{cid: x.ID, diag: diag, nodes: []*ua.NodeID{se, lvl, te}}
+			diag := dn.diag
 			seen.Store(diag.String(), dn)
 			if rng.Intn(4) == 0 {
 				res, err := cl.Call(ctx, &ua.CallMethodRequest{ObjectID: diag, MethodID: ua.NewNumericNodeID(0, id.PubSubDiagnosticsTypeReset)})
@@ -166,26 +156,51 @@ func (c *churn) remoteDiagWorker(rng *rand.Rand, cl *opcua.Client, stop <-chan s
 				rv = append(rv, &ua.ReadValueID{NodeID: n, AttributeID: ua.AttributeIDValue})
 			}
 			res, err := cl.Read(ctx, &ua.ReadRequest{NodesToRead: rv})
-			if err != nil {
-				return nil
-			}
-			reads.Add(1)
-			for i, r := range res.Results {
-				switch r.Status {
-				case ua.StatusOK:
-					if i == 1 {
-						if l, ok := r.Value.Value().(int32); !ok || l < 0 || l > int32(ua.DiagnosticsLevelDebug) {
-							c.sink.Addf("DiagnosticsLevel of %v reads %v", diag, r.Value.Value())
-						}
-					}
-				case ua.StatusBadNodeIDUnknown, ua.StatusBadOutOfService:
-				default:
-					c.sink.Addf("read %v: %v", dn.nodes[i], r.Status)
-				}
+			if err == nil {
+				reads.Add(1)
+				c.checkDiagReads(dn, res.Results)
 			}
 			return nil
 		})
 	}
+}
+
+// checkDiagReads checks the values read of the nodes of dn.
+func (c *churn) checkDiagReads(dn *diagNode, results []*ua.DataValue) {
+	diag := dn.diag
+	for i, r := range results {
+		switch r.Status {
+		case ua.StatusOK:
+			if i == 1 {
+				if l, ok := r.Value.Value().(int32); !ok || l < 0 || l > int32(ua.DiagnosticsLevelDebug) {
+					c.sink.Addf("DiagnosticsLevel of %v reads %v", diag, r.Value.Value())
+				}
+			}
+		case ua.StatusBadNodeIDUnknown, ua.StatusBadOutOfService:
+		default:
+			c.sink.Addf("read %v: %v", dn.nodes[i], r.Status)
+		}
+	}
+}
+
+// browseDiagNode finds the diagnostics object of the component at node and
+// the variables the workers read; false when it is gone.
+func browseDiagNode(ctx context.Context, cl *opcua.Client, cid pubsub.ComponentID, node *ua.NodeID) (*diagNode, bool) {
+	diag, err := childNode(ctx, cl, node, "Diagnostics")
+	if err != nil {
+		return nil, false
+	}
+	ctrs, err := childNode(ctx, cl, diag, "Counters")
+	if err != nil {
+		return nil, false
+	}
+	se, err1 := childNode(ctx, cl, ctrs, "StateError")
+	lvl, err2 := childNode(ctx, cl, diag, "DiagnosticsLevel")
+	te, err3 := childNode(ctx, cl, diag, "TotalError")
+	if err1 != nil || err2 != nil || err3 != nil {
+		return nil, false
+	}
+	return &diagNode{cid: cid, diag: diag, nodes: []*ua.NodeID{se, lvl, te}}, true
 }
 
 // TestChaosDiagnostics resets the diagnostics objects (Part 14 §9.1.11),
