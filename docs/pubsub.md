@@ -2,8 +2,8 @@
 
 OPC UA PubSub sends data from publishers to any number of subscribers without
 sessions: a publisher samples a *DataSet* at a fixed interval and sends it as a
-*NetworkMessage* over UDP or through an MQTT broker, and subscribers pick the
-DataSets they are interested in from what arrives. go-opcua implements both
+*NetworkMessage* over UDP, raw Ethernet or through an MQTT broker, and
+subscribers pick the DataSets they are interested in from what arrives. go-opcua implements both
 sides, standalone (no OPC UA server needed) and inside the server, where
 published fields come from the address space and received fields are written
 to variables.
@@ -11,7 +11,7 @@ to variables.
 | Area | Supported |
 |------|-----------|
 | Message mappings | UADP (binary) and JSON (`ua-data`, `ua-metadata`, `ua-status`) |
-| Transports | UDP unicast and multicast (`opc.udp://`), MQTT 3.1.1 (`mqtt://`, `mqtts://`) with UADP or JSON |
+| Transports | UDP unicast and multicast (`opc.udp://`), Ethernet with UADP (`opc.eth://`, Linux, macOS, FreeBSD), MQTT 3.1.1 (`mqtt://`, `mqtts://`) with UADP or JSON |
 | UADP field encodings | Variant, DataValue, RawData |
 | DataSetMessages | key frames, delta frames, keep-alive, events (PublishedEvents) |
 | Message security | Sign and SignAndEncrypt with PubSub-Aes128-CTR and PubSub-Aes256-CTR (UADP) |
@@ -19,7 +19,7 @@ to variables.
 | Configuration | the standard `ua.PubSubConfigurationDataType`, builders for common setups, runtime add / remove / enable / disable |
 | Information model | `Server/PublishSubscribe` with connections, groups, writers, readers, published data sets, status and the configuration methods |
 | Remote configuration | package `pubsub/remote` calls the PubSub methods of any Part 14 server |
-| Not implemented | Ethernet (`opc.eth://`), AMQP, chunked NetworkMessages, UADP discovery requests, Diagnostics objects, PubSub actions |
+| Not implemented | AMQP, chunked NetworkMessages, UADP discovery requests, Diagnostics objects, PubSub actions |
 
 Interoperability is tested against open62541 v1.5.9 (see the interop ledger,
 profile `pubsub`), the only peer with PubSub in the interop suite: Eclipse Milo
@@ -35,7 +35,7 @@ opcua-interop adapter does not drive (not tested).
 | `pubsub/message` | encoding-independent NetworkMessage / DataSetMessage model |
 | `pubsub/uadp` | UADP message mapping incl. message security |
 | `pubsub/jsonmsg` | JSON message mapping |
-| `pubsub/transport`, `/udp`, `/mqtt` | transport registry and the UDP and MQTT transports |
+| `pubsub/transport`, `/udp`, `/eth`, `/mqtt` | transport registry and the UDP, Ethernet and MQTT transports |
 | `pubsub/security` | security policies, key rings, the key service (SKS logic) |
 | `pubsub/sks` | SKS client: GetSecurityKeys, SetSecurityKeys, a key source that pulls and refreshes |
 | `pubsub/remote` | client helpers for the PublishSubscribe methods of a server |
@@ -115,6 +115,61 @@ Topics are the `QueueName` of the writer (or group) and of the reader;
 publisher sends retained `ua-metadata` messages. `WithTransportConfig` sets
 broker credentials and TLS (`mqtts://`).
 
+## Ethernet
+
+The Ethernet transport (Part 14 §7.3.3, profile
+`http://opcfoundation.org/UA-Profile/Transport/pubsub-eth-uadp`) sends UADP
+NetworkMessages directly as the payload of Ethernet II frames with EtherType
+`0xB62C`, without IP and UDP headers. JSON is not defined over Ethernet.
+
+```go
+conn := pubsub.EthernetConnection("Ethernet", "opc.eth://01-00-5e-00-00-01:100.5", "eth0", uint16(2234))
+```
+
+The address is `opc.eth://<host>[:<VID>[.<PCP>]]`:
+
+| Part | Meaning |
+|------|---------|
+| host | the destination MAC address, six hexadecimal groups separated by hyphens (`01-23-45-67-89-ab`): unicast, multicast or broadcast (`ff-ff-ff-ff-ff-ff`); empty for a connection that only receives. Host names and IP addresses (which the specification allows if they resolve to a MAC address) are not supported. |
+| VID | VLAN identifier, 0 to 4094: frames carry an IEEE 802.1Q tag. VID 0 is a priority tag (no VLAN, only the PCP). |
+| PCP | priority code point of the tag, 0 to 7 (default 0) |
+
+- **Interface.** `NetworkInterface` of the address is required: the frames
+  are sent on that interface with its MAC address as source (the kernel
+  fills it in on macOS and FreeBSD).
+- **Receiving.** A subscriber gets the `0xB62C` frames on the interface sent
+  to its MAC address, to broadcast or, for a multicast URL, to that group,
+  which it joins (`PACKET_ADD_MEMBERSHIP` on Linux, `SIOCADDMULTI` on the
+  BSDs). Frames this host sends are received too, unless
+  `transport.Config.MulticastLoopback` is false. The VLAN tag is not a
+  receive filter (Linux removes it before raw sockets see the frame): to
+  receive one VLAN only, use the VLAN interface (`eth0.100`) and a URL
+  without VID.
+- **Size.** A NetworkMessage is at most 1500 bytes (§7.3.3: a frame is at
+  most 1522 bytes with addresses, VLAN tag, EtherType and FCS), or the MTU of
+  the interface if smaller; on the BSDs a VLAN tag takes 4 bytes of it.
+  Larger messages fail with `transport.ErrMessageTooLarge`. The hardware pads
+  frames below the Ethernet minimum: a receiver sees zero bytes after a
+  NetworkMessage of fewer than 46 bytes.
+- **Privileges.** Linux uses `AF_PACKET` raw sockets and needs
+  `CAP_NET_RAW` (or root): `sudo setcap cap_net_raw+ep ./app`, or
+  `--cap-add NET_RAW` in a container (Docker grants it by default). macOS and
+  FreeBSD use BPF devices (`/dev/bpf*`): root, or read-write access to the
+  devices (the `access_bpf` group of Wireshark's ChmodBPF on macOS). Joining
+  a multicast group needs root on macOS, and macOS hides the MAC address of
+  an interface from processes without privileges: the transport then cannot
+  filter on its own unicast address and accepts every unicast frame the
+  interface delivers. Without access `Open` (or the first `Subscribe`) fails
+  with an error that wraps `os.ErrPermission`.
+- **Operating systems.** Linux, macOS and FreeBSD. On Windows and the other
+  systems `Open` fails with `eth.ErrNotSupported`, and the server lists the
+  profile in `SupportedTransportProfiles` only where it works.
+- **TSN.** go-opcua does no time-scheduled sending: frames leave when the
+  writer group publishes, without `SO_TXTIME`, launch times or traffic
+  classes. PCP marks the frames for the switches; the queueing of the host
+  is up to its configuration (for example a Linux `mqprio` or `taprio`
+  qdisc).
+
 ## In the server
 
 `server.WithPubSub(cfg, opts...)` runs a PubSub runtime inside the server:
@@ -184,3 +239,6 @@ anonymous users) and accepts pushed keys with `srv.EnableSecurityKeyPush`.
   them as a subscriber; it has no events, chunking or discovery messages.
 - Its GetSecurityKeys returns a wrong (negative) TimeToNextKey; go-opcua's
   key rings treat a non-positive TimeToNextKey as KeyLifetime.
+- Over Ethernet, open62541 sends no VLAN tag for VID 0 (go-opcua sends a
+  priority tag) and only accepts MAC addresses (no host names), like
+  go-opcua.
