@@ -22,8 +22,8 @@
 //     announcements; the dotnet client probes a go-opcua server with
 //     WithPubSub, whose runtime answers.
 //
-// Networking as in pubsub_helpers_test.go. The dotnet adapter of the pinned
-// opcua-interop release (v0.9.0) has no PubSub: run with a newer DOTNET_IMAGE.
+// Networking as in pubsub_helpers_test.go. The dotnet adapter has PubSub
+// since opcua-interop v0.10.0.
 
 package interop
 

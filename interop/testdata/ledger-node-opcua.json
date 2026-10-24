@@ -1,5 +1,5 @@
 {
-  "interopVersion": "v0.9.0",
+  "interopVersion": "v0.10.0",
   "peer": {
     "stack": "node-opcua",
     "version": "2.187.12"
