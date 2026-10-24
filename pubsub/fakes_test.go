@@ -38,7 +38,9 @@ type memBus struct {
 	// connection is closed, like a broker transport waiting for an
 	// acknowledgement during an outage.
 	blockSend map[string]bool
-	opened    map[string]int
+	// failSub refuses the subscriptions to a topic.
+	failSub map[string]bool
+	opened  map[string]int
 }
 
 type memSent struct {
@@ -68,6 +70,7 @@ var bus = &memBus{
 	failOpen:  map[string]int{},
 	failSend:  map[string]bool{},
 	blockSend: map[string]bool{},
+	failSub:   map[string]bool{},
 	opened:    map[string]int{},
 }
 
@@ -167,7 +170,10 @@ func (c *memConn) Send(ctx context.Context, payload []byte, opts transport.Publi
 }
 
 func (c *memConn) Subscribe(ctx context.Context, topic string, qos byte, h transport.Handler) (func() error, error) {
-	if strings.Contains(topic, "fail") {
+	bus.mu.Lock()
+	refuse := bus.failSub[topic]
+	bus.mu.Unlock()
+	if strings.Contains(topic, "fail") || refuse {
 		return nil, errors.New("mem: subscribe refused")
 	}
 	s := &memSub{url: c.url, topic: topic, h: h, ch: make(chan *transport.Message, 4096), done: make(chan struct{})}

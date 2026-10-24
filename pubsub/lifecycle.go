@@ -5,6 +5,7 @@ package pubsub
 import (
 	"context"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
@@ -273,6 +274,8 @@ func (p *PubSub) runConnection(ctx context.Context, c *connection, gen uint64, k
 			}
 			close(c.subsCh)
 			c.subsCh = make(chan struct{})
+			// Responder groups wait for their request queue.
+			p.reconcileLocked()
 		}
 		p.unlock()
 	}
@@ -321,9 +324,13 @@ func (p *PubSub) reconcileWriterGroup(g *writerGroup, parentOp bool) {
 		if g.cancel == nil {
 			p.startWriterGroup(g)
 		}
-		if g.mode > ua.MessageSecurityModeNone && !g.keysOK {
+		switch {
+		case g.mode > ua.MessageSecurityModeNone && !g.keysOK:
 			p.setState(&g.base, ua.PubSubStatePreOperational, nil)
-		} else {
+		case !p.actionQueueReady(g):
+			// A Responder is Operational once it hears requests.
+			p.setState(&g.base, ua.PubSubStatePreOperational, nil)
+		default:
 			p.setState(&g.base, ua.PubSubStateOperational, nil)
 		}
 	}
@@ -331,6 +338,25 @@ func (p *PubSub) reconcileWriterGroup(g *writerGroup, parentOp bool) {
 	for _, w := range g.writers {
 		p.reconcileWriter(w, op)
 	}
+}
+
+// actionQueueReady tells whether the connection of a writer group with
+// Action writers is subscribed to where their requests arrive: the
+// QueueName of the group on a broker, the connection address on a datagram
+// transport. A group without Action writers is always ready. p.mu is held.
+func (p *PubSub) actionQueueReady(g *writerGroup) bool {
+	if !slices.ContainsFunc(g.writers, (*dataSetWriter).isAction) {
+		return true
+	}
+	c := g.conn
+	topic := ""
+	if c.broker {
+		if g.brokerTS == nil {
+			return false
+		}
+		topic = g.brokerTS.QueueName
+	}
+	return c.subscribed[topic]
 }
 
 func (p *PubSub) startWriterGroup(g *writerGroup) {
