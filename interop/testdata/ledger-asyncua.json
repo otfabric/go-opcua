@@ -2079,6 +2079,20 @@
       "fixture": "baseline"
     },
     {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.10.1 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.mqtt5.gzip",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop asyncua v0.10.1 reports pubsub.supported=false: asyncua 2.1.0 ships a UADP-over-UDP PubSub module (asyncua.pubsub), but the adapter does not wire it; wire it in the adapter to verify these rows",
+      "fixture": "baseline"
+    },
+    {
       "capability": "pubsub.amqp",
       "direction": "go-client-to-asyncua-server",
       "status": "unsupported",
