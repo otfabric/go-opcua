@@ -129,7 +129,7 @@ type client struct {
 	maxFrame   uint32       // the client's
 	remoteIdle atomic.Int64 // the client's idle-time-out
 	sessions   map[uint16]*session
-	closing    bool
+	closing    bool // the broker ended the connection: it sends nothing more
 	lastSent   atomic.Int64
 	unwritten  atomic.Int64 // frames queued, not written yet
 }
@@ -290,9 +290,11 @@ func (b *Broker) DropConnections() {
 	b.mu.Lock()
 	cs := make([]*client, 0, len(b.clients))
 	for c := range b.clients {
+		c.shutdown()
 		cs = append(cs, c)
 	}
 	b.mu.Unlock()
+	// Closed outside b.mu: closing a TLS connection writes.
 	for _, c := range cs {
 		c.close()
 	}
@@ -305,8 +307,8 @@ func (b *Broker) CloseConnections(e *amqp.Error) {
 	defer b.mu.Unlock()
 	for c := range b.clients {
 		if c.sessions != nil && !c.closing {
-			c.closing = true
 			c.send(0, &amqp.Close{Error: e}, nil)
+			c.shutdown()
 		}
 	}
 }
@@ -500,6 +502,9 @@ func (c *client) serve() {
 		}
 		b.mu.Lock()
 		ok := c.handle(f)
+		if !ok {
+			c.shutdown()
+		}
 		b.mu.Unlock()
 		if !ok {
 			return
@@ -568,6 +573,10 @@ func (c *client) handshake(br *bufio.Reader) bool {
 		}
 	}
 	b.mu.Lock()
+	if c.closing {
+		b.mu.Unlock()
+		return false
+	}
 	c.maxFrame = max(open.MaxFrameSize, amqp.MinMaxFrameSize)
 	c.remoteIdle.Store(int64(time.Duration(open.IdleTimeout) * time.Millisecond))
 	c.sessions = map[uint16]*session{}
@@ -637,6 +646,15 @@ func (c *client) handle(f *amqp.Frame) bool {
 	if f.Type != amqp.FrameAMQP {
 		return false
 	}
+	if _, ok := f.Body.(*amqp.Close); ok {
+		if !c.closing {
+			c.send(0, &amqp.Close{}, nil)
+		}
+		return false
+	}
+	if c.closing {
+		return true // after its close the broker only waits for the client's
+	}
 	if begin, ok := f.Body.(*amqp.Begin); ok {
 		if _, used := c.sessions[f.Channel]; used {
 			return false
@@ -647,12 +665,6 @@ func (c *client) handle(f *amqp.Frame) bool {
 		ch := f.Channel
 		c.send(f.Channel, &amqp.Begin{RemoteChannel: &ch, IncomingWindow: sessionWindow, OutgoingWindow: math.MaxUint32, HandleMax: 1023}, nil)
 		return true
-	}
-	if _, ok := f.Body.(*amqp.Close); ok {
-		if !c.closing {
-			c.send(0, &amqp.Close{}, nil)
-		}
-		return false
 	}
 	s := c.sessions[f.Channel]
 	if s == nil {
@@ -864,7 +876,7 @@ func (b *Broker) dispatch(q *queue) {
 		var to *blink
 		for range q.consumers {
 			q.next = (q.next + 1) % len(q.consumers)
-			if cand := q.consumers[q.next]; cand.credit > uint32(len(cand.backlog)) {
+			if cand := q.consumers[q.next]; !cand.s.c.closing && cand.credit > uint32(len(cand.backlog)) {
 				to = cand
 				break
 			}
@@ -1055,9 +1067,23 @@ func (c *client) cleanup() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	delete(b.clients, c)
+	c.shutdown()
+}
+
+// shutdown ends a connection for the broker: nothing more is sent on it,
+// its links go away and the unsettled messages of its queue consumers go
+// back to their queues. It runs when the connection ends, in the same
+// critical section as what ends it (a drop, a close, a frame that fails),
+// not later when its goroutines wind down: until then the queue would keep
+// dispatching to the dead consumer, and a client that reconnected
+// meanwhile would get the messages after it in the queue first, the ones
+// sent to the dead link only when they went back (and a subscriber
+// discards those older ones by their sequence numbers). b.mu is held.
+func (c *client) shutdown() {
+	c.closing = true
 	for _, s := range c.sessions {
 		for h, l := range s.links {
-			b.dropLink(l)
+			c.b.dropLink(l)
 			delete(s.links, h)
 		}
 	}
