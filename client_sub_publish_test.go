@@ -5,6 +5,7 @@ package opcua
 import (
 	"context"
 	"io"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,9 +16,42 @@ import (
 
 func withPublishHook(t *testing.T, fn func(context.Context, *Client) (*ua.PublishResponse, error)) {
 	t.Helper()
-	prev := publishRequestFn
-	publishRequestFn = fn
-	t.Cleanup(func() { publishRequestFn = prev })
+	prev := publishRequestFn.Swap(&fn)
+	t.Cleanup(func() { publishRequestFn.Store(prev) })
+}
+
+// Regression: the hook was a plain variable. Client.Close does not wait for
+// the publish loop, so the loop of a client an earlier test closed could
+// still read the hook while the next test installed one: a data race that
+// failed whichever test was running.
+func TestPublishHookWhilePublishLoopRuns(t *testing.T) {
+	c, err := NewClient("opc.tcp://example.com:4840")
+	require.NoError(t, err)
+	running, stop, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			_, _ = c.sendPublishRequest(context.Background())
+			if i == 0 {
+				close(running)
+			}
+		}
+	}()
+	<-running
+	hooked := make(chan struct{})
+	var once sync.Once
+	withPublishHook(t, func(context.Context, *Client) (*ua.PublishResponse, error) {
+		once.Do(func() { close(hooked) })
+		return nil, ua.StatusBadTimeout
+	})
+	<-hooked // the loop has read the installed hook
+	close(stop)
+	<-done
 }
 
 func TestPublish_ErrorSwitch(t *testing.T) {
