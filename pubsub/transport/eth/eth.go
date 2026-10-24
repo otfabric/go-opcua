@@ -52,8 +52,10 @@ import (
 	"log/slog"
 	"net"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/goid"
 	"github.com/otfabric/go-opcua/pubsub/transport"
 )
 
@@ -101,6 +103,9 @@ type Conn struct {
 	handlers map[uint64]transport.Handler
 	nextID   uint64
 	wg       sync.WaitGroup
+	// recvID is the goroutine id of the receive goroutine, so a Close
+	// from a handler does not wait for itself.
+	recvID atomic.Uint64
 }
 
 var _ transport.Connection = (*Conn)(nil)
@@ -251,6 +256,7 @@ func (c *Conn) Subscribe(ctx context.Context, _ string, _ byte, h transport.Hand
 
 func (c *Conn) receive(l link) {
 	defer c.wg.Done()
+	c.recvID.Store(goid.ID())
 	buf := make([]byte, readBuffer)
 	var hs []transport.Handler
 	for {
@@ -336,7 +342,8 @@ func (c *Conn) LocalAddr() net.Addr {
 }
 
 // Close closes the links, leaves the multicast group and waits for the
-// receive goroutine to end.
+// receive goroutine to end (unless it is called from a handler, which runs
+// on that goroutine).
 func (c *Conn) Close() error {
 	c.mu.Lock()
 	if c.closed {
@@ -353,6 +360,8 @@ func (c *Conn) Close() error {
 	if recv != nil {
 		errs = append(errs, recv.close())
 	}
-	c.wg.Wait()
+	if goid.ID() != c.recvID.Load() {
+		c.wg.Wait()
+	}
 	return errors.Join(errs...)
 }
