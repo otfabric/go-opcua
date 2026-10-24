@@ -637,6 +637,11 @@ func DecodeVersion(header byte, body []byte, version byte) (Packet, error) {
 			return nil, err
 		}
 		c := &Connect{ProtocolName: r.str(), ProtocolLevel: r.u8()}
+		if r.err == nil && c.ProtocolName == "" {
+			// No version has one (§3.1.2.1). Other names are left to the
+			// receiver, which answers them as an unsupported version.
+			return nil, protoErr("CONNECT without protocol name")
+		}
 		v5 = c.ProtocolLevel >= Version5
 		cf := r.u8()
 		c.KeepAlive = r.u16()
