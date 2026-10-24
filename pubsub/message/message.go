@@ -190,8 +190,35 @@ type NetworkMessage struct {
 	// NetworkMessageDataSet, in the order of the payload header.
 	Messages []*DataSetMessage
 
-	// Discovery holds the body of a discovery NetworkMessage.
+	// Discovery holds the body of a discovery announcement (a
+	// NetworkMessage of type NetworkMessageDiscoveryResponse).
 	Discovery *Discovery
+	// Request holds the body of a discovery probe (a NetworkMessage of
+	// type NetworkMessageDiscoveryRequest).
+	Request *DiscoveryRequest
+
+	// Chunk is set for one chunk of a chunked UADP NetworkMessage
+	// (Part 14 §7.2.4.4.4 in 1.05). Its NetworkMessage carries the headers
+	// of the chunk; the DataSetMessage or the discovery announcement it is
+	// a piece of is decoded once all chunks are reassembled.
+	Chunk *Chunk
+}
+
+// Chunk is the chunk payload of a chunked UADP NetworkMessage (Part 14
+// Table 159 in 1.05): a piece of one DataSetMessage or of one discovery
+// announcement. All chunks of a message except the last one have the same
+// size.
+type Chunk struct {
+	// MessageSequenceNumber identifies the chunked message among the
+	// messages of its writer: the sequence number of the DataSetMessage, or
+	// of the discovery announcement.
+	MessageSequenceNumber uint16
+	// ChunkOffset is the position of Data in the complete message.
+	ChunkOffset uint32
+	// TotalSize is the size of the complete message in bytes.
+	TotalSize uint32
+	// Data is the piece of the message.
+	Data []byte
 }
 
 // FieldEncoding is the encoding of the fields of a UADP DataSetMessage
@@ -289,24 +316,174 @@ type DataSetMessage struct {
 	Fields []*Field
 }
 
-// DiscoveryType is the kind of a UADP discovery NetworkMessage.
+// DiscoveryType is the AnnouncementType of a UADP discovery announcement
+// (Part 14 Table 168 in 1.05).
 type DiscoveryType uint8
 
 const (
 	DiscoveryPublisherEndpoints  DiscoveryType = 1
 	DiscoveryDataSetMetaData     DiscoveryType = 2
 	DiscoveryDataSetWriterConfig DiscoveryType = 3
+	DiscoveryPubSubConnection    DiscoveryType = 4
+	// DiscoveryApplicationInformation announces the ApplicationDescription
+	// or the status of the publisher, see [ApplicationInformation].
+	DiscoveryApplicationInformation DiscoveryType = 5
 )
 
-// Discovery is the body of a discovery NetworkMessage (Part 14 §7.2.2.4).
+func (t DiscoveryType) String() string {
+	switch t {
+	case DiscoveryPublisherEndpoints:
+		return "PublisherEndpoints"
+	case DiscoveryDataSetMetaData:
+		return "DataSetMetaData"
+	case DiscoveryDataSetWriterConfig:
+		return "DataSetWriterConfiguration"
+	case DiscoveryPubSubConnection:
+		return "PubSubConnection"
+	case DiscoveryApplicationInformation:
+		return "ApplicationInformation"
+	}
+	return "DiscoveryType(" + strconv.Itoa(int(t)) + ")"
+}
+
+// DiscoveryLayout is the byte layout of a UADP discovery message. The
+// encoder writes the layout it is given; the decoder recognises both and
+// reports the one it found.
+type DiscoveryLayout uint8
+
+const (
+	// DiscoveryLayoutSpec is the layout of Part 14 §7.2.4.6 in 1.05: a
+	// probe starts with its ProbeType and the InformationType, the
+	// structures of an announcement are encoded as they are.
+	DiscoveryLayoutSpec DiscoveryLayout = 0
+	// DiscoveryLayoutDotNet is the layout of the OPC Foundation .NET stack
+	// 2.x (Opc.Ua.PubSub UadpDiscoveryCoder): a probe has a single type
+	// byte (the InformationType, no ProbeType) followed by the
+	// DataSetWriterIds, every structure of an announcement is preceded by
+	// its length as a UInt32, the PubSubConnection announcement carries
+	// one PubSubConnectionDataType and a StatusCode, and the types
+	// PubSubConnection and ApplicationInformation are numbered 5 and 4.
+	DiscoveryLayoutDotNet DiscoveryLayout = 1
+)
+
+// Discovery is the body of a discovery announcement (Part 14 §7.2.4.6 in
+// 1.05). Which fields are used follows Type.
 type Discovery struct {
 	Type DiscoveryType
-	// SequenceNumber of the announcement.
+	// SequenceNumber of the announcement; it increases by one for every
+	// announcement of a PublisherId.
 	SequenceNumber uint16
-	// DataSetWriterID and MetaData for a DataSetMetaData announcement.
+
+	// DataSetWriterID and MetaData of a DataSetMetaData announcement.
 	DataSetWriterID uint16
 	MetaData        *ua.DataSetMetaDataType
-	StatusCode      ua.StatusCode
+	// StatusCode of a DataSetMetaData, PublisherEndpoints or (in the .NET
+	// layout) PubSubConnection announcement.
+	StatusCode ua.StatusCode
+
+	// Endpoints of a PublisherEndpoints announcement.
+	Endpoints []*ua.EndpointDescription
+
+	// DataSetWriterIDs, WriterGroup and StatusCodes (one per writer id) of
+	// a DataSetWriter configuration announcement. WriterGroup holds only
+	// the DataSetWriters of DataSetWriterIDs.
+	DataSetWriterIDs []uint16
+	WriterGroup      *ua.WriterGroupDataType
+	StatusCodes      []ua.StatusCode
+
+	// Connections of a PubSubConnection announcement.
+	Connections []*ua.PubSubConnectionDataType
+
+	// Application of an ApplicationInformation announcement.
+	Application *ApplicationInformation
+
+	// Layout is the byte layout the announcement is (to be) encoded in.
+	Layout DiscoveryLayout
+}
+
+// ApplicationInformationType selects the content of an ApplicationInformation
+// announcement (Part 14 Table 169 in 1.05).
+type ApplicationInformationType uint16
+
+const (
+	ApplicationInformationDescription ApplicationInformationType = 1
+	ApplicationInformationStatus      ApplicationInformationType = 2
+)
+
+// ApplicationInformation is the body of an ApplicationInformation
+// announcement: the ApplicationDescription with the capabilities of the
+// publisher (Table 171), or its status (Table 173).
+type ApplicationInformation struct {
+	Type ApplicationInformationType
+
+	Description  *ua.ApplicationDescription
+	Capabilities []string
+
+	IsCyclic       bool
+	Status         ua.PubSubState
+	NextReportTime time.Time
+	Timestamp      time.Time
+}
+
+// ProbeType is the kind of a UADP discovery probe (Part 14 Table 178 in 1.05).
+type ProbeType uint8
+
+const (
+	// ProbePublisherInformation asks the publishers for the information
+	// of the InformationType.
+	ProbePublisherInformation ProbeType = 1
+	// ProbeFindApplications asks all applications for their
+	// ApplicationInformation; it has no further fields.
+	ProbeFindApplications ProbeType = 2
+)
+
+// InformationType is what a publisher information probe asks for (Part 14
+// Table 179 in 1.05).
+type InformationType uint8
+
+const (
+	InformationPublisherEndpoints  InformationType = 1
+	InformationDataSetMetaData     InformationType = 2
+	InformationDataSetWriterConfig InformationType = 3
+	InformationWriterGroupConfig   InformationType = 4
+	InformationPubSubConnections   InformationType = 5
+)
+
+func (t InformationType) String() string {
+	switch t {
+	case InformationPublisherEndpoints:
+		return "PublisherEndpoints"
+	case InformationDataSetMetaData:
+		return "DataSetMetaData"
+	case InformationDataSetWriterConfig:
+		return "DataSetWriterConfiguration"
+	case InformationWriterGroupConfig:
+		return "WriterGroupConfiguration"
+	case InformationPubSubConnections:
+		return "PubSubConnections"
+	}
+	return "InformationType(" + strconv.Itoa(int(t)) + ")"
+}
+
+// DiscoveryRequest is the body of a discovery probe (Part 14 §7.2.4.6.12 in
+// 1.05). Which fields are used follows InformationType.
+type DiscoveryRequest struct {
+	ProbeType       ProbeType
+	InformationType InformationType
+	// DataSetWriterIDs of a DataSetMetaData or DataSetWriter configuration
+	// probe (Table 180). Empty asks for all writers.
+	DataSetWriterIDs []uint16
+	// WriterGroupID and IncludeDataSetWriters of a WriterGroup
+	// configuration probe (Table 181).
+	WriterGroupID         uint16
+	IncludeDataSetWriters bool
+	// TransportProfileURIs and IncludeWriterGroups (with
+	// IncludeDataSetWriters) of a PubSubConnections probe (Table 182).
+	TransportProfileURIs []string
+	IncludeWriterGroups  bool
+
+	// Layout is the byte layout the probe is (to be) encoded in.
+	Layout DiscoveryLayout
 }
 
 // MetaDataLookup returns the DataSetMetaData a decoder needs for messages of a
