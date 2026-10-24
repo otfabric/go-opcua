@@ -1338,11 +1338,6 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 	instance.Lock()
 	defer instance.Unlock()
 
-	m, err := instance.newRequestMessage(req, reqID, authToken, timeout)
-	if err != nil {
-		return nil, err
-	}
-
 	var resp chan *MessageBody
 
 	if respRequired {
@@ -1360,15 +1355,32 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 		s.handlersMu.Unlock()
 	}
 
+	// A request that is not sent must not leave its handler behind, nor use
+	// up the sequence numbers of the chunks that were not sent: the peer
+	// refuses every chunk of a secured channel that follows a gap.
+	seq, seqStarted := instance.sequenceNumber, instance.seqStarted
+	fail := func(err error) (<-chan *MessageBody, error) {
+		instance.sequenceNumber, instance.seqStarted = seq, seqStarted
+		if respRequired {
+			s.popHandler(reqID)
+		}
+		return nil, err
+	}
+
+	m, err := instance.newRequestMessage(req, reqID, authToken, timeout)
+	if err != nil {
+		return fail(err)
+	}
+
 	chunks, err := m.EncodeChunks(instance.maxBodySize)
 	if err != nil {
-		return nil, err
+		return fail(err)
 	}
 
 	for i, chunk := range chunks {
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
+			return fail(ctx.Err())
 		default:
 		}
 		if i > 0 { // fix sequence number on subsequent chunks
@@ -1378,16 +1390,17 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 
 		chunk, err = instance.signAndEncrypt(m, chunk)
 		if err != nil {
-			return nil, err
+			return fail(err)
 		}
 
 		// send the message
 		var n int
 		_ = s.c.SetWriteDeadline(time.Now().Add(timeout))
 		if n, err = s.c.Write(chunk); err != nil {
-			return nil, err
+			return fail(err)
 		}
 		_ = s.c.SetWriteDeadline(time.Time{})
+		seq, seqStarted = instance.sequenceNumber, instance.seqStarted
 
 		atomic.AddUint64(&instance.bytesSent, uint64(n))
 		atomic.AddUint32(&instance.messagesSent, 1)
@@ -1417,10 +1430,17 @@ func (s *SecureChannel) SendMsgWithContext(ctx context.Context, instance *channe
 	}
 
 	// we need to get a lock on the sequence number so we are sure to send them in the correct order.
-	// encode the message
+	instance.Lock()
+	defer instance.Unlock()
+
+	// encode the message. If it cannot be encoded nothing is sent, so give
+	// the sequence number back: the numbers on the wire have to stay
+	// contiguous.
+	prevSeq, prevStarted := instance.sequenceNumber, instance.seqStarted
 	m := instance.newMessage(resp, typeID, reqID)
 	b, err := m.Encode()
 	if err != nil {
+		instance.sequenceNumber, instance.seqStarted = prevSeq, prevStarted
 		return err
 	}
 
