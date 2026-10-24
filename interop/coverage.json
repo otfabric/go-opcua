@@ -6704,6 +6704,108 @@
       "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
     },
     {
+      "capability": "pubsub.mqtt5",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestPubSubMQTT5_GoPublishes_Open62541Subscribes",
+      "case": "uadp, json; Mosquitto 2.0.22, open62541 on MQTT 3.1.1",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "pubsub.mqtt5",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.mqtt5",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestPubSubMQTT5_Open62541Publishes_GoSubscribes",
+      "case": "uadp, json; Mosquitto 2.0.22, open62541 on MQTT 3.1.1",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "pubsub.mqtt5",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.amqp",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no AMQP transport (its PubSub transports are UDP, Ethernet and MQTT); go-opcua's AMQP transport is tested go-opcua to go-opcua through RabbitMQ 4 and ActiveMQ Artemis (TestPubSubAMQP_RabbitMQ, TestPubSubAMQP_Artemis)"
+    },
+    {
+      "capability": "pubsub.amqp",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
+      "capability": "pubsub.amqp",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no AMQP transport (its PubSub transports are UDP, Ethernet and MQTT); go-opcua's AMQP transport is tested go-opcua to go-opcua through RabbitMQ 4 and ActiveMQ Artemis (TestPubSubAMQP_RabbitMQ, TestPubSubAMQP_Artemis)"
+    },
+    {
+      "capability": "pubsub.amqp",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "test": "TestPubSub_MiloHasNoPubSub",
+      "fixture": "baseline",
+      "interopVersion": "v0.9.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no PubSub (Part 14) implementation: its artifacts hold only the generated PubSub DataTypes and ObjectType stubs (no NetworkMessage encoder, UDP/MQTT transport, runtime or SKS); the Milo adapter declares pubsub.supported=false and refuses --pubsub-config and codec pubsub-*"
+    },
+    {
       "capability": "pubsub.security.sign",
       "direction": "go-client-to-open62541-server",
       "status": "verified",

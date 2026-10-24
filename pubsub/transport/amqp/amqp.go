@@ -69,6 +69,7 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,6 +93,31 @@ const (
 	ContentTypeUADP = transport.ContentTypeUADP
 	ContentTypeJSON = transport.ContentTypeJSON
 )
+
+// received is the transport.Message of an AMQP message: the content-type
+// says which mapping the payload has (Part 14 B.3.8), the subject is the
+// UAMessageType (Table B.1), and string application-properties are user
+// properties, sorted by name.
+func received(m *iamqp.Message, payload []byte, topic string) *transport.Message {
+	out := &transport.Message{Payload: payload, Topic: topic, Received: time.Now()}
+	if p := m.Properties; p != nil {
+		out.ContentType = string(p.ContentType)
+		if p.Subject != "" {
+			out.UserProperties = append(out.UserProperties, transport.Property{Name: transport.UAMessageTypeProperty, Value: p.Subject})
+		}
+	}
+	names := make([]string, 0, len(m.ApplicationProperties))
+	for k, v := range m.ApplicationProperties {
+		if _, ok := v.(string); ok {
+			names = append(names, k)
+		}
+	}
+	slices.Sort(names)
+	for _, k := range names {
+		out.UserProperties = append(out.UserProperties, transport.Property{Name: k, Value: m.ApplicationProperties[k].(string)})
+	}
+	return out
+}
 
 // ErrNotConnected is returned by a QoS 0 Send while the connection is
 // re-established.
@@ -399,7 +425,7 @@ func (c *Conn) Subscribe(ctx context.Context, topic string, qos byte, h transpor
 			c.log.Debug("pubsub/transport/amqp: dropping oversized message", "address", topic, "size", len(payload))
 			return
 		}
-		h(&transport.Message{Payload: payload, Topic: topic, Received: time.Now()})
+		h(received(m, payload, topic))
 	})
 	if err != nil {
 		return nil, fmt.Errorf("pubsub/transport/amqp: subscribe %q: %w", topic, mapErr(err))

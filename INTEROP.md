@@ -643,10 +643,13 @@ PubSub (Part 14) against open62541 1.5.9 — profile `pubsub` in the ledger, 52 
 | `pubsub.uadp.udp` (Variant, DataValue, RawData), `pubsub.uadp.mqtt`, `pubsub.json.mqtt` | C→O, O→S |
 | `pubsub.uadp.udp-multicast` | C→O, O→S (adapter with `--network host`; Linux only, skipped on macOS) |
 | `pubsub.uadp.eth` (since go-opcua v1.9.0; Variant, SignAndEncrypt) | C→O, O→S (adapter on a Docker bridge network with a named bridge interface; Linux and root only, run by the Interop job `ethernet`, skipped elsewhere) |
+| `pubsub.mqtt5` (since go-opcua v1.9.0; UADP and JSON, go-opcua on MQTT 5.0 with QoS 2, content type and UAMessageType checked by an MQTT 5.0 listener; open62541 on 3.1.1) | C→O, O→S |
 | `pubsub.security.*` (Sign, SignAndEncrypt; PubSub-Aes128-CTR, PubSub-Aes256-CTR; wrong keys and unsecured messages rejected) | C→O, O→S |
 | `pubsub.sks.*` (GetSecurityKeys, SKS pull, SetSecurityKeys push, Add/RemoveSecurityGroup) | C→O, O→S |
 | `pubsub.runtime.*` (go publisher and subscriber, TargetVariables, receive timeout) | C→O, O→S |
 | `pubsub.infomodel.*` (configuration methods, browse, Enable / Disable) | C→O (`pubsub/remote`), O→S (adapter `call` / `browse`) |
+
+AMQP 1.0 (`pubsub.amqp`, since go-opcua v1.9.0): open62541 1.5.9 has no AMQP transport, so the ledger rows are `unsupported`; `TestPubSubAMQP_RabbitMQ` and `TestPubSubAMQP_Artemis` run a go-opcua publisher and subscriber through RabbitMQ 4.1.4 (v2 addresses `/queues/<name>`, queues declared through the management API) and ActiveMQ Artemis 2.42.0 (auto-created anycast addresses through the `queue` capability), both with SASL PLAIN: UADP unsecured and SignAndEncrypt, JSON, and a reader that learns the DataSetMetaData from its metadata queue. The broker images are pinned by digest in `interop/pubsub_broker_peer_test.go`.
 
 open62541 limits found by these tests (recorded in opcua-interop's contract): it publishes a ConfigurationVersion it generates itself, so go readers are configured without a MajorVersion; AddDataSetReader cannot target an existing variable; a ReaderGroup added to a running connection needs the connection disabled and enabled again; RemoveDataSetReader needs its group disabled; its reader discards KeepAlive messages.
 

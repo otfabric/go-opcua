@@ -97,6 +97,9 @@ func TestSendSubscribe(t *testing.T) {
 		require.Equal(t, "/exchanges/amq.topic/data", m.Topic)
 		require.Equal(t, []byte{'m', '0' + qos}, m.Payload)
 		require.WithinDuration(t, time.Now(), m.Received, 10*time.Second)
+		require.Equal(t, ContentTypeJSON, m.ContentType)
+		mt, _ := m.UserProperty(transport.UAMessageTypeProperty)
+		require.Equal(t, transport.MessageTypeData, mt)
 		am, settled := rec.last(t)
 		require.Equal(t, qos == 0, settled)
 		require.Equal(t, SubjectData, am.Properties.Subject)
@@ -119,7 +122,10 @@ func TestSendSubscribe(t *testing.T) {
 			"site": "plant", "line": 3, "ratio": 0.5, "odd": []int{1},
 		},
 	}))
-	require.Equal(t, []byte("meta"), in.next(t).Payload)
+	mm := in.next(t)
+	require.Equal(t, []byte("meta"), mm.Payload)
+	require.Equal(t, ContentTypeUADP, mm.ContentType)
+	require.Equal(t, []transport.Property{{Name: transport.UAMessageTypeProperty, Value: transport.MessageTypeMetaData}, {Name: "odd", Value: "[1]"}, {Name: "site", Value: "plant"}}, mm.UserProperties)
 	am, _ := rec.last(t)
 	p := am.Properties
 	require.Equal(t, SubjectMetaData, p.Subject)

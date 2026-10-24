@@ -22,7 +22,7 @@ Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 | **Historical events on the server.** The history provider interfaces cover data only; the client has `HistoryReadEvent`. | UA-.NETStandard (framework), asyncua | Store events in the application, or keep event history in another historian. |
 | **Live server diagnostics.** No ServerDiagnosticsSummary or session diagnostics counters; responses carry an empty `DiagnosticInfo` even when the request sets `ReturnDiagnostics`. | open62541, UA-.NETStandard, node-opcua | Use the metrics callbacks and `log/slog` ([OBSERVABILITY.md](../OBSERVABILITY.md)). The go-opcua client does send `ReturnDiagnostics` (since v1.8.1) and decodes what a server returns. |
 | **Dynamic decoding of custom structures** from the server's DataTypeDefinition | Milo, UA-.NETStandard, node-opcua, asyncua | Generate or register Go types (`ua.RegisterExtensionObject`); unknown structures stay ExtensionObject bodies. |
-| **PubSub: Ethernet, AMQP, chunked NetworkMessages, UADP discovery, PubSub diagnostics** | open62541 (Ethernet / TSN) | Use UDP or MQTT. |
+| **PubSub actions** (request / response over PubSub, Part 14 1.05), **time-scheduled Ethernet (TSN)**, AMQP over WebSockets | open62541 (Ethernet / TSN) | Use Methods over a session for request / response; plain Ethernet, UDP, MQTT or AMQP for data. |
 
 ## go-opcua behaviour you may notice
 
@@ -36,6 +36,9 @@ Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 | Raw history deletes (DeleteRawModified) remove the sample at the end time, while a raw read excludes it. | Known limitation of the built-in historian. | Pass an end time just past the last sample to delete. |
 | Triggering links (SetTriggering) are not restored when the client re-creates a subscription after a reconnect. | Recovery re-creates subscriptions and monitored items only. | Call `Subscription.SetTriggering` again after recovery. |
 | mDNS has no probing or conflict resolution, and real multicast is verified on Linux only. | Scope of the built-in responder. | Prefer the LDS registry over mDNS on untrusted networks. |
+| PubSub: chunked NetworkMessages and UADP discovery use the layout of the OPC Foundation .NET stack 2.x where the specification is ambiguous; open62541 1.5.9 sends and accepts neither, and no peer adapter offers them, so they are tested against go-opcua only. | No interoperable peer to test against. | Keep MaxNetworkMessageSize large enough to avoid chunks towards open62541; configure DataSetMetaData on readers instead of relying on discovery. |
+| PubSub over MQTT: go-opcua speaks MQTT 3.1.1 unless `SetMQTTVersion` asks for 5.0; only 5.0 carries the content type and UAMessageType of a message, a 3.1.1 subscriber tells the mapping from the payload. | Part 14 §7.3.4.4 leaves the default to the implementation; open62541 1.5.9 speaks 3.1.1. | Use `MQTTVersionBestAvailable` with brokers that speak 5.0. |
+| PubSub over AMQP: ExactlyOnce is sent as AtLeastOnce, and DataSetMetaData is not retained (AMQP has no retained messages). | AMQP 1.0 settlement has no exactly-once in practice; Part 14 B.3. | Put the metadata on a queue address so late subscribers still get it. |
 | ECC: where open62541 1.5.9 and Part 6 1.05.07 differ (curve25519 key material, Sign-mode key derivation, ChannelThumbprint), go-opcua follows open62541. | open62541 is the only ECC peer that can be tested. | Prefer SignAndEncrypt with ECC_nistP256 / P384 or the AEAD policies with other stacks. See [Security](security.md). |
 
 ## Peer deviations
