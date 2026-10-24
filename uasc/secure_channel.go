@@ -1226,6 +1226,17 @@ func (s *SecureChannel) renew(instance *channelInstance) error {
 	// time and that no request is in the middle of being sent.
 	s.sendGate.Lock()
 	defer s.sendGate.Unlock()
+
+	// A token that was replaced in the meantime (Renew before its scheduled
+	// renewal fired) is not renewed again: the renewal would open from the
+	// superseded token's sequence number, one already used on the channel
+	// (Part 6 §6.7.2.4), and the successor schedules a renewal of its own.
+	if active := s.activeInstanceOrNil(); active != nil && active != instance {
+		s.cfg.Logger.Debug("security token already renewed", "channel_id", s.c.ID(),
+			"secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
+		return nil
+	}
+
 	instance.Lock()
 	defer instance.Unlock()
 
