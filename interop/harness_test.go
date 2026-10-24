@@ -484,13 +484,7 @@ func runAdapterClient(t *testing.T, imageEnvVar, defaultImage, endpoint, subcmd 
 	}
 	cmdArgs = append(cmdArgs, args...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
-	cmd.Stderr = os.Stderr
-
-	raw, err := cmd.Output()
+	raw, err := runClientContainer(t, cmdArgs)
 	if err != nil {
 		t.Fatalf("adapter client %q (%s): %v\noutput: %s", subcmd, image, err, raw)
 	}
@@ -521,20 +515,51 @@ func runAdapterClientResult(t *testing.T, imageEnvVar, defaultImage, endpoint, s
 	}
 	cmdArgs = append(cmdArgs, args...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
-	cmd.Stderr = os.Stderr
-
-	// Output() returns bytes even on non-zero exit; capture them regardless.
-	raw, _ := cmd.Output()
+	// The output is returned even on non-zero exit; capture it regardless.
+	raw, _ := runClientContainer(t, cmdArgs)
 
 	result, err := parseAdapterOutput(raw)
 	if err != nil {
 		t.Fatalf("parse adapter client output (no JSON found): %v\nraw: %s", err, raw)
 	}
 	return result
+}
+
+// clientContainers numbers the client containers of the process.
+var clientContainers atomic.Int64
+
+// runClientContainer runs a one-shot adapter client, `docker run --rm …`
+// (cmdArgs starts with "run", "--rm"), and returns its stdout. Its stderr
+// goes to os.Stderr.
+//
+// The run is bounded by clientTimeout, plus the command's own --timeout-ms
+// if it has one: a subscription that collects notifications for 20 s must
+// not be killed at 30 s while a loaded runner starts its container. The
+// container is named, so that it is stopped when the bound is hit: killing
+// the docker CLI leaves it running.
+func runClientContainer(t *testing.T, cmdArgs []string) ([]byte, error) {
+	t.Helper()
+	timeout := clientTimeout
+	for i, a := range cmdArgs {
+		if a == "--timeout-ms" && i+1 < len(cmdArgs) {
+			if ms, err := strconv.Atoi(cmdArgs[i+1]); err == nil {
+				timeout += time.Duration(ms) * time.Millisecond
+			}
+		}
+	}
+	name := fmt.Sprintf("%s-client-%d", dockerContainerName(t), clientContainers.Add(1))
+	args := append([]string{cmdArgs[0], cmdArgs[1], "--name", name}, cmdArgs[2:]...)
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "docker", args...)
+	cmd.Stderr = os.Stderr
+	raw, err := cmd.Output()
+	if ctx.Err() != nil {
+		dockerStop(name)
+		return raw, fmt.Errorf("adapter client killed after %v: %w", timeout, err)
+	}
+	return raw, err
 }
 
 // runOpen62541Client runs the open62541 adapter in client mode.
@@ -1729,13 +1754,7 @@ func runSecureAdapterClient(t *testing.T, imageEnvVar, defaultImage, clientPKINa
 	}
 	cmdArgs = append(cmdArgs, extraArgs...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
-	cmd.Stderr = os.Stderr
-
-	raw, err := cmd.Output()
+	raw, err := runClientContainer(t, cmdArgs)
 	if err != nil {
 		t.Fatalf("secure adapter client %q (%s): %v\noutput: %s", subcmd, image, err, raw)
 	}
@@ -1785,15 +1804,9 @@ func runSecureAdapterClientResult(t *testing.T, imageEnvVar, defaultImage, clien
 	}
 	cmdArgs = append(cmdArgs, extraArgs...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "docker", cmdArgs...)
-	cmd.Stderr = os.Stderr
-
 	// Do not fatal on non-zero exit — the adapter may exit non-zero when the
 	// server rejects the connection.  Attempt to parse whatever JSON was produced.
-	raw, _ := cmd.Output()
+	raw, _ := runClientContainer(t, cmdArgs)
 	if len(raw) == 0 {
 		t.Logf("runSecureAdapterClientResult: no output from adapter")
 		return adapterResult{}
