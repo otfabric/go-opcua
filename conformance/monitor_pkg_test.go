@@ -193,7 +193,8 @@ func TestMonitor_CallbackSubscription(t *testing.T) {
 	require.Same(t, sub, subSeen, "the callback receives its subscription")
 	require.Equal(t, []any{int32(42), int32(1), int32(2), int32(3), int32(4), int32(5)}, got[f.Int32.String()], "in order, nothing lost")
 	mu.Unlock()
-	require.GreaterOrEqual(t, sub.Delivered(), uint64(7))
+	// Counted after the callback returned.
+	eventually(t, func() bool { return sub.Delivered() >= 7 }, "deliveries counted")
 }
 
 // TestMonitor_SlowConsumerIsReported verifies messages that cannot be handed
