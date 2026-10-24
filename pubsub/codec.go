@@ -26,6 +26,15 @@ func (e encoding) String() string {
 	return "UADP"
 }
 
+// contentType is the MIME type of the mapping (Part 14 Annex B.3.8, the
+// AMQP content-type).
+func (e encoding) contentType() string {
+	if e == encJSON {
+		return "application/json"
+	}
+	return "application/opcua+uadp"
+}
+
 // codec is the message mapping as the runtime uses it. The UADP and JSON
 // implementations call package uadp and package jsonmsg; the options of the
 // UADP codec carry the security and filter hooks for both (JSON has no

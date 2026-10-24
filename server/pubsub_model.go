@@ -135,7 +135,8 @@ func (s *Server) buildPubSubModel() error {
 	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeRemovePublishedDataSet), m.method("RemovePublishedDataSet", m.removePublishedDataSet))
 
 	if n := s.ownNode(id.PublishSubscribeSupportedTransportProfiles); n != nil {
-		dv := DataValueFromValue([]string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON})
+		dv := DataValueFromValue([]string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON,
+			transport.ProfileAMQPUADP, transport.ProfileAMQPJSON})
 		n.mu.Lock()
 		n.val = func() *ua.DataValue { return dv }
 		n.mu.Unlock()

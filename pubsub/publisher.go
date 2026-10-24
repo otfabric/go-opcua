@@ -527,7 +527,13 @@ func (e *encoder) sendData(ctx context.Context, outs []*outDSM) {
 			continue
 		}
 		e.number++
-		if !e.send(ctx, b, transport.PublishOptions{Topic: chunk[0].topic, QoS: chunk[0].qos}) {
+		var own *dataSetWriter
+		if chunk[0].own {
+			own = chunk[0].w
+		}
+		opts := transport.PublishOptions{Topic: chunk[0].topic, QoS: chunk[0].qos,
+			ContentType: g.enc.contentType(), Properties: messageProperties(g, own)}
+		if !e.send(ctx, b, opts) {
 			e.lose(chunk)
 			continue
 		}
@@ -590,6 +596,30 @@ func (e *encoder) lose(chunk []*outDSM) {
 			e.st.lost[o.w] = true
 		}
 	}
+}
+
+// messageProperties returns the GroupProperties of g and, for a message of
+// one writer, its DataSetWriterProperties, which take precedence: broker
+// transports map some of them to message properties (AMQP, Part 14
+// Table B.2). It is nil without properties.
+func messageProperties(g *writerGroup, w *dataSetWriter) map[string]any {
+	var props map[string]any
+	add := func(kvs []*ua.KeyValuePair) {
+		for _, kv := range kvs {
+			if kv == nil || kv.Key == nil {
+				continue
+			}
+			if props == nil {
+				props = map[string]any{}
+			}
+			props[kv.Key.Name] = variantValue(kv.Value)
+		}
+	}
+	add(g.cfg.GroupProperties)
+	if w != nil {
+		add(w.cfg.DataSetWriterProperties)
+	}
+	return props
 }
 
 func (e *encoder) fail(err error, encode bool) {
@@ -669,7 +699,9 @@ func (e *encoder) sendMetaData(ctx context.Context, w *dataSetWriter) {
 		e.fail(err, true)
 		return
 	}
-	if e.send(ctx, b, transport.PublishOptions{Topic: w.brokerTS.MetaDataQueueName, QoS: 1, Retain: true}) {
+	opts := transport.PublishOptions{Topic: w.brokerTS.MetaDataQueueName, QoS: 1, Retain: true, MetaData: true,
+		ContentType: g.enc.contentType(), Properties: messageProperties(g, w)}
+	if e.send(ctx, b, opts) {
 		e.st.meta[w] = true
 	}
 }
