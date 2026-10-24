@@ -32,8 +32,9 @@ func actionTypeName(t message.DataSetMessageType) string {
 		return MessageTypeActionRequest
 	case message.DataSetMessageActionResponse:
 		return MessageTypeActionResponse
+	default:
+		return ""
 	}
-	return ""
 }
 
 // encodeAction encodes an action NetworkMessage. A missing MessageID is

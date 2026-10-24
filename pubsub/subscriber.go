@@ -176,6 +176,10 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		t, chunk, err := uadp.PeekType(m.Payload)
 		probe = err == nil && !chunk && t == message.NetworkMessageDiscoveryRequest
 	}
+	if encErr == nil && !probe && isActionMessage(enc, m) {
+		p.receiveAction(c, gen, enc, m)
+		return
+	}
 	p.lock()
 	if c.gen != gen {
 		p.unlock()
@@ -722,7 +726,9 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 			st.fields = append(st.fields, nil)
 		}
 		complete = st.key
-	case message.DataSetMessageEvent, message.DataSetMessageKeepAlive:
+	case message.DataSetMessageEvent, message.DataSetMessageKeepAlive,
+		message.DataSetMessageActionRequest, message.DataSetMessageActionResponse:
+		// Action messages are handled by receiveAction.
 	}
 	if dsm.Type == message.DataSetMessageEvent {
 		fields = make([]*ua.DataValue, n)

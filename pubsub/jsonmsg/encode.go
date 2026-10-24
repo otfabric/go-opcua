@@ -173,8 +173,10 @@ func dataSetMessageTypeName(t message.DataSetMessageType) (string, error) {
 		return MessageTypeEvent, nil
 	case message.DataSetMessageKeepAlive:
 		return MessageTypeKeepAlive, nil
+	default:
+		// Action DataSetMessages belong to action NetworkMessages.
+		return "", fmt.Errorf("pubsub/jsonmsg: unknown DataSetMessage type %d", t)
 	}
-	return "", fmt.Errorf("pubsub/jsonmsg: unknown DataSetMessage type %d", t)
 }
 
 func (e *encoder) dataSetMessage(m *message.DataSetMessage) error {

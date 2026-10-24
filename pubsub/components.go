@@ -21,6 +21,10 @@ type publishedDataSet struct {
 	items  []*ua.PublishedVariableDataType
 	events *ua.PublishedEventsDataType
 	md     *ua.DataSetMetaDataType
+	// action is the PublishedAction (Part 14 §6.2.3.10.3 in 1.05) of an
+	// Action data set: md is the response DataSetMetaData, action holds
+	// the request DataSetMetaData and the Action targets.
+	action *ua.PublishedActionDataType
 }
 
 func (d *publishedDataSet) config() *ua.PublishedDataSetDataType {
@@ -61,6 +65,18 @@ type connection struct {
 	reasm   *uadp.Reassembler
 	annSeq  atomic.Uint32
 	limiter *discoveryLimiter
+
+	// subsCh is closed (and replaced) whenever the connection goroutine
+	// updated its subscriptions; subscribed are the topics it has. Both
+	// belong to the current run (gen); subsCh is nil while stopped.
+	// topicsSeq counts the changes of topics, syncedSeq is the change the
+	// subscriptions reflect.
+	subsCh     chan struct{}
+	subscribed map[string]bool
+	topicsSeq  uint64
+	syncedSeq  uint64
+	// act is the state of the PubSub Actions of the current run.
+	act actionState
 }
 
 func (c *connection) config() *ua.PubSubConnectionDataType {
@@ -261,8 +277,20 @@ func (p *PubSub) addPublishedDataSetLocked(in *ua.PublishedDataSetDataType) (Com
 		d.items = src.PublishedData
 	case *ua.PublishedEventsDataType:
 		d.events = src
+	case *ua.PublishedActionDataType:
+		d.action = src
+	case *ua.PublishedActionMethodDataType:
+		// The ActionMethods are not bound to Methods of an address
+		// space: the targets run the registered ActionHandlers.
+		d.action = &ua.PublishedActionDataType{RequestDataSetMetaData: src.RequestDataSetMetaData, ActionTargets: src.ActionTargets}
 	}
 	d.md = p.completeMetaData(cfg)
+	if d.action != nil {
+		d.action.RequestDataSetMetaData = completeActionMetaData(d.action.RequestDataSetMetaData, cfg.Name+"Request")
+		if src, ok := eoValue(cfg.DataSetSource).(*ua.PublishedActionMethodDataType); ok {
+			src.RequestDataSetMetaData = d.action.RequestDataSetMetaData
+		}
+	}
 	cfg.DataSetMetaData = d.md
 	p.pdss = append(p.pdss, d)
 	p.comps[d.id] = d
@@ -310,6 +338,9 @@ func (p *PubSub) completeMetaData(cfg *ua.PublishedDataSetDataType) *ua.DataSetM
 				md.Fields = append(md.Fields, f)
 			}
 		}
+	case *ua.PublishedActionDataType, *ua.PublishedActionMethodDataType:
+		// The response DataSetMetaData of an Action.
+		n = len(md.Fields)
 	case *ua.PublishedEventsDataType:
 		n = len(src.SelectedFields)
 		if len(md.Fields) == 0 {
@@ -393,10 +424,10 @@ func (p *PubSub) pdsByName(name string) *publishedDataSet {
 	return nil
 }
 
-func (p *PubSub) pdsNames() map[string]bool {
-	m := make(map[string]bool, len(p.pdss))
+func (p *PubSub) pdsNames() dataSets {
+	m := make(dataSets, len(p.pdss))
 	for _, d := range p.pdss {
-		m[d.name] = true
+		m[d.name] = d.action != nil
 	}
 	return m
 }
@@ -682,7 +713,13 @@ func (p *PubSub) addWriterLocked(g *writerGroup, in *ua.DataSetWriterDataType) (
 			return 0, configErr(path, "DataSetWriterId %d is used by writer %q", in.DataSetWriterID, w.name)
 		}
 	}
-	if g.conn.broker && (g.brokerTS == nil || g.brokerTS.QueueName == "") {
+	action := in.DataSetName != "" && p.pdsNames()[in.DataSetName]
+	switch {
+	case action && g.conn.broker && (g.brokerTS == nil || g.brokerTS.QueueName == ""):
+		return 0, configErr(path, "an Action writer needs the QueueName of its group (the request queue)")
+	case !action && g.interval <= 0:
+		return 0, configErr(path, "a writer group with PublishingInterval 0 only takes Action writers")
+	case g.conn.broker && (g.brokerTS == nil || g.brokerTS.QueueName == ""):
 		if ts, _ := eoValue(in.TransportSettings).(*ua.BrokerDataSetWriterTransportDataType); ts == nil || ts.QueueName == "" {
 			return 0, configErr(path, "neither the writer nor its group has a broker QueueName")
 		}

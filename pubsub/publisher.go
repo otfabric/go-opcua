@@ -20,6 +20,10 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 )
 
+// keyCheckInterval is how often a writer group that does not publish
+// checks the availability of its keys.
+const keyCheckInterval = time.Second
+
 // runWriterGroup publishes a writer group every PublishingInterval, starting
 // after its offset, until ctx ends.
 func (p *PubSub) runWriterGroup(ctx context.Context, g *writerGroup, gen uint64) {
@@ -30,6 +34,21 @@ func (p *PubSub) runWriterGroup(ctx context.Context, g *writerGroup, gen uint64)
 		first.Stop()
 		return
 	case <-first.C:
+	}
+	if g.interval <= 0 {
+		// A group of Action writers on a reliable transport only answers
+		// requests (Part 14 Table 85 in 1.05); a secured one checks its
+		// keys, which make it Operational.
+		t := time.NewTicker(keyCheckInterval)
+		defer t.Stop()
+		for {
+			p.groupKeys(g, gen)
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
 	}
 	p.publishCycle(ctx, g, gen)
 	t := time.NewTicker(g.interval)
@@ -85,35 +104,9 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	}
 	defer g.pubMu.unlock()
 
-	p.lock()
-	if g.gen != gen {
-		p.unlock()
+	ks, mode, ok := p.groupKeys(g, gen)
+	if !ok {
 		return
-	}
-	mode, groupID := g.mode, g.cfg.SecurityGroupID
-	p.unlock()
-
-	var ks security.KeySource
-	if mode > ua.MessageSecurityModeNone {
-		ks = p.KeySource(groupID)
-		ok := ks != nil
-		if ok {
-			_, err := ks.CurrentKeys()
-			ok = err == nil
-		}
-		p.lock()
-		if g.gen != gen {
-			p.unlock()
-			return
-		}
-		if g.keysOK != ok {
-			g.keysOK = ok
-			p.reconcileLocked()
-		}
-		p.unlock()
-		if !ok {
-			return
-		}
 	}
 
 	p.lock()
@@ -127,7 +120,8 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	var plan []planned
 	mds := map[uint16]*ua.DataSetMetaDataType{}
 	for _, w := range g.writers {
-		if !w.running || w.state != ua.PubSubStateOperational {
+		if !w.running || w.state != ua.PubSubStateOperational || w.isAction() {
+			// Action writers send responses only (action.go).
 			continue
 		}
 		e := planned{w: w}
@@ -242,6 +236,39 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 		w.needKey = true
 	}
 	p.unlock()
+}
+
+// groupKeys returns the security mode of a writer group and, for a secured
+// group, its current keys. It records whether the keys are available, which
+// makes the group Operational or PreOperational. ok is false if the group
+// was stopped or a secured group has no keys.
+func (p *PubSub) groupKeys(g *writerGroup, gen uint64) (ks security.KeySource, mode ua.MessageSecurityMode, ok bool) {
+	p.lock()
+	if g.gen != gen {
+		p.unlock()
+		return nil, 0, false
+	}
+	mode, groupID := g.mode, g.cfg.SecurityGroupID
+	p.unlock()
+	if mode <= ua.MessageSecurityModeNone {
+		return nil, mode, true
+	}
+	ks = p.KeySource(groupID)
+	ok = ks != nil
+	if ok {
+		_, err := ks.CurrentKeys()
+		ok = err == nil
+	}
+	p.lock()
+	defer p.unlock()
+	if g.gen != gen {
+		return nil, mode, false
+	}
+	if g.keysOK != ok {
+		g.keysOK = ok
+		p.reconcileLocked()
+	}
+	return ks, mode, ok
 }
 
 // sample reads the values of published variables and applies their
