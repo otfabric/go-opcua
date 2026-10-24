@@ -1748,6 +1748,7 @@ func cloneReadRequest(req *ua.ReadRequest) *ua.ReadRequest {
 		rvs[i] = rc
 	}
 	return &ua.ReadRequest{
+		RequestHeader:      req.RequestHeader,
 		MaxAge:             req.MaxAge,
 		TimestampsToReturn: req.TimestampsToReturn,
 		NodesToRead:        rvs,
@@ -1810,6 +1811,7 @@ func cloneBrowseRequest(req *ua.BrowseRequest) *ua.BrowseRequest {
 		descs[i] = dc
 	}
 	reqc := &ua.BrowseRequest{
+		RequestHeader:                 req.RequestHeader,
 		View:                          req.View,
 		RequestedMaxReferencesPerNode: req.RequestedMaxReferencesPerNode,
 		NodesToBrowse:                 descs,

@@ -95,10 +95,14 @@ func (c *channelInstance) newRequestMessage(req ua.Request, reqID uint32, authTo
 		RequestHandle:       reqID, // client-assigned; reusing reqID for simple correlation
 	}
 
-	// The header is created here, but a service may have data of its own
-	// for it: CreateSession and ActivateSession use the AdditionalHeader to
-	// ask for the ephemeral key of an ECC security policy.
-	if prev := req.Header(); prev != nil && prev.AdditionalHeader != nil {
+	// The header is created here, but the caller may have set fields of it
+	// that belong to the request rather than to the channel: the
+	// ReturnDiagnostics mask and the AuditEntryId (Part 4 §7.33), and the
+	// AdditionalHeader CreateSession and ActivateSession use to ask for the
+	// ephemeral key of an ECC security policy.
+	if prev := req.Header(); prev != nil {
+		reqHdr.ReturnDiagnostics = prev.ReturnDiagnostics
+		reqHdr.AuditEntryID = prev.AuditEntryID
 		reqHdr.AdditionalHeader = prev.AdditionalHeader
 	}
 
