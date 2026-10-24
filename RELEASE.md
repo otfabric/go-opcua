@@ -7,7 +7,7 @@
 
 ### Summary
 
-Fixes in the library for the key timing of SKS KeySources, URIs with a `;` in NodeId strings, MQTT clients that take a session from each other, a data race in the server's secure channel and a client test hook race, and a sweep of the test suites for scheduling-dependent tests: every test that passed or failed depending on timing (on a loaded CI runner, under the race detector, or on Linux) now waits for the event it asserts on. The suites were run 25 times in parallel on CI to find them.
+Fixes in the library for the key timing of SKS KeySources, URIs with a `;` in NodeId strings, MQTT clients that take a session from each other, a data race in the server's secure channel, a server that closed channels with a client's CloseSecureChannel request, and a client test hook race, and a sweep of the test suites for scheduling-dependent tests: every test that passed or failed depending on timing (on a loaded CI runner, under the race detector, or on Linux) now waits for the event it asserts on. The suites were run 25 times in parallel on CI to find them.
 
 ### Fixed
 
@@ -15,6 +15,7 @@ Fixes in the library for the key timing of SKS KeySources, URIs with a `;` in No
 - **ua: URIs in NodeId, ExpandedNodeId and QualifiedName strings are escaped.** The compact JSON and XML forms wrote a namespace or server URI as is into `nsu=<uri>;` and `svu=<uri>;`, and a URI with a `;` ended early when read back: the value came back as a String NodeId of the whole text and did not survive a second encode. A `;` is now written as `%3B` and a `%` as `%25` (Part 6 §5.1.12), and read back by the codec and by `ua.ParseExpandedNodeID`; other percent-encodings are read as written.
 - **mqtt: a client waits its backoff before reconnecting after a broker DISCONNECT.** It reconnected at once, so after another connection took its session over it took the session straight back, the other connection could lose it before its CONNACK, and two clients with one client identifier took the session from each other in a tight loop. The backoff now only starts over after a connection that lasted `MaxReconnectDelay`; a connection lost otherwise is still retried at once.
 - **uasc: no data race on the request id of a server channel.** The OpenSecureChannel handler set the channel's request id without the lock that `Close` takes to draw one, so a server shutting down while a client (re)opened a channel raced on it.
+- **uasc: a server closes a channel with an Error message, not a CloseSecureChannel request.** CloseSecureChannel is a client request (Part 6 §7.1.4); a server that closed its channels (on `Server.Close`, for one) sent one to each client anyway. It now sends an Error message with `Bad_SecureChannelClosed` (§7.1.5, Table 79) and closes the connection, so a client learns why its pending requests failed. The write of the old request carried the server channel's `RequestTimeout`, zero by default, as its write deadline, so it was never sent and clients only saw the connection close; the Error message gets 5 s. A go-opcua client reconnects after either, as before. Clients still send CloseSecureChannel.
 - **client: the publish request test hook is atomic.** A publish loop that outlived `Client.Close` could read the hook while the next test replaced it (a data race under `-race`).
 
 ### Tests

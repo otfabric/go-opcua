@@ -978,3 +978,64 @@ func TestClose_DuringRenewal(t *testing.T) {
 	require.ErrorIs(t, p.client.Close(), io.EOF)
 	require.Error(t, result(t, renewed))
 }
+
+// TestClose_ServerSendsError closes a server channel: CloseSecureChannel is a
+// client request (Part 6 §7.1.4), so the server tells the client with an
+// Error message instead (§7.1.5) and sends no request.
+func TestClose_ServerSendsError(t *testing.T) {
+	for _, pol := range []covPolicy{covNone, covRSA} {
+		t.Run(pol.name, func(t *testing.T) {
+			p := newCovPair(t, pol, covOpts{})
+			p.server.requestIDMu.Lock()
+			before := p.server.requestID
+			p.server.requestIDMu.Unlock()
+
+			require.ErrorIs(t, p.server.Close(), io.EOF)
+
+			timeout := time.After(covWait)
+			for {
+				var err error
+				select {
+				case err = <-p.clientErrs:
+				case <-timeout:
+					t.Fatal("the client got no Error message")
+				}
+				var uerr *uacp.Error
+				if errors.As(err, &uerr) {
+					require.Equal(t, uint32(ua.StatusBadSecureChannelClosed), uerr.ErrorCode)
+					break
+				}
+				require.NotErrorIs(t, err, io.EOF, "the connection closed before the Error message arrived")
+			}
+			select {
+			case <-p.client.disconnected:
+			case <-time.After(covWait):
+				t.Fatal("the client did not notice the closed connection")
+			}
+
+			p.server.requestIDMu.Lock()
+			defer p.server.requestIDMu.Unlock()
+			require.Equal(t, before, p.server.requestID, "the server sent a request")
+		})
+	}
+}
+
+// TestClose_ClientSendsCloseRequest closes a client channel: it still sends
+// a CloseSecureChannel request before it closes the connection.
+func TestClose_ClientSendsCloseRequest(t *testing.T) {
+	p := newCovPair(t, covNone, covOpts{noOpen: true, noServe: true})
+	opened := make(chan error, 1)
+	go func() { opened <- p.client.Open(context.Background()) }()
+	require.NoError(t, p.server.Receive(context.Background()).Err, "the OpenSecureChannel exchange")
+	require.NoError(t, result(t, opened))
+	require.Eventually(t, func() bool {
+		c, tok := token(p.server)
+		cc, ctok := token(p.client)
+		return c == cc && tok == ctok
+	}, covWait, time.Millisecond)
+
+	require.ErrorIs(t, p.client.Close(), io.EOF)
+	b, err := p.serverConn.Receive()
+	require.NoError(t, err)
+	require.Equal(t, MessageTypeCloseSecureChannel, string(b[:3]))
+}
