@@ -350,15 +350,24 @@ func WithClientCertificateTrustList(caCertDER ...[]byte) Option {
 			if len(certDER) == 0 {
 				return nil // no certificate presented; non-certificate channel
 			}
-			cert, err := x509.ParseCertificate(certDER)
-			if err != nil {
+			// A client may send its certificate chain (Part 6 §6.7.2: the
+			// application instance certificate followed by its issuers;
+			// UA-.NETStandard does): the leaf is verified, the rest are
+			// candidate intermediates, never trust anchors.
+			certs, err := x509.ParseCertificates(certDER)
+			if err != nil || len(certs) == 0 {
 				return ua.StatusBadCertificateInvalid
 			}
-			opts := x509.VerifyOptions{
-				Roots:     pool,
-				KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+			intermediates := x509.NewCertPool()
+			for _, c := range certs[1:] {
+				intermediates.AddCert(c)
 			}
-			if _, err := cert.Verify(opts); err != nil {
+			opts := x509.VerifyOptions{
+				Roots:         pool,
+				Intermediates: intermediates,
+				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
+			}
+			if _, err := certs[0].Verify(opts); err != nil {
 				return ua.StatusBadCertificateUntrusted
 			}
 			return nil

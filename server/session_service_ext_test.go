@@ -65,6 +65,41 @@ func TestSessionService_CreateSession_TimeoutClamping(t *testing.T) {
 	}
 }
 
+// TestSessionService_CreateSession_EndpointsForOtherURL: a client that used a
+// URL the server does not advertise (another host name for the same server)
+// still gets the server's endpoints, so it can verify the one its
+// SecureChannel uses; a client that used an advertised URL gets only the
+// endpoints of that URL.
+func TestSessionService_CreateSession_EndpointsForOtherURL(t *testing.T) {
+	srv := newTestServer()
+	local := &ua.EndpointDescription{EndpointURL: "opc.tcp://localhost:4840/", SecurityMode: ua.MessageSecurityModeNone}
+	localSigned := &ua.EndpointDescription{EndpointURL: "opc.tcp://localhost:4840", SecurityMode: ua.MessageSecurityModeSign}
+	other := &ua.EndpointDescription{EndpointURL: "opc.tcp://plant-a:4840", SecurityMode: ua.MessageSecurityModeNone}
+	srv.endpoints = []*ua.EndpointDescription{local, localSigned, other}
+	svc := &SessionService{srv: srv}
+
+	for _, tc := range []struct {
+		url  string
+		want []*ua.EndpointDescription
+	}{
+		{"opc.tcp://localhost:4840", []*ua.EndpointDescription{local, localSigned}},
+		{"opc.tcp://plant-a:4840/", []*ua.EndpointDescription{other}},
+		{"opc.tcp://host.docker.internal:4840", []*ua.EndpointDescription{local, localSigned, other}},
+		{"", []*ua.EndpointDescription{local, localSigned, other}},
+	} {
+		t.Run(tc.url, func(t *testing.T) {
+			resp, err := svc.CreateSession(context.Background(), scNone(), &ua.CreateSessionRequest{
+				RequestHeader:           reqHeader(),
+				EndpointURL:             tc.url,
+				RequestedSessionTimeout: 5000,
+				ClientNonce:             []byte("n"),
+			}, 1)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, resp.(*ua.CreateSessionResponse).ServerEndpoints)
+		})
+	}
+}
+
 func TestSessionService_CreateSession_ClientCertRejected(t *testing.T) {
 	srv := newTestServer()
 	srv.cfg.clientCertificateValidator = func([]byte) error {

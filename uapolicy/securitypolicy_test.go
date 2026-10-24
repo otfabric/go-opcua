@@ -262,3 +262,37 @@ func generatePrivateKey(bitSize int) (*rsa.PrivateKey, error) {
 
 	return privateKey, nil
 }
+
+// TestAsymmetricPlaintextBlockSize: the RSA-OAEP plaintext block is the key
+// size minus 2*hashLen+2 (Part 6 §6.7.4; SHA-1: 42, SHA-256: 66), and every
+// encrypted block but the last carries a full plaintext block. Receivers
+// such as UA-.NETStandard lay the decrypted blocks out by that size, so a
+// shorter block (the former 2*64+2 for SHA-256) fails their signature check.
+func TestAsymmetricPlaintextBlockSize(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		uri  string
+		want int
+	}{
+		{ua.SecurityPolicyURIBasic256Sha256, 256 - 42},
+		{ua.SecurityPolicyURIAes128Sha256RsaOaep, 256 - 42},
+		{ua.SecurityPolicyURIAes256Sha256RsaPss, 256 - 66},
+	} {
+		t.Run(tc.uri, func(t *testing.T) {
+			enc, err := Asymmetric(tc.uri, key, &key.PublicKey)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, enc.PlaintextBlockSize())
+
+			plain := make([]byte, 2*tc.want)
+			_, err = rand.Read(plain)
+			require.NoError(t, err)
+			cipher, err := enc.Encrypt(plain)
+			require.NoError(t, err)
+			require.Len(t, cipher, 2*256, "two full plaintext blocks make two cipher blocks")
+			got, err := enc.Decrypt(cipher)
+			require.NoError(t, err)
+			require.Equal(t, plain, got)
+		})
+	}
+}

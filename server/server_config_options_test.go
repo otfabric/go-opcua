@@ -124,3 +124,58 @@ func TestServerOption_WithClientCertificateTrustList(t *testing.T) {
 	_, err = New(WithClientCertificateTrustList([]byte("not-a-cert")))
 	require.Error(t, err)
 }
+
+// TestServerOption_WithClientCertificateTrustList_Chain: a client that sends
+// its certificate chain (leaf followed by issuers, Part 6 §6.7.2) is accepted
+// when the leaf chains to the trust list, and an issuer the client sends
+// along does not become a trust anchor.
+func TestServerOption_WithClientCertificateTrustList_Chain(t *testing.T) {
+	newCA := func(cn string) (*rsa.PrivateKey, *x509.Certificate) {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		tmpl := &x509.Certificate{
+			SerialNumber:          big.NewInt(2),
+			Subject:               pkix.Name{CommonName: cn},
+			NotBefore:             time.Now().Add(-time.Hour),
+			NotAfter:              time.Now().Add(24 * time.Hour),
+			KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+			BasicConstraintsValid: true,
+			IsCA:                  true,
+		}
+		der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &key.PublicKey, key)
+		require.NoError(t, err)
+		cert, err := x509.ParseCertificate(der)
+		require.NoError(t, err)
+		return key, cert
+	}
+	leafOf := func(caKey *rsa.PrivateKey, ca *x509.Certificate) []byte {
+		key, err := rsa.GenerateKey(rand.Reader, 2048)
+		require.NoError(t, err)
+		appURI, _ := url.Parse("urn:test:client")
+		tmpl := &x509.Certificate{
+			SerialNumber: big.NewInt(3),
+			Subject:      pkix.Name{CommonName: "test-client"},
+			NotBefore:    time.Now().Add(-time.Hour),
+			NotAfter:     time.Now().Add(24 * time.Hour),
+			KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+			URIs:         []*url.URL{appURI},
+		}
+		der, err := x509.CreateCertificate(rand.Reader, tmpl, ca, &key.PublicKey, caKey)
+		require.NoError(t, err)
+		return der
+	}
+
+	caKey, ca := newCA("trusted-ca")
+	srv, err := New(WithClientCertificateTrustList(ca.Raw))
+	require.NoError(t, err)
+	validate := srv.cfg.clientCertificateValidator
+
+	leaf := leafOf(caKey, ca)
+	require.NoError(t, validate(leaf), "single certificate")
+	require.NoError(t, validate(append(append([]byte{}, leaf...), ca.Raw...)), "leaf followed by its CA")
+
+	otherKey, other := newCA("other-ca")
+	untrusted := append(leafOf(otherKey, other), other.Raw...)
+	require.ErrorIs(t, validate(untrusted), ua.StatusBadCertificateUntrusted, "a CA sent along is not trusted")
+	require.ErrorIs(t, validate(append(append([]byte{}, leaf...), 0x30, 0x01)), ua.StatusBadCertificateInvalid, "trailing garbage")
+}
