@@ -130,6 +130,11 @@ type Client struct {
 	// subs is the set of active subscriptions by id.
 	subs map[uint32]*Subscription
 
+	// subGen counts the subscriptions registered so far; a Publish fault
+	// for a request sent before the last registration is stale (see
+	// markSubscriptionsBrokenSince). Guarded by subMux.
+	subGen uint64
+
 	// pendingAcks contains the pending subscription acknowledgements
 	// for all active subscriptions.
 	pendingAcks []*ua.SubscriptionAcknowledgement
@@ -418,14 +423,12 @@ func (c *Client) monitor(ctx context.Context) {
 				return
 			}
 
-			// The server has no subscription for the session. That is not a
-			// connection problem. If the client believes it has some, they
-			// have ended on the server (expired or deleted): recreate them.
-			if errors.Is(err, ua.StatusBadNoSubscription) {
-				if c.cfg.sechan.AutoReconnect && c.markSubscriptionsBroken() > 0 {
-					c.recoverBrokenSubscriptions(ctx)
-				}
-				armRetry()
+			// A fault of a request sent in a session the client has left
+			// (the application activated another one, or a reconnect
+			// replaced it) says nothing about the session it uses now.
+			var fault *uasc.RequestFault
+			if errors.As(err, &fault) && c.leftSession(fault.AuthToken) {
+				c.cfg.logger.Debug("monitor: fault of a session the client has left, ignoring", "error", err)
 				continue
 			}
 
@@ -1055,6 +1058,16 @@ func (c *Client) SecureChannel() *uasc.SecureChannel {
 func (c *Client) setSecureChannel(sc *uasc.SecureChannel) {
 	c.atomicSechan.Store(sc)
 	stats.Client().Add("SecureChannel", 1)
+}
+
+// leftSession reports whether authToken is that of a session the client no
+// longer uses. A nil token is a request outside any session.
+func (c *Client) leftSession(authToken *ua.NodeID) bool {
+	if authToken == nil {
+		return false
+	}
+	s := c.Session()
+	return s == nil || !s.resp.AuthenticationToken.Equal(authToken)
 }
 
 // Session returns the active session.

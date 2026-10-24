@@ -91,6 +91,7 @@ func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, 
 	}
 
 	c.subs[sub.id()] = sub
+	c.subGen++
 	c.updatePublishTimeoutNeedsSubMuxLock()
 
 	// Start the publish loop if it isn't already running. This is done while
@@ -209,6 +210,7 @@ func (c *Client) recreateSubscription(ctx context.Context, id uint32) error {
 		// that, put it back under the id it is known by.
 		if _, ok := c.subs[sub.id()]; !ok {
 			c.subs[sub.id()] = sub
+			c.subGen++
 			stats.Subscription().Add("Count", 1)
 			c.updatePublishTimeoutNeedsSubMuxLock()
 		}
@@ -400,6 +402,7 @@ func (c *Client) registerSubscriptionNeedsSubMuxLock(sub *Subscription) error {
 	}
 
 	c.subs[sub.id()] = sub
+	c.subGen++
 	sub.lastActivity.Store(time.Now().UnixNano())
 	return nil
 }
@@ -708,6 +711,7 @@ func (c *Client) monitorSubscriptions(ctx context.Context) {
 func (c *Client) publish(ctx context.Context) error {
 	c.subMux.RLock()
 	c.cfg.logger.Debug("publish: pending acks", "pending_acks", c.pendingAcks)
+	gen := c.subGen
 	c.subMux.RUnlock()
 
 	// send the next publish request
@@ -755,7 +759,13 @@ func (c *Client) publish(ctx context.Context) error {
 		c.cfg.logger.Debug("publish: timeout, ignoring", "error", err)
 
 	case err == ua.StatusBadNoSubscription:
+		// The session has no subscription on the server. If the client
+		// believes it has some that existed when the request was sent, they
+		// ended on the server (expired or deleted): recreate them.
 		c.cfg.logger.Debug("publish: no subscriptions but the publishing loop is still running", "error", err)
+		if c.cfg.sechan.AutoReconnect && c.markSubscriptionsBrokenSince(gen) > 0 {
+			c.requestSubscriptionRecovery()
+		}
 		return err
 
 	case err != nil && res != nil:
@@ -924,6 +934,24 @@ func (c *Client) recreateSubscriptionLater(sub *Subscription) {
 func (c *Client) markSubscriptionsBroken() int {
 	c.subMux.Lock()
 	defer c.subMux.Unlock()
+	return c.markSubscriptionsBrokenNeedsSubMuxLock()
+}
+
+// markSubscriptionsBrokenSince is markSubscriptionsBroken for a Publish
+// request that found the session without subscriptions, sent when subGen
+// was gen. A subscription registered since then (a recreation completing
+// while the request was under way) is not what the server answered about:
+// nothing is marked.
+func (c *Client) markSubscriptionsBrokenSince(gen uint64) int {
+	c.subMux.Lock()
+	defer c.subMux.Unlock()
+	if c.subGen != gen {
+		return 0
+	}
+	return c.markSubscriptionsBrokenNeedsSubMuxLock()
+}
+
+func (c *Client) markSubscriptionsBrokenNeedsSubMuxLock() int {
 	for _, sub := range c.subs {
 		sub.needsRecreate = true
 	}

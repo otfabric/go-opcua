@@ -174,25 +174,28 @@ func TestParallelStartClose(t *testing.T) {
 					default:
 					}
 					_ = wd.Do("op", func() error {
+						// every operation but the reads may restart the reader
 						switch rng.Intn(6) {
 						case 0:
 							ctx, cancel := context.WithCancel(context.Background())
-							_ = rt.Start(ctx)
+							chk.restart(func() { _ = rt.Start(ctx) })
 							if rng.Intn(2) == 0 {
-								cancel()
+								chk.restart(cancel)
 							} else {
-								time.AfterFunc(time.Duration(rng.Intn(20))*time.Millisecond, cancel)
+								time.AfterFunc(time.Duration(rng.Intn(20))*time.Millisecond, func() { chk.restart(cancel) })
 							}
 						case 1:
-							_ = rt.Start(context.Background())
+							chk.restart(func() { _ = rt.Start(context.Background()) })
 						case 2:
-							_ = rt.Disable(pubsub.Root)
+							chk.restart(func() { _ = rt.Disable(pubsub.Root) })
 						case 3:
-							_ = rt.Enable(pubsub.Root)
+							chk.restart(func() { _ = rt.Enable(pubsub.Root) })
 						case 4:
-							if cid, err := rt.AddConnection(pubsub.UDPConnection(fmt.Sprintf("x%d", g), udpURL(port), uint16(2))); err == nil && rng.Intn(2) == 0 {
-								_ = rt.RemoveConnection(cid)
-							}
+							chk.restart(func() {
+								if cid, err := rt.AddConnection(pubsub.UDPConnection(fmt.Sprintf("x%d", g), udpURL(port), uint16(2))); err == nil && rng.Intn(2) == 0 {
+									_ = rt.RemoveConnection(cid)
+								}
+							})
 						default:
 							_ = rt.Components()
 							_, _ = rt.Status(pubsub.Root)

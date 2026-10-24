@@ -114,8 +114,8 @@ type SecureChannel struct {
 	openWaitID uint32
 	openWaitCh chan struct{}
 
-	// handles maps requestIDs to response channels
-	handlers   map[uint32]chan *MessageBody
+	// handlers maps request ids to the requests waiting for their response
+	handlers   map[uint32]pendingRequest
 	handlersMu sync.Mutex
 
 	// chunks maintains a temporary list of chunks for a given request ID
@@ -254,7 +254,7 @@ func newSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, kind channelKi
 		disconnected: make(chan struct{}),
 		instances:    make(map[uint32][]*channelInstance),
 		chunks:       make(map[uint32][]*MessageChunk),
-		handlers:     make(map[uint32]chan *MessageBody),
+		handlers:     make(map[uint32]pendingRequest),
 	}
 
 	return s, nil
@@ -314,7 +314,7 @@ func (s *SecureChannel) dispatcher() {
 					return
 				default:
 					select {
-					case s.errch <- msg.Err:
+					case s.errch <- s.monitorError(msg):
 					default:
 					}
 				}
@@ -335,8 +335,8 @@ func (s *SecureChannel) dispatcher() {
 					// io.EOF when the disconnected channel fires on the next loop.
 					s.handlersMu.Lock()
 					pending := make(map[uint32]chan *MessageBody, len(s.handlers))
-					for id, hch := range s.handlers {
-						pending[id] = hch
+					for id, h := range s.handlers {
+						pending[id] = h.ch
 						delete(s.handlers, id)
 					}
 					s.handlersMu.Unlock()
@@ -411,16 +411,46 @@ func (s *SecureChannel) notifyMonitor(msg *MessageBody) bool {
 	return isReconnectTrigger(msg.Err)
 }
 
+// RequestFault is how the secure channel reports a service fault that asks
+// for recovery (an invalid session or subscription) to its error channel:
+// the fault, and the authentication token of the request it answers. A
+// session fault is only news about the session the request was sent in; the
+// receiver can tell a fault of a session it has left from one of the session
+// it uses.
+type RequestFault struct {
+	Err error
+	// AuthToken is the authentication token the request was sent with, nil
+	// for a request outside a session.
+	AuthToken *ua.NodeID
+}
+
+func (f *RequestFault) Error() string { return f.Err.Error() }
+func (f *RequestFault) Unwrap() error { return f.Err }
+
+// monitorError is the error the dispatcher reports for a failed msg: a
+// service fault as a RequestFault, anything else as it is.
+func (s *SecureChannel) monitorError(msg *MessageBody) error {
+	if msg.Response() == nil {
+		return msg.Err
+	}
+	s.handlersMu.Lock()
+	h := s.handlers[msg.RequestID]
+	s.handlersMu.Unlock()
+	return &RequestFault{Err: msg.Err, AuthToken: h.authToken}
+}
+
 // isReconnectTrigger reports whether a service-level fault requires the secure
 // channel, session, or subscriptions to be recreated. These are the status
 // codes the client's connection monitor acts on; every other operation-level
 // fault is delivered to the caller without disturbing the connection.
+// BadNoSubscription is not one: only a Publish request gets it, and only the
+// client's publish loop knows whether it is stale (a subscription was
+// recreated while the request was under way).
 func isReconnectTrigger(err error) bool {
 	switch {
 	case errors.Is(err, ua.StatusBadSecureChannelIDInvalid),
 		errors.Is(err, ua.StatusBadSessionIDInvalid),
 		errors.Is(err, ua.StatusBadSubscriptionIDInvalid),
-		errors.Is(err, ua.StatusBadNoSubscription),
 		errors.Is(err, ua.StatusBadCertificateInvalid):
 		return true
 	default:
@@ -1279,15 +1309,22 @@ func (s *SecureChannel) awaitResponse(ctx context.Context, reqID uint32, ch <-ch
 	}
 }
 
+// pendingRequest is a request waiting for its response: the channel the
+// response goes to and the authentication token the request was sent with.
+type pendingRequest struct {
+	ch        chan *MessageBody
+	authToken *ua.NodeID
+}
+
 func (s *SecureChannel) popHandler(reqID uint32) (chan *MessageBody, bool) {
 	s.handlersMu.Lock()
 	defer s.handlersMu.Unlock()
 
-	ch, ok := s.handlers[reqID]
+	h, ok := s.handlers[reqID]
 	if ok {
 		delete(s.handlers, reqID)
 	}
-	return ch, ok
+	return h.ch, ok
 }
 
 func (s *SecureChannel) Renew(ctx context.Context) error {
@@ -1346,12 +1383,12 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 
 		s.handlersMu.Lock()
 
-		if s.handlers[reqID] != nil {
+		if _, ok := s.handlers[reqID]; ok {
 			s.handlersMu.Unlock()
 			return nil, fmt.Errorf("%w: request id %d", errors.ErrDuplicateHandler, reqID)
 		}
 
-		s.handlers[reqID] = resp
+		s.handlers[reqID] = pendingRequest{ch: resp, authToken: authToken}
 		s.handlersMu.Unlock()
 	}
 

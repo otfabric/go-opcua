@@ -123,14 +123,42 @@ type checker struct {
 	mu      sync.Mutex
 	streams map[string]*rstream
 	total   atomic.Int64
+
+	// restarts and restarting are maintained by a test whose operations
+	// restart the readers (see restart): a restarted reader starts over
+	// (Part 14 §7.2.2.3.4) and accepts a message the kernel delivers late
+	// that its predecessor would have discarded as older. The order of
+	// two data sets is only checked when no restart came between them.
+	restarts   atomic.Int64
+	restarting atomic.Int64
+}
+
+// restart runs op, an operation that may restart the readers.
+func (c *checker) restart(op func()) {
+	c.restarts.Add(1)
+	c.restarting.Add(1)
+	defer func() {
+		c.restarting.Add(-1)
+		c.restarts.Add(1)
+	}()
+	op()
+}
+
+// epoch identifies the time between two reader restarts; ok is false while
+// one may be in progress.
+func (c *checker) epoch() (n int64, ok bool) {
+	n = c.restarts.Load()
+	return n, c.restarting.Load() == 0 && c.restarts.Load() == n
 }
 
 type rstream struct {
-	hasSeq bool
-	seq    uint16
-	n      int64
-	count  int64
-	last   time.Time
+	hasSeq  bool
+	seq     uint16
+	n       int64
+	count   int64
+	last    time.Time
+	epoch   int64
+	inEpoch bool
 }
 
 func newChecker() *checker {
@@ -186,7 +214,13 @@ func (c *checker) handle(d *pubsub.ReceivedDataSet) {
 		st = &rstream{}
 		c.streams[key] = st
 	}
-	if st.count > 0 && n <= st.n {
+	epoch, inEpoch := c.epoch()
+	ordered := st.inEpoch && inEpoch && st.epoch == epoch
+	st.epoch, st.inEpoch = epoch, inEpoch
+	if !ordered {
+		st.hasSeq = false
+	}
+	if ordered && st.count > 0 && n <= st.n {
 		c.sink.Addf("%s: counter went from %d to %d (seq %d after %d): duplicate or stale data set", key, st.n, n, d.SequenceNumber, st.seq)
 	}
 	seq := uint16(d.SequenceNumber)

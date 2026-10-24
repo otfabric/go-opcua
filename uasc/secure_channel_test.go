@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"math"
 	"testing"
 	"time"
@@ -490,7 +491,6 @@ func TestIsReconnectTrigger(t *testing.T) {
 		ua.StatusBadSecureChannelIDInvalid,
 		ua.StatusBadSessionIDInvalid,
 		ua.StatusBadSubscriptionIDInvalid,
-		ua.StatusBadNoSubscription,
 		ua.StatusBadCertificateInvalid,
 	}
 	for _, err := range triggers {
@@ -501,6 +501,11 @@ func TestIsReconnectTrigger(t *testing.T) {
 
 	if isReconnectTrigger(ua.StatusBadUserAccessDenied) {
 		t.Error("isReconnectTrigger(StatusBadUserAccessDenied) = true, want false")
+	}
+	// only a Publish request gets BadNoSubscription, and only the client's
+	// publish loop can tell whether it is stale
+	if isReconnectTrigger(ua.StatusBadNoSubscription) {
+		t.Error("isReconnectTrigger(StatusBadNoSubscription) = true, want false")
 	}
 	if isReconnectTrigger(nil) {
 		t.Error("isReconnectTrigger(nil) = true, want false")
@@ -526,6 +531,38 @@ func TestNotifyMonitor(t *testing.T) {
 	bodyWithErr := &MessageBody{body: &ua.ReadResponse{}, Err: ua.StatusBadSessionIDInvalid}
 	if !sc.notifyMonitor(bodyWithErr) {
 		t.Error("notifyMonitor with reconnect trigger error should return true")
+	}
+}
+
+// A service fault reaches the monitor with the authentication token of the
+// request it answers; a transport error as it is.
+func TestMonitorErrorCarriesAuthToken(t *testing.T) {
+	tok := ua.NewByteStringNodeID(0, []byte("session-a"))
+	sc := &SecureChannel{cfg: &Config{}, handlers: map[uint32]pendingRequest{
+		7: {ch: make(chan *MessageBody, 1), authToken: tok},
+		8: {ch: make(chan *MessageBody, 1)},
+	}}
+
+	err := sc.monitorError(&MessageBody{RequestID: 7, body: &ua.ServiceFault{}, Err: ua.StatusBadSessionIDInvalid})
+	var fault *RequestFault
+	if !errors.As(err, &fault) {
+		t.Fatalf("monitorError = %T, want *RequestFault", err)
+	}
+	if !fault.AuthToken.Equal(tok) {
+		t.Errorf("AuthToken = %v, want %v", fault.AuthToken, tok)
+	}
+	if !errors.Is(err, ua.StatusBadSessionIDInvalid) {
+		t.Errorf("errors.Is(%v, StatusBadSessionIDInvalid) = false", err)
+	}
+
+	// outside a session
+	err = sc.monitorError(&MessageBody{RequestID: 8, body: &ua.ServiceFault{}, Err: ua.StatusBadSecureChannelIDInvalid})
+	if !errors.As(err, &fault) || fault.AuthToken != nil {
+		t.Errorf("monitorError = %v, want a RequestFault without token", err)
+	}
+
+	if err := sc.monitorError(&MessageBody{Err: io.EOF}); err != io.EOF {
+		t.Errorf("monitorError(io.EOF) = %v, want io.EOF", err)
 	}
 }
 
