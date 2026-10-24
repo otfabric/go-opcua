@@ -331,7 +331,7 @@ func Validate(cfg *ua.PubSubConfigurationDataType) error {
 	if cfg == nil {
 		return configErr("", "nil configuration")
 	}
-	pdsNames := map[string]bool{}
+	pdsNames := dataSets{}
 	for i, pds := range cfg.PublishedDataSets {
 		path := fmt.Sprintf("published data set %d", i)
 		if pds != nil {
@@ -340,10 +340,10 @@ func Validate(cfg *ua.PubSubConfigurationDataType) error {
 		if err := validatePublishedDataSet(path, pds); err != nil {
 			return err
 		}
-		if pdsNames[pds.Name] {
+		if _, dup := pdsNames[pds.Name]; dup {
 			return configErr(path, "duplicate name")
 		}
-		pdsNames[pds.Name] = true
+		pdsNames[pds.Name] = isActionSource(pds.DataSetSource)
 	}
 	connNames := map[string]bool{}
 	for i, c := range cfg.Connections {
@@ -395,6 +395,10 @@ func validatePublishedDataSet(path string, pds *ua.PublishedDataSetDataType) err
 		if err := validateFieldNames(path, pds.DataSetMetaData); err != nil {
 			return err
 		}
+	case *ua.PublishedActionDataType:
+		return validateActionSource(path, pds, src.RequestDataSetMetaData, src.ActionTargets)
+	case *ua.PublishedActionMethodDataType:
+		return validateActionSource(path, pds, src.RequestDataSetMetaData, src.ActionTargets)
 	case *ua.PublishedEventsDataType:
 		if src.EventNotifier == nil {
 			return configErr(path, "PublishedEvents without EventNotifier")
@@ -412,6 +416,52 @@ func validatePublishedDataSet(path string, pds *ua.PublishedDataSetDataType) err
 		return configErr(path, "DataSetSource of type %T is not supported", src)
 	}
 	return nil
+}
+
+// dataSets are the names of the PublishedDataSets of a configuration, each
+// with whether it is a PublishedAction.
+type dataSets map[string]bool
+
+// isActionSource reports whether a DataSetSource is a PublishedAction (or a
+// PublishedActionMethod).
+func isActionSource(src *ua.ExtensionObject) bool {
+	switch eoValue(src).(type) {
+	case *ua.PublishedActionDataType, *ua.PublishedActionMethodDataType:
+		return true
+	}
+	return false
+}
+
+func hasActionWriter(ws []*ua.DataSetWriterDataType, pds dataSets) bool {
+	for _, w := range ws {
+		if w != nil && pds[w.DataSetName] {
+			return true
+		}
+	}
+	return false
+}
+
+// validateActionSource checks a PublishedAction (Part 14 §6.2.3.10.3 in
+// 1.05): its Action targets with unique ids, and the field names of the
+// request and the response DataSetMetaData.
+func validateActionSource(path string, pds *ua.PublishedDataSetDataType, request *ua.DataSetMetaDataType, targets []*ua.ActionTargetDataType) error {
+	if len(targets) == 0 {
+		return configErr(path, "a PublishedAction needs ActionTargets")
+	}
+	ids := map[uint16]bool{}
+	for i, t := range targets {
+		if t == nil {
+			return configErr(path, "ActionTargets[%d] is nil", i)
+		}
+		if ids[t.ActionTargetID] {
+			return configErr(path, "ActionTargetId %d is used twice", t.ActionTargetID)
+		}
+		ids[t.ActionTargetID] = true
+	}
+	if err := validateFieldNames(path+": RequestDataSetMetaData", request); err != nil {
+		return err
+	}
+	return validateFieldNames(path, pds.DataSetMetaData)
 }
 
 func validateFieldNames(path string, md *ua.DataSetMetaDataType) error {
@@ -434,7 +484,7 @@ func validateFieldNames(path string, md *ua.DataSetMetaDataType) error {
 	return nil
 }
 
-func validateConnection(path string, c *ua.PubSubConnectionDataType, pds map[string]bool) error {
+func validateConnection(path string, c *ua.PubSubConnectionDataType, pds dataSets) error {
 	if c == nil {
 		return configErr(path, "nil connection")
 	}
@@ -537,7 +587,7 @@ func validateSecurity(path string, mode ua.MessageSecurityMode, groupID string, 
 	return configErr(path, "invalid SecurityMode %d", mode)
 }
 
-func validateWriterGroup(path, profile string, broker bool, wg *ua.WriterGroupDataType, pds map[string]bool) error {
+func validateWriterGroup(path, profile string, broker bool, wg *ua.WriterGroupDataType, pds dataSets) error {
 	if wg == nil {
 		return configErr(path, "nil writer group")
 	}
@@ -547,7 +597,16 @@ func validateWriterGroup(path, profile string, broker bool, wg *ua.WriterGroupDa
 	if wg.WriterGroupID == 0 {
 		return configErr(path, "WriterGroupId must not be 0")
 	}
-	if !(wg.PublishingInterval > 0) || math.IsInf(wg.PublishingInterval, 0) {
+	// A group of Action writers on a reliable transport has the
+	// PublishingInterval 0 (Part 14 Table 85 in 1.05): it only answers
+	// requests.
+	actions := len(wg.DataSetWriters) > 0
+	for _, w := range wg.DataSetWriters {
+		if w == nil || !pds[w.DataSetName] {
+			actions = false
+		}
+	}
+	if !(wg.PublishingInterval > 0 || (actions && wg.PublishingInterval == 0)) || math.IsInf(wg.PublishingInterval, 0) {
 		return configErr(path, "PublishingInterval must be > 0 (milliseconds)")
 	}
 	if wg.KeepAliveTime < 0 || math.IsNaN(wg.KeepAliveTime) || math.IsInf(wg.KeepAliveTime, 0) {
@@ -585,6 +644,12 @@ func validateWriterGroup(path, profile string, broker bool, wg *ua.WriterGroupDa
 	if err := validateSecurity(path, wg.SecurityMode, wg.SecurityGroupID, enc); err != nil {
 		return err
 	}
+	if broker && hasActionWriter(wg.DataSetWriters, pds) {
+		// Requests arrive on the queue of the group (Part 14 Table 85).
+		if ts, _ := eoValue(wg.TransportSettings).(*ua.BrokerWriterGroupTransportDataType); ts == nil || ts.QueueName == "" {
+			return configErr(path, "a writer group of Action writers on a broker connection needs a QueueName (the request queue)")
+		}
+	}
 	names := map[string]bool{}
 	ids := map[uint16]bool{}
 	for i, w := range wg.DataSetWriters {
@@ -607,7 +672,7 @@ func validateWriterGroup(path, profile string, broker bool, wg *ua.WriterGroupDa
 	return nil
 }
 
-func validateWriter(path string, enc encoding, broker bool, w *ua.DataSetWriterDataType, pds map[string]bool) error {
+func validateWriter(path string, enc encoding, broker bool, w *ua.DataSetWriterDataType, pds dataSets) error {
 	if w == nil {
 		return configErr(path, "nil writer")
 	}
@@ -617,7 +682,7 @@ func validateWriter(path string, enc encoding, broker bool, w *ua.DataSetWriterD
 	if w.DataSetWriterID == 0 {
 		return configErr(path, "DataSetWriterId must not be 0")
 	}
-	if w.DataSetName != "" && pds != nil && !pds[w.DataSetName] {
+	if _, ok := pds[w.DataSetName]; w.DataSetName != "" && pds != nil && !ok {
 		return configErr(path, "no published data set %q", w.DataSetName)
 	}
 	switch ms := eoValue(w.MessageSettings).(type) {

@@ -306,6 +306,28 @@ func PublishedDataItems(name string, fields ...PublishedField) *ua.PublishedData
 	}
 }
 
+// PublishedActions returns a PublishedDataSet whose DataSetSource is a
+// PublishedAction (Part 14 §6.2.3.10.3 in 1.05) with the given Action
+// targets: request describes the input fields of the requests (the
+// RequestDataSetMetaData), response the output fields of the responses
+// (the DataSetMetaData). The writers of the data set are Responders; the
+// handlers of the targets are registered with [WithActionHandler].
+func PublishedActions(name string, request, response []Field, targets ...*ua.ActionTargetDataType) *ua.PublishedDataSetDataType {
+	return &ua.PublishedDataSetDataType{
+		Name:            name,
+		DataSetMetaData: MetaData(name, response...),
+		DataSetSource: ua.NewExtensionObject(&ua.PublishedActionDataType{
+			RequestDataSetMetaData: MetaData(name+"Request", request...),
+			ActionTargets:          targets,
+		}),
+	}
+}
+
+// ActionTargetOf returns an Action target of a [PublishedActions] data set.
+func ActionTargetOf(id uint16, name string) *ua.ActionTargetDataType {
+	return &ua.ActionTargetDataType{ActionTargetID: id, Name: name, Description: &ua.LocalizedText{}}
+}
+
 // DataSetMetaDataOf returns the DataSetMetaData of a published data set
 // built with [PublishedDataItems], for the readers of its writers.
 func DataSetMetaDataOf(pds *ua.PublishedDataSetDataType) *ua.DataSetMetaDataType {
