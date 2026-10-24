@@ -30,7 +30,10 @@ func findNS(t *testing.T, c interface {
 	FindNamespace(context.Context, string) (uint16, error)
 }) (context.Context, uint16) {
 	t.Helper()
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	// Most callers use ctx for the rest of the test, not only for these
+	// two calls: 5 s was too short for that against a peer starting cold
+	// on a loaded runner.
+	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
 	t.Cleanup(cancel)
 
 	if err := c.UpdateNamespaces(ctx); err != nil {
