@@ -61,6 +61,12 @@ type ChaosProxy struct {
 	backend string
 	links   map[*chaosLink]struct{}
 	closed  bool
+	// drops counts DropAll calls. A connection accepted before one is
+	// reset when it registers its link: DropAll did not see it.
+	drops uint64
+	// beforeLink, if set, runs between the accept of a connection and the
+	// registration of its link (tests).
+	beforeLink atomic.Pointer[func()]
 
 	refuse atomic.Bool
 
@@ -142,6 +148,9 @@ func (p *ChaosProxy) ActiveLinks() int {
 // DropAll abortively closes (RST) every proxied connection. New connections
 // are still accepted.
 func (p *ChaosProxy) DropAll() {
+	p.mu.Lock()
+	p.drops++
+	p.mu.Unlock()
 	for _, l := range p.snapshot() {
 		l.reset()
 	}
@@ -302,16 +311,22 @@ func (p *ChaosProxy) acceptLoop() {
 			return
 		}
 		p.accepted.Add(1)
+		p.mu.Lock()
+		drops := p.drops
+		p.mu.Unlock()
 		if p.refuse.Load() {
 			abort(c)
 			continue
 		}
 		p.wg.Add(1)
-		go p.serve(c)
+		go p.serve(c, drops)
 	}
 }
 
-func (p *ChaosProxy) serve(client net.Conn) {
+// serve forwards an accepted connection. drops is the DropAll count at the
+// accept: a DropAll or a refusal while the backend is dialled ends the
+// connection when its link registers, as if it had been among the links.
+func (p *ChaosProxy) serve(client net.Conn, drops uint64) {
 	defer p.wg.Done()
 
 	p.mu.Lock()
@@ -331,8 +346,11 @@ func (p *ChaosProxy) serve(client net.Conn) {
 
 	l := &chaosLink{p: p, client: client, server: server, done: make(chan struct{})}
 
+	if f := p.beforeLink.Load(); f != nil {
+		(*f)()
+	}
 	p.mu.Lock()
-	if p.closed {
+	if p.closed || p.drops != drops || p.refuse.Load() {
 		p.mu.Unlock()
 		l.reset()
 		return
