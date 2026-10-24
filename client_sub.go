@@ -368,18 +368,32 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 				return result, status
 			}
 
-			// Process the republished notification and advance sequence number
-			if res.NotificationMessage != nil {
-				c.notifySubscription(ctx, sub, res.NotificationMessage)
-				sub.lastSeq = res.NotificationMessage.SequenceNumber
-				sub.nextSeq = sub.lastSeq + 1
-				result.republishedCount++
-				c.cfg.logger.Debug("republished notification", "seq_num", res.NotificationMessage.SequenceNumber, "sub_id", sub.id())
-
-				if len(availableSeq) > 0 && !slices.Contains(availableSeq, sub.nextSeq) {
-					c.cfg.logger.Debug("republishing subscription complete", "sub_id", sub.id())
-					return result, nil
+			// Only the message asked for is a retransmission. A Good response
+			// with another one (opcua-asyncio answers a sequence number it
+			// does not hold with an empty message, sequence number 0) means
+			// the server has no more to retransmit, as BadMessageNotAvailable
+			// does: taking its number would rewind the subscription's
+			// sequence numbers and ask for the same message again and again.
+			if res.NotificationMessage == nil || res.NotificationMessage.SequenceNumber != req.RetransmitSequenceNumber {
+				got := uint32(0)
+				if res.NotificationMessage != nil {
+					got = res.NotificationMessage.SequenceNumber
 				}
+				c.cfg.logger.Debug("republish answered without the requested message", "sub_id", req.SubscriptionID,
+					"seq_num", req.RetransmitSequenceNumber, "got_seq_num", got)
+				return result, nil
+			}
+
+			// Process the republished notification and advance sequence number
+			c.notifySubscription(ctx, sub, res.NotificationMessage)
+			sub.lastSeq = res.NotificationMessage.SequenceNumber
+			sub.nextSeq = sub.lastSeq + 1
+			result.republishedCount++
+			c.cfg.logger.Debug("republished notification", "seq_num", res.NotificationMessage.SequenceNumber, "sub_id", sub.id())
+
+			if len(availableSeq) > 0 && !slices.Contains(availableSeq, sub.nextSeq) {
+				c.cfg.logger.Debug("republishing subscription complete", "sub_id", sub.id())
+				return result, nil
 			}
 		}
 
