@@ -209,6 +209,10 @@ func newCWPair(t *testing.T, timeout time.Duration, maxPending int) *cwPair {
 	require.True(t, p.w.acquire(context.Background()))
 	require.NoError(t, p.w.send(msg.RequestID, &ua.ReadResponse{ResponseHeader: cwHeader(ua.StatusOK), Results: []*ua.DataValue{}}))
 	require.NoError(t, cwWait(t, res).err)
+	// The writer returns the slot after the write, which can be after the
+	// client got the response: the tests start with every slot free.
+	require.Eventually(t, func() bool { return len(p.w.slots) == 0 }, 10*time.Second, time.Millisecond,
+		"the slot of the round trip was not returned")
 	return p
 }
 
