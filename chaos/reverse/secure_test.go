@@ -308,7 +308,11 @@ func runSecureReverse(t *testing.T, prof profile, seed int64, dur time.Duration)
 			rproxy.Heal()
 			// Bytes may have been swallowed: see the blackhole.
 			rproxy.DropAll()
-		}, false},
+			// A blackhole that is lifted again within the storm lets the
+			// stream go on after the bytes it swallowed, cut inside a
+			// message: the receiver fails its security checks as after a
+			// flipped bit.
+		}, true},
 	}
 
 	// Every fault is applied at least once.
