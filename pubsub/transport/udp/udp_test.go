@@ -7,13 +7,13 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua/internal/testutil/leakcheck"
 	"github.com/otfabric/go-opcua/internal/testutil/testport"
 
 	"github.com/stretchr/testify/require"
@@ -264,7 +264,6 @@ func TestConcurrentSendReceive(t *testing.T) {
 }
 
 func TestCloseSemantics(t *testing.T) {
-	before := runtime.NumGoroutine()
 	c, port, _ := listen(t, loopback, func(*transport.Message) {})
 	url := fmt.Sprintf("opc.udp://127.0.0.1:%d", port)
 	require.NoError(t, c.Close())
@@ -272,9 +271,11 @@ func TestCloseSemantics(t *testing.T) {
 	require.ErrorIs(t, c.Send(context.Background(), []byte("x"), transport.PublishOptions{}), transport.ErrClosed)
 	_, err := c.Subscribe(context.Background(), "", 0, func(*transport.Message) {})
 	require.ErrorIs(t, err, transport.ErrClosed)
-	// Close waited for the receive goroutine (no Eventually here: it runs
-	// its condition in a goroutine of its own).
-	require.LessOrEqual(t, runtime.NumGoroutine(), before)
+	// Close waited for the receive goroutine. The connections of earlier
+	// tests are closed by their cleanups, so no receive loop may be left.
+	// (Counting goroutines is not exact: other goroutines of the test binary
+	// come and go.)
+	require.NotContains(t, leakcheck.AllStacks(), "udp.(*Conn).receive")
 
 	// The port is free again.
 	c2 := open(t, transport.Config{URL: url})
