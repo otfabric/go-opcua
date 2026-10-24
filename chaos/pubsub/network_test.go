@@ -184,12 +184,16 @@ func TestChaosUDPNetworkFaults(t *testing.T) {
 				p.relay.set(f)
 				time.Sleep(hold)
 			}
-			if blackholes == 0 {
-				t.Logf("%s: blackhole for %v", time.Now().Format("15:04:05.000"), 3*timeout)
-				p.relay.set(faults{blackhole: true})
-				time.Sleep(3 * timeout)
-				blackholes++
+			// A last blackhole that lasts until every reader is in Error:
+			// one of a random length may have ended before a reader whose
+			// timer was held up by a loaded machine noticed it (or there
+			// was none), and the checks below need a timeout.
+			t.Logf("%s: blackhole until the readers time out", time.Now().Format("15:04:05.000"))
+			p.relay.set(faults{blackhole: true})
+			for _, r := range p.readers {
+				waitState(t, p.sub, compID(t, p.sub, pubsub.KindDataSetReader, r), ua.PubSubStateError)
 			}
+			blackholes++
 			p.relay.set(faults{})
 
 			// Recovery: every reader delivers again and is Operational.
@@ -231,6 +235,7 @@ func TestChaosUDPNetworkFaults(t *testing.T) {
 func TestChaosPublisherRestart(t *testing.T) {
 	t.Parallel()
 	const timeout = 200 * time.Millisecond
+	stalls := chaoskit.WatchStalls(t)
 	port := freeUDPPort(t)
 	var cur atomic.Pointer[checker]
 	cur.Store(newChecker())
@@ -260,6 +265,7 @@ func TestChaosPublisherRestart(t *testing.T) {
 			t.Fatalf("round %d: nothing from the restarted publisher", round)
 		}
 		if d := time.Since(begin); round > 0 && d > timeout+time.Second {
+			stalls.SkipIfStalled(t, 500*time.Millisecond, "the first message after a restart is bounded by MessageReceiveTimeout + 1 s")
 			t.Errorf("round %d: the first message of the restarted publisher was delivered after %v (MessageReceiveTimeout %v)", round, d, timeout)
 		}
 		t.Logf("round %d: first data set after %v", round, time.Since(begin))
