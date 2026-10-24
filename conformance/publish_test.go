@@ -619,11 +619,13 @@ func TestSubscription_LifetimeExpiry(t *testing.T) {
 	orphan := newRawSub(t, c, rawSubParams{interval: 10, keepAlive: 1, lifetime: 3})
 	require.Equal(t, uint32(3), orphan.lifetime)
 
-	// A subscription with a one-second lifetime that is serviced by a client
-	// publish loop.
+	// A subscription with a lifetime of 2.5 s that is serviced by a client
+	// publish loop. The client has one Publish request outstanding at a
+	// time: a lifetime of a second ran out when its publish loop was held
+	// up that long on a loaded runner.
 	served := newClient(t, url)
 	kept, err := served.Subscribe(ctx, &opcua.SubscriptionParameters{
-		Interval: 10 * time.Millisecond, MaxKeepAliveCount: 1, LifetimeCount: 100,
+		Interval: 25 * time.Millisecond, MaxKeepAliveCount: 1, LifetimeCount: 100,
 	}, make(chan *opcua.PublishNotificationData, 64))
 	require.NoError(t, err)
 	require.Equal(t, uint32(100), kept.RevisedLifetimeCount)
@@ -636,7 +638,7 @@ func TestSubscription_LifetimeExpiry(t *testing.T) {
 
 	// Two lifetimes later the serviced subscription still exists: each
 	// keep-alive it gets to send resets its lifetime counter.
-	time.Sleep(time.Until(created.Add(2 * time.Second)))
+	time.Sleep(time.Until(created.Add(5 * time.Second)))
 	res, err := served.SetPublishingMode(ctx, true, kept.SubscriptionID)
 	require.NoError(t, err)
 	require.Equal(t, []ua.StatusCode{ua.StatusOK}, res.Results)
