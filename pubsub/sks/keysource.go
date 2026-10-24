@@ -64,6 +64,13 @@ type Config struct {
 // of the current one that the source does not hold (the peer fetched
 // first) triggers a fetch too, at most once per MinRetry. Failed fetches
 // are retried with exponential backoff. Close stops it.
+//
+// A fetch returns the current key and the future keys, not the past ones:
+// a subscriber whose first fetch comes just after a key change does not
+// hold the previous key, and rejects the messages that a publisher which
+// has not changed keys yet still secures with it (at most the publisher's
+// response delay). Where a publisher and a subscriber start together,
+// create the subscriber's KeySource first.
 type KeySource struct {
 	cfg  Config
 	ring *security.KeyRing
@@ -110,7 +117,7 @@ func NewKeySource(ctx context.Context, cfg Config) (*KeySource, error) {
 		stop:    make(chan struct{}),
 		done:    make(chan struct{}),
 	}
-	r, err := s.fetch(ctx)
+	r, received, err := s.fetch(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +126,7 @@ func NewKeySource(ctx context.Context, cfg Config) (*KeySource, error) {
 		return nil, fmt.Errorf("pubsub/sks: %w", err)
 	}
 	s.ring = security.NewKeyRing(cfg.SecurityGroupID, policy, security.WithMaxPastKeys(cfg.MaxPastKeys))
-	if err := s.install(r); err != nil {
+	if err := s.install(r, received); err != nil {
 		return nil, err
 	}
 	go s.run()
@@ -192,7 +199,10 @@ func (s *KeySource) Close() error {
 	return nil
 }
 
-func (s *KeySource) fetch(ctx context.Context) (*Result, error) {
+// fetch gets the keys and returns when the response arrived: closing a
+// session dialed for the fetch comes after that and must not delay the
+// key changes.
+func (s *KeySource) fetch(ctx context.Context) (*Result, time.Time, error) {
 	ctx, cancel := context.WithTimeout(ctx, s.cfg.Timeout)
 	defer cancel()
 	c := s.cfg.Client
@@ -200,7 +210,7 @@ func (s *KeySource) fetch(ctx context.Context) (*Result, error) {
 		var err error
 		c, err = s.cfg.Dial(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("pubsub/sks: dial SKS: %w", err)
+			return nil, time.Time{}, fmt.Errorf("pubsub/sks: dial SKS: %w", err)
 		}
 		defer func() { _ = c.Close(context.WithoutCancel(ctx)) }()
 	}
@@ -211,11 +221,21 @@ func (s *KeySource) fetch(ctx context.Context) (*Result, error) {
 	case count == 0:
 		count = math.MaxUint32
 	}
-	return GetSecurityKeys(ctx, c, s.cfg.SecurityGroupID, 0, count)
+	r, err := GetSecurityKeys(ctx, c, s.cfg.SecurityGroupID, 0, count)
+	return r, time.Now(), err
 }
 
-func (s *KeySource) install(r *Result) error {
-	if err := s.ring.SetKeys(r.SecurityPolicyURI, r.FirstTokenID, r.Keys, r.TimeToNextKey, r.KeyLifetime); err != nil {
+// install sets the keys of r, received at received. TimeToNextKey counts
+// from the SKS's response, so the time since then is taken off: a ring
+// that changed keys later than the SKS would have a publisher secure
+// messages with a key its subscribers may already have given up.
+func (s *KeySource) install(r *Result, received time.Time) error {
+	ttnk := r.TimeToNextKey
+	if ttnk > 0 {
+		// At least 1 ns: SetKeys reads 0 as a whole key lifetime.
+		ttnk = max(ttnk-time.Since(received), time.Nanosecond)
+	}
+	if err := s.ring.SetKeys(r.SecurityPolicyURI, r.FirstTokenID, r.Keys, ttnk, r.KeyLifetime); err != nil {
 		return fmt.Errorf("pubsub/sks: %w", err)
 	}
 	if s.cfg.OnUpdate != nil {
@@ -280,9 +300,9 @@ func (s *KeySource) run() {
 			case <-ctx.Done():
 			}
 		}()
-		r, err := s.fetch(ctx)
+		r, received, err := s.fetch(ctx)
 		if err == nil {
-			err = s.install(r)
+			err = s.install(r, received)
 		}
 		cancel()
 		s.mu.Lock()

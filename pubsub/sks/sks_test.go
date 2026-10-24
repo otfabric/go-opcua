@@ -442,3 +442,28 @@ func TestKeySourceRefreshOnUnknownToken(t *testing.T) {
 	require.False(t, src.ahead(0))
 	require.False(t, (&KeySource{ring: security.NewKeyRing("x", security.Aes128CTR())}).ahead(1), "empty ring")
 }
+
+// TestInstallCountsFromTheResponse: TimeToNextKey counts from the SKS's
+// response, so the time between the response and the install (closing the
+// session dialed for the fetch) is taken off, and a key change that is
+// already due advances the ring instead of being postponed a lifetime.
+func TestInstallCountsFromTheResponse(t *testing.T) {
+	key := make([]byte, 52) // Aes128-CTR: 32 signing, 16 encrypting, 4 nonce bytes
+	r := &Result{
+		SecurityPolicyURI: security.PolicyURIAes128CTR,
+		FirstTokenID:      7,
+		Keys:              [][]byte{key, key},
+		TimeToNextKey:     time.Hour,
+		KeyLifetime:       2 * time.Hour,
+	}
+	s := &KeySource{ring: security.NewKeyRing("g", security.Aes128CTR())}
+	require.NoError(t, s.install(r, time.Now().Add(-10*time.Minute)))
+	require.InDelta(t, 50*time.Minute, s.ring.TimeToNextKey(), float64(time.Minute))
+	require.EqualValues(t, 7, s.ring.CurrentTokenID())
+
+	// The key changed between the response and the install.
+	r.TimeToNextKey = time.Minute
+	require.NoError(t, s.install(r, time.Now().Add(-2*time.Minute)))
+	require.EqualValues(t, 8, s.ring.CurrentTokenID())
+	require.InDelta(t, 2*time.Hour, s.ring.TimeToNextKey(), float64(2*time.Minute))
+}

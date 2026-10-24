@@ -258,7 +258,11 @@ func TestPubSub_SecurityKeyService(t *testing.T) {
 		t.Cleanup(func() { _ = src.Close() })
 		return src
 	}
-	pubKeys, subKeys := pull(), pull()
+	// The subscriber fetches first: a fetch returns no past keys, so a
+	// subscriber that fetched just after a key change would not hold the
+	// key the publisher still uses until its own change (sks.KeySource).
+	subKeys := pull()
+	pubKeys := pull()
 	pullURL := psUDPURL(t)
 	pullPDS := pubsub.PublishedDataItems("pull", pubsub.Var("n", ua.NewStringNodeID(1, "pull"), ua.TypeIDInt32))
 	pullRec := newPSRecorder()
@@ -278,7 +282,8 @@ func TestPubSub_SecurityKeyService(t *testing.T) {
 	eventually(t, func() bool { return len(pullRec.of("pull")) > n+5 }, "data flows with the pulled keys")
 	st, err := pullSub.Status(psComponent(t, pullSub, pubsub.KindConnection, "sub"))
 	require.NoError(t, err)
-	require.Zero(t, st.Counters.DecodeErrors, "a message was rejected at a key change")
+	require.Zero(t, st.Counters.DecodeErrors, "a message was rejected at a key change: %v (publisher tokens %v, subscriber tokens %v)",
+		st.LastError, pubKeys.Ring().TokenIDs(), subKeys.Ring().TokenIDs())
 	require.NoError(t, pubKeys.Err())
 
 	// Push: the server's subscriber has no keys and takes nothing...
