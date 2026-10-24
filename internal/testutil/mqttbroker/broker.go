@@ -517,6 +517,27 @@ func (c *client) connect(p *mqtt.Connect) (time.Duration, bool) {
 		expiry = *v
 	}
 	ack := &mqtt.Connack{}
+	if v5 {
+		pr := &ack.Props
+		if b.opts.ReceiveMaximum > 0 {
+			pr.ReceiveMaximum = mqtt.Ptr(b.opts.ReceiveMaximum)
+		}
+		if b.opts.MaxPacketSize > 0 {
+			pr.MaximumPacketSize = mqtt.Ptr(b.opts.MaxPacketSize)
+		}
+		if b.maxQoS < 2 {
+			pr.MaximumQoS = mqtt.Ptr(b.maxQoS)
+		}
+		if b.opts.NoRetain {
+			pr.RetainAvailable = mqtt.Ptr(byte(0))
+		}
+		if b.opts.NoWildcard {
+			pr.WildcardSubAvailable = mqtt.Ptr(byte(0))
+		}
+		pr.ServerKeepAlive = b.opts.ServerKeepAlive
+		pr.SubIDAvailable = mqtt.Ptr(byte(0))
+		pr.SharedSubAvailable = mqtt.Ptr(byte(0))
+	}
 	b.mu.Lock()
 	id := p.ClientID
 	if id == "" {
@@ -547,40 +568,12 @@ func (c *client) connect(p *mqtt.Connect) (time.Duration, bool) {
 	s.client = c
 	c.sess = s
 	c.will = p.Will
-	b.mu.Unlock()
-	if old != nil {
-		old.disconnect(mqtt.ReasonSessionTakenOver, "another connection took over the session") // session takeover
-	}
 	ack.SessionPresent = present
-	if v5 {
-		pr := &ack.Props
-		if b.opts.ReceiveMaximum > 0 {
-			pr.ReceiveMaximum = mqtt.Ptr(b.opts.ReceiveMaximum)
-		}
-		if b.opts.MaxPacketSize > 0 {
-			pr.MaximumPacketSize = mqtt.Ptr(b.opts.MaxPacketSize)
-		}
-		if b.maxQoS < 2 {
-			pr.MaximumQoS = mqtt.Ptr(b.maxQoS)
-		}
-		if b.opts.NoRetain {
-			pr.RetainAvailable = mqtt.Ptr(byte(0))
-		}
-		if b.opts.NoWildcard {
-			pr.WildcardSubAvailable = mqtt.Ptr(byte(0))
-		}
-		pr.ServerKeepAlive = b.opts.ServerKeepAlive
-		pr.SubIDAvailable = mqtt.Ptr(byte(0))
-		pr.SharedSubAvailable = mqtt.Ptr(byte(0))
-	}
 	c.send(ack)
-	keepAlive := time.Duration(p.KeepAlive) * time.Second
-	if v := b.opts.ServerKeepAlive; v5 && v != nil {
-		keepAlive = time.Duration(*v) * time.Second
-	}
 
-	// Retransmit what the session had in flight.
-	b.mu.Lock()
+	// Retransmit what the session had in flight, in the critical section
+	// that attached the client: a publication routed in between would go
+	// out ahead of older ones (MQTT 3.1.1 §4.6, 5.0 §4.6).
 	var all []*queued
 	for _, q := range s.inflight {
 		q.sent = false
@@ -594,6 +587,13 @@ func (c *client) connect(p *mqtt.Connect) (time.Duration, bool) {
 		c.transmit(q)
 	}
 	b.mu.Unlock()
+	if old != nil {
+		old.disconnect(mqtt.ReasonSessionTakenOver, "another connection took over the session") // session takeover
+	}
+	keepAlive := time.Duration(p.KeepAlive) * time.Second
+	if v := b.opts.ServerKeepAlive; v5 && v != nil {
+		keepAlive = time.Duration(*v) * time.Second
+	}
 	return keepAlive, true
 }
 
