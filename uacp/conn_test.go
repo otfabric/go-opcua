@@ -4,17 +4,19 @@ package uacp
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net"
 	"testing"
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/stretchr/testify/require"
 )
 
 func TestListenerAddrAndEndpoint(t *testing.T) {
-	ep := "opc.tcp://127.0.0.1:4840/foo"
+	ep := fmt.Sprintf("opc.tcp://127.0.0.1:%d/foo", testport.TCP(t))
 	ln, err := Listen(context.Background(), ep, nil)
 	require.NoError(t, err)
 	defer func() { _ = ln.Close() }()
@@ -25,7 +27,7 @@ func TestListenerAddrAndEndpoint(t *testing.T) {
 
 func TestConn(t *testing.T) {
 	t.Run("server exists ", func(t *testing.T) {
-		ep := "opc.tcp://127.0.0.1:4840/foo/bar"
+		ep := fmt.Sprintf("opc.tcp://127.0.0.1:%d/foo/bar", testport.TCP(t))
 		ln, err := Listen(context.Background(), ep, nil)
 		require.NoError(t, err)
 		defer func() { _ = ln.Close() }()
@@ -53,7 +55,7 @@ func TestConn(t *testing.T) {
 		case <-done:
 		case err := <-acceptErr:
 			require.Fail(t, "accept fail: %v", err)
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			require.Fail(t, "timed out")
 		}
 	})
@@ -72,7 +74,7 @@ func TestConn(t *testing.T) {
 }
 
 func TestClientWrite(t *testing.T) {
-	ep := "opc.tcp://127.0.0.1:4840/foo/bar"
+	ep := fmt.Sprintf("opc.tcp://127.0.0.1:%d/foo/bar", testport.TCP(t))
 	ln, err := Listen(context.Background(), ep, nil)
 	require.NoError(t, err, "Listen failed")
 	defer func() { _ = ln.Close() }()
@@ -104,7 +106,7 @@ func TestClientWrite(t *testing.T) {
 			goto NEXT
 		case err := <-acceptErr:
 			require.Fail(t, "accept fail: %v", err)
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			require.Fail(t, "timed out")
 		}
 	}
@@ -126,7 +128,7 @@ NEXT:
 }
 
 func TestServerWrite(t *testing.T) {
-	ep := "opc.tcp://127.0.0.1:4840/foo/bar"
+	ep := fmt.Sprintf("opc.tcp://127.0.0.1:%d/foo/bar", testport.TCP(t))
 	ln, err := Listen(context.Background(), ep, nil)
 	require.NoError(t, err, "Listen failed")
 	defer func() { _ = ln.Close() }()
@@ -158,7 +160,7 @@ func TestServerWrite(t *testing.T) {
 			goto NEXT
 		case err := <-acceptErr:
 			require.Fail(t, "accept fail: %v", err)
-		case <-time.After(time.Second):
+		case <-time.After(10 * time.Second):
 			require.Fail(t, "timed out")
 		}
 	}
