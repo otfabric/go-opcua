@@ -138,10 +138,14 @@ type triggerServer struct {
 	srv          atomic.Pointer[server.Server]
 	url          string
 	transferMode atomic.Int32
-	republishOne atomic.Bool  // answer the next Republish with a made-up message
-	createFails  atomic.Bool  // fail CreateSubscription
-	createCalls  atomic.Int32 // failed CreateSubscription calls
-	noSub        atomic.Bool  // answer the next Publish with BadNoSubscription
+	republishOne atomic.Bool // answer the next Republish with a made-up message
+	// answer every Republish with Good and an empty NotificationMessage
+	// (sequence number 0), as opcua-asyncio 2.1.0 does for a sequence number
+	// it does not hold
+	republishEmpty atomic.Bool
+	createFails    atomic.Bool  // fail CreateSubscription
+	createCalls    atomic.Int32 // failed CreateSubscription calls
+	noSub          atomic.Bool  // answer the next Publish with BadNoSubscription
 }
 
 var triggerCodes = map[string]ua.StatusCode{
@@ -181,6 +185,12 @@ func newTriggerServer(t *testing.T) *triggerServer {
 	}
 	republish := func(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 		req := r.(*ua.RepublishRequest)
+		if ts.republishEmpty.Load() {
+			return &ua.RepublishResponse{
+				ResponseHeader:      okHeader(r),
+				NotificationMessage: &ua.NotificationMessage{},
+			}, nil
+		}
 		if ts.republishOne.CompareAndSwap(true, false) {
 			return &ua.RepublishResponse{
 				ResponseHeader:      okHeader(r),
@@ -248,6 +258,21 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 		rec.waitRecovered(t, c)
 		// the session survived on the server: it is restored, and with it
 		// the subscription
+		ev := rec.waitEvent(t, opcua.SubscriptionRecoveryTransferred)
+		require.Equal(t, subID, ev.SubscriptionID)
+		readOK()
+	})
+
+	t.Run("secure channel invalid/republish answered without the message", func(t *testing.T) {
+		// A Good RepublishResponse whose NotificationMessage is not the one
+		// asked for ends the retransmission like BadMessageNotAvailable: the
+		// client neither rewinds its sequence numbers to it nor asks again
+		// and again.
+		ts.republishEmpty.Store(true)
+		t.Cleanup(func() { ts.republishEmpty.Store(false) })
+		rec.reset()
+		trigger(t, c, "SecureChannelIdInvalid")
+		rec.waitRecovered(t, c)
 		ev := rec.waitEvent(t, opcua.SubscriptionRecoveryTransferred)
 		require.Equal(t, subID, ev.SubscriptionID)
 		readOK()
