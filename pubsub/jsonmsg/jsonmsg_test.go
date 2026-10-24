@@ -734,3 +734,28 @@ func TestParseHelpers(t *testing.T) {
 	require.Error(t, err)
 	require.False(t, isDecimal("123456789012345678901"))
 }
+
+// A DataValue field whose Value has no UaType, as Opc.Ua.PubSub's
+// JsonEncoder writes it when the DataSetMetaData implies the type, is
+// typed by the metadata; without metadata by its JSON form.
+func TestDecodeDataValueWithoutUaType(t *testing.T) {
+	in := `{"MessageId":"m","MessageType":"ua-data","Messages":[{"DataSetWriterId":1,"Payload":{"Temp":{"Value":21.5,"Status":{"Code":2147614720},"SourceTimestamp":"2026-10-24T10:00:00Z"},"Count":{"Value":7}}}]}`
+	nm, err := Decode([]byte(in), &DecodeOptions{MetaData: metaLookupTyped([]byte{byte(ua.TypeIDFloat), byte(ua.TypeIDUint16)}, "Temp", "Count")})
+	require.NoError(t, err)
+	f := nm.Messages[0].Fields
+	require.Len(t, f, 2)
+	require.Equal(t, float32(21.5), f[0].Value.Value.Value())
+	require.Equal(t, ua.StatusBadInternalError, f[0].Value.Status)
+	require.Equal(t, time.Date(2026, 10, 24, 10, 0, 0, 0, time.UTC), f[0].Value.SourceTimestamp)
+	require.Equal(t, ua.DataSetFieldContentMaskStatusCode|ua.DataSetFieldContentMaskSourceTimestamp, nm.Messages[0].FieldContentMask)
+	require.Equal(t, uint16(7), f[1].Value.Value.Value())
+
+	nm, err = Decode([]byte(in), nil)
+	require.NoError(t, err)
+	require.Equal(t, 21.5, nm.Messages[0].Fields[0].Value.Value.Value())
+
+	// A Value the metadata type cannot take stays an error.
+	bad := strings.Replace(in, `"Value":7`, `"Value":"x"`, 1)
+	_, err = Decode([]byte(bad), &DecodeOptions{MetaData: metaLookupTyped([]byte{byte(ua.TypeIDFloat), byte(ua.TypeIDUint16)}, "Temp", "Count")})
+	require.Error(t, err)
+}

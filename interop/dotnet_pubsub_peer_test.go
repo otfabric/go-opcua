@@ -65,13 +65,6 @@ var psDotnet = &psPeer{name: "dotnet", env: dotnetEnv, image: defaultDotnetImage
 		// MessageIsValid, so the adapter refuses valid=false (BadNotImplemented).
 		"dataset-message-invalid": "Opc.Ua.PubSub drops a DataSetMessage without MessageIsValid when decoding and cannot encode one (contract §14.13)",
 	},
-	goDecodeGaps: map[string]string{
-		// With the DataSetMetaData (--metadata), JsonEncoder leaves out the
-		// UaType of fields that match it: {"Temp":{"Value":21.5,
-		// "SourceTimestamp":…}}. jsonmsg.Decode types bare Variant fields
-		// from the DataSetMetaData, but not the Value of a DataValue field.
-		"json/datavalue-fields": "jsonmsg.Decode does not apply the DataSetMetaData to the Value of a DataValue field without UaType ({\"Value\":21.5,…}) that Opc.Ua.PubSub's JsonEncoder writes when the metadata implies the type",
-	},
 }
 
 // ---------------------------------------------------------------------------

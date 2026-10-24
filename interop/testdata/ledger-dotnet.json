@@ -2061,7 +2061,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "verified",
       "test": "TestPubSubCodec_DotnetEncodesJSON_GoDecodes",
-      "case": "*; datavalue-fields: go-opcua cannot decode the DataValue Value Opc.Ua.PubSub writes without UaType when it has the DataSetMetaData (a go-opcua gap, pinned by the test)",
+      "case": "*",
       "evidence": "verified against the opcua-interop dotnet adapter of the release after v0.9.0 (v0.9.0 reports pubsub.supported=false); the row holds once interopVersion pins that release",
       "fixture": "baseline"
     },
