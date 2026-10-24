@@ -7,17 +7,22 @@
 
 ### Summary
 
-Interop pin update (the suite runs against opcua-interop **v0.8.2**), async-opcua (Rust) as an opt-in interop peer, and a fix for the first sequence number of server channels.
+Interop pin update (the suite runs against opcua-interop **v0.8.2**), async-opcua (Rust) and the OPC Foundation UA-.NETStandard stack (C#) as opt-in interop peers, a fix for the first sequence number of server channels, and three interoperability fixes found by UA-.NETStandard.
 
 ### Fixed
 
 - **server: the first sequence number of a channel is below 1024.** The channel broker seeded new channels with 1..1023 and the first chunk carries seed+1, so about one channel in 1023 started at 1024. With the RSA security policies the first sequence number must be below 1024 (Part 6 §6.7.2.4); clients that check it (async-opcua) closed the channel with `Bad_SequenceNumberInvalid`. Found by the async-opcua interop peer.
+- **uapolicy: RSA-OAEP-SHA256 plaintext block size.** Aes256_Sha256_RsaPss computed the plaintext block size of asymmetric encryption with the padding of SHA-512 (`2·64+2` instead of `2·32+2` bytes), so asymmetric messages were split into blocks 64 bytes smaller than the peer expected; UA-.NETStandard failed to verify their signatures. The client and server of this library agreed with each other, which hid it. Found by the UA-.NETStandard interop peer.
+- **server: CreateSession endpoints for another host name.** CreateSession returned no `ServerEndpoints` when the client connected with a host name that no endpoint URL matches (a container name, an IP address); it now returns all endpoints of the server. UA-.NETStandard clients abort the session without a matching endpoint.
+- **server: client certificate chains.** `WithClientCertificateTrustList` read only the first certificate of a client certificate chain; the leaf is verified and the rest of the chain is used as intermediates (Part 6 lets a client send its certificate chain).
 
 ### Tests
 
 - Interop images pinned to the opcua-interop v0.8.2 multi-arch digests (open62541 `e035d078…06d48866`, Milo `2d84fa47…ddc9a15e`; release run https://github.com/otfabric/opcua-interop/actions/runs/40055105259). v0.8.2 fixes the intermittent `mqtt-json` interop failure: the open62541 adapter re-enables PubSub components that went to Error when an MQTT send failed before the broker accepted the connection, and no longer aborts with a double free when the broker refuses connections.
 - `interop/coverage.json` and the coverage ledger name v0.8.2.
 - **Interop:** an opt-in peer, the FreeOpcUa async-opcua 0.19.0 Rust stack (opcua-interop v0.9.0 `async-opcua` adapter, `ASYNC_OPCUA_IMAGE`), in both directions with its own ledger `interop/testdata/ledger-async-opcua.json`, checked by `TestAsyncOpcuaLedgerValid` (see INTEROP.md). What async-opcua lacks (ECC, LDS and mDNS, PubSub, the 1.05 JSON / Part 6 XML encodings) is `unsupported` in the ledger and skipped by the tests; the stack deviations it showed (a type-mismatched Write is accepted, Browse of an unknown node is `Good`, no event queue overflow event) are skips with the reason. Without `ASYNC_OPCUA_IMAGE` and without the default image present locally, the async-opcua tests skip.
+- **Interop:** an opt-in peer, the OPC Foundation UA-.NETStandard 2.0.1 C# stack (opcua-interop v0.9.0 `dotnet` adapter, `DOTNET_IMAGE`), in both directions, with the go-opcua LDS (registration, `TestMulticast_GoAndPeers`) and the JSON / XML codec, with its own ledger `interop/testdata/ledger-dotnet.json`, checked by `TestDotnetLedgerValid` (see INTEROP.md). What the dotnet adapter does not offer (reverse connect, ECC, LDS and mDNS server, PubSub) is `unsupported` in the ledger. Without `DOTNET_IMAGE` and without the default image present locally, the dotnet tests skip. The shared history helpers treat the end time of a raw read as exclusive.
+- `TestOpen62541LDS_GoServerRegisters` waits for the registration event as well as the FindServers listing; the LDS can list the server before the RegisterServer2 response reaches the registrant.
 
 ---
 

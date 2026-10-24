@@ -1,0 +1,2212 @@
+{
+  "interopVersion": "v0.9.0",
+  "peer": {
+    "stack": "opcfoundation-uanetstandard",
+    "version": "2.0.1"
+  },
+  "entries": [
+    {
+      "capability": "session.connect",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Connect",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.connect",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Endpoints",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.namespace",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "session.namespace",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.endpoints",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Connect",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.endpoints",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Endpoints",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_FindServers",
+      "case": "coverage/discovery.find-servers/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_FindServers",
+      "case": "coverage/discovery.find-servers/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers-on-network",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "test": "TestDotnetServer_DiscoveryServerUnsupported",
+      "nextAction": "The UA-.NETStandard server of the adapter is no Local Discovery Server: it refuses FindServersOnNetwork, RegisterServer and RegisterServer2 with a service fault (pinned by TestDotnetServer_DiscoveryServerUnsupported); the OPC Foundation LDS is a separate product",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.find-servers-on-network",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.find-servers-on-network/dotnet-client-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.lds-registration",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "test": "TestDotnetServer_DiscoveryServerUnsupported",
+      "nextAction": "The UA-.NETStandard server of the adapter is no Local Discovery Server: it refuses FindServersOnNetwork, RegisterServer and RegisterServer2 with a service fault (pinned by TestDotnetServer_DiscoveryServerUnsupported); the OPC Foundation LDS is a separate product",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.lds-registration",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_DotnetServerRegisters",
+      "case": "coverage/discovery.lds-registration/dotnet-server-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.objects",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.objects",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Browse",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.namespace",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BrowseInteropNamespace",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.namespace",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BrowseObjectsNodes",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.scalars-folder",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BrowseScalarsFolder",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.scalars-folder",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BrowseScalarsFolder",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BrowseNext",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BrowseNext",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next-release",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BrowseNextRelease",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.next-release",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BrowseNextRelease",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.result-mask",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BrowseResultMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.result-mask",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BrowseResultMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.filtering",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BrowseFiltering",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "browse.filtering",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BrowseFiltering",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.scalar",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ReadScalarInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.scalar",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_ReadScalarInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.array",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ReadArrayInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.array",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_ReadArrayInt32",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.batch",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BatchRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.batch",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BatchRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.dynamic",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ReadDynamicCounter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.dynamic",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_ReadDynamicCounter",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.timestamps",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_TimestampsToReturn",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.timestamps",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_TimestampsToReturn",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.index-range",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_IndexRangeSubset",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.index-range",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_IndexRangeSubset",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.invalid-node",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_InvalidNodeId",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "read.invalid-node",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_InvalidNodeId",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.value",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_WriteAndReadBack",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.value",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Write",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.batch",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_BatchWrite",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.batch",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_BatchWrite",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.type-mismatch",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_WriteTypeMismatch",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.type-mismatch",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_WriteTypeMismatch",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.encoding-mask",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_WriteEncodingMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "write.encoding-mask",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_WriteEncodingMask",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.timestamps",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_DataValue_GoodWithTimestamps",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.timestamps",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_DataValue_GoodWithTimestamps",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.uncertain",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_DataValue_Uncertain",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "datavalue.uncertain",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_DataValue_Uncertain",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.read-only",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Access_ReadOnly_WriteRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.read-only",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Access_ReadOnly_WriteRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.write-only",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Access_WriteOnly_ReadRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "access.write-only",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Access_WriteOnly_ReadRejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.call",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_CallMethodAdd",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.call",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_CallMethod",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.validation",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_MethodValidation",
+      "case": "coverage/method.validation/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "method.validation",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_MethodValidation",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.data-change",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Subscribe",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.data-change",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Subscribe",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.queue-window",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Subscribe_DiscardOldest",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.queue-window",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Subscribe_DiscardOldest",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.timestamps",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_SubscribeTimestampsToReturn",
+      "case": "coverage/subscription.timestamps/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.timestamps",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_SubscribeTimestamps",
+      "case": "coverage/subscription.timestamps/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.revise",
+      "direction": "go-client-to-dotnet-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.revise",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_SubscriptionLifecycle_Revise",
+      "case": "coverage/subscription.lifecycle.revise/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.delete",
+      "direction": "go-client-to-dotnet-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.lifecycle.delete",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_SubscriptionLifecycle_Delete",
+      "case": "coverage/subscription.lifecycle.delete/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.republish",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ClientRepublish",
+      "case": "coverage/subscription.client.republish/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.republish",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.republish",
+      "direction": "go-client-to-dotnet-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.republish",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Republish",
+      "case": "coverage/subscription.server.republish/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ClientTransferSubscriptions",
+      "case": "coverage/subscription.client.transfer/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.transfer",
+      "direction": "go-client-to-dotnet-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.server.transfer",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_TransferSubscriptions",
+      "case": "coverage/subscription.server.transfer/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.recovery.reconnect",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_SubscriptionRecoveryReconnect",
+      "case": "coverage/subscription.recovery.reconnect/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.recovery.reconnect",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ModifySubscription",
+      "case": "coverage/subscription.modify/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.modify",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ModifySubscription",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.publishing-mode",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_SubscriptionLifecycle_PublishingMode",
+      "case": "coverage/subscription.publishing-mode/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ModifyMonitoredItems",
+      "case": "coverage/monitoreditem.modify/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.modify",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_SetMonitoringMode",
+      "case": "coverage/monitoreditem.monitoring-mode/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.monitoring-mode",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_SubscriptionLifecycle_MonitoringMode",
+      "case": "coverage/monitoreditem.monitoring-mode/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.subscription",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_EventSubscription",
+      "case": "coverage/event.subscription/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.subscription",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_EventSubscribe",
+      "case": "coverage/event.subscription/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.select-clauses",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_EventFilterSelectClauses",
+      "case": "coverage/event.filter.select-clauses/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.select-clauses",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_EventFilterSelectClauses",
+      "case": "coverage/event.filter.select-clauses/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.of-type",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_EventFilterOfType",
+      "case": "coverage/event.filter.of-type/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.of-type",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_EventFilterOfType",
+      "case": "coverage/event.filter.of-type/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.where-clause",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_EventFilterWhereClause",
+      "case": "coverage/event.filter.where-clause/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.where-clause",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.severity-threshold",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_EventFilterSeverityThreshold",
+      "case": "coverage/event.filter.severity-threshold/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.filter.severity-threshold",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_EventFilterSeverityThreshold",
+      "case": "coverage/event.filter.severity-threshold/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.notification.decode",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_EventNotificationDecode",
+      "case": "coverage/event.notification.decode/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.notification.decode",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.base",
+      "direction": "go-client-to-dotnet-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.base",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_EventEmissionBase",
+      "case": "coverage/event.emission.base/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.custom",
+      "direction": "go-client-to-dotnet-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.emission.custom",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.queue-overflow",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_EventQueueOverflow",
+      "case": "coverage/event.queue-overflow/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "event.queue-overflow",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.raw",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_HistoryReadRaw",
+      "case": "coverage/history.read.raw/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.raw",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_HistoryReadRaw",
+      "case": "coverage/history.read.raw/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.continuation",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_HistoryReadContinuation",
+      "case": "coverage/history.read.continuation/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.continuation",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_HistoryReadContinuation",
+      "case": "coverage/history.read.continuation/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.modified",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.modified",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.at-time",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.at-time",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.processed",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.processed",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.data",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.data",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.events",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.update.events",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.delete",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.delete",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Basic256Sha256_Sign_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Basic256Sha256_Sign_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Basic256Sha256_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.basic256sha256.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Basic256Sha256_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes128.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes128.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Aes128Sha256RsaOaep_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes256.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.aes256.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Aes256Sha256RsaPss_SignAndEncrypt_ScalarRead",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.untrusted",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_UntrustedCert_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.untrusted",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_UntrustedCert_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.trusted",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_TrustedCert_Accepted",
+      "case": "coverage/security.cert.trusted/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.trusted",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_TrustedCert_Accepted",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.valid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Username_ValidCredentials",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.valid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Username_ValidCredentials",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.invalid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Username_InvalidPassword_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.username.invalid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Username_InvalidPassword_Rejected",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.issued-token",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.issued-token",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.chains",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.chains",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.crl",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.cert.crl",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.channel.renewal",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_SecureChannelRenewal",
+      "case": "coverage/security.channel.renewal/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.channel.renewal",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_SecureChannelRenewal",
+      "case": "coverage/security.channel.renewal/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.first",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.first",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.next",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "query.next",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-nodes",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_AddNodes",
+      "case": "coverage/nodemgmt.add-nodes/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-nodes",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_AddNodes",
+      "case": "coverage/nodemgmt.add-nodes/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-nodes",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_DeleteNodes",
+      "case": "coverage/nodemgmt.delete-nodes/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-nodes",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_DeleteNodes",
+      "case": "coverage/nodemgmt.delete-nodes/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "translate.browse-path",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_TranslateBrowsePath",
+      "case": "coverage/translate.browse-path/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "translate.browse-path",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_TranslateBrowsePath",
+      "case": "coverage/translate.browse-path/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_RegisterNodes",
+      "case": "coverage/view.register-nodes/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "view.register-nodes",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_RegisterNodes",
+      "case": "coverage/view.register-nodes/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.registered",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.registered",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.dynamic",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "custom.types.dynamic",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.acknowledgeable",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.acknowledgeable",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodeset2.import",
+      "direction": "go-client-to-dotnet-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodeset2.import",
+      "direction": "dotnet-client-to-go-server",
+      "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.deadband/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.deadband",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Deadband",
+      "case": "coverage/monitoreditem.deadband/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.percent-deadband/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.percent-deadband",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_PercentDeadband",
+      "case": "coverage/monitoreditem.percent-deadband/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.trigger/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.trigger",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Trigger",
+      "case": "coverage/monitoreditem.trigger/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_DataChangeFilter",
+      "case": "coverage/monitoreditem.sampling-interval/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.sampling-interval",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_SamplingInterval",
+      "case": "coverage/monitoreditem.sampling-interval/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.subscription",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.valid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.username.invalid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256.renewal",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.subscription",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.valid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.username.invalid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp384.renewal",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.write",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.subscription",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.valid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.username.invalid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-aesgcm.renewal",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.write",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.subscription",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.valid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.username.invalid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-nistp256-chachapoly.renewal",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.sign-encrypt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.write",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.subscription",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.valid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.username.invalid",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve25519.renewal",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc.unimplemented-policy",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 offers only RSA security profiles (capabilities securityProfiles): UA-.NETStandard 2.0.1 refuses the test PKI's ECC application certificates, which the RSA test CA issues; an ECC-signed test CA in opcua-interop would let the adapter enable the ECC policies",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.subscription",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.reverse-connect.secure",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 does not offer reverse connect (no --reverse-connect server option or reverse client listener); UA-.NETStandard 2.0.1 implements it (ReverseConnectManager), so it is an adapter gap",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_DotnetDecodes",
+      "case": "variant/*/json",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.variant",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_DotnetEncodes_GoDecodes",
+      "case": "json",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_DotnetDecodes",
+      "case": "datavalue/*/json",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json.datavalue",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_DotnetEncodes_GoDecodes",
+      "case": "dataValueJson",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_DotnetDecodes",
+      "case": "variant/*/xml",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.variant",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_DotnetEncodes_GoDecodes",
+      "case": "xml",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodes_DotnetDecodes",
+      "case": "datavalue/*/xml",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.xml.datavalue",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_DotnetEncodes_GoDecodes",
+      "case": "dataValueXml",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "go-client-to-dotnet-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoLDS_DotnetClient_RegisterServer",
+      "case": "coverage/discovery.register-server/dotnet-client-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "test": "TestDotnetServer_DiscoveryServerUnsupported",
+      "nextAction": "The UA-.NETStandard server of the adapter is no Local Discovery Server: it refuses FindServersOnNetwork, RegisterServer and RegisterServer2 with a service fault (pinned by TestDotnetServer_DiscoveryServerUnsupported); the OPC Foundation LDS is a separate product",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.register-server2.mdns",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestMulticast_GoAndPeers",
+      "case": "coverage/discovery.register-server2.mdns/dotnet-client-to-go-lds",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 has no mDNS (multicast extension): UA-.NETStandard 2.0.1 implements no multicast discovery in its server or client",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "discovery.multicast",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 has no mDNS (multicast extension): UA-.NETStandard 2.0.1 implements no multicast discovery in its server or client",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.codec",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.codec",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.delta-frame",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.delta-frame",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.keep-alive-message",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.keep-alive-message",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.security-header",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.security-header",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.codec",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.codec",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.variant",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.variant",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.datavalue",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.datavalue",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.rawdata",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.field.rawdata",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp-multicast",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.udp-multicast",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.mqtt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.uadp.mqtt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.mqtt",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.json.mqtt",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.sign",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.sign",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes128-ctr",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes128-ctr",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes256-ctr",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.aes256-ctr",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.reject",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.security.reject",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.get-security-keys",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.get-security-keys",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.pull",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.pull",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.push",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.push",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.security-groups",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.sks.security-groups",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.target-variables",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.target-variables",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.sks-pull",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.runtime.sks-pull",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.keepalive",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.keepalive",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.receive-timeout",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.receive-timeout",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.methods",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.methods",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.browse",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "pubsub.infomodel.browse",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "opcua-interop dotnet v0.9.0 reports pubsub.supported=false: UA-.NETStandard 2.0.1 ships a PubSub runtime (Opc.Ua.PubSub), but the adapter does not implement the --pubsub-config / codec pubsub-* contract (§14)",
+      "fixture": "baseline"
+    }
+  ]
+}

@@ -13,8 +13,10 @@ package interop
 var (
 	optionalPeerImageEnv = map[string]bool{
 		asyncOpcuaEnv: true,
+		dotnetEnv:     true,
 	}
 	peerInteropVersion = map[string]string{
 		asyncOpcuaEnv: asyncOpcuaInteropVersion,
+		dotnetEnv:     dotnetInteropVersion,
 	}
 )
