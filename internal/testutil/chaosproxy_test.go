@@ -329,6 +329,36 @@ func TestChaosProxyDropAllResetsButKeepsListening(t *testing.T) {
 	}
 }
 
+// TestChaosProxyDropAllWhileConnecting: a connection that the proxy accepted
+// but had not yet linked to the backend when DropAll (and a refusal) came is
+// reset too. It went on living, and a server the test meant to cut off
+// stayed connected (TestChaosReverseConnect, "client unreachable").
+func TestChaosProxyDropAllWhileConnecting(t *testing.T) {
+	for _, refuse := range []bool{false, true} {
+		s := newSink(t, true)
+		p := NewChaosProxy(t, s.ln.Addr().String(), 1)
+		var once sync.Once
+		hook := func() {
+			once.Do(func() {
+				p.SetRefuse(refuse)
+				if !refuse {
+					p.DropAll()
+				}
+			})
+		}
+		p.beforeLink.Store(&hook)
+		c := dialProxy(t, p)
+		_, _ = c.Write([]byte("x"))
+		_ = c.SetReadDeadline(time.Now().Add(proxyWait))
+		if _, err := c.Read(make([]byte, 1)); err == nil {
+			t.Fatalf("refuse %v: read succeeded on a connection dropped while it was set up", refuse)
+		} else if ne, ok := err.(net.Error); ok && ne.Timeout() {
+			t.Fatalf("refuse %v: connection dropped while it was set up was not closed", refuse)
+		}
+		waitFor(t, "links gone", func() bool { return p.ActiveLinks() == 0 })
+	}
+}
+
 func TestChaosProxyHalfClose(t *testing.T) {
 	s := newSink(t, false)
 	p := NewChaosProxy(t, s.ln.Addr().String(), 1)
