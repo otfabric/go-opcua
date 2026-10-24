@@ -84,6 +84,15 @@ func newChannelBroker(l *slog.Logger, endpointURL string, clientCertValidator Cl
 	}
 }
 
+// sequenceNumberSeed returns the sequence number a new server channel starts
+// from. The channel increments it before the first chunk, and with the
+// legacy (RSA) security policies the first SequenceNumber must be below 1024
+// (Part 6 §6.7.2.4), so the seed is 0..1022 and the first number 1..1023.
+// The ECC policies ignore it and start at 0. intn is math/rand's Int31n.
+func sequenceNumberSeed(intn func(int32) int32) uint32 {
+	return uint32(intn(1023))
+}
+
 // RegisterConn connects a new UACP connection to the channel broker's list
 // of connections and starts waiting for data on it.  Data is pushed onto the broker's
 // Response channel
@@ -101,7 +110,7 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 	c.secureTokenID++
 	secureChannelID := c.secureChannelID
 	secureTokenID := c.secureTokenID
-	sequenceNumber := uint32(mrand.Int31n(1023) + 1)
+	sequenceNumber := sequenceNumberSeed(mrand.Int31n)
 	c.mu.Unlock()
 
 	errch := make(chan error, 1)
