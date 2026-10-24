@@ -150,7 +150,11 @@ func TestRegressionUnregistrationBoundedByRequestTimeout(t *testing.T) {
 	sink := &chaoskit.ErrSink{}
 	defer sink.Report(t)
 
-	const reqTimeout = 2 * time.Second
+	// Close takes the request timeout and the response leniency of uasc
+	// (250 ms); the bug took 1.9 times the request timeout. The limit lies
+	// in between, with room for a loaded runner, on which Close took up to
+	// 1.1 s longer than on an idle machine.
+	const reqTimeout = 4 * time.Second
 	lds := mustStart(t, wd, serverOpts(
 		server.ApplicationURI("urn:chaos:discovery:lds"),
 		server.WithLocalDiscoveryServer(server.LDSAllowInsecureRegistration()),
@@ -183,7 +187,7 @@ func TestRegressionUnregistrationBoundedByRequestTimeout(t *testing.T) {
 	log.markClosed()
 	proxy.Heal()
 	proxy.DropAll()
-	if limit := reqTimeout * 14 / 10; took > limit {
+	if limit := reqTimeout * 3 / 2; took > limit {
 		t.Errorf("Close took %v with a request timeout of %v: the unregistration is not bounded by it", took, reqTimeout)
 	}
 	events := log.snapshot()
