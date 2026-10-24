@@ -122,7 +122,8 @@ func TestPubSubInformationModel(t *testing.T) {
 	require.Equal(t, int32(ua.PubSubStateOperational), v.Value())
 	v, err = c.Node(nid(id.PublishSubscribeSupportedTransportProfiles)).Value(ctx)
 	require.NoError(t, err)
-	profiles := []string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON}
+	profiles := []string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON,
+		transport.ProfileAMQPUADP, transport.ProfileAMQPJSON}
 	if eth.Supported {
 		profiles = append(profiles, transport.ProfileEthUADP)
 	}

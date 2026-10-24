@@ -5,7 +5,8 @@
 //
 // A [Connection] is opened for a PubSubConnection from its transport profile
 // and network address. The UDP (opc.udp://, unicast and multicast),
-// Ethernet (opc.eth://) and MQTT (mqtt://, mqtts://) transports are
+// Ethernet (opc.eth://), MQTT (mqtt://, mqtts://) and AMQP (amqp://,
+// amqps://) transports are
 // implemented by the sub-packages and register themselves with [Register];
 // import them for their side effect or use
 // [github.com/otfabric/go-opcua/pubsub], which imports all of them.
@@ -28,6 +29,8 @@ const (
 	ProfileUDPUADP  = "http://opcfoundation.org/UA-Profile/Transport/pubsub-udp-uadp"
 	ProfileMQTTUADP = "http://opcfoundation.org/UA-Profile/Transport/pubsub-mqtt-uadp"
 	ProfileMQTTJSON = "http://opcfoundation.org/UA-Profile/Transport/pubsub-mqtt-json"
+	ProfileAMQPUADP = "http://opcfoundation.org/UA-Profile/Transport/pubsub-amqp-uadp"
+	ProfileAMQPJSON = "http://opcfoundation.org/UA-Profile/Transport/pubsub-amqp-json"
 	ProfileEthUADP  = "http://opcfoundation.org/UA-Profile/Transport/pubsub-eth-uadp"
 )
 
@@ -94,24 +97,33 @@ type Handler func(*Message)
 type PublishOptions struct {
 	// Topic is the queue name. Datagram transports ignore it.
 	Topic string
-	// QoS is the MQTT quality of service: 0 (at most once), 1 (at least
-	// once) or 2 (exactly once).
+	// QoS is the requested delivery guarantee: 0 at most once (best
+	// effort), 1 at least once, 2 exactly once (MQTT QoS 2; AMQP downgrades
+	// it to 1).
 	QoS byte
 	// Retain asks the broker to keep the message for late subscribers
-	// (used for metadata).
+	// (used for metadata). AMQP has no retained messages and ignores it.
 	Retain bool
 	// ContentType is the MIME type of the payload (ContentTypeUADP,
 	// ContentTypeJSON); empty selects the one of the transport profile.
-	// MQTT 5.0 sends it as Content Type, 3.1.1 cannot.
+	// MQTT 5.0 sends it as Content Type, 3.1.1 cannot; AMQP as content-type
+	// (Part 14 B.3.8).
 	ContentType string
 	// MessageType is the UAMessageType of the message (MessageTypeData,
-	// MessageTypeMetaData, ...); MQTT 5.0 sends it as a User Property.
+	// MessageTypeMetaData, ...); MQTT 5.0 sends it as a User Property, AMQP
+	// as the subject (Part 14 Table B.1).
 	MessageType string
 	// MessageExpiry, if positive, is the MQTT 5.0 Message Expiry Interval
 	// (rounded up to whole seconds).
 	MessageExpiry time.Duration
 	// UserProperties are further MQTT 5.0 User Properties.
 	UserProperties []Property
+	// Properties are the transport settings of the writer group and the
+	// dataset writer (WriterGroupProperties, DataSetWriterProperties) that
+	// apply to the message, writer before group. AMQP maps the names of
+	// Part 14 Table B.2 ("message-to", ...) to message properties and sends
+	// the others as application properties; MQTT ignores them.
+	Properties map[string]any
 }
 
 // Connection is an open PubSub transport connection.
@@ -135,14 +147,16 @@ type Config struct {
 	ProfileURI string
 	// URL is the address: opc.udp://host:port for UDP (a multicast group
 	// joins the group), opc.eth://MAC[:VID[.PCP]] for Ethernet,
-	// mqtt://host:port or mqtts://host:port for MQTT.
+	// mqtt://host:port or mqtts://host:port for MQTT, amqp://host:port or
+	// amqps://host:port for AMQP.
 	URL string
 	// Interface is the network interface (NetworkInterface of
 	// NetworkAddressDataType): for UDP multicast, empty selects the system
 	// default; Ethernet requires it.
 	Interface string
 
-	// MQTT settings. MQTTVersion is "3.1.1", "5.0" or "BestAvailable"
+	// Broker settings (MQTT and AMQP; ClientID is the AMQP container-id).
+	// MQTTVersion is "3.1.1", "5.0" or "BestAvailable"
 	// (the values of the MqttVersion connection property, Part 14
 	// §7.3.4.4); empty uses the MqttVersion connection property and, without
 	// it, 3.1.1.
@@ -171,7 +185,7 @@ type Config struct {
 	// sends and receives. Zero selects the transport default: the largest
 	// UDP payload (65507 bytes over IPv4, 65527 over IPv6) for UDP, the
 	// payload of one frame (1500 bytes or the smaller MTU) for Ethernet,
-	// 1 MiB for MQTT. Ethernet does not go above the frame payload.
+	// 1 MiB for MQTT and AMQP. Ethernet does not go above the frame payload.
 	MaxMessageSize int
 
 	Logger *slog.Logger
@@ -195,7 +209,7 @@ var (
 )
 
 // Register makes a transport available for a URL scheme ("opc.udp",
-// "opc.eth", "mqtt", "mqtts"). It panics if the scheme is registered twice.
+// "opc.eth", "mqtt", "mqtts", "amqp", "amqps"). It panics if the scheme is registered twice.
 func Register(scheme string, open Opener) {
 	mu.Lock()
 	defer mu.Unlock()
