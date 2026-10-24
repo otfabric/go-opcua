@@ -164,7 +164,7 @@ func ParseExpandedNodeID(s string, ns []string) (*ExpandedNodeID, error) {
 			return nil, fmt.Errorf("%w: namespace urls require a server NamespaceArray", errors.ErrInvalidNamespace)
 		}
 
-		nsuval := strings.TrimPrefix(nsval, "nsu=")
+		nsuval := unescapeURI(strings.TrimPrefix(nsval, "nsu="))
 		ok := false
 		for id, uri := range ns {
 			if uri == nsuval {
