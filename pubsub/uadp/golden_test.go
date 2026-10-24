@@ -202,10 +202,10 @@ func TestDiscoveryMetaData(t *testing.T) {
 	require.ErrorIs(t, err, ErrMalformed)
 	_, err = Encode(&message.NetworkMessage{Type: message.NetworkMessageDiscoveryResponse, Discovery: &message.Discovery{Type: message.DiscoveryDataSetMetaData}}, nil)
 	require.ErrorIs(t, err, ErrMalformed)
-	_, err = Encode(&message.NetworkMessage{Type: message.NetworkMessageDiscoveryResponse, Discovery: &message.Discovery{Type: message.DiscoveryPublisherEndpoints}}, nil)
+	_, err = Encode(&message.NetworkMessage{Type: message.NetworkMessageDiscoveryResponse, Discovery: &message.Discovery{Type: 9}}, nil)
 	require.ErrorIs(t, err, ErrUnsupported)
 	_, err = Encode(&message.NetworkMessage{Type: message.NetworkMessageDiscoveryRequest}, nil)
-	require.ErrorIs(t, err, ErrUnsupported)
+	require.ErrorIs(t, err, ErrMalformed)
 	for _, raw := range []string{
 		"81 80 08",                 // no body
 		"81 80 08 01",              // publisher endpoints
@@ -215,8 +215,8 @@ func TestDiscoveryMetaData(t *testing.T) {
 		_, err := Decode(h(t, raw), nil)
 		require.Error(t, err, raw)
 	}
-	_, err = Decode(h(t, "81 80 08 01"), nil)
+	_, err = Decode(h(t, "81 80 08 09 0000"), nil)
 	require.ErrorIs(t, err, ErrUnsupported)
 	_, err = Decode(h(t, "81 80 04 01"), nil)
-	require.ErrorIs(t, err, ErrUnsupported, "discovery request")
+	require.ErrorIs(t, err, ErrMalformed, "truncated discovery probe")
 }

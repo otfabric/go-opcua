@@ -63,6 +63,7 @@ type outDSM struct {
 // sendStats are the counters of one publish cycle.
 type sendStats struct {
 	nm, bytes, encErr, sendErr uint64
+	chunks, announced          uint64
 	lastErr                    error
 	dsm, ka                    map[*dataSetWriter]uint64
 	meta                       map[*dataSetWriter]bool
@@ -122,6 +123,7 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	}
 	tc := g.conn.tc
 	pubID := g.conn.pubID
+	announce := p.announceRate(g)
 	var plan []planned
 	mds := map[uint16]*ua.DataSetMetaDataType{}
 	for _, w := range g.writers {
@@ -178,6 +180,10 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 			if w.metaPending || (upd > 0 && now.Sub(w.metaSentAt) >= upd) {
 				metas = append(metas, w)
 			}
+		} else if announce > 0 && w.pds != nil && w.pds.md != nil && (w.metaPending || now.Sub(w.metaSentAt) >= announce) {
+			// The cyclic DataSetMetaData announcement of the
+			// DiscoveryAnnounceRate (Part 14 §6.4.1.2.3, §6.4.1.3.4).
+			metas = append(metas, w)
 		}
 	}
 	p.unlock()
@@ -216,6 +222,8 @@ func (p *PubSub) publishCycle(ctx context.Context, g *writerGroup, gen uint64) {
 	for w, n := range st.failed {
 		p.count(&w.base, CounterFailedDataSetMessages, n)
 	}
+	g.ctr.ChunksSent += st.chunks
+	g.conn.ctr.DiscoveryResponsesSent += st.announced
 	if st.lastErr != nil {
 		g.err = st.lastErr
 	}
@@ -536,8 +544,12 @@ func (e *encoder) sendData(ctx context.Context, outs []*outDSM) {
 				chunks = append([][]*outDSM{chunk[:h], chunk[h:]}, chunks...)
 				continue
 			}
-			e.fail(fmt.Errorf("%w: %d > %d bytes (writer %q)", errTooLarge, len(b), maxSize, chunk[0].w.name), true)
-			e.lose(chunk)
+			if g.enc != encUADP {
+				e.fail(fmt.Errorf("%w: %d > %d bytes (writer %q)", errTooLarge, len(b), maxSize, chunk[0].w.name), true)
+				e.lose(chunk)
+				continue
+			}
+			e.sendChunks(ctx, chunk[0], maxSize)
 			continue
 		}
 		e.number++
@@ -555,6 +567,78 @@ func (e *encoder) sendData(ctx context.Context, outs []*outDSM) {
 			}
 		}
 	}
+}
+
+// sendChunks sends a UADP NetworkMessage of a single DataSetMessage that
+// exceeds maxSize as chunks (Part 14 §7.2.4.4.4): each chunk is a
+// NetworkMessage of its own, with its own GroupHeader numbers and, when
+// the group is secured, its own security header and nonce.
+func (e *encoder) sendChunks(ctx context.Context, o *outDSM, maxSize int) {
+	g := e.g
+	parts, err := e.p.codecs(g.enc).EncodeChunks(e.dataMessage([]*outDSM{o}), e.options(), maxSize)
+	if err != nil {
+		e.fail(fmt.Errorf("%w: chunks of writer %q: %w", errTooLarge, o.w.name, err), true)
+		e.lose([]*outDSM{o})
+		return
+	}
+	n := uint16(len(parts))
+	e.number += n
+	// The sequence numbers of the chunks are used even if a chunk is
+	// not sent: a subscriber must not mistake a later chunk for one of
+	// them.
+	g.nmSeq += n
+	for _, b := range parts {
+		if !e.send(ctx, b, transport.PublishOptions{Topic: o.topic, QoS: o.qos}) {
+			e.lose([]*outDSM{o})
+			return
+		}
+		e.st.chunks++
+	}
+	if o.dsm.Type == message.DataSetMessageKeepAlive {
+		e.st.ka[o.w]++
+	} else {
+		e.st.dsm[o.w]++
+	}
+}
+
+// announceMetaData sends the cyclic DataSetMetaData announcement of a
+// writer of a datagram group, chunked above the DiscoveryMaxMessageSize.
+func (e *encoder) announceMetaData(ctx context.Context, w *dataSetWriter) {
+	g := e.g
+	nm := &message.NetworkMessage{
+		Type:        message.NetworkMessageDiscoveryResponse,
+		UADPMask:    ua.UADPNetworkMessageContentMaskPublisherID,
+		PublisherID: e.pubID,
+		Discovery: &message.Discovery{
+			Type:            message.DiscoveryDataSetMetaData,
+			SequenceNumber:  uint16(g.conn.annSeq.Add(1)),
+			DataSetWriterID: w.cfg.DataSetWriterID,
+			MetaData:        w.pds.md,
+			StatusCode:      ua.StatusGood,
+			Layout:          e.p.opts.discovery.Layout,
+		},
+	}
+	cd := e.p.codecs(g.enc)
+	opts := e.options()
+	b, err := cd.Encode(nm, opts)
+	parts := [][]byte{b}
+	if maxSize := discoveryMaxSize(g.conn, e.tc); err == nil && maxSize > 0 && len(b) > maxSize {
+		parts, err = cd.EncodeChunks(nm, opts, maxSize)
+	}
+	if err != nil {
+		e.fail(err, true)
+		return
+	}
+	for _, b := range parts {
+		if !e.send(ctx, b, transport.PublishOptions{}) {
+			return
+		}
+		if len(parts) > 1 {
+			e.st.chunks++
+		}
+	}
+	e.st.meta[w] = true
+	e.st.announced++
 }
 
 // dataMessage builds the NetworkMessage of a chunk.
@@ -588,14 +672,19 @@ func (e *encoder) dataMessage(chunk []*outDSM) *message.NetworkMessage {
 }
 
 func (e *encoder) encode(nm *message.NetworkMessage) ([]byte, error) {
+	return e.p.codecs(e.g.enc).Encode(nm, e.options())
+}
+
+// options are the encoding options of the group: a secured UADP group
+// takes a fresh nonce sequence number for every message and chunk.
+func (e *encoder) options() *uadp.EncodeOptions {
 	opts := &uadp.EncodeOptions{MetaData: e.lookup}
 	if e.mode > ua.MessageSecurityModeNone && e.g.enc == encUADP {
-		e.g.nonceSeq++
 		opts.SecurityMode = e.mode
 		opts.Keys = e.ks
-		opts.NonceSequence = e.g.nonceSeq
+		opts.NextNonceSequence = e.g.nextNonce
 	}
-	return e.p.codecs(e.g.enc).Encode(nm, opts)
+	return opts
 }
 
 // lose records the writers of DataSetMessages that were not sent.
@@ -655,10 +744,15 @@ func (e *encoder) send(ctx context.Context, b []byte, opts transport.PublishOpti
 }
 
 // sendMetaData announces the DataSetMetaData of a writer on its
-// MetaDataQueueName, retained by the broker for late subscribers.
+// MetaDataQueueName, retained by the broker for late subscribers, or on the
+// datagram connection.
 func (e *encoder) sendMetaData(ctx context.Context, w *dataSetWriter) {
 	g := e.g
 	md := w.pds.md
+	if w.brokerTS == nil {
+		e.announceMetaData(ctx, w)
+		return
+	}
 	var b []byte
 	var err error
 	if g.enc == encJSON {

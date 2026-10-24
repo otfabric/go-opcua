@@ -58,7 +58,11 @@ func newEncodeSecurity(opts *EncodeOptions) (*encodeSecurity, error) {
 	if k == nil {
 		return nil, secError("no current keys")
 	}
-	nonce, err := p.NewMessageNonce(opts.NonceSequence)
+	seq := opts.NonceSequence
+	if opts.NextNonceSequence != nil {
+		seq = opts.NextNonceSequence()
+	}
+	nonce, err := p.NewMessageNonce(seq)
 	if err != nil {
 		return nil, secError("message nonce: %v", err)
 	}

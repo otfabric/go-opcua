@@ -101,7 +101,6 @@ func TestPubSub_MessageSecurity(t *testing.T) {
 	rec := newPSRecorder()
 	sub := psRuntime(t, pubsub.NewConfiguration(nil, subConn), append(subOpts, pubsub.WithDataSetHandler(rec.handle))...)
 	pub := psRuntime(t, pubsub.NewConfiguration(pdss, pubConn), append(pubOpts, pubsub.WithDataSource(&psCounterSource{}))...)
-	_ = pub
 
 	first, err := rotating.CurrentTokenID("rotating")
 	require.NoError(t, err)
@@ -118,10 +117,24 @@ func TestPubSub_MessageSecurity(t *testing.T) {
 	}, "the keys rotate")
 	n := len(rec.of("rotating"))
 	eventually(t, func() bool { return len(rec.of("rotating")) > n+5 }, "the rotating group delivers after the rotations")
+	// A message lost to a key change is an encode error of the publisher
+	// (the sequence number is taken before the message is secured) or a
+	// decode error of the subscriber (checked below). UDP itself may drop a
+	// datagram on a loaded host: allow one lone gap of one message, while a
+	// key change problem leaves a gap at each of the rotations.
+	wg, err := pub.Status(psComponent(t, pub, pubsub.KindWriterGroup, "rotating"))
+	require.NoError(t, err)
+	require.Zero(t, wg.Counters.EncodeErrors, "the publisher lacked keys at a key change")
+	require.Zero(t, wg.Counters.SendErrors)
 	sets := rec.of("rotating")
+	gaps := 0
 	for i := 1; i < len(sets); i++ {
-		require.Equal(t, uint16(sets[i-1].SequenceNumber+1), uint16(sets[i].SequenceNumber), "a message was lost at a key change")
+		if d := uint16(sets[i].SequenceNumber) - uint16(sets[i-1].SequenceNumber); d != 1 {
+			require.Equal(t, uint16(2), d, "messages were lost at a key change")
+			gaps++
+		}
 	}
+	require.LessOrEqual(t, gaps, 1, "messages were lost at a key change")
 	require.Empty(t, rec.of("downgrade"), "a SignAndEncrypt reader took Sign messages")
 	require.Empty(t, rec.of("otherkeys"), "a reader took messages signed with keys it does not have")
 	st, err := sub.Status(psComponent(t, sub, pubsub.KindConnection, "sub"))

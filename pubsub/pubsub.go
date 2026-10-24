@@ -98,6 +98,7 @@ func New(cfg *ua.PubSubConfigurationDataType, opts ...Option) (*PubSub, error) {
 	if p.opts.retryInterval <= 0 {
 		p.opts.retryInterval = defaultRetryInterval
 	}
+	p.opts.discovery = p.opts.discovery.normalized()
 	for k, v := range p.opts.keySources {
 		p.keySources[k] = v
 	}

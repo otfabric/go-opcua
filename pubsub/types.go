@@ -150,6 +150,29 @@ type Counters struct {
 	// callback (DataSetHandler, DataSource, TargetWriter, event handler) or
 	// while decoding a received message. They are logged with their stack.
 	Panics uint64
+
+	// ChunksSent and ChunksReceived count UADP chunk NetworkMessages
+	// (Part 14 §7.2.4.4.4); they are NetworkMessages as well.
+	// ChunkedMessagesReceived counts the messages reassembled from them.
+	// ChunksDiscarded counts received chunks the reassembly rejected
+	// (outside their message, duplicate or overlapping, beyond the memory
+	// limits) or dropped with an incomplete message (timeout, eviction).
+	ChunksSent              uint64
+	ChunksReceived          uint64
+	ChunkedMessagesReceived uint64
+	ChunksDiscarded         uint64
+	// DiscoveryRequestsSent and DiscoveryRequestsReceived count UADP
+	// discovery probes (Part 14 §7.2.4.6.12); DiscoveryRequestsIgnored
+	// counts received probes that were not answered: not for this
+	// publisher, duplicates, or beyond the rate limit.
+	// DiscoveryResponsesSent counts the announcements sent in answer to
+	// probes or cyclically, DiscoveryResponsesReceived the announcements
+	// received.
+	DiscoveryRequestsSent      uint64
+	DiscoveryRequestsReceived  uint64
+	DiscoveryRequestsIgnored   uint64
+	DiscoveryResponsesSent     uint64
+	DiscoveryResponsesReceived uint64
 }
 
 func (c *Counters) add(o *Counters) {
@@ -173,6 +196,15 @@ func (c *Counters) add(o *Counters) {
 	c.TargetWriteErrors += o.TargetWriteErrors
 	c.StateChanges += o.StateChanges
 	c.Panics += o.Panics
+	c.ChunksSent += o.ChunksSent
+	c.ChunksReceived += o.ChunksReceived
+	c.ChunkedMessagesReceived += o.ChunkedMessagesReceived
+	c.ChunksDiscarded += o.ChunksDiscarded
+	c.DiscoveryRequestsSent += o.DiscoveryRequestsSent
+	c.DiscoveryRequestsReceived += o.DiscoveryRequestsReceived
+	c.DiscoveryRequestsIgnored += o.DiscoveryRequestsIgnored
+	c.DiscoveryResponsesSent += o.DiscoveryResponsesSent
+	c.DiscoveryResponsesReceived += o.DiscoveryResponsesReceived
 }
 
 // Status is the state and the diagnostics of a component.

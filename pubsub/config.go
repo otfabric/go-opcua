@@ -3,8 +3,11 @@
 package pubsub
 
 import (
+	"errors"
 	"fmt"
 	"math"
+	"net"
+	"net/netip"
 	"strconv"
 	"strings"
 	"time"
@@ -172,6 +175,82 @@ func connectionURL(c *ua.PubSubConnectionDataType) (url, iface string, ok bool) 
 		return a.URL, a.NetworkInterface, a.URL != ""
 	}
 	return "", "", false
+}
+
+// datagramDiscovery is the discovery configuration of a datagram
+// connection: DatagramConnectionTransportDataType (Part 14 §6.4.1.2.2) and
+// DatagramConnectionTransport2DataType (§6.4.1.2.3).
+type datagramDiscovery struct {
+	// url and iface are the DiscoveryAddress, empty without.
+	url, iface string
+	// announce is the DiscoveryAnnounceRate: the interval of the cyclic
+	// announcements, 0 for announcements only in answer to probes.
+	announce time.Duration
+	// maxSize is the DiscoveryMaxMessageSize, 0 for the transport
+	// default.
+	maxSize int
+}
+
+// connectionDiscovery returns the discovery configuration of a connection.
+// The TransportSettings of other types are left to the transport.
+func connectionDiscovery(c *ua.PubSubConnectionDataType, broker bool) (datagramDiscovery, error) {
+	var d datagramDiscovery
+	var addr *ua.ExtensionObject
+	switch ts := eoValue(c.TransportSettings).(type) {
+	case *ua.DatagramConnectionTransportDataType:
+		addr = ts.DiscoveryAddress
+	case *ua.DatagramConnectionTransport2DataType:
+		addr = ts.DiscoveryAddress
+		// DiscoveryAnnounceRate is in seconds (§6.4.1.2.3).
+		d.announce = time.Duration(ts.DiscoveryAnnounceRate) * time.Second
+		d.maxSize = int(ts.DiscoveryMaxMessageSize)
+	default:
+		return d, nil
+	}
+	if broker {
+		return d, fmt.Errorf("%T on a broker connection", eoValue(c.TransportSettings))
+	}
+	switch a := eoValue(addr).(type) {
+	case nil:
+	case *ua.NetworkAddressURLDataType:
+		if a.URL != "" {
+			if _, err := transport.Scheme(a.URL); err != nil {
+				return d, fmt.Errorf("DiscoveryAddress: %w", err)
+			}
+		}
+		d.url, d.iface = a.URL, a.NetworkInterface
+	default:
+		return d, errors.New("DiscoveryAddress must be a NetworkAddressUrlDataType")
+	}
+	return d, nil
+}
+
+// sharedAddress tells whether the address of a datagram connection reaches
+// the publishers and the subscribers alike, so that a publisher can listen
+// on it for discovery probes: a multicast group, or a transport other than
+// UDP. A unicast UDP address is the subscriber's: a publisher binding it
+// would take its datagrams.
+func sharedAddress(url string) bool {
+	scheme, err := transport.Scheme(url)
+	if err != nil {
+		return false
+	}
+	if scheme != "opc.udp" {
+		return true
+	}
+	rest := strings.TrimPrefix(url, "opc.udp://")
+	if i := strings.IndexAny(rest, "/?#"); i >= 0 {
+		rest = rest[:i]
+	}
+	host, _, err := net.SplitHostPort(rest)
+	if err != nil {
+		return false
+	}
+	if i := strings.IndexByte(host, '%'); i >= 0 {
+		host = host[:i]
+	}
+	a, err := netip.ParseAddr(host)
+	return err == nil && a.IsMulticast()
 }
 
 // groupEncoding returns the mapping of a WriterGroup: the type of its
@@ -389,6 +468,9 @@ func validateConnection(path string, c *ua.PubSubConnectionDataType, pds map[str
 			return configErr(path, "ConnectionProperties: %v", err)
 		}
 	}
+	if _, err := connectionDiscovery(c, broker); err != nil {
+		return configErr(path, "TransportSettings: %v", err)
+	}
 	wgNames := map[string]bool{}
 	wgIDs := map[uint16]bool{}
 	for i, wg := range c.WriterGroups {
@@ -473,6 +555,13 @@ func validateWriterGroup(path, profile string, broker bool, wg *ua.WriterGroupDa
 	case *ua.DatagramWriterGroupTransportDataType:
 		if broker {
 			return configErr(path, "DatagramWriterGroupTransportDataType on a broker connection")
+		}
+	case *ua.DatagramWriterGroupTransport2DataType:
+		if broker {
+			return configErr(path, "DatagramWriterGroupTransport2DataType on a broker connection")
+		}
+		if eoValue(ts.Address) != nil {
+			return configErr(path, "DatagramWriterGroupTransport2DataType: an Address of the writer group is not supported")
 		}
 	case *ua.BrokerWriterGroupTransportDataType:
 		if !broker {

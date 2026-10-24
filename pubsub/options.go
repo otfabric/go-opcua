@@ -7,8 +7,10 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/pubsub/transport"
+	"github.com/otfabric/go-opcua/pubsub/uadp"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -119,6 +121,8 @@ type options struct {
 	retryInterval   time.Duration
 	codecs          func(encoding) codec
 	diagLevel       ua.DiagnosticsLevel
+	reassembly      *uadp.ReassemblerOptions
+	discovery       DiscoveryOptions
 }
 
 // WithLogger sets the logger. The default discards log output.
@@ -200,4 +204,54 @@ func WithTransportConfig(f func(conn *ua.PubSubConnectionDataType, cfg *transpor
 // open (state Error) waits before it tries again. The default is 5 seconds.
 func WithRetryInterval(d time.Duration) Option {
 	return func(o *options) { o.retryInterval = d }
+}
+
+// WithChunkReassembly sets the limits of the reassembly of chunked UADP
+// NetworkMessages: the largest message, the memory of the incomplete
+// messages of each connection, overall and per PublisherId, and how long an
+// incomplete message waits for its chunks. Zero fields keep the defaults of
+// [uadp.ReassemblerOptions].
+func WithChunkReassembly(o uadp.ReassemblerOptions) Option {
+	return func(opts *options) { opts.reassembly = &o }
+}
+
+// DiscoveryOptions control the UADP discovery of datagram connections
+// (Part 14 §7.2.4.6): the probes a subscriber sends for DataSetMetaData it
+// does not have, and the announcements a publisher sends in answer to
+// probes. Zero fields select the defaults.
+type DiscoveryOptions struct {
+	// Disabled turns discovery off: no probes are sent or answered and no
+	// cyclic announcements are sent.
+	Disabled bool
+	// MinInterval is the least time between two announcements of the same
+	// kind and writer (default 500 ms, the minimum of Part 14
+	// §7.2.4.6.12.2): probes for it in between are ignored.
+	MinInterval time.Duration
+	// Rate and Burst bound the announcements a connection sends in answer
+	// to probes, all kinds and writers together (default 20 per second,
+	// bursts of 20): probes cannot make a publisher flood the network.
+	Rate  float64
+	Burst int
+	// MaxProbeInterval bounds the interval between the probes of a
+	// subscriber, which doubles from 500 ms while the announcement is
+	// missing (default 8 seconds).
+	MaxProbeInterval time.Duration
+	// Layout is the byte layout of the probes the subscriber sends: the
+	// spec's (default) or that of the OPC Foundation .NET stack. Probes
+	// are answered in the layout they came in.
+	Layout message.DiscoveryLayout
+	// Endpoints returns the server endpoints of the publisher for
+	// PublisherEndpoints probes; without it they are answered with
+	// Bad_NotSupported.
+	Endpoints func() []*ua.EndpointDescription
+	// Application returns the ApplicationDescription of the publisher, and
+	// Capabilities are its capabilities, for FindApplications probes;
+	// without it they are answered with the state of the runtime.
+	Application  func() *ua.ApplicationDescription
+	Capabilities []string
+}
+
+// WithDiscovery sets the options of the UADP discovery.
+func WithDiscovery(o DiscoveryOptions) Option {
+	return func(opts *options) { opts.discovery = o }
 }
