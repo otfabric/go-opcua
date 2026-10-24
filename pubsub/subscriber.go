@@ -37,7 +37,15 @@ type stream struct {
 	// expired is set by a MessageReceiveTimeout: the writer may have
 	// restarted its sequence numbers meanwhile (see processDSM).
 	expired bool
+	// seen is when the stream last had a message.
+	seen time.Time
 }
+
+// maxReaderStreams bounds the streams a reader keeps: a reader that does
+// not filter on PublisherId, WriterGroupId or DataSetWriterId would else
+// keep one for every identity a sender makes up. The least recently seen
+// stream makes room for a new one.
+const maxReaderStreams = 1024
 
 // staleWindow is how far behind the last sequence number a message may be,
 // after a MessageReceiveTimeout, and still count as a late copy of an old
@@ -659,9 +667,20 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	key := streamKey{pub: pub.String(), pt: pub.Type, wg: wgid, dsw: dsm.DataSetWriterID}
 	st := r.streams[key]
 	if st == nil {
+		if len(r.streams) >= maxReaderStreams {
+			var oldest streamKey
+			var at time.Time
+			for k, s := range r.streams {
+				if at.IsZero() || s.seen.Before(at) {
+					oldest, at = k, s.seen
+				}
+			}
+			delete(r.streams, oldest)
+		}
 		st = &stream{}
 		r.streams[key] = st
 	}
+	st.seen = recv
 	keepAlive := dsm.Type == message.DataSetMessageKeepAlive
 	if hasSeq(dsm, enc) {
 		// UADP carries 16 bits; JSON publishers wrap at 16 bits as well
