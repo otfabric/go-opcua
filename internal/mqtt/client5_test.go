@@ -405,6 +405,30 @@ func TestV5SessionTakeover(t *testing.T) {
 	}
 }
 
+// TestV5NoReconnectAfterTakeover: a client whose session was taken over
+// waits its backoff before it reconnects instead of taking the session back
+// at once.
+func TestV5NoReconnectAfterTakeover(t *testing.T) {
+	var connects atomic.Int32
+	b := startBroker(t, mqttbroker.Options{OnConnect: func(p *mqtt.Connect) {
+		if p.ClientID == "c" {
+			connects.Add(1)
+		}
+	}})
+	lost := make(chan error, 10)
+	dial5(t, mqtt.Options{Server: b.URL(), ClientID: "c", MinReconnectDelay: time.Hour, MaxReconnectDelay: time.Hour,
+		OnConnectionLost: func(err error) { lost <- err }})
+	second := dial5(t, mqtt.Options{Server: b.URL(), ClientID: "c", MinReconnectDelay: time.Hour, MaxReconnectDelay: time.Hour})
+	select {
+	case <-lost:
+	case <-time.After(5 * time.Second):
+		t.Fatal("no connection loss")
+	}
+	time.Sleep(300 * time.Millisecond) // time for a reconnect that should not come
+	require.Equal(t, int32(2), connects.Load(), "the first client connected again")
+	require.True(t, second.IsConnected())
+}
+
 func TestV5ServerKeepAliveAndSession(t *testing.T) {
 	one := uint16(1)
 	b := startBroker(t, mqttbroker.Options{ServerKeepAlive: &one})

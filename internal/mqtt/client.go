@@ -238,7 +238,10 @@ type Options struct {
 	// ConnectTimeout bounds one connection attempt (dial and CONNACK).
 	ConnectTimeout time.Duration
 	// MinReconnectDelay and MaxReconnectDelay bound the exponential backoff
-	// between connection attempts.
+	// between connection attempts. After a DISCONNECT of the broker the
+	// client waits the backoff before it reconnects (after another lost
+	// connection it reconnects at once); the backoff starts over once a
+	// connection lasted MaxReconnectDelay.
 	MinReconnectDelay time.Duration
 	MaxReconnectDelay time.Duration
 	// MaxPacketSize limits received packets (the remaining length); larger
@@ -485,7 +488,6 @@ func (c *Client) run(ctx context.Context, first chan<- error) {
 			delay = min(delay*2, c.opts.MaxReconnectDelay)
 			continue
 		}
-		delay = c.opts.MinReconnectDelay
 		if !c.attach(l, sp) {
 			_ = l.conn.Close()
 			return
@@ -497,6 +499,7 @@ func (c *Client) run(ctx context.Context, first chan<- error) {
 		if c.opts.OnConnect != nil {
 			c.opts.OnConnect(sp)
 		}
+		up := time.Now()
 		err = c.serve(l, br)
 		c.detach(l)
 		select {
@@ -507,6 +510,22 @@ func (c *Client) run(ctx context.Context, first chan<- error) {
 		c.log.Debug("mqtt: connection lost", "server", c.addr, "error", err)
 		if c.opts.OnConnectionLost != nil {
 			c.opts.OnConnectionLost(err)
+		}
+		// The backoff starts over after a connection that lasted; one
+		// lost soon after it was made counts as a failed attempt.
+		if time.Since(up) >= c.opts.MaxReconnectDelay {
+			delay = c.opts.MinReconnectDelay
+		}
+		var de *DisconnectError
+		if errors.As(err, &de) {
+			// The broker sent DISCONNECT. Reconnecting at once after a
+			// session takeover would take the session back from the
+			// other connection while it connects, and two clients with
+			// one identifier would take it from each other in turn.
+			if !c.sleep(ctx, true, delay) {
+				return
+			}
+			delay = min(delay*2, c.opts.MaxReconnectDelay)
 		}
 	}
 }
