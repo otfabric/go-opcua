@@ -2,7 +2,7 @@
 
 ## v1.7.1
 
-**Date:** unreleased
+**Date:** 2026-10-24
 **Previous release:** v1.7.0
 
 ### Fixed
@@ -13,6 +13,8 @@
 ### Tests
 
 - Fake-clock test of the refresh schedule for 0–5 future keys, a test against an SKS that takes a whole key lifetime to answer, and a test of the token-triggered fetch; each fails on the old schedule.
+
+---
 
 ## v1.7.0
 
