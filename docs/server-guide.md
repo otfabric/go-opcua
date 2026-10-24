@@ -26,6 +26,22 @@
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.
 
+Not implemented in the server, so plan around them:
+
+- **Alarms & Conditions** (Part 9): no condition state machines, Acknowledge,
+  Confirm or ConditionRefresh (`AlarmsConditionsSupported()` reports false).
+  Emit `BaseEventType` or your own event types and keep condition state in
+  the application.
+- **Diagnostics**: no live `ServerDiagnosticsSummary` or session diagnostics
+  counters, and responses carry an empty `DiagnosticInfo` even when the
+  request sets `ReturnDiagnostics`. Use the metrics callbacks and `log/slog`
+  ([OBSERVABILITY.md](../OBSERVABILITY.md)).
+- **Historical events**: the history interfaces cover data only (see
+  [Historical Access](#historical-access-raw)).
+- **Certificate management** (Part 12 GDS push and pull): certificates and
+  trust lists are configured in code (`server.Certificate`, `server.PrivateKey`,
+  `WithClientCertificateTrustList`).
+
 ---
 
 ## Minimal Server
