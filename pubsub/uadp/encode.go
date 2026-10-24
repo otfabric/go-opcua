@@ -22,10 +22,12 @@ func (e *encoder) has(m ua.UADPNetworkMessageContentMask) bool {
 // check validates the type and the body of the NetworkMessage.
 func (e *encoder) check() error {
 	nm := e.nm
-	if nm.Chunk != nil && nm.Action != nil {
-		return unsupported("chunked action messages")
-	}
 	if nm.Chunk != nil {
+		if nm.Action != nil {
+			if err := checkActionChunk(nm); err != nil {
+				return err
+			}
+		}
 		switch nm.Type {
 		case message.NetworkMessageDataSet:
 			if e.has(ua.UADPNetworkMessageContentMaskPayloadHeader) && (len(nm.Messages) != 1 || nm.Messages[0] == nil) {

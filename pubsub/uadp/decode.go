@@ -116,9 +116,6 @@ func decodeHeaders(data []byte) (*message.NetworkMessage, int, error) {
 		if nm.Type != message.NetworkMessageDataSet {
 			return nil, 0, malformed("ActionHeader in a NetworkMessage of type %d", nm.Type)
 		}
-		if nm.Chunk != nil {
-			return nil, 0, unsupported("chunked action messages")
-		}
 		nm.Action = &message.ActionHeader{}
 	}
 

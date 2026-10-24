@@ -30,7 +30,13 @@ import (
 //     encrypted range of a SignAndEncrypt message, like the payload.
 //   - The FieldCount is written for RawData fields too: Tables 166 and 167
 //     do not omit it as the key frame does.
-//   - Chunked action messages are not supported.
+//   - A chunked action message (§7.2.4.4.4) carries the ActionHeader in
+//     every chunk, like the other headers: the chunks of a request or
+//     response are a DataSet chunk NetworkMessage with bit 5 of
+//     ExtendedFlags2, the ActionHeader and then the chunk payload of
+//     Table 159, whose ChunkData are the pieces of the one ActionRequest or
+//     ActionResponse DataSetMessage. The MessageSequenceNumber of the
+//     chunks tells the messages of one Requestor and CorrelationData apart.
 
 // maxActionString bounds the ResponseAddress and a String RequestorId.
 const maxActionString = 4096
@@ -64,6 +70,27 @@ func checkAction(nm *message.NetworkMessage) error {
 		if m.Type != want {
 			return malformed("DataSetMessage %d of type %v in an %v", i, m.Type, a.Type)
 		}
+	}
+	if len(a.ResponseAddress) > maxActionString {
+		return malformed("ResponseAddress of %d bytes", len(a.ResponseAddress))
+	}
+	if r := a.RequestorID; r != nil && (r.Type > message.PublisherIDString || len(r.Str) > maxActionString) {
+		return malformed("RequestorId %v", r)
+	}
+	if math.IsNaN(a.TimeoutHint) || math.IsInf(a.TimeoutHint, 0) {
+		return malformed("TimeoutHint %v", a.TimeoutHint)
+	}
+	return nil
+}
+
+// checkActionChunk validates the ActionHeader of a chunk NetworkMessage.
+func checkActionChunk(nm *message.NetworkMessage) error {
+	a := nm.Action
+	if nm.Type != message.NetworkMessageDataSet {
+		return malformed("an ActionHeader in a NetworkMessage of type %d", nm.Type)
+	}
+	if a.Type != message.ActionRequest && a.Type != message.ActionResponse {
+		return malformed("action message type %d", a.Type)
 	}
 	if len(a.ResponseAddress) > maxActionString {
 		return malformed("ResponseAddress of %d bytes", len(a.ResponseAddress))

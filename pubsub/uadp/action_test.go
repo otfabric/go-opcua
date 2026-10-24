@@ -3,7 +3,9 @@
 package uadp
 
 import (
+	"math/rand/v2"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -212,15 +214,108 @@ func TestActionEncodeErrors(t *testing.T) {
 	nm.Action = nil
 	_, err := Encode(nm, nil)
 	require.ErrorIs(t, err, ErrMalformed)
-	// Chunked action messages are not supported.
+	// A chunk carries one action DataSetMessage, and its ActionHeader is
+	// checked like that of a whole message.
 	nm = actionRequestNM()
-	nm.Messages = nm.Messages[:1]
-	nm.Chunk = &message.Chunk{TotalSize: 10, Data: []byte{1}}
-	_, err = Encode(nm, nil)
-	require.ErrorIs(t, err, ErrUnsupported)
-	nm.Chunk = nil
 	_, err = EncodeChunks(nm, nil, 40)
-	require.Error(t, err)
+	require.ErrorIs(t, err, ErrMalformed)
+	nm.Messages = nm.Messages[:1]
+	nm.Messages[0].Type = message.DataSetMessageKeyFrame
+	_, err = EncodeChunks(nm, nil, 40)
+	require.ErrorIs(t, err, ErrMalformed)
+	for name, mod := range map[string]func(a *message.ActionHeader){
+		"no type":        func(a *message.ActionHeader) { a.Type = 0 },
+		"long address":   func(a *message.ActionHeader) { a.ResponseAddress = string(make([]byte, maxActionString+1)) },
+		"requestor type": func(a *message.ActionHeader) { a.RequestorID = &message.PublisherID{Type: 7} },
+		"nan timeout":    func(a *message.ActionHeader) { a.TimeoutHint = nan() },
+	} {
+		nm = actionRequestNM()
+		nm.Messages = nm.Messages[:1]
+		nm.Chunk = &message.Chunk{TotalSize: 10, Data: []byte{1}}
+		mod(nm.Action)
+		_, err = Encode(nm, nil)
+		require.ErrorIs(t, err, ErrMalformed, name)
+	}
+}
+
+// TestActionChunks: an ActionRequest and an ActionResponse larger than the
+// NetworkMessage size are sent as chunks (Part 14 §7.2.4.4.4) that carry
+// the ActionHeader, unsecured and secured, and are reassembled in any
+// order.
+func TestActionChunks(t *testing.T) {
+	big := string(make([]byte, 3000))
+	for _, mode := range []ua.MessageSecurityMode{ua.MessageSecurityModeNone, ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt} {
+		for _, typ := range []message.ActionMessageType{message.ActionRequest, message.ActionResponse} {
+			t.Run(mode.String()+"/"+typ.String(), func(t *testing.T) {
+				ks := zeroKeys(testPolicy{})
+				nm := actionRequestNM()
+				nm.Messages = nm.Messages[:1]
+				nm.Messages[0].SequenceNumber = 7
+				nm.Messages[0].Fields = append(nm.Messages[0].Fields, vf(2, big))
+				if typ == message.ActionResponse {
+					nm.Action.Type, nm.Action.ResponseAddress, nm.Action.TimeoutHint = message.ActionResponse, "", 0
+					nm.Messages[0].Type = message.DataSetMessageActionResponse
+					nm.Messages[0].ActionState = ua.ActionStateDone
+				}
+				opts := &EncodeOptions{}
+				dopts := &DecodeOptions{}
+				if mode > ua.MessageSecurityModeNone {
+					opts = &EncodeOptions{SecurityMode: mode, Keys: ks, NonceSequence: 1}
+					dopts = &DecodeOptions{Security: requireSecurity(mode, ks)}
+				}
+				chunks, err := EncodeChunks(nm, opts, 500)
+				require.NoError(t, err)
+				require.Greater(t, len(chunks), 5)
+				r := NewReassembler(nil)
+				var payload []byte
+				var last *message.NetworkMessage
+				for n, i := range rand.New(rand.NewPCG(3, 4)).Perm(len(chunks)) {
+					require.LessOrEqual(t, len(chunks[i]), 500)
+					require.True(t, PeekAction(chunks[i]))
+					c, err := Decode(chunks[i], dopts)
+					require.NoError(t, err)
+					require.NotNil(t, c.Chunk)
+					require.Equal(t, nm.Action, c.Action, "every chunk carries the ActionHeader")
+					require.Equal(t, uint16(7), c.Chunk.MessageSequenceNumber)
+					p, _, err := r.Add(c, time.Unix(1, 0))
+					require.NoError(t, err)
+					if n < len(chunks)-1 {
+						require.Nil(t, p)
+					}
+					payload, last = p, c
+				}
+				out, err := DecodeReassembled(last, payload, nil)
+				require.NoError(t, err)
+				require.Equal(t, nm.Action, out.Action)
+				require.Len(t, out.Messages, 1)
+				m := out.Messages[0]
+				require.Equal(t, nm.Messages[0].Type, m.Type)
+				require.Equal(t, uint16(9), m.ActionTargetID)
+				require.Equal(t, uint16(41), m.RequestID)
+				require.Equal(t, big, m.Fields[2].Value.Value.Value())
+			})
+		}
+	}
+
+	// A reassembled payload that is not an action DataSetMessage of the
+	// type of the ActionHeader is rejected.
+	nm := actionRequestNM()
+	nm.Messages = nm.Messages[:1]
+	chunks, err := EncodeChunks(nm, nil, 100)
+	require.NoError(t, err)
+	r := NewReassembler(nil)
+	var payload []byte
+	var last *message.NetworkMessage
+	for _, b := range chunks {
+		c, err := Decode(b, nil)
+		require.NoError(t, err)
+		payload, _, err = r.Add(c, time.Unix(1, 0))
+		require.NoError(t, err)
+		last = c
+	}
+	last.Action.Type = message.ActionResponse
+	_, err = DecodeReassembled(last, payload, nil)
+	require.ErrorIs(t, err, ErrMalformed)
 }
 
 func nan() float64 {
@@ -273,9 +368,9 @@ func TestActionDecodeMalformed(t *testing.T) {
 		_, err := Decode(raw, nil)
 		require.ErrorIs(t, err, ErrMalformed, name)
 	}
-	// A chunk with an ActionHeader.
+	// A truncated chunk with an ActionHeader.
 	_, err = Decode([]byte{0x91, 0x80, 0x21, 0x05}, nil)
-	require.ErrorIs(t, err, ErrUnsupported)
+	require.ErrorIs(t, err, ErrMalformed)
 	// An invalid DataSetMessage of another type is tolerated.
 	_, err = Decode(cat(hdr, []byte{0x01}, []byte{0x00}), nil)
 	require.NoError(t, err)
