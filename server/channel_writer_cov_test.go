@@ -200,6 +200,15 @@ func newCWPair(t *testing.T, timeout time.Duration, maxPending int) *cwPair {
 		<-p.recvDn
 	})
 	require.NoError(t, csc.Open(ctx))
+	// Open returns once the client has the OpenSecureChannel response, but
+	// the server activates its token only after sending it. A request is
+	// read after that, so one round trip guarantees an active channel for
+	// the tests that queue responses without a request.
+	res := p.call(cwReadRequest())
+	msg := p.nextRequest(t)
+	require.True(t, p.w.acquire(context.Background()))
+	require.NoError(t, p.w.send(msg.RequestID, &ua.ReadResponse{ResponseHeader: cwHeader(ua.StatusOK), Results: []*ua.DataValue{}}))
+	require.NoError(t, cwWait(t, res).err)
 	return p
 }
 
