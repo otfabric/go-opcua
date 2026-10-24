@@ -1234,7 +1234,7 @@
       "test": "TestAsyncuaServer_DataChangeFilter",
       "case": "coverage/monitoreditem.percent-deadband/go-client-to-asyncua-server",
       "reason": "asyncua 2.1.0 accepts a PercentDeadband (also on a node without EURange) but does not apply it",
-      "nextAction": "The adapter does not advertise the percent-deadband server feature, so the case skips; the opcua-interop smoke pins the acceptance (check_asyncua_deadband_deviation); promote the row to verified when a pinned asyncua release fixes it",
+      "nextAction": "The case skips as a stack deviation (the adapter does not advertise the percent-deadband server feature); the opcua-interop smoke pins the acceptance (check_asyncua_deadband_deviation); promote the row to verified when a pinned asyncua release fixes it",
       "fixture": "baseline"
     },
     {

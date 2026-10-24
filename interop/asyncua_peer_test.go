@@ -528,8 +528,7 @@ func TestAsyncuaServer_DataChangeFilter(t *testing.T) {
 	h := startAsyncuaServer(t)
 	assertPeerDataChangeFilter(t, h.endpoint, dirGoClientToAsyncuaServer)
 	t.Run("coverage/monitoreditem.percent-deadband/go-client-to-asyncua-server", func(t *testing.T) {
-		requireServerFeature(t, asyncuaEnv, defaultAsyncuaImage, "percent-deadband")
-		assertPeerPercentDeadband(t, h.endpoint)
+		asyncuaDeviation(t, "a percent deadband is accepted but not applied, also on a node without EURange (MonitoredItemService); the adapter does not advertise percent-deadband")
 	})
 }
 
