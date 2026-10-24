@@ -60,6 +60,10 @@ type memSub struct {
 	ch    chan *transport.Message
 	done  chan struct{}
 	once  sync.Once
+
+	// queued and handled count the messages put on ch and those the
+	// handler returned from (settled).
+	queued, handled atomic.Int64
 }
 
 var bus = &memBus{
@@ -113,11 +117,28 @@ func (b *memBus) deliver(url, topic string, payload []byte) {
 			continue
 		}
 		m := &transport.Message{Payload: append([]byte(nil), payload...), Topic: topic, Received: time.Now()}
+		s.queued.Add(1)
 		select {
 		case s.ch <- m:
 		case <-s.done:
+			s.queued.Add(-1)
 		}
 	}
+}
+
+// settled reports whether the subscribers of url have handled every message
+// delivered to them: the runtime counts a message before it calls its
+// handlers, so a counter alone does not tell that they ran.
+func (b *memBus) settled(url string) bool {
+	b.mu.Lock()
+	subs := append([]*memSub(nil), b.subs[url]...)
+	b.mu.Unlock()
+	for _, s := range subs {
+		if s.handled.Load() != s.queued.Load() {
+			return false
+		}
+	}
+	return true
 }
 
 type memConn struct {
@@ -184,6 +205,7 @@ func (c *memConn) Subscribe(ctx context.Context, topic string, qos byte, h trans
 				return
 			case m := <-s.ch:
 				s.h(m)
+				s.handled.Add(1)
 			}
 		}
 	}()
@@ -200,6 +222,7 @@ func (c *memConn) Subscribe(ctx context.Context, topic string, qos byte, h trans
 	c.subs = append(c.subs, s)
 	c.mu.Unlock()
 	for _, r := range retained {
+		s.queued.Add(1)
 		s.ch <- &transport.Message{Payload: []byte(r[1]), Topic: r[0], Received: time.Now()}
 	}
 	return func() error { c.remove(s); return nil }, nil

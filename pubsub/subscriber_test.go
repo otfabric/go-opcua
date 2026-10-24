@@ -73,12 +73,13 @@ func (f *subFixture) send(nm *message.NetworkMessage) {
 	bus.inject(f.url, "", b)
 }
 
-// sendSync sends and waits until the reader handled the message.
+// sendSync sends and waits until the reader handled the message and the
+// runtime called the handlers of what it delivered.
 func (f *subFixture) sendSync(nm *message.NetworkMessage) {
 	f.t.Helper()
 	before := f.handled()
 	f.send(nm)
-	require.Eventually(f.t, func() bool { return f.handled() > before }, 2*time.Second, time.Millisecond)
+	require.Eventually(f.t, func() bool { return f.handled() > before && bus.settled(f.url) }, 2*time.Second, time.Millisecond)
 }
 
 func (f *subFixture) handled() uint64 {
