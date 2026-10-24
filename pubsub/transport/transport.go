@@ -40,7 +40,48 @@ type Message struct {
 	Source net.Addr
 	// Received is when the transport received the message.
 	Received time.Time
+	// ContentType is the MIME type of the payload, if the transport carries
+	// one: the MQTT 5.0 Content Type ("application/opcua+uadp",
+	// "application/json", Part 14 §7.3.4.9). Empty otherwise.
+	ContentType string
+	// UserProperties are the MQTT 5.0 User Properties of the message, in
+	// order (UAMessageType, promoted fields, ...; Part 14 §7.3.4.8).
+	UserProperties []Property
 }
+
+// Property is a name and value pair of a message header, such as an MQTT
+// 5.0 User Property. A name may occur more than once.
+type Property struct {
+	Name, Value string
+}
+
+// UserProperty returns the value of the first user property called name,
+// and whether there is one.
+func (m *Message) UserProperty(name string) (string, bool) {
+	for _, p := range m.UserProperties {
+		if p.Name == name {
+			return p.Value, true
+		}
+	}
+	return "", false
+}
+
+// MIME types of NetworkMessages (Part 14 §7.3.4.9.1 and §7.3.4.9.2), sent
+// as the MQTT 5.0 Content Type.
+const (
+	ContentTypeUADP     = "application/opcua+uadp"
+	ContentTypeJSON     = "application/json"
+	ContentTypeJSONGzip = "application/json+gzip"
+)
+
+// MQTT message types (Part 14 §7.3.4.7.2), sent as the MQTT 5.0 User
+// Property UAMessageType (§7.3.4.8, Table 207).
+const (
+	UAMessageTypeProperty = "UAMessageType"
+	MessageTypeData       = "ua-data"
+	MessageTypeMetaData   = "ua-metadata"
+	MessageTypeStatus     = "ua-status"
+)
 
 // Handler receives messages. It is called from the transport's receive
 // goroutine and must not block for long.
@@ -52,12 +93,24 @@ type Handler func(*Message)
 type PublishOptions struct {
 	// Topic is the queue name. Datagram transports ignore it.
 	Topic string
-	// QoS is the MQTT quality of service, 0 (at most once) or 1 (at least
-	// once). 2 is downgraded to 1.
+	// QoS is the MQTT quality of service: 0 (at most once), 1 (at least
+	// once) or 2 (exactly once).
 	QoS byte
 	// Retain asks the broker to keep the message for late subscribers
 	// (used for metadata).
 	Retain bool
+	// ContentType is the MIME type of the payload (ContentTypeUADP,
+	// ContentTypeJSON); empty selects the one of the transport profile.
+	// MQTT 5.0 sends it as Content Type, 3.1.1 cannot.
+	ContentType string
+	// MessageType is the UAMessageType of the message (MessageTypeData,
+	// MessageTypeMetaData, ...); MQTT 5.0 sends it as a User Property.
+	MessageType string
+	// MessageExpiry, if positive, is the MQTT 5.0 Message Expiry Interval
+	// (rounded up to whole seconds).
+	MessageExpiry time.Duration
+	// UserProperties are further MQTT 5.0 User Properties.
+	UserProperties []Property
 }
 
 // Connection is an open PubSub transport connection.
@@ -86,12 +139,16 @@ type Config struct {
 	// of NetworkAddressDataType); empty selects the system default.
 	Interface string
 
-	// MQTT settings.
-	ClientID  string
-	Username  string
-	Password  string
-	TLSConfig *tls.Config
-	KeepAlive time.Duration
+	// MQTT settings. MQTTVersion is "3.1.1", "5.0" or "BestAvailable"
+	// (the values of the MqttVersion connection property, Part 14
+	// §7.3.4.4); empty uses the MqttVersion connection property and, without
+	// it, 3.1.1.
+	MQTTVersion string
+	ClientID    string
+	Username    string
+	Password    string
+	TLSConfig   *tls.Config
+	KeepAlive   time.Duration
 
 	// UDP settings: the TTL of multicast datagrams (default 1) and whether
 	// this host receives its own multicast datagrams (default true).
