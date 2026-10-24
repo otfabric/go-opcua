@@ -454,7 +454,8 @@ PubSub Actions (Part 14 §6.2.11.2 in 1.05) call a function of another
 PubSub application: a Requestor sends an ActionRequest, a Responder
 executes the Action target and answers with an ActionResponse. The
 Responder is a DataSetWriter of a PublishedDataSet whose DataSetSource is a
-PublishedAction; its targets are Go handlers.
+PublishedAction, whose targets are Go handlers, or a PublishedActionMethod,
+whose targets call Methods.
 
 ```go
 calc := pubsub.PublishedActions("Calc",
@@ -484,6 +485,16 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
 // err: the call failed (ErrActionTimeout wraps Bad_Timeout); res.Status: the result of the Action.
 ```
 
+- **Method targets.** `pubsub.PublishedActionMethods(name, request,
+  response, targets, methods)` makes a PublishedActionMethod (§6.2.3.10.4):
+  target i calls `methods[i]` (`pubsub.ActionMethodOf(objectID, methodID)`)
+  with the inputs of the request. A server (`server.WithPubSub`) calls the
+  Methods of its address space, with the checks of the Call service
+  (unknown Method: Bad_MethodInvalid, argument checks against
+  InputArguments) but without a session: `MethodCallerFromContext` finds
+  nothing, `pubsub.ActionInvocationFrom` tells the request. A standalone
+  runtime calls them with `pubsub.WithActionMethodCaller`. A handler
+  registered for a target takes precedence over its Method.
 - **Addressing.** On a broker the requests go to the QueueName of the
   Responder's writer group (`ActionRequestTopic` gives the default
   `<prefix>/<encoding>/action-request/<responder>/<group>`), the responses to
@@ -540,8 +551,7 @@ res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
   ActionTimeouts in `Status(id).Counters` (writers count what they serve,
   connections what they request or reject).
 
-Not supported: PublishedActionMethod targets bound to server Methods (the
-handlers run instead), DataSetWriter Actions discovery announcements and the
+Not supported: DataSetWriter Actions discovery announcements and the
 ActionMetaData JSON messages, and the MQTT 5.0
 ResponseTopic / CorrelationData properties (the addresses travel in the
 ActionHeader). The server shows a PublishedAction as a PublishedDataSetType

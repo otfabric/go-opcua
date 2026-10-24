@@ -127,6 +127,7 @@ type options struct {
 	discovery       DiscoveryOptions
 	actions         ActionOptions
 	actionHandlers  map[actionKey]ActionHandler
+	methodCaller    ActionMethodCaller
 	inflateLimit    int
 }
 

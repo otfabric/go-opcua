@@ -416,6 +416,14 @@ func validatePublishedDataSet(path string, pds *ua.PublishedDataSetDataType) err
 	case *ua.PublishedActionDataType:
 		return validateActionSource(path, pds, src.RequestDataSetMetaData, src.ActionTargets)
 	case *ua.PublishedActionMethodDataType:
+		if len(src.ActionMethods) != len(src.ActionTargets) {
+			return configErr(path, "%d ActionMethods for %d ActionTargets", len(src.ActionMethods), len(src.ActionTargets))
+		}
+		for i, m := range src.ActionMethods {
+			if m == nil || m.ObjectID == nil || m.MethodID == nil || m.MethodID.Equal(ua.NewNumericNodeID(0, 0)) {
+				return configErr(path, "ActionMethods[%d] needs an ObjectId and a MethodId", i)
+			}
+		}
 		return validateActionSource(path, pds, src.RequestDataSetMetaData, src.ActionTargets)
 	case *ua.PublishedEventsDataType:
 		if src.EventNotifier == nil {

@@ -25,6 +25,9 @@ type publishedDataSet struct {
 	// Action data set: md is the response DataSetMetaData, action holds
 	// the request DataSetMetaData and the Action targets.
 	action *ua.PublishedActionDataType
+	// methods are the Methods of the targets of a PublishedActionMethod,
+	// by ActionTargetId.
+	methods map[uint16]*ua.ActionMethodDataType
 }
 
 func (d *publishedDataSet) config() *ua.PublishedDataSetDataType {
@@ -289,9 +292,13 @@ func (p *PubSub) addPublishedDataSetLocked(in *ua.PublishedDataSetDataType) (Com
 	case *ua.PublishedActionDataType:
 		d.action = src
 	case *ua.PublishedActionMethodDataType:
-		// The ActionMethods are not bound to Methods of an address
-		// space: the targets run the registered ActionHandlers.
+		// ActionMethods[i] is the Method of ActionTargets[i]; the
+		// targets call it with the ActionMethodCaller.
 		d.action = &ua.PublishedActionDataType{RequestDataSetMetaData: src.RequestDataSetMetaData, ActionTargets: src.ActionTargets}
+		d.methods = map[uint16]*ua.ActionMethodDataType{}
+		for i, t := range src.ActionTargets {
+			d.methods[t.ActionTargetID] = src.ActionMethods[i]
+		}
 	}
 	d.md = p.completeMetaData(cfg)
 	if d.action != nil {

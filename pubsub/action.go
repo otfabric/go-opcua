@@ -71,6 +71,20 @@ import (
 // Bad_InternalError.
 type ActionHandler func(ctx context.Context, inputs []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
 
+// ActionMethodCaller calls the Method of a PublishedActionMethod target
+// (Part 14 §6.2.3.10.4 in 1.05): methodID of objectID with the inputs of
+// the request. It is called like an [ActionHandler]. A server's runtime
+// (server.WithPubSub) calls the Methods of its address space.
+type ActionMethodCaller func(ctx context.Context, objectID, methodID *ua.NodeID, inputs []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
+
+// WithActionMethodCaller sets how the targets of PublishedActionMethods
+// call their Methods. A handler registered for a target with
+// [WithActionHandler] takes precedence; a target with neither is answered
+// with Bad_NotImplemented.
+func WithActionMethodCaller(c ActionMethodCaller) Option {
+	return func(o *options) { o.methodCaller = c }
+}
+
 // actionKey identifies the handler of an Action target.
 type actionKey struct {
 	dataSet string
@@ -194,6 +208,22 @@ func (p *PubSub) SetActionHandler(dataSetName string, actionTargetID uint16, h A
 	p.lock()
 	defer p.unlock()
 	WithActionHandler(dataSetName, actionTargetID, h)(&p.opts)
+}
+
+// actionHandler returns the handler of an Action target: the registered
+// one or, for a PublishedActionMethod, the call of its Method. The caller
+// holds the lock.
+func (p *PubSub) actionHandler(d *publishedDataSet, target uint16) ActionHandler {
+	if h := p.opts.actionHandlers[actionKey{d.name, target}]; h != nil {
+		return h
+	}
+	m, call := d.methods[target], p.opts.methodCaller
+	if m == nil || call == nil {
+		return nil
+	}
+	return func(ctx context.Context, inputs []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		return call(ctx, m.ObjectID, m.MethodID, inputs)
+	}
 }
 
 // isAction reports whether a writer is an Action writer: its
@@ -835,7 +865,7 @@ func (p *PubSub) actionRequestLocked(c *connection, gen uint64, enc encoding, w 
 		}
 		c.act.exchanges[key] = ex
 		inputs, st := actionInputs(w.pds.action.RequestDataSetMetaData, dsm)
-		h := p.opts.actionHandlers[actionKey{w.pds.name, dsm.ActionTargetID}]
+		h := p.actionHandler(w.pds, dsm.ActionTargetID)
 		switch {
 		case !isGood(st):
 			ex.finish(st, nil, nil)

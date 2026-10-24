@@ -323,6 +323,27 @@ func PublishedActions(name string, request, response []Field, targets ...*ua.Act
 	}
 }
 
+// PublishedActionMethods returns a PublishedActionMethod (Part 14
+// §6.2.3.10.4 in 1.05): like [PublishedActions], but target i calls
+// methods[i] (see [ActionMethodOf]) through the [ActionMethodCaller] of the
+// runtime, the Methods of the address space in a server.
+func PublishedActionMethods(name string, request, response []Field, targets []*ua.ActionTargetDataType, methods []*ua.ActionMethodDataType) *ua.PublishedDataSetDataType {
+	return &ua.PublishedDataSetDataType{
+		Name:            name,
+		DataSetMetaData: MetaData(name, response...),
+		DataSetSource: ua.NewExtensionObject(&ua.PublishedActionMethodDataType{
+			RequestDataSetMetaData: MetaData(name+"Request", request...),
+			ActionTargets:          targets,
+			ActionMethods:          methods,
+		}),
+	}
+}
+
+// ActionMethodOf returns the Method of a [PublishedActionMethods] target.
+func ActionMethodOf(objectID, methodID *ua.NodeID) *ua.ActionMethodDataType {
+	return &ua.ActionMethodDataType{ObjectID: objectID, MethodID: methodID}
+}
+
 // ActionTargetOf returns an Action target of a [PublishedActions] data set.
 func ActionTargetOf(id uint16, name string) *ua.ActionTargetDataType {
 	return &ua.ActionTargetDataType{ActionTargetID: id, Name: name, Description: &ua.LocalizedText{}}
