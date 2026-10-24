@@ -130,6 +130,12 @@ func TestAEAD_Identities(t *testing.T) {
 		server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
 		server.EnableAuthMode(ua.UserTokenTypeCertificate),
 		server.WithUsernameValidator(userValidator),
+		server.WithIssuedTokenValidator(func(tok *ua.IssuedIdentityToken) error {
+			if bytes.HasPrefix(tok.TokenData, []byte("opaque-jwt")) {
+				return nil
+			}
+			return ua.StatusBadIdentityTokenRejected
+		}),
 		server.WithX509UserValidator(func(der []byte) error {
 			for _, user := range users {
 				if bytes.Equal(der, user.cert) {
