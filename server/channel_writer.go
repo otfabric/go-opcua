@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uasc"
@@ -247,10 +248,12 @@ func (w *channelWriter) close() {
 }
 
 // isConnError reports whether err means that the connection is broken, as
-// opposed to a response that could not be produced.
+// opposed to a response that could not be produced. A secure channel without
+// an active security token cannot send anything either.
 func isConnError(err error) bool {
 	var netErr net.Error
 	return stderrors.As(err, &netErr) ||
+		stderrors.Is(err, errors.ErrSecureChannelClosed) ||
 		stderrors.Is(err, net.ErrClosed) ||
 		stderrors.Is(err, io.EOF) ||
 		stderrors.Is(err, io.ErrUnexpectedEOF) ||

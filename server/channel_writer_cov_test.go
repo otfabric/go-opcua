@@ -5,13 +5,16 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
+	"os"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	opcuaerrors "github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uasc"
@@ -490,4 +493,58 @@ queue:
 	// A torn-down writer refuses new responses instead of queueing them.
 	require.ErrorIs(t, p.w.sendUnslotted(1000, big), errChannelGone)
 	require.ErrorIs(t, p.w.send(1001, big), errChannelGone)
+}
+
+// Errors that leave nothing to send on, and those that do not.
+func TestChannelWriterCov_IsConnError(t *testing.T) {
+	for _, err := range []error{
+		net.ErrClosed,
+		io.EOF,
+		io.ErrUnexpectedEOF,
+		os.ErrDeadlineExceeded,
+		&net.OpError{Op: "write", Err: net.ErrClosed},
+		// a channel whose security token is not (or no longer) active
+		fmt.Errorf("send: %w", opcuaerrors.ErrSecureChannelClosed),
+	} {
+		require.True(t, isConnError(err), "%v", err)
+	}
+	for _, err := range []error{ua.StatusBadEncodingError, opcuaerrors.ErrUnknownService} {
+		require.False(t, isConnError(err), "%v", err)
+	}
+}
+
+// A response for a channel whose security token is not active (the window
+// in which the server has answered OpenSecureChannel but not yet installed
+// the token): nothing can be sent on it, not even the ServiceFault that
+// replaces a response that cannot be encoded. The writer ends the channel
+// instead of keeping it.
+func TestChannelWriterCov_NoActiveToken(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	l, err := uacp.Listen(ctx, "opc.tcp://127.0.0.1:0", nil)
+	require.NoError(t, err)
+	defer func() { _ = l.Close() }()
+	accepted := make(chan *uacp.Conn, 1)
+	go func() {
+		c, _ := l.Accept(ctx)
+		accepted <- c
+	}()
+	cconn, err := uacp.Dial(ctx, "opc.tcp://"+l.Addr().String())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = cconn.Close() })
+	sconn := <-accepted
+	require.NotNil(t, sconn)
+
+	scfg := defaultChannelConfig()
+	scfg.Logger = silentLogger()
+	ssc, err := uasc.NewServerSecureChannel("opc.tcp://"+l.Addr().String(), sconn, scfg, make(chan error, 1), 1, 1, 1)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = ssc.Close() })
+
+	w := newChannelWriter(ssc, sconn, silentLogger(), time.Second, 2)
+	go w.run()
+	require.True(t, w.acquire(context.Background()))
+	require.NoError(t, w.send(1, unencodable()))
+	cwClosed(t, w.done, "writer done")
+	cwClosed(t, w.exited, "writer")
 }
