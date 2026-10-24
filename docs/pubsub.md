@@ -24,11 +24,11 @@ to variables.
 | Actions | PubSub Actions (request / response, Part 14 §6.2.11.2): Responder and Requestor over UDP, MQTT and AMQP, UADP (secured) and JSON (see below) |
 | Not implemented | AMQP over WebSockets (`wss://`) |
 
-Interoperability is tested against open62541 v1.5.9 (see the interop ledger,
-profile `pubsub`), the only peer with PubSub in the interop suite: Eclipse Milo
-1.1.8 and async-opcua 0.19 have no PubSub implementation, PubSub is a commercial
-add-on for node-opcua, and UA-.NETStandard 2.0.1 ships a PubSub runtime that its
-opcua-interop adapter does not drive (not tested).
+Interoperability is tested in both directions against open62541 v1.5.9 and
+the Opc.Ua.PubSub runtime of UA-.NETStandard 2.0.1 (see the interop ledger,
+profile `pubsub`); the AMQP transport is tested through RabbitMQ 4 and ActiveMQ
+Artemis. Eclipse Milo 1.1.8, async-opcua 0.19 and opcua-asyncio have no PubSub
+in the interop suite (PubSub is a commercial add-on for node-opcua).
 
 ## Packages
 
@@ -534,3 +534,19 @@ object: the nodeset has no PublishedActionType.
 - Over Ethernet, open62541 sends no VLAN tag for VID 0 (go-opcua sends a
   priority tag) and only accepts MAC addresses (no host names), like
   go-opcua.
+
+## Interoperating with UA-.NETStandard
+
+- Its MQTT publisher needs MQTT 5.0 (Opc.Ua.PubSub.Mqtt sets the MQTT 5 content
+  type on every publication); its subscriber works with 3.1.1 too.
+- Its UDP transport sends with TTL 1 unless configured, which also limits
+  unicast to the local network.
+- Chunked NetworkMessages and UADP discovery use the .NET 2.x layout, which
+  go-opcua sends and recognises; .NET answers DataSetMetaData and
+  DataSetWriterConfiguration probes only.
+- Its UADP encoder writes an empty String with length 0 (go-opcua: the null
+  String) and always sets MessageIsValid; its JSON encoder leaves out the
+  `UaType` that the DataSetMetaData implies, which go-opcua decodes with the
+  reader's metadata.
+- No Security Key Service (static keys only), no PublishSubscribe information
+  model, no Ethernet or AMQP.
