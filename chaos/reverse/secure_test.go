@@ -18,10 +18,13 @@ import (
 
 // channelLifetime is the secure channel lifetime of the client under faults.
 // The client renews the token after three quarters of it, so a window of
-// renewalWindow always contains a renewal.
+// renewalWindow always contains a renewal. The server gives up a channel
+// whose token was not renewed a quarter of the lifetime after it ran out:
+// 3 s leave a renewal under latency 1.5 s on a loaded runner (1.5 s left
+// 750 ms), as in chaos/secure.
 const (
-	channelLifetime = 1500 * time.Millisecond
-	renewalWindow   = 1250 * time.Millisecond
+	channelLifetime = 3 * time.Second
+	renewalWindow   = 2500 * time.Millisecond
 )
 
 // stormLength is how long the faults of a storm follow each other.
