@@ -1,5 +1,28 @@
 # go-opcua Releases
 
+## v1.9.1
+
+**Date:** 2026-10-24
+**Previous release:** v1.9.0
+
+### Summary
+
+Two race fixes in the library and a sweep of the test suites for scheduling-dependent tests: every test that passed or failed depending on timing (on a loaded CI runner, under the race detector, or on Linux) now waits for the event it asserts on.
+
+### Fixed
+
+- **pubsub/sks: a KeySource changes keys when the SKS does.** `TimeToNextKey` counts from the SKS's response, but the ring started counting only after the session dialed for the fetch was closed, so every ring changed keys later than the SKS by the time that close took. A publisher whose ring lagged secured messages with a key that a subscriber which fetched just after the key change did not hold. The time since the response is now taken off. A fetch still returns no past keys: where a publisher and a subscriber start together, create the subscriber's KeySource first (documented on `KeySource`).
+- **client: the publish request test hook is atomic.** A publish loop that outlived `Client.Close` could read the hook while the next test replaced it (a data race under `-race`).
+
+### Tests
+
+- **Interop:** UDP and TCP ports are bound before a peer is told them and replaced when taken (testport checks the IPv6 wildcard and skips the configured ephemeral range); a container whose host port Docker finds taken starts again on other ports; each dotnet discovery probe gets its own go-opcua publisher and ports (Linux kept routing answers to a removed container) and is repeated as Part 14 §7.2.4.6.12.2 expects of a subscriber; adapter client runs are bounded by their own `--timeout-ms`; a data race on a container log buffer; event pulses, subscription recovery, queue isolation and mDNS waits no longer depend on timing.
+- **Unit, chaos and conformance:** 21 timing assumptions replaced by waits on the asserted event, among them counters read once while the runtime updates them after the send (`TestChunkedUDP`, discovery), goroutine stack snapshots right after `Close`, key and token lifetimes shorter than an RSA handshake under `-race`, a UDP burst larger than Linux's default receive buffer, and fixed port 4840 in the uacp tests. The AMQP chaos test's silent broker outlasts the client idle time-out.
+- The interop suite runs against opcua-interop **v0.10.1**.
+- `server.test`, a compiled test binary committed by mistake, is removed and `*.test` ignored.
+
+---
+
 ## v1.9.0
 
 **Date:** 2026-10-24
