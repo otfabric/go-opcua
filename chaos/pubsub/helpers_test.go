@@ -151,7 +151,11 @@ type checker struct {
 	// the handler later, after releasing its lock, so a restart can fall
 	// between the two: the restarts are bounded by the Timestamp of the
 	// earlier data set (taken by the publisher or at reception, before the
-	// runtime processed it), not by the handler call.
+	// runtime processed it), not by the handler call. Both data sets
+	// count: a receive goroutine of the connection before a restart may
+	// call the handler for a data set its reader took after the
+	// restarted reader delivered a newer one, so the earlier Timestamp
+	// of the two bounds the restarts.
 	restartEnd atomic.Int64 // UnixNano of the end of the latest restart
 	restarting atomic.Int64
 }
@@ -244,7 +248,11 @@ func (c *checker) handle(d *pubsub.ReceivedDataSet) {
 		st = &rstream{}
 		c.streams[key] = st
 	}
-	ordered := st.count > 0 && !c.restartedSince(st.prevTS)
+	since := st.prevTS
+	if d.Timestamp.Before(since) {
+		since = d.Timestamp
+	}
+	ordered := st.count > 0 && !c.restartedSince(since)
 	st.prevTS = d.Timestamp
 	if !ordered {
 		st.hasSeq = false
