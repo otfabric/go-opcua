@@ -77,4 +77,14 @@ func TestDiscoveryStrings(t *testing.T) {
 	} {
 		require.Equal(t, want, typ.String())
 	}
+	for typ, want := range map[DataSetMessageType]string{
+		DataSetMessageActionRequest: "ActionRequest", DataSetMessageActionResponse: "ActionResponse",
+	} {
+		require.Equal(t, want, typ.String())
+	}
+	for typ, want := range map[ActionMessageType]string{
+		ActionRequest: "ActionRequest", ActionResponse: "ActionResponse", 9: "ActionMessageType(9)",
+	} {
+		require.Equal(t, want, typ.String())
+	}
 }

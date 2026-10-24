@@ -35,6 +35,19 @@ const (
 	ext2PromotedFields = 0x02
 	ext2TypeMask       = 0x1c
 	ext2TypeShift      = 2
+	// ext2Action announces the ActionHeader of an ActionRequest or
+	// ActionResponse NetworkMessage (Part 14 Table 154 in 1.05).
+	ext2Action = 0x20
+)
+
+// ActionFlags of the ActionHeader (Part 14 Table 154 in 1.05).
+const (
+	actRequest         = 0x01
+	actResponseAddress = 0x02
+	actCorrelationData = 0x04
+	actRequestorID     = 0x08
+	actTimeoutHint     = 0x10
+	actKnown           = 0x1f
 )
 
 // SecurityFlags of the security header.
