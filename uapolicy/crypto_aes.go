@@ -5,6 +5,7 @@ package uapolicy
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"fmt"
 
 	"github.com/otfabric/go-opcua/errors"
 )
@@ -20,11 +21,21 @@ type AES struct {
 	Secret    []byte
 }
 
-func (a *AES) Decrypt(src []byte) ([]byte, error) {
-	paddedKey := make([]byte, a.KeyLength/8)
-	copy(paddedKey, a.Secret)
+// block returns the cipher for the key. Encrypt and Decrypt use the same key
+// and both reject a key whose length is not KeyLength bits, or an IV that is
+// not one block long (cipher.NewCBC* panics on that).
+func (a *AES) block() (cipher.Block, error) {
+	if len(a.Secret)*8 != a.KeyLength {
+		return nil, fmt.Errorf("%w: AES key of %d bits, want %d", errors.ErrInvalidSecurityConfig, len(a.Secret)*8, a.KeyLength)
+	}
+	if len(a.IV) != aes.BlockSize {
+		return nil, fmt.Errorf("%w: AES IV of %d bytes, want %d", errors.ErrInvalidSecurityConfig, len(a.IV), aes.BlockSize)
+	}
+	return aes.NewCipher(a.Secret)
+}
 
-	block, err := aes.NewCipher(a.Secret)
+func (a *AES) Decrypt(src []byte) ([]byte, error) {
+	block, err := a.block()
 	if err != nil {
 		return nil, err
 	}
@@ -45,15 +56,12 @@ func (a *AES) Decrypt(src []byte) ([]byte, error) {
 }
 
 func (a *AES) Encrypt(src []byte) ([]byte, error) {
-	paddedKey := make([]byte, a.KeyLength/8)
-	copy(paddedKey, a.Secret)
-
 	// CBC mode always works in whole blocks.
 	if len(src)%aes.BlockSize != 0 {
 		return nil, errors.ErrInvalidPlaintext
 	}
 
-	block, err := aes.NewCipher(paddedKey)
+	block, err := a.block()
 	if err != nil {
 		return nil, err
 	}
