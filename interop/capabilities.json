@@ -409,6 +409,24 @@
       ]
     },
     {
+      "id": "subscription.client.transfer.anonymous",
+      "title": "TransferSubscriptions between two anonymous sessions of the same client application certificate (Basic256Sha256 SignAndEncrypt; go-opcua client)",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "subscription.client.transfer.other-identity",
+      "title": "TransferSubscriptions to a session of another user identity refused with Bad_UserAccessDenied (the fixture's only user, test-user, to an anonymous session; go-opcua client)",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
       "id": "subscription.server.transfer",
       "title": "Server TransferSubscriptions handler",
       "profile": "subscriptions",
@@ -449,6 +467,15 @@
     {
       "id": "monitoreditem.modify",
       "title": "ModifyMonitoredItems",
+      "profile": "subscriptions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "monitoreditem.set-triggering",
+      "title": "SetTriggering: a linked item in Sampling mode reports only after its triggering item reports; RemoveLinks (go-opcua client)",
       "profile": "subscriptions",
       "applicableDirections": [
         "go-client-to-open62541-server",
@@ -832,6 +859,24 @@
         "go-client-to-milo-server",
         "open62541-client-to-go-server",
         "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "nodemgmt.add-references",
+      "title": "AddReferences: the added reference is browsable (go-opcua client)",
+      "profile": "node-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "nodemgmt.delete-references",
+      "title": "DeleteReferences: the deleted reference is gone from Browse (go-opcua client)",
+      "profile": "node-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
       ]
     },
     {
@@ -1317,6 +1362,15 @@
       ]
     },
     {
+      "id": "transport.chunking.secure",
+      "title": "Multi-chunk messages on secured channels: a ByteString of about 200 KB (sized to the server's limits) written and read back over Basic256Sha256 and Aes256_Sha256_RsaPss SignAndEncrypt, request and response in several chunks (go-opcua client)",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
       "id": "encoding.json.variant",
       "title": "JSON DataEncoding (1.05): built-in scalars, arrays, matrix (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
       "profile": "encoding",
@@ -1330,6 +1384,28 @@
     {
       "id": "encoding.json.datavalue",
       "title": "JSON DataEncoding (1.05): DataValue with timestamps (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "encoding",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "encoding.json-verbose.variant",
+      "title": "JSON DataEncoding (1.05.04), Verbose form: built-in scalars, arrays, matrix; C→ also a Bad StatusCode with its Symbol (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
+      "profile": "encoding",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "encoding.json-verbose.datavalue",
+      "title": "JSON DataEncoding (1.05.04), Verbose form: DataValue with timestamps; C→ also an Uncertain status with its Symbol (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
       "profile": "encoding",
       "applicableDirections": [
         "go-client-to-open62541-server",
@@ -1686,6 +1762,24 @@
         "go-client-to-milo-server",
         "open62541-client-to-go-server",
         "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "diagnostics.server-summary",
+      "title": "Server diagnostics: ServerDiagnosticsSummary counts the client's sessions; the client's session in SessionDiagnosticsArray where it is exposed (go-opcua client)",
+      "profile": "diagnostics",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
+      ]
+    },
+    {
+      "id": "diagnostics.return-diagnostics",
+      "title": "RequestHeader.ReturnDiagnostics: operation DiagnosticInfos returned for a failed Read and decoded against the string table, none without the mask (go-opcua client)",
+      "profile": "diagnostics",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server"
       ]
     }
   ]

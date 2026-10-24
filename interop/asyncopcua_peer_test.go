@@ -1210,3 +1210,48 @@ func TestPubSub_AsyncOpcuaHasNoPubSub(t *testing.T) {
 		t.Errorf("server --pubsub-config: err=%v, want exit 2\n%s", err, srvOut)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// C→P services (c2p_services_peer_test.go): chunked secure messages,
+// SetTriggering, TransferSubscriptions identity rules, AddReferences /
+// DeleteReferences, server diagnostics
+// ---------------------------------------------------------------------------
+
+func TestAsyncOpcuaServer_ChunkedSecureMessages(t *testing.T) {
+	t.Run("coverage/transport.chunking.secure/go-client-to-async-opcua-server", func(t *testing.T) {
+		assertPeerChunkedSecure(t, startAsyncOpcuaSecureServer(t).endpoint)
+	})
+}
+
+func TestAsyncOpcuaServer_SetTriggering(t *testing.T) {
+	t.Run("coverage/monitoreditem.set-triggering/go-client-to-async-opcua-server", func(t *testing.T) {
+		requireSetTriggering(t, startAsyncOpcuaServer(t).endpoint)
+	})
+}
+
+func TestAsyncOpcuaServer_TransferSubscriptionsIdentity(t *testing.T) {
+	t.Run("coverage/subscription.client.transfer.anonymous/go-client-to-async-opcua-server", func(t *testing.T) {
+		assertPeerTransferAnonymous(t, startAsyncOpcuaSecureServer(t).endpoint, ua.StatusOK)
+	})
+	t.Run("coverage/subscription.client.transfer.other-identity/go-client-to-async-opcua-server", func(t *testing.T) {
+		assertPeerTransferOtherIdentity(t, startAsyncOpcuaSecureServer(t).endpoint, ua.StatusBadUserAccessDenied)
+	})
+}
+
+// TestAsyncOpcuaServer_ReferencesUnsupported pins why nodemgmt.*-references
+// are unsupported for async-opcua: its server implements AddNodes and
+// DeleteNodes, but answers AddReferences / DeleteReferences operations with
+// BadServiceUnsupported.
+func TestAsyncOpcuaServer_ReferencesUnsupported(t *testing.T) {
+	assertPeerReferencesRefused(t, startAsyncOpcuaServer(t).endpoint)
+}
+
+func TestAsyncOpcuaServer_Diagnostics(t *testing.T) {
+	h := startAsyncOpcuaServer(t)
+	t.Run("coverage/diagnostics.server-summary/go-client-to-async-opcua-server", func(t *testing.T) {
+		assertPeerServerDiagnostics(t, h.endpoint)
+	})
+	t.Run("coverage/diagnostics.return-diagnostics/go-client-to-async-opcua-server", func(t *testing.T) {
+		assertPeerReturnDiagnostics(t, h.endpoint)
+	})
+}

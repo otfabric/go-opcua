@@ -1387,6 +1387,19 @@ func copyDir(src, dst string) error {
 // GetEndpoints so the server certificate is taken from the server's advertisement.
 func dialSecureClient(t *testing.T, endpoint, policy, mode string) *opcua.Client {
 	t.Helper()
+	c, err := connectSecureClient(t, endpoint, policy, mode, ua.UserTokenTypeAnonymous, opcua.AuthAnonymous())
+	if err != nil {
+		t.Fatalf("Connect secure (%q %s/%s): %v", endpoint, policy, mode, err)
+	}
+	return c
+}
+
+// connectSecureClient is dialSecureClient with the user token type of the
+// endpoint's token policy to use and further client options (the identity,
+// a logger, ...). It returns the error of Connect, so that callers can
+// assert a refusal; the client is closed when the test ends.
+func connectSecureClient(t *testing.T, endpoint, policy, mode string, tokenType ua.UserTokenType, extra ...opcua.Option) (*opcua.Client, error) {
+	t.Helper()
 
 	pki := pkiDir(t)
 	consumerCert := filepath.Join(pki, "consumer", "cert.crt")
@@ -1423,13 +1436,13 @@ func dialSecureClient(t *testing.T, endpoint, policy, mode string) *opcua.Client
 	// and security parameters from the advertised endpoint.
 	chosen.EndpointURL = endpoint
 
-	c, err := opcua.NewClient(endpoint,
-		opcua.SecurityFromEndpoint(chosen, ua.UserTokenTypeAnonymous),
+	opts := []opcua.Option{
+		opcua.SecurityFromEndpoint(chosen, tokenType),
 		opcua.CertificateFile(consumerCert),
 		opcua.PrivateKeyFile(consumerKey),
 		opcua.TrustedCertificates(ca),
-		opcua.AuthAnonymous(),
-	)
+	}
+	c, err := opcua.NewClient(endpoint, append(opts, extra...)...)
 	if err != nil {
 		t.Fatalf("NewClient (secure): %v", err)
 	}
@@ -1438,16 +1451,16 @@ func dialSecureClient(t *testing.T, endpoint, policy, mode string) *opcua.Client
 	defer cancel()
 
 	if err := c.Connect(ctx); err != nil {
-		t.Fatalf("Connect secure (%q %s/%s): %v", endpoint, policy, mode, err)
+		return nil, err
 	}
 
 	t.Cleanup(func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
-		c.Close(ctx2)
+		c.Close(ctx2) //nolint:errcheck
 	})
 
-	return c
+	return c, nil
 }
 
 // ---------------------------------------------------------------------------

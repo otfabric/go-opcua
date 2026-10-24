@@ -7,10 +7,10 @@ Pinned opcua-interop version: **v0.8.2**
 ## Status totals
 
 - `deferred`: 64
-- `not-applicable`: 28
-- `unsupported`: 138
+- `not-applicable`: 44
+- `unsupported`: 148
 - `unverified`: 1
-- `verified`: 393
+- `verified`: 407
 
 ## Unverified by reason
 

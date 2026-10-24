@@ -547,6 +547,34 @@
       "fixture": "baseline"
     },
     {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.anonymous/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.anonymous",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_TransferSubscriptionsIdentity",
+      "case": "coverage/subscription.client.transfer.other-identity/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "subscription.client.transfer.other-identity",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
       "capability": "subscription.server.transfer",
       "direction": "go-client-to-dotnet-server",
       "status": "not-applicable",
@@ -613,6 +641,20 @@
     },
     {
       "capability": "monitoreditem.modify",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_SetTriggering",
+      "case": "coverage/monitoreditem.set-triggering/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "monitoreditem.set-triggering",
       "direction": "dotnet-client-to-go-server",
       "status": "not-applicable",
       "fixture": "baseline"
@@ -1103,6 +1145,34 @@
       "fixture": "baseline"
     },
     {
+      "capability": "nodemgmt.add-references",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_AddDeleteReferences",
+      "case": "coverage/nodemgmt.add-references/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.add-references",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_AddDeleteReferences",
+      "case": "coverage/nodemgmt.delete-references/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "nodemgmt.delete-references",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
       "capability": "translate.browse-path",
       "direction": "go-client-to-dotnet-server",
       "status": "verified",
@@ -1132,6 +1202,35 @@
       "status": "verified",
       "test": "TestGoServer_DotnetClient_RegisterNodes",
       "case": "coverage/view.register-nodes/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "test": "TestDotnetServer_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/go-client-to-dotnet-server",
+      "nextAction": "The UA-.NETStandard server of the adapter runs with diagnostics off (Server.ServerDiagnostics.EnabledFlag = false, the stack default); the test skips. An adapter that enables them (ServerConfiguration DiagnosticsEnabled) would let the row be verified",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.server-summary",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Diagnostics",
+      "case": "coverage/diagnostics.return-diagnostics/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "diagnostics.return-diagnostics",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
       "fixture": "baseline"
     },
     {
@@ -1723,6 +1822,20 @@
       "fixture": "baseline"
     },
     {
+      "capability": "transport.chunking.secure",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_ChunkedSecureMessages",
+      "case": "coverage/transport.chunking.secure/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.chunking.secure",
+      "direction": "dotnet-client-to-go-server",
+      "status": "not-applicable",
+      "fixture": "baseline"
+    },
+    {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-dotnet-server",
       "status": "verified",
@@ -1751,6 +1864,38 @@
       "direction": "dotnet-client-to-go-server",
       "status": "verified",
       "test": "TestCodec_DotnetEncodes_GoDecodes",
+      "case": "dataValueJson",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodesVerbose_DotnetDecodes",
+      "case": "variant/*/json",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.variant",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_DotnetEncodesVerbose_GoDecodes",
+      "case": "json",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCodec_GoEncodesVerbose_DotnetDecodes",
+      "case": "datavalue/*/json",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "encoding.json-verbose.datavalue",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestCodec_DotnetEncodesVerbose_GoDecodes",
       "case": "dataValueJson",
       "fixture": "baseline"
     },

@@ -53,7 +53,12 @@ opcua-interop
       browse_mask_test.go                  browse (ResultMask bits)
       datachange_filter_peer_test.go       DataChangeFilter deadband (absolute / percent),
                                            trigger, sampling interval — all four directions
-      codec_peer_test.go                   JSON / XML DataEncoding round trips (open62541, Milo)
+      codec_peer_test.go                   JSON / XML DataEncoding round trips (open62541, Milo),
+                                           JSON Verbose (Milo)
+      c2p_services_peer_test.go            go-opcua client against every peer server: multi-chunk
+                                           secured messages, SetTriggering, TransferSubscriptions
+                                           identity rules, Add/DeleteReferences, server diagnostics
+                                           (shared assertions; opt-in peers in their own files)
       ecc_peer_test.go                     ECC_nistP256 / ECC_nistP384 (open62541), user token,
                                            renewal, unimplemented ECC policies refused;
                                            AEAD policies (AesGcm, ChaChaPoly, curve25519)
@@ -164,6 +169,7 @@ go test -tags=interop -v ./interop/...
 | `TestGoServer_` (no peer infix) | OPC UA server + client | none (Go↔Go) | companion only |
 | `TestGoServer_PeerClient_` | OPC UA server | both adapter clients (subtest per peer) | O→S, M→S |
 | `TestCodec_<Peer>Encodes_GoDecodes` / `TestCodec_GoEncodes_<Peer>Decodes` | JSON / XML codec | adapter `codec` | O→S, M→S / C→O, C→M |
+| `TestCodec_<Peer>EncodesVerbose_GoDecodes` / `TestCodec_GoEncodesVerbose_<Peer>Decodes` | JSON Verbose codec | adapter `codec --json-mode verbose` | M→S / C→M (and the dotnet directions) |
 | `TestOpen62541LDS_` / `TestGoLDS_` | registrant / LDS | open62541 LDS / adapter server or client | C→O / O→S, M→S |
 | `TestMulticast_` | LDS in a container | open62541 LDS, both adapter clients | all (see ledger `case`) |
 | `TestDotnetServer_` | OPC UA client | UA-.NETStandard server | `go-client-to-dotnet-server` (`ledger-dotnet.json`) |
@@ -277,6 +283,12 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | DataChangeFilter — percent deadband (AnalogItem EURange) | ✓ | ✓ |
 | DataChangeFilter — trigger (Status / StatusValue / StatusValueTimestamp) | ✓ | ✓ |
 | Sampling interval honoured | ✓ | ✓ |
+| Multi-chunk messages, Basic256Sha256 / Aes256_Sha256_RsaPss SignAndEncrypt | ✓ | n/a |
+| SetTriggering / RemoveLinks (linked item in Sampling) | ✓ | n/a |
+| TransferSubscriptions: anonymous → anonymous (same certificate); user → other identity refused | ✓ | n/a |
+| AddReferences / DeleteReferences | ✓ | n/a |
+| ServerDiagnosticsSummary, SessionDiagnosticsArray | ✓ | n/a |
+| ReturnDiagnostics (operation DiagnosticInfos) | ⚠ | n/a |
 | ECC_nistP256 / Sign, SignAndEncrypt | ✓ | ✓ |
 | ECC_nistP384 / Sign, SignAndEncrypt | ✓ | ✓ |
 | ECC_nistP256_AesGcm / SignAndEncrypt | ✓ | ✓ |
@@ -292,6 +304,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | JSON DataEncoding — DataValue | ✓ | ✓ |
 | XML DataEncoding — built-in scalars, arrays, matrix | ✓‡ | ✓‡ |
 | XML DataEncoding — DataValue | ⚠ | ⚠ |
+| JSON DataEncoding, Verbose form | ⚠ | ⚠ |
 | LDS registration (server registers / unregisters) | ✓ | ✓ |
 | RegisterServer / RegisterServer2 driven by the peer client | n/a | ✓ |
 | RegisterServer2 MdnsDiscoveryConfiguration → FindServersOnNetwork | ✓ | ✓ |
@@ -301,6 +314,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 \* Go-client-driven against Go server always; adapter reverse only where CLI exposes the control (`--queue-size`, `--discard-oldest`, `--timestamps` on subscribe).
 ‡ For the codec rows "Go→open62541" means go-opcua encodes and open62541 decodes, "open62541→Go" the reverse; for LDS registration and mDNS the left column is go-opcua acting towards the open62541 LDS (registering, browsing), the right column open62541 acting towards the go-opcua LDS; for reverse connect the left column is the Go client listening for the open62541 server, the right column the Go server dialling the open62541 client. open62541 1.5.9 cannot decode an XmlElement from XML and cannot encode a matrix to XML; both gaps are listed in `codec_peer_test.go` and asserted to still be there.
 ⚠ open62541 1.5.9 does not implement DataValue in the XML encoding (`BadNotImplemented`); `encoding.xml.datavalue` is `unsupported` in both open62541 directions.
+⚠ open62541 1.5.9 has the compact JSON form only: `encoding.json-verbose.*` is `unsupported` in both open62541 directions. It returns no DiagnosticInfos for a Read with ReturnDiagnostics (`diagnostics.return-diagnostics` C→O `unsupported`).
 
 ### go-opcua client ↔ Milo
 
@@ -395,12 +409,20 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | DataChangeFilter — percent deadband (AnalogItem EURange) | ✓ | ✓ |
 | DataChangeFilter — trigger (Status / StatusValue / StatusValueTimestamp) | ✓ | ✓ |
 | Sampling interval honoured | ✓ | ✓ |
+| Multi-chunk messages, Basic256Sha256 / Aes256_Sha256_RsaPss SignAndEncrypt | ✓ | n/a |
+| SetTriggering / RemoveLinks (linked item in Sampling) | ✓ | n/a |
+| TransferSubscriptions: anonymous → anonymous (same certificate); user → other identity refused | ✓ | n/a |
+| AddReferences / DeleteReferences | ⚠ | n/a |
+| ServerDiagnosticsSummary, SessionDiagnosticsArray | ⚠ | n/a |
+| ReturnDiagnostics (operation DiagnosticInfos) | ⚠ | n/a |
 | ECC security policies | ⚠ | ⚠ |
 | Reverse connect | ⚠ | ⚠ |
 | JSON DataEncoding — built-in scalars, arrays, matrix | ✓ | ✓ |
 | JSON DataEncoding — DataValue | ⚠ | ✓ |
 | XML DataEncoding — built-in scalars, arrays, matrix | ✓ | ✓ |
 | XML DataEncoding — DataValue | ✓ | ✓ |
+| JSON DataEncoding, Verbose form — built-in scalars, arrays, matrix | ✓ | ✓ |
+| JSON DataEncoding, Verbose form — DataValue | ⚠ | ✓ |
 | LDS registration (server registers / unregisters) | ⚠ | ✓ |
 | RegisterServer / RegisterServer2 driven by the peer client | n/a | ✓ |
 | RegisterServer2 MdnsDiscoveryConfiguration → FindServersOnNetwork | ⚠ | ✓ |
@@ -413,7 +435,8 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 † Paging through continuation points is verified; Milo's SDK does not pass `ReleaseContinuationPoints` to the history backend, so release/reuse is asserted on C→O only.
 ⚠ Eclipse Milo 1.1.8 implements no ECC SecurityPolicy and no ReverseHello: all `security.ecc-*` and `transport.reverse-connect*` rows are `unsupported` for C→M and M→S.
 ⚠ Eclipse Milo 1.1.8 is no discovery server (RegisterServer, RegisterServer2 and FindServersOnNetwork answer `Bad_ServiceUnsupported`, pinned by `TestMiloServer_DiscoveryServerUnsupported`) and has no mDNS. The Milo server registers with a go-opcua LDS and the Milo client drives its discovery services, so M→S is verified.
-⚠ Milo does not decode a JSON DataValue with the Variant members inlined (the Part 6 1.05 form go-opcua and open62541 emit); go-opcua decodes Milo's nested form.
+⚠ Milo does not decode a JSON DataValue with the Variant members inlined (the Part 6 1.05 form go-opcua and open62541 emit); go-opcua decodes Milo's nested form. The same holds for the Verbose form.
+⚠ The Milo reference server answers AddReferences / DeleteReferences with `BadNotSupported` (pinned by `TestMiloServer_ReferencesUnsupported`), runs with server diagnostics off (`EnabledFlag` false) and returns no DiagnosticInfos: `nodemgmt.*-references`, `diagnostics.*` C→M are `unsupported`.
 
 ### go-opcua ↔ async-opcua (opt-in peer)
 
@@ -431,7 +454,7 @@ go test -tags=interop -run 'AsyncOpcua' -v ./interop/
 
 Its evidence is kept in its own ledger, [`interop/testdata/ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) (one row per capability for `go-client-to-async-opcua-server` and `async-opcua-client-to-go-server`; LDS evidence names `async-opcua-server-to-go-lds` / `async-opcua-client-to-go-lds` in its `case`), checked without Docker by `TestAsyncOpcuaLedgerValid`. `coverage.json` and `COVERAGE.md` stay open62541 / Milo only.
 
-What async-opcua 0.19 does not provide is `unsupported` in the ledger, declared by the adapter (`print-capabilities`) and skipped by the tests, never emulated: ECC security policies, Local Discovery Server and mDNS (the server answers the discovery services with `Bad_ServiceUnsupported`, pinned by `TestAsyncOpcuaServer_DiscoveryServerUnsupported`), PubSub (`TestPubSub_AsyncOpcuaHasNoPubSub`), and the `codec` operation (its JSON Variant is the 1.04 Type/Body form, its XML Variant the NodeSet2 form without the Part 6 `<Value>` element).
+What async-opcua 0.19 does not provide is `unsupported` in the ledger, declared by the adapter (`print-capabilities`) and skipped by the tests, never emulated: ECC security policies, Local Discovery Server and mDNS (the server answers the discovery services with `Bad_ServiceUnsupported`, pinned by `TestAsyncOpcuaServer_DiscoveryServerUnsupported`), PubSub (`TestPubSub_AsyncOpcuaHasNoPubSub`), and the `codec` operation (its JSON Variant is the 1.04 Type/Body form, its XML Variant the NodeSet2 form without the Part 6 `<Value>` element). Its server answers AddReferences / DeleteReferences with `Bad_ServiceUnsupported` (`TestAsyncOpcuaServer_ReferencesUnsupported`; AddNodes / DeleteNodes are verified), has no server diagnostics (`EnabledFlag` is null) and returns empty DiagnosticInfos for ReturnDiagnostics.
 
 ⚠ Stack deviations the suite found (details in `opcua-interop/async-opcua/README.md`):
 
@@ -441,6 +464,7 @@ What async-opcua 0.19 does not provide is `unsupported` in the ledger, declared 
 - Under trigger `StatusValueTimestamp` a SourceTimestamp change is reported inside a deadband, and a percent-deadband change of exactly the deadband is reported (floating point); both are logged, not asserted, by `TestAsyncOpcuaServer_DataChangeFilter`.
 - A Write with a SourceTimestamp is accepted (as Milo does), logged by `TestAsyncOpcuaServer_WriteEncodingMask`.
 - Certificates are trusted by exact match only (no CA chains): the v0.9.0 test PKI lists the go-opcua consumer certificate in the async-opcua server's trust list.
+- `MaxByteStringLength` is 65535, so `TestAsyncOpcuaServer_ChunkedSecureMessages` writes and reads three ByteStrings of that size in one request (the messages are still split into four chunks).
 
 ### go-opcua ↔ node-opcua (opt-in peer)
 
@@ -458,7 +482,7 @@ go test -tags=interop -run 'NodeOpcua' -v ./interop/
 
 Its evidence is kept in [`interop/testdata/ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) (directions `go-client-to-node-opcua-server` and `node-opcua-client-to-go-server`; LDS evidence names `node-opcua-server-to-go-lds` / `node-opcua-client-to-go-lds` in its `case`), checked without Docker by `TestNodeOpcuaLedgerValid`. node-opcua validates certificates against the test CA and its CRL, so no per-certificate trust entries are needed.
 
-What node-opcua does not provide is `unsupported` in the ledger, declared by the adapter and skipped or pinned by the tests: ECC security policies (`TestNodeOpcuaServer_EccUnsupported`), AddNodes / DeleteNodes on the server (`Bad_ServiceUnsupported`, `TestNodeOpcuaServer_NodeManagementUnsupported`; the node-opcua client's node-management is verified against go-opcua), QueryFirst / QueryNext and HistoryUpdate on the server (`Bad_ServiceUnsupported`), a discovery server in the adapter (`OPCUAServer` answers the LDS services with `Bad_ServiceUnsupported`, `TestNodeOpcuaServer_DiscoveryServerUnsupported`; node-opcua's LDS is a separate application), PubSub (`TestPubSub_NodeOpcuaHasNoPubSub`), and the `codec` operation (`TestNodeOpcuaAdapter_CodecUnsupported`).
+What node-opcua does not provide is `unsupported` in the ledger, declared by the adapter and skipped or pinned by the tests: ECC security policies (`TestNodeOpcuaServer_EccUnsupported`), AddNodes / DeleteNodes on the server (`Bad_ServiceUnsupported`, `TestNodeOpcuaServer_NodeManagementUnsupported`; the node-opcua client's node-management is verified against go-opcua), QueryFirst / QueryNext and HistoryUpdate on the server (`Bad_ServiceUnsupported`), a discovery server in the adapter (`OPCUAServer` answers the LDS services with `Bad_ServiceUnsupported`, `TestNodeOpcuaServer_DiscoveryServerUnsupported`; node-opcua's LDS is a separate application), PubSub (`TestPubSub_NodeOpcuaHasNoPubSub`), the `codec` operation (`TestNodeOpcuaAdapter_CodecUnsupported`), AddReferences / DeleteReferences on the server (`Bad_ServiceUnsupported`, `TestNodeOpcuaServer_ReferencesUnsupported`) and DiagnosticInfos for ReturnDiagnostics (none are returned). ServerDiagnosticsSummary and SessionDiagnosticsArray are verified.
 
 ⚠ Stack deviations the suite found (details in `opcua-interop/node-opcua/README.md`):
 
@@ -485,9 +509,9 @@ go test -tags=interop -run 'Dotnet' -v ./interop/
 
 Its evidence is kept in its own ledger, [`interop/testdata/ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) (one row per capability for `go-client-to-dotnet-server` and `dotnet-client-to-go-server`; LDS evidence names `dotnet-server-to-go-lds` / `dotnet-client-to-go-lds` in its `case`), checked without Docker by `TestDotnetLedgerValid`: known capabilities, a row for every capability in both directions, evidence tests that exist and declare the row's subtest, and a row or case for every `coverage/…` subtest of the dotnet files.
 
-What the dotnet adapter does not offer is `unsupported` in the ledger and declared by `print-capabilities`: reverse connect (the stack has it, the adapter does not wire it), ECC (2.0.1 refuses the test PKI's ECC certificates, which the RSA test CA issues), the Local Discovery Server and mDNS (pinned by `TestDotnetServer_DiscoveryServerUnsupported`) and PubSub. Its codec reads namespace-qualified XML only, so open62541's XML documents fail to decode there (an opcua-interop smoke check, not a go-opcua test).
+What the dotnet adapter does not offer is `unsupported` in the ledger and declared by `print-capabilities`: reverse connect (the stack has it, the adapter does not wire it), ECC (2.0.1 refuses the test PKI's ECC certificates, which the RSA test CA issues), the Local Discovery Server and mDNS (pinned by `TestDotnetServer_DiscoveryServerUnsupported`) and PubSub. Its server runs with diagnostics off (`EnabledFlag` false, `diagnostics.server-summary` `unsupported`); ReturnDiagnostics is verified (it is the only peer that returns operation DiagnosticInfos), as are AddReferences / DeleteReferences and the JSON Verbose codec in both directions. Its codec reads namespace-qualified XML only, so open62541's XML documents fail to decode there (an opcua-interop smoke check, not a go-opcua test).
 
-UA-.NETStandard found three go-opcua defects, fixed in v1.8.1: the RSA-OAEP-SHA256 plaintext block size (Aes256_Sha256_RsaPss), CreateSession without `ServerEndpoints` for a client that connects with another host name, and client certificate chains in `WithClientCertificateTrustList`. Other behaviour the tests account for: a username token needs an encrypting channel (the dotnet client refuses one over SecurityPolicy None, so the username tests use Basic256Sha256 SignAndEncrypt); TransferSubscriptions needs the same user identity in both sessions (anonymous sessions are refused with `Bad_UserAccessDenied`, pinned); the end time of a raw history read is exclusive; a continuation-point release answers with a null HistoryData.
+UA-.NETStandard found three go-opcua defects, fixed in v1.8.1: the RSA-OAEP-SHA256 plaintext block size (Aes256_Sha256_RsaPss), CreateSession without `ServerEndpoints` for a client that connects with another host name, and client certificate chains in `WithClientCertificateTrustList`. Other behaviour the tests account for: a username token needs an encrypting channel (the dotnet client refuses one over SecurityPolicy None, so the username tests use Basic256Sha256 SignAndEncrypt); TransferSubscriptions needs the same identity in both sessions: two anonymous sessions on a None channel carry nothing to compare and are refused with `Bad_UserAccessDenied` (pinned), two anonymous sessions of the same application certificate over Basic256Sha256 SignAndEncrypt transfer (`TestDotnetServer_TransferSubscriptionsIdentity`), as with every other peer; the end time of a raw history read is exclusive; a continuation-point release answers with a null HistoryData.
 
 ---
 
