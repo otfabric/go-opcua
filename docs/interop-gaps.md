@@ -36,7 +36,7 @@ Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 | Raw history deletes (DeleteRawModified) remove the sample at the end time, while a raw read excludes it. | Known limitation of the built-in historian. | Pass an end time just past the last sample to delete. |
 | Triggering links (SetTriggering) are not restored when the client re-creates a subscription after a reconnect. | Recovery re-creates subscriptions and monitored items only. | Call `Subscription.SetTriggering` again after recovery. |
 | mDNS has no probing or conflict resolution, and real multicast is verified on Linux only. | Scope of the built-in responder. | Prefer the LDS registry over mDNS on untrusted networks. |
-| PubSub: chunked NetworkMessages and UADP discovery use the layout of the OPC Foundation .NET stack 2.x where the specification is ambiguous; open62541 1.5.9 sends and accepts neither, and no peer adapter offers them, so they are tested against go-opcua only. | No interoperable peer to test against. | Keep MaxNetworkMessageSize large enough to avoid chunks towards open62541; configure DataSetMetaData on readers instead of relying on discovery. |
+| PubSub: chunked NetworkMessages and UADP discovery use the layout of the OPC Foundation .NET stack 2.x where the specification is ambiguous. They interoperate with UA-.NETStandard 2.0.1; open62541 1.5.9 sends and accepts neither. | open62541 drops chunks and ignores discovery probes. | Keep MaxNetworkMessageSize large enough to avoid chunks towards open62541; configure DataSetMetaData on readers instead of relying on discovery. |
 | PubSub over MQTT: go-opcua speaks MQTT 3.1.1 unless `SetMQTTVersion` asks for 5.0; only 5.0 carries the content type and UAMessageType of a message, a 3.1.1 subscriber tells the mapping from the payload. | Part 14 §7.3.4.4 leaves the default to the implementation; open62541 1.5.9 speaks 3.1.1. | Use `MQTTVersionBestAvailable` with brokers that speak 5.0. |
 | PubSub over AMQP: ExactlyOnce is sent as AtLeastOnce, and DataSetMetaData is not retained (AMQP has no retained messages). | AMQP 1.0 settlement has no exactly-once in practice; Part 14 B.3. | Put the metadata on a queue address so late subscribers still get it. |
 | ECC: where open62541 1.5.9 and Part 6 1.05.07 differ (curve25519 key material, Sign-mode key derivation, ChannelThumbprint), go-opcua follows open62541. | open62541 is the only ECC peer that can be tested. | Prefer SignAndEncrypt with ECC_nistP256 / P384 or the AEAD policies with other stacks. See [Security](security.md). |
@@ -83,6 +83,7 @@ on the side of the application that talks to the peer.
 - The XmlDecoder reads namespace-qualified elements only: do not use `ua.WithoutXMLNamespace` with .NET peers.
 - ECC application certificates issued by an RSA CA are refused; ECC between go-opcua and .NET is untested.
 - The OPC Foundation LDS is a separate product; there is no multicast discovery.
+- PubSub (Opc.Ua.PubSub 2.0.1): an MQTT publisher needs MQTT 5.0 (it sets the MQTT 5 content type on every publication); subscribing works on 3.1.1 too. Its UDP transport sends with TTL 1 unless configured, which also limits unicast. The encoder writes an empty String with length 0 (go-opcua: the null String, length -1), always sets MessageIsValid and drops a DataSetMessage without it; the JSON encoder leaves out the `UaType` the DataSetMetaData implies (go-opcua decodes it since v1.9.0). Discovery answers DataSetMetaData and DataSetWriterConfiguration probes only. No SKS, no PublishSubscribe information model, no Ethernet, no AMQP.
 
 ### node-opcua 2.187.12
 
@@ -124,3 +125,4 @@ Fixed; listed so that you can tell whether an upgrade helps with a symptom.
 | The client drops the caller's `ReturnDiagnostics` and `AuditEntryId` | all peers (no diagnostics returned) | v1.8.1 |
 | A scheduled renewal renews a token that `Renew` already replaced, from a used sequence number | asyncua | v1.8.1 |
 | A Republish answered without the requested message rewinds the subscription's sequence numbers | asyncua | v1.8.1 |
+| A JSON DataValue field without `UaType` fails to decode when the reader has DataSetMetaData | UA-.NETStandard | v1.9.0 |

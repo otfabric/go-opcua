@@ -305,9 +305,11 @@ NetworkMessages, UADP discovery and the diagnostics objects. Transports: UDP
 unicast and multicast, raw Ethernet (Linux, macOS, FreeBSD; no TSN
 scheduling), MQTT 3.1.1 and 5.0, AMQP 1.0; PubSub Actions (request / response)
 with Go handlers.
-Interoperability-tested against open62541, the only peer whose adapter offers
-PubSub (UDP, multicast, Ethernet, MQTT 3.1.1 and 5.0); the AMQP transport is
-tested through RabbitMQ 4 and ActiveMQ Artemis. See [PubSub](docs/pubsub.md).
+Interoperability-tested in both directions against open62541 (UDP,
+multicast, Ethernet, MQTT 3.1.1 and 5.0, SKS) and UA-.NETStandard (UDP, MQTT
+3.1.1 and 5.0, message security, chunked NetworkMessages, UADP discovery);
+the AMQP transport is tested through RabbitMQ 4 and ActiveMQ Artemis. See
+[PubSub](docs/pubsub.md).
 
 ⁸ An encoding of values (`ua.EncodeJSON`, `ua.EncodeXML`), not a transport.
 Verified live in both directions against open62541, Milo and
