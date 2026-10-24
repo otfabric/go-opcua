@@ -4,10 +4,11 @@
 // it moves encoded NetworkMessages between publishers and subscribers.
 //
 // A [Connection] is opened for a PubSubConnection from its transport profile
-// and network address. The UDP (opc.udp://, unicast and multicast) and MQTT
-// (mqtt://, mqtts://) transports are implemented by the sub-packages and
-// register themselves with [Register]; import them for their side effect or
-// use [github.com/otfabric/go-opcua/pubsub], which imports both.
+// and network address. The UDP (opc.udp://, unicast and multicast), MQTT
+// (mqtt://, mqtts://) and AMQP (amqp://, amqps://) transports are
+// implemented by the sub-packages and register themselves with [Register];
+// import them for their side effect or use
+// [github.com/otfabric/go-opcua/pubsub], which imports all of them.
 package transport
 
 import (
@@ -27,6 +28,8 @@ const (
 	ProfileUDPUADP  = "http://opcfoundation.org/UA-Profile/Transport/pubsub-udp-uadp"
 	ProfileMQTTUADP = "http://opcfoundation.org/UA-Profile/Transport/pubsub-mqtt-uadp"
 	ProfileMQTTJSON = "http://opcfoundation.org/UA-Profile/Transport/pubsub-mqtt-json"
+	ProfileAMQPUADP = "http://opcfoundation.org/UA-Profile/Transport/pubsub-amqp-uadp"
+	ProfileAMQPJSON = "http://opcfoundation.org/UA-Profile/Transport/pubsub-amqp-json"
 	ProfileEthUADP  = "http://opcfoundation.org/UA-Profile/Transport/pubsub-eth-uadp"
 )
 
@@ -52,12 +55,25 @@ type Handler func(*Message)
 type PublishOptions struct {
 	// Topic is the queue name. Datagram transports ignore it.
 	Topic string
-	// QoS is the MQTT quality of service, 0 (at most once) or 1 (at least
-	// once). 2 is downgraded to 1.
+	// QoS is the requested delivery guarantee: 0 at most once (best
+	// effort), 1 at least once, 2 exactly once (downgraded to 1).
 	QoS byte
 	// Retain asks the broker to keep the message for late subscribers
-	// (used for metadata).
+	// (used for metadata). AMQP has no retained messages and ignores it.
 	Retain bool
+	// ContentType is the MIME type of the message mapping,
+	// "application/opcua+uadp" or "application/json" (AMQP content-type,
+	// Part 14 B.3.8). Empty: the transport derives it from the profile.
+	ContentType string
+	// MetaData marks a DataSetMetaData message (AMQP sends it with the
+	// subject "ua-metadata", Part 14 Table B.1).
+	MetaData bool
+	// Properties are the transport settings of the writer group and the
+	// dataset writer (WriterGroupProperties, DataSetWriterProperties) that
+	// apply to the message, writer before group. AMQP maps the names of
+	// Part 14 Table B.2 ("message-to", ...) to message properties and sends
+	// the others as application properties; MQTT ignores them.
+	Properties map[string]any
 }
 
 // Connection is an open PubSub transport connection.
@@ -80,13 +96,14 @@ type Config struct {
 	// ProfileURI is the TransportProfileUri of the PubSubConnection.
 	ProfileURI string
 	// URL is the address: opc.udp://host:port for UDP (a multicast group
-	// joins the group), mqtt://host:port or mqtts://host:port for MQTT.
+	// joins the group), mqtt://host:port or mqtts://host:port for MQTT,
+	// amqp://host:port or amqps://host:port for AMQP.
 	URL string
 	// Interface is the network interface for UDP multicast (NetworkInterface
 	// of NetworkAddressDataType); empty selects the system default.
 	Interface string
 
-	// MQTT settings.
+	// Broker settings (MQTT and AMQP). ClientID is the AMQP container-id.
 	ClientID  string
 	Username  string
 	Password  string
@@ -109,7 +126,7 @@ type Config struct {
 	// MaxMessageSize limits the size of the NetworkMessages the connection
 	// sends and receives. Zero selects the transport default: the largest
 	// UDP payload (65507 bytes over IPv4, 65527 over IPv6) for UDP, 1 MiB
-	// for MQTT.
+	// for MQTT and AMQP.
 	MaxMessageSize int
 
 	Logger *slog.Logger
@@ -133,7 +150,7 @@ var (
 )
 
 // Register makes a transport available for a URL scheme ("opc.udp",
-// "mqtt", "mqtts"). It panics if the scheme is registered twice.
+// "mqtt", "mqtts", "amqp", "amqps"). It panics if the scheme is registered twice.
 func Register(scheme string, open Opener) {
 	mu.Lock()
 	defer mu.Unlock()
