@@ -491,3 +491,34 @@ func TestRegressionResponderOperationalWhenSubscribed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int32(5), res.Outputs[0].Value())
 }
+
+// Regression: a UADP ActionRequest for a DataSetWriter the Responder does
+// not have was filtered before it was counted, unlike one for an unknown
+// Action target, although ActionRequestsRejected is documented to count
+// both. It is counted now, and still not answered.
+func TestRegressionActionRequestUnknownWriterCounted(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	resp := startReal(t, responderConfig(url, 20*time.Millisecond, ua.MessageSecurityModeNone), WithActionHandler("Calc", 1, addHandler))
+	waitRunning(t, resp, "Responder")
+	waitResponder(t, resp)
+	cid := mustID(t, resp, KindConnection, Root, "Responder")
+	rid := message.NewPublisherID(message.PublisherIDUInt16, 7)
+	request := func(pub uint16, dswid uint16) []byte {
+		b, err := uadp.Encode(&message.NetworkMessage{
+			Type: message.NetworkMessageDataSet, PublisherID: message.NewPublisherID(message.PublisherIDUInt16, uint64(pub)),
+			UADPMask: ua.UADPNetworkMessageContentMaskPublisherID | ua.UADPNetworkMessageContentMaskPayloadHeader,
+			Messages: []*message.DataSetMessage{{DataSetWriterID: dswid, Type: message.DataSetMessageActionRequest, Valid: true,
+				ActionTargetID: 1, RequestID: 1, ActionState: ua.ActionStateExecuting}},
+			Action: &message.ActionHeader{Type: message.ActionRequest, CorrelationData: []byte("c"), RequestorID: &rid, TimeoutHint: 5000},
+		}, nil)
+		require.NoError(t, err)
+		return b
+	}
+	bus.inject(url, "", request(1, 999))                                      // this Responder, an unknown writer: rejected
+	bus.inject(url, "", request(2, 999))                                      // another Responder: not counted
+	bus.inject(url, "", rawRequest(t, 1, 9, 2, ua.ActionStateExecuting, "c")) // an unknown target: rejected
+	require.Eventually(t, func() bool { return actCounters(resp, cid).ActionRequestsRejected == 2 }, 3*time.Second, time.Millisecond)
+	require.Never(t, func() bool { return actCounters(resp, cid).ActionRequestsRejected > 2 }, 100*time.Millisecond, 5*time.Millisecond)
+	require.Empty(t, responses(url))
+}

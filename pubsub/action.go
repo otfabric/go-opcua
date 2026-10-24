@@ -529,7 +529,7 @@ func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *trans
 	snap := p.snapshotActions(c)
 	ownPub, hasPub := c.pubID, c.hasPub
 	p.unlock()
-	if len(snap.writers) == 0 && len(snap.calls) == 0 {
+	if !hasPub && len(snap.calls) == 0 {
 		return
 	}
 	// The MessageType of a JSON message tells requests from responses
@@ -575,11 +575,15 @@ func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *trans
 		}
 	}
 	var keyGroup string
+	// unknown is set for a request to this PublisherId for none of its
+	// running Action writers: it is rejected (counted, not answered).
+	unknown := false
 	opts := &decodeOptions{}
 	opts.DecodeOptions = uadp.DecodeOptions{
 		Accept: func(h *message.NetworkMessage) bool {
 			found := false
 			forUs(h, func(ua.MessageSecurityMode, string) { found = true })
+			unknown = !found && kind != message.ActionResponse && hasPub && samePublisher(h.PublisherID, ownPub)
 			return found
 		},
 		// The least security a writer or call the message may be for
@@ -627,6 +631,13 @@ func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *trans
 	}
 	if err != nil {
 		if errors.Is(err, uadp.ErrFiltered) {
+			if unknown {
+				p.lock()
+				if c.gen == gen {
+					c.ctr.ActionRequestsRejected++
+				}
+				p.unlock()
+			}
 			return
 		}
 		p.lock()
