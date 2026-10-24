@@ -129,6 +129,11 @@ const (
 	// actionDuplicateGuard is the least time between two answers to
 	// repeated requests of an exchange.
 	actionDuplicateGuard = 100 * time.Millisecond
+	// actionLinger is how long a Responder remembers an ended exchange
+	// (expired or acknowledged) for the late copies of its requests, and
+	// maxActionTombstones how many it remembers per connection.
+	actionLinger        = 5 * time.Second
+	maxActionTombstones = 256
 	// maxActionSenders bounds the transports a connection keeps open to
 	// datagram ResponseAddresses and RequestAddresses.
 	maxActionSenders = 8
@@ -329,7 +334,13 @@ var ErrActionTimeout = fmt.Errorf("pubsub: no response to the Action request: %w
 // connection. It is guarded by PubSub.mu.
 type actionState struct {
 	// Responder: the exchanges and the token bucket of new requests.
+	// The exchanges count toward MaxConcurrent: those executing (a
+	// handler that is still running included, past its deadline) and
+	// those Done but not acknowledged. tombs are the ended exchanges,
+	// kept for actionLinger so that late copies of their requests are
+	// answered and not executed again.
 	exchanges map[exchangeKey]*exchange
+	tombs     map[exchangeKey]*exchange
 	bucket    tokenBucket
 	// Requestor: the pending calls and the response topics they listen
 	// on ("" for the address of a datagram connection), counted.
@@ -344,6 +355,7 @@ type actionState struct {
 func (s *actionState) init() {
 	if s.exchanges == nil {
 		s.exchanges = map[exchangeKey]*exchange{}
+		s.tombs = map[exchangeKey]*exchange{}
 		s.calls = map[callKey]*actionCall{}
 		s.listen = map[string]int{}
 		s.senders = map[string]transport.Connection{}
@@ -354,6 +366,9 @@ func (s *actionState) init() {
 // are cancelled, calls fail. p.mu is held.
 func (p *PubSub) stopActions(c *connection) {
 	for _, ex := range c.act.exchanges {
+		ex.stop()
+	}
+	for _, ex := range c.act.tombs {
 		ex.stop()
 	}
 	for _, call := range c.act.calls {
@@ -671,6 +686,8 @@ type exchange struct {
 	lastSent time.Time
 	cancel   context.CancelFunc
 	timer    *time.Timer
+	// running tells that the handler has not returned yet.
+	running bool
 }
 
 func (ex *exchange) stop() {
@@ -755,6 +772,9 @@ func hasActionTarget(a *ua.PublishedActionDataType, id uint16) bool {
 func (p *PubSub) actionRequestLocked(c *connection, gen uint64, enc encoding, w *dataSetWriter, key exchangeKey, nm *message.NetworkMessage, dsm *message.DataSetMessage, m *transport.Message, now time.Time) *actionSend {
 	o := &p.opts.actions
 	ex := c.act.exchanges[key]
+	if ex == nil {
+		ex = c.act.tombs[key]
+	}
 	switch dsm.ActionState {
 	case ua.ActionStateExecuting:
 		if ex != nil {
@@ -802,14 +822,20 @@ func (p *PubSub) actionRequestLocked(c *connection, gen uint64, enc encoding, w 
 		}
 		return nil
 	case ua.ActionStateIdle:
-		// The acknowledgement of a Done response: confirmed with Idle.
+		// The acknowledgement of a Done response: confirmed with Idle,
+		// and again for a repeated acknowledgement.
 		if ex != nil {
-			if ex.state != ua.ActionStateDone {
+			switch ex.state {
+			case ua.ActionStateDone:
+				ex.state, ex.status, ex.outputs = ua.ActionStateIdle, ua.StatusGood, nil
+				p.buryExchange(c, gen, ex)
+			case ua.ActionStateIdle:
+				if now.Sub(ex.lastSent) < actionDuplicateGuard {
+					return nil
+				}
+			default:
 				return nil
 			}
-			delete(c.act.exchanges, key)
-			ex.stop()
-			ex.state, ex.status, ex.outputs = ua.ActionStateIdle, ua.StatusGood, nil
 			return p.responseLocked(c, gen, ex, now)
 		}
 		if !c.act.bucket.allow(now, o.Rate, o.Burst) {
@@ -953,6 +979,7 @@ func (p *PubSub) startAction(c *connection, gen uint64, ex *exchange, h ActionHa
 	ctx, cancel := context.WithDeadline(p.ctx, ex.deadline)
 	ctx = context.WithValue(ctx, invocationKey{}, inv)
 	ex.cancel = cancel
+	ex.running = true
 	md := w.pds.md
 	p.wg.Add(1)
 	go func() {
@@ -965,6 +992,14 @@ func (p *PubSub) startAction(c *connection, gen uint64, ex *exchange, h ActionHa
 		}
 		p.lock()
 		if c.gen != gen || c.act.exchanges[ex.key] != ex {
+			p.unlock()
+			return
+		}
+		ex.running = false
+		if ex.state == ua.ActionStateDone {
+			// Expired while the handler ran: answered with
+			// Bad_Timeout, it ends now.
+			p.buryExchange(c, gen, ex)
 			p.unlock()
 			return
 		}
@@ -998,9 +1033,24 @@ func (p *PubSub) exchangeTimer(c *connection, gen uint64, ex *exchange) {
 	}
 	now := time.Now()
 	if !now.Before(ex.deadline) {
-		delete(c.act.exchanges, ex.key)
-		ex.stop()
+		if !ex.running {
+			p.buryExchange(c, gen, ex)
+			p.unlock()
+			return
+		}
+		// The handler outlives the TimeoutHint: it is cancelled, the
+		// request is Done with Bad_Timeout, and the exchange stays (and
+		// counts toward MaxConcurrent) until the handler returns.
+		ex.cancel()
+		var s *actionSend
+		if ex.state == ua.ActionStateExecuting {
+			ex.finish(ua.StatusBadTimeout, nil, nil)
+			s = p.responseLocked(c, gen, ex, now)
+		}
 		p.unlock()
+		if s != nil {
+			_ = p.sendAction(s)
+		}
 		return
 	}
 	var s *actionSend
@@ -1012,6 +1062,33 @@ func (p *PubSub) exchangeTimer(c *connection, gen uint64, ex *exchange) {
 	if s != nil {
 		_ = p.sendAction(s)
 	}
+}
+
+// buryExchange ends an exchange: it moves to the tombstones of its
+// connection for actionLinger. p.mu is held.
+func (p *PubSub) buryExchange(c *connection, gen uint64, ex *exchange) {
+	delete(c.act.exchanges, ex.key)
+	ex.stop()
+	if len(c.act.tombs) >= maxActionTombstones {
+		var oldest *exchange
+		for _, t := range c.act.tombs {
+			if oldest == nil || t.deadline.Before(oldest.deadline) {
+				oldest = t
+			}
+		}
+		delete(c.act.tombs, oldest.key)
+		oldest.stop()
+	}
+	// The deadline of a tombstone is when it is forgotten.
+	ex.deadline = time.Now().Add(actionLinger)
+	c.act.tombs[ex.key] = ex
+	ex.timer = time.AfterFunc(actionLinger, func() {
+		p.lock()
+		defer p.unlock()
+		if c.gen == gen && c.act.tombs[ex.key] == ex {
+			delete(c.act.tombs, ex.key)
+		}
+	})
 }
 
 // responseLocked builds the response of an exchange in its current state:
