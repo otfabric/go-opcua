@@ -309,8 +309,16 @@ func (c *Conn) receive(l link) {
 // the interface's address, the broadcast address or the joined group. A
 // frame this host sent is accepted with loopback only, and never on a
 // loopback interface, which delivers it a second time as received.
+//
+// Where the receive tap marks the frames this host sends (Linux), a frame
+// received from the interface's own MAC address is one of them reflected
+// back by the network (a bridge in hairpin mode, Docker's networks, a
+// loop): it was delivered as outgoing already, or is not wanted.
 func (c *Conn) accept(f frame, outgoing bool) bool {
 	if outgoing && (!c.loop || c.ifi.Flags&net.FlagLoopback != 0) {
+		return false
+	}
+	if !outgoing && c.reflected(f) {
 		return false
 	}
 	switch {
@@ -324,6 +332,12 @@ func (c *Conn) accept(f frame, outgoing bool) bool {
 		return string(f.dst) == string(c.addr.MAC)
 	}
 	return false
+}
+
+// reflected reports whether a received frame is a frame this host sent,
+// coming back from the network.
+func (c *Conn) reflected(f frame) bool {
+	return outgoingTap && c.ownMAC && c.ifi.Flags&net.FlagLoopback == 0 && string(f.src) == string(c.mac)
 }
 
 func (c *Conn) isClosed() bool {

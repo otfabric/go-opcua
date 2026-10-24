@@ -29,6 +29,7 @@ import (
 const (
 	privilegeHint       = "CAP_NET_RAW or root"
 	tagCountsAgainstMTU = false // the kernel allows 4 more bytes for a tagged frame
+	outgoingTap         = true  // the receive tap marks the frames this host sends
 	// Supported reports whether the OS has an implementation.
 	Supported = true
 )

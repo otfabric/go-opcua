@@ -30,6 +30,7 @@ const (
 	privilegeHint = "root or read-write access to /dev/bpf*"
 	// tagCountsAgainstMTU: bpf(4) counts a VLAN tag as payload.
 	tagCountsAgainstMTU = true
+	outgoingTap         = false
 	// Supported reports whether the OS has an implementation.
 	Supported = true
 

@@ -16,8 +16,9 @@ import (
 // eth_test: it replaces the OS links (and the interfaces, with those of
 // eth_test.go) for the duration of a test, so that publishers and
 // subscribers run over the Ethernet transport without raw socket access.
-// Every frame a link sends reaches every receiving link, as if from another
-// host, unless Drop says otherwise. Tests using it must not run in
+// Every frame a link sends reaches every receiving link, unless Drop says
+// otherwise; where the OS marks the frames this host sends (Linux), they
+// arrive marked outgoing, as through the OS's tap. Tests using it must not run in
 // parallel.
 type MemSegment struct {
 	// Drop, if set, is asked about every frame before it is delivered.
@@ -90,7 +91,10 @@ type memLink struct {
 func (l *memLink) read(buf []byte) (int, bool, error) {
 	select {
 	case b := <-l.in:
-		return copy(buf, b), false, nil
+		// A frame of this host (the interface's source address) comes
+		// through the outgoing tap where there is one, as from the OS.
+		own := len(b) >= 12 && l.cfg.ifi != nil && bytes.Equal(b[6:12], l.cfg.ifi.HardwareAddr)
+		return copy(buf, b), outgoingTap && own, nil
 	case <-l.done:
 		return 0, false, net.ErrClosed
 	}
