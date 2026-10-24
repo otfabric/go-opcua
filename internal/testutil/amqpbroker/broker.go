@@ -963,6 +963,11 @@ func (s *session) transfer(t *amqp.Transfer, payload []byte) bool {
 		s.sendFlow(l)
 	}
 	b.received.Add(1)
+	// Read before the message is routed: a consumer can have it before
+	// the disposition is decided, and a message received while
+	// dispositions are withheld is never settled, also when the
+	// withholding ends meanwhile.
+	withhold := b.withhold.Load()
 	m := &amqp.Message{}
 	var state amqp.DeliveryState = &amqp.Accepted{}
 	address := l.address
@@ -984,7 +989,7 @@ func (s *session) transfer(t *amqp.Transfer, payload []byte) bool {
 	if _, ok := state.(*amqp.Accepted); ok {
 		b.route(address, &stored{payload: body})
 	}
-	if !l.curSettled && !b.withhold.Load() {
+	if !l.curSettled && !withhold {
 		c.send(s.channel, &amqp.Disposition{Role: amqp.RoleReceiver, First: l.curID, Settled: true, State: state}, nil)
 	}
 	return true
