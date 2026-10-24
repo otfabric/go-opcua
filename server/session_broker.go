@@ -111,6 +111,17 @@ func (s *session) touchAt(t time.Time) {
 	s.lastActivity.Store(int64(t.Sub(monoEpoch)))
 }
 
+// touchIfAlive restarts the timeout of a session that has not timed out at
+// now and reports whether it had not. A request must not revive a session
+// whose timeout elapsed before the reaper removed it.
+func (s *session) touchIfAlive(now time.Time) bool {
+	if s.expired(now) {
+		return false
+	}
+	s.touchAt(now)
+	return true
+}
+
 // idle returns how long the session has been unused at now.
 func (s *session) idle(now time.Time) time.Duration {
 	return now.Sub(monoEpoch) - time.Duration(s.lastActivity.Load())
@@ -235,8 +246,11 @@ func (sb *sessionBroker) Session(authToken *ua.NodeID) *session {
 		return nil
 	}
 	// Every service request looks its session up, so this is where the
-	// session timeout is restarted.
-	s.touch()
+	// session timeout is restarted. A session that has timed out stays
+	// closed although the reaper has not removed it yet (Part 4 §5.6.2).
+	if !s.touchIfAlive(time.Now()) {
+		return nil
+	}
 
 	return s
 }
@@ -254,7 +268,7 @@ func (sb *sessionBroker) touchToken(authToken *ua.NodeID) {
 	s := sb.s[authToken.String()]
 	sb.mu.Unlock()
 	if s != nil {
-		s.touch()
+		s.touchIfAlive(time.Now())
 	}
 }
 

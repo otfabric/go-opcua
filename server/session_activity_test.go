@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -85,10 +86,11 @@ func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 		t.Fatal("the method handler was not called")
 	}
 
-	// The waiter's session has been idle for a long time; its request now
-	// waits behind the blocked handler.
-	idleSince := time.Now().Add(-time.Hour)
-	sess.touchAt(idleSince)
+	// The waiter's session has been idle for most of its timeout; its
+	// request now waits behind the blocked handler.
+	timeout := time.Duration(sess.timeout.Load())
+	require.Greater(t, timeout, time.Minute)
+	sess.touchAt(time.Now().Add(-timeout + time.Minute))
 	read := make(chan error, 1)
 	go func() {
 		_, err := waiter.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{
@@ -96,7 +98,7 @@ func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 		}}})
 		read <- err
 	}()
-	require.Eventually(t, func() bool { return sess.idle(time.Now()) < time.Minute },
+	require.Eventually(t, func() bool { return sess.idle(time.Now()) < timeout/2 },
 		10*time.Second, time.Millisecond, "the queued request did not count as activity")
 	for _, s := range srv.sb.reapExpired(time.Now()) {
 		require.NotSame(t, sess, s, "the session with a queued request was reaped")
@@ -105,4 +107,31 @@ func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 	close(release)
 	require.NoError(t, <-called)
 	require.NoError(t, <-read)
+}
+
+// A request for a session whose timeout has elapsed does not revive it,
+// although the reaper, which runs periodically, has not removed it yet: the
+// session is closed once its timeout has elapsed (Part 4 §5.6.2).
+//
+// Before the fix the arriving request and the session lookup restarted the
+// timeout of the expired session, and its client could go on using it.
+func TestExpiredSessionNotRevived(t *testing.T) {
+	sb := newSessionBroker(slog.New(slog.DiscardHandler))
+	sess := sb.NewSession()
+	sess.setTimeout(time.Second)
+	sess.touchAt(time.Now().Add(-2 * time.Second))
+
+	sb.touchToken(sess.AuthTokenID)
+	require.True(t, sess.expired(time.Now()), "the arriving request revived the session")
+	require.Nil(t, sb.Session(sess.AuthTokenID), "the lookup returned an expired session")
+	require.True(t, sess.expired(time.Now()), "the lookup revived the session")
+	require.Equal(t, []*session{sess}, sb.reapExpired(time.Now()))
+
+	// A session that has not timed out is still found and touched.
+	live := sb.NewSession()
+	live.setTimeout(time.Minute)
+	live.touchAt(time.Now().Add(-30 * time.Second))
+	sb.touchToken(live.AuthTokenID)
+	require.Less(t, live.idle(time.Now()), time.Second)
+	require.Same(t, live, sb.Session(live.AuthTokenID))
 }
