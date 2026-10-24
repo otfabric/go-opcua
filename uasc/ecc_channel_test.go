@@ -311,6 +311,25 @@ func TestNewRequestMessage_KeepsAdditionalHeader(t *testing.T) {
 	require.Nil(t, plain.RequestHeader.AdditionalHeader)
 }
 
+// TestNewRequestMessage_KeepsCallerHeaderFields: the request header is built
+// for the channel, but the ReturnDiagnostics mask and the AuditEntryId the
+// caller set belong to the request and must reach the server.
+func TestNewRequestMessage_KeepsCallerHeaderFields(t *testing.T) {
+	sc := &SecureChannel{cfg: &Config{SecurityMode: ua.MessageSecurityModeNone, RequestTimeout: time.Second, Logger: testLogger}}
+	c := newChannelInstance(sc)
+
+	req := &ua.ReadRequest{RequestHeader: &ua.RequestHeader{
+		ReturnDiagnostics: ua.ReturnDiagnosticsAll,
+		AuditEntryID:      "audit-1",
+		RequestHandle:     99,
+	}}
+	_, err := c.newRequestMessage(req, 5, nil, time.Second)
+	require.NoError(t, err)
+	require.Equal(t, uint32(ua.ReturnDiagnosticsAll), req.RequestHeader.ReturnDiagnostics)
+	require.Equal(t, "audit-1", req.RequestHeader.AuditEntryID)
+	require.Equal(t, uint32(5), req.RequestHeader.RequestHandle, "the handle is the channel's")
+}
+
 func TestECDHHeader(t *testing.T) {
 	const uri = ua.SecurityPolicyURIECCNistP384
 

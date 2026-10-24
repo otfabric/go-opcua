@@ -106,6 +106,17 @@ func TestCloneReadRequest(t *testing.T) {
 	}
 }
 
+// TestCloneRequest_KeepsRequestHeader: Read and Browse clone the request to
+// fill in defaults; the clone must keep the caller's RequestHeader, or a
+// ReturnDiagnostics mask never reaches the server.
+func TestCloneRequest_KeepsRequestHeader(t *testing.T) {
+	hdr := &ua.RequestHeader{ReturnDiagnostics: ua.ReturnDiagnosticsAll, AuditEntryID: "audit-1"}
+	read := cloneReadRequest(&ua.ReadRequest{RequestHeader: hdr})
+	require.Same(t, hdr, read.RequestHeader)
+	browse := cloneBrowseRequest(&ua.BrowseRequest{RequestHeader: hdr})
+	require.Same(t, hdr, browse.RequestHeader)
+}
+
 func TestCloneBrowseRequest(t *testing.T) {
 	tests := []struct {
 		name      string
