@@ -127,21 +127,12 @@ func TestGoServer_QueueItemIsolation(t *testing.T) {
 	}
 	defer sub.Cancel(ctx) //nolint:errcheck
 
-	// Drain initials (may arrive as one or two publishes).
-	deadline := time.After(6 * time.Second)
-drainLoop:
-	for {
-		select {
-		case msg := <-notifyCh:
-			if msg.Error != nil {
-				t.Fatalf("initial: %v", msg.Error)
-			}
-		case <-deadline:
-			break drainLoop
-		case <-time.After(500 * time.Millisecond):
-			break drainLoop
-		}
-	}
+	// Wait for the initial values: the server publishes them only at the
+	// first 2 s tick. Draining for a quiet 500 ms instead returned before
+	// they came, and under load the tick fell between the writes below,
+	// so that the initial value and the first writes made up A's window.
+	// The writes now have a whole publishing interval.
+	drainInitial(t, notifyCh)
 
 	for _, v := range []int32{1, 2, 3, 4, 5} {
 		writeInt32(t, c, ctx, nodeA, v)
@@ -150,7 +141,7 @@ drainLoop:
 
 	// Collect until we see both handles.
 	var gotA, gotB []int32
-	deadline = time.After(8 * time.Second)
+	deadline := time.After(8 * time.Second)
 	for len(gotA) < 3 || len(gotB) < 1 {
 		select {
 		case msg := <-notifyCh:
