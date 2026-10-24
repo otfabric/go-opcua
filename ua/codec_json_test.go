@@ -567,6 +567,68 @@ func TestJSONOptions(t *testing.T) {
 	})
 }
 
+// TestNodeIDStringEscapesURIs pins the percent-encoding of ';' and '%' in the
+// URIs of the string form of a NodeId, ExpandedNodeId and QualifiedName
+// (Part 6 §5.1.12). Unescaped, a ';' in a namespace URI ended the URI early:
+// the legacy {"Id":1,"Namespace":"urn:test;a"} was written as
+// "nsu=urn:test;a;i=1" and read back as a String NodeId holding that text.
+func TestNodeIDStringEscapesURIs(t *testing.T) {
+	opts := []CodecOption{
+		WithNamespaceArray([]string{"http://opcfoundation.org/UA/", "urn:a;b%c"}),
+		WithServerArray([]string{"urn:local", "urn:srv;1"}),
+	}
+	tests := []struct {
+		name    string
+		v       interface{}
+		opts    []CodecOption
+		compact string
+	}{
+		{name: "ExpandedNodeId URI with ';'", v: NewExpandedNodeID(NewNumericNodeID(0, 346219405), "urn:test;a", 0),
+			compact: `"nsu=urn:test%3Ba;i=346219405"`},
+		{name: "ExpandedNodeId URI with '%'", v: NewExpandedNodeID(NewStringNodeID(0, "x;y"), "urn:100%3B", 7),
+			compact: `"svr=7;nsu=urn:100%253B;s=x;y"`},
+		{name: "ExpandedNodeId server URI", v: NewExpandedNodeID(NewFourByteNodeID(1, 9), "", 1), opts: opts,
+			compact: `"svu=urn:srv%3B1;nsu=urn:a%3Bb%25c;i=9"`},
+		{name: "NodeId with table", v: NewFourByteNodeID(1, 9), opts: opts,
+			compact: `"nsu=urn:a%3Bb%25c;i=9"`},
+		{name: "QualifiedName with table", v: &QualifiedName{NamespaceIndex: 1, Name: "n;m"}, opts: opts,
+			compact: `"nsu=urn:a%3Bb%25c;n;m"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b, err := EncodeJSON(tt.v, tt.opts...)
+			require.NoError(t, err)
+			require.Equal(t, tt.compact, string(b))
+			again := reflect.New(reflect.TypeOf(tt.v).Elem())
+			require.NoError(t, DecodeJSON(b, again.Interface(), tt.opts...))
+			require.Equal(t, binOf(t, tt.v), binOf(t, again.Interface()))
+
+			x, err := EncodeXML(tt.v, tt.opts...)
+			require.NoError(t, err)
+			again = reflect.New(reflect.TypeOf(tt.v).Elem())
+			require.NoError(t, DecodeXML(x, again.Interface(), tt.opts...))
+			require.Equal(t, binOf(t, tt.v), binOf(t, again.Interface()))
+		})
+	}
+
+	// The legacy form carries the URI as it is; the compact form written
+	// from it is a fixed point.
+	var e ExpandedNodeID
+	require.NoError(t, DecodeJSON([]byte(`{"Id":346219405,"Namespace":"urn:test;a"}`), &e))
+	first, err := EncodeJSON(&e)
+	require.NoError(t, err)
+	var e2 ExpandedNodeID
+	require.NoError(t, DecodeJSON(first, &e2))
+	second, err := EncodeJSON(&e2)
+	require.NoError(t, err)
+	require.Equal(t, string(first), string(second))
+	require.Equal(t, "urn:test;a", e2.NamespaceURI)
+
+	// Lower case hex is read too; other percent-encodings are kept.
+	require.NoError(t, DecodeJSON([]byte(`"nsu=urn:x%3by%20z;i=1"`), &e))
+	require.Equal(t, "urn:x;y%20z", e.NamespaceURI)
+}
+
 // TestExistingMarshalJSONUnchanged guards the display format that
 // encoding/json produces through the MarshalJSON methods of this package,
 // which predates the OPC UA JSON DataEncoding and must not change.

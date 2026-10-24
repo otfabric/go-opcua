@@ -205,7 +205,7 @@ func (o *codecOptions) namespacePrefix(ns uint16, uri string) string {
 	}
 	switch {
 	case uri != "":
-		return "nsu=" + uri + ";"
+		return "nsu=" + escapeURI(uri) + ";"
 	case ns != 0:
 		return "ns=" + strconv.FormatUint(uint64(ns), 10) + ";"
 	}
@@ -219,7 +219,7 @@ func (o *codecOptions) formatExpandedNodeID(e *ExpandedNodeID) string {
 	var b strings.Builder
 	if e.ServerIndex != 0 {
 		if int64(e.ServerIndex) < int64(len(o.servers)) && o.servers[e.ServerIndex] != "" {
-			b.WriteString("svu=" + o.servers[e.ServerIndex] + ";")
+			b.WriteString("svu=" + escapeURI(o.servers[e.ServerIndex]) + ";")
 		} else {
 			b.WriteString("svr=" + strconv.FormatUint(uint64(e.ServerIndex), 10) + ";")
 		}
@@ -233,8 +233,9 @@ func (o *codecOptions) formatExpandedNodeID(e *ExpandedNodeID) string {
 //
 //	[svr=<index>;|svu=<uri>;][ns=<index>;|nsu=<uri>;]<i|s|g|b>=<identifier>
 //
-// A namespace URI that is not in the NamespaceArray is kept in the
-// NamespaceURI field. ok is false if the text is not a NodeId at all.
+// The URIs are unescaped (see escapeURI). A namespace URI that is not in the
+// NamespaceArray is kept in the NamespaceURI field. ok is false if the text
+// is not a NodeId at all.
 func (o *codecOptions) parseExpandedNodeID(s string) (e *ExpandedNodeID, ok bool) {
 	var (
 		ns     uint16
@@ -250,7 +251,7 @@ func (o *codecOptions) parseExpandedNodeID(s string) (e *ExpandedNodeID, ok bool
 		if i < 0 {
 			return "", false
 		}
-		v := rest[len(prefix):i]
+		v := unescapeURI(rest[len(prefix):i])
 		rest = rest[i+1:]
 		return v, true
 	}
@@ -364,11 +365,37 @@ func isNullExpandedNodeID(e *ExpandedNodeID) bool {
 	return e == nil || (isNullNodeID(e.NodeID) && e.NamespaceURI == "" && e.ServerIndex == 0)
 }
 
+// escapeURI percent-encodes the ';' and '%' of a namespace or server URI
+// written into the string form of a NodeId, ExpandedNodeId or QualifiedName
+// (Part 6 §5.1.12): a ';' would end the URI early, and with '%' encoded the
+// escaping is undone exactly.
+func escapeURI(uri string) string {
+	if !strings.ContainsAny(uri, ";%") {
+		return uri
+	}
+	return uriEscaper.Replace(uri)
+}
+
+// unescapeURI undoes escapeURI. Other percent-encodings are left as they
+// are, so a URI that holds one (and was written by an encoder that does not
+// escape) is read as written.
+func unescapeURI(s string) string {
+	if !strings.Contains(s, "%") {
+		return s
+	}
+	return uriUnescaper.Replace(s)
+}
+
+var (
+	uriEscaper   = strings.NewReplacer("%", "%25", ";", "%3B")
+	uriUnescaper = strings.NewReplacer("%25", "%", "%3B", ";", "%3b", ";")
+)
+
 // formatQualifiedName writes "<index>:<name>", "nsu=<uri>;<name>" or just
 // the name for namespace 0.
 func (o *codecOptions) formatQualifiedName(q *QualifiedName) string {
 	if uri, ok := o.namespaceURI(q.NamespaceIndex); ok {
-		return "nsu=" + uri + ";" + q.Name
+		return "nsu=" + escapeURI(uri) + ";" + q.Name
 	}
 	if q.NamespaceIndex == 0 && !ambiguousName(q.Name) {
 		return q.Name
@@ -393,7 +420,7 @@ func ambiguousName(name string) bool {
 func (o *codecOptions) parseQualifiedName(s string) *QualifiedName {
 	if strings.HasPrefix(s, "nsu=") {
 		if i := strings.IndexByte(s, ';'); i > 0 {
-			if idx, ok := o.namespaceIndex(s[4:i]); ok {
+			if idx, ok := o.namespaceIndex(unescapeURI(s[4:i])); ok {
 				return &QualifiedName{NamespaceIndex: idx, Name: s[i+1:]}
 			}
 		}
