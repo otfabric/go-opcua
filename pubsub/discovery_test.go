@@ -93,8 +93,10 @@ func TestChunkedUDP(t *testing.T) {
 			pub := newRuntime(t, NewConfiguration([]*ua.PublishedDataSetDataType{pds}, AttachWriterGroups(UDPConnection("pub", url, uint16(5)), wg)),
 				WithDataSource(ds), WithKeySource("sg", ring))
 			waitValue(t, rec, big)
+			// The publisher counts its chunks once the send returned,
+			// which can be after the subscriber took the message.
+			require.Eventually(t, func() bool { return counters(t, pub).ChunksSent > 0 }, 5*time.Second, time.Millisecond)
 			pc, sc := counters(t, pub), counters(t, sub)
-			require.NotZero(t, pc.ChunksSent)
 			require.Zero(t, pc.EncodeErrors, errString(pub))
 			require.NotZero(t, sc.ChunksReceived)
 			require.NotZero(t, sc.ChunkedMessagesReceived)
@@ -202,11 +204,13 @@ func TestDiscoveryMetaData(t *testing.T) {
 			t.Parallel()
 			pub, sub, rec := discoveryPair(t, nil, nil, []Option{WithDiscovery(DiscoveryOptions{Layout: layout})})
 			waitValue(t, rec, "text")
+			// The publisher counts a response once the send returned,
+			// which can be after the subscriber took it.
+			require.Eventually(t, func() bool { return counters(t, pub).DiscoveryResponsesSent > 0 }, 5*time.Second, time.Millisecond)
 			sc, pc := counters(t, sub), counters(t, pub)
 			require.NotZero(t, sc.DiscoveryRequestsSent)
 			require.NotZero(t, sc.DiscoveryResponsesReceived)
 			require.NotZero(t, pc.DiscoveryRequestsReceived)
-			require.NotZero(t, pc.DiscoveryResponsesSent)
 			require.Zero(t, sc.DecodeErrors, errString(sub))
 			require.Zero(t, pc.DecodeErrors, errString(pub))
 			id := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, mustID(t, sub, KindConnection, Root, "sub"), "rg"), "r")
@@ -351,10 +355,14 @@ func TestDiscoveryProbes(t *testing.T) {
 	}
 	// For another publisher.
 	bus.inject(url, "", probeBytes(t, probes[1], 6))
-	require.Eventually(t, func() bool { return counters(t, pub).DiscoveryRequestsReceived == uint64(len(probes)+1) }, 5*time.Second, time.Millisecond)
-	c := counters(t, pub)
-	require.Equal(t, uint64(2), c.DiscoveryRequestsIgnored)
-	got := announcements(t, url)
+	// A probe is counted as received before it is decoded and answered:
+	// wait for the answers and the ignored ones.
+	var got []*message.Discovery
+	require.Eventually(t, func() bool {
+		got = announcements(t, url)
+		c := counters(t, pub)
+		return c.DiscoveryRequestsReceived == uint64(len(probes)+1) && c.DiscoveryRequestsIgnored == 2 && len(got) >= 7
+	}, 5*time.Second, time.Millisecond)
 	require.Len(t, got, 7)
 	byType := map[message.DiscoveryType][]*message.Discovery{}
 	for _, d := range got {
