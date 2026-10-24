@@ -411,13 +411,14 @@ func TestChannel_RenewalUnderTraffic(t *testing.T) {
 			ctx := context.Background()
 
 			logs := &logCounter{}
-			// A 2s token lifetime is renewed by the client after 75% (1s).
+			// A 2s token lifetime is renewed by the client after 75% (1.5s).
 			c := newClient(t, url, append(tc.opts(t, url),
 				opcua.Lifetime(2*time.Second),
 				opcua.WithLogger(slog.New(logs)),
 			)...)
 			const tokenMsg = "received security token"
-			require.Equal(t, 1, logs.count(tokenMsg))
+			// At least: a connect slower than 1.5s has renewed it already.
+			require.GreaterOrEqual(t, logs.count(tokenMsg), 1)
 
 			sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32).Start(ctx)
 			require.NoError(t, err)
@@ -442,7 +443,8 @@ func TestChannel_RenewalUnderTraffic(t *testing.T) {
 			// An explicit renewal is possible at any time as well.
 			before := logs.count(tokenMsg)
 			require.NoError(t, c.SecureChannel().Renew(ctx))
-			require.Equal(t, before+1, logs.count(tokenMsg))
+			// At least: an automatic renewal may have been due at the same time.
+			require.GreaterOrEqual(t, logs.count(tokenMsg), before+1)
 			writeInt32(t, c, f.Int32, 7)
 			awaitValue(t, ch, 0, int32(7))
 		})
