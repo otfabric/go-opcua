@@ -57,10 +57,13 @@ type Config struct {
 
 // KeySource is a security.KeySource for one SecurityGroup that pulls the
 // keys from an SKS with GetSecurityKeys. It fetches the keys once in
-// NewKeySource and then in the background: right after the SKS changed its
-// current key and the source holds at most one future key, so that a key
-// is fetched before it is needed whenever the SKS hands out future keys.
-// Failed fetches are retried with exponential backoff. Close stops it.
+// NewKeySource and then in the background: right after the key change that
+// leaves the source with at most one future key, so that whenever the SKS
+// hands out future keys a fetch has two key lifetimes to complete before
+// the source runs out of keys. A received message with a token just ahead
+// of the current one that the source does not hold (the peer fetched
+// first) triggers a fetch too, at most once per MinRetry. Failed fetches
+// are retried with exponential backoff. Close stops it.
 type KeySource struct {
 	cfg  Config
 	ring *security.KeyRing
@@ -70,9 +73,15 @@ type KeySource struct {
 	done    chan struct{}
 	once    sync.Once
 
-	mu      sync.Mutex
-	lastErr error
+	mu          sync.Mutex
+	lastErr     error
+	lastMissRef time.Time // last Refresh triggered by an unknown token
 }
+
+// missWindow is how far ahead of the current token an unknown token may be
+// to trigger a fetch: a peer that fetched first is a few keys ahead at
+// most, anything further is not worth asking the SKS about.
+const missWindow = 8
 
 var _ security.KeySource = (*KeySource)(nil)
 
@@ -125,7 +134,36 @@ func (s *KeySource) CurrentKeys() (*security.Keys, error) { return s.ring.Curren
 
 // KeysForToken returns the keys of a received message's token.
 func (s *KeySource) KeysForToken(tokenID uint32) (*security.Keys, error) {
-	return s.ring.KeysForToken(tokenID)
+	k, err := s.ring.KeysForToken(tokenID)
+	if errors.Is(err, security.ErrNoKeys) && s.ahead(tokenID) {
+		s.mu.Lock()
+		now := time.Now()
+		due := now.Sub(s.lastMissRef) >= s.cfg.MinRetry
+		if due {
+			s.lastMissRef = now
+		}
+		s.mu.Unlock()
+		if due {
+			s.Refresh()
+		}
+	}
+	return k, err
+}
+
+// ahead reports whether tokenID is one of the missWindow tokens after the
+// current one (token ids wrap around from 0xFFFFFFFF to 1).
+func (s *KeySource) ahead(tokenID uint32) bool {
+	cur := s.ring.CurrentTokenID()
+	if cur == 0 || tokenID == 0 {
+		return false
+	}
+	for range missWindow {
+		cur = security.NextTokenID(cur)
+		if cur == tokenID {
+			return true
+		}
+	}
+	return false
 }
 
 // Ring is the KeyRing the keys are kept in.
@@ -186,17 +224,21 @@ func (s *KeySource) install(r *Result) error {
 	return nil
 }
 
-// nextFetch is the delay until the next fetch: just after the key change
-// at which the ring is left with at most one future key, or after the next
-// key change if it has none. Zero means no rotation: no scheduled fetch.
+// nextFetch is the delay until the next fetch: just after the first key
+// change that leaves the ring with at most one future key (with F future
+// keys now that is change max(F-1, 1)), so that the fetch has a key
+// lifetime to spare before the ring has none left. Zero means no rotation:
+// no scheduled fetch.
 func (s *KeySource) nextFetch() time.Duration {
 	life := s.ring.KeyLifetime()
 	if life <= 0 {
 		return 0
 	}
+	// TimeToNextKey before FutureKeyCount: a key change between the two
+	// reads makes the fetch early, never late.
 	ttnk := s.ring.TimeToNextKey()
 	future := s.ring.FutureKeyCount()
-	k := max(future-1, 0)
+	k := max(future-2, 0) // key changes after the next one
 	guard := min(max(life/20, time.Millisecond), 2*time.Second)
 	return ttnk + time.Duration(k)*life + guard
 }
