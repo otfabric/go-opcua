@@ -83,7 +83,7 @@ MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev \
 make interop
 
 # The security, ECC and secured reverse connect tests need the test PKI of
-# opcua-interop v0.8.1 (RSA identities plus ecc-<curve>/ certificates):
+# opcua-interop v0.8.2 (RSA identities plus ecc-<curve>/ certificates):
 (cd ../opcua-interop && certs/generate.sh)        # or: certs/generate.sh --add-ecc on an existing PKI
 export OPCUA_INTEROP_PKI_DIR=$PWD/../opcua-interop/certs/test-pki
 
@@ -97,8 +97,8 @@ OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 make interop
 make interop-shard SHARD=2 SHARDS=6
 
 # CI — digest pinned (update interop.yml after each release)
-OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:2f008620c41ca6f752abe5d9a470cdba2742afed92d93b7ec6332750e20b9e84 \
-MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:0fbbf7624ce59d7e8e0ff866570e1cdb6fc8f3aadd6900d3d29e6d21b2a823ed \
+OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:e035d07896a650a820a552e778202bc847c78855ff3d4ae0de1f172606d48866 \
+MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:2d84fa47b67d785fe84ebeb3e4d41ec75841e459fd43fd689bf45c1fddc9a15e \
 make interop
 ```
 
@@ -417,14 +417,14 @@ Every `unverified` row must carry a controlled `reason`:
 
 `test-missing` · `adapter-command-missing` · `adapter-fixture-missing` · `fault-harness-missing` · `consumer-demand-missing` · `peer-capability-unknown`
 
-Adapter images are pinned to [opcua-interop v0.8.1](https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1) (digest-pinned below), the release the suite and the ledger are written against (`interopVersion` in `harness_test.go`, `coverage.json`, `render-interop-coverage`). The ledger's peer versions are open62541 **1.5.9** and Eclipse Milo **1.1.8**. CI sets `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` so that missing operations, features, security profiles or a missing test PKI fail rather than skip.
+Adapter images are pinned to [opcua-interop v0.8.2](https://github.com/otfabric/opcua-interop/releases/tag/v0.8.2) (digest-pinned below), the release the suite and the ledger are written against (`interopVersion` in `harness_test.go`, `coverage.json`, `render-interop-coverage`). The ledger's peer versions are open62541 **1.5.9** and Eclipse Milo **1.1.8**. CI sets `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` so that missing operations, features, security profiles or a missing test PKI fail rather than skip.
 
 | Image | Tag |
 |-------|-----|
-| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.8.1`](https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1) / `@sha256:2f008620…e20b9e84` |
-| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.8.1`](https://github.com/otfabric/opcua-interop/releases/tag/v0.8.1) / `@sha256:0fbbf762…b2a823ed` |
+| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.8.2`](https://github.com/otfabric/opcua-interop/releases/tag/v0.8.2) / `@sha256:e035d078…06d48866` |
+| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.8.2`](https://github.com/otfabric/opcua-interop/releases/tag/v0.8.2) / `@sha256:2d84fa47…ddc9a15e` |
 
-> **Pins.** The default images in `harness_test.go` and `.github/workflows/interop.yml` are the multi-arch digests of the [v0.8.1 release run](https://github.com/otfabric/opcua-interop/actions/runs/40031915713). opcua-interop tags are immutable: on a new release update `interopVersion`, the digests, this table, `coverage.json` and `render-interop-coverage` in lockstep. A capability-gated test fails — it does not skip — when a default image is not the release named by `interopVersion`.
+> **Pins.** The default images in `harness_test.go` and `.github/workflows/interop.yml` are the multi-arch digests of the [v0.8.2 release run](https://github.com/otfabric/opcua-interop/actions/runs/40055105259). opcua-interop tags are immutable: on a new release update `interopVersion`, the digests, this table, `coverage.json` and `render-interop-coverage` in lockstep. A capability-gated test fails — it does not skip — when a default image is not the release named by `interopVersion`.
 
 > **Local dev images:** Override `OPEN62541_IMAGE` / `MILO_IMAGE` when testing unreleased adapter builds.
 
