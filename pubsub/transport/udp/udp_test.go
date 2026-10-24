@@ -240,16 +240,24 @@ func TestConcurrentSendReceive(t *testing.T) {
 
 	pub := open(t, transport.Config{URL: url})
 	const senders, per = 4, 200
+	// The senders keep at most window datagrams ahead of the receiver: a
+	// burst of 800 overflows the default receive buffer on Linux (some
+	// 200 small datagrams) when the receiver is slowed down by the race
+	// detector, and the kernel drops the rest silently. A sender gives up
+	// waiting after a while, so that lost datagrams do not stall it.
+	const window = 64
+	var sent atomic.Int64
 	var wg sync.WaitGroup
 	for s := 0; s < senders; s++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			for i := 0; i < per; i++ {
-				_ = pub.Send(context.Background(), []byte(fmt.Sprintf("m-%d", i)), transport.PublishOptions{})
-				if i%50 == 0 {
-					time.Sleep(time.Millisecond)
+				for deadline := time.Now().Add(100 * time.Millisecond); sent.Load()-got.Load() >= window && time.Now().Before(deadline); {
+					time.Sleep(100 * time.Microsecond)
 				}
+				sent.Add(1)
+				_ = pub.Send(context.Background(), []byte(fmt.Sprintf("m-%d", i)), transport.PublishOptions{})
 			}
 		}()
 	}
