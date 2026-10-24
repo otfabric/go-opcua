@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/pubsub/security"
@@ -44,6 +45,10 @@ type PubSub struct {
 	conns   []*connection
 	pdss    []*publishedDataSet
 	comps   map[ComponentID]component
+	// reqSeq numbers the RequestIds of CallAction (guarded by mu);
+	// actNonce the secured action requests.
+	reqSeq   uint16
+	actNonce atomic.Uint32
 }
 
 // component is implemented by all components.
@@ -99,6 +104,7 @@ func New(cfg *ua.PubSubConfigurationDataType, opts ...Option) (*PubSub, error) {
 		p.opts.retryInterval = defaultRetryInterval
 	}
 	p.opts.discovery = p.opts.discovery.normalized()
+	p.opts.actions = p.opts.actions.normalized()
 	for k, v := range p.opts.keySources {
 		p.keySources[k] = v
 	}

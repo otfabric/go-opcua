@@ -141,6 +141,13 @@ func TestSendSubscribe(t *testing.T) {
 	require.WithinDuration(t, time.Now(), p.CreationTime, 10*time.Second)
 	require.Equal(t, map[string]any{"site": "plant", "line": int64(3), "ratio": 0.5, "odd": "[1]"}, am.ApplicationProperties)
 
+	// Other message types travel as the subject too.
+	require.NoError(t, pub.Send(bg, []byte("act"), transport.PublishOptions{Topic: "/exchanges/amq.topic/data", QoS: 1, MessageType: transport.MessageTypeActionRequest}))
+	mt, _ := in.next(t).UserProperty(transport.UAMessageTypeProperty)
+	require.Equal(t, transport.MessageTypeActionRequest, mt)
+	am, _ = rec.last(t)
+	require.Equal(t, transport.MessageTypeActionRequest, am.Properties.Subject)
+
 	require.NoError(t, cancel())
 	require.NoError(t, pub.Send(bg, []byte("x"), transport.PublishOptions{Topic: "/exchanges/amq.topic/data", QoS: 1}))
 	select {

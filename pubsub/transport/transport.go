@@ -85,6 +85,10 @@ const (
 	MessageTypeData       = "ua-data"
 	MessageTypeMetaData   = "ua-metadata"
 	MessageTypeStatus     = "ua-status"
+	// The messages of PubSub Actions (Part 14 §7.3.4.7.9 and
+	// §7.3.4.7.10 in 1.05).
+	MessageTypeActionRequest  = "ua-action-request"
+	MessageTypeActionResponse = "ua-action-response"
 )
 
 // Handler receives messages. It is called from the transport's receive

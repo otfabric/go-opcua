@@ -122,6 +122,69 @@ func TestRegressionPublisherRestartAfterTimeout(t *testing.T) {
 	waitState(t, sub, rid, ua.PubSubStateOperational)
 }
 
+// Regression (chaos/pubsub network faults): a copy of the last message
+// that a network delayed or duplicated past a MessageReceiveTimeout was
+// delivered a second time, because the timeout made the reader forget the
+// sequence numbers. The timeout now only marks them expired: the last
+// message again, or one just behind it, is still discarded; a publisher
+// that restarted far behind is taken.
+func TestRegressionDuplicateAfterTimeout(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	md := MetaData("pds", Field{Name: "a", Type: ua.TypeIDInt32})
+	r := DataSetReader("r", uint16(7), 1, 1, md)
+	r.MessageReceiveTimeout = 50
+	rec := &recorder{}
+	sub, err := New(NewConfiguration(nil, AttachReaderGroups(memConnection("sub", url, nil), ReaderGroup("rg", r))), WithDataSetHandler(rec.handler))
+	require.NoError(t, err)
+	require.NoError(t, sub.Start(context.Background()))
+	t.Cleanup(func() { _ = sub.Close() })
+	rid := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, mustID(t, sub, KindConnection, Root, "sub"), "rg"), "r")
+	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
+
+	send := func(seq uint16, v int32) {
+		b, err := uadp.Encode(&message.NetworkMessage{
+			Type:        message.NetworkMessageDataSet,
+			UADPMask:    DefaultUADPNetworkMessageContentMask,
+			PublisherID: message.NewPublisherID(message.PublisherIDUInt16, 7),
+			GroupHeader: message.GroupHeader{WriterGroupID: 1, SequenceNumber: seq},
+			Messages: []*message.DataSetMessage{{
+				DataSetWriterID: 1, Type: message.DataSetMessageKeyFrame, Valid: true,
+				UADPMask: ua.UADPDataSetMessageContentMaskSequenceNumber, SequenceNumber: uint32(seq),
+				Fields: []*message.Field{{Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(v)}}},
+			}},
+		}, nil)
+		require.NoError(t, err)
+		bus.inject(url, "", b)
+	}
+	timeouts := func() uint64 {
+		st, err := sub.Status(rid)
+		require.NoError(t, err)
+		return st.Counters.Timeouts
+	}
+	for seq := uint16(181); seq <= 182; seq++ {
+		send(seq, int32(seq))
+	}
+	require.Eventually(t, func() bool { return len(rec.dataSets()) == 2 }, 3*time.Second, time.Millisecond)
+	require.Eventually(t, func() bool { return timeouts() == 1 }, 3*time.Second, time.Millisecond)
+
+	// Late copies of 182 and 181 cross the timeout: both are discarded.
+	send(182, 182)
+	send(181, 181)
+	// The publisher restarted: 1 is far behind 182 and is taken.
+	send(1, 1)
+	require.Eventually(t, func() bool { return len(rec.dataSets()) == 3 }, 3*time.Second, time.Millisecond)
+	ds := rec.dataSets()
+	require.Equal(t, []int32{1}, int32Values(ds[2]), "a late copy crossed the timeout")
+	send(2, 2)
+	require.Eventually(t, func() bool { return len(rec.dataSets()) == 4 }, 3*time.Second, time.Millisecond)
+	require.Equal(t, []int32{2}, int32Values(rec.dataSets()[3]))
+	st, err := sub.Status(rid)
+	require.NoError(t, err)
+	require.Equal(t, uint64(2), st.Counters.SequenceDiscards)
+	require.Equal(t, uint64(1), st.Counters.SequenceResyncs)
+}
+
 // Regression (chaos/pubsub fuzz): UADP carries no field names. The decoder
 // named the fields with the DataSetMetaData of the first reader that took
 // the writer's messages, and every reader then placed the fields by those

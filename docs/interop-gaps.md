@@ -22,7 +22,7 @@ Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 | **Historical events on the server.** The history provider interfaces cover data only; the client has `HistoryReadEvent`. | UA-.NETStandard (framework), asyncua | Store events in the application, or keep event history in another historian. |
 | **Live server diagnostics.** No ServerDiagnosticsSummary or session diagnostics counters; responses carry an empty `DiagnosticInfo` even when the request sets `ReturnDiagnostics`. | open62541, UA-.NETStandard, node-opcua | Use the metrics callbacks and `log/slog` ([OBSERVABILITY.md](../OBSERVABILITY.md)). The go-opcua client does send `ReturnDiagnostics` (since v1.8.1) and decodes what a server returns. |
 | **Dynamic decoding of custom structures** from the server's DataTypeDefinition | Milo, UA-.NETStandard, node-opcua, asyncua | Generate or register Go types (`ua.RegisterExtensionObject`); unknown structures stay ExtensionObject bodies. |
-| **PubSub actions** (request / response over PubSub, Part 14 1.05), **time-scheduled Ethernet (TSN)**, AMQP over WebSockets | open62541 (Ethernet / TSN) | Use Methods over a session for request / response; plain Ethernet, UDP, MQTT or AMQP for data. |
+| **Time-scheduled Ethernet (TSN)**, AMQP over WebSockets, PubSub Actions bound to server Methods (go-opcua runs Go handlers) | open62541 (Ethernet / TSN) | Plain Ethernet, UDP, MQTT or AMQP for data; register an `ActionHandler` that calls the Method. |
 
 ## go-opcua behaviour you may notice
 

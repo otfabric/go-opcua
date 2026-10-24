@@ -17,7 +17,9 @@ import (
 
 // Encode encodes a NetworkMessage of type NetworkMessageDataSet as a
 // "ua-data" JSON message, following nm.JSONMask and the JSONMask and
-// FieldContentMask of each DataSetMessage.
+// FieldContentMask of each DataSetMessage, or, with nm.Action set, as a
+// "ua-action-request" or "ua-action-response" message (see Actions in the
+// package documentation).
 //
 // With the NetworkMessageHeader bit a missing MessageID is generated (it is
 // mandatory). Without the NetworkMessageHeader bit the result is the array of
@@ -32,6 +34,10 @@ func Encode(nm *message.NetworkMessage, opts *EncodeOptions) ([]byte, error) {
 	}
 	if opts == nil {
 		opts = &EncodeOptions{}
+	}
+	if nm.Action != nil {
+		e := &encoder{opts: opts, nm: nm}
+		return e.encodeAction()
 	}
 	mask := nm.JSONMask
 	single := mask&ua.JSONNetworkMessageContentMaskSingleDataSetMessage != 0
@@ -167,8 +173,10 @@ func dataSetMessageTypeName(t message.DataSetMessageType) (string, error) {
 		return MessageTypeEvent, nil
 	case message.DataSetMessageKeepAlive:
 		return MessageTypeKeepAlive, nil
+	default:
+		// Action DataSetMessages belong to action NetworkMessages.
+		return "", fmt.Errorf("pubsub/jsonmsg: unknown DataSetMessage type %d", t)
 	}
-	return "", fmt.Errorf("pubsub/jsonmsg: unknown DataSetMessage type %d", t)
 }
 
 func (e *encoder) dataSetMessage(m *message.DataSetMessage) error {

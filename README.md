@@ -303,7 +303,8 @@ PubSub-Aes128/256-CTR with keys from a static key ring, a Security Key Service
 or SetSecurityKeys push; remote configuration with `pubsub/remote`; chunked
 NetworkMessages, UADP discovery and the diagnostics objects. Transports: UDP
 unicast and multicast, raw Ethernet (Linux, macOS, FreeBSD; no TSN
-scheduling), MQTT 3.1.1 and 5.0, AMQP 1.0. No PubSub actions.
+scheduling), MQTT 3.1.1 and 5.0, AMQP 1.0; PubSub Actions (request / response)
+with Go handlers.
 Interoperability-tested against open62541, the only peer whose adapter offers
 PubSub (UDP, multicast, Ethernet, MQTT 3.1.1 and 5.0); the AMQP transport is
 tested through RabbitMQ 4 and ActiveMQ Artemis. See [PubSub](docs/pubsub.md).

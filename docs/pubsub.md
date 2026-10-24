@@ -21,7 +21,8 @@ to variables.
 | Diagnostics | Part 14 §9.1.11 diagnostics objects on PublishSubscribe and every connection, group, writer and reader (`pubsub.Diagnostics`, Reset, DiagnosticsLevel) |
 | Remote configuration | package `pubsub/remote` calls the PubSub methods of any Part 14 server |
 | UADP chunks and discovery | chunked NetworkMessages with bounded reassembly, discovery probes and announcements (see below) |
-| Not implemented | AMQP over WebSockets (`wss://`), PubSub actions |
+| Actions | PubSub Actions (request / response, Part 14 §6.2.11.2): Responder and Requestor over UDP, MQTT and AMQP, UADP (secured) and JSON (see below) |
+| Not implemented | AMQP over WebSockets (`wss://`) |
 
 Interoperability is tested against open62541 v1.5.9 (see the interop ledger,
 profile `pubsub`), the only peer with PubSub in the interop suite: Eclipse Milo
@@ -425,6 +426,91 @@ writer group); the .NET layout cannot carry WriterGroup and PubSubConnection
 probe filters, nor its probe type 6; DataSetWriter "Actions" announcements
 (types 6 and 7) are not supported; a unicast DiscoveryAddress is only good
 for probes (the answers that go to it reach only the publisher's host).
+
+## Actions
+
+PubSub Actions (Part 14 §6.2.11.2 in 1.05) call a function of another
+PubSub application: a Requestor sends an ActionRequest, a Responder
+executes the Action target and answers with an ActionResponse. The
+Responder is a DataSetWriter of a PublishedDataSet whose DataSetSource is a
+PublishedAction; its targets are Go handlers.
+
+```go
+calc := pubsub.PublishedActions("Calc",
+    []pubsub.Field{{Name: "A", Type: ua.TypeIDInt32}, {Name: "B", Type: ua.TypeIDInt32}}, // request
+    []pubsub.Field{{Name: "Sum", Type: ua.TypeIDInt32}},                                // response
+    pubsub.ActionTargetOf(1, "Add"))
+
+// Responder: the requests for writer 100 arrive on the request queue of
+// its group (PublishingInterval 0 on a broker, Part 14 Table 85).
+queue := pubsub.ActionRequestTopic("opcua", pubsub.MappingJSON, "responder-1", "Actions")
+responder, _ := pubsub.New(pubsub.NewConfiguration([]*ua.PublishedDataSetDataType{calc},
+    pubsub.AttachWriterGroups(pubsub.MQTTConnection("Broker", "mqtt://broker:1883", "responder-1", pubsub.MappingJSON),
+        pubsub.JSONWriterGroup("Actions", 1, 0, queue, pubsub.DataSetWriter("Calc", 100, "Calc")))),
+    pubsub.WithActionHandler("Calc", 1, func(ctx context.Context, in []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+        return []*ua.Variant{ua.MustVariant(in[0].Value().(int32) + in[1].Value().(int32))}, ua.StatusGood
+    }))
+
+// Requestor: any running connection with a PublisherId (the RequestorId).
+requestor, _ := pubsub.New(pubsub.NewConfiguration(nil,
+    pubsub.MQTTConnection("Broker", "mqtt://broker:1883", "requestor-7", pubsub.MappingJSON)))
+res, err := requestor.CallAction(ctx, pubsub.ActionTarget{
+    Connection: "Broker", PublisherID: "responder-1", DataSetWriterID: 100, ActionTargetID: 1,
+    RequestAddress:  queue, // responses come on .../action-response/responder-1/Actions
+    RequestMetaData: pubsub.MetaData("CalcRequest", pubsub.Field{Name: "A"}, pubsub.Field{Name: "B"}),
+    Timeout:         5 * time.Second,
+}, []*ua.Variant{ua.MustVariant(int32(2)), ua.MustVariant(int32(3))})
+// err: the call failed (ErrActionTimeout wraps Bad_Timeout); res.Status: the result of the Action.
+```
+
+- **Addressing.** On a broker the requests go to the QueueName of the
+  Responder's writer group (`ActionRequestTopic` gives the default
+  `<prefix>/<encoding>/action-request/<responder>/<group>`), the responses to
+  the ResponseAddress of the request or the matching `action-response` topic.
+  On UDP the requests go to the connection address of the Responder
+  (`ActionTarget.RequestAddress`, default the Requestor's own address, e.g. a
+  shared multicast group) and the responses to the ResponseAddress, which a
+  Responder only accepts for the host the request came from or a multicast
+  group, else to its own connection address.
+- **States (Tables 83, 84).** The Requestor sends the request with
+  ActionState Executing and, on the Done response, acknowledges it with Idle.
+  With `ActionTarget.ResendInterval` (the PublishingInterval of the Responder,
+  for datagram transports) it resends the request while it hears nothing and
+  the Idle until the Responder confirms it. The Responder executes a request
+  once per RequestorId, CorrelationData (16 random bytes per call), RequestId
+  and writer; a repeated request is answered with the current state.
+  While running it sends Executing, and it repeats Done until the
+  acknowledgement or the end of the TimeoutHint, every PublishingInterval of
+  a datagram group.
+- **Results.** Missing or surplus inputs are answered with
+  Bad_ArgumentsMissing / Bad_TooManyArguments, inputs of another built-in type
+  than the request DataSetMetaData with Bad_TypeMismatch, targets without
+  handler with Bad_NotImplemented, a handler panic with Bad_InternalError.
+  The handler's context ends with the TimeoutHint; `ActionInvocationFrom(ctx)`
+  tells which request it serves.
+- **Limits.** `pubsub.WithActionOptions(pubsub.ActionOptions{...})`:
+  `MaxConcurrent` exchanges per connection (default 64; more are answered
+  with Bad_TooManyOperations), `Rate`/`Burst` of new requests per connection
+  (default 50/s, 50; more are dropped), `MaxTimeout` caps the TimeoutHint
+  (default 60 s), `DefaultTimeout` of CallAction (10 s). Requests that cannot
+  be decoded, are for another Responder, writer or target, or lack the
+  security of the writer group get no response (§6.2.11.2.2): the Requestor
+  times out.
+- **Security.** UADP action messages are signed and encrypted like data
+  messages: the Responder requires the SecurityMode and SecurityGroup of its
+  writer group and answers with them, the Requestor sets them in the
+  ActionTarget. The JSON mapping has no message security.
+- **Counters.** ActionRequestsSent, ActionRequestsReceived,
+  ActionRequestsRejected, ActionResponsesSent, ActionResponsesReceived and
+  ActionTimeouts in `Status(id).Counters` (writers count what they serve,
+  connections what they request or reject).
+
+Not supported: PublishedActionMethod targets bound to server Methods (the
+handlers run instead), DataSetWriter Actions discovery announcements and the
+ActionMetaData JSON messages, chunked action messages, and the MQTT 5.0
+ResponseTopic / CorrelationData properties (the addresses travel in the
+ActionHeader). The server shows a PublishedAction as a PublishedDataSetType
+object: the nodeset has no PublishedActionType.
 
 ## Interoperating with open62541
 

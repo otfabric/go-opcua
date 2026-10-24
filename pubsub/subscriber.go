@@ -34,7 +34,15 @@ type stream struct {
 	seq    uint32
 	fields []*ua.DataValue
 	key    bool
+	// expired is set by a MessageReceiveTimeout: the writer may have
+	// restarted its sequence numbers meanwhile (see processDSM).
+	expired bool
 }
+
+// staleWindow is how far behind the last sequence number a message may be,
+// after a MessageReceiveTimeout, and still count as a late copy of an old
+// message rather than the start of a restarted publisher.
+const staleWindow = 16
 
 // readerSnap is the filter of a running reader, copied for the decoder
 // callbacks that run outside the lock.
@@ -175,6 +183,10 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 	if encErr == nil && enc == encUADP {
 		t, chunk, err := uadp.PeekType(m.Payload)
 		probe = err == nil && !chunk && t == message.NetworkMessageDiscoveryRequest
+	}
+	if encErr == nil && !probe && isActionMessage(enc, m) {
+		p.receiveAction(c, gen, enc, m)
+		return
 	}
 	p.lock()
 	if c.gen != gen {
@@ -641,7 +653,23 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 		// UADP carries 16 bits; JSON publishers wrap at 16 bits as well
 		// (open62541 rejects larger values), so both compare in 16 bits.
 		seq := dsm.SequenceNumber & 0xffff
-		if st.hasSeq {
+		if st.hasSeq && st.expired {
+			// After a timeout a publisher that restarted starts again
+			// at a lower number: resynchronise to it, unless the
+			// message is the last one again or just behind it, a late
+			// or duplicated copy that crossed the timeout.
+			behind := uint16(st.seq - seq)
+			if (behind == 0 && !keepAlive) || (behind > 0 && behind < staleWindow) {
+				r.ctr.SequenceDiscards++
+				return
+			}
+			if !keepAlive {
+				st.expired = false
+				if v := compareSeq(seq, st.seq, true); v == seqOlder || v == seqResync {
+					r.ctr.SequenceResyncs++
+				}
+			}
+		} else if st.hasSeq {
 			switch compareSeq(seq, st.seq, true) {
 			case seqDuplicate:
 				if !keepAlive {
@@ -724,7 +752,9 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 			st.fields = append(st.fields, nil)
 		}
 		complete = st.key
-	case message.DataSetMessageEvent, message.DataSetMessageKeepAlive:
+	case message.DataSetMessageEvent, message.DataSetMessageKeepAlive,
+		message.DataSetMessageActionRequest, message.DataSetMessageActionResponse:
+		// Action messages are handled by receiveAction.
 	}
 	if dsm.Type == message.DataSetMessageEvent {
 		fields = make([]*ua.DataValue, n)
