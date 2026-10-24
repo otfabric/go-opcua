@@ -15,6 +15,8 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/pubsub"
+	"github.com/otfabric/go-opcua/pubsub/transport"
+	"github.com/otfabric/go-opcua/pubsub/transport/eth"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
@@ -120,7 +122,11 @@ func TestPubSubInformationModel(t *testing.T) {
 	require.Equal(t, int32(ua.PubSubStateOperational), v.Value())
 	v, err = c.Node(nid(id.PublishSubscribeSupportedTransportProfiles)).Value(ctx)
 	require.NoError(t, err)
-	require.Len(t, v.Value(), 3)
+	profiles := []string{transport.ProfileUDPUADP, transport.ProfileMQTTUADP, transport.ProfileMQTTJSON}
+	if eth.Supported {
+		profiles = append(profiles, transport.ProfileEthUADP)
+	}
+	require.Equal(t, profiles, v.Value())
 	v, err = c.Node(nid(id.PublishSubscribePubSubCapablitiesMaxPubSubConnections)).Value(ctx)
 	require.NoError(t, err)
 	require.Equal(t, uint32(0), v.Value())
