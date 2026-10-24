@@ -1171,9 +1171,7 @@ func TestGoServer_AsyncOpcuaClient_ReverseConnect_Secure(t *testing.T) {
 func TestPubSub_AsyncOpcuaHasNoPubSub(t *testing.T) {
 	caps, image := imageCapabilities(t, asyncOpcuaEnv, defaultAsyncOpcuaImage)
 	requirePinnedVersion(t, asyncOpcuaEnv, caps, image)
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-	raw, err := exec.CommandContext(ctx, "docker", "run", "--rm", image, "print-capabilities").Output()
+	raw, err := printCapabilities(image)
 	if err != nil {
 		t.Fatalf("print-capabilities: %v", err)
 	}
@@ -1195,6 +1193,8 @@ func TestPubSub_AsyncOpcuaHasNoPubSub(t *testing.T) {
 	}
 	t.Logf("async-opcua: %s", doc.PubSub.Reason)
 
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
 	out, _ := exec.CommandContext(ctx, "docker", "run", "--rm", image, "client", "codec", "pubsub-uadp-decode", "--document", "AQ==").Output()
 	r, err := parseAdapterOutput(out)
 	if err != nil {
