@@ -128,3 +128,40 @@ func TestRegressionNilExtensionObjectBodies(t *testing.T) {
 		}, "configuration %d", i)
 	}
 }
+
+// Regression: a reader that does not filter on the PublisherId kept the
+// state of a stream for every PublisherId it received a message from: a
+// sender making up PublisherIds grew it without bound.
+func TestRegressionReaderStreamsBounded(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	md := MetaData("pds", Field{Name: "a", Type: ua.TypeIDInt32})
+	rec := &recorder{}
+	sub, err := New(NewConfiguration(nil, AttachReaderGroups(memConnection("sub", url, nil), ReaderGroup("rg", DataSetReader("r", nil, 0, 0, md)))),
+		WithDataSetHandler(rec.handler))
+	require.NoError(t, err)
+	require.NoError(t, sub.Start(context.Background()))
+	t.Cleanup(func() { _ = sub.Close() })
+	rid := mustID(t, sub, KindDataSetReader, mustID(t, sub, KindReaderGroup, mustID(t, sub, KindConnection, Root, "sub"), "rg"), "r")
+	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
+
+	const n = maxReaderStreams + 200
+	for i := range n {
+		b, err := uadp.Encode(&message.NetworkMessage{
+			Type:        message.NetworkMessageDataSet,
+			UADPMask:    DefaultUADPNetworkMessageContentMask,
+			PublisherID: message.NewPublisherID(message.PublisherIDUInt32, uint64(i)),
+			GroupHeader: message.GroupHeader{WriterGroupID: 1},
+			Messages: []*message.DataSetMessage{{DataSetWriterID: 1, Type: message.DataSetMessageKeyFrame, Valid: true,
+				UADPMask: ua.UADPDataSetMessageContentMaskSequenceNumber, SequenceNumber: 1,
+				Fields: []*message.Field{{Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(i))}}}}},
+		}, nil)
+		require.NoError(t, err)
+		bus.inject(url, "", b)
+	}
+	require.Eventually(t, func() bool { return len(rec.dataSets()) == n }, 5*time.Second, time.Millisecond)
+	sub.lock()
+	streams := len(sub.comps[rid].(*dataSetReader).streams)
+	sub.unlock()
+	require.LessOrEqual(t, streams, maxReaderStreams)
+}
