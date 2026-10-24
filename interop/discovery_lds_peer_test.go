@@ -696,10 +696,8 @@ func runAdapterClientOnNetwork(t *testing.T, imageEnv, defaultImage, network, su
 	t.Helper()
 	requireOptionalPeer(t, imageEnv, defaultImage)
 	image := getEnvOr(imageEnv, defaultImage)
-	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	defer cancel()
 	cmdArgs := append([]string{"run", "--rm", "--network", network, image, "client", subcmd}, args...)
-	raw, _ := exec.CommandContext(ctx, "docker", cmdArgs...).Output()
+	raw, _ := runClientContainer(t, cmdArgs)
 	result, err := parseAdapterOutput(raw)
 	if err != nil {
 		t.Fatalf("parse adapter client output: %v\nraw: %s", err, raw)
