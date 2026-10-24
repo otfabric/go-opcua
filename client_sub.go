@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -1051,13 +1052,16 @@ func (c *Client) handleNotificationNeedsSubMuxLock(sub *Subscription, res *ua.Pu
 	})
 }
 
-// publishRequestFn, when non-nil, replaces sendPublishRequest. Used by unit tests
-// to exercise the publish() error switch without a live SecureChannel.
-var publishRequestFn func(ctx context.Context, c *Client) (*ua.PublishResponse, error)
+// publishRequestFn, when set, replaces sendPublishRequest. Used by unit tests
+// to exercise the publish() error switch without a live SecureChannel. It is
+// atomic because the publish loop of a client closed by an earlier test may
+// still be on its way out (Close does not wait for it) when a test installs
+// the hook.
+var publishRequestFn atomic.Pointer[func(ctx context.Context, c *Client) (*ua.PublishResponse, error)]
 
 func (c *Client) sendPublishRequest(ctx context.Context) (*ua.PublishResponse, error) {
-	if publishRequestFn != nil {
-		return publishRequestFn(ctx, c)
+	if fn := publishRequestFn.Load(); fn != nil {
+		return (*fn)(ctx, c)
 	}
 
 	c.subMux.RLock()
