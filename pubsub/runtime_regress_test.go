@@ -4,6 +4,7 @@ package pubsub
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -164,4 +165,60 @@ func TestRegressionReaderStreamsBounded(t *testing.T) {
 	streams := len(sub.comps[rid].(*dataSetReader).streams)
 	sub.unlock()
 	require.LessOrEqual(t, streams, maxReaderStreams)
+}
+
+// Regression: the exchanges of an Action writer outlived the writer. A
+// writer that was disabled or removed kept running its handlers until the
+// TimeoutHint and its exchange timers kept sending responses for it.
+func TestRegressionActionExchangesEndWithWriter(t *testing.T) {
+	t.Parallel()
+	for _, remove := range []bool{false, true} {
+		t.Run(fmt.Sprint("remove=", remove), func(t *testing.T) {
+			t.Parallel()
+			url := memURL(t)
+			started := make(chan struct{}, 1)
+			cancelled := make(chan struct{}, 1)
+			h := func(ctx context.Context, _ []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+				started <- struct{}{}
+				<-ctx.Done()
+				cancelled <- struct{}{}
+				return nil, ua.StatusBadTimeout
+			}
+			resp := startReal(t, responderConfig(url, 20*time.Millisecond, ua.MessageSecurityModeNone), WithActionHandler("Calc", 1, h))
+			req := startReal(t, requestorConfig(url))
+			waitRunning(t, resp, "Responder")
+			waitRunning(t, req, "Requestor")
+			waitResponder(t, resp)
+			wid := mustID(t, resp, KindDataSetWriter, mustID(t, resp, KindWriterGroup, mustID(t, resp, KindConnection, Root, "Responder"), "Actions"), "CalcWriter")
+
+			tg := calcTarget()
+			tg.Timeout = 10 * time.Second
+			ctx, cancel := context.WithCancel(context.Background())
+			done := make(chan struct{})
+			go func() {
+				defer close(done)
+				_, _ = req.CallAction(ctx, tg, int32s(1, 2))
+			}()
+			t.Cleanup(func() { cancel(); <-done })
+			select {
+			case <-started:
+			case <-time.After(5 * time.Second):
+				t.Fatal("the handler did not start")
+			}
+			if remove {
+				require.NoError(t, resp.RemoveDataSetWriter(wid))
+			} else {
+				require.NoError(t, resp.Disable(wid))
+			}
+			select {
+			case <-cancelled:
+			case <-time.After(2 * time.Second):
+				t.Fatal("the handler of the stopped writer was not cancelled")
+			}
+			resp.lock()
+			n := len(resp.conns[0].act.exchanges)
+			resp.unlock()
+			require.Zero(t, n)
+		})
+	}
 }
