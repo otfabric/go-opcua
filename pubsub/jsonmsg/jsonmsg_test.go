@@ -344,11 +344,6 @@ func TestRawDataWithoutMetaData(t *testing.T) {
 	require.Equal(t, 18446744073709551615.0, got["h"])
 }
 
-type rawStruct struct {
-	A int32
-	B string
-}
-
 func TestRawDataStructure(t *testing.T) {
 	// A registered structure as RawData: written without the Variant
 	// wrapper, read back with the DataType of the metadata.
