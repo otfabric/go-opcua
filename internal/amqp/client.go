@@ -58,6 +58,11 @@ const (
 // (§2.5.6). It is opened again whenever half of it is used.
 const sessionWindow = 1 << 16
 
+// maxCtrl bounds the control frames queued for the writer. A broker that
+// keeps to the session window cannot make the client queue more than about
+// one answer per transfer frame of the window before it reads them.
+const maxCtrl = 2 * sessionWindow
+
 // SASL mechanisms (Part 5 §5.3.3.1). NONE skips the SASL layer.
 const (
 	SASLAnonymous = "ANONYMOUS"
@@ -944,6 +949,11 @@ func (c *Client) serve(cs *conn) error {
 		}
 		c.mu.Lock()
 		in, err := c.handle(cs, f)
+		if err == nil && len(cs.ctrl) > maxCtrl {
+			// Answers (dispositions, echoed flows) pile up: the broker
+			// keeps sending and does not read.
+			err = fmt.Errorf("amqp: the broker does not read: %d frames queued", len(cs.ctrl))
+		}
 		c.mu.Unlock()
 		if err != nil {
 			var pc *peerClose

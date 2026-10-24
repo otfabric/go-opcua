@@ -3,6 +3,7 @@
 package amqp_test
 
 import (
+	"bytes"
 	"testing"
 	"time"
 
@@ -56,5 +57,29 @@ func TestCloseWaitsForHandler(t *testing.T) {
 	case <-finished:
 	default:
 		t.Fatal("Close returned before the handler")
+	}
+}
+
+// Regression: every echo flow (and every unsettled transfer) of the broker
+// queued an answer for the writer, without limit: a broker that sent and
+// did not read made the client queue answers until the write deadline.
+func TestBrokerThatDoesNotReadIsDropped(t *testing.T) {
+	p := newPeer(t)
+	lost := make(chan error, 1)
+	dialPeer(t, p, amqp.Options{OnConnectionLost: func(err error) {
+		select {
+		case lost <- err:
+		default:
+		}
+	}})
+	frame, err := amqp.AppendFrame(nil, &amqp.Frame{Body: &amqp.Flow{IncomingWindow: 1000, OutgoingWindow: 1000, Echo: true}})
+	require.NoError(t, err)
+	flood := bytes.Repeat(frame, 600_000)
+	go func() { _, _ = p.conn.Write(flood) }() // and never read
+	select {
+	case err := <-lost:
+		require.ErrorContains(t, err, "does not read")
+	case <-time.After(15 * time.Second):
+		t.Fatal("the client kept queueing answers")
 	}
 }
