@@ -124,41 +124,54 @@ type checker struct {
 	streams map[string]*rstream
 	total   atomic.Int64
 
-	// restarts and restarting are maintained by a test whose operations
+	// restartEnd and restarting are maintained by a test whose operations
 	// restart the readers (see restart): a restarted reader starts over
 	// (Part 14 §7.2.2.3.4) and accepts a message the kernel delivers late
 	// that its predecessor would have discarded as older. The order of
 	// two data sets is only checked when no restart came between them.
-	restarts   atomic.Int64
+	//
+	// The runtime checks the order when it processes a message and calls
+	// the handler later, after releasing its lock, so a restart can fall
+	// between the two: the restarts are bounded by the Timestamp of the
+	// earlier data set (taken by the publisher or at reception, before the
+	// runtime processed it), not by the handler call.
+	restartEnd atomic.Int64 // UnixNano of the end of the latest restart
 	restarting atomic.Int64
 }
 
 // restart runs op, an operation that may restart the readers.
 func (c *checker) restart(op func()) {
-	c.restarts.Add(1)
 	c.restarting.Add(1)
 	defer func() {
+		end := time.Now().UnixNano()
+		for {
+			old := c.restartEnd.Load()
+			if old >= end || c.restartEnd.CompareAndSwap(old, end) {
+				break
+			}
+		}
 		c.restarting.Add(-1)
-		c.restarts.Add(1)
 	}()
 	op()
 }
 
-// epoch identifies the time between two reader restarts; ok is false while
-// one may be in progress.
-func (c *checker) epoch() (n int64, ok bool) {
-	n = c.restarts.Load()
-	return n, c.restarting.Load() == 0 && c.restarts.Load() == n
+// restartedSince reports whether a reader restart may have happened since
+// t: one is in progress or ended after t.
+func (c *checker) restartedSince(t time.Time) bool {
+	if c.restarting.Load() != 0 {
+		return true
+	}
+	end := c.restartEnd.Load()
+	return end != 0 && end >= t.UnixNano()
 }
 
 type rstream struct {
-	hasSeq  bool
-	seq     uint16
-	n       int64
-	count   int64
-	last    time.Time
-	epoch   int64
-	inEpoch bool
+	hasSeq bool
+	seq    uint16
+	n      int64
+	count  int64
+	last   time.Time
+	prevTS time.Time // Timestamp of the last data set
 }
 
 func newChecker() *checker {
@@ -214,9 +227,8 @@ func (c *checker) handle(d *pubsub.ReceivedDataSet) {
 		st = &rstream{}
 		c.streams[key] = st
 	}
-	epoch, inEpoch := c.epoch()
-	ordered := st.inEpoch && inEpoch && st.epoch == epoch
-	st.epoch, st.inEpoch = epoch, inEpoch
+	ordered := st.count > 0 && !c.restartedSince(st.prevTS)
+	st.prevTS = d.Timestamp
 	if !ordered {
 		st.hasSeq = false
 	}
