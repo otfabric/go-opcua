@@ -349,7 +349,7 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 		c.cfg.logger.Debug("republish response", "response", res, "error", err)
 
 		switch {
-		case err == ua.StatusBadMessageNotAvailable:
+		case errors.Is(err, ua.StatusBadMessageNotAvailable):
 			c.cfg.logger.Debug("republishing subscription OK", "sub_id", req.SubscriptionID)
 			return result, nil
 
@@ -728,26 +728,26 @@ func (c *Client) publish(ctx context.Context) error {
 		// client has now: carry on publishing there. Returning the error
 		// would pause the publish loop, and nothing would resume it.
 		c.cfg.logger.Debug("publish: error for a session the client has left, ignoring", "error", err)
-	case err == io.EOF:
+	case errors.Is(err, io.EOF):
 		c.cfg.logger.Debug("publish: eof: pausing publish loop")
 		return err
 
-	case err == ua.StatusBadSessionNotActivated:
+	case errors.Is(err, ua.StatusBadSessionNotActivated):
 		c.cfg.logger.Debug("publish: session not active, pausing publish loop")
 		return err
 
-	case err == ua.StatusBadSessionIDInvalid:
+	case errors.Is(err, ua.StatusBadSessionIDInvalid):
 		c.cfg.logger.Debug("publish: session not valid, pausing publish loop")
 		return err
 
-	case err == ua.StatusBadServerNotConnected:
+	case errors.Is(err, ua.StatusBadServerNotConnected):
 		c.cfg.logger.Debug("publish: no connection, pausing publish loop")
 		return err
 
-	case err == ua.StatusBadSequenceNumberUnknown:
+	case errors.Is(err, ua.StatusBadSequenceNumberUnknown):
 		c.cfg.logger.Debug("publish: sequence number unknown during ACK", "error", err)
 
-	case err == ua.StatusBadTooManyPublishRequests:
+	case errors.Is(err, ua.StatusBadTooManyPublishRequests):
 		c.cfg.logger.Debug("publish: too many publish requests, backing off for 1s", "error", err)
 		select {
 		case <-ctx.Done():
@@ -755,10 +755,10 @@ func (c *Client) publish(ctx context.Context) error {
 		case <-time.After(time.Second):
 		}
 
-	case err == ua.StatusBadTimeout:
+	case errors.Is(err, ua.StatusBadTimeout):
 		c.cfg.logger.Debug("publish: timeout, ignoring", "error", err)
 
-	case err == ua.StatusBadNoSubscription:
+	case errors.Is(err, ua.StatusBadNoSubscription):
 		// The session has no subscription on the server. If the client
 		// believes it has some that existed when the request was sent, they
 		// ended on the server (expired or deleted): recreate them.
