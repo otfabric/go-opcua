@@ -316,3 +316,38 @@ func TestRegressionChunksCarryMessageProperties(t *testing.T) {
 		require.Equal(t, transport.MessageTypeData, m.MessageType)
 	}
 }
+
+// Regression: the incomplete chunked messages of a connection expired only
+// when further chunks arrived: the chunks of a message that was never
+// completed stayed in memory, uncounted, for as long as no other chunk
+// came.
+func TestRegressionIncompleteChunksExpire(t *testing.T) {
+	t.Parallel()
+	url := memURL(t)
+	md := MetaData("pds", Field{Name: "a", Type: ua.TypeIDInt32})
+	sub, err := New(NewConfiguration(nil, AttachReaderGroups(memConnection("sub", url, nil), ReaderGroup("rg", DataSetReader("r", uint16(7), 1, 1, md)))),
+		WithChunkReassembly(uadp.ReassemblerOptions{Timeout: 50 * time.Millisecond}))
+	require.NoError(t, err)
+	require.NoError(t, sub.Start(context.Background()))
+	t.Cleanup(func() { _ = sub.Close() })
+	require.Eventually(t, func() bool { return bus.subscribers(url) > 0 }, 3*time.Second, time.Millisecond)
+	b, err := uadp.Encode(&message.NetworkMessage{
+		Type:        message.NetworkMessageDataSet,
+		UADPMask:    DefaultUADPNetworkMessageContentMask,
+		PublisherID: message.NewPublisherID(message.PublisherIDUInt16, 7),
+		GroupHeader: message.GroupHeader{WriterGroupID: 1},
+		Messages:    []*message.DataSetMessage{{DataSetWriterID: 1}},
+		Chunk:       &message.Chunk{MessageSequenceNumber: 1, TotalSize: 2000, Data: make([]byte, 1000)},
+	}, nil)
+	require.NoError(t, err)
+	bus.inject(url, "", b)
+	cid := mustID(t, sub, KindConnection, Root, "sub")
+	require.Eventually(t, func() bool {
+		st, err := sub.Status(cid)
+		return err == nil && st.Counters.ChunksReceived == 1 && st.Counters.ChunksDiscarded == 1
+	}, 3*time.Second, time.Millisecond)
+	sub.lock()
+	pending := sub.conns[0].reasm.Stats().Pending
+	sub.unlock()
+	require.Zero(t, pending)
+}
