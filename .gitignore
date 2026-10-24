@@ -25,3 +25,6 @@ cover.*
 # Claude Code agent worktrees
 .claude/
 coverage-gate.out
+
+# Compiled test binaries (go test -c)
+*.test
