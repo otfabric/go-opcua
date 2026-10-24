@@ -117,14 +117,6 @@ func TestOpen62541Server_ClientTransferSubscriptions(t *testing.T) {
 
 		resp, err := c.TransferSubscriptions(ctx, []uint32{sub.SubscriptionID}, false)
 		if err != nil {
-			msg := err.Error()
-			// Service-level rejection still proves the client API completed the request path.
-			if strings.Contains(msg, "BadServiceUnsupported") ||
-				strings.Contains(msg, "BadNotImplemented") ||
-				strings.Contains(msg, "BadSubscription") {
-				t.Logf("TransferSubscriptions service error (defined): %v", err)
-				return
-			}
 			t.Fatalf("TransferSubscriptions: %v", err)
 		}
 		if resp == nil {
@@ -137,9 +129,10 @@ func TestOpen62541Server_ClientTransferSubscriptions(t *testing.T) {
 		if sc == ua.StatusCode(0) && resp.ResponseHeader != nil && resp.ResponseHeader.ServiceResult != ua.StatusOK {
 			sc = resp.ResponseHeader.ServiceResult
 		}
-		// Any defined StatusCode (Good, BadSubscription*, BadNotImplemented, …) is evidence.
-		t.Logf("TransferSubscriptions result StatusCode=%v", sc)
-		_ = sc // non-skip path: service completed with a StatusCode
+		// The subscription belongs to this session: open62541 transfers it.
+		if sc != ua.StatusOK {
+			t.Errorf("TransferSubscriptions result: got %v, want Good", sc)
+		}
 	})
 }
 

@@ -336,8 +336,9 @@
     {
       "capability": "write.encoding-mask",
       "direction": "go-client-to-async-opcua-server",
-      "status": "verified",
+      "status": "unsupported",
       "test": "TestAsyncOpcuaServer_WriteEncodingMask",
+      "nextAction": "async-opcua soft-accepts EncodingMask timestamp Writes (StatusGood); claim requires BadWriteNotSupported",
       "fixture": "baseline"
     },
     {

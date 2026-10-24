@@ -900,11 +900,8 @@ func TestDotnetServer_UntrustedCert_Rejected(t *testing.T) {
 		opcua.AuthAnonymous(),
 	)
 	if err != nil {
-		if isCertRejectionError(err) {
-			t.Logf("NewClient correctly rejected untrusted cert at config stage: %v", err)
-			return
-		}
-		t.Fatalf("NewClient returned unexpected error (not a certificate rejection): %v", err)
+		// A local rejection would leave the server's trust check untested.
+		t.Fatalf("NewClient: %v", err)
 	}
 
 	connectCtx, connectCancel := context.WithTimeout(context.Background(), dialTimeout)
@@ -1876,14 +1873,8 @@ func TestDotnetServer_WriteEncodingMask(t *testing.T) {
 		t.Fatalf("timestamp write: %v", err)
 	}
 	if bad.Results[0] != ua.StatusBadWriteNotSupported {
-		// Capability claim is strict: EncodingMask Writes must be rejected with
-		// BadWriteNotSupported. dotnet soft-accepts → unsupported for this claim
-		// (documented peer variance), not an open peer-capability-unknown.
-		t.Logf("timestamp write: dotnet returned %v (soft-accept); write.encoding-mask C→M = unsupported for BadWriteNotSupported claim",
-			bad.Results[0])
-		return
+		t.Errorf("timestamp write: got %v, want BadWriteNotSupported", bad.Results[0])
 	}
-	t.Logf("dotnet rejects timestamp Writes with BadWriteNotSupported — eligible to promote verified")
 }
 
 // TestDotnetServer_TimestampsToReturn verifies peer TimestampsToReturn Neither.
