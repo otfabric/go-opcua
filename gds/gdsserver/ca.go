@@ -16,7 +16,6 @@ import (
 	"encoding/asn1"
 	"errors"
 	"fmt"
-	"io"
 	"math/big"
 	"net"
 	"net/url"
@@ -25,8 +24,6 @@ import (
 
 	"github.com/ProtonMail/go-crypto/brainpool"
 	"github.com/cloudflare/circl/sign/ed448"
-	"golang.org/x/crypto/cryptobyte"
-	cbasn1 "golang.org/x/crypto/cryptobyte/asn1"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -35,8 +32,10 @@ import (
 // certType describes a certificate type of Part 12 §7.8.4 that the GDS
 // issues.
 type certType struct {
-	id     uint32
-	issuer string // the Issuer.Name of the CA that signs it
+	id uint32
+	// issuer is the Issuer.Name of the CA that signs it; "" for a type
+	// whose CA follows the key (see issuerFor).
+	issuer string
 	// generate makes a new key of the type.
 	generate func(rsaBits int) (crypto.Signer, error)
 	// accepts reports whether a public key fits the type.
@@ -59,12 +58,29 @@ func genECDSA(c elliptic.Curve) func(int) (crypto.Signer, error) {
 
 func genRSA(bits int) (crypto.Signer, error) { return rsa.GenerateKey(rand.Reader, bits) }
 
-// certTypes are the certificate types the GDS can issue. The Brainpool
-// types are issued by the NIST CA with the same hash (ecdsa-with-SHA256,
-// ecdsa-with-SHA384, the CertificateSignatureAlgorithm of their security
-// policies): crypto/x509 cannot check the signature of a CRL a Brainpool CA
-// signed, so its revocations would not be enforced by the servers of this
-// module.
+// issuerFor returns the name of the CA that signs a certificate of the type
+// for the public key pub.
+func (t *certType) issuerFor(pub crypto.PublicKey) string {
+	if t.issuer != "" {
+		return t.issuer
+	}
+	switch {
+	case isCurve(pub, elliptic.P256()):
+		return "NistP256"
+	case isCurve(pub, elliptic.P384()):
+		return "NistP384"
+	}
+	return "RSA"
+}
+
+// httpsIssuers are the CAs that may sign the certificates of the
+// HttpsCertificateType, by the key of the certificate.
+var httpsIssuers = []string{"RSA", "NistP256", "NistP384"}
+
+// certTypes are the certificate types the GDS can issue. Each application
+// certificate type has a CA of its own key type; the HttpsCertificateType
+// (the TLS certificates of the DefaultHttpsGroup, RSA or ECDSA on the NIST
+// curves) is signed by the CA of its key.
 var certTypes = map[uint32]*certType{
 	id.RsaSha256ApplicationCertificateType: {
 		id: id.RsaSha256ApplicationCertificateType, issuer: "RSA", generate: genRSA,
@@ -84,11 +100,11 @@ var certTypes = map[uint32]*certType{
 		accepts: func(pub crypto.PublicKey) bool { return isCurve(pub, elliptic.P384()) },
 	},
 	id.EccBrainpoolP256r1ApplicationCertificateType: {
-		id: id.EccBrainpoolP256r1ApplicationCertificateType, issuer: "NistP256", generate: genECDSA(brainpool.P256r1()),
+		id: id.EccBrainpoolP256r1ApplicationCertificateType, issuer: "BrainpoolP256r1", generate: genECDSA(brainpool.P256r1()),
 		accepts: func(pub crypto.PublicKey) bool { return isCurve(pub, brainpool.P256r1()) },
 	},
 	id.EccBrainpoolP384r1ApplicationCertificateType: {
-		id: id.EccBrainpoolP384r1ApplicationCertificateType, issuer: "NistP384", generate: genECDSA(brainpool.P384r1()),
+		id: id.EccBrainpoolP384r1ApplicationCertificateType, issuer: "BrainpoolP384r1", generate: genECDSA(brainpool.P384r1()),
 		accepts: func(pub crypto.PublicKey) bool { return isCurve(pub, brainpool.P384r1()) },
 	},
 	id.EccCurve25519ApplicationCertificateType: {
@@ -107,6 +123,12 @@ var certTypes = map[uint32]*certType{
 		},
 		accepts: func(pub crypto.PublicKey) bool { _, ok := pub.(ed448.PublicKey); return ok },
 	},
+	id.HTTPSCertificateType: {
+		id: id.HTTPSCertificateType, generate: genRSA,
+		accepts: func(pub crypto.PublicKey) bool {
+			return rsaBits(pub, 2048, 4096) || isCurve(pub, elliptic.P256()) || isCurve(pub, elliptic.P384())
+		},
+	},
 }
 
 // newIssuerKey makes the key of a new CA.
@@ -118,6 +140,10 @@ func newIssuerKey(name string, rsaBits int) (crypto.Signer, error) {
 		return genECDSA(elliptic.P256())(0)
 	case "NistP384":
 		return genECDSA(elliptic.P384())(0)
+	case "BrainpoolP256r1":
+		return genECDSA(brainpool.P256r1())(0)
+	case "BrainpoolP384r1":
+		return genECDSA(brainpool.P384r1())(0)
 	case "Curve25519":
 		return certTypes[id.EccCurve25519ApplicationCertificateType].generate(0)
 	case "Curve448":
@@ -212,7 +238,7 @@ func loadCA(rec *Issuer) (*ca, error) {
 		c.revoked[serialKey(new(big.Int).SetBytes(r.SerialNumber))] = true
 	}
 	if len(rec.CRL) > 0 {
-		if crl, err := x509.ParseRevocationList(rec.CRL); err == nil {
+		if crl, err := uapolicy.ParseRevocationList(rec.CRL); err == nil {
 			c.crl = crl
 		}
 	}
@@ -255,9 +281,13 @@ func (c *ca) issue(l *leaf) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	u, err := url.Parse(l.uri)
-	if err != nil {
-		return nil, err
+	var uris []*url.URL
+	if l.uri != "" {
+		u, err := url.Parse(l.uri)
+		if err != nil {
+			return nil, err
+		}
+		uris = []*url.URL{u}
 	}
 	usage := x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment
 	if _, ok := l.pub.(*rsa.PublicKey); ok {
@@ -275,7 +305,7 @@ func (c *ca) issue(l *leaf) ([]byte, error) {
 		KeyUsage:              usage,
 		ExtKeyUsage:           []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth},
 		BasicConstraintsValid: true,
-		URIs:                  []*url.URL{u},
+		URIs:                  uris,
 		DNSNames:              l.dns,
 		IPAddresses:           l.ips,
 		SubjectKeyId:          keyID(l.pub),
@@ -297,11 +327,11 @@ func (c *ca) makeCRL(now time.Time, validity time.Duration) error {
 			RevocationTime: r.RevokedAt,
 		})
 	}
-	der, err := signCRL(rand.Reader, tmpl, c.cert, c.key)
+	der, err := uapolicy.CreateRevocationList(rand.Reader, tmpl, c.cert, c.key)
 	if err != nil {
 		return err
 	}
-	crl, err := x509.ParseRevocationList(der)
+	crl, err := uapolicy.ParseRevocationList(der)
 	if err != nil {
 		return err
 	}
@@ -309,65 +339,6 @@ func (c *ca) makeCRL(now time.Time, validity time.Duration) error {
 	c.rec.CRLNumber++
 	c.crl = crl
 	return nil
-}
-
-var oidSignatureEd448 = asn1.ObjectIdentifier{1, 3, 101, 113}
-
-// signCRL creates a CRL like x509.CreateRevocationList, also for an Ed448
-// issuer, which crypto/x509 cannot sign with: the CRL is built with a
-// throwaway Ed25519 key, and the TBSCertList is signed again with Ed448
-// after its signature algorithm was replaced.
-func signCRL(rnd io.Reader, tmpl *x509.RevocationList, issuer *x509.Certificate, key crypto.Signer) ([]byte, error) {
-	if _, ok := key.(ed448.PrivateKey); !ok {
-		return x509.CreateRevocationList(rnd, tmpl, issuer, key)
-	}
-	_, placeholder, err := ed25519.GenerateKey(rnd)
-	if err != nil {
-		return nil, err
-	}
-	iss := *issuer
-	iss.PublicKey = placeholder.Public()
-	der, err := x509.CreateRevocationList(rnd, tmpl, &iss, placeholder)
-	if err != nil {
-		return nil, err
-	}
-	in := cryptobyte.String(der)
-	var list, tbs cryptobyte.String
-	if !in.ReadASN1(&list, cbasn1.SEQUENCE) || !list.ReadASN1(&tbs, cbasn1.SEQUENCE) {
-		return nil, errors.New("gdsserver: malformed CRL")
-	}
-	var version, alg cryptobyte.String
-	hasVersion := tbs.PeekASN1Tag(cbasn1.INTEGER)
-	if hasVersion && !tbs.ReadASN1Element(&version, cbasn1.INTEGER) {
-		return nil, errors.New("gdsserver: malformed CRL version")
-	}
-	if !tbs.ReadASN1Element(&alg, cbasn1.SEQUENCE) {
-		return nil, errors.New("gdsserver: malformed CRL signature algorithm")
-	}
-	algID := func(b *cryptobyte.Builder) {
-		b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) { b.AddASN1ObjectIdentifier(oidSignatureEd448) })
-	}
-	var tb cryptobyte.Builder
-	tb.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
-		b.AddBytes(version)
-		algID(b)
-		b.AddBytes(tbs)
-	})
-	newTBS, err := tb.Bytes()
-	if err != nil {
-		return nil, err
-	}
-	sig, err := key.Sign(rnd, newTBS, crypto.Hash(0))
-	if err != nil {
-		return nil, err
-	}
-	var out cryptobyte.Builder
-	out.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
-		b.AddBytes(newTBS)
-		algID(b)
-		b.AddASN1BitString(sig)
-	})
-	return out.Bytes()
 }
 
 // parseSubjectName parses a SubjectName of Part 12 §7.9.4: X.500 name

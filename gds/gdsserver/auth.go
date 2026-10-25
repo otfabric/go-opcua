@@ -19,6 +19,9 @@ type caller struct {
 	// cert is the application instance certificate of the channel, nil
 	// on a channel without security.
 	cert *x509.Certificate
+	// auditGroup and auditType are the certificate group and type of a
+	// certificate request, for its audit event.
+	auditGroup, auditType *ua.NodeID
 }
 
 // identify returns the caller of a method: a session is required.

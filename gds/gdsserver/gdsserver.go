@@ -124,6 +124,10 @@ type GDS struct {
 	now   func() time.Time
 	log   *slog.Logger
 	types []uint32 // the certificate types of the DefaultApplicationGroup
+	// groups are the certificate groups of the Directory: the
+	// DefaultApplicationGroup, the DefaultHttpsGroup and the
+	// DefaultUserTokenGroup.
+	groups []*group
 
 	mu      sync.Mutex
 	apps    map[string]*Application
@@ -134,8 +138,19 @@ type GDS struct {
 	meta    *Meta
 	closed  bool           // Close was called
 	calls   sync.WaitGroup // the method calls in progress
+}
 
-	trust *server.TrustListObject
+// group is a certificate group of the Directory (Part 12 §7.8.3).
+type group struct {
+	key       string // GroupApplication, GroupHTTPS or GroupUserToken
+	node      uint32
+	trustNode uint32
+	typesNode uint32
+	types     []uint32 // the certificate types it issues
+	// issuers are the names of the CAs whose certificates and CRLs are in
+	// its trust list.
+	issuers []string
+	trust   *server.TrustListObject
 }
 
 // errAttach wraps the errors of Attach.
@@ -187,7 +202,7 @@ func Attach(srv *server.Server, cfg Config) (*GDS, error) {
 		types = DefaultCertificateTypes
 	}
 	for _, t := range types {
-		if t == nil || t.Namespace() != 0 || certTypes[t.IntID()] == nil {
+		if t == nil || t.Namespace() != 0 || certTypes[t.IntID()] == nil || certTypes[t.IntID()].issuer == "" {
 			return nil, fmt.Errorf("%w: certificate type %v is not supported", errAttach, t)
 		}
 		if !slices.Contains(g.types, t.IntID()) {
@@ -199,6 +214,7 @@ func Attach(srv *server.Server, cfg Config) (*GDS, error) {
 	if err := g.load(ctx); err != nil {
 		return nil, err
 	}
+	g.makeGroups()
 
 	g.ns = server.NewNodeNameSpace(srv, gdsid.NamespaceURI).ID()
 	if err := srv.ImportNodeSetXML(nodeSet(g.ns)); err != nil {
@@ -374,8 +390,9 @@ func (g *GDS) buildModel() error {
 		{gdsid.DirectoryGetCertificateStatus, g.getCertificateStatus},
 		{gdsid.DirectoryCheckRevocationStatus, g.checkRevocationStatus},
 	} {
-		h := m.h
-		g.srv.RegisterMethod(dir, g.node(m.id), func(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		mid, h := m.id, m.h
+		perms := g.rolePermissions(g.node(mid))
+		g.srv.RegisterMethod(dir, g.node(mid), func(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 			if !g.enter() {
 				return nil, ua.StatusBadShutdown
 			}
@@ -384,36 +401,41 @@ func (g *GDS) buildModel() error {
 			if sc != ua.StatusOK {
 				return nil, sc
 			}
-			return h(ctx, c, args)
+			// The RolePermissions of the NodeSet apply besides the checks of
+			// the handler; an application may call the self methods for
+			// itself without a role.
+			var out []*ua.Variant
+			if !c.permits(perms) && !selfMethods[mid] {
+				sc = ua.StatusBadUserAccessDenied
+			} else {
+				out, sc = h(ctx, c, args)
+			}
+			g.audit(ctx, c, mid, args, out, sc)
+			return out, sc
 		})
 	}
 
-	// Only the DefaultApplicationGroup is served: the HTTPS and user token
-	// groups of the NodeSet have no TrustList and no CertificateTypes.
-	if f := g.srv.Node(g.node(gdsid.DirectoryCertificateGroups)); f != nil {
-		for _, nid := range []uint32{gdsid.DirectoryCertificateGroupsDefaultHTTPSGroup, gdsid.DirectoryCertificateGroupsDefaultUserTokenGroup} {
-			f.RemoveRef(ua.NewExpandedNodeID(g.node(nid), "", 0), ua.NewNumericNodeID(0, id.Organizes), true)
-			f.RemoveRef(ua.NewExpandedNodeID(g.node(nid), "", 0), ua.NewNumericNodeID(0, id.HasComponent), true)
+	for _, gr := range g.groups {
+		if n := g.srv.Node(g.node(gr.typesNode)); n != nil {
+			types := make([]*ua.NodeID, len(gr.types))
+			for i, t := range gr.types {
+				types[i] = ua.NewNumericNodeID(0, t)
+			}
+			dv := server.DataValueFromValue(types)
+			n.SetValueFunc(func() *ua.DataValue { return dv })
 		}
-	}
-	if n := g.srv.Node(g.node(gdsid.DirectoryCertificateGroupsDefaultApplicationGroupCertificateTypes)); n != nil {
-		types := make([]*ua.NodeID, len(g.types))
-		for i, t := range g.types {
-			types[i] = ua.NewNumericNodeID(0, t)
+		tl, err := g.srv.ServeTrustList(g.node(gr.trustNode), server.TrustListConfig{
+			Load:      func() *ua.TrustListDataType { return g.trustListOf(gr) },
+			Authorize: g.authorizeTrustList,
+			Update: func(ctx context.Context, _ *server.MethodCaller, tl *ua.TrustListDataType) ua.StatusCode {
+				return g.updateTrustList(ctx, gr, tl)
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("%w: %w", errAttach, err)
 		}
-		dv := server.DataValueFromValue(types)
-		n.SetValueFunc(func() *ua.DataValue { return dv })
+		gr.trust = tl
 	}
-
-	tl, err := g.srv.ServeTrustList(g.node(gdsid.DirectoryCertificateGroupsDefaultApplicationGroupTrustList), server.TrustListConfig{
-		Load:      g.trustList,
-		Authorize: g.authorizeTrustList,
-		Update:    g.updateTrustList,
-	})
-	if err != nil {
-		return fmt.Errorf("%w: %w", errAttach, err)
-	}
-	g.trust = tl
 	return nil
 }
 
@@ -465,6 +487,28 @@ func (g *GDS) DefaultApplicationGroup() *ua.NodeID {
 	return g.node(gdsid.DirectoryCertificateGroupsDefaultApplicationGroup)
 }
 
+// DefaultHTTPSGroup returns the NodeId of the DefaultHttpsGroup of the
+// Directory: it issues HttpsCertificateType certificates to servers.
+func (g *GDS) DefaultHTTPSGroup() *ua.NodeID {
+	return g.node(gdsid.DirectoryCertificateGroupsDefaultHTTPSGroup)
+}
+
+// DefaultUserTokenGroup returns the NodeId of the DefaultUserTokenGroup of
+// the Directory: its trust list holds the issuers of user certificates.
+func (g *GDS) DefaultUserTokenGroup() *ua.NodeID {
+	return g.node(gdsid.DirectoryCertificateGroupsDefaultUserTokenGroup)
+}
+
+// GroupTrustList returns the trust list of a certificate group (by its
+// NodeId; nil for the DefaultApplicationGroup), nil for an unknown group.
+func (g *GDS) GroupTrustList(group *ua.NodeID) *ua.TrustListDataType {
+	gr := g.groupOf(group)
+	if gr == nil {
+		return nil
+	}
+	return g.trustListOf(gr)
+}
+
 // IssuerCertificates returns the certificates of the CAs of the GDS (DER).
 func (g *GDS) IssuerCertificates() [][]byte {
 	g.mu.Lock()
@@ -501,13 +545,27 @@ func (g *GDS) trustList() *ua.TrustListDataType {
 }
 
 func (g *GDS) trustListLocked() *ua.TrustListDataType {
+	return g.groupTrustListLocked(g.groups[0])
+}
+
+// trustListOf builds the trust list of a group.
+func (g *GDS) trustListOf(gr *group) *ua.TrustListDataType {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.refreshCRLsLocked()
+	return g.groupTrustListLocked(gr)
+}
+
+// groupTrustListLocked builds the trust list of a group: the certificates
+// and CRLs of its CAs, then what a CertificateAuthorityAdmin added.
+func (g *GDS) groupTrustListLocked(gr *group) *ua.TrustListDataType {
 	tl := &ua.TrustListDataType{SpecifiedLists: uint32(ua.TrustListMasksAll)}
-	for _, name := range g.caNamesLocked() {
+	for _, name := range gr.issuers {
 		c := g.cas[name]
 		tl.TrustedCertificates = append(tl.TrustedCertificates, slices.Clone(c.rec.Certificate))
 		tl.TrustedCrls = append(tl.TrustedCrls, slices.Clone(c.rec.CRL))
 	}
-	if extra := g.meta.TrustList; extra != nil {
+	if extra := g.extraTrustLocked(gr); extra != nil {
 		add := func(dst *[][]byte, src [][]byte) {
 			for _, x := range src {
 				if !slices.ContainsFunc(*dst, func(y []byte) bool { return bytes.Equal(x, y) }) {
@@ -541,8 +599,8 @@ func (g *GDS) refreshCRLsLocked() {
 		}
 		changed = true
 	}
-	if changed && g.trust != nil {
-		g.trust.Changed()
+	if changed {
+		g.trustChanged()
 	}
 }
 
@@ -559,9 +617,9 @@ func (g *GDS) renewCRLLocked(c *ca) error {
 	return nil
 }
 
-// updateTrustList is the Update of the TrustList object: the certificates
-// and CRLs besides those of the CAs are kept in the Meta.
-func (g *GDS) updateTrustList(ctx context.Context, _ *server.MethodCaller, tl *ua.TrustListDataType) ua.StatusCode {
+// updateTrustList is the Update of the TrustList object of a group: the
+// certificates and CRLs besides those of the CAs are kept in the Meta.
+func (g *GDS) updateTrustList(ctx context.Context, gr *group, tl *ua.TrustListDataType) ua.StatusCode {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if g.closed {
@@ -582,12 +640,20 @@ func (g *GDS) updateTrustList(ctx context.Context, _ *server.MethodCaller, tl *u
 		return out
 	}
 	meta := cloneMeta(g.meta)
-	meta.TrustList = &ua.TrustListDataType{
+	extra := &ua.TrustListDataType{
 		SpecifiedLists:      uint32(ua.TrustListMasksAll),
 		TrustedCertificates: keep(tl.TrustedCertificates),
 		TrustedCrls:         keep(tl.TrustedCrls),
 		IssuerCertificates:  keep(tl.IssuerCertificates),
 		IssuerCrls:          keep(tl.IssuerCrls),
+	}
+	if gr.key == GroupApplication {
+		meta.TrustList = extra
+	} else {
+		if meta.GroupTrustLists == nil {
+			meta.GroupTrustLists = map[string]*ua.TrustListDataType{}
+		}
+		meta.GroupTrustLists[gr.key] = extra
 	}
 	if err := g.store.PutMeta(ctx, meta); err != nil {
 		g.log.Warn("gds: storing the trust list failed", "error", err)

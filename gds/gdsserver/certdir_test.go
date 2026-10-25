@@ -122,7 +122,7 @@ func TestCertificates_SigningRequestErrors(t *testing.T) {
 	_, err = self.StartSigningRequest(ctx, appID, nil, nil, tampered)
 	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
 
-	// A well-formed request crypto/x509 cannot read.
+	// A well-formed request with an unknown signature.
 	unsupported, err := asn1.Marshal(struct {
 		Info      asn1.RawValue
 		Algorithm pkix.AlgorithmIdentifier
@@ -134,10 +134,15 @@ func TestCertificates_SigningRequestErrors(t *testing.T) {
 	})
 	require.NoError(t, err)
 	_, err = self.StartSigningRequest(ctx, appID, nil, nil, unsupported)
-	require.ErrorIs(t, err, ua.StatusBadNotSupported)
-
-	_, err = self.StartSigningRequest(ctx, appID, ua.NewNumericNodeID(e.gds.Namespace(), gdsid.DirectoryCertificateGroupsDefaultHTTPSGroup), nil, good)
 	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
+
+	_, err = self.StartSigningRequest(ctx, appID, ua.NewNumericNodeID(e.gds.Namespace(), 9999), nil, good)
+	require.ErrorIs(t, err, ua.StatusBadInvalidArgument, "no group")
+	_, err = self.StartSigningRequest(ctx, appID, ua.NewNumericNodeID(e.gds.Namespace(), gdsid.DirectoryCertificateGroupsDefaultUserTokenGroup), nil, good)
+	require.ErrorIs(t, err, ua.StatusBadInvalidArgument, "the user token group issues nothing")
+	_, err = self.StartSigningRequest(ctx, appID, e.gds.node(gdsid.DirectoryCertificateGroupsDefaultHTTPSGroup), nil,
+		csrFor(t, newKey(t, testpki.CurveP384), testClientURI))
+	require.ErrorIs(t, err, ua.StatusBadInvalidArgument, "an HTTPS key the GDS has no CA for")
 	_, err = self.StartSigningRequest(ctx, appID, nil, ua.NewNumericNodeID(0, id.RsaSha256ApplicationCertificateType), good)
 	require.ErrorIs(t, err, ua.StatusBadInvalidArgument, "a type the group does not issue")
 	_, err = self.StartSigningRequest(ctx, appID, nil, ua.NewNumericNodeID(3, id.EccNistP256ApplicationCertificateType), good)
@@ -241,7 +246,7 @@ func TestCertificates_NewKeyPair(t *testing.T) {
 	require.NoError(t, err)
 
 	for name, r := range map[string]*gds.NewKeyPairRequest{
-		"format":  {PrivateKeyFormat: gds.PrivateKeyFormatPFX},
+		"format":  {PrivateKeyFormat: "DER"},
 		"subject": {SubjectName: "XX=1"},
 		"domain":  {DomainNames: []string{"a b"}},
 		"empty":   {DomainNames: []string{""}},
@@ -291,15 +296,28 @@ func TestCertificates_AllTypes(t *testing.T) {
 	}
 	require.Equal(t, p.CACert, e.gds.IssuerCertificates()[len(e.gds.IssuerCertificates())-1], "the RSA CA is the one configured")
 
-	for _, curve := range []string{testpki.CurveP256, testpki.CurveP384, testpki.CurveEd25519} {
-		typ := map[string]*ua.NodeID{
+	// A request of every key type, Brainpool and Ed448 included; each is
+	// signed by the CA of its own key type.
+	for _, curve := range testpki.Curves {
+		typ, issuer := map[string]*ua.NodeID{
 			testpki.CurveP256: gds.EccNistP256ApplicationCertificateType, testpki.CurveP384: gds.EccNistP384ApplicationCertificateType,
-			testpki.CurveEd25519: gds.EccCurve25519ApplicationCertificateType,
+			testpki.CurveEd25519: gds.EccCurve25519ApplicationCertificateType, testpki.CurveEd448: gds.EccCurve448ApplicationCertificateType,
+			testpki.CurveBrainpoolP256r1: gds.EccBrainpoolP256r1ApplicationCertificateType,
+			testpki.CurveBrainpoolP384r1: gds.EccBrainpoolP384r1ApplicationCertificateType,
+		}[curve], map[string]string{
+			testpki.CurveP256: "NistP256", testpki.CurveP384: "NistP384", testpki.CurveEd25519: "Curve25519", testpki.CurveEd448: "Curve448",
+			testpki.CurveBrainpoolP256r1: "BrainpoolP256r1", testpki.CurveBrainpoolP384r1: "BrainpoolP384r1",
 		}[curve]
 		reqID, err := self.StartSigningRequest(ctx, appID, nil, typ, csrFor(t, newKey(t, curve), testClientURI))
 		require.NoError(t, err, curve)
-		_, err = self.FinishRequest(ctx, appID, reqID)
+		res, err := self.FinishRequest(ctx, appID, reqID)
 		require.NoError(t, err, curve)
+		cert, err := uapolicy.ParseCertificate(res.Certificate)
+		require.NoError(t, err)
+		require.True(t, e.gds.cas[issuer].issues(cert), curve)
+		status, _, err := self.CheckRevocationStatus(ctx, res.Certificate)
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusOK, status, curve)
 	}
 	reqID, err := self.StartSigningRequest(ctx, appID, nil, gds.RsaSha256ApplicationCertificateType, csrFor(t, p.ClientKey, testClientURI))
 	require.NoError(t, err)
@@ -444,7 +462,7 @@ func TestCertificates_GroupsAndStatusArguments(t *testing.T) {
 	ctx := ctxT(t)
 	appID := e.registerClient()
 	self := e.anonymous()
-	bad := ua.NewNumericNodeID(e.gds.Namespace(), gdsid.DirectoryCertificateGroupsDefaultUserTokenGroup)
+	bad := ua.NewNumericNodeID(e.gds.Namespace(), 9999)
 	_, err := self.GetTrustList(ctx, appID, bad)
 	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
 	_, _, err = self.GetCertificates(ctx, appID, bad)

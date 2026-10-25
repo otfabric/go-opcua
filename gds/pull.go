@@ -346,9 +346,11 @@ type NewKeyPairRequest struct {
 	// DomainNames are the host names and IP addresses of the certificate;
 	// empty lets the GDS take those of the discovery URLs.
 	DomainNames []string
-	// PrivateKeyFormat is PrivateKeyFormatPEM (empty selects it).
+	// PrivateKeyFormat is PrivateKeyFormatPEM (empty selects it) or
+	// PrivateKeyFormatPFX.
 	PrivateKeyFormat string
-	// PrivateKeyPassword encrypts the private key FinishRequest returns.
+	// PrivateKeyPassword protects the private key FinishRequest returns
+	// (DecodePrivateKey decodes it).
 	PrivateKeyPassword string
 }
 
@@ -540,8 +542,9 @@ func (p *PullClient) CheckRevocationStatus(ctx context.Context, cert []byte) (st
 // NewCertificateRequest returns a PKCS #10 request for StartSigningRequest:
 // the key of the application with its ApplicationUri, the subject (name
 // value pairs separated by '/' or ',', or empty for CN=the host of the
-// URI) and the host names and IP addresses. crypto/x509 makes it, so the
-// key must be RSA, ECDSA on a NIST curve or Ed25519.
+// URI) and the host names and IP addresses. The key may be of any
+// certificate type: RSA, ECDSA (NIST and Brainpool curves), Ed25519 or
+// Ed448 (uapolicy.CreateCertificateRequest).
 func NewCertificateRequest(key crypto.Signer, applicationURI, subject string, hosts []string) ([]byte, error) {
 	u, err := url.Parse(applicationURI)
 	if err != nil || u.Scheme == "" {
@@ -559,7 +562,7 @@ func NewCertificateRequest(key crypto.Signer, applicationURI, subject string, ho
 			tmpl.DNSNames = append(tmpl.DNSNames, h)
 		}
 	}
-	return x509.CreateCertificateRequest(rand.Reader, tmpl, key)
+	return uapolicy.CreateCertificateRequest(rand.Reader, tmpl, key)
 }
 
 var oidDomainComponent = asn1.ObjectIdentifier{0, 9, 2342, 19200300, 100, 1, 25}
@@ -630,6 +633,12 @@ type EnrollRequest struct {
 	SubjectName string
 	DomainNames []string
 
+	// PrivateKeyFormat (PrivateKeyFormatPEM or PrivateKeyFormatPFX) and
+	// PrivateKeyPassword are those of the key the GDS generates (no Key):
+	// the format the key travels in.
+	PrivateKeyFormat   string
+	PrivateKeyPassword string
+
 	// PollInterval is the interval of WaitForCertificate.
 	PollInterval time.Duration
 }
@@ -678,6 +687,7 @@ func (p *PullClient) Enroll(ctx context.Context, r *EnrollRequest) (*Enrollment,
 		reqID, err = p.StartNewKeyPairRequest(ctx, appID, &NewKeyPairRequest{
 			CertificateGroup: r.CertificateGroup, CertificateType: r.CertificateType,
 			SubjectName: r.SubjectName, DomainNames: r.DomainNames,
+			PrivateKeyFormat: r.PrivateKeyFormat, PrivateKeyPassword: r.PrivateKeyPassword,
 		})
 		if err != nil {
 			return nil, err
@@ -689,7 +699,11 @@ func (p *PullClient) Enroll(ctx context.Context, r *EnrollRequest) (*Enrollment,
 	}
 	e := &Enrollment{ApplicationID: appID, Certificate: res.Certificate, IssuerCertificates: res.IssuerCertificates, PrivateKey: r.Key}
 	if e.PrivateKey == nil {
-		if e.PrivateKey, err = DecodePrivateKey(PrivateKeyFormatPEM, res.PrivateKey, ""); err != nil {
+		format := r.PrivateKeyFormat
+		if format == "" {
+			format = PrivateKeyFormatPEM
+		}
+		if e.PrivateKey, err = DecodePrivateKey(format, res.PrivateKey, r.PrivateKeyPassword); err != nil {
 			return nil, err
 		}
 	}

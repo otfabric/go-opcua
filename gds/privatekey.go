@@ -68,7 +68,8 @@ type pbkdf2Params struct {
 // EncodePrivateKey encodes a private key as FinishRequest returns it: with
 // format PEM a PKCS #8 "PRIVATE KEY" PEM block, or with a password an
 // "ENCRYPTED PRIVATE KEY" (PKCS #8 with PBES2: PBKDF2 with HMAC-SHA-256 and
-// AES-256-CBC, RFC 8018). PFX is not supported.
+// AES-256-CBC, RFC 8018). A PFX holds the certificate too: encode it with
+// uapolicy.EncodePFX.
 func EncodePrivateKey(format string, key crypto.Signer, password string) ([]byte, error) {
 	if !strings.EqualFold(format, PrivateKeyFormatPEM) {
 		return nil, fmt.Errorf("%w: format %q is not supported", errPrivateKey, format)
@@ -130,8 +131,16 @@ func EncodePrivateKey(format string, key crypto.Signer, password string) ([]byte
 // DecodePrivateKey decodes the private key FinishRequest returned for a
 // StartNewKeyPairRequest: format PEM (PKCS #8, PKCS #1 or SEC 1, or an
 // "ENCRYPTED PRIVATE KEY" with PBES2, PBKDF2 and AES-CBC, decrypted with
-// the password). PFX is not supported.
+// the password) or PFX (PKCS #12 protected with the password, see
+// uapolicy.ParsePFX; its certificates are ignored).
 func DecodePrivateKey(format string, data []byte, password string) (crypto.Signer, error) {
+	if strings.EqualFold(format, PrivateKeyFormatPFX) {
+		key, _, err := uapolicy.ParsePFX(data, password)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", errPrivateKey, err)
+		}
+		return key, nil
+	}
 	if !strings.EqualFold(format, PrivateKeyFormatPEM) {
 		return nil, fmt.Errorf("%w: format %q is not supported", errPrivateKey, format)
 	}
