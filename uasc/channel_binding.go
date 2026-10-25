@@ -269,19 +269,18 @@ func (s *SecureChannel) NewSessionUserTokenSignature(policyURI string, serverCer
 // returned from CreateSession.
 func (s *SecureChannel) VerifySessionUserTokenSignature(policyURI string, userCertificate, serverCertificate, serverNonce, clientNonce, signature []byte) error {
 	policyURI = s.userTokenPolicy(policyURI)
-	var (
-		data []byte
-		err  error
-	)
 	if s.userTokenBound(policyURI) {
-		data, err = s.boundUserTokenData(serverCertificate, s.cfg.Certificate, s.RemoteCertificate(), serverNonce, clientNonce)
+		data, err := s.boundUserTokenData(serverCertificate, s.cfg.Certificate, s.RemoteCertificate(), serverNonce, clientNonce)
 		if err != nil {
 			return err
 		}
-	} else {
-		data = joinBytes(serverCertificate, serverNonce)
+		return s.verifyWith(policyURI, userCertificate, data, signature)
 	}
-	return s.verifyWith(policyURI, userCertificate, data, signature)
+	enc, err := verifier(policyURI, userCertificate)
+	if err != nil {
+		return err
+	}
+	return verifyLegacySignature(enc, serverCertificate, serverNonce, signature)
 }
 
 func (s *SecureChannel) signWith(policyURI string, key any, data []byte) ([]byte, string, error) {
@@ -297,13 +296,19 @@ func (s *SecureChannel) signWith(policyURI string, key any, data []byte) ([]byte
 }
 
 func (s *SecureChannel) verifyWith(policyURI string, certificate, data, signature []byte) error {
-	key, err := uapolicy.CertificatePublicKey(certificate)
-	if err != nil {
-		return err
-	}
-	enc, err := uapolicy.AsymmetricKeys(policyURI, nil, key)
+	enc, err := verifier(policyURI, certificate)
 	if err != nil {
 		return err
 	}
 	return enc.VerifySignature(data, signature)
+}
+
+// verifier returns the algorithms of the security policy that verify
+// signatures made with the key of certificate (its leaf, if it is a chain).
+func verifier(policyURI string, certificate []byte) (*uapolicy.EncryptionAlgorithm, error) {
+	key, err := uapolicy.CertificatePublicKey(certificate)
+	if err != nil {
+		return nil, err
+	}
+	return uapolicy.AsymmetricKeys(policyURI, nil, key)
 }
