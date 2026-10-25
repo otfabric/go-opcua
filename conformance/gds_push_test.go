@@ -104,11 +104,12 @@ func TestGDSPush_AddressSpace(t *testing.T) {
 	}
 	require.True(t, names(id.Server, id.HasComponent)["ServerConfiguration"])
 	sc := names(id.ServerConfiguration, id.HasComponent)
-	for _, m := range []string{"UpdateCertificate", "CreateSigningRequest", "GetRejectedList", "ApplyChanges", "CertificateGroups"} {
+	for _, m := range []string{"UpdateCertificate", "CreateSigningRequest", "CreateSelfSignedCertificate", "GetCertificates", "GetRejectedList",
+		"ApplyChanges", "CancelChanges", "ResetToServerDefaults", "CertificateGroups", "TransactionDiagnostics"} {
 		require.True(t, sc[m], m)
 	}
 	groups := names(id.ServerConfigurationCertificateGroups, id.HasComponent)
-	require.Equal(t, map[string]bool{"DefaultApplicationGroup": true}, groups)
+	require.Equal(t, map[string]bool{"DefaultApplicationGroup": true, "DefaultHttpsGroup": true, "DefaultUserTokenGroup": true}, groups)
 	tl := names(id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustList, id.HasComponent)
 	for _, m := range []string{"Open", "OpenWithMasks", "Read", "Write", "Close", "CloseAndUpdate", "AddCertificate", "RemoveCertificate"} {
 		require.True(t, tl[m], m)
@@ -116,7 +117,7 @@ func TestGDSPush_AddressSpace(t *testing.T) {
 
 	props, err := g.Properties(ctx)
 	require.NoError(t, err)
-	require.Equal(t, []string{"PEM"}, props.SupportedPrivateKeyFormats)
+	require.Equal(t, []string{"PEM", "PFX"}, props.SupportedPrivateKeyFormats)
 	require.NotZero(t, props.MaxTrustListSize)
 	require.Len(t, props.CertificateTypes, 1)
 	require.True(t, props.CertificateTypes[0].Equal(gds.RsaSha256ApplicationCertificateType))

@@ -140,9 +140,26 @@ func (s *Server) listenTransports(ctx context.Context) error {
 	if len(s.cfg.wss.endpoints) == 0 && len(s.cfg.https.endpoints) == 0 {
 		return nil
 	}
-	cfg, err := s.cfg.transportTLS()
-	if err != nil {
-		return err
+	var cfg *tls.Config
+	if m := s.push; m != nil && m.https.Load() != nil {
+		// The certificate of the DefaultHttpsGroup, which ApplyChanges can
+		// replace.
+		base := s.cfg.tlsConfig
+		if base == nil {
+			base = &tls.Config{}
+		}
+		cfg = m.tlsConfig(base)
+		if cfg.MinVersion < tls.VersionTLS12 {
+			cfg.MinVersion = tls.VersionTLS12
+		}
+	} else {
+		var err error
+		if cfg, err = s.cfg.transportTLS(); err != nil {
+			return err
+		}
+		if m := s.push; m != nil {
+			cfg = m.tlsConfig(cfg)
+		}
 	}
 	if addr, err := s.cfg.wss.bindAddr(); err != nil {
 		return err

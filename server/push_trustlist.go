@@ -22,8 +22,8 @@ const (
 	maxIssuerDepth = 8
 )
 
-// trustList is an immutable snapshot of the trust list of the
-// DefaultApplicationGroup (Part 12 §7.8.2): the certificates and CRLs with
+// trustList is an immutable snapshot of the trust list of a certificate
+// group (Part 12 §7.8.2): the certificates and CRLs with
 // what client certificate validation needs of them. A validation loads one
 // snapshot and uses only it, so an update never leaves a channel checked
 // against half a trust list.
@@ -163,15 +163,15 @@ func newTrustList(d *ua.TrustListDataType, maxSize uint32) (*trustList, ua.Statu
 	}
 	cas := append(slices.Clone(tl.trusted), tl.issuers...)
 	for _, der := range append(slices.Clone(d.TrustedCrls), d.IssuerCrls...) {
-		crl, err := x509.ParseRevocationList(der)
+		crl, err := uapolicy.ParseRevocationList(der)
 		if err != nil {
 			return nil, ua.StatusBadCertificateInvalid
 		}
-		// A CRL counts only with the signature of a CA of the lists. One
-		// whose issuer is missing (or whose algorithm crypto/x509 cannot
-		// check: Brainpool, Ed448) is kept in the list but not used.
+		// A CRL counts only with the signature of a CA of the lists (RSA,
+		// ECDSA on the NIST and Brainpool curves, Ed25519 or Ed448). One
+		// whose issuer is missing is kept in the list but not used.
 		for _, ca := range cas {
-			if !bytes.Equal(ca.RawSubject, crl.RawIssuer) || crl.CheckSignatureFrom(ca) != nil {
+			if !bytes.Equal(ca.RawSubject, crl.RawIssuer) || uapolicy.CheckRevocationListSignature(crl, ca) != nil {
 				continue
 			}
 			set := tl.revoked[string(crl.RawIssuer)]
@@ -244,7 +244,7 @@ func (tl *trustList) verify(certs []*x509.Certificate) error {
 
 // crlIssuer returns the RawIssuer of a DER CRL, nil if it does not parse.
 func crlIssuer(der []byte) []byte {
-	crl, err := x509.ParseRevocationList(der)
+	crl, err := uapolicy.ParseRevocationList(der)
 	if err != nil {
 		return nil
 	}
