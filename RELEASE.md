@@ -1,5 +1,39 @@
 # go-opcua Releases
 
+## v1.12.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.11.0
+
+### Summary
+
+The ECC security policies ECC_brainpoolP256r1, ECC_brainpoolP384r1 and ECC_curve448 work on client and server, in Sign and SignAndEncrypt, with certificates on those curves that crypto/x509 cannot handle.
+
+### Added
+
+- **Security policies `ECC_brainpoolP256r1`, `ECC_brainpoolP384r1` and `ECC_curve448` (Part 7, Part 6 §6.8).** Client and server, Sign and SignAndEncrypt, including EccEncryptedSecret user tokens, X.509 user certificates on these curves and endpoint selection. Verified against open62541 1.5.9 in both directions.
+- **uapolicy: certificates with Brainpool and Ed448 keys.** `ParseCertificate`, `ParseCertificates`, `CreateCertificate`, `VerifyCertificate`, `MarshalPrivateKey` and the type `Ed448`. `ParsePrivateKey` reads Brainpool (PKCS #8, SEC 1) and Ed448 (PKCS #8) keys. Ed448-signed chains are verified against the trusted certificates only. The client, server, reverse connect, LDS and X.509 user tokens use these.
+- **ua:** `SecurityPolicyURIECCBrainpoolP256r1`, `SecurityPolicyURIECCBrainpoolP384r1`, `SecurityPolicyURIECCCurve448` and their short names.
+
+### Security
+
+- Brainpool uses `github.com/ProtonMail/go-crypto/brainpool` through Go's generic elliptic code, which is **not constant time**. The Brainpool policies rank below the NIST ones. Prefer the NIST or AEAD policies, or keep the application key in an HSM through `crypto.Signer` (see docs/security.md).
+- Ed448 and X448 come from `github.com/cloudflare/circl`; X448 refuses low-order points.
+- ECC_curve448 derives keys as open62541 does (HKDF-SHA256, a 32-byte signing key, no SecureChannelEnhancements).
+
+### Tests
+
+- **Unit, known-answer and fuzz:** RFC 7027, 7748 and 8032 vectors, key-derivation outputs, OpenSSL-generated certificates and keys (uapolicy/testdata/openssl), and fuzz tests for the certificate parser, the private-key parser and the shared-secret step.
+- **e2e and conformance:** every policy and mode, multi-chunk messages, Calls, subscriptions, renewals, EccEncryptedSecret passwords and issued tokens, X.509 users per curve, trust lists and key mismatches.
+- **Chaos:** the three policies join chaos/secure (bit flips, replays, incomplete chunks, parallel channels).
+- **Interop:** 18 new capabilities verified against open62541 in both directions. `security.ecc.unimplemented-policy` is retired.
+
+### Dependencies
+
+- Added `github.com/cloudflare/circl` v1.6.5 and `github.com/ProtonMail/go-crypto` v1.5.2.
+
+---
+
 ## v1.11.0
 
 **Date:** 2026-10-25
