@@ -266,7 +266,8 @@ func TestServerRestartOnSamePort(t *testing.T) {
 
 	for round := 0; round < 3; round++ {
 		if !eventually(settleLimit, func() bool { return st.lastValue(0) > 0 && st.lastValue(1) > 0 }) {
-			t.Fatalf("round %d: no data before the restart", round)
+			t.Fatalf("round %d: no data before the restart: delivered %d/%d, nodes at %d/%d; client state %v, transitions %v, subscriptions %v, server %+v",
+				round, st.lastValue(0), st.lastValue(1), e.counters[0].Load(), e.counters[1].Load(), c.State(), rec.snapshot(), c.SubscriptionIDs(), e.resources())
 		}
 		reconnects := countState(rec, opcua.Reconnecting)
 
