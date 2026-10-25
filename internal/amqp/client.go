@@ -54,14 +54,15 @@ const (
 	DefaultCredit            = 256
 )
 
-// sessionWindow is the incoming window of the session, in transfer frames
-// (§2.5.6). It is opened again whenever half of it is used.
-const sessionWindow = 1 << 16
+// DefaultSessionWindow is the incoming window of the session, in transfer
+// frames (§2.5.6), unless Options.SessionWindow sets another. It is opened
+// again whenever half of it is used.
+const DefaultSessionWindow = 1 << 16
 
 // maxCtrl bounds the control frames queued for the writer. A broker that
 // keeps to the session window cannot make the client queue more than about
 // one answer per transfer frame of the window before it reads them.
-const maxCtrl = 2 * sessionWindow
+const maxCtrl = 2 * DefaultSessionWindow
 
 // SASL mechanisms (Part 5 §5.3.3.1). NONE skips the SASL layer.
 const (
@@ -193,6 +194,10 @@ type Options struct {
 	MaxReconnectDelay time.Duration
 	// MaxFrameSize is the largest frame the client accepts (at least 512).
 	MaxFrameSize uint32
+	// SessionWindow is the incoming window of the session in transfer
+	// frames (§2.5.6), at most DefaultSessionWindow; 0 selects
+	// DefaultSessionWindow.
+	SessionWindow uint32
 	// MaxMessageSize limits received messages; it is announced on receiver
 	// links and larger messages are rejected.
 	MaxMessageSize int
@@ -473,6 +478,9 @@ func newClient(opts Options) (*Client, error) {
 	if c.opts.MaxReconnectDelay < c.opts.MinReconnectDelay {
 		c.opts.MaxReconnectDelay = c.opts.MinReconnectDelay
 	}
+	if c.opts.SessionWindow == 0 || c.opts.SessionWindow > DefaultSessionWindow {
+		c.opts.SessionWindow = DefaultSessionWindow
+	}
 	if c.opts.MaxFrameSize == 0 {
 		c.opts.MaxFrameSize = DefaultMaxFrameSize
 	}
@@ -707,7 +715,7 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 	if !ok || f.Type != FrameAMQP {
 		return fail(protoErr("expected open, got %T", f.Body))
 	}
-	begin := &Begin{IncomingWindow: sessionWindow, OutgoingWindow: math.MaxUint32, Properties: c.opts.SessionProperties}
+	begin := &Begin{IncomingWindow: c.opts.SessionWindow, OutgoingWindow: math.MaxUint32, Properties: c.opts.SessionProperties}
 	if err := writeFrame(nc, &Frame{Body: begin}); err != nil {
 		return fail(err)
 	}
@@ -746,7 +754,7 @@ func (c *Client) connect(ctx context.Context) (*conn, error) {
 		remoteChannel:        f.Channel,
 		remoteIncomingWindow: pb.IncomingWindow,
 		nextIncomingID:       pb.NextOutgoingID,
-		incomingWindow:       sessionWindow,
+		incomingWindow:       c.opts.SessionWindow,
 		handles:              map[uint32]*link{},
 		remote:               map[uint32]*link{},
 		attaching:            map[string]*link{},
@@ -1107,8 +1115,8 @@ func (c *Client) onTransfer(cs *conn, t *Transfer, payload []byte) (*inbound, er
 	if cs.incomingWindow > 0 {
 		cs.incomingWindow--
 	}
-	if cs.incomingWindow < sessionWindow/2 {
-		cs.incomingWindow = sessionWindow
+	if cs.incomingWindow < c.opts.SessionWindow/2 {
+		cs.incomingWindow = c.opts.SessionWindow
 		cs.queue(&Flow{})
 	}
 	l := cs.remote[t.Handle]

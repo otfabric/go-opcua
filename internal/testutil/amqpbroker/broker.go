@@ -59,6 +59,9 @@ type Options struct {
 	RequireSASL bool
 	// MaxFrameSize is the largest frame the broker accepts (default 64 KiB).
 	MaxFrameSize uint32
+	// SessionWindow is the incoming window of its sessions in transfer
+	// frames (default 1 Mi).
+	SessionWindow uint32
 	// MaxMessageSize is announced on the links (0: no limit).
 	MaxMessageSize uint64
 	// IdleTimeout: clients silent for this long are dropped; half of it is
@@ -163,14 +166,17 @@ type blink struct {
 	deliveryCount uint32
 	backlog       []*stored
 	tag           uint64
+	// out is the delivery being sent, outOff how much of it is, outID its
+	// delivery id: a delivery is sent as the session window allows.
+	out    *stored
+	outOff int
+	outID  uint32
 
 	inDelivery bool
 	curID      uint32
 	curSettled bool
 	partial    []byte
 }
-
-const sessionWindow = 1 << 20
 
 // New returns a stopped broker.
 func New(opts Options) *Broker {
@@ -182,6 +188,9 @@ func New(opts Options) *Broker {
 	}
 	if opts.MaxFrameSize == 0 {
 		opts.MaxFrameSize = 64 << 10
+	}
+	if opts.SessionWindow == 0 {
+		opts.SessionWindow = 1 << 20
 	}
 	if opts.IsQueue == nil {
 		opts.IsQueue = func(a string) bool { return strings.HasPrefix(a, "/queues/") || strings.HasPrefix(a, "queue://") }
@@ -660,10 +669,10 @@ func (c *client) handle(f *amqp.Frame) bool {
 			return false
 		}
 		s := &session{c: c, channel: f.Channel, links: map[uint32]*blink{}, nextIncomingID: begin.NextOutgoingID,
-			incomingWindow: sessionWindow, remoteIncomingWindow: begin.IncomingWindow, unacked: map[uint32]*unacked{}}
+			incomingWindow: c.b.opts.SessionWindow, remoteIncomingWindow: begin.IncomingWindow, unacked: map[uint32]*unacked{}}
 		c.sessions[f.Channel] = s
 		ch := f.Channel
-		c.send(f.Channel, &amqp.Begin{RemoteChannel: &ch, IncomingWindow: sessionWindow, OutgoingWindow: math.MaxUint32, HandleMax: 1023}, nil)
+		c.send(f.Channel, &amqp.Begin{RemoteChannel: &ch, IncomingWindow: c.b.opts.SessionWindow, OutgoingWindow: math.MaxUint32, HandleMax: 1023}, nil)
 		return true
 	}
 	s := c.sessions[f.Channel]
@@ -891,43 +900,51 @@ func (b *Broker) dispatch(q *queue) {
 }
 
 // pump sends the backlog of a link as its credit and the session window
-// allow, splitting messages into frames of the client's size. b.mu is
-// held.
+// allow, splitting messages into frames of the client's size. A delivery
+// larger than the window goes out in parts, as the client opens its window
+// again (§2.5.6). b.mu is held.
 func (b *Broker) pump(l *blink) {
 	s := l.s
 	c := s.c
-	for len(l.backlog) > 0 && l.credit > 0 {
-		m := l.backlog[0]
-		chunk := int(c.maxFrame) - 64 // room for the transfer performative
-		frames := uint32((len(m.payload) + chunk - 1) / chunk)
-		if s.remoteIncomingWindow < frames {
-			return
-		}
-		l.backlog = l.backlog[1:]
-		id := s.nextDeliveryID
-		s.nextDeliveryID++
-		l.tag++
-		tag := []byte(fmt.Sprintf("%d", l.tag))
-		format := uint32(0)
-		settled := l.settled
-		// All frames of the delivery in one write.
-		var buf []byte
-		for off := 0; off < len(m.payload); off += chunk {
-			end := min(off+chunk, len(m.payload))
-			t := &amqp.Transfer{Handle: l.handle, More: end < len(m.payload)}
-			if off == 0 {
-				t.DeliveryID, t.DeliveryTag, t.MessageFormat, t.Settled = &id, tag, &format, &settled
+	chunk := int(c.maxFrame) - 64 // room for the transfer performative
+	for s.remoteIncomingWindow > 0 {
+		first := false
+		if l.out == nil {
+			if len(l.backlog) == 0 || l.credit == 0 {
+				return
 			}
-			buf, _ = amqp.AppendFrame(buf, &amqp.Frame{Channel: s.channel, Body: t, Payload: m.payload[off:end]})
+			l.out, l.outOff, l.outID = l.backlog[0], 0, s.nextDeliveryID
+			l.backlog = l.backlog[1:]
+			s.nextDeliveryID++
+			l.tag++
+			l.deliveryCount++
+			l.credit--
+			if !l.settled {
+				s.unacked[l.outID] = &unacked{l: l, msg: l.out}
+			}
+			first = true
+		}
+		m := l.out
+		// The frames the window allows, in one write.
+		var buf []byte
+		for s.remoteIncomingWindow > 0 && (first || l.outOff < len(m.payload)) {
+			end := min(l.outOff+chunk, len(m.payload))
+			t := &amqp.Transfer{Handle: l.handle, More: end < len(m.payload)}
+			if first {
+				id, format, settled := l.outID, uint32(0), l.settled
+				t.DeliveryID, t.DeliveryTag, t.MessageFormat, t.Settled = &id, []byte(fmt.Sprintf("%d", l.tag)), &format, &settled
+				first = false
+			}
+			buf, _ = amqp.AppendFrame(buf, &amqp.Frame{Channel: s.channel, Body: t, Payload: m.payload[l.outOff:end]})
+			l.outOff = end
 			s.nextOutgoingID++
 			s.remoteIncomingWindow--
 		}
 		c.sendRaw(buf)
-		l.deliveryCount++
-		l.credit--
-		if !settled {
-			s.unacked[id] = &unacked{l: l, msg: m}
+		if l.outOff < len(m.payload) {
+			return // the rest when the window opens again
 		}
+		l.out = nil
 	}
 }
 
@@ -935,8 +952,8 @@ func (s *session) transfer(t *amqp.Transfer, payload []byte) bool {
 	c, b := s.c, s.c.b
 	s.nextIncomingID++
 	s.incomingWindow--
-	if s.incomingWindow < sessionWindow/2 {
-		s.incomingWindow = sessionWindow
+	if s.incomingWindow < b.opts.SessionWindow/2 {
+		s.incomingWindow = b.opts.SessionWindow
 		s.sendFlow(nil)
 	}
 	l := s.links[t.Handle]
