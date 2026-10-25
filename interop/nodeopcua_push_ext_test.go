@@ -79,23 +79,21 @@ type pushExtClient struct {
 	coreRows bool
 }
 
-// requireV015 skips when the adapter image of pc does not advertise a
-// capability of opcua-interop v0.15.0 (list: clientOperations,
-// clientFeatures or serverFeatures). It skips also under
-// OPCUA_INTEROP_REQUIRE_CAPABILITIES=1: v0.15.0 is not released yet, so the
-// pinned image cannot have it. Once v0.15.0 is pinned, replace it with
-// requireAdapterOp / requireAdapterFeature.
+// requireV015 skips (or fails when REQUIRE_CAPABILITIES=1) when the adapter
+// image of pc does not advertise a capability of opcua-interop v0.15.0
+// (list: clientOperations, clientFeatures or serverFeatures).
 func requireV015(t *testing.T, pc pushExtClient, list, capability string) {
 	t.Helper()
 	caps := pc.require(t)
+	requirePinnedVersion(t, pc.env, caps, pc.defaultImage)
 	have := map[string][]string{
 		"clientOperations": caps.ClientOperations,
 		"clientFeatures":   caps.ClientFeatures,
 		"serverFeatures":   caps.ServerFeatures,
 	}[list]
 	if !slices.Contains(have, capability) {
-		t.Skipf("the %s adapter (version %s) has no %s %q: added in opcua-interop v0.15.0 (unreleased); "+
-			"set %s to a build of it", pc.name, caps.Adapter.Version, list, capability, pc.env)
+		capabilityUnavailable(t, "the %s adapter (version %s) has no %s %q: need opcua-interop v0.15.0; "+
+			"set %s to such an image", pc.name, caps.Adapter.Version, list, capability, pc.env)
 	}
 }
 

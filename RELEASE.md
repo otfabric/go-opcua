@@ -1,5 +1,46 @@
 # go-opcua Releases
 
+## v1.24.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.23.1
+
+### Summary
+
+opcua-interop v0.15.0 is pinned: every peer client adapter has push management and GDS pull, so the interop ledgers go from 212 unverified rows to 6. Session signatures follow Part 4 §6.1.8 for certificate chains, `Server.Session` returns the exported handle, and QueryFirst checks its type definitions.
+
+### Changed
+
+- **server: `Server.Session(hdr)` returns the exported `*server.Session`.** It returned the unexported `*session`, which no caller outside the package could use. `Session(nil)` is nil instead of a panic.
+
+### Fixed
+
+- **Session signatures cover the leaf of a certificate chain** (Part 4 §6.1.8, legacy signature method). A peer may send its certificate followed by its issuers (UA-.NETStandard does by default).
+  - The client signed ClientSignature and the X.509 user token signature over the whole chain, and the server signed ServerSignature over the client's whole chain. Both now sign over the leaf, which every stack accepts.
+  - The server verifies ClientSignature and UserTokenSignature over the leaf first, then over the chain as sent, the order §6.1.8 gives.
+  - The channel-bound method of the ECC AEAD policies already used the leaf.
+- **server: an X509IdentityToken may carry a certificate chain.** ActivateSession refused it with Bad_IdentityTokenInvalid; the alarm audit events and the session diagnostics showed "X509" instead of the subject. `uapolicy.LeafCertificate` returns the leaf of a chain.
+- **server: QueryFirst reports a type definition that is no type node.** A NodeTypeDescription whose TypeDefinitionNode is unknown or not an ObjectType or VariableType gets Bad_TypeDefinitionInvalid in its ParsingResult (Part 4 §5.9.3); only the null NodeId did. Found by the async-opcua query client.
+- **pubsub: `DiscoverAction` returns with its response counted.** DiscoveryResponsesReceived was counted after the ActionMetaData was handed to the waiter, so counters read right after `DiscoverAction` could miss it.
+
+### Tests
+
+- **The root package tests run in parallel** (`t.Parallel()` in 235 tests), which takes the package well under the CI limit. The tests that swap package-level hooks stay serial.
+- Chain tests on both sides with a CA-issued certificate: the signatures cover the leaf, both forms verify, a wrong nonce, data or key is refused.
+- **Interop harness:** the codec runs of the peers are named containers, stopped on timeout and retried once when they produced no output.
+
+### Interop
+
+- **Pinned opcua-interop v0.15.0** ([release run](https://github.com/otfabric/opcua-interop/actions/runs/40217588999)): the seven adapters by their new digests, dotnet-gds on UA-.NETStandard 2.0.1 (Opc.Ua.Gds.Server / .Gds.Client).
+- **Push management and GDS pull from every peer client.** `client push` with the Part 12 1.05 flags (certificate groups, CreateSelfSignedCertificate, DeleteCertificate, the HTTPS and UserToken groups, PFX, TransactionDiagnostics) and `client gds-pull` against the go server, from open62541, Milo, asyncua, async-opcua and UA-.NETStandard (`TestCertMgmtPushExt_<Peer>Client_GoServer`, `TestGDSPull_<Peer>Client_GoServer`). node-opcua's push client gets the same flags and `client query`.
+- **UA-.NETStandard server:** the Part 9 1.05 alarm methods, dialog, branches, alarm groups and audible sound (`TestDotnetServer_Alarms105`), condition audit events with `--auditing` (`TestDotnetServer_AlarmAudit`), CreateSelfSignedCertificate on an empty certificate slot. UA-.NETStandard 2.0.1 has no handler for TimedShelve2 and Respond2.
+- **UA-.NETStandard GDS 2.0.1:** the ECC CA's CRL is well formed and CheckRevocationStatus reads it (`Bad_CertificateRevoked`); the test no longer reads a malformed CRL.
+- **Push management through each peer's generic `client call`,** condition audit events from node-opcua, UA-.NETStandard PubSub keep-alive and receive timeout, multicast in both directions with UA-.NETStandard (multicast loopback since v0.15.0).
+- **Ledgers:** 97 rows settled from the peer sources and 76 promoted with v0.15.0. Unverified: `coverage.json` 0, async-opcua 0, asyncua 0, UA-.NETStandard 2 (PubSub reader state), node-opcua 4 (no GDS pull client).
+- [docs/interop-gaps.md](docs/interop-gaps.md): the UA-.NETStandard 2.0.1 GDS, a pushed trust list with the 1.5.378 ECC CRL.
+
+---
+
 ## v1.23.1
 
 **Date:** 2026-10-25
@@ -1237,8 +1278,8 @@ Verified four-direction against open62541 and Milo for IndexRange, timestamps, B
 
 | Image | Pin |
 |-------|-----|
-| open62541 | `ghcr.io/otfabric/opcua-interop-open62541@sha256:53c7a184ca9769bab87c6b5335c01322925411894368644913133c0812999283` |
-| Milo | `ghcr.io/otfabric/opcua-interop-milo@sha256:c462f45a5e9b9ce8878788b97c77973832b23861e7ae5d0c6642279f798c15cf` |
+| open62541 | `ghcr.io/otfabric/opcua-interop-open62541@sha256:f2cad1899750433cf99268b59f2c9dd2747f6960d2a3ea1b736b10e77b36c084` |
+| Milo | `ghcr.io/otfabric/opcua-interop-milo@sha256:88cbb7ce46a474fbfeaa7c4ab31b53bb1968e48f5593a1cdcb39c7bcaf53a0e9` |
 
 Digests are fix-forwarded on the same `v0.5.0` tag when opcua-interop requirements change (no RC / `v0.5.1` pins). See [INTEROP.md](INTEROP.md) and [`interop/COVERAGE.md`](interop/COVERAGE.md) for the full matrix. Docs updated in `API.md`, `README.md`, and `docs/*`.
 

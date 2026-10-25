@@ -1268,7 +1268,7 @@ A server application asks for a TLS certificate in the DefaultHttpsGroup
 (`CertificateGroup` of the request, the group's NodeId from
 `GetCertificateGroups`) and reads the issuers of user certificates from the
 trust list of the DefaultUserTokenGroup. The pull model is verified against
-the Global Discovery Server of UA-.NETStandard 1.5.378.
+the Global Discovery Server of UA-.NETStandard 2.0.1.
 
 ---
 

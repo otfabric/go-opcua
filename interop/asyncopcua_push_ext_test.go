@@ -65,22 +65,20 @@ import (
 	"github.com/otfabric/go-opcua/uapolicy"
 )
 
-// requireAsyncOpcuaV015 skips when the async-opcua adapter image does not
-// advertise a capability of opcua-interop v0.15.0 (list: clientOperations
-// or clientFeatures). It skips also under
-// OPCUA_INTEROP_REQUIRE_CAPABILITIES=1: v0.15.0 is not released yet, so the
-// pinned image cannot have it. Once v0.15.0 is pinned, replace it with
-// requireAdapterOp / requireAdapterFeature.
+// requireAsyncOpcuaV015 skips (or fails when REQUIRE_CAPABILITIES=1) when
+// the async-opcua adapter image does not advertise a capability of
+// opcua-interop v0.15.0 (list: clientOperations or clientFeatures).
 func requireAsyncOpcuaV015(t *testing.T, list, capability string) {
 	t.Helper()
 	caps := requireAsyncOpcuaImage(t)
+	requirePinnedVersion(t, asyncOpcuaEnv, caps, defaultAsyncOpcuaImage)
 	have := map[string][]string{
 		"clientOperations": caps.ClientOperations,
 		"clientFeatures":   caps.ClientFeatures,
 	}[list]
 	if !slices.Contains(have, capability) {
-		t.Skipf("the async-opcua adapter (version %s) has no %s %q: added in opcua-interop v0.15.0 (unreleased); "+
-			"set %s to a build of it", caps.Adapter.Version, list, capability, asyncOpcuaEnv)
+		capabilityUnavailable(t, "the async-opcua adapter (version %s) has no %s %q: need opcua-interop v0.15.0; "+
+			"set %s to such an image", caps.Adapter.Version, list, capability, asyncOpcuaEnv)
 	}
 }
 

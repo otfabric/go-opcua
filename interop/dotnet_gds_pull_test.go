@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 // The GDS pull model (Part 12 §6, §7.9) against UA-.NETStandard: the
-// opcua-interop adapter dotnet-gds (opcua-interop v0.14.0, CLIENT_CONTRACT
+// opcua-interop adapter dotnet-gds (opcua-interop v0.15.0, CLIENT_CONTRACT
 // §16) runs the stack's Global Discovery Server and GDS client on
-// OPCFoundation.NetStandard.Opc.Ua.Gds.*.Common 1.5.378.182, the newest
-// release of those packages (the dotnet adapter runs on 2.0.1, which has
-// none).
+// OPCFoundation.NetStandard.Opc.Ua.Gds.Server / .Gds.Client 2.0.1.
 //
 //	go-client-to-dotnet-server   gds.PullClient → GlobalDiscoverySampleServer
 //	dotnet-client-to-go-server   GlobalDiscoveryServerClient (`client gds-pull`) → gdsserver
@@ -24,8 +22,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/x509"
-	"crypto/x509/pkix"
-	"encoding/asn1"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -46,8 +42,8 @@ import (
 const (
 	dotnetGDSEnv = "DOTNET_GDS_IMAGE"
 	// defaultDotnetGDSImage is the dotnet-gds adapter of opcua-interop
-	// v0.14.0, by digest; an opt-in peer until it moves to the pinned peers.
-	defaultDotnetGDSImage = "ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:7c2fc3d697a1bc1c6e5a385d8febdb73fbce67e6b87fd7f2886bb50a0c4de77a"
+	// v0.15.0, by digest; an opt-in peer until it moves to the pinned peers.
+	defaultDotnetGDSImage = "ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:c8f5b05d58a955840aaf819bcd9aeb1af62db8500c5bad360e6c4081ec9f176d"
 
 	// The GDS administrator of the fixture (opcua-interop
 	// fixtures/gds/fixture.json) and of the go GDS.
@@ -57,7 +53,7 @@ const (
 
 func init() {
 	optionalPeerImageEnv[dotnetGDSEnv] = true
-	peerInteropVersion[dotnetGDSEnv] = "v0.14.0"
+	peerInteropVersion[dotnetGDSEnv] = "v0.15.0"
 }
 
 // requireDotnetGDS skips (or fails with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1)
@@ -72,12 +68,12 @@ func requireDotnetGDS(t *testing.T, list string) {
 		have = caps.ClientOperations
 	}
 	if !slices.Contains(have, "gds-pull") {
-		capabilityUnavailable(t, "adapter %s (version %s) has no %s gds-pull (opcua-interop v0.14.0 dotnet-gds)", image, caps.Adapter.Version, list)
+		capabilityUnavailable(t, "adapter %s (version %s) has no %s gds-pull (opcua-interop v0.15.0 dotnet-gds)", image, caps.Adapter.Version, list)
 	}
 }
 
 // TestDotnetGDSPull_GoClient_DotnetServer: gds.PullClient against the
-// Global Discovery Server of UA-.NETStandard 1.5.378.
+// Global Discovery Server of UA-.NETStandard 2.0.1.
 func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 	requireDotnetGDS(t, "serverFeatures")
 	h := startSecureAdapterServerIn(t, dotnetGDSEnv, defaultDotnetGDSImage, "dotnet-server",
@@ -236,16 +232,16 @@ func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 		if err != nil {
 			t.Fatalf("reading the TrustList: %v", err)
 		}
-		if !crlsRevoke(tl.TrustedCrls, cert) && !malformedCRLsRevoke(t, tl.TrustedCrls, cert) {
+		if !crlsRevoke(tl.TrustedCrls, cert) {
 			t.Fatalf("no CRL of the trust list revokes the certificate of %s serial %x", cert.Issuer, cert.SerialNumber)
 		}
-		// UA-.NETStandard 1.5.378 checks online and does not read its CRL:
-		// BadCertificateRevocationUnknown (CLIENT_CONTRACT §16.3).
+		// UA-.NETStandard 2.0.1 reads its CRL (1.5.378 checked online only and
+		// answered BadCertificateRevocationUnknown).
 		status, _, err := p.CheckRevocationStatus(ctx, issued)
 		if err != nil {
 			t.Fatalf("CheckRevocationStatus: %v", err)
 		}
-		if status != ua.StatusBadCertificateRevoked && status != ua.StatusBadCertificateRevocationUnknown {
+		if status != ua.StatusBadCertificateRevoked {
 			t.Fatalf("CheckRevocationStatus of a revoked certificate: %v", status)
 		}
 		if err := p.UnregisterApplication(ctx, appID); err != nil {
@@ -288,36 +284,6 @@ func crlsRevoke(crls [][]byte, cert *x509.Certificate) bool {
 			continue
 		}
 		for _, e := range crl.RevokedCertificateEntries {
-			if e.SerialNumber.Cmp(cert.SerialNumber) == 0 {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// malformedCRLsRevoke reports whether a CRL that crypto/x509 refuses lists
-// cert. UA-.NETStandard 1.5.378 signs the CRL of its ECC CA with ECDSA but
-// writes sha256WithRSAEncryption as the signature algorithm of the
-// TBSCertList, which RFC 5280 §5.1.1.2 requires to equal the outer one;
-// x509.ParseRevocationList refuses it ("inner and outer signature algorithm
-// identifiers don't match"). The entries are read from the ASN.1 here.
-func malformedCRLsRevoke(t *testing.T, crls [][]byte, cert *x509.Certificate) bool {
-	t.Helper()
-	for _, b := range crls {
-		if _, err := x509.ParseRevocationList(b); err == nil {
-			continue
-		}
-		var cl pkix.CertificateList //nolint:staticcheck // read without the checks of x509.ParseRevocationList
-		if rest, err := asn1.Unmarshal(b, &cl); err != nil || len(rest) > 0 {
-			continue
-		}
-		if cl.TBSCertList.Issuer.String() != cert.Issuer.ToRDNSequence().String() {
-			continue
-		}
-		t.Logf("the CRL of %s has the inner signature algorithm %v and the outer %v (UA-.NETStandard 1.5.378)",
-			cert.Issuer, cl.TBSCertList.Signature.Algorithm, cl.SignatureAlgorithm.Algorithm)
-		for _, e := range cl.TBSCertList.RevokedCertificates { //nolint:staticcheck // see above
 			if e.SerialNumber.Cmp(cert.SerialNumber) == 0 {
 				return true
 			}
@@ -438,7 +404,7 @@ func decodeB64(t *testing.T, s string) []byte {
 }
 
 // TestDotnetGDSPull_DotnetClient_GoServer: GlobalDiscoveryServerClient of
-// UA-.NETStandard 1.5.378 against gdsserver.
+// UA-.NETStandard 2.0.1 against gdsserver.
 func TestDotnetGDSPull_DotnetClient_GoServer(t *testing.T) {
 	requireDotnetGDS(t, "clientOperations")
 	testGDSPullGoServer(t, dotnetGDSPullClient)
