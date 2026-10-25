@@ -2084,6 +2084,34 @@
       "fixture": "baseline"
     },
     {
+      "capability": "transport.wss",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.wss",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",

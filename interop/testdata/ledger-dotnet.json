@@ -2074,6 +2074,34 @@
       "fixture": "baseline"
     },
     {
+      "capability": "transport.wss",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Transport_WSS",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.wss",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Transport_WSS",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Transport_HTTPS",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Transport_HTTPS",
+      "fixture": "baseline"
+    },
+    {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-dotnet-server",
       "status": "verified",

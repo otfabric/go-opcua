@@ -6430,6 +6430,102 @@
       "status": "not-applicable"
     },
     {
+      "capability": "transport.wss",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no WebSocket or HTTPS transport: UA_ENABLE_WEBSOCKET_SERVER was removed with the 1.4 EventLoop rework and the libwebsockets provider (UA_ENABLE_LWS, arch/posix/eventloop_posix_websocket_lws.c) exists on master only; revisit when a release ships it"
+    },
+    {
+      "capability": "transport.wss",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no server-side HTTPS or WebSocket transport; its client transports (opc-ua-stack/transport-https, transport-websocket) are incubating and not published"
+    },
+    {
+      "capability": "transport.wss",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no WebSocket or HTTPS transport: UA_ENABLE_WEBSOCKET_SERVER was removed with the 1.4 EventLoop rework and the libwebsockets provider (UA_ENABLE_LWS, arch/posix/eventloop_posix_websocket_lws.c) exists on master only; revisit when a release ships it"
+    },
+    {
+      "capability": "transport.wss",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no server-side HTTPS or WebSocket transport; its client transports (opc-ua-stack/transport-https, transport-websocket) are incubating and not published"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no WebSocket or HTTPS transport: UA_ENABLE_WEBSOCKET_SERVER was removed with the 1.4 EventLoop rework and the libwebsockets provider (UA_ENABLE_LWS, arch/posix/eventloop_posix_websocket_lws.c) exists on master only; revisit when a release ships it"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no server-side HTTPS or WebSocket transport; its client transports (opc-ua-stack/transport-https, transport-websocket) are incubating and not published"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "open62541-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no WebSocket or HTTPS transport: UA_ENABLE_WEBSOCKET_SERVER was removed with the 1.4 EventLoop rework and the libwebsockets provider (UA_ENABLE_LWS, arch/posix/eventloop_posix_websocket_lws.c) exists on master only; revisit when a release ships it"
+    },
+    {
+      "capability": "transport.https",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no server-side HTTPS or WebSocket transport; its client transports (opc-ua-stack/transport-https, transport-websocket) are incubating and not published"
+    },
+    {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-open62541-server",
       "status": "verified",
