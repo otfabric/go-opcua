@@ -1558,6 +1558,28 @@
       ]
     },
     {
+      "id": "transport.wss",
+      "title": "opc.wss (Part 6 §7.5, wss-uasc-uabinary): UA Secure Conversation over a TLS WebSocket with the opcua+uacp sub-protocol; session, Read, Write, Browse, GetEndpoints and a subscription",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "transport.https",
+      "title": "opc.https (Part 6 §7.4, https-uabinary): UA Binary requests as HTTPS POSTs (application/octet-stream, OPCUA-SecurityPolicy header); session, Read, Write, Browse, GetEndpoints and a subscription with Publish as a long-polled POST",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "encoding.json.variant",
       "title": "JSON DataEncoding (1.05): built-in scalars, arrays, matrix (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
       "profile": "encoding",

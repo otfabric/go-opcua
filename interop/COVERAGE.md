@@ -297,6 +297,8 @@ Go↔Go tests never earn ✅.
 | Reverse connect: subscription over the reverse connection | ✅ | N/A | ✅ | N/A | C→O: `TestOpen62541Server_ReverseConnect`; O→S: `TestGoServer_Open62541Client_ReverseConnect_Subscribe` |
 | Reverse connect secured (Basic256Sha256, ECC_nistP256, ECC_nistP384) | ✅ | N/A | ✅ | N/A | C→O: `TestOpen62541Server_ReverseConnect_Secure / coverage/transport.reverse-connect.secure/go-client-to-open62541-server/{Basic256Sha256,ECC_nistP256,ECC_nistP384}`; O→S: `TestGoServer_Open62541Client_ReverseConnect_Secure / coverage/transport.reverse-connect.secure/open62541-client-to-go-server/{Basic256Sha256,ECC_nistP256,ECC_nistP384}` |
 | Multi-chunk messages on secured channels: a ByteString of about 200 KB (sized to the server's limits) written and read back over Basic256Sha256 and Aes256_Sha256_RsaPss SignAndEncrypt, request and response in several chunks (go-opcua client) | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ChunkedSecureMessages`; C→M: `TestMiloServer_ChunkedSecureMessages` |
+| opc.wss (Part 6 §7.5, wss-uasc-uabinary): UA Secure Conversation over a TLS WebSocket with the opcua+uacp sub-protocol; session, Read, Write, Browse, GetEndpoints and a subscription | N/A | N/A | N/A | N/A | — |
+| opc.https (Part 6 §7.4, https-uabinary): UA Binary requests as HTTPS POSTs (application/octet-stream, OPCUA-SecurityPolicy header); session, Read, Write, Browse, GetEndpoints and a subscription with Publish as a long-polled POST | N/A | N/A | N/A | N/A | — |
 
 ## view
 
