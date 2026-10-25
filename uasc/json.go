@@ -75,6 +75,12 @@ func EncodeServiceMessageJSON(v any, namespaces []string) ([]byte, error) {
 // the namespace URIs of NodeIds are looked up in. The errors wrap
 // ua.StatusBadDecodingError, or ua.StatusBadServiceUnsupported for a message
 // that is not a service request or response.
+//
+// The compact form leaves out the fields that have their default value, and
+// a decoded message has no value for them: a structure or a NodeId that was
+// left out is nil. The message is therefore completed the way the UA Binary
+// decoder fills in every field, by passing it through UA Binary, so that the
+// services see the same message whatever the encoding.
 func DecodeServiceMessageJSON(b []byte, namespaces []string) (any, error) {
 	var x *ua.ExtensionObject
 	if err := ua.DecodeJSON(b, &x, ua.WithNamespaceArray(namespaces)); err != nil {
@@ -86,7 +92,15 @@ func DecodeServiceMessageJSON(b []byte, namespaces []string) (any, error) {
 	if ua.ServiceTypeID(x.Value) == 0 {
 		return nil, fmt.Errorf("%w: %T is not a service message", ua.StatusBadServiceUnsupported, x.Value)
 	}
-	return x.Value, nil
+	bin, err := EncodeServiceMessage(x.Value)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %T: %v", ua.StatusBadDecodingError, x.Value, err)
+	}
+	_, v, err := ua.DecodeService(bin)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %T: %v", ua.StatusBadDecodingError, x.Value, err)
+	}
+	return v, nil
 }
 
 // NewWebSocketJSONChannel returns a client channel to an opc.wss endpoint

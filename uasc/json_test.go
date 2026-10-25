@@ -56,6 +56,16 @@ func TestServiceMessageJSON(t *testing.T) {
 		require.Equal(t, uint32(3), v.(*ua.ReadRequest).RequestHeader.RequestHandle)
 	}
 
+	// What the compact form leaves out is filled in as by the binary
+	// decoder.
+	v, err = DecodeServiceMessageJSON([]byte(`{"UaTypeId":"i=631","NodesToRead":[{}]}`), nil)
+	require.NoError(t, err)
+	got = v.(*ua.ReadRequest)
+	require.NotNil(t, got.RequestHeader)
+	require.NotNil(t, got.RequestHeader.AuthenticationToken)
+	require.NotNil(t, got.NodesToRead[0].NodeID)
+	require.NotNil(t, got.NodesToRead[0].DataEncoding)
+
 	// A fault encodes like any other response.
 	b, err = EncodeServiceMessageJSON(&ua.ServiceFault{ResponseHeader: &ua.ResponseHeader{RequestHandle: 1, ServiceResult: ua.StatusBadDecodingError}}, nil)
 	require.NoError(t, err)
