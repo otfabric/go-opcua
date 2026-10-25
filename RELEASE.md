@@ -1,5 +1,45 @@
 # go-opcua Releases
 
+## v1.20.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.19.0
+
+### Summary
+
+The last parts of Alarms & Conditions (Part 9 v1.05): OnDelay / OffDelay, re-alarming, AudibleSound, FirstInGroup and AlarmMetrics, with an injectable clock for the alarm timers.
+
+### Added
+
+- **server: OnDelay / OffDelay.** An activation, or a return to normal, is reported only once it has lasted the delay. A shorter excursion is never reported, and an activation during OffDelay cancels the return to normal. `ConditionState.PendingActive` and `PendingInactive` show a running delay.
+- **server: ReAlarmTime / ReAlarmRepeatCount.** An alarm that stays active is annunciated again and counted. It then needs a new acknowledgement, its silence ends, it latches, and it gets a branch when `Branching` is on.
+- **server: AudibleEnabled and AudibleSound** (AudioVariableType) with `ConditionConfig.AudibleSound` and `ConditionUpdate.AudibleEnabled`.
+- **server: FirstInGroupFlag and the FirstInGroup object** with `ConditionConfig.FirstInGroup`.
+- **server: AlarmMetricsType** (`Server.AddAlarmMetrics`, `AlarmMetrics`, `RemoveAlarmMetrics`), for the whole server or one alarm group:
+  - alarm count and start time;
+  - maximum active time, maximum unacknowledged time and maximum re-alarm count;
+  - current, maximum and average alarm rates;
+  - a Reset method, audited.
+- **server: `WithAlarmClock`.** An injectable clock (`server.Clock`) for the shelving, delay and re-alarm timers.
+- **client:**
+  - `ReadAlarmMetrics` and `ResetAlarmMetrics`.
+  - `ConditionEvent` reports AudibleEnabled, ReAlarmRepeatCount and FirstInGroupFlag. Event lists without these fields still parse.
+
+### Changed
+
+- **server: an alarm annunciated again while it is still unacknowledged or unconfirmed keeps the transition time of its AckedState and ConfirmedState.** The unacknowledged time is therefore counted from the first annunciation. When the occurrence moves to a branch, the new occurrence starts fresh.
+
+### Tests
+
+- Unit, e2e and conformance tests on a manual clock, without sleeps. The chaos test drives concurrent activations, clock advances, acknowledgements, silencing and metrics resets while connections drop.
+- Interop: the open62541, Eclipse Milo, UA-.NETStandard, node-opcua, asyncua and async-opcua clients against the Go server. New ledger capabilities: `alarms.alarm-timing`, `alarms.audible-sound`, `alarms.first-in-group` and `alarms.alarm-metrics`.
+
+### Interop
+
+- opcua-interop v0.13.0 (unchanged).
+
+---
+
 ## v1.19.0
 
 **Date:** 2026-10-25
