@@ -6,6 +6,7 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -271,15 +272,9 @@ func optionConstructors(t *testing.T, dir string) []string {
 func testFunctionCalls(t *testing.T) map[string]map[string]bool {
 	t.Helper()
 	fset := token.NewFileSet()
-	entries, err := os.ReadDir(".")
-	require.NoError(t, err)
-
 	out := map[string]map[string]bool{}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
-			continue
-		}
-		file, err := parser.ParseFile(fset, e.Name(), nil, parser.SkipObjectResolution)
+	for _, name := range conformanceTestFiles(t) {
+		file, err := parser.ParseFile(fset, name, nil, parser.SkipObjectResolution)
 		require.NoError(t, err)
 		for _, decl := range file.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
@@ -301,22 +296,39 @@ func testFunctionCalls(t *testing.T) map[string]map[string]bool {
 	return out
 }
 
-// readPackageTestSource concatenates the source of every _test.go file in this
-// directory so coverage can be detected by simple reference scanning.
+// readPackageTestSource concatenates the source of every _test.go file of the
+// conformance packages so coverage can be detected by simple reference
+// scanning.
 func readPackageTestSource(t *testing.T) string {
 	t.Helper()
-	entries, err := os.ReadDir(".")
-	require.NoError(t, err)
-
 	var b strings.Builder
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), "_test.go") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(".", e.Name()))
+	for _, name := range conformanceTestFiles(t) {
+		data, err := os.ReadFile(name)
 		require.NoError(t, err)
 		b.Write(data)
 		b.WriteByte('\n')
 	}
 	return b.String()
+}
+
+// conformanceTestFiles returns the _test.go files of this package and of the
+// conformance packages below it (split off to keep every package within the
+// CI time limit), which together are the suite the matrix tests check.
+func conformanceTestFiles(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	err := filepath.WalkDir(".", func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && path != "." && strings.HasPrefix(d.Name(), "testdata") {
+			return filepath.SkipDir
+		}
+		if !d.IsDir() && strings.HasSuffix(path, "_test.go") {
+			names = append(names, path)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	return names
 }

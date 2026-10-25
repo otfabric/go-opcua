@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package conformance
+package alarms
 
 import (
 	"context"

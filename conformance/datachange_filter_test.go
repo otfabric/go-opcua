@@ -865,18 +865,3 @@ func writeDouble(t *testing.T, c *opcua.Client, id *ua.NodeID, v float64) {
 	require.NoError(t, err)
 	require.Equal(t, ua.StatusOK, st)
 }
-
-// pendingValues returns the values of the samples for handle that were
-// received on ch (through awaitValue) but not claimed yet.
-func pendingValues(ch <-chan *opcua.PublishNotificationData, handle uint32) []any {
-	b := bufferFor(ch)
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	var out []any
-	for _, s := range b.pending {
-		if s.handle == handle {
-			out = append(out, s.dv.Value.Value())
-		}
-	}
-	return out
-}

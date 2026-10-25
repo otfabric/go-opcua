@@ -15,6 +15,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -834,17 +835,17 @@ func TestAEAD_DiscoveryRegistration(t *testing.T) {
 			ua.SecurityPolicyURIECCNistP256AesGcm},
 	} {
 		// One after the other: two of the registrants share an application URI.
-		var log registrationLog
+		var log conformkit.RegistrationLog
 		opts := append([]server.RegistrationOption{
-			server.RegisterEventHandler(log.handle),
+			server.RegisterEventHandler(log.Handle),
 			server.RegisterRequestTimeout(30 * time.Second),
 		}, tt.extra...)
 		a, _ := newServer(t,
 			server.ApplicationIdentity(tt.identity.cert, tt.identity.key),
 			server.WithDiscoveryRegistration(ldsURL, opts...),
 		)
-		eventually(t, func() bool { return log.count(registered) > 0 }, tt.name+": registers with the LDS")
-		ev := log.snapshot()[0]
+		eventually(t, func() bool { return log.Count(conformkit.Registered) > 0 }, tt.name+": registers with the LDS")
+		ev := log.Snapshot()[0]
 		require.Equal(t, tt.policy, ev.SecurityPolicyURI, tt.name)
 		require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, ev.SecurityMode, tt.name)
 		require.Contains(t, registeredHere(), tt.uri, tt.name)
@@ -859,18 +860,18 @@ func TestAEAD_DiscoveryRegistration(t *testing.T) {
 		server.EnableSecurity(ua.SecurityPolicyURIECCCurve25519, ua.MessageSecurityModeSignAndEncrypt),
 		server.WithLocalDiscoveryServer(),
 	)
-	var log registrationLog
+	var log conformkit.RegistrationLog
 	a, _ := newServer(t,
 		server.ApplicationIdentity(ecc.client[curveP256].cert, ecc.client[curveP256].key),
 		server.WithDiscoveryRegistration(onlyURL,
-			server.RegisterEventHandler(log.handle),
+			server.RegisterEventHandler(log.Handle),
 			server.RegisterBackoff(10*time.Millisecond, 50*time.Millisecond),
 		),
 	)
 	eventually(t, func() bool {
-		return log.count(func(e server.RegistrationEvent) bool { return e.Err != nil }) > 0
+		return log.Count(func(e server.RegistrationEvent) bool { return e.Err != nil }) > 0
 	}, "the registration fails")
-	require.ErrorIs(t, log.snapshot()[0].Err, ua.StatusBadSecurityModeRejected)
+	require.ErrorIs(t, log.Snapshot()[0].Err, ua.StatusBadSecurityModeRejected)
 	require.Empty(t, only.RegisteredServers())
 	require.NoError(t, a.Close())
 }

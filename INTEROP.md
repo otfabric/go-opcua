@@ -700,7 +700,7 @@ Profile `certificate-management`: `certmgmt.push.trust-list`, `.certificate-upda
 
 ### GDS pull model (Part 12 §6, §7.9)
 
-Profiles `discovery` and `certificate-management`: `gds.pull.directory`, `gds.pull.certificate-request`, `gds.pull.trust-list`, `gds.pull.revocation`. No peer of the matrix has a Global Discovery Server or a GDS pull client in the versions tested (open62541 1.5.9 and node-opcua 2.187 implement the push model only; UA-.NETStandard's GDS packages have no 2.0.1 release), so every row is `unverified` (`peer-capability-unknown` for the peer servers, `adapter-command-missing` for the UA-.NETStandard server and every peer client). The go side is covered by `conformance/gds_pull_test.go` (the address space and a request lifecycle over the wire), `gds/pull_test.go` (an enrolled server and client connect) and `chaos/gdspull`.
+Profiles `discovery` and `certificate-management`: `gds.pull.directory`, `gds.pull.certificate-request`, `gds.pull.trust-list`, `gds.pull.revocation`. No peer of the matrix has a Global Discovery Server or a GDS pull client in the versions tested (open62541 1.5.9 and node-opcua 2.187 implement the push model only; UA-.NETStandard's GDS packages have no 2.0.1 release), so every row is `unverified` (`peer-capability-unknown` for the peer servers, `adapter-command-missing` for the UA-.NETStandard server and every peer client). The go side is covered by `conformance/certmgmt/gds_pull_test.go` (the address space and a request lifecycle over the wire), `gds/pull_test.go` (an enrolled server and client connect) and `chaos/gdspull`.
 
 ### Remaining gaps (summary)
 
