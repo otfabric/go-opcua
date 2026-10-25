@@ -283,7 +283,9 @@ func TestSubscriptionStats(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = sub.Cancel(ctx) })
 
-	_, err = sub.Stats(ctx)
-	// The test server does not expose SubscriptionDiagnosticsArray as a readable value.
-	require.Error(t, err)
+	// The server exposes its SubscriptionDiagnosticsArray.
+	st, err := sub.Stats(ctx)
+	require.NoError(t, err)
+	require.Equal(t, sub.SubscriptionID, st.SubscriptionID)
+	require.Equal(t, uint32(1), st.MonitoredItemCount)
 }

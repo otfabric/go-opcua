@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -61,6 +62,9 @@ type Server struct {
 	status     *ua.ServerStatusDataType
 	endpoints  []*ua.EndpointDescription
 	namespaces []NameSpace
+	// nsView is the namespaces for readers that do not take mu (Node):
+	// AddNamespace publishes a new slice, it never changes one in place.
+	nsView atomic.Pointer[[]NameSpace]
 
 	l  *uacp.Listener
 	wl *uacp.Listener // opc.wss, nil without WebSocket endpoints
@@ -106,6 +110,9 @@ type Server struct {
 
 	// ps is the PubSub runtime and its information model (pubsub.go).
 	ps pubsubState
+
+	// diag holds the server diagnostics (diagnostics.go).
+	diag *serverDiagnostics
 }
 
 type serverConfig struct {
@@ -169,6 +176,10 @@ type serverConfig struct {
 	pubsub *pubsubConfig
 	// pubsubAuth authorises the PubSub configuration methods.
 	pubsubAuth PubSubAuthorizer
+
+	// diagnosticsOff starts the server with EnabledFlag false
+	// (WithServerDiagnostics).
+	diagnosticsOff bool
 }
 
 var capabilities = ServerCapabilities{
@@ -281,6 +292,7 @@ func New(opts ...Option) (*Server, error) {
 		},
 	}
 
+	s.publishNamespaces()
 	s.disc = newDiscoveryManager(s)
 	s.registerAlarmMethods()
 
@@ -329,6 +341,11 @@ func New(opts ...Option) (*Server, error) {
 	for _, n := range ServerCapabilitiesNodes(s) {
 		s.namespaces[0].AddNode(n)
 	}
+
+	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
+	s.diag.bind()
+	s.sb.idNamespace = s.diag.sessionNamespace
+	s.sb.removed = s.diag.sessionRemoved
 
 	return s, nil
 }
@@ -381,6 +398,8 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 	}
 	s.disc = newDiscoveryManager(s)
 	s.registerAlarmMethods()
+	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
+	s.sb.removed = s.diag.sessionRemoved
 	return s, nil
 }
 
@@ -434,7 +453,8 @@ func (s *Server) AddNamespace(ns NameSpace) int {
 		return idx
 	}
 	ns.SetID(uint16(len(s.namespaces)))
-	s.namespaces = append(s.namespaces, ns)
+	s.namespaces = append(slices.Clip(s.namespaces), ns)
+	s.publishNamespaces()
 
 	// Give NodeNameSpace instances their server back-reference so that
 	// Browse, ChangeNotification and SetAttribute can call s.cfg.logger,
@@ -870,10 +890,27 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 	return ep
 }
 
+// publishNamespaces makes s.namespaces the view of Node. It is called with
+// mu held, or before the server is shared.
+func (s *Server) publishNamespaces() {
+	view := s.namespaces
+	s.nsView.Store(&view)
+}
+
+// ns0 returns namespace 0 without taking mu.
+func (s *Server) ns0() NameSpace {
+	return (*s.nsView.Load())[0]
+}
+
 func (s *Server) Node(nid *ua.NodeID) *Node {
+	v := s.nsView.Load()
+	if v == nil {
+		return nil
+	}
+	namespaces := *v
 	ns := int(nid.Namespace())
-	if ns < len(s.namespaces) {
-		return s.namespaces[ns].Node(nid)
+	if ns < len(namespaces) {
+		return namespaces[ns].Node(nid)
 	}
 	return nil
 }

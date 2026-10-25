@@ -64,7 +64,7 @@ func (s *Server) ownNode(nid uint32) *Node {
 		rolePermissions: n.rolePermissions,
 	}
 	n.mu.RUnlock()
-	return s.namespaces[0].AddNode(cp)
+	return s.ns0().AddNode(cp)
 }
 
 func hasForwardRef(n *Node, target *ua.NodeID, refType uint32) bool {

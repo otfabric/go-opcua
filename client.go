@@ -1578,6 +1578,15 @@ func (c *Client) DetachSession(ctx context.Context) (*Session, error) {
 func (c *Client) Send(ctx context.Context, req ua.Request, h func(ua.Response) error) error {
 	stats.Client().Add("Send", 1)
 
+	if c.wantsDiagnostics(req) {
+		hd, rh := c.prepareDiagnostics(req, h)
+		return serviceError(c.sendRetry(ctx, req, hd), rh)
+	}
+	return c.sendRetry(ctx, req, h)
+}
+
+// sendRetry sends the request and retries it per the RetryPolicy.
+func (c *Client) sendRetry(ctx context.Context, req ua.Request, h func(ua.Response) error) error {
 	err := c.doSend(ctx, req, h)
 	if err == nil {
 		return nil

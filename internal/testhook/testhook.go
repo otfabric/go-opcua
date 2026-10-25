@@ -17,6 +17,9 @@ type ServerResources struct {
 	Subscriptions int
 	// MonitoredItems is the number of live monitored items.
 	MonitoredItems int
+	// DiagnosticsSessionObjects is the number of SessionDiagnosticsObjects
+	// (Server.ServerDiagnostics.SessionsDiagnosticsSummary).
+	DiagnosticsSessionObjects int
 }
 
 // ServerResourcesOf returns the resource snapshot of a *server.Server. It is

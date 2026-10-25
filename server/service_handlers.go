@@ -143,7 +143,9 @@ func (s *Server) serve(ctx context.Context, sc *uasc.SecureChannel, reqID uint32
 
 	typeID := ua.ServiceTypeID(req)
 	h, ok := s.handlers[typeID]
-	if status := s.checkSession(req); ok && status != ua.StatusOK {
+	sess, status := s.checkSession(req)
+	before := s.diag.beforeRequest(req)
+	if ok && status != ua.StatusOK {
 		// The service needs an activated session and the request has none.
 		err = status
 	} else if ok {
@@ -164,12 +166,18 @@ func (s *Server) serve(ctx context.Context, sc *uasc.SecureChannel, reqID uint32
 		}
 	}
 
+	s.diag.afterRequest(sc, typeID, req, sess, resp, err, before)
+
 	if err != nil {
 		if statusCode, ok := err.(ua.StatusCode); ok {
 			resp = &ua.ServiceFault{ResponseHeader: responseHeader(0, statusCode)}
 		} else {
 			resp = &ua.ServiceFault{ResponseHeader: responseHeader(0, ua.StatusBadUnexpectedError)}
 		}
+	}
+	if resp != nil {
+		addDiagnostics(req, resp)
+		s.diag.publishResponse(resp)
 	}
 
 	return resp
@@ -215,6 +223,7 @@ func (s *Server) sendPublishResponse(sc *uasc.SecureChannel, reqID uint32, resp 
 	if sc == nil {
 		return errChannelGone
 	}
+	s.diag.publishResponse(resp)
 	if w := s.channelWriter(sc); w != nil {
 		return w.sendUnslotted(reqID, resp)
 	}
@@ -253,28 +262,31 @@ func logPanic(l *slog.Logger, what string, r any, args ...any) {
 // authenticating (CreateSession without ActivateSession, or no session at
 // all), and a request carrying the token of a session that was closed or
 // has timed out keeps being served.
-func (s *Server) checkSession(req ua.Request) ua.StatusCode {
+//
+// It returns the activated session of the request, nil for the services
+// that need none.
+func (s *Server) checkSession(req ua.Request) (*session, ua.StatusCode) {
 	switch req.(type) {
 	case *ua.FindServersRequest, *ua.FindServersOnNetworkRequest, *ua.GetEndpointsRequest,
 		*ua.RegisterServerRequest, *ua.RegisterServer2Request,
 		*ua.CreateSessionRequest, *ua.ActivateSessionRequest, *ua.CloseSessionRequest:
 		// CloseSession is allowed for a session that was never activated;
 		// its handler validates the token.
-		return ua.StatusOK
+		return nil, ua.StatusOK
 	}
 
 	hdr := req.Header()
 	if hdr == nil || hdr.AuthenticationToken == nil {
-		return ua.StatusBadSessionIDInvalid
+		return nil, ua.StatusBadSessionIDInvalid
 	}
 	sess := s.sb.Session(hdr.AuthenticationToken)
 	if sess == nil {
-		return ua.StatusBadSessionIDInvalid
+		return nil, ua.StatusBadSessionIDInvalid
 	}
 	if !sess.activated.Load() {
-		return ua.StatusBadSessionNotActivated
+		return nil, ua.StatusBadSessionNotActivated
 	}
-	return ua.StatusOK
+	return sess, ua.StatusOK
 }
 
 func responseHeader(reqID uint32, statusCode ua.StatusCode) *ua.ResponseHeader {

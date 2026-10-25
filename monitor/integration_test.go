@@ -164,9 +164,10 @@ func TestNodeMonitor_SetMonitoringModeAndStats(t *testing.T) {
 	require.NoError(t, sub.SetMonitoringMode(ctx, ua.MonitoringModeDisabled, items[0]))
 	require.NoError(t, sub.SetMonitoringMode(ctx, ua.MonitoringModeReporting, items[0]))
 
-	_, err = sub.Stats(ctx)
-	require.Error(t, err)
+	st, err := sub.Stats(ctx)
+	require.NoError(t, err)
 	require.NotZero(t, sub.SubscriptionID())
+	require.Equal(t, sub.SubscriptionID(), st.SubscriptionID)
 }
 
 func TestNodeMonitor_StringNodeHelpers(t *testing.T) {

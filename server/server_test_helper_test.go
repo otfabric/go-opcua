@@ -71,6 +71,7 @@ func newTestServer() *Server {
 		ns0.m[k] = v
 	}
 	s.namespaces = []NameSpace{ns0}
+	s.publishNamespaces()
 
 	// initHandlers is normally called by Start().
 	// We need SubscriptionService and MonitoredItemService

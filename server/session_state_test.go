@@ -27,15 +27,15 @@ func TestCheckSessionRequiresActivatedSession(t *testing.T) {
 	}
 
 	// no session at all
-	if got := s.checkSession(read(ua.NewTwoByteNodeID(0))); got != ua.StatusBadSessionIDInvalid {
+	if got := checkSessionStatus(s, read(ua.NewTwoByteNodeID(0))); got != ua.StatusBadSessionIDInvalid {
 		t.Errorf("request without a session: got %v, want BadSessionIdInvalid", got)
 	}
-	if got := s.checkSession(&ua.ReadRequest{}); got != ua.StatusBadSessionIDInvalid {
+	if got := checkSessionStatus(s, &ua.ReadRequest{}); got != ua.StatusBadSessionIDInvalid {
 		t.Errorf("request without a header: got %v, want BadSessionIdInvalid", got)
 	}
 
 	// created but not activated
-	if got := s.checkSession(read(sess.AuthTokenID)); got != ua.StatusBadSessionNotActivated {
+	if got := checkSessionStatus(s, read(sess.AuthTokenID)); got != ua.StatusBadSessionNotActivated {
 		t.Errorf("request on a session that was not activated: got %v, want BadSessionNotActivated", got)
 	}
 
@@ -49,7 +49,7 @@ func TestCheckSessionRequiresActivatedSession(t *testing.T) {
 		&ua.CreateSubscriptionRequest{RequestHeader: header(sess.AuthTokenID)},
 		&ua.PublishRequest{RequestHeader: header(sess.AuthTokenID)},
 	} {
-		if got := s.checkSession(req); got != ua.StatusOK {
+		if got := checkSessionStatus(s, req); got != ua.StatusOK {
 			t.Errorf("%T on an activated session: got %v", req, got)
 		}
 	}
@@ -58,7 +58,7 @@ func TestCheckSessionRequiresActivatedSession(t *testing.T) {
 	if err := s.sb.Close(sess.AuthTokenID); err != nil {
 		t.Fatal(err)
 	}
-	if got := s.checkSession(read(sess.AuthTokenID)); got != ua.StatusBadSessionIDInvalid {
+	if got := checkSessionStatus(s, read(sess.AuthTokenID)); got != ua.StatusBadSessionIDInvalid {
 		t.Errorf("request on a closed session: got %v, want BadSessionIdInvalid", got)
 	}
 
@@ -70,7 +70,7 @@ func TestCheckSessionRequiresActivatedSession(t *testing.T) {
 		&ua.ActivateSessionRequest{RequestHeader: header(nil)},
 		&ua.CloseSessionRequest{RequestHeader: header(nil)},
 	} {
-		if got := s.checkSession(req); got != ua.StatusOK {
+		if got := checkSessionStatus(s, req); got != ua.StatusOK {
 			t.Errorf("%T without a session: got %v, want Good", req, got)
 		}
 	}
@@ -201,4 +201,10 @@ func TestExpiredSubscriptionIsAnnouncedOnNextPublish(t *testing.T) {
 	if _, err := ss.Publish(context.Background(), nil, req, 2); err != ua.StatusBadNoSubscription {
 		t.Fatalf("second Publish: %v, want BadNoSubscription", err)
 	}
+}
+
+// checkSessionStatus returns the status of Server.checkSession.
+func checkSessionStatus(s *Server, req ua.Request) ua.StatusCode {
+	_, st := s.checkSession(req)
+	return st
 }

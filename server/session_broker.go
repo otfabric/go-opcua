@@ -62,6 +62,9 @@ type session struct {
 	// handlers and the session reaper.
 	lastActivity atomic.Int64
 	timeout      atomic.Int64
+
+	// diag holds the diagnostics of the session (diagnostics.go).
+	diag sessionDiag
 }
 
 // pendingStatusChange is a StatusChangeNotification waiting for a Publish
@@ -159,6 +162,12 @@ type sessionBroker struct {
 	// being handled then (the dispatcher is not waited for) gets a session
 	// that the broker does not keep: nothing would ever remove it.
 	closed bool
+
+	// idNamespace returns the namespace of new SessionIds (nil: 1), and
+	// removed is told about every session the broker forgets, after it
+	// released its lock (see serverDiagnostics).
+	idNamespace func() uint16
+	removed     func(s *session, timedOut bool)
 }
 
 func newSessionBroker(l *slog.Logger) *sessionBroker {
@@ -184,11 +193,16 @@ func newAuthenticationToken() *ua.NodeID {
 }
 
 func (sb *sessionBroker) NewSession() *session {
+	ns := uint16(1)
+	if sb.idNamespace != nil {
+		ns = sb.idNamespace()
+	}
 	s := &session{
-		ID:              ua.NewGUIDNodeID(1, uuid.New().String()),
+		ID:              ua.NewGUIDNodeID(ns, uuid.New().String()),
 		AuthTokenID:     newAuthenticationToken(),
 		PublishRequests: make(chan PubReq, 100),
 	}
+	s.diag.created = time.Now()
 	s.touch()
 
 	sb.mu.Lock()
@@ -202,14 +216,45 @@ func (sb *sessionBroker) NewSession() *session {
 
 func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
 	sb.mu.Lock()
-	defer sb.mu.Unlock()
-
-	if sb.s[authToken.String()] == nil {
+	s := sb.s[authToken.String()]
+	if s == nil {
 		sb.logger.Warn("sessionBroker.Close: error looking up session", "auth_token", authToken)
 	}
 	delete(sb.s, authToken.String())
+	sb.mu.Unlock()
 
+	if s != nil && sb.removed != nil {
+		sb.removed(s, false)
+	}
 	return nil
+}
+
+// all returns the sessions the broker keeps.
+func (sb *sessionBroker) all() []*session {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	out := make([]*session, 0, len(sb.s))
+	for _, s := range sb.s {
+		out = append(out, s)
+	}
+	return out
+}
+
+// count returns the number of sessions the broker keeps.
+func (sb *sessionBroker) count() int {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return len(sb.s)
+}
+
+// has reports whether the broker keeps the session.
+func (sb *sessionBroker) has(s *session) bool {
+	if s == nil || s.AuthTokenID == nil {
+		return false
+	}
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	return sb.s[s.AuthTokenID.String()] == s
 }
 
 // peek returns the session with the given token without restarting its
@@ -223,9 +268,18 @@ func (sb *sessionBroker) peek(authToken *ua.NodeID) *session {
 // closeAll forgets every session and keeps none from now on.
 func (sb *sessionBroker) closeAll() {
 	sb.mu.Lock()
-	defer sb.mu.Unlock()
+	gone := make([]*session, 0, len(sb.s))
+	for _, s := range sb.s {
+		gone = append(gone, s)
+	}
 	clear(sb.s)
 	sb.closed = true
+	sb.mu.Unlock()
+	if sb.removed != nil {
+		for _, s := range gone {
+			sb.removed(s, false)
+		}
+	}
 }
 
 // reopen makes the broker keep sessions again. It is called when the server
@@ -279,13 +333,18 @@ func (sb *sessionBroker) touchToken(authToken *ua.NodeID) {
 // without CloseSession (crash, network loss) leaks its session forever.
 func (sb *sessionBroker) reapExpired(now time.Time) []*session {
 	sb.mu.Lock()
-	defer sb.mu.Unlock()
-
 	var expired []*session
 	for k, s := range sb.s {
 		if s.expired(now) {
 			expired = append(expired, s)
 			delete(sb.s, k)
+		}
+	}
+	sb.mu.Unlock()
+
+	if sb.removed != nil {
+		for _, s := range expired {
+			sb.removed(s, true)
 		}
 	}
 	return expired

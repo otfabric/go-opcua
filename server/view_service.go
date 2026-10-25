@@ -55,19 +55,17 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 		},
 		Results: make([]*ua.BrowseResult, len(req.NodesToBrowse)),
 
-		DiagnosticInfos: []*ua.DiagnosticInfo{{}},
+		DiagnosticInfos: []*ua.DiagnosticInfo{},
 	}
 
 	maxRefs := req.RequestedMaxReferencesPerNode
 
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
-	ac := s.srv.cfg.accessController
-
 	for i := range req.NodesToBrowse {
 		br := req.NodesToBrowse[i]
 		s.srv.cfg.logger.Debug("browse", "node_id", br.NodeID)
 
-		if sc := ac.CheckBrowse(context.Background(), sess, br.NodeID); sc != ua.StatusOK {
+		if sc := s.srv.checkBrowse(context.Background(), sess, br.NodeID); sc != ua.StatusOK {
 			resp.Results[i] = &ua.BrowseResult{StatusCode: sc}
 			continue
 		}
@@ -86,6 +84,7 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 		}
 
 		result := ns.Browse(br)
+		s.srv.diag.filterBrowse(sess, br.NodeID, result)
 
 		// Apply continuation point logic when maxRefs > 0 and there are more refs.
 		if maxRefs > 0 && uint32(len(result.References)) > maxRefs {
