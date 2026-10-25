@@ -1107,7 +1107,7 @@ defer gd.Close() // before srv.Close; makes later calls fail with Bad_Shutdown
 | Persistence | `Config.Store` (`gdsserver.Store`): applications, requests, issuers with their keys and CRLs, the trust list additions; `NewMemoryStore` keeps them in memory, `NewFileStore(dir)` in a directory (one JSON file per record, written to a temporary file, synced and renamed; files 0600, directories 0700). A GDS attached again to the same Store continues with its state |
 
 The pull model is verified against the Global Discovery Server and the GDS
-client of UA-.NETStandard 1.5.378 (INTEROP.md).
+client of UA-.NETStandard 2.0.1 (INTEROP.md).
 [examples/gds-pull](../examples/gds-pull/main.go) runs a GDS and enrolls a
 server and a client.
 

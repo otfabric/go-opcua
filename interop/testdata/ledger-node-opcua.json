@@ -1,5 +1,5 @@
 {
-  "interopVersion": "v0.14.0",
+  "interopVersion": "v0.15.0",
   "peer": {
     "stack": "node-opcua",
     "version": "2.187.12"
@@ -1100,11 +1100,9 @@
     {
       "capability": "query.first",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestGoServer_NodeOpcuaClient_Query",
       "case": "coverage/query.first/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -1117,11 +1115,9 @@
     {
       "capability": "query.next",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestGoServer_NodeOpcuaClient_Query",
       "case": "coverage/query.next/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -1336,11 +1332,9 @@
     {
       "capability": "alarms.branches",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestNodeOpcuaServer_AlarmBranches",
       "case": "coverage/alarms.branches/go-client-to-node-opcua-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -1400,11 +1394,9 @@
     {
       "capability": "alarms.audible-sound",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestNodeOpcuaServer_AlarmAudible",
       "case": "coverage/alarms.audible-sound/go-client-to-node-opcua-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2254,28 +2246,28 @@
       "capability": "transport.wss",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.14.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.15.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.14.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.15.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.14.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.15.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.14.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.15.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
@@ -3031,11 +3023,9 @@
     {
       "capability": "certmgmt.push.create-self-signed",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
       "case": "coverage/certmgmt.push.create-self-signed/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3049,11 +3039,9 @@
     {
       "capability": "certmgmt.push.delete-certificate",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
       "case": "coverage/certmgmt.push.delete-certificate/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3081,11 +3069,9 @@
     {
       "capability": "certmgmt.push.https-group",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
       "case": "coverage/certmgmt.push.https-group/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3098,11 +3084,9 @@
     {
       "capability": "certmgmt.push.usertoken-group",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
       "case": "coverage/certmgmt.push.usertoken-group/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3116,11 +3100,9 @@
     {
       "capability": "certmgmt.push.pfx",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
       "case": "coverage/certmgmt.push.pfx/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3134,11 +3116,9 @@
     {
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-unreleased",
+      "status": "verified",
       "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
       "case": "coverage/certmgmt.push.transaction-diagnostics/node-opcua-client-to-go-server",
-      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {

@@ -9,7 +9,7 @@ ledger row says `unsupported` with the same reason.
 
 Versions: go-opcua v1.23.0; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 0.19.0, UA-.NETStandard 2.0.1, node-opcua 2.187.12 and opcua-asyncio
-(`asyncua`) 2.1.0, as packaged by opcua-interop v0.14.0.
+(`asyncua`) 2.1.0, as packaged by opcua-interop v0.15.0.
 
 ## What go-opcua does not implement
 
@@ -86,13 +86,13 @@ on the side of the application that talks to the peer.
 - Alarms & Conditions: a repeated Acknowledge with the same EventId answers `Bad_ConditionBranchAlreadyAcked`; every method call reports an event with a new Time.
 - PubSub (Opc.Ua.PubSub 2.0.1): an MQTT publisher needs MQTT 5.0 (it sets the MQTT 5 content type on every publication); subscribing works on 3.1.1 too. Its UDP transport sends with TTL 1 unless configured, which also limits unicast, and with IP_MULTICAST_LOOP off (`UdpTransportOptions.MulticastLoopback`): a subscriber on the publisher's host receives none of its multicast unless loopback is turned on. The encoder writes an empty String with length 0 (go-opcua: the null String, length -1), always sets MessageIsValid and drops a DataSetMessage without it; the JSON encoder leaves out the `UaType` the DataSetMetaData implies (go-opcua decodes it since v1.9.0). Discovery answers DataSetMetaData and DataSetWriterConfiguration probes only. No SKS, no PublishSubscribe information model, no Ethernet, no AMQP.
 
-### UA-.NETStandard 1.5.378 (GDS)
+### UA-.NETStandard 2.0.1 (GDS)
 
-The Global Discovery Server and GDS client (Opc.Ua.Gds.*.Common 1.5.378.182, opcua-interop adapter dotnet-gds; the 2.0.1 GDS packages are unreleased):
+The Global Discovery Server and GDS client (Opc.Ua.Gds.Server / .Gds.Client 2.0.1, opcua-interop adapter dotnet-gds; 1.5.378 until opcua-interop v0.15.0):
 
-- The CRL of its ECC CA names sha256WithRSAEncryption inside the TBSCertList and ecdsa-with-SHA256 outside; crypto/x509 (and `uapolicy.ParseRevocationList`) refuse it (RFC 5280 §5.1.1.2). The RSA CA's CRL is well formed. A trust list with that CRL, pushed to a go-opcua server, is refused with `Bad_CertificateInvalid`: leave the ECC CA's CRL out of the trust list (revocation by that CA is then not checked).
-- CheckRevocationStatus checks online and does not read its own CRL: a revoked certificate is `Bad_CertificateRevocationUnknown`.
-- One certificate request per application: a new request reuses the RequestId. UnregisterApplication revokes the application's certificates. FindApplications needs an authenticated user.
+- The server sends its certificate with its issuer (SendCertificateChain defaults to true), which Part 6 allows; the go-opcua client signs over the leaf and accepts the chain. open62541 1.5.9 and async-opcua 0.19.0 clients cannot connect to such a server (CLIENT_CONTRACT §16.3).
+- StartSigningRequest, StartNewKeyPairRequest and FinishRequest need a SignAndEncrypt session, CheckRevocationStatus at least Sign; GetCertificateStatus needs a CA, self or application admin role. FindApplications is open to Anonymous.
+- UnregisterApplication revokes the application's certificates, and CheckRevocationStatus reads the GDS CRL (`Bad_CertificateRevoked`). The ECC CA's CRL is well formed (1.5.378 named sha256WithRSAEncryption inside the TBSCertList).
 - The client reads a TrustList with the MethodIds of FileType (Part 4 §5.11.2.2), which the go-opcua server resolves since v1.22.0.
 
 ### node-opcua 2.187.12
