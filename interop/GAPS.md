@@ -14,7 +14,8 @@ Pinned opcua-interop version: **v0.14.0**
 
 ## Unverified by reason
 
-- `adapter-command-missing`: 34
+- `adapter-command-missing`: 22
+- `adapter-unreleased`: 12
 
 ## Unverified rows
 
@@ -24,34 +25,34 @@ Pinned opcua-interop version: **v0.14.0**
 | `certmgmt.push.access` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.alarms` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.alarms` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.certificate-update` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.certificate-update` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.create-self-signed` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.create-self-signed` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.delete-certificate` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.delete-certificate` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.get-certificates` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.get-certificates` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.https-group` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.https-group` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.pfx` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.pfx` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.rejected-list` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.rejected-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.reset-to-defaults` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.reset-to-defaults` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.transaction-diagnostics` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.transaction-diagnostics` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.trust-list` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.trust-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `certmgmt.push.usertoken-group` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.usertoken-group` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
-| `gds.pull.certificate-request` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
 | `gds.pull.certificate-request` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
-| `gds.pull.directory` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
 | `gds.pull.directory` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
-| `gds.pull.revocation` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
 | `gds.pull.revocation` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
-| `gds.pull.trust-list` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
 | `gds.pull.trust-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
+| `certmgmt.push.certificate-update` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `certmgmt.push.create-self-signed` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `certmgmt.push.delete-certificate` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `certmgmt.push.https-group` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `certmgmt.push.pfx` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `certmgmt.push.transaction-diagnostics` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `certmgmt.push.trust-list` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `certmgmt.push.usertoken-group` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `gds.pull.certificate-request` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `gds.pull.directory` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `gds.pull.revocation` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
+| `gds.pull.trust-list` | M→S | `adapter-unreleased` | verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned |
 
