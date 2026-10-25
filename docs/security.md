@@ -571,10 +571,10 @@ The server supports fine-grained authorization through the `AccessController` in
 
 ```go
 type AccessController interface {
-    CheckRead(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-    CheckWrite(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-    CheckBrowse(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-    CheckCall(ctx context.Context, session *session, methodID *ua.NodeID) ua.StatusCode
+    CheckRead(ctx context.Context, session *server.Session, nodeID *ua.NodeID) ua.StatusCode
+    CheckWrite(ctx context.Context, session *server.Session, nodeID *ua.NodeID) ua.StatusCode
+    CheckBrowse(ctx context.Context, session *server.Session, nodeID *ua.NodeID) ua.StatusCode
+    CheckCall(ctx context.Context, session *server.Session, methodID *ua.NodeID) ua.StatusCode
 }
 ```
 
@@ -582,16 +582,21 @@ type AccessController interface {
 
 ```go
 type RoleBasedAC struct {
+    server.DefaultAccessController // allows Read, Browse and Call
     adminNodes map[string]bool
 }
 
-func (ac *RoleBasedAC) CheckWrite(ctx context.Context, sess *session, nodeID *ua.NodeID) ua.StatusCode {
-    if ac.adminNodes[nodeID.String()] {
-        // Only allow admin sessions to write protected nodes
-        // Check session identity against your authorization backend
-        return ua.StatusBadUserAccessDenied
+func (ac *RoleBasedAC) CheckWrite(ctx context.Context, sess *server.Session, nodeID *ua.NodeID) ua.StatusCode {
+    if !ac.adminNodes[nodeID.String()] {
+        return ua.StatusOK
     }
-    return ua.StatusOK
+    // Only sessions with the SecurityAdmin role write protected nodes.
+    for _, role := range sess.Roles() {
+        if role.Equal(ua.RoleSecurityAdmin.NodeID()) {
+            return ua.StatusOK
+        }
+    }
+    return ua.StatusBadUserAccessDenied
 }
 
 // Apply to server
@@ -602,6 +607,8 @@ s, err := server.New(
     // ... other options
 )
 ```
+
+`server.Session` is the session of the request, nil without one: `ID()`, `Identity()` (the user identity token as the client sent it), `Roles()` (from the `RoleMapper`) and `ClientCertificate()`. It does not expose the AuthenticationToken or the nonces.
 
 The `DefaultAccessController` allows all operations. Override it to enforce your security model.
 

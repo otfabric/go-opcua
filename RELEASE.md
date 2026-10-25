@@ -1,5 +1,43 @@
 # go-opcua Releases
 
+## v1.23.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.22.0
+
+### Summary
+
+Custom access controllers can be written outside package `server`, and the documentation is brought up to date with the stack.
+
+### Changed
+
+- **server: `AccessController` and `EventAccessController` take an exported `*server.Session`.**
+  - They took the unexported `*session`, so no package outside `server` could implement them, although the guides described them as pluggable.
+  - `server.Session` is a read-only handle of the session: `ID`, `Identity`, `Roles` and `ClientCertificate`. It does not expose the AuthenticationToken or the nonces.
+  - A nil `*Session` is a request without a session.
+  - An implementation outside the package needs only the new parameter type; `DefaultAccessController` and `RBACAccessController` are unchanged otherwise.
+
+### Documentation
+
+- **API.md:** a table of contents for every section; signatures checked against the code (methods that do not exist removed); PubSub Actions and AMQP; the remaining server options; `ReportAuditEvent`; `Session`.
+- **README:** interop evidence counts recomputed from the ledgers; `make interop` runs the six pinned peers; GDS and PubSub examples; the conformance packages.
+- **INTEROP.md:** the seven adapters of opcua-interop v0.14.0, an Alarms & Conditions section, push management evidence, current ledger totals.
+- **docs:**
+  - architecture, client and server guides, security, and interop gaps follow the transports, ECC, GDS and diagnostics;
+  - the HTTPS endpoints exclude only the policies with SecureChannelEnhancements.
+- **OBSERVABILITY, CONTRIBUTING, ERRORS:** server diagnostics, audit events, adding an interop capability, and the errors of the server and the GDS.
+
+### Tests
+
+- `conformance/addrspace`: a controller of another package that sees the SessionId, identity and roles of the request.
+- `server`: unit tests of the handle.
+
+### Interop
+
+- opcua-interop v0.14.0 (unchanged).
+
+---
+
 ## v1.22.0
 
 **Date:** 2026-10-25

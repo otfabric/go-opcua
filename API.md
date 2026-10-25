@@ -1927,10 +1927,10 @@ type AttrValue struct {
 
 ```go
 type AccessController interface {
-    CheckRead(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-    CheckWrite(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-    CheckBrowse(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-    CheckCall(ctx context.Context, session *session, methodID *ua.NodeID) ua.StatusCode
+    CheckRead(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
+    CheckWrite(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
+    CheckBrowse(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
+    CheckCall(ctx context.Context, session *Session, methodID *ua.NodeID) ua.StatusCode
 }
 ```
 
@@ -1939,6 +1939,17 @@ to deny.
 
 ```go
 type DefaultAccessController struct{}  // allows all operations
+```
+
+`Session` is the session of the request, read-only; nil without a session
+(its methods then return nil). It does not expose the AuthenticationToken or
+the nonces.
+
+```go
+func (s *Session) ID() *ua.NodeID                 // SessionId
+func (s *Session) Identity() ua.IdentityToken     // as the client sent it; nil before ActivateSession
+func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper; a copy
+func (s *Session) ClientCertificate() []byte      // of CreateSession; a copy
 ```
 
 ---
@@ -2178,7 +2189,7 @@ func (s *Server) Auditing() bool
 // EventAccessController allows
 func (s *Server) ReportAuditEvent(ctx context.Context, ev *BaseEvent, notifiers ...*ua.NodeID) bool
 type EventAccessController interface { // RBACAccessController: ReceiveEvents
-    CheckReceiveEvents(ctx context.Context, session *session, eventType *ua.NodeID) ua.StatusCode
+    CheckReceiveEvents(ctx context.Context, session *Session, eventType *ua.NodeID) ua.StatusCode
 }
 
 type AlarmLimits struct{ HighHigh, High, Low, LowLow *float64 }

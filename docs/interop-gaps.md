@@ -7,7 +7,7 @@ peer entry comes from the interop suite ([INTEROP.md](../INTEROP.md)): the
 test that found it skips with the reason or pins the behaviour, and the
 ledger row says `unsupported` with the same reason.
 
-Versions: go-opcua v1.22.0; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
+Versions: go-opcua v1.23.0; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 0.19.0, UA-.NETStandard 2.0.1, node-opcua 2.187.12 and opcua-asyncio
 (`asyncua`) 2.1.0, as packaged by opcua-interop v0.14.0.
 
