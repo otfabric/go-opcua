@@ -127,7 +127,7 @@ func TestChannelBroker_RenewalIsNotHeldUpByWaitingRequests(t *testing.T) {
 	for _, res := range []<-chan cwResult{first, second} {
 		in, ok := p.cb.ReadMessage(ctx)
 		require.True(t, ok, "the requests are handed to the request handler")
-		require.NoError(t, in.w.send(in.msg.RequestID, &ua.ReadResponse{ResponseHeader: cwHeader(ua.StatusOK), Results: []*ua.DataValue{}}))
+		require.NoError(t, in.w.send(in.reqID, &ua.ReadResponse{ResponseHeader: cwHeader(ua.StatusOK), Results: []*ua.DataValue{}}))
 		r := cwWait(t, res)
 		require.NoError(t, r.err)
 	}
@@ -152,6 +152,6 @@ func TestChannelBroker_RequestsReadBeforeTheEndAreHandled(t *testing.T) {
 	defer cancel()
 	in, ok := p.cb.ReadMessage(ctx)
 	require.True(t, ok, "the request read before the channel ended was dropped")
-	_, isRead := in.msg.Request().(*ua.ReadRequest)
+	_, isRead := in.req.(*ua.ReadRequest)
 	require.True(t, isRead)
 }
