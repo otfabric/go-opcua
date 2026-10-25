@@ -2997,6 +2997,22 @@
       "fixture": "baseline"
     },
     {
+      "capability": "certmgmt.push.delete-certificate",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.delete-certificate",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-asyncua-server",
       "status": "unverified",
