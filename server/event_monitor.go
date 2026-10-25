@@ -3,7 +3,9 @@
 package server
 
 import (
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
@@ -203,7 +205,9 @@ func (s *Server) isKnownEventType(nodeID *ua.NodeID) bool {
 			id.ProgressEventType:
 			return true
 		}
-		return false
+		// Every other event type of namespace 0 (the condition and alarm
+		// types of Part 9, the refresh events, ...).
+		return s != nil && s.isSubtypeOf(nodeID, ua.NewNumericNodeID(0, id.BaseEventType))
 	}
 	// For user-defined namespaces, accept any ObjectType node present in the
 	// address space. This allows custom event subtypes registered via AddNode.
@@ -245,8 +249,12 @@ type BaseEvent struct {
 	Message    *ua.LocalizedText
 	Severity   uint16
 	// Fields holds additional user-defined event properties. Keys match the
-	// BrowsePath name in the client's SelectClause (e.g. "AlarmLevel").
+	// BrowsePath of the client's SelectClause, its names joined with "/"
+	// (e.g. "AlarmLevel", "AckedState/Id").
 	Fields map[string]*ua.Variant
+
+	// conditionID is the ConditionId of a condition event.
+	conditionID *ua.NodeID
 }
 
 // selectEventFields applies SelectClauses to a BaseEvent, returning the event
@@ -254,13 +262,37 @@ type BaseEvent struct {
 func selectEventFields(event *BaseEvent, clauses []*ua.SimpleAttributeOperand) []*ua.Variant {
 	fields := make([]*ua.Variant, len(clauses))
 	for i, clause := range clauses {
-		name := ""
-		if len(clause.BrowsePath) > 0 {
-			name = clause.BrowsePath[0].Name
-		}
-		fields[i] = resolveBaseEventField(event, name)
+		fields[i] = resolveEventClause(event, clause)
 	}
 	return fields
+}
+
+// resolveEventClause resolves a SimpleAttributeOperand against an event. The
+// BrowsePath names are joined with "/" ("AckedState/Id"); an empty
+// BrowsePath with AttributeId NodeId selects the ConditionId of a condition
+// event (Part 9 §5.5.2).
+func resolveEventClause(event *BaseEvent, clause *ua.SimpleAttributeOperand) *ua.Variant {
+	if clause == nil {
+		return ua.MustVariant(nil)
+	}
+	if len(clause.BrowsePath) == 0 && clause.AttributeID == ua.AttributeIDNodeID {
+		if event.conditionID != nil {
+			return ua.MustVariant(event.conditionID)
+		}
+		return ua.MustVariant(nil)
+	}
+	return resolveBaseEventField(event, eventFieldPath(clause.BrowsePath))
+}
+
+// eventFieldPath joins the names of a BrowsePath with "/".
+func eventFieldPath(path []*ua.QualifiedName) string {
+	names := make([]string, len(path))
+	for i, q := range path {
+		if q != nil {
+			names[i] = q.Name
+		}
+	}
+	return strings.Join(names, "/")
 }
 
 func resolveBaseEventField(event *BaseEvent, name string) *ua.Variant {
@@ -404,11 +436,7 @@ func (s *Server) resolveEventOperand(event *BaseEvent, elements []*ua.ContentFil
 	case *ua.LiteralOperand:
 		return v.Value
 	case *ua.SimpleAttributeOperand:
-		name := ""
-		if len(v.BrowsePath) > 0 {
-			name = v.BrowsePath[0].Name
-		}
-		return resolveBaseEventField(event, name)
+		return resolveEventClause(event, v)
 	case *ua.ElementOperand:
 		vv := s.evalEventElement(event, elements, int(v.Index), visiting)
 		return tvlVariant(vv)
@@ -442,64 +470,85 @@ func (s *Server) eventTypeMatches(actual, expected *ua.NodeID) bool {
 // EmitBaseEvent emits a BaseEventType event to all event-monitored items watching nodeID.
 // It applies each item's OfType check and full WhereClause before selecting fields.
 func (s *Server) EmitBaseEvent(nodeID *ua.NodeID, event *BaseEvent) error {
+	s.emitEvent(nodeID, event, false)
+	return nil
+}
+
+// eventDeliveryWait bounds how long the event of a condition waits for room
+// in the event queue of a subscription whose publish loop is busy.
+const eventDeliveryWait = 5 * time.Second
+
+// emitEvent delivers event to the event items watching nodeID. With wait an
+// item whose subscription queue is full is waited for (see deliverToItem).
+func (s *Server) emitEvent(nodeID *ua.NodeID, event *BaseEvent, wait bool) {
 	// PublishedEvents of the PubSub runtime see the event too.
 	s.forwardPubSubEvent(nodeID, event)
 
 	if s.MonitoredItemService == nil || s.eventItems == nil {
-		return nil
+		return
 	}
 
 	s.MonitoredItemService.Mu.Lock()
-	items, ok := s.MonitoredItemService.Nodes[nodeID.String()]
-	if !ok {
-		s.MonitoredItemService.Mu.Unlock()
-		return nil
+	items := s.MonitoredItemService.Nodes[nodeID.String()]
+	targets := make([]*MonitoredItem, 0, len(items))
+	for _, item := range items {
+		// Only items in Reporting mode deliver events.
+		if item != nil && item.Sub != nil && item.Mode == ua.MonitoringModeReporting {
+			targets = append(targets, item)
+		}
 	}
-	targets := make([]*MonitoredItem, len(items))
-	copy(targets, items)
 	s.MonitoredItemService.Mu.Unlock()
 
 	for _, item := range targets {
-		if item == nil || item.Sub == nil {
-			continue
-		}
-		if item.Mode == ua.MonitoringModeDisabled {
-			continue
-		}
+		s.deliverToItem(item, event, false, wait)
+	}
+}
 
-		emi := s.eventItems.get(item.ID)
-		if emi == nil {
-			continue
-		}
-
+// deliverToItem applies the filter of an event item to event and queues the
+// selected fields for its subscription. bypassWhere skips the OfType and
+// WhereClause checks (RefreshStart/RefreshEnd events, Part 9 §5.5.7). A full
+// queue drops the event unless wait is set: then the event waits up to
+// eventDeliveryWait for the publish loop (which drains the queue
+// continuously) or until the subscription ends.
+func (s *Server) deliverToItem(item *MonitoredItem, event *BaseEvent, bypassWhere, wait bool) {
+	emi := s.eventItems.get(item.ID)
+	if emi == nil || item.Sub == nil {
+		return
+	}
+	if !bypassWhere {
 		// Apply OfType filter (fast path from the validated OfTypeNodeID shortcut).
 		if emi.OfTypeNodeID != nil && event.EventType != nil {
 			if !s.eventTypeMatches(event.EventType, emi.OfTypeNodeID) {
-				continue
+				return
 			}
 		}
-
 		// Evaluate the full WhereClause if present (covers comparison operators).
 		if emi.WhereClause != nil && len(emi.WhereClause.Elements) > 0 {
 			if !s.evalEventFilter(event, emi.WhereClause) {
-				continue
-			}
-		}
-
-		fields := selectEventFields(event, emi.SelectClauses)
-		ef := &ua.EventFieldList{
-			ClientHandle: item.Req.RequestedParameters.ClientHandle,
-			EventFields:  fields,
-		}
-
-		if item.Mode == ua.MonitoringModeReporting {
-			select {
-			case item.Sub.EventNotifyChannel <- ef:
-			default:
-				s.cfg.logger.Warn("event channel full, dropping event for monitored item", "id", item.ID)
+				return
 			}
 		}
 	}
 
-	return nil
+	ef := &ua.EventFieldList{
+		ClientHandle: item.Req.RequestedParameters.ClientHandle,
+		EventFields:  selectEventFields(event, emi.SelectClauses),
+	}
+	select {
+	case item.Sub.EventNotifyChannel <- ef:
+		return
+	default:
+	}
+	if wait {
+		t := time.NewTimer(eventDeliveryWait)
+		defer t.Stop()
+		select {
+		case item.Sub.EventNotifyChannel <- ef:
+			return
+		case <-item.Sub.shutdown:
+			return
+		case <-t.C:
+		}
+	}
+	s.cfg.logger.Warn("event channel full, dropping event for monitored item", "id", item.ID)
 }
