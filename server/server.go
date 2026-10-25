@@ -69,6 +69,7 @@ type Server struct {
 	l  *uacp.Listener
 	wl *uacp.Listener // opc.wss, nil without WebSocket endpoints
 	hs *httpsServer   // opc.https, nil without HTTPS endpoints
+	wj *wssJSONServer // opc.wss with opcua+uajson, nil without EnableUAJSON
 	cb *channelBroker
 	sb *sessionBroker
 
@@ -159,6 +160,7 @@ type serverConfig struct {
 	issuedTokenValidator       IssuedTokenValidator
 	clientCertificateValidator ClientCertificateValidator
 	allowUsernameOnNone        bool
+	uajson                     bool
 	metrics                    ServerMetrics
 
 	// lds, multicast and registrations configure the discovery roles of the
@@ -849,12 +851,16 @@ func (s *Server) initEndpoints() {
 	// The opc.tcp endpoints first, then those of opc.wss and opc.https.
 	httpsModes := s.httpsModes()
 	for _, t := range s.transportEndpoints() {
-		isHTTPS := t.profile == ua.TransportProfileHTTPS
+		isHTTPS := t.profile == ua.TransportProfileHTTPS || t.profile == ua.TransportProfileHTTPSJSON
 		for _, sec := range s.cfg.enabledSec {
 			// HTTPS offers a security policy once, with the strongest
 			// mode enabled for it, and only a policy that needs no secure
 			// conversation (Part 6 §7.4.1).
 			if isHTTPS && (!uasc.HTTPSPolicySupported(sec.secPolicy) || httpsModes[sec.secPolicy] != sec.secMode) {
+				continue
+			}
+			// opcua+uajson has no way to name a policy: None only.
+			if t.profile == ua.TransportProfileWSSJSON && (sec.secPolicy != ua.SecurityPolicyURINone || sec.secMode != ua.MessageSecurityModeNone) {
 				continue
 			}
 			for _, url := range t.urls {
@@ -899,10 +905,11 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 			authSecPolicy = "http://opcfoundation.org/UA/SecurityPolicy#None"
 		}
 
-		// Over HTTPS TLS encrypts the token whatever the policy.
+		// Over HTTPS and opcua+uajson, which have no secure
+		// conversation, TLS encrypts the token whatever the policy.
 		if auth.tokenType != ua.UserTokenTypeAnonymous &&
 			authSecPolicy == "http://opcfoundation.org/UA/SecurityPolicy#None" &&
-			!s.cfg.allowUsernameOnNone && profile != ua.TransportProfileHTTPS {
+			!s.cfg.allowUsernameOnNone && !tlsOnly(profile) {
 			continue
 		}
 
