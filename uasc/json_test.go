@@ -319,7 +319,9 @@ func TestWebSocketJSONTimeoutAndCancel(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, <-errc, context.Canceled)
 
-	go func() { errc <- sc.SendRequestWithTimeout(context.Background(), &ua.ReadRequest{}, nil, time.Minute, h) }()
+	go func() {
+		errc <- sc.SendRequestWithTimeout(context.Background(), &ua.ReadRequest{}, nil, time.Minute, h)
+	}()
 	require.Eventually(t, func() bool { return peer.conns.Load() == 3 }, time.Minute, time.Millisecond)
 	require.NoError(t, sc.Close())
 	require.ErrorIs(t, <-errc, errors.ErrSecureChannelClosed)

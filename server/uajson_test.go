@@ -108,10 +108,10 @@ func TestHTTPSJSON(t *testing.T) {
 		status ua.StatusCode
 		handle uint32
 	}{
-		`{"UaTypeId":"i=631","RequestHeader":{"RequestHandle":4},"NodesToRead":7}`: {ua.StatusBadDecodingError, 4},
+		`{"UaTypeId":"i=631","RequestHeader":{"RequestHandle":4},"NodesToRead":7}`:        {ua.StatusBadDecodingError, 4},
 		`{"TypeId":{"Id":631},"Body":{"RequestHeader":{"RequestHandle":5},"MaxAge":"x"}}`: {ua.StatusBadDecodingError, 5},
-		`{"UaTypeId":"i=884","Low":1}`:                                                    {ua.StatusBadServiceUnsupported, 0},
-		`{"UaTypeId":"i=634","ResponseHeader":{"RequestHandle":3}}`:                       {ua.StatusBadServiceUnsupported, 0},
+		`{"UaTypeId":"i=884","Low":1}`:                              {ua.StatusBadServiceUnsupported, 0},
+		`{"UaTypeId":"i=634","ResponseHeader":{"RequestHandle":3}}`: {ua.StatusBadServiceUnsupported, 0},
 		`{`: {ua.StatusBadDecodingError, 0},
 	} {
 		resp, b := postJSON(t, c, url, uasc.HTTPSJSONContentType, "", []byte(doc))

@@ -882,7 +882,9 @@ func (c *Client) httpsClient() *http.Client {
 func (c *Client) dialJSON() error {
 	profile := c.cfg.transportProfile
 	scheme, _, _ := strings.Cut(c.endpointURL, "://")
-	if want := ua.TransportProfileScheme(profile); !strings.EqualFold(scheme, want) && !(want == uasc.SchemeHTTPS && strings.EqualFold(scheme, "https")) {
+	want := ua.TransportProfileScheme(profile)
+	httpsAlias := want == uasc.SchemeHTTPS && strings.EqualFold(scheme, "https")
+	if !strings.EqualFold(scheme, want) && !httpsAlias {
 		return fmt.Errorf("%w: transport profile %s needs an %s endpoint, not %s", errors.ErrInvalidEndpoint, profile, want, c.endpointURL)
 	}
 	errCh := make(chan error, 1)
