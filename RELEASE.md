@@ -1,5 +1,51 @@
 # go-opcua Releases
 
+## v1.19.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.18.0
+
+### Summary
+
+The pull model of certificate management (Part 12 v1.05 §6 and §7.9): a Global Discovery Server that keeps an application directory and issues certificates, and a client that enrolls with it.
+
+### Added
+
+- **gds/gdsserver: a Global Discovery Server.** `Attach(srv, Config)` adds the `Directory` object (CertificateDirectoryType) in the GDS namespace.
+  - Directory: FindApplications, RegisterApplication, UpdateApplication, UnregisterApplication (which revokes the application's certificates), GetApplication, QueryApplications and QueryServers.
+  - Certificate requests: StartSigningRequest, StartNewKeyPairRequest and FinishRequest. A request waits for `GDS.ApproveRequest` unless `AutoApprove` is set; `MaxRequests` and `RequestLifetime` apply.
+  - Revocation and trust: RevokeCertificate, GetCertificateGroups, GetCertificates, GetTrustList, GetCertificateStatus and CheckRevocationStatus.
+  - A CA per key type (RSA, NIST P-256 and P-384, Curve25519, Curve448), generated or given. It issues certificates and CRLs, and re-signs the CRL on every revocation and before its NextUpdate.
+  - The DefaultApplicationGroup TrustList holds the CA certificates and their CRLs.
+  - Access:
+    - Directory queries are open.
+    - Registration needs DiscoveryAdmin.
+    - Certificate requests, revocation and the trust list need CertificateAuthorityAdmin over SignAndEncrypt, or the application itself.
+    - Writing the TrustList needs SecurityAdmin.
+  - Storage is a pluggable `Store` (`NewMemoryStore`). A GDS attached again to the same Store continues where it stopped, and `GDS.Close` refuses later calls with Bad_Shutdown.
+- **gds: `PullClient`** with every Directory and CertificateDirectory method, plus `WaitForCertificate`, `ReadTrustList` and `NewCertificateRequest`.
+  - `Enroll` finds or registers the application, requests a certificate, waits for it and reads the trust list.
+  - `Enrollment.ClientOptions` and `ServerOptions` configure an `opcua.Client` or a `server.Server` with the result.
+- **gds/gdsid:** NodeIds of the GDS information model (Part 12 v1.05.07).
+- **server:** `ServeTrustList` serves a TrustList object on any node. Also new: `Node.SetValueFunc` and `MethodCaller.ClientCertificate`.
+- **ua:** `ExtensionObject.RawBody` keeps the binary body of an ExtensionObject whose type is not registered.
+- **examples/gds-pull:** a GDS that enrolls a server and a client, which then connect.
+
+### Not implemented
+
+- In the GDS: CSRs with Brainpool or Ed448 keys (StartNewKeyPairRequest serves these types), PFX private keys, the DefaultHttpsGroup and DefaultUserTokenGroup of the directory, GDS audit events, the RolePermissions of the GDS NodeSet, and a file-based Store.
+
+### Tests
+
+- Unit, e2e and conformance tests, and chaos tests (a GDS restarted in the middle of a request, churn of registrations, requests and revocations).
+- Interop: new ledger capabilities `gds.pull.*`. They are unverified: the peer stacks of opcua-interop have no GDS, and the UA-.NETStandard GDS packages have no release for the adapter's version.
+
+### Interop
+
+- opcua-interop v0.13.0 (unchanged).
+
+---
+
 ## v1.18.0
 
 **Date:** 2026-10-25
