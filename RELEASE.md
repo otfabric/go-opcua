@@ -1,5 +1,41 @@
 # go-opcua Releases
 
+## v1.21.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.20.0
+
+### Summary
+
+The rest of push certificate management (Part 12 v1.05 §7): DeleteCertificate and certificate groups defined by the application. PFX files in BER encoding are accepted.
+
+### Added
+
+- **server: DeleteCertificate** (Part 12 v1.05 §7.10) on the ServerConfiguration. It is part of the transaction and needs SecurityAdmin over SignAndEncrypt.
+  - At ApplyChanges, these deletions are refused with Bad_InvalidState and recorded in the TransactionDiagnostics:
+    - the certificate the endpoints use;
+    - the HTTPS certificate, while there are opc.https or opc.wss endpoints.
+  - Deleting and then creating or updating a certificate in the same transaction replaces it.
+  - `CertificateDeleteStore` persists deletions. ResetToServerDefaults removes certificates the server did not start with.
+- **server: certificate groups of the application** (`PushManagement.CertificateGroups`).
+  - Each group has its own TrustList, CertificateTypes and certificates.
+  - The groups take part in the transactions, GetCertificates, CreateSigningRequest, UpdateCertificate, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults and the certificate alarms.
+  - New: `Server.CertificateGroupID`, `GroupCertificate` and `VerifyGroupCertificate`.
+- **gds:** `Client.DeleteCertificate` and `Client.CertificateGroups`.
+- **uapolicy: `ParsePFX` reads PKCS #12 files in BER encoding** (indefinite lengths, constructed OCTET STRINGs), as Java keytool writes them. RC4 and the public-key integrity and privacy modes are refused on purpose.
+
+### Tests
+
+- Unit, e2e, conformance and chaos tests (the certificate-management churn adds deletions and application groups).
+- The server and root packages are above 90% coverage with their own tests: discovery registration and SelectEndpoint are now covered there.
+- Interop: DeleteCertificate verified against UA-.NETStandard; open62541 and node-opcua do not serve it.
+
+### Interop
+
+- opcua-interop v0.13.0 (unchanged).
+
+---
+
 ## v1.20.0
 
 **Date:** 2026-10-25
