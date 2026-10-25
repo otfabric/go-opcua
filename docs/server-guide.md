@@ -28,9 +28,6 @@ not registered with the server returns `StatusBadServiceUnsupported`.
 
 Not implemented in the server, so plan around them:
 
-- **Alarms & Conditions** (Part 9 v1.05): no AudibleSound, OnDelay /
-  OffDelay, ReAlarmTime / ReAlarmRepeatCount, FirstInGroup or AlarmMetrics.
-  See [Alarms and Conditions](#alarms-and-conditions).
 - **Historical events**: the history interfaces cover data only (see
   [Historical Access](#historical-access-raw)).
 
@@ -667,6 +664,53 @@ InputArguments and OutputArguments. An access controller that implements
 `EventAccessController` decides who receives them: the
 `RBACAccessController` requires the ReceiveEvents permission of the event
 type (namespace 0 grants it to SecurityAdmin, not to Anonymous).
+
+**Delays and re-alarming.** `OnDelay` holds an activation (ActiveState, a
+limit state or the non-exclusive limits) until it has lasted that long; an
+excursion shorter than OnDelay is never reported. `OffDelay` holds the return
+to normal in the same way, and an activation during OffDelay cancels it.
+`State().PendingActive` / `PendingInactive` tell that a delay runs; the
+other fields of an update apply at once. `ReAlarmTime` re-annunciates an
+alarm that stays active: each time it ends, ReAlarmRepeatCount counts up and
+the alarm needs a new acknowledgement (and confirmation), its silence ends
+and a latching alarm latches; with `Branching` the previous occurrence moves
+to a branch. The properties are Durations in milliseconds.
+
+**AudibleSound.** `ConditionConfig.AudibleSound` adds AudibleEnabled (true
+at the start; `ConditionUpdate.AudibleEnabled` changes it) and AudibleSound,
+an AudioVariableType with the sound and its optional ListId / AgencyId /
+VersionId.
+
+**FirstInGroup.** `ConditionConfig.FirstInGroup` names an alarm group (the
+alarm becomes a member). The alarm gets FirstInGroupFlag and a FirstInGroup
+object (AlarmGroupType, listing the alarms that share the group). The first
+alarm of the group to become active while none was active has the flag
+until all of them are inactive again; a branch keeps the flag of its
+occurrence.
+
+**AlarmMetrics.** `Server.AddAlarmMetrics` adds an AlarmMetricsType object
+(a component of the Server object, or of `Parent`) that counts the
+activations of every alarm or of the members of `Group`: AlarmCount,
+StartTime, MaximumActiveState, MaximumUnAck, MaximumReAlarmCount and the
+Current / Maximum / Average alarm rates per `RateMinutes`. Its Reset method
+(audited with an AuditUpdateMethodEventType) and `AlarmMetrics.Reset` start
+anew.
+
+**The alarm clock.** The shelving, delay and re-alarm timers run on the
+clock of `server.WithAlarmClock` (the system clock by default). A test can
+pass a manual clock and advance it, so that no test waits for a timer.
+
+```go
+g, _ := s.AddAlarmGroup(server.AlarmGroupConfig{Name: "BoilerTrip", Namespace: ns})
+_, _ = s.AddCondition(server.ConditionConfig{
+    Name: "FlameOut", Source: src.ID(),
+    OnDelay: 2 * time.Second, OffDelay: 5 * time.Second, ReAlarmTime: 10 * time.Minute,
+    FirstInGroup: g.NodeID(),
+    AudibleSound: &server.AudibleSound{Sound: horn, ListID: "plant-horns"},
+})
+m, _ := s.AddAlarmMetrics(server.AlarmMetricsConfig{Namespace: ns, Group: g.NodeID()})
+log.Printf("%+v", m.Values())
+```
 
 ### Historical Access (raw)
 

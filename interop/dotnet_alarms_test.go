@@ -35,3 +35,13 @@ func TestGoServer_DotnetClient_Alarms105(t *testing.T) {
 	t.Run("coverage/alarms.alarm-groups/dotnet-client-to-go-server", p.assertGroups)
 	t.Run("coverage/alarms.audit-events/dotnet-client-to-go-server", p.assertAudit)
 }
+
+func TestGoServer_DotnetClient_Alarms105Timing(t *testing.T) {
+	requireAdapterOp(t, dotnetEnv, defaultDotnetImage, "read")
+	requireAdapterOp(t, dotnetEnv, defaultDotnetImage, "call")
+	p := startAlarmTiming(t, runDotnetClientResult)
+	t.Run("coverage/alarms.alarm-timing/dotnet-client-to-go-server", p.assertTiming)
+	t.Run("coverage/alarms.audible-sound/dotnet-client-to-go-server", p.assertAudible)
+	t.Run("coverage/alarms.first-in-group/dotnet-client-to-go-server", p.assertFirstInGroup)
+	t.Run("coverage/alarms.alarm-metrics/dotnet-client-to-go-server", p.assertMetrics)
+}

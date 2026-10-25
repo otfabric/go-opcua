@@ -999,6 +999,50 @@
       ]
     },
     {
+      "id": "alarms.alarm-timing",
+      "title": "OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount of an AlarmConditionType (Part 9 1.05)",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "alarms.audible-sound",
+      "title": "AudibleEnabled and AudibleSound (AudioVariableType) of an AlarmConditionType",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "alarms.first-in-group",
+      "title": "FirstInGroupFlag and the FirstInGroup AlarmGroupType object of an AlarmConditionType",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "alarms.alarm-metrics",
+      "title": "AlarmMetricsType counters and its Reset method",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "nodeset2.import",
       "title": "NodeSet2 import peer model",
       "profile": "information-model",

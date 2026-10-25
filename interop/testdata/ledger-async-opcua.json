@@ -1381,6 +1381,70 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.alarm-timing",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-timing",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-timing/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves AudibleEnabled / AudibleSound (AudioVariableType), then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.audible-sound/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves FirstInGroupFlag / FirstInGroup, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.first-in-group/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves an AlarmMetricsType object with its counters and Reset, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-metrics/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-async-opcua-server",
       "status": "deferred",
