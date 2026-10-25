@@ -2935,8 +2935,10 @@
       "capability": "certmgmt.push.trust-list",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.trust-list/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2950,8 +2952,10 @@
       "capability": "certmgmt.push.certificate-update",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.certificate-update/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2966,7 +2970,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "nextAction": "the dotnet adapter's `client push` (opcua-interop feat/dotnet-push, unreleased) calls GetRejectedList on every run, but no dotnet-client test asserts it yet: TestCertMgmtPush_NodeOpcuaClient_GoServer's rejected-list case would need to take the client adapter (pushExtClient); add it when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2981,7 +2985,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "nextAction": "the dotnet adapter's `client push` (opcua-interop feat/dotnet-push, unreleased) reports BadUserAccessDenied as serviceResult, but no dotnet-client test asserts the SecurityAdmin refusal yet: TestCertMgmtPush_NodeOpcuaClient_GoServer's access case would need to take the client adapter (pushExtClient); add it when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2995,8 +2999,10 @@
       "capability": "certmgmt.push.get-certificates",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.get-certificates/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3011,8 +3017,10 @@
       "capability": "certmgmt.push.create-self-signed",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.create-self-signed/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3026,8 +3034,10 @@
       "capability": "certmgmt.push.delete-certificate",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.delete-certificate/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3042,8 +3052,10 @@
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.reset-to-defaults/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3057,8 +3069,10 @@
       "capability": "certmgmt.push.https-group",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.https-group/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3072,8 +3086,10 @@
       "capability": "certmgmt.push.usertoken-group",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.usertoken-group/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3087,8 +3103,10 @@
       "capability": "certmgmt.push.pfx",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.pfx/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3102,8 +3120,10 @@
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_DotnetClient_GoServer",
+      "case": "coverage/certmgmt.push.transaction-diagnostics/dotnet-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/dotnet-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3118,7 +3138,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "nextAction": "the dotnet adapter's `client push` (opcua-interop feat/dotnet-push, unreleased) does not exercise the certificate expiration / trust list out of date alarms; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
       "fixture": "baseline"
     },
     {
