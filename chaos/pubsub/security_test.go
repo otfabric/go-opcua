@@ -182,19 +182,79 @@ func TestChaosSecurityAttacks(t *testing.T) {
 	}
 }
 
+// keyWatch is the KeySource of the subscriber in TestChaosKeyRotationStorm.
+// It sorts the key lookups that fail into those for a message that is older
+// than the keys the SecurityGroup keeps (aged: rejected as it must be) and
+// those for a key the group should have (lost to the rotation).
+type keyWatch struct {
+	security.KeySource
+	ks   *security.KeyService
+	sg   string
+	past uint32
+
+	mu    sync.Mutex
+	first uint32 // the tokens up to first are those of the recorded messages
+	aged  int    // lookups for a token past the group's past keys
+	old   int    // aged lookups for a token up to first
+	lost  []string
+}
+
+func (w *keyWatch) KeysForToken(id uint32) (*security.Keys, error) {
+	k, err := w.KeySource.KeysForToken(id)
+	if err == nil {
+		return k, nil
+	}
+	// The rotation only moves on: a token that is past the past keys now
+	// was so at the lookup, or is the lookup's fault.
+	cur, cerr := w.ks.CurrentTokenID(w.sg)
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if cerr == nil && id < cur && cur-id > w.past {
+		w.aged++
+		if id <= w.first {
+			w.old++
+		}
+	} else {
+		w.lost = append(w.lost, fmt.Sprintf("token %d while %d is current: %v", id, cur, err))
+	}
+	return k, err
+}
+
+func (w *keyWatch) setFirst(id uint32) {
+	w.mu.Lock()
+	w.first = id
+	w.mu.Unlock()
+}
+
+func (w *keyWatch) counts() (aged, old int, lost []string) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.aged, w.old, append([]string(nil), w.lost...)
+}
+
 // TestChaosKeyRotationStorm rotates the keys of the SecurityGroup every 80
 // ms while the publisher sends every 10 ms: no message may be lost to the
 // rotation. Messages recorded earlier and injected after their key left
 // the subscriber's past keys are rejected for their key.
+//
+// A message is decodable as long as its key is among the keys the
+// SecurityGroup keeps: for three key lifetimes, 240 ms, after the key was
+// replaced. A machine busy enough to hold a datagram up for longer than
+// that (between the publisher's encoder, the relay and the subscriber's
+// decoder) makes the subscriber reject a message for its age, rightly so.
+// The test therefore does not count the rejections, it looks at each
+// failed key lookup: it is for a key that is past the past keys, or it is
+// a message lost to the rotation.
 func TestChaosKeyRotationStorm(t *testing.T) {
 	t.Parallel()
 	seed := chaoskit.Seed(t)
 	rng := rand.New(rand.NewSource(seed))
 	const life = 80 * time.Millisecond
-	ks := keyService(t, "sg", security.PolicyURIAes256CTR, life, 2, 3)
-	p := newUDPPair(t, seed, pairOpts{writers: 2, mode: ua.MessageSecurityModeSignAndEncrypt, pubKeys: keySource(t, ks, "sg"), subKeys: keySource(t, ks, "sg")})
+	const future, past = 2, 3
+	ks := keyService(t, "sg", security.PolicyURIAes256CTR, life, future, past)
+	watch := &keyWatch{KeySource: keySource(t, ks, "sg"), ks: ks, sg: "sg", past: past}
+	p := newUDPPair(t, seed, pairOpts{writers: 2, mode: ua.MessageSecurityModeSignAndEncrypt, pubKeys: keySource(t, ks, "sg"), subKeys: watch})
 	p.chk.waitGrowth(t, 5, p.readers...)
-	stalls := chaoskit.WatchStalls(t)
 
 	sub := compID(t, p.sub, pubsub.KindConnection, "sub")
 	old := p.relay.captured()
@@ -202,18 +262,20 @@ func TestChaosKeyRotationStorm(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	watch.setFirst(first)
 	// inject sends an old message and waits until the subscriber has
-	// rejected it. UDP may drop a datagram (loopback too, under load): one
-	// that is not counted within a while is sent again.
-	decodeErrors := func() uint64 { return status(t, p.sub, sub).Counters.DecodeErrors }
+	// rejected one of them for its key. UDP may drop a datagram (loopback
+	// too, under load): one that is not rejected within a while is sent
+	// again.
+	rejectedOld := func() int { _, n, _ := watch.counts(); return n }
 	var injected int
 	inject := func(msg []byte) {
-		before := decodeErrors()
+		before := rejectedOld()
 		for range 5 {
 			p.relay.inject(msg)
 			deadline := time.Now().Add(time.Second)
 			for time.Now().Before(deadline) {
-				if decodeErrors() > before {
+				if rejectedOld() > before {
 					injected++
 					return
 				}
@@ -232,18 +294,32 @@ func TestChaosKeyRotationStorm(t *testing.T) {
 	}
 	last, _ := ks.CurrentTokenID("sg")
 	p.chk.waitGrowth(t, 10, p.readers...)
-	ctr := status(t, p.sub, sub).Counters
-	t.Logf("tokens %d..%d, injected %d old messages, subscriber %+v", first, last, injected, ctr)
 	if last-first < 10 {
 		t.Errorf("only %d key changes", last-first)
 	}
-	if s := stalls.Max(); s > 2*life {
-		t.Logf("the process stalled for %v: messages may outlive their keys, not checking for losses", s)
-	} else if ctr.DecodeErrors != uint64(injected) {
-		t.Errorf("%d old messages injected, %d decode errors: the rotation lost messages", injected, ctr.DecodeErrors)
+
+	// Every message the subscriber could not decode was rejected for its
+	// key (not for a signature or a decryption gone wrong with the key of
+	// another token), and that key was past the past keys. The counter
+	// is raised after the lookup: wait for it.
+	var ctr pubsub.Counters
+	agreed := chaoskit.Eventually(settle, func() bool {
+		ctr = status(t, p.sub, sub).Counters
+		aged, _, lost := watch.counts()
+		return ctr.DecodeErrors == uint64(aged+len(lost))
+	})
+	aged, rejected, lost := watch.counts()
+	t.Logf("tokens %d..%d, injected %d old messages, %d rejected for an old key, of which %d late real messages; subscriber %+v",
+		first, last, injected, aged, aged-rejected, ctr)
+	for _, l := range lost {
+		t.Errorf("the rotation lost a message: no key for %s", l)
 	}
-	if injected > 0 && ctr.DecodeErrors < uint64(injected) {
-		t.Errorf("%d messages with a key past MaxPastKeyCount injected, only %d rejected", injected, ctr.DecodeErrors)
+	if !agreed {
+		t.Errorf("%d decode errors, %d of them for an old key and %d for a missing one: messages failed for something else than their key",
+			ctr.DecodeErrors, aged, len(lost))
+	}
+	if rejected < injected {
+		t.Errorf("%d messages with a key past MaxPastKeyCount injected, only %d rejected", injected, rejected)
 	}
 	p.stopChecking()
 	p.chk.sink.Report(t)
