@@ -19,6 +19,7 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 - **HistoryServerCapabilities** report what the provider of `SetHistorian` implements: AccessHistoryEventsCapability, Insert/Replace/Update/DeleteEventCapability, and the data capabilities, which were all false before.
 - `MaxNodesPerHistoryReadEvents` and `MaxNodesPerHistoryUpdateEvents` are enforced (`Bad_TooManyOperations`).
 - **`Node.SetMethodArguments(in, out []*ua.Argument)`** gives a Method node its InputArguments and OutputArguments Properties (Part 3 §5.7: PropertyType, DataType Argument, ValueRank 1, HasProperty) in the namespace of the method, which callers built by hand with `NewNode`. `Client.MethodArguments` reads them and the Call service checks the input arguments against them. The method_server example uses it.
+- **ua: `EventFilterBuilder.SelectPaths` and `FieldPath` take `ns:Name` segments**, e.g. `2:Temperature` or `AckedState/2:Note`, as BrowseNames of that namespace, as QualifiedNames are written elsewhere; plain segments stay namespace 0 (`0:Name` for a namespace 0 name that itself starts with digits and a colon).
 - API: `server.EventHistoryProvider`, `EventHistoryUpdater`, `EventHistoryDeleter`, `HistoricalEvent`, `NewHistoricalEvent`, `EventHistoryOptions`, `Server.EnableEventHistory`, `Historian.EnableEvents` / `EventsEnabled` / `RecordEvent` / `ReadEvents` / `UpdateEvents` / `DeleteEvents`.
 
 ### Changed
