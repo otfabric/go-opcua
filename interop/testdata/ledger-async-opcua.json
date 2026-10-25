@@ -1301,6 +1301,86 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105",
+      "case": "coverage/alarms.alarm-state-methods/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves Respond / Respond2 of a DialogConditionType, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105",
+      "case": "coverage/alarms.dialog/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves condition branches, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105",
+      "case": "coverage/alarms.branches/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves alarm groups and GetGroupMemberships, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105",
+      "case": "coverage/alarms.alarm-groups/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves AuditConditionEventType events of the condition methods, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms105",
+      "case": "coverage/alarms.audit-events/async-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-async-opcua-server",
       "status": "deferred",

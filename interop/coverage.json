@@ -191,6 +191,241 @@
       }
     },
     {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "nextAction": "Eclipse Milo 1.1.8 has no condition state machine (the A&C methods are abstract generated stubs), so the Milo adapter has no alarm fixture; revisit when a pinned Milo release implements conditions",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_Alarms105",
+      "case": "coverage/alarms.alarm-state-methods/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_Alarms105",
+      "case": "coverage/alarms.alarm-state-methods/milo-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Respond / Respond2 of a DialogConditionType; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "nextAction": "Eclipse Milo 1.1.8 has no condition state machine (the A&C methods are abstract generated stubs), so the Milo adapter has no alarm fixture; revisit when a pinned Milo release implements conditions",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_Alarms105",
+      "case": "coverage/alarms.dialog/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_Alarms105",
+      "case": "coverage/alarms.dialog/milo-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without condition branches; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "nextAction": "Eclipse Milo 1.1.8 has no condition state machine (the A&C methods are abstract generated stubs), so the Milo adapter has no alarm fixture; revisit when a pinned Milo release implements conditions",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_Alarms105",
+      "case": "coverage/alarms.branches/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_Alarms105",
+      "case": "coverage/alarms.branches/milo-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without alarm groups and GetGroupMemberships; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "nextAction": "Eclipse Milo 1.1.8 has no condition state machine (the A&C methods are abstract generated stubs), so the Milo adapter has no alarm fixture; revisit when a pinned Milo release implements conditions",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_Alarms105",
+      "case": "coverage/alarms.alarm-groups/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_Alarms105",
+      "case": "coverage/alarms.alarm-groups/milo-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AuditConditionEventType events of the condition methods; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "nextAction": "Eclipse Milo 1.1.8 has no condition state machine (the A&C methods are abstract generated stubs), so the Milo adapter has no alarm fixture; revisit when a pinned Milo release implements conditions",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_Alarms105",
+      "case": "coverage/alarms.audit-events/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_Alarms105",
+      "case": "coverage/alarms.audit-events/milo-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
       "capability": "browse.filtering",
       "direction": "go-client-to-open62541-server",
       "status": "verified",
