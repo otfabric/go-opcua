@@ -16,7 +16,7 @@ Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 | Gap | Who has it | Workaround |
 |---|---|---|
 | **JSON over HTTPS and WebSockets** (`https-uajson`, `wss-uajson`, the OpenAPI mapping). The binary `opc.https` and `opc.wss` transports are implemented. | UA-.NETStandard | Use the binary transports. |
-| **A persistent GDS store and a file-based PKI store.** The pull model of Part 12 (package `gds/gdsserver`, `gds.PullClient`) and the push model (`server.WithPushManagement`, package `gds`) are implemented, the push model with the three default certificate groups and certificate groups of the application, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults, TransactionDiagnostics, PFX keys and the certificate alarms of 1.05; `gdsserver` keeps its state in a `MemoryStore` unless the application implements `gdsserver.Store`. | UA-.NETStandard | Implement `gdsserver.Store` and `server.CertificateStore` over the application's storage. |
+| **A file-based PKI store.** The pull model of Part 12 (package `gds/gdsserver`, `gds.PullClient`) and the push model (`server.WithPushManagement`, package `gds`) are implemented, the push model with the three default certificate groups and certificate groups of the application, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults, TransactionDiagnostics, PFX keys and the certificate alarms of 1.05; the pull model with the three default certificate groups, CSRs of every key type, PEM and PFX keys, the RolePermissions and audit events of the GDS NodeSet, and a `MemoryStore` or a file-based `gdsserver.NewFileStore`. | UA-.NETStandard | Implement `server.CertificateStore` over the application's storage. |
 | **Historical events on the server.** The history provider interfaces cover data only; the client has `HistoryReadEvent`. | UA-.NETStandard (framework), asyncua | Store events in the application, or keep event history in another historian. |
 | **Dynamic decoding of custom structures** from the server's DataTypeDefinition | Milo, UA-.NETStandard, node-opcua, asyncua | Generate or register Go types (`ua.RegisterExtensionObject`); unknown structures stay ExtensionObject bodies. |
 | **Time-scheduled Ethernet (TSN)**, AMQP over WebSockets, PubSub Actions bound to server Methods (go-opcua runs Go handlers) | open62541 (Ethernet / TSN) | Plain Ethernet, UDP, MQTT or AMQP for data; register an `ActionHandler` that calls the Method. |
@@ -86,6 +86,15 @@ on the side of the application that talks to the peer.
 - Alarms & Conditions: a repeated Acknowledge with the same EventId answers `Bad_ConditionBranchAlreadyAcked`; every method call reports an event with a new Time.
 - PubSub (Opc.Ua.PubSub 2.0.1): an MQTT publisher needs MQTT 5.0 (it sets the MQTT 5 content type on every publication); subscribing works on 3.1.1 too. Its UDP transport sends with TTL 1 unless configured, which also limits unicast. The encoder writes an empty String with length 0 (go-opcua: the null String, length -1), always sets MessageIsValid and drops a DataSetMessage without it; the JSON encoder leaves out the `UaType` the DataSetMetaData implies (go-opcua decodes it since v1.9.0). Discovery answers DataSetMetaData and DataSetWriterConfiguration probes only. No SKS, no PublishSubscribe information model, no Ethernet, no AMQP.
 
+### UA-.NETStandard 1.5.378 (GDS)
+
+The Global Discovery Server and GDS client (Opc.Ua.Gds.*.Common 1.5.378.182, opcua-interop adapter dotnet-gds; the 2.0.1 GDS packages are unreleased):
+
+- The CRL of its ECC CA names sha256WithRSAEncryption inside the TBSCertList and ecdsa-with-SHA256 outside; crypto/x509 (and `uapolicy.ParseRevocationList`) refuse it (RFC 5280 §5.1.1.2). The RSA CA's CRL is well formed.
+- CheckRevocationStatus checks online and does not read its own CRL: a revoked certificate is `Bad_CertificateRevocationUnknown`.
+- One certificate request per application: a new request reuses the RequestId. UnregisterApplication revokes the application's certificates. FindApplications needs an authenticated user.
+- The client reads a TrustList with the MethodIds of FileType (Part 4 §5.11.2.2), which the go-opcua server resolves since v1.22.0.
+
 ### node-opcua 2.187.12
 
 - After a SecureChannel renewal the server answers a request under the token the request used. The go-opcua client copes; open62541's client stalls.
@@ -129,3 +138,4 @@ Fixed; listed so that you can tell whether an upgrade helps with a symptom.
 | A scheduled renewal renews a token that `Renew` already replaced, from a used sequence number | asyncua | v1.8.1 |
 | A Republish answered without the requested message rewinds the subscription's sequence numbers | asyncua | v1.8.1 |
 | A JSON DataValue field without `UaType` fails to decode when the reader has DataSetMetaData | UA-.NETStandard | v1.9.0 |
+| A Call with the MethodId of the ObjectType (the InstanceDeclaration) on an instance answers `Bad_MethodInvalid` | UA-.NETStandard (GDS client) | v1.22.0 |

@@ -1241,6 +1241,26 @@ CertificateAuthorityAdmin role, or a session of the application itself.
 `WaitForCertificate` polls FinishRequest (`DefaultPollInterval`) while the
 request waits for approval. See [examples/gds-pull](../examples/gds-pull/main.go).
 
+`NewCertificateRequest` makes a request for a key of any certificate type
+(RSA, NIST and Brainpool ECDSA, Ed25519, Ed448). A key the GDS generates
+comes as PEM (encrypted when a password is given) or as PFX with the
+certificate and its issuer; `DecodePrivateKey` reads both, and `Enroll`
+takes the format and password:
+
+```go
+e, err := pc.Enroll(ctx, &gds.EnrollRequest{
+    ApplicationID:      appID,
+    PrivateKeyFormat:   gds.PrivateKeyFormatPFX,
+    PrivateKeyPassword: password,
+})
+```
+
+A server application asks for a TLS certificate in the DefaultHttpsGroup
+(`CertificateGroup` of the request, the group's NodeId from
+`GetCertificateGroups`) and reads the issuers of user certificates from the
+trust list of the DefaultUserTokenGroup. The pull model is verified against
+the Global Discovery Server of UA-.NETStandard 1.5.378.
+
 ---
 
 ## Error Handling

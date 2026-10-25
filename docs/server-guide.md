@@ -1056,9 +1056,10 @@ A Global Discovery Server (the pull model) is the subject of the next section.
 
 Package `gds/gdsserver` adds a Global Discovery Server (Part 12 §6 and §7.9)
 to a server: the `Directory` object (CertificateDirectoryType) in the GDS
-namespace `http://opcfoundation.org/UA/GDS/` with its DefaultApplicationGroup
-and TrustList, an application directory, and a CA per key type that issues
-certificates and CRLs. Call `Attach` before `Start`:
+namespace `http://opcfoundation.org/UA/GDS/` with its DefaultApplicationGroup,
+DefaultHttpsGroup and DefaultUserTokenGroup and their TrustLists, an
+application directory, and a CA per key type that issues certificates and
+CRLs. Call `Attach` before `Start`:
 
 ```go
 var g atomic.Pointer[gdsserver.GDS]
@@ -1076,7 +1077,7 @@ srv, _ := server.New(
     }),
 )
 gd, err := gdsserver.Attach(srv, gdsserver.Config{
-    Store:            myStore,  // nil: a MemoryStore
+    Store:            store,    // nil: a MemoryStore; gdsserver.NewFileStore(dir) for a directory
     CertificateTypes: []*ua.NodeID{gds.RsaSha256ApplicationCertificateType, gds.EccNistP256ApplicationCertificateType},
 })
 g.Store(gd)
@@ -1087,16 +1088,17 @@ defer gd.Close() // before srv.Close; makes later calls fail with Bad_Shutdown
 | Topic | Behaviour |
 |-------|-----------|
 | Directory | FindApplications, RegisterApplication, UpdateApplication, UnregisterApplication (revokes the application's certificates), GetApplication, QueryApplications, QueryServers; records are validated (URIs, names, at most 32 discovery URLs and capabilities) |
-| Certificate requests | StartSigningRequest (a CSR whose URI must be the application's), StartNewKeyPairRequest (the GDS generates the key; PEM), FinishRequest; a request waits for `GDS.ApproveRequest` (`GDS.Requests` lists them) unless `Config.AutoApprove`; at most `MaxRequests` open requests per application |
-| CA | One issuer per key type (RSA, NistP256, NistP384, Curve25519, Curve448), generated or given in `Config.Issuers`; DNS names and IP addresses from the discovery URLs or DomainNames; the CRL is re-signed on every revocation and before its NextUpdate |
-| Trust list | GetCertificateGroups, GetCertificates, GetTrustList and the TrustList object of the DefaultApplicationGroup (the CA certificates and their CRLs; SecurityAdmin may add certificates), GetCertificateStatus, RevokeCertificate, CheckRevocationStatus |
+| Certificate requests | StartSigningRequest (a CSR of any key type — RSA, NIST and Brainpool ECDSA, Ed25519, Ed448 — whose URI must be the application's), StartNewKeyPairRequest (the GDS generates the key; PEM, encrypted with a password, or PFX with the certificate and its issuer), FinishRequest; a request waits for `GDS.ApproveRequest` (`GDS.Requests` lists them) unless `Config.AutoApprove`; at most `MaxRequests` open requests per application |
+| CA | One issuer per key type (RSA, NistP256, NistP384, BrainpoolP256r1, BrainpoolP384r1, Curve25519, Curve448), generated or given in `Config.Issuers`; DNS names and IP addresses from the discovery URLs or DomainNames; the CRL is re-signed on every revocation and before its NextUpdate |
+| Certificate groups | DefaultApplicationGroup (`Config.CertificateTypes`; trust list: every CA), DefaultHttpsGroup (HttpsCertificateType, RSA or ECDSA P-256 / P-384 TLS certificates, when the GDS has such a CA; a request may leave out the ApplicationUri; trust list: those CAs), DefaultUserTokenGroup (issues nothing; trust list: what a CertificateAuthorityAdmin adds). A client gets the application group, a server all three |
+| Trust list | GetCertificateGroups, GetCertificates, GetTrustList and the TrustList object of each group (the CA certificates and their CRLs, plus the certificates a CertificateAuthorityAdmin adds), GetCertificateStatus, RevokeCertificate, CheckRevocationStatus; `GDS.TrustList`, `GDS.GroupTrustList` |
 | Authorization | Directory queries are open; register / update / unregister need DiscoveryAdmin; certificate requests, revocation and the trust list need CertificateAuthorityAdmin over SignAndEncrypt, or the application itself (a certificate the GDS issued to it, or one `Config.SelfAdmin` accepts); the TrustList object needs SecurityAdmin to write |
-| Persistence | `Config.Store` (`gdsserver.Store`): applications, requests, issuers with their keys and CRLs; `NewMemoryStore` keeps them in memory. A GDS attached again to the same Store continues with its state |
+| RolePermissions | The methods carry the RolePermissions of the GDS NodeSet (Call for DiscoveryAdmin, CertificateAuthorityAdmin, ...); the GDS refuses a session none of whose roles may call a method, except an application calling the self-administration methods for itself. `server.RBACAccessController` applies them too, before the GDS, and so refuses self-administration by an application without a role |
+| Audit events | With `server.WithAuditing(true)`: ApplicationRegistrationChangedAuditEventType, CertificateRequestedAuditEventType, CertificateDeliveredAuditEventType and CertificateRevokedAuditEventType of the GDS NodeSet, on the Server object and the Directory, without passwords and private keys; an `EventAccessController` filters them (RBAC: ReceiveEvents for SecurityAdmin) |
+| Persistence | `Config.Store` (`gdsserver.Store`): applications, requests, issuers with their keys and CRLs, the trust list additions; `NewMemoryStore` keeps them in memory, `NewFileStore(dir)` in a directory (one JSON file per record, written to a temporary file, synced and renamed; files 0600, directories 0700). A GDS attached again to the same Store continues with its state |
 
-Not implemented: CSRs with Brainpool or Ed448 keys (Bad_NotSupported;
-StartNewKeyPairRequest serves these types), PFX private keys, the
-DefaultHttpsGroup and DefaultUserTokenGroup of the directory, audit events,
-the RolePermissions of the GDS NodeSet, and a file-based Store.
+The pull model is verified against the Global Discovery Server and the GDS
+client of UA-.NETStandard 1.5.378 (INTEROP.md).
 [examples/gds-pull](../examples/gds-pull/main.go) runs a GDS and enrolls a
 server and a client.
 

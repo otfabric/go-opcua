@@ -2583,8 +2583,12 @@ func (p *PullClient) GetCertificateGroups / GetCertificates / GetTrustList / Rea
 func (p *PullClient) Enroll(ctx, r *EnrollRequest) (*Enrollment, error)
 func (e *Enrollment) ClientOptions() ([]opcua.Option, error)
 func (e *Enrollment) ServerOptions() []server.Option
-func NewCertificateRequest(key crypto.Signer, applicationURI, subject string, hosts []string) ([]byte, error)
+func NewCertificateRequest(key crypto.Signer, applicationURI, subject string, hosts []string) ([]byte, error) // any key type
+func DecodePrivateKey(format string, data []byte, password string) (crypto.Signer, error) // PEM or PFX
 ```
+
+`NewKeyPairRequest{CertificateGroup, CertificateType, SubjectName, DomainNames, PrivateKeyFormat, PrivateKeyPassword}`
+and `EnrollRequest{..., PrivateKeyFormat, PrivateKeyPassword}` take `PrivateKeyFormatPEM` or `PrivateKeyFormatPFX`.
 
 See [docs/client-guide.md](docs/client-guide.md#certificate-management-gds-pull).
 
@@ -2597,14 +2601,21 @@ func Attach(srv *server.Server, cfg Config) (*GDS, error)       // before srv.St
 func (g *GDS) Close()                                           // later calls: Bad_Shutdown
 func (g *GDS) Namespace() uint16
 func (g *GDS) DiscoveryAdminRole() / CertificateAuthorityAdminRole() *ua.NodeID
-func (g *GDS) DefaultApplicationGroup() *ua.NodeID
+func (g *GDS) DefaultApplicationGroup() / DefaultHTTPSGroup() / DefaultUserTokenGroup() *ua.NodeID
 func (g *GDS) Requests() []*PendingRequest
 func (g *GDS) ApproveRequest(ctx context.Context, requestID string, approve bool) error // ErrUnknownRequest, ErrClosed
 func (g *GDS) RequestID(n *ua.NodeID) string
 func (g *GDS) IssuerCertificates() [][]byte
-func (g *GDS) TrustList() *ua.TrustListDataType
-type Store interface{ ... }                                      // NewMemoryStore
+func (g *GDS) TrustList() *ua.TrustListDataType                 // of the DefaultApplicationGroup
+func (g *GDS) GroupTrustList(group *ua.NodeID) *ua.TrustListDataType
+type Store interface{ ... }                                      // NewMemoryStore, NewFileStore
+func NewFileStore(dir string) (*FileStore, error)               // one JSON file per record, atomic writes, 0600
 ```
+
+Certificate groups DefaultApplicationGroup, DefaultHttpsGroup (HttpsCertificateType) and
+DefaultUserTokenGroup with a TrustList each; CSRs of every key type (RSA, NIST and Brainpool
+ECDSA, Ed25519, Ed448); new key pairs as PEM or PFX; the RolePermissions of the GDS NodeSet;
+the audit events of the GDS NodeSet with `server.WithAuditing`.
 
 `Config{Store, CertificateTypes, Issuers, CAName, CALifetime, CertificateLifetime, CRLLifetime, RSAKeySize, AutoApprove, RequestLifetime, MaxRequests, MaxApplications, SelfAdmin, Now, Logger}`.
 See [docs/server-guide.md](docs/server-guide.md#global-discovery-server-pull-model).
