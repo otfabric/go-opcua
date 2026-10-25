@@ -47,6 +47,12 @@ type channelInstance struct {
 	expiry  *time.Timer
 	expired bool
 
+	// requestedAt is when a client sent the OpenSecureChannel request that
+	// issued the token, on the local monotonic clock. The server creates
+	// the token after that, so the lifetime of the token is over no earlier
+	// than requestedAt plus its lifetime.
+	requestedAt time.Time
+
 	bytesSent uint64 // atomic.Load/Store - needs to be aligned for 32bit systems
 	// bytesReceived    uint64
 	messagesSent uint32 // atomic.Load/Store

@@ -94,6 +94,13 @@ type SecureChannel struct {
 	// grants; captured from the configured lifetime on the first open.
 	maxLifetime uint32
 
+	// renewing is set on a server channel while a renewal that was received
+	// in full is being processed, and expiryDeferred holds the token whose
+	// lifetime ran out meanwhile; see scheduleServerTokenExpiry. Both are
+	// guarded by instancesMu.
+	renewing       bool
+	expiryDeferred *channelInstance
+
 	// sendGate keeps requests and token renewal apart: every request holds
 	// the read side while it is written to the connection and a renewal
 	// holds the write side. A renewal therefore starts only when no request
@@ -462,6 +469,9 @@ func isReconnectTrigger(err error) bool {
 // them to the registered callback channel, if there is one. Otherwise,
 // the message is dropped.
 func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
+	// A renewal that readChunk took up is done with when Receive returns,
+	// whether it was answered or failed.
+	defer s.endRenewalProcessing()
 	for {
 		select {
 		case <-ctx.Done():
@@ -674,6 +684,9 @@ func (s *SecureChannel) readChunk() (*MessageChunk, error) {
 				s.setOpening(renewing)
 				opening = renewing
 				renewal = true
+				if m.ChunkType == ChunkTypeFinal {
+					s.beginRenewalProcessing()
+				}
 			}
 		}
 
@@ -972,6 +985,7 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 		RequestedLifetime:     s.cfg.Lifetime,
 	}
 
+	opening.requestedAt = time.Now()
 	return s.sendRequestWithTimeout(ctx, req, reqID, opening, nil, s.cfg.RequestTimeout, func(v ua.Response) error {
 		s.cfg.Logger.Debug("handling OpenSecureChannelResponse")
 		resp, ok := v.(*ua.OpenSecureChannelResponse)
@@ -1194,15 +1208,36 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 	return nil
 }
 
-func (s *SecureChannel) scheduleRenewal(instance *channelInstance) {
-	// https://reference.opcfoundation.org/v104/Core/docs/Part4/5.5.2/#5.5.2.1
-	// Clients should request a new SecurityToken after 75 % of its lifetime has elapsed. This should ensure that
-	// clients will receive the new SecurityToken before the old one actually expire
+// renewalDelay returns how long from now a client waits before it renews
+// the token of instance.
+//
+// https://reference.opcfoundation.org/v104/Core/docs/Part4/5.5.2/#5.5.2.1
+// Clients should request a new SecurityToken after 75 % of its lifetime has
+// elapsed. This should ensure that clients will receive the new SecurityToken
+// before the old one actually expire.
+//
+// The lifetime runs from when the server created the token. The client
+// cannot read the server's clock (CreatedAt), but it knows the token was
+// created after it sent the request, so the 75 % are counted from then. The
+// time the response took to arrive and be processed (the asymmetric
+// cryptography of the expensive policies, a busy machine) is time the server
+// has already counted against the token: counting from the response would
+// renew that much later and leave the renewal less of the time the server
+// allows it.
+func renewalDelay(instance *channelInstance, now time.Time) time.Duration {
 	const renewAfter = 0.75
 	// Computed on the duration itself. Rounding the lifetime down to whole
 	// seconds first turns every lifetime below 1.34s into "renew now", and
 	// the renewed token is renewed immediately again, in a tight loop.
 	when := time.Duration(float64(instance.revisedLifetime) * renewAfter)
+	if !instance.requestedAt.IsZero() {
+		when -= now.Sub(instance.requestedAt)
+	}
+	return max(when, 0)
+}
+
+func (s *SecureChannel) scheduleRenewal(instance *channelInstance) {
+	when := renewalDelay(instance, time.Now())
 
 	s.cfg.Logger.Debug("security token refresh scheduled", "channel_id", s.c.ID(), "refresh_at", time.Now().UTC().Add(when).Format(time.RFC3339), "timeout", when, "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
 
