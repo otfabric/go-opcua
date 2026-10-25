@@ -132,7 +132,11 @@ func startServer(t *testing.T, f *fixture, wd *chaoskit.Watchdog) (*server.Serve
 			}
 			return server.DefaultRoleMapper(tok)
 		}),
-		server.WithPushManagement(server.PushManagement{TrustList: f.listB}),
+		server.WithPushManagement(server.PushManagement{
+			TrustList: f.listB,
+			// The alarms are evaluated all the time, during the changes.
+			Alarms: &server.CertificateAlarms{ExpirationLimit: 48 * time.Hour, CheckInterval: 2 * time.Millisecond},
+		}),
 		server.SetLogger(chaoskit.Logger()),
 	)
 	if err != nil {
@@ -423,7 +427,7 @@ func adminOp(rng *rand.Rand, g *gds.Client, f *fixture) error {
 	defer cancel()
 	p := f.p
 	var err error
-	switch rng.Intn(10) {
+	switch rng.Intn(16) {
 	case 0:
 		_, err = g.WriteTrustList(ctx, f.listA)
 	case 1:
@@ -457,6 +461,28 @@ func adminOp(rng *rand.Rand, g *gds.Client, f *fixture) error {
 		if tl, err = g.ReadTrustList(ctx, ua.TrustListMasksAll); err == nil && !containsCert(tl.TrustedCertificates, p.ClientCert) {
 			err = errors.New("the trust list read does not trust the admin")
 		}
+	case 10:
+		// Back to the trust list (listB) and certificate (certs[0]) the
+		// server started with.
+		return g.ResetToServerDefaults(ctx)
+	case 11:
+		var certs [][]byte
+		if _, certs, err = g.GetCertificates(ctx, nil); err == nil && (len(certs) != 1 || !f.installed(certs[0])) {
+			err = errors.New("GetCertificates returns a certificate nobody installed")
+		}
+	case 12:
+		var d *gds.TransactionDiagnostics
+		if d, err = g.TransactionDiagnostics(ctx); err == nil && d.StartTime.IsZero() && (len(d.AffectedTrustLists) > 0 || len(d.AffectedCertificateGroups) > 0) {
+			err = errors.New("TransactionDiagnostics: affected nodes without a transaction")
+		}
+	case 13:
+		// The HTTPS certificate (no HTTPS listener: it changes only the
+		// group's certificate).
+		_, err = g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{CertificateGroup: gds.DefaultHTTPSGroup, LifetimeInDays: 1})
+	case 14:
+		err = g.WithTrustList(gds.UserTokenTrustList).AddCertificate(ctx, p.UserCert, true)
+	case 15:
+		_, err = g.WithTrustList(gds.HTTPSTrustList).WriteTrustList(ctx, f.listA)
 	}
 	if err != nil {
 		return err

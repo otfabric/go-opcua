@@ -15,10 +15,14 @@
 //
 // Several SecurityAdmin clients replace the trust list (WriteTrustList,
 // AddCertificate, RemoveCertificate), install other application instance
-// certificates (UpdateCertificate, with other keys too), apply and cancel
-// their transactions, and drop their sessions in the middle of one, while
+// certificates (UpdateCertificate, with other keys too), create self-signed
+// HTTPS certificates, change the trust lists of the HTTPS and UserToken
+// groups, reset the server to its defaults (ResetToServerDefaults), read
+// GetCertificates and the TransactionDiagnostics, apply and cancel their
+// transactions, and drop their sessions in the middle of one, while
 // other clients open and close secured channels and sessions with trusted,
 // untrusted and revoked certificates and long-lived clients keep reading.
+// The certificate alarms are evaluated every few milliseconds meanwhile.
 //
 // # Invariants
 //
