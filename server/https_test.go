@@ -117,16 +117,16 @@ func TestHTTPSServerClosing(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, postBody(t, c, url, body))
 
-	ch := s.hs.channels[ua.SecurityPolicyURINone]
+	ch := s.hs.vc.channels[ua.SecurityPolicyURINone]
 	require.NotNil(t, ch)
 
 	// A request whose client went away gives no response.
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	require.Nil(t, s.hs.handle(ctx, "", body))
+	require.Nil(t, s.hs.handle(ctx, "", body, false))
 
 	require.NoError(t, s.Close())
-	require.Nil(t, s.hs.handle(context.Background(), "", body), "the server has closed")
+	require.Nil(t, s.hs.handle(context.Background(), "", body, false), "the server has closed")
 
 	rec := &recorder{header: http.Header{}}
 	s.hs.ServeHTTP(rec, &http.Request{Method: http.MethodPost})

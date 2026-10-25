@@ -101,6 +101,32 @@ func ListenHTTPSOn(addr string) Option {
 	}
 }
 
+// EnableUAJSON makes the opc.wss and opc.https endpoints serve the UA JSON
+// mappings of their transports as well:
+//
+//   - https-uajson (Part 6 §7.4.5): an HTTPS request with the Content-Type
+//     application/json (or application/opcua+uajson, which UA-.NETStandard
+//     sends) is a JSON message (Part 6 §5.4.9), answered by one, and may be
+//     gzip compressed. The security policies are those of https-uabinary.
+//   - wss-uajson (Part 6 §7.5.2): a WebSocket with the sub-protocol
+//     opcua+uajson carries one JSON message per WebSocket message, with no
+//     HEL/ACK and no secure conversation. Its requests are served
+//     concurrently and answered as they complete; a client correlates them
+//     by RequestHandle. A WebSocket cannot name a security policy, so it is
+//     only offered when None with the mode None is enabled (or no security
+//     is configured at all), and TLS alone protects the messages.
+//
+// The JSON endpoints are advertised next to the binary ones, at the same
+// URLs, with the transport profiles ua.TransportProfileHTTPSJSON and
+// ua.TransportProfileWSSJSON. Responses are written in the compact JSON
+// form; requests may use the compact or the verbose form.
+func EnableUAJSON() Option {
+	return func(s *serverConfig) error {
+		s.uajson = true
+		return nil
+	}
+}
+
 // TLSConfig sets the TLS configuration of the opc.wss and opc.https
 // endpoints: the server's TLS certificate (Certificates or GetCertificate)
 // and, to require client TLS certificates, ClientAuth and ClientCAs. The TLS
@@ -168,6 +194,9 @@ func (s *Server) listenTransports(ctx context.Context) error {
 			return err
 		}
 		s.cfg.wss.applyPort(s.wl.Addr())
+		if s.wssJSONEnabled() {
+			s.wj = newWSSJSONServer(s)
+		}
 	}
 	if addr, err := s.cfg.https.bindAddr(); err != nil {
 		s.closeTransports()
@@ -184,6 +213,10 @@ func (s *Server) listenTransports(ctx context.Context) error {
 
 // serveTransports starts serving the WebSocket and HTTPS listeners.
 func (s *Server) serveTransports(ctx context.Context) {
+	if s.wj != nil {
+		s.wj.start()
+		s.wl.ServeWebSocketJSON(s.wj.serve)
+	}
 	if s.wl != nil {
 		go s.acceptAndRegister(ctx, s.wl)
 	}
@@ -198,25 +231,64 @@ func (s *Server) closeTransports() {
 	if s.wl != nil {
 		_ = s.wl.Close()
 	}
+	if s.wj != nil {
+		s.wj.close()
+	}
 	if s.hs != nil {
 		s.hs.close()
 	}
 }
 
-// transportEndpoints returns the endpoint URLs of each transport with their
-// transport profile.
-func (s *Server) transportEndpoints() []struct {
+// transportURLs are the endpoint URLs of a transport profile.
+type transportURLs struct {
 	urls    []string
 	profile string
-} {
-	return []struct {
-		urls    []string
-		profile string
-	}{
+}
+
+// transportEndpoints returns the endpoint URLs of each transport with their
+// transport profile.
+func (s *Server) transportEndpoints() []transportURLs {
+	t := []transportURLs{
 		{s.cfg.endpoints, ua.TransportProfileUATCP},
 		{s.cfg.wss.endpoints, ua.TransportProfileWSS},
 		{s.cfg.https.endpoints, ua.TransportProfileHTTPS},
 	}
+	if s.cfg.uajson {
+		// The JSON twins, at the same URLs.
+		if s.wssJSONEnabled() {
+			t = append(t, transportURLs{s.cfg.wss.endpoints, ua.TransportProfileWSSJSON})
+		}
+		t = append(t, transportURLs{s.cfg.https.endpoints, ua.TransportProfileHTTPSJSON})
+	}
+	return t
+}
+
+// wssJSONEnabled reports whether the opc.wss endpoints serve wss-uajson:
+// EnableUAJSON, and the security policy None with the mode None, the only
+// security opcua+uajson has (or no security configured at all).
+func (s *Server) wssJSONEnabled() bool {
+	if !s.cfg.uajson || len(s.cfg.wss.endpoints) == 0 {
+		return false
+	}
+	if len(s.cfg.enabledSec) == 0 {
+		return true
+	}
+	for _, sec := range s.cfg.enabledSec {
+		if sec.secPolicy == ua.SecurityPolicyURINone && sec.secMode == ua.MessageSecurityModeNone {
+			return true
+		}
+	}
+	return false
+}
+
+// tlsOnly reports whether a transport profile has no secure conversation:
+// TLS alone protects its messages.
+func tlsOnly(profile string) bool {
+	switch profile {
+	case ua.TransportProfileHTTPS, ua.TransportProfileHTTPSJSON, ua.TransportProfileWSSJSON:
+		return true
+	}
+	return false
 }
 
 // WebSocketAddr returns the address the opc.wss listener is bound to, nil
