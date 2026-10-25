@@ -15,16 +15,16 @@ import (
 // denyAllController denies all operations.
 type denyAllController struct{}
 
-func (denyAllController) CheckRead(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (denyAllController) CheckRead(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusBadUserAccessDenied
 }
-func (denyAllController) CheckWrite(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (denyAllController) CheckWrite(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusBadUserAccessDenied
 }
-func (denyAllController) CheckBrowse(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (denyAllController) CheckBrowse(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusBadUserAccessDenied
 }
-func (denyAllController) CheckCall(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (denyAllController) CheckCall(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusBadUserAccessDenied
 }
 
@@ -228,33 +228,33 @@ func TestRBACAccessController(t *testing.T) {
 	authSess := &session{roles: []*ua.NodeID{ua.RoleAuthenticatedUser.NodeID()}}
 
 	t.Run("anonymous can browse", func(t *testing.T) {
-		assert.Equal(t, ua.StatusOK, ac.CheckBrowse(context.Background(), anonSess, nid))
+		assert.Equal(t, ua.StatusOK, ac.CheckBrowse(context.Background(), anonSess.handle(), nid))
 	})
 
 	t.Run("anonymous cannot read", func(t *testing.T) {
-		assert.Equal(t, ua.StatusBadUserAccessDenied, ac.CheckRead(context.Background(), anonSess, nid))
+		assert.Equal(t, ua.StatusBadUserAccessDenied, ac.CheckRead(context.Background(), anonSess.handle(), nid))
 	})
 
 	t.Run("anonymous cannot write", func(t *testing.T) {
-		assert.Equal(t, ua.StatusBadUserAccessDenied, ac.CheckWrite(context.Background(), anonSess, nid))
+		assert.Equal(t, ua.StatusBadUserAccessDenied, ac.CheckWrite(context.Background(), anonSess.handle(), nid))
 	})
 
 	t.Run("authenticated can read", func(t *testing.T) {
-		assert.Equal(t, ua.StatusOK, ac.CheckRead(context.Background(), authSess, nid))
+		assert.Equal(t, ua.StatusOK, ac.CheckRead(context.Background(), authSess.handle(), nid))
 	})
 
 	t.Run("authenticated can write", func(t *testing.T) {
-		assert.Equal(t, ua.StatusOK, ac.CheckWrite(context.Background(), authSess, nid))
+		assert.Equal(t, ua.StatusOK, ac.CheckWrite(context.Background(), authSess.handle(), nid))
 	})
 
 	t.Run("authenticated can call", func(t *testing.T) {
-		assert.Equal(t, ua.StatusOK, ac.CheckCall(context.Background(), authSess, nid))
+		assert.Equal(t, ua.StatusOK, ac.CheckCall(context.Background(), authSess.handle(), nid))
 	})
 
 	t.Run("node without permissions allows all", func(t *testing.T) {
 		nid2 := ua.NewNumericNodeID(0, 50001)
 		ns0.AddNode(NewNode(nid2, Attributes{}, nil, nil))
-		assert.Equal(t, ua.StatusOK, ac.CheckRead(context.Background(), anonSess, nid2))
+		assert.Equal(t, ua.StatusOK, ac.CheckRead(context.Background(), anonSess.handle(), nid2))
 	})
 
 	t.Run("nil session defaults to Anonymous role", func(t *testing.T) {

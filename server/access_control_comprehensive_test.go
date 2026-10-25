@@ -18,28 +18,28 @@ type nodeSpecificController struct {
 	allowedNodeID string
 }
 
-func (c nodeSpecificController) CheckRead(_ context.Context, _ *session, nodeID *ua.NodeID) ua.StatusCode {
+func (c nodeSpecificController) CheckRead(_ context.Context, _ *Session, nodeID *ua.NodeID) ua.StatusCode {
 	if nodeID != nil && nodeID.String() == c.allowedNodeID {
 		return ua.StatusOK
 	}
 	return ua.StatusBadUserAccessDenied
 }
 
-func (c nodeSpecificController) CheckWrite(_ context.Context, _ *session, nodeID *ua.NodeID) ua.StatusCode {
+func (c nodeSpecificController) CheckWrite(_ context.Context, _ *Session, nodeID *ua.NodeID) ua.StatusCode {
 	if nodeID != nil && nodeID.String() == c.allowedNodeID {
 		return ua.StatusOK
 	}
 	return ua.StatusBadUserAccessDenied
 }
 
-func (c nodeSpecificController) CheckBrowse(_ context.Context, _ *session, nodeID *ua.NodeID) ua.StatusCode {
+func (c nodeSpecificController) CheckBrowse(_ context.Context, _ *Session, nodeID *ua.NodeID) ua.StatusCode {
 	if nodeID != nil && nodeID.String() == c.allowedNodeID {
 		return ua.StatusOK
 	}
 	return ua.StatusBadUserAccessDenied
 }
 
-func (c nodeSpecificController) CheckCall(_ context.Context, _ *session, nodeID *ua.NodeID) ua.StatusCode {
+func (c nodeSpecificController) CheckCall(_ context.Context, _ *Session, nodeID *ua.NodeID) ua.StatusCode {
 	if nodeID != nil && nodeID.String() == c.allowedNodeID {
 		return ua.StatusOK
 	}
@@ -49,16 +49,16 @@ func (c nodeSpecificController) CheckCall(_ context.Context, _ *session, nodeID 
 // readOnlyController allows reads but denies writes, browse, and calls.
 type readOnlyController struct{}
 
-func (readOnlyController) CheckRead(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (readOnlyController) CheckRead(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusOK
 }
-func (readOnlyController) CheckWrite(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (readOnlyController) CheckWrite(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusBadUserAccessDenied
 }
-func (readOnlyController) CheckBrowse(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (readOnlyController) CheckBrowse(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusOK
 }
-func (readOnlyController) CheckCall(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (readOnlyController) CheckCall(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusBadUserAccessDenied
 }
 

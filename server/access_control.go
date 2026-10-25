@@ -15,35 +15,36 @@ import (
 // [ua.StatusOK] to allow the operation, or an appropriate status code
 // (e.g., [ua.StatusBadUserAccessDenied]) to deny it.
 //
-// The session parameter provides the authenticated session context, which
-// can be used to implement role-based or user-based access control.
+// The [Session] parameter is the session of the request (nil without one):
+// its SessionId, user identity and roles, for role-based or user-based
+// access control.
 //
 // Provide a custom implementation via [WithAccessController]. The default
 // is [DefaultAccessController] which allows all operations.
 type AccessController interface {
-	CheckRead(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-	CheckWrite(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-	CheckBrowse(ctx context.Context, session *session, nodeID *ua.NodeID) ua.StatusCode
-	CheckCall(ctx context.Context, session *session, methodID *ua.NodeID) ua.StatusCode
+	CheckRead(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
+	CheckWrite(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
+	CheckBrowse(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
+	CheckCall(ctx context.Context, session *Session, methodID *ua.NodeID) ua.StatusCode
 }
 
 // DefaultAccessController is a permissive access controller that allows all
 // operations. It is used when no custom [AccessController] is configured.
 type DefaultAccessController struct{}
 
-func (DefaultAccessController) CheckRead(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (DefaultAccessController) CheckRead(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusOK
 }
 
-func (DefaultAccessController) CheckWrite(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (DefaultAccessController) CheckWrite(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusOK
 }
 
-func (DefaultAccessController) CheckBrowse(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (DefaultAccessController) CheckBrowse(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusOK
 }
 
-func (DefaultAccessController) CheckCall(_ context.Context, _ *session, _ *ua.NodeID) ua.StatusCode {
+func (DefaultAccessController) CheckCall(_ context.Context, _ *Session, _ *ua.NodeID) ua.StatusCode {
 	return ua.StatusOK
 }
 
@@ -148,23 +149,23 @@ func NewRBACAccessController(srv *Server) *RBACAccessController {
 	return &RBACAccessController{srv: srv}
 }
 
-func (ac *RBACAccessController) CheckRead(ctx context.Context, sess *session, nodeID *ua.NodeID) ua.StatusCode {
+func (ac *RBACAccessController) CheckRead(ctx context.Context, sess *Session, nodeID *ua.NodeID) ua.StatusCode {
 	return ac.checkPermission(sess, nodeID, ua.PermissionTypeRead)
 }
 
-func (ac *RBACAccessController) CheckWrite(ctx context.Context, sess *session, nodeID *ua.NodeID) ua.StatusCode {
+func (ac *RBACAccessController) CheckWrite(ctx context.Context, sess *Session, nodeID *ua.NodeID) ua.StatusCode {
 	return ac.checkPermission(sess, nodeID, ua.PermissionTypeWrite)
 }
 
-func (ac *RBACAccessController) CheckBrowse(ctx context.Context, sess *session, nodeID *ua.NodeID) ua.StatusCode {
+func (ac *RBACAccessController) CheckBrowse(ctx context.Context, sess *Session, nodeID *ua.NodeID) ua.StatusCode {
 	return ac.checkPermission(sess, nodeID, ua.PermissionTypeBrowse)
 }
 
-func (ac *RBACAccessController) CheckCall(ctx context.Context, sess *session, nodeID *ua.NodeID) ua.StatusCode {
+func (ac *RBACAccessController) CheckCall(ctx context.Context, sess *Session, nodeID *ua.NodeID) ua.StatusCode {
 	return ac.checkPermission(sess, nodeID, ua.PermissionTypeCall)
 }
 
-func (ac *RBACAccessController) checkPermission(sess *session, nodeID *ua.NodeID, required ua.PermissionType) ua.StatusCode {
+func (ac *RBACAccessController) checkPermission(sess *Session, nodeID *ua.NodeID, required ua.PermissionType) ua.StatusCode {
 	if nodeID == nil {
 		return ua.StatusOK
 	}
@@ -177,7 +178,7 @@ func (ac *RBACAccessController) checkPermission(sess *session, nodeID *ua.NodeID
 	}
 	var roles []*ua.NodeID
 	if sess != nil {
-		roles = sess.roles
+		roles = sess.s.roles
 	}
 	if len(roles) == 0 {
 		roles = []*ua.NodeID{ua.RoleAnonymous.NodeID()}

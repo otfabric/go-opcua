@@ -63,12 +63,12 @@ func (s *Server) bindAuditing() {
 // events; without it every session that monitors the notifier receives
 // them.
 type EventAccessController interface {
-	CheckReceiveEvents(ctx context.Context, session *session, eventType *ua.NodeID) ua.StatusCode
+	CheckReceiveEvents(ctx context.Context, session *Session, eventType *ua.NodeID) ua.StatusCode
 }
 
 // CheckReceiveEvents grants the events of eventType to the sessions with the
 // ReceiveEvents permission of the event type node.
-func (ac *RBACAccessController) CheckReceiveEvents(_ context.Context, sess *session, eventType *ua.NodeID) ua.StatusCode {
+func (ac *RBACAccessController) CheckReceiveEvents(_ context.Context, sess *Session, eventType *ua.NodeID) ua.StatusCode {
 	return ac.checkPermission(sess, eventType, ua.PermissionTypeReceiveEvents)
 }
 
@@ -86,7 +86,7 @@ func (s *Server) mayReceive(item *MonitoredItem, event *BaseEvent) bool {
 	if sess == nil {
 		return false
 	}
-	return eac.CheckReceiveEvents(context.Background(), sess, event.EventType) == ua.StatusOK
+	return eac.CheckReceiveEvents(context.Background(), sess.handle(), event.EventType) == ua.StatusOK
 }
 
 // audited wraps the handler of a condition method so that the call reports
