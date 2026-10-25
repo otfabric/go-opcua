@@ -74,6 +74,7 @@ func TestExtensionObject_DecodeEdgeCases(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, len(b)-1, n, "exactly the declared body must be skipped")
 		require.Nil(t, eo.Value)
+		require.Equal(t, []byte{0xaa, 0xbb}, eo.RawBody, "the body of an unknown type is kept")
 		require.Equal(t, uint32(0xfffffff0), eo.TypeID.NodeID.IntID())
 		require.Equal(t, uint16(7), eo.TypeID.NodeID.Namespace())
 	})
