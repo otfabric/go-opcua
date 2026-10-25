@@ -2782,6 +2782,74 @@
       "status": "unsupported",
       "nextAction": "the opcua-interop dotnet adapter does not expose the PublishSubscribe information model (contract §14.13): it builds the Opc.Ua.PubSub runtime from --pubsub-config, the server has no PublishSubscribe object",
       "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.trust-list",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "test": "TestCertMgmtPush_GoClient_PeerServers",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "passes against the dotnet adapter that grants the fixture user roles (SecurityAdmin, opcua-interop feat/gds) on the stack's ConfigurationNodeManager; promote to verified when the opcua-interop release with feat/gds is pinned",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.trust-list",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.certificate-update",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "test": "TestCertMgmtPush_GoClient_PeerServers",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "passes against the dotnet adapter that grants the fixture user roles (SecurityAdmin, opcua-interop feat/gds) on the stack's ConfigurationNodeManager; promote to verified when the opcua-interop release with feat/gds is pinned",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.certificate-update",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.rejected-list",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "test": "TestCertMgmtPush_GoClient_PeerServers",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "passes against the dotnet adapter that grants the fixture user roles (SecurityAdmin, opcua-interop feat/gds) on the stack's ConfigurationNodeManager; promote to verified when the opcua-interop release with feat/gds is pinned",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.rejected-list",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.access",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "test": "TestCertMgmtPush_GoClient_PeerServers",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "passes against the dotnet adapter that grants the fixture user roles (SecurityAdmin, opcua-interop feat/gds) on the stack's ConfigurationNodeManager; promote to verified when the opcua-interop release with feat/gds is pinned",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.access",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
     }
   ]
 }

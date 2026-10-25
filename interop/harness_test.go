@@ -1316,6 +1316,21 @@ func loadCACert(t *testing.T, caPath string) *x509.Certificate {
 // mutating the checked-in source tree.
 func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPKIName string) *serverHandle {
 	t.Helper()
+	fixtureDir := getEnvOr("OPCUA_INTEROP_FIXTURE_DIR", defaultFixtureDir)
+	if !strings.HasPrefix(fixtureDir, "/") {
+		cwd, err := os.Getwd()
+		if err != nil {
+			t.Fatalf("getwd: %v", err)
+		}
+		fixtureDir = cwd + "/" + fixtureDir
+	}
+	return startSecureAdapterServerIn(t, imageEnvVar, defaultImage, adapterPKIName, fixtureDir)
+}
+
+// startSecureAdapterServerIn is startSecureAdapterServer with the
+// baseline.json of fixtureDir (an absolute path).
+func startSecureAdapterServerIn(t *testing.T, imageEnvVar, defaultImage, adapterPKIName, fixtureDir string) *serverHandle {
+	t.Helper()
 	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
 	pki := pkiDir(t)
@@ -1343,14 +1358,6 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 
 	image := getEnvOr(imageEnvVar, defaultImage)
 	containerName := dockerContainerName(t)
-	fixtureDir := getEnvOr("OPCUA_INTEROP_FIXTURE_DIR", defaultFixtureDir)
-	if !strings.HasPrefix(fixtureDir, "/") {
-		cwd, err := os.Getwd()
-		if err != nil {
-			t.Fatalf("getwd: %v", err)
-		}
-		fixtureDir = cwd + "/" + fixtureDir
-	}
 
 	for range publishAttempts {
 		port := freePort(t)

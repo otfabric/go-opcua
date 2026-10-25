@@ -2080,6 +2080,50 @@
         "go-client-to-open62541-server",
         "go-client-to-milo-server"
       ]
+    },
+    {
+      "id": "certmgmt.push.trust-list",
+      "title": "Push model TrustList of the DefaultApplicationGroup: OpenWithMasks / Read / Close, Open / Write / CloseAndUpdate, AddCertificate / RemoveCertificate, ApplyChanges (Part 12 §7.8.2, §7.10.6) (C→ = go-opcua package gds pushes to the peer server; →S = the peer's push client pushes to server.WithPushManagement)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "certmgmt.push.certificate-update",
+      "title": "Push model CreateSigningRequest / UpdateCertificate / ApplyChanges of the application instance certificate (Part 12 §7.10.4, §7.10.6, §7.10.8)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "certmgmt.push.rejected-list",
+      "title": "Push model GetRejectedList (Part 12 §7.10.9)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "certmgmt.push.access",
+      "title": "Push model access: ServerConfiguration properties, the methods need the SecurityAdmin role on a SignAndEncrypt channel (Part 12 §7.2)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
     }
   ]
 }
