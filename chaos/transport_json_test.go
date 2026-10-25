@@ -130,7 +130,9 @@ func TestChaosHTTPSJSONBodies(t *testing.T) {
 	bodies := []func() (string, []byte){
 		func() (string, []byte) { return "", randBytes(rng, rng.Intn(1024)) },
 		func() (string, []byte) { return "", []byte(strings.Repeat(`{"a":`, 1+rng.Intn(5000))) },
-		func() (string, []byte) { return "", []byte(`{"UaTypeId":"i=631","NodesToRead":[` + strings.Repeat(`{},`, rng.Intn(2000)) + `{}]}`) },
+		func() (string, []byte) {
+			return "", []byte(`{"UaTypeId":"i=631","NodesToRead":[` + strings.Repeat(`{},`, rng.Intn(2000)) + `{}]}`)
+		},
 		func() (string, []byte) { return "gzip", randBytes(rng, rng.Intn(256)) },
 	}
 	for i := 0; i < 60; i++ {
@@ -146,7 +148,7 @@ func TestChaosHTTPSJSONBodies(t *testing.T) {
 		}
 		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusOK && !(enc == "gzip" && resp.StatusCode == http.StatusBadRequest) {
+		if resp.StatusCode != http.StatusOK && (enc != "gzip" || resp.StatusCode != http.StatusBadRequest) {
 			t.Errorf("malformed body: HTTP %d, want 200 with a ServiceFault", resp.StatusCode)
 		}
 		if err := readCurrentTime(c); err != nil {
