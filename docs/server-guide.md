@@ -492,6 +492,27 @@ s.RegisterMethod(objectID, methodID, handler)
 
 Clients call the method via the standard `Call` service.
 
+Give the method node its signature with `SetMethodArguments`: it adds the
+InputArguments and OutputArguments Properties of Part 3 §5.7 (PropertyType,
+DataType Argument, ValueRank 1, referenced with HasProperty) to the node's
+namespace, so clients can read them (`Client.MethodArguments`) and the
+server checks the input arguments of a call against them
+(`Bad_ArgumentsMissing`, `Bad_TooManyArguments`, `Bad_TypeMismatch`).
+A nil list leaves that Property out; calling it again replaces the
+arguments.
+
+```go
+method := server.NewFolderNode(methodID, "Double")
+method.SetNodeClass(ua.NodeClassMethod)
+ns.AddNode(method) // the node must be in a namespace first
+objNode.AddRef(method, id.HasComponent, true)
+
+err := method.SetMethodArguments(
+    []*ua.Argument{{Name: "factor", DataType: ua.NewNumericNodeID(0, id.Double), ValueRank: -1}},
+    []*ua.Argument{{Name: "result", DataType: ua.NewNumericNodeID(0, id.Double), ValueRank: -1}},
+)
+```
+
 ---
 
 ## NodeSet2 Import

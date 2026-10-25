@@ -18,6 +18,7 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 - **HistoryUpdate `UpdateEventDetails`** (insert, replace, update; events matched by EventId) **and `DeleteEventDetails`**, with a result per event: `Good_EntryInserted`, `Good_EntryReplaced`, `Bad_EntryExists`, `Bad_NoEntryExists`, `Good_DataIgnored`, `Bad_TypeDefinitionInvalid`, `Bad_SourceNodeIdInvalid`, `Bad_OutOfRange`; `Bad_NoData` for an unknown EventId to delete; `Bad_NotWritable` without the HistoryWrite bit.
 - **HistoryServerCapabilities** report what the provider of `SetHistorian` implements: AccessHistoryEventsCapability, Insert/Replace/Update/DeleteEventCapability, and the data capabilities, which were all false before.
 - `MaxNodesPerHistoryReadEvents` and `MaxNodesPerHistoryUpdateEvents` are enforced (`Bad_TooManyOperations`).
+- **`Node.SetMethodArguments(in, out []*ua.Argument)`** gives a Method node its InputArguments and OutputArguments Properties (Part 3 §5.7: PropertyType, DataType Argument, ValueRank 1, HasProperty) in the namespace of the method, which callers built by hand with `NewNode`. `Client.MethodArguments` reads them and the Call service checks the input arguments against them. The method_server example uses it.
 - API: `server.EventHistoryProvider`, `EventHistoryUpdater`, `EventHistoryDeleter`, `HistoricalEvent`, `NewHistoricalEvent`, `EventHistoryOptions`, `Server.EnableEventHistory`, `Historian.EnableEvents` / `EventsEnabled` / `RecordEvent` / `ReadEvents` / `UpdateEvents` / `DeleteEvents`.
 
 ### Changed
