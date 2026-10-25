@@ -61,6 +61,38 @@ type AlarmGroup struct {
 	members     []*Condition
 	suppressing bool
 	removed     bool
+
+	// fmu guards the following; it is a leaf lock, taken with the lock
+	// of a condition held. memberSet mirrors members for the alarm
+	// metrics of the group; firstOut are the alarms with this group as
+	// their FirstInGroup, activeOut those of them that are active and
+	// first the first-out alarm.
+	fmu       sync.Mutex
+	memberSet map[*Condition]bool
+	firstOut  []*Condition
+	activeOut map[*Condition]bool
+	first     *Condition
+}
+
+// setMember records c in (or out of) memberSet.
+func (g *AlarmGroup) setMember(c *Condition, in bool) {
+	g.fmu.Lock()
+	defer g.fmu.Unlock()
+	if g.memberSet == nil {
+		g.memberSet = map[*Condition]bool{}
+	}
+	if in {
+		g.memberSet[c] = true
+	} else {
+		delete(g.memberSet, c)
+	}
+}
+
+// hasMember reports whether c is a member of the group.
+func (g *AlarmGroup) hasMember(c *Condition) bool {
+	g.fmu.Lock()
+	defer g.fmu.Unlock()
+	return g.memberSet[c]
 }
 
 // groupState are the alarm groups of a server.
@@ -176,6 +208,7 @@ func (s *Server) RemoveAlarmGroup(groupID *ua.NodeID) error {
 	delete(s.alarms.groups.groups, groupID.String())
 	s.alarms.mu.Unlock()
 	for _, c := range members {
+		g.setMember(c, false)
 		g.unlink(c)
 	}
 	target := ua.NewExpandedNodeID(g.id, "", 0)
@@ -238,6 +271,7 @@ func (g *AlarmGroup) AddMember(c *Condition) error {
 	g.members = append(g.members, c)
 	suppressing := g.suppressing
 	s.alarms.mu.Unlock()
+	g.setMember(c, true)
 
 	if cn := s.Node(c.id); cn != nil {
 		linkChild(g.node, cn, g.memberRef())
@@ -267,6 +301,7 @@ func (g *AlarmGroup) RemoveMember(c *Condition) error {
 	g.members = slices.Delete(g.members, i, i+1)
 	suppressing := g.suppressing
 	s.alarms.mu.Unlock()
+	g.setMember(c, false)
 	g.unlink(c)
 	if suppressing {
 		s.applyGroupSuppression([]*Condition{c})
@@ -395,6 +430,7 @@ func (s *Server) leaveAlarmGroups(c *Condition) {
 	}
 	s.alarms.mu.Unlock()
 	for _, g := range left {
+		g.setMember(c, false)
 		g.unlink(c)
 	}
 }

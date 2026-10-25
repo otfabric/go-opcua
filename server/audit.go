@@ -5,7 +5,6 @@ package server
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
@@ -111,41 +110,8 @@ func (c *Condition) deliverAudit(ev *BaseEvent) {
 
 // auditEvent builds the audit event of a call of a condition method.
 func (c *Condition) auditEvent(ctx context.Context, auditType uint32, methodID *ua.NodeID, args, out []*ua.Variant, sc ua.StatusCode) *BaseEvent {
-	now := time.Now()
-	// The BrowseName of the method: the generated names carry the type
-	// ("AcknowledgeableConditionType_Acknowledge").
-	name := id.MethodName(methodID.IntID())
-	if i := strings.LastIndexByte(name, '_'); i >= 0 {
-		name = name[i+1:]
-	}
-	auditEntry := ""
-	if caller, ok := MethodCallerFromContext(ctx); ok && caller != nil {
-		auditEntry = caller.AuditEntryID
-	}
-	if args == nil {
-		args = []*ua.Variant{}
-	}
-	if out == nil {
-		out = []*ua.Variant{}
-	}
-	ok := sc.Uint32()&0xC0000000 == 0
-	msg := name + " of " + c.cfg.Name
-	if !ok {
-		msg += ": " + sc.Error()
-	}
-	f := map[string]*ua.Variant{
-		// AuditEventType (Part 5 §6.4.3)
-		"ActionTimeStamp":    ua.MustVariant(now),
-		"Status":             ua.MustVariant(ok),
-		"ServerId":           ua.MustVariant(c.srv.cfg.applicationURI),
-		"ClientAuditEntryId": ua.MustVariant(auditEntry),
-		"ClientUserId":       ua.MustVariant(clientUserID(ctx)),
-		// AuditUpdateMethodEventType (Part 5 §6.4.27)
-		"MethodId":        ua.MustVariant(methodID),
-		"StatusCodeId":    ua.MustVariant(sc),
-		"InputArguments":  ua.MustVariant(args),
-		"OutputArguments": ua.MustVariant(out),
-	}
+	ev := c.srv.methodAuditEvent(ctx, auditType, methodID, c.id, c.cfg.Name, args, out, sc)
+	f := ev.Fields
 	arg := func(i int) *ua.Variant {
 		if i < len(args) && args[i] != nil {
 			return args[i]
@@ -165,15 +131,56 @@ func (c *Condition) auditEvent(ctx context.Context, auditType uint32, methodID *
 			f["ShelvingTime"] = arg(0)
 		}
 	}
+	return ev
+}
+
+// methodAuditEvent builds the AuditUpdateMethodEventType event (Part 5
+// §6.4.27) of type auditType for a call of methodID on object, which is
+// named subject in the Message.
+func (s *Server) methodAuditEvent(ctx context.Context, auditType uint32, methodID, object *ua.NodeID, subject string, args, out []*ua.Variant, sc ua.StatusCode) *BaseEvent {
+	now := s.now()
+	// The BrowseName of the method: the generated names carry the type
+	// ("AcknowledgeableConditionType_Acknowledge").
+	name := id.MethodName(methodID.IntID())
+	if i := strings.LastIndexByte(name, '_'); i >= 0 {
+		name = name[i+1:]
+	}
+	auditEntry := ""
+	if caller, ok := MethodCallerFromContext(ctx); ok && caller != nil {
+		auditEntry = caller.AuditEntryID
+	}
+	if args == nil {
+		args = []*ua.Variant{}
+	}
+	if out == nil {
+		out = []*ua.Variant{}
+	}
+	ok := sc.Uint32()&0xC0000000 == 0
+	msg := name + " of " + subject
+	if !ok {
+		msg += ": " + sc.Error()
+	}
 	return &BaseEvent{
 		EventID:    newEventID(),
 		EventType:  ua.NewNumericNodeID(0, auditType),
-		SourceNode: c.id,
+		SourceNode: object,
 		SourceName: "Method/" + name,
 		Time:       now,
 		Message:    ua.NewLocalizedTextWithLocale(msg, "en"),
 		Severity:   100,
-		Fields:     f,
-		audit:      true,
+		Fields: map[string]*ua.Variant{
+			// AuditEventType (Part 5 §6.4.3)
+			"ActionTimeStamp":    ua.MustVariant(now),
+			"Status":             ua.MustVariant(ok),
+			"ServerId":           ua.MustVariant(s.cfg.applicationURI),
+			"ClientAuditEntryId": ua.MustVariant(auditEntry),
+			"ClientUserId":       ua.MustVariant(clientUserID(ctx)),
+			// AuditUpdateMethodEventType (Part 5 §6.4.27)
+			"MethodId":        ua.MustVariant(methodID),
+			"StatusCodeId":    ua.MustVariant(sc),
+			"InputArguments":  ua.MustVariant(args),
+			"OutputArguments": ua.MustVariant(out),
+		},
+		audit: true,
 	}
 }

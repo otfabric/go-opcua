@@ -38,11 +38,19 @@ var conditionFields = []conditionField{
 	{"SilenceState/Id", id.AlarmConditionType}, {"LatchedState/Id", id.AlarmConditionType},
 	{"DialogState/Id", id.DialogConditionType}, {"Prompt", id.DialogConditionType},
 	{"LastResponse", id.DialogConditionType},
+	// The further Part 9 1.05 alarm components, added after the v1.17.0
+	// fields.
+	{"AudibleEnabled", id.AlarmConditionType}, {"ReAlarmRepeatCount", id.AlarmConditionType},
+	{"FirstInGroupFlag", id.AlarmConditionType},
 }
 
 // conditionFieldsV114 is the number of fields of NewConditionEventFilter in
 // v1.14.0; ParseConditionEvent accepts events of such a filter.
 const conditionFieldsV114 = 21
+
+// conditionFieldsV117 is the number of fields of NewConditionEventFilter in
+// v1.17.0, also accepted by ParseConditionEvent.
+const conditionFieldsV117 = 28
 
 // ConditionEventFields lists the fields [NewConditionEventFilter] selects
 // after the ConditionId, as "/"-separated BrowsePaths.
@@ -108,6 +116,12 @@ type ConditionEvent struct {
 	DialogActive *bool
 	Prompt       *ua.LocalizedText
 	LastResponse *int32
+	// AudibleEnabled, ReAlarmRepeatCount and FirstInGroup are the optional
+	// AudibleEnabled, ReAlarmRepeatCount and FirstInGroupFlag of an alarm
+	// (Part 9 §5.8.2).
+	AudibleEnabled     *bool
+	ReAlarmRepeatCount *int16
+	FirstInGroup       *bool
 }
 
 // IsBranch reports whether the event is that of a condition branch (Part 9
@@ -148,7 +162,7 @@ func ParseConditionEvent(ev *ua.EventFieldList) (*ConditionEvent, error) {
 	if ev == nil {
 		return nil, fmt.Errorf("opcua: condition event: nil event")
 	}
-	if n := len(ev.EventFields); n != len(conditionFields)+1 && n != conditionFieldsV114+1 {
+	if n := len(ev.EventFields); n != len(conditionFields)+1 && n != conditionFieldsV117+1 && n != conditionFieldsV114+1 {
 		return nil, fmt.Errorf("opcua: condition event: %d fields, want %d", n, len(conditionFields)+1)
 	}
 	f := ev.EventFields
@@ -198,6 +212,11 @@ func ParseConditionEvent(ev *ua.EventFieldList) (*ConditionEvent, error) {
 	if r, ok := val(28).(int32); ok {
 		e.LastResponse = &r
 	}
+	e.AudibleEnabled = boolField(val(29))
+	if n, ok := val(30).(int16); ok {
+		e.ReAlarmRepeatCount = &n
+	}
+	e.FirstInGroup = boolField(val(31))
 	return e, nil
 }
 
