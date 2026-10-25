@@ -20,6 +20,10 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 - `MaxNodesPerHistoryReadEvents` and `MaxNodesPerHistoryUpdateEvents` are enforced (`Bad_TooManyOperations`).
 - API: `server.EventHistoryProvider`, `EventHistoryUpdater`, `EventHistoryDeleter`, `HistoricalEvent`, `NewHistoricalEvent`, `EventHistoryOptions`, `Server.EnableEventHistory`, `Historian.EnableEvents` / `EventsEnabled` / `RecordEvent` / `ReadEvents` / `UpdateEvents` / `DeleteEvents`.
 
+### Changed
+
+- **server: the normal close of a secure channel is logged at Info, not Warn.** A client's CloseSecureChannel, the peer closing its connection and the server shutting down are the expected end of a channel, logged at the level its opening is ("secure channel closed", "context done, closing secure channel"). Protocol, decode and send errors stay Warn / Error.
+
 ### Fixed
 
 - **server: `SetHistorian` while the server runs is race free.** The provider was read by the History services without synchronisation.
