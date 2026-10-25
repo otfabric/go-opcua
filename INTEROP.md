@@ -12,11 +12,14 @@ The suite uses a dual layout that mirrors [`interop/COVERAGE.md`](interop/COVERA
 2. **Capability companions** — smaller files grouped by COVERAGE.md section. `*_test.go` is Go↔Go semantics; `*_peer_test.go` is peer evidence that can earn ✅.
 
 ```
-opcua-interop
-  open62541 adapter image   (C, native OPC UA stack)
-  milo adapter image        (Java/JVM OPC UA stack)
-  dotnet adapter image      (C#, OPC Foundation UA-.NETStandard; opcua-interop v0.14.0)
-  asyncua adapter image     (Python, FreeOpcUa opcua-asyncio; opcua-interop v0.14.0)
+opcua-interop v0.14.0
+  open62541 adapter image     (C, open62541 1.5.9)
+  milo adapter image          (Java, Eclipse Milo 1.1.8)
+  async-opcua adapter image   (Rust, async-opcua 0.19.0)
+  dotnet adapter image        (C#, OPC Foundation UA-.NETStandard 2.0.1)
+  node-opcua adapter image    (TypeScript, node-opcua 2.187.12)
+  asyncua adapter image       (Python, FreeOpcUa opcua-asyncio 2.1.0)
+  dotnet-gds adapter image    (C#, UA-.NETStandard GDS 1.5.378; opt-in)
          |
     go-opcua/interop/
       # Infrastructure
@@ -30,19 +33,17 @@ opcua-interop
       milo_server_test.go                  TestMiloServer_*                (C→M)
       milo_client_test.go                  TestGoServer_MiloClient_*       (M→S)
 
-      # Opt-in peer, own ledger (testdata/ledger-dotnet.json)
+      # Peers with their own ledger (testdata/ledger-<peer>.json); the same
+      # file set for asyncopcua_*, nodeopcua_* and asyncua_*
       dotnet_harness_test.go               DOTNET_IMAGE, image gate, directions
       dotnet_server_test.go                TestDotnetServer_*              (go-client-to-dotnet-server)
       dotnet_client_test.go                TestGoServer_DotnetClient_*     (dotnet-client-to-go-server)
       dotnet_peer_test.go                  capability tests on the shared peer assertions
+      dotnet_alarms_test.go                A&C on the shared assertions of alarms_peer_test.go
       dotnet_ledger_validate_test.go       ledger-dotnet.json integrity (no docker)
-
-      # Opt-in peer, own ledger (testdata/ledger-asyncua.json)
-      asyncua_harness_test.go              ASYNCUA_IMAGE, image gate, directions, asyncuaDeviation
-      asyncua_server_test.go               TestAsyncuaServer_*             (go-client-to-asyncua-server)
-      asyncua_client_test.go               TestGoServer_AsyncuaClient_*    (asyncua-client-to-go-server)
-      asyncua_peer_test.go                 capability tests on the shared peer assertions
-      asyncua_ledger_validate_test.go      ledger-asyncua.json integrity (no docker)
+      dotnet_pubsub_peer_test.go           PubSub against Opc.Ua.PubSub
+      dotnet_gds_pull_test.go              GDS pull model against the dotnet-gds adapter (opt-in)
+      optional_peers_test.go               opt-in adapter images (DOTNET_GDS_IMAGE)
 
       # Capability companions (COVERAGE sections)
       events_test.go / events_peer_test.go / events_c2peer_test.go
@@ -77,6 +78,16 @@ opcua-interop
       discovery_lds_peer_test.go           LDS registration, RegisterServer(2),
                                            FindServersOnNetwork, mDNS
       discoverypeer/                       go-opcua server run in a container for the mDNS tests
+      transport_peer_test.go               opc.https and opc.wss
+      alarms_peer_test.go                  A&C (Part 9): conditions, Acknowledge / Confirm,
+                                           ConditionRefresh, both directions
+      alarms105_peer_test.go               Part 9 1.05 methods, dialogs, branches, alarm groups,
+                                           audit events (peer client → go-opcua server)
+      alarms105_timing_peer_test.go        OnDelay / OffDelay, ReAlarm, AudibleSound,
+                                           FirstInGroup, AlarmMetrics
+      certmgmt_peer_test.go                push certificate management (Part 12 §7)
+      certmgmt_groups_peer_test.go         push management: the 1.05 groups and methods
+      pubsub_*_test.go                     PubSub (Part 14) against open62541 and through brokers
 
       # Ledger
       coverage.json / capabilities.json    source of truth
@@ -156,11 +167,11 @@ go test -tags=interop -v ./interop/...
 | `MILO_IMAGE` | Milo (Java) adapter image | digest pin in `harness_test.go` |
 | `ASYNC_OPCUA_IMAGE` | async-opcua (Rust) adapter image (see [go-opcua ↔ async-opcua](#go-opcua--async-opcua)) | the v0.14.0 digest `ghcr.io/otfabric/opcua-interop-async-opcua@sha256:680250a8…27c6ef18` |
 | `DOTNET_IMAGE` | UA-.NETStandard (C#) adapter image (see [go-opcua ↔ UA-.NETStandard](#go-opcua--ua-netstandard)) | the v0.14.0 digest `ghcr.io/otfabric/opcua-interop-dotnet@sha256:586b5cde…b09a08b6` |
-| `DOTNET_GDS_IMAGE` | UA-.NETStandard 1.5.378 GDS adapter image (dotnet-gds, opt-in; see [GDS pull model](#gds-pull-model-part-12-6-79)) | `ghcr.io/otfabric/opcua-interop-dotnet-gds:v0.14.0` if present locally |
+| `DOTNET_GDS_IMAGE` | UA-.NETStandard 1.5.378 GDS adapter image (dotnet-gds, opt-in; see [GDS pull model](#gds-pull-model-part-12-6-79)) | the v0.14.0 digest `ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:7c2fc3d6…`, used only if present locally |
 | `NODE_OPCUA_IMAGE` | node-opcua (TypeScript / Node.js) adapter image (see [go-opcua ↔ node-opcua](#go-opcua--node-opcua)) | the v0.14.0 digest `ghcr.io/otfabric/opcua-interop-node-opcua@sha256:da5539fe…4ce14fb1` |
 | `ASYNCUA_IMAGE` | opcua-asyncio (Python, `asyncua`) adapter image (see [go-opcua ↔ opcua-asyncio](#go-opcua--opcua-asyncio)) | the v0.14.0 digest `ghcr.io/otfabric/opcua-interop-asyncua@sha256:1c1433ae…5058bc93` |
 | `OPCUA_INTEROP_FIXTURE_DIR` | Path to fixture directory containing `baseline.json` | `testdata/` |
-| `OPCUA_INTEROP_PKI_DIR` | Root of the test PKI tree generated by `opcua-interop/certs/generate.sh` (v0.8.0 or later; since v0.7.0 the ECC tests need `<identity>/ecc-<curve>/cert.crt\|cert.key`) | `../../opcua-interop/certs/test-pki` |
+| `OPCUA_INTEROP_PKI_DIR` | Root of the test PKI tree generated by `opcua-interop/certs/generate.sh` of the pinned release (the identities of all six adapters; the ECC tests need `<identity>/ecc-<curve>/cert.crt\|cert.key`) | `../../opcua-interop/certs/test-pki` |
 | `OPCUA_INTEROP_REQUIRE_CAPABILITIES` | `1`: fail instead of skip when an image lacks a client operation, a client/server feature or a security profile the suite has evidence for, or when the test PKI is missing | unset (skip) |
 | `INTEROP_DEBUG_LOG` | Print the Go server's structured log to stderr in the SecureChannel renewal peer tests | unset |
 
@@ -193,6 +204,8 @@ go test -tags=interop -v ./interop/...
 | `TestMulticast_` | LDS in a container | open62541 LDS, both adapter clients | all (see ledger `case`) |
 | `TestDotnetServer_` | OPC UA client | UA-.NETStandard server | `go-client-to-dotnet-server` (`ledger-dotnet.json`) |
 | `TestGoServer_DotnetClient_` | OPC UA server | UA-.NETStandard client | `dotnet-client-to-go-server` (`ledger-dotnet.json`) |
+| `TestDotnetGDSPull_` | GDS client / GDS | UA-.NETStandard GDS / GDS client (dotnet-gds) | both dotnet directions (`ledger-dotnet.json`) |
+| `TestCertMgmtPush_`, `TestCertMgmtPushGroups_` | push management client / server | peer servers with push management / node-opcua client | per peer ledger |
 
 For the capabilities that are not a client calling a server (codec, LDS registration, mDNS, reverse connect) the ledger keeps the four direction columns and the capability title says what "C→" and "→S" mean.
 
@@ -461,7 +474,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 
 ### go-opcua ↔ async-opcua
 
-[async-opcua](https://github.com/FreeOpcUa/async-opcua) 0.19.0 (Rust) is a third peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-async-opcua`. Its tests (`interop/asyncopcua_*_test.go`, the async-opcua peers of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.9.0 image (`ASYNC_OPCUA_IMAGE` overrides it); a capability-gated test fails rather than skips when the image reports another opcua-interop release than `interopVersion`.
+[async-opcua](https://github.com/FreeOpcUa/async-opcua) 0.19.0 (Rust) is a third peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-async-opcua`. Its tests (`interop/asyncopcua_*_test.go`, the async-opcua peers of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.14.0 image (`ASYNC_OPCUA_IMAGE` overrides it); a capability-gated test fails rather than skips when the image reports another opcua-interop release than `interopVersion`.
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
@@ -489,7 +502,7 @@ What async-opcua 0.19 does not provide is `unsupported` in the ledger, declared 
 
 ### go-opcua ↔ node-opcua
 
-[node-opcua](https://github.com/node-opcua/node-opcua) 2.187.12 (TypeScript / Node.js) is another peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-node-opcua`. Its tests (`interop/nodeopcua_*_test.go`, the node-opcua peers of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.9.0 image (`NODE_OPCUA_IMAGE` overrides it).
+[node-opcua](https://github.com/node-opcua/node-opcua) 2.187.12 (TypeScript / Node.js) is another peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-node-opcua`. Its tests (`interop/nodeopcua_*_test.go`, the node-opcua peers of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.14.0 image (`NODE_OPCUA_IMAGE` overrides it).
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
@@ -514,7 +527,7 @@ What node-opcua does not provide is `unsupported` in the ledger, declared by the
 
 ### go-opcua ↔ opcua-asyncio
 
-[opcua-asyncio](https://github.com/FreeOpcUa/opcua-asyncio) (PyPI `asyncua` 2.1.0, Python 3.14) is another peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-asyncua`. Its tests (`interop/asyncua_*_test.go`, the asyncua peers of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.9.0 image (`ASYNCUA_IMAGE` overrides it).
+[opcua-asyncio](https://github.com/FreeOpcUa/opcua-asyncio) (PyPI `asyncua` 2.1.0, Python 3.14) is another peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-asyncua`. Its tests (`interop/asyncua_*_test.go`, the asyncua peers of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.14.0 image (`ASYNCUA_IMAGE` overrides it).
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
@@ -552,7 +565,7 @@ Two go-opcua bugs found by this peer are fixed in v1.8.1 (a superseded security 
 
 ### go-opcua ↔ UA-.NETStandard
 
-The OPC Foundation [UA-.NETStandard](https://github.com/OPCFoundation/UA-.NETStandard) stack 2.0.1 (C#, .NET 10) is a fourth peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-dotnet`. Its tests (`interop/dotnet_*_test.go`, the dotnet peer of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.9.0 image (`DOTNET_IMAGE` overrides it).
+The OPC Foundation [UA-.NETStandard](https://github.com/OPCFoundation/UA-.NETStandard) stack 2.0.1 (C#, .NET 10) is a fourth peer, added with the opcua-interop **v0.9.0** adapter `ghcr.io/otfabric/opcua-interop-dotnet`. Its tests (`interop/dotnet_*_test.go`, the dotnet peer of `TestMulticast_GoAndPeers`) run with every interop run against the digest-pinned v0.14.0 image (`DOTNET_IMAGE` overrides it).
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
@@ -618,7 +631,7 @@ Adapter images are pinned to [opcua-interop v0.14.0](https://github.com/otfabric
 
 ### Evidence objective
 
-Optimise for accurate evidence, not a zero-unverified quota. Current ledger: **1 unverified** row (`pubsub.uadp.security-header` O→S: the adapter's standalone codec has no keys; signed and encrypted messages from open62541 are verified live as `pubsub.security.*`) — the other gaps are `deferred`, `unsupported`, or `not-applicable` (see [`GAPS.md`](interop/GAPS.md) and [`BUCKET_B.md`](interop/BUCKET_B.md)).
+Optimise for accurate evidence, not a zero-unverified quota. Current ledger (`coverage.json`, 876 rows): **476 verified, 70 unverified**, 228 unsupported, 60 deferred, 42 not applicable. The unverified rows wait for an adapter command (39: push management and GDS clients for open62541 and Milo, and PubSub chunking, discovery and keyed codec operations of the open62541 adapter), an adapter fixture (9: Part 9 1.05 conditions on the open62541 server) or knowledge of what the peer supports (22: push management on Milo, ResetToServerDefaults on open62541, a GDS on either); see [`GAPS.md`](interop/GAPS.md) and [`BUCKET_B.md`](interop/BUCKET_B.md). The other peers' ledgers are summarised in the [README](README.md#interop-evidence).
 
 ### Recently promoted peer rows (core evidence)
 
@@ -695,9 +708,15 @@ open62541 limits found by these tests (recorded in opcua-interop's contract): it
 
 The capability `security.ecc.unimplemented-policy` (the three policies refused cleanly) is retired with these rows.
 
-### Push certificate management (Part 12 §7, pending an opcua-interop release)
+### Alarms & Conditions (Part 9)
 
-Profile `certificate-management`: `certmgmt.push.trust-list`, `.certificate-update`, `.rejected-list`, `.access`. `TestCertMgmtPush_GoClient_PeerServers` drives package `gds` against open62541 1.5.9 (UA_ENABLE_GDS_PUSHMANAGEMENT), UA-.NETStandard 2.0.1 and node-opcua 2.187.12; `TestCertMgmtPush_NodeOpcuaClient_GoServer` drives node-opcua's ClientPushCertificateManagement (adapter `client push`) against `server.WithPushManagement`. They need opcua-interop v0.13.0 or later (serverFeatures `push-management`, client operation `push`, contract §15): on older images they skip, or fail with `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1`. The UA-.NETStandard push client has no 2.0.1 package and open62541 has no push client API (D→S, O→S `adapter-command-missing`); Milo, async-opcua and asyncua are not wired (`peer-capability-unknown` for their servers).
+Profile `alarms-conditions`. `alarms.condition-refresh` and `alarms.acknowledgeable` (ConditionRefresh, Acknowledge / Confirm / AddComment against the alarm fixture) are verified in both directions with open62541, UA-.NETStandard and node-opcua, and peer client → go-opcua server with Milo, async-opcua and asyncua (the Milo and asyncua servers have no conditions: `unsupported`; async-opcua's is `peer-capability-unknown`). The Part 9 1.05 rows — `alarms.alarm-state-methods`, `.dialog`, `.branches`, `.alarm-groups`, `.audit-events` (`alarms105_peer_test.go`) and `.alarm-timing`, `.audible-sound`, `.first-in-group`, `.alarm-metrics` (`alarms105_timing_peer_test.go`) — are verified peer client → go-opcua server with all six peers, through their generic `client call`, `client event-subscribe` and `client read` operations. No peer server fixture has these features, so the go-opcua client direction is `unverified` (`adapter-fixture-missing` for open62541, UA-.NETStandard and node-opcua) and covered in process by `conformance/alarms`.
+
+### Push certificate management (Part 12 §7)
+
+Profile `certificate-management`: `certmgmt.push.trust-list`, `.certificate-update`, `.rejected-list`, `.access`. `TestCertMgmtPush_GoClient_PeerServers` drives package `gds` against open62541 1.5.9 (UA_ENABLE_GDS_PUSHMANAGEMENT), UA-.NETStandard 2.0.1 and node-opcua 2.187.12; `TestCertMgmtPush_NodeOpcuaClient_GoServer` drives node-opcua's ClientPushCertificateManagement (adapter `client push`) against `server.WithPushManagement`. All these rows are verified. They need opcua-interop v0.13.0 or later (serverFeatures `push-management`, client operation `push`, contract §15): on older images they skip, or fail with `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1`. The UA-.NETStandard push client has no 2.0.1 package and open62541 has no push client API (D→S, O→S `adapter-command-missing`); Milo, async-opcua and asyncua are not wired (`peer-capability-unknown` for their servers).
+
+The Part 12 1.05 additions have rows of their own: `certmgmt.push.get-certificates`, `.create-self-signed`, `.delete-certificate`, `.reset-to-defaults`, `.https-group`, `.usertoken-group`, `.pfx`, `.transaction-diagnostics` and `.alarms` (CertificateExpired / TrustListOutOfDate). `TestCertMgmtPushGroups_GoClient_PeerServers` verifies all of them against UA-.NETStandard 2.0.1 but CreateSelfSignedCertificate (`adapter-fixture-missing`) and ResetToServerDefaults (`unsupported`), and the DefaultUserTokenGroup against open62541 and node-opcua; the others are `unsupported` where the peer server lacks the method or object, and ResetToServerDefaults on open62541 and node-opcua is `peer-capability-unknown`. No peer client calls these methods (→S `adapter-command-missing`); the go-opcua server side is covered by `conformance/certmgmt` and `chaos/certmgmt`.
 
 ### GDS pull model (Part 12 §6, §7.9)
 
@@ -715,7 +734,7 @@ The go side is also covered by `conformance/certmgmt/gds_pull_test.go` and `gds_
 - **Unsupported (behavioural):** `write.encoding-mask` C→M — Milo soft-accepts; claim requires `BadWriteNotSupported`. `nodemgmt.add-nodes` / `nodemgmt.delete-nodes` C→M — the Milo reference server has no NodeManagement service set.
 - **Unsupported (peer stack lacks the feature):** all `security.ecc-*` and `transport.reverse-connect*` rows for Milo (no ECC policy, no ReverseHello); Milo as a discovery server (`discovery.lds-registration`, `discovery.register-server2.mdns`, `discovery.find-servers-on-network` C→M) and `discovery.multicast` C→M / M→S (no mDNS); `encoding.xml.datavalue` C→O / O→S (open62541 has no XML DataValue); `encoding.json.datavalue` C→M (Milo decodes only its nested DataValue form).
 - **Known representation limits** (asserted, not claimed away): go-opcua has no null String (`""` is the null String in binary and `""` in JSON / XML); open62541 cannot decode XmlElement from XML nor encode a matrix to XML; Milo's XML decoder keeps a DateTime to the millisecond.
-- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query, IssuedIdentityToken, A&C, dynamic EO decode, custom event emission, general WhereClause surface, HistoryRead modified/at-time/processed/events, HistoryUpdate, certificate chains / CRL, secured LDS registration against a peer LDS, the JSON / XML encodings as a transport (only the DataEncoding of values is verified).
+- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query against Milo, IssuedIdentityToken, dynamic EO decode, custom event emission, general WhereClause surface and event queue overflow for O→S / M→S, HistoryRead modified/at-time/processed/events, HistoryUpdate, HistoryDelete, certificate chains / CRL, secured LDS registration against a peer LDS, the JSON / XML encodings as a transport (only the DataEncoding of values is verified).
 
 ### Server defects found by peer evidence
 
