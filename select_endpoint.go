@@ -39,16 +39,32 @@ import (
 // all of them when the URL of the GetEndpoints request matches none exactly.
 // SelectEndpoint then keeps to the opc.tcp endpoints, the transport of a
 // client that has not asked for another one; with no opc.tcp endpoint in the
-// list, every transport is considered. SelectEndpointForTransport selects
-// among the endpoints of one transport.
+// list, every transport is considered, the UA Binary mappings before the UA
+// JSON ones (wss-uajson, https-uajson), which a client uses only when asked
+// to. SelectEndpointForTransport selects among the endpoints of one
+// transport.
 func SelectEndpoint(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error) {
 	if len(endpoints) == 0 {
 		return nil, errors.ErrNoEndpoints
 	}
 	if tcp := endpointsOfTransport(endpoints, ua.TransportProfileUATCP); len(tcp) > 0 {
 		endpoints = tcp
+	} else if binary := binaryEndpoints(endpoints); len(binary) > 0 {
+		endpoints = binary
 	}
 	return selectEndpoint(endpoints, policy, mode, certificate)
+}
+
+// binaryEndpoints returns the endpoints whose transport profile is not a UA
+// JSON mapping.
+func binaryEndpoints(endpoints []*ua.EndpointDescription) []*ua.EndpointDescription {
+	var out []*ua.EndpointDescription
+	for _, ep := range endpoints {
+		if ep != nil && !ua.IsJSONTransportProfile(ep.TransportProfileURI) {
+			out = append(out, ep)
+		}
+	}
+	return out
 }
 
 // SelectEndpointForTransport is SelectEndpoint for the endpoints with the

@@ -19,6 +19,14 @@ type TransportURLs struct {
 	TCP, WSS, HTTPS string
 }
 
+// JSONTransportTestClient connects a client to the UA JSON mapping
+// (ua.TransportProfileHTTPSJSON or ua.TransportProfileWSSJSON) of url with
+// security None, trusting the TLS CA of the test PKI.
+func JSONTransportTestClient(t *testing.T, url, profile string, opts ...opcua.Option) *opcua.Client {
+	t.Helper()
+	return NewTransportTestClient(t, url, append([]opcua.Option{opcua.TransportProfile(profile)}, opts...)...)
+}
+
 // TLS returns the TLS PKI of the test binary.
 func TLS(t *testing.T) *testpki.TLSPKI {
 	t.Helper()
