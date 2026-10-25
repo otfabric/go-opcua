@@ -1318,8 +1318,195 @@
       ]
     },
     {
-      "id": "security.ecc.unimplemented-policy",
-      "title": "ECC policies go-opcua does not implement (brainpoolP256r1, brainpoolP384r1, curve448) are refused cleanly",
+      "id": "security.ecc-brainpoolp256r1.sign-encrypt",
+      "title": "ECC_brainpoolP256r1 / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp256r1.write",
+      "title": "ECC_brainpoolP256r1 / Write and read back",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp256r1.subscription",
+      "title": "ECC_brainpoolP256r1 / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp256r1.username.valid",
+      "title": "ECC_brainpoolP256r1 / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp256r1.username.invalid",
+      "title": "ECC_brainpoolP256r1 / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp256r1.renewal",
+      "title": "ECC_brainpoolP256r1 / SecurityToken renewal under subscription",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "title": "ECC_brainpoolP384r1 / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp384r1.write",
+      "title": "ECC_brainpoolP384r1 / Write and read back",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp384r1.subscription",
+      "title": "ECC_brainpoolP384r1 / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp384r1.username.valid",
+      "title": "ECC_brainpoolP384r1 / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp384r1.username.invalid",
+      "title": "ECC_brainpoolP384r1 / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-brainpoolp384r1.renewal",
+      "title": "ECC_brainpoolP384r1 / SecurityToken renewal under subscription",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve448.sign-encrypt",
+      "title": "ECC_curve448 / SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve448.write",
+      "title": "ECC_curve448 / Write and read back",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve448.subscription",
+      "title": "ECC_curve448 / subscription over SignAndEncrypt",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve448.username.valid",
+      "title": "ECC_curve448 / UserName token (EccEncryptedSecret), valid",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve448.username.invalid",
+      "title": "ECC_curve448 / UserName token (EccEncryptedSecret), wrong password rejected",
+      "profile": "security",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "security.ecc-curve448.renewal",
+      "title": "ECC_curve448 / SecurityToken renewal under subscription (5 renewals)",
       "profile": "security",
       "applicableDirections": [
         "go-client-to-open62541-server",

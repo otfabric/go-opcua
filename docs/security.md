@@ -17,7 +17,7 @@ The library handles this automatically. You configure certificates, policies, an
 
 ## Security Policies
 
-The `uapolicy` package implements eleven security policies:
+The `uapolicy` package implements fourteen security policies:
 
 | Policy | Encryption | Signature | Application key | Status |
 |--------|-----------|-----------|-----------------|--------|
@@ -32,8 +32,11 @@ The `uapolicy` package implements eleven security policies:
 | **ECC_nistP256_AesGcm** | AES-128-GCM | AES-128-GCM tag | ECDSA P-256 or P-384 | ECC, AEAD (OPC UA 1.05.07) |
 | **ECC_nistP256_ChaChaPoly** | ChaCha20-Poly1305 | Poly1305 tag | ECDSA P-256 or P-384 | ECC, AEAD (OPC UA 1.05.07) |
 | **ECC_curve25519** | ChaCha20-Poly1305 | Poly1305 tag | Ed25519 | ECC, AEAD (OPC UA 1.05.07) |
+| **ECC_brainpoolP256r1** | AES-128-CBC | HMAC-SHA256 | ECDSA brainpoolP256r1 or brainpoolP384r1 | ECC (OPC UA 1.05) |
+| **ECC_brainpoolP384r1** | AES-256-CBC | HMAC-SHA384 | ECDSA brainpoolP384r1 | ECC (OPC UA 1.05) |
+| **ECC_curve448** | ChaCha20-Poly1305 | Poly1305 tag | Ed448 | ECC, AEAD (OPC UA 1.05.07) |
 
-Everything is implemented with the Go standard library, except ChaCha20-Poly1305, which comes from `golang.org/x/crypto` (the one dependency this library has for cryptography).
+Everything is implemented with the Go standard library, except ChaCha20-Poly1305, which comes from `golang.org/x/crypto`, Ed448 and X448, which come from `github.com/cloudflare/circl`, and the Brainpool curves, which come from `github.com/ProtonMail/go-crypto` (see [Brainpool and Curve448](#brainpool-and-curve448) for why, and for what that costs).
 
 **Recommendation:** Use `Basic256Sha256` for broad compatibility or `Aes256_Sha256_RsaPss` for maximum security with RSA certificates. Avoid `Basic128Rsa15` and `Basic256` — they are deprecated by the OPC Foundation. Use the ECC policies where the peer supports them and you want forward secrecy and small keys; among them prefer the three with authenticated encryption (AEAD), which are the ones current stacks enable by default.
 
@@ -81,10 +84,11 @@ All certificates of one application should carry the same `ApplicationURI`. `Sta
 
 Things to know:
 
-- **Key type and policy must match.** See the table below. An RSA certificate on an ECC policy (or the reverse), or an ECDSA certificate on `ECC_curve25519` (or the reverse), is rejected, on the client with `ErrInvalidSecurityConfig` before anything is sent.
-- **Keys in an HSM.** An ECC application key only ever signs, so `PrivateKeySigner`, `AuthPrivateKeySigner` and `ApplicationIdentity` accept any `crypto.Signer` with an ECDSA or Ed25519 public key. (RSA keys also decrypt and must be `*rsa.PrivateKey`.)
-- **Ranking.** ECC endpoints get a higher `SecurityLevel` than the RSA ones, and the AEAD policies a higher one than the others: `ECC_curve25519` (103) > `ECC_nistP256_ChaChaPoly` (93) > `ECC_nistP256_AesGcm` (83) > `ECC_nistP384` (73) > `ECC_nistP256` (63) > `Aes256_Sha256_RsaPss` (53) > … (`SignAndEncrypt`; `Sign` is one less). The numbers continue the existing scheme of one decade per policy. Within the AEAD group the order is by what a policy adds: AES-GCM, then ChaCha20-Poly1305 (a 256 bit key, constant time without hardware support), then Curve25519 with Ed25519 certificates. A client can only use the endpoints its certificate fits; see [Auto-Detection](#auto-detection).
-- **Not implemented:** `ECC_curve448`, `ECC_brainpoolP256r1` and `ECC_brainpoolP384r1`. They need primitives neither the Go standard library nor `golang.org/x/crypto` has (Ed448/X448, Brainpool curves). A client refuses them by name with `ErrUnsupportedSecurityPolicy`.
+- **Key type and policy must match.** See the table below. An RSA certificate on an ECC policy (or the reverse), an ECDSA certificate on `ECC_curve25519` (or the reverse), a NIST certificate on a Brainpool policy (or the reverse), or an Ed25519 certificate on `ECC_curve448` (or the reverse), is rejected, on the client with `ErrInvalidSecurityConfig` before anything is sent.
+- **Keys in an HSM.** An ECC application key only ever signs, so `PrivateKeySigner`, `AuthPrivateKeySigner` and `ApplicationIdentity` accept any `crypto.Signer` with an ECDSA (NIST or Brainpool curve), Ed25519 or Ed448 (`github.com/cloudflare/circl/sign/ed448`) public key. (RSA keys also decrypt and must be `*rsa.PrivateKey`.)
+- **Ranking.** ECC endpoints get a higher `SecurityLevel` than the RSA ones, and the AEAD policies a higher one than the others: `ECC_curve448` (113) > `ECC_curve25519` (103) > `ECC_nistP256_ChaChaPoly` (93) > `ECC_nistP256_AesGcm` (83) > `ECC_nistP384` (73) > `ECC_brainpoolP384r1` (71) > `ECC_nistP256` (63) > `ECC_brainpoolP256r1` (61) > `Aes256_Sha256_RsaPss` (53) > … (`SignAndEncrypt`; `Sign` is one less). The numbers continue the existing scheme of one decade per policy. Within the AEAD group the order is by what a policy adds: AES-GCM, then ChaCha20-Poly1305 (a 256 bit key, constant time without hardware support), then Curve25519 with Ed25519 certificates, then Curve448 (the same construction at a 224 bit security level). A Brainpool policy ranks just below its NIST counterpart: the same strength, an implementation that is not constant time. A client can only use the endpoints its certificate fits; see [Auto-Detection](#auto-detection).
+- **Brainpool and Curve448** (`ECC_brainpoolP256r1`, `ECC_brainpoolP384r1`, `ECC_curve448`) need certificates `crypto/x509` cannot handle; see [Brainpool and Curve448](#brainpool-and-curve448).
+- **Unknown policies** (`ECC_nistP521`, `ECC_brainpoolP512r1` and anything else not in the table): a client refuses them by name with `ErrUnsupportedSecurityPolicy`.
 - **Peers.** Proven against open62541 v1.5.9 (OpenSSL) in both directions. Recent revisions of Part 7, and open62541 with them, treat `ECC_nistP256` / `ECC_nistP384` as superseded by the AEAD policies; open62541 keeps them available but no longer enables them by default.
 - **Prefer `SignAndEncrypt` with other stacks.** In `Sign` mode the key derivation follows open62541 v1.5.9: the length `L` that goes into the HKDF salt covers the signing key, the encrypting key and the IV. OPC UA 1.05.07 (Part 6 §6.8.1) changed `L` for Sign-only channels to the signing key alone, and the current OPC Foundation .NET stack does that. A peer following the newer rule derives different signing keys, so `Sign` mode is not expected to interoperate with it; `SignAndEncrypt` is the same in both.
 
@@ -97,6 +101,7 @@ Things to know:
 | `ECC_nistP256_AesGcm` | ECDSA P-256 (or P-384) | ECDSA-SHA256 | ECDH P-256 | AES-128-GCM |
 | `ECC_nistP256_ChaChaPoly` | ECDSA P-256 (or P-384) | ECDSA-SHA256 | ECDH P-256 | ChaCha20-Poly1305 |
 | `ECC_curve25519` | Ed25519 | Ed25519 | X25519 | ChaCha20-Poly1305 |
+| `ECC_curve448` | Ed448 | Ed448 | X448 | ChaCha20-Poly1305 |
 | `ECC_nistP256` | ECDSA P-256 (or P-384) | ECDSA-SHA256 | ECDH P-256 | AES-128-CBC + HMAC-SHA256 |
 | `ECC_nistP384` | ECDSA P-384 | ECDSA-SHA384 | ECDH P-384 | AES-256-CBC + HMAC-SHA384 |
 
@@ -140,12 +145,55 @@ What is different on the wire (all of it handled by the library):
 |---|---|---|
 | `ECC_curve25519` key material | Policies with authenticated encryption derive no signing key (`L` = EncryptingKey + IV) | A 32 byte signing key is derived in front of the encrypting key (`L` = 32 + 32 + 12). It makes the tags of `Sign` mode; `SignAndEncrypt` uses the encrypting key. |
 | `ECC_curve25519` and the SecureChannelEnhancements | Apply to the policies whose profile sets the property (not checked for this policy against Part 7) | Not applied: no ChannelThumbprint, no key chaining, classic session signatures (certificate + nonce) |
+| `ECC_curve448` | As `ECC_curve25519` (the hash of its key derivation in the published text could not be checked) | Everything as `ECC_curve25519`, with Ed448 and X448: HKDF-**SHA256**, a 32 byte signing key in front of the encrypting key, no SecureChannelEnhancements |
 | Hash of a certificate in a channel bound signature | The CertificateThumbprintAlgorithm of the policy | SHA-256 of the DER encoded leaf certificate |
 | ChannelThumbprint | "appending the bytes of the Signature from the first Request to the bytes of the first Response" | Signed data is the response chunk followed by the request signature (the same reading) |
 | `Sign` mode key derivation | Encrypting key and IV lengths are zero in `L` for Sign-only channels | `L` is the same in both modes (as for `ECC_nistP256`, see above) |
 | `SignatureData.algorithm` of the session signatures | empty for the enhanced policies | open62541 sends the policy URI for an X.509 user token signature and ignores the field on receipt; this library sends it empty and ignores it too |
 
 The differences only matter with a third stack that follows the text literally. `ECC_nistP256_AesGcm` and `ECC_nistP256_ChaChaPoly` in `SignAndEncrypt` mode differ from the text in the certificate hash alone (if at all: the thumbprint algorithm of these policies may well be SHA-256). The adapter this library is tested with offers the three policies in `SignAndEncrypt` mode only. `Sign` mode is covered between two instances of this library; against open62541 it was checked once by hand (its client reading from a go-opcua server over each of the three policies) and is not part of the interoperability suite.
+
+### Brainpool and Curve448
+
+| Policy | Application certificate | Signatures | Key agreement (nonce) | Keys | Cipher |
+|---|---|---|---|---|---|
+| `ECC_brainpoolP256r1` | ECDSA brainpoolP256r1 (or brainpoolP384r1) | ECDSA-SHA256, r‖s | ECDH brainpoolP256r1 (64 bytes x‖y) | HKDF-SHA256 | AES-128-CBC + HMAC-SHA256 |
+| `ECC_brainpoolP384r1` | ECDSA brainpoolP384r1 | ECDSA-SHA384, r‖s | ECDH brainpoolP384r1 (96 bytes x‖y) | HKDF-SHA384 | AES-256-CBC + HMAC-SHA384 |
+| `ECC_curve448` | Ed448 | Ed448 (pure, empty context, 114 bytes) | X448 (56 bytes) | HKDF-SHA256 | ChaCha20-Poly1305 |
+
+The Brainpool policies are `ECC_nistP256` / `ECC_nistP384` on another curve, `Sign` mode included. `ECC_curve448` is `ECC_curve25519` with Ed448 and X448 (see the table above for where both follow open62541). All three are proven against open62541 v1.5.9 (OpenSSL) in both directions in `SignAndEncrypt` mode, the only mode its adapter offers them in; `Sign` mode is covered between two instances of this library.
+
+**Certificates.** `crypto/x509` refuses certificates with Brainpool keys and cannot verify Ed448 signatures, so the library reads and checks certificates itself wherever it reads one (client and server configuration, endpoint certificates, X.509 user tokens, trust lists):
+
+- `uapolicy.ParseCertificate` / `ParseCertificates` return an `*x509.Certificate` for every key type: a Brainpool key as an `*ecdsa.PublicKey` on its curve (`PublicKeyAlgorithm` ECDSA), an Ed448 key as an `ed448.PublicKey`. Everything else comes from `crypto/x509`; `Raw` and the other raw fields are the original bytes.
+- `uapolicy.CreateCertificate` makes certificates with these keys or signed by them (other keys go to `x509.CreateCertificate`); `uapolicy.MarshalPrivateKey` writes any key as PKCS #8. `uapolicy.ParsePrivateKey` reads Brainpool keys in PKCS #8 and SEC 1 and Ed448 keys in PKCS #8, as OpenSSL writes them.
+- `uapolicy.VerifyCertificate` verifies a chain. Without Ed448 signatures that is `crypto/x509`, Brainpool keys included. A chain in which a certificate is signed with Ed448 is built by the library against the trusted certificates only (`TrustedCertificates`, `WithClientCertificateTrustList`; not the system roots, which carry no Ed448 keys), with this subset of RFC 5280 §6.1: validity period; no unknown critical extension; every issuer a CA by basicConstraints, with keyCertSign if it has a key usage, and within its path length; issuer and subject names equal byte for byte; authority and subject key identifiers equal where both are present; at most 8 certificates. A CA with name constraints is refused on such a path and policy constraints are not evaluated: keep such CAs out of chains with Ed448 signatures.
+
+The parsers are fuzzed (`uapolicy/x509_fuzz_test.go`).
+
+**Libraries, and what they cost.** The library does no curve arithmetic of its own.
+
+- *Ed448 and X448* come from `github.com/cloudflare/circl` (`sign/ed448`, `dh/x448`): constant time, maintained, checked here against the RFC 8032 and RFC 7748 vectors. A peer's X448 key that gives an all-zero shared secret (a low order point) is refused.
+- *Brainpool* has no implementation in the Go standard library, `golang.org/x/crypto` or circl. It comes from `github.com/ProtonMail/go-crypto/brainpool`, the maintained fork of `ebfe/brainpool` that ProtonMail's OpenPGP implementation uses. It maps the curves to `elliptic.Curve` through their isomorphic twists with a = −3; signatures and key agreements then run through the generic code `crypto/ecdsa` and `crypto/elliptic` keep for such curves. That code works with `math/big` and is **not constant time**, unlike the NIST curves of the standard library and unlike open62541 (OpenSSL) and the .NET stack (the operating system's providers). The alternatives were worse: curve arithmetic of our own (the most error-prone code in a stack, without review) or cgo bindings to OpenSSL (the library is pure Go). The RFC 7027 vectors are checked.
+
+  What can leak is timing, to someone who can make and time many operations with the same secret:
+  - *The application instance key* signs every OpenSecureChannel and every CreateSession / ActivateSession. This is where a timing side channel matters: a peer, or an observer on the network, can trigger many signatures and time them.
+  - *The ephemeral keys* of the key agreement are used once each, for one SecurityToken or one EccEncryptedSecret, which leaves little to accumulate.
+  - *Verification* handles public data only.
+
+  So prefer the NIST or the AEAD policies where the peer has them (they rank higher for that reason); keep a Brainpool application key in an HSM or another `crypto.Signer` with a constant time implementation (the library only calls `Sign` on it; the ephemeral keys stay in software); and keep Brainpool endpoints off untrusted networks. Points from a peer are checked to be in range and on the curve before use.
+
+```go
+// A Brainpool server identity next to the others; certificate and key as
+// OpenSSL writes them.
+key, _ := uapolicy.ParsePrivateKey(bpKeyPEM) // PKCS #8 or SEC 1
+srv, _ := server.New(
+    server.ApplicationIdentity(bpCertDER, key), // a brainpoolP384r1 key serves both Brainpool policies
+    server.EnableSecurity("ECC_brainpoolP384r1", ua.MessageSecurityModeSignAndEncrypt),
+    server.EnableSecurity("ECC_brainpoolP256r1", ua.MessageSecurityModeSignAndEncrypt),
+    // ...
+)
+```
 
 ### Policy Selection
 
@@ -253,13 +301,30 @@ openssl req -x509 -newkey ed25519 \
     -subj "/CN=OPC-UA Test" \
     -addext "keyUsage=digitalSignature,nonRepudiation" \
     -addext "subjectAltName=URI:urn:otfabric:opcua:client,DNS:localhost"
+
+# For ECC_brainpoolP256r1 / ECC_brainpoolP384r1: an ECDSA key on
+# brainpoolP256r1 or brainpoolP384r1 (the latter serves both policies).
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:brainpoolP256r1 \
+    -keyout key.pem -out cert.pem \
+    -days 365 -nodes \
+    -subj "/CN=OPC-UA Test" \
+    -addext "keyUsage=digitalSignature,nonRepudiation" \
+    -addext "subjectAltName=URI:urn:otfabric:opcua:client,DNS:localhost"
+
+# For ECC_curve448: an Ed448 key.
+openssl req -x509 -newkey ed448 \
+    -keyout key.pem -out cert.pem \
+    -days 365 -nodes \
+    -subj "/CN=OPC-UA Test" \
+    -addext "keyUsage=digitalSignature,nonRepudiation" \
+    -addext "subjectAltName=URI:urn:otfabric:opcua:client,DNS:localhost"
 ```
 
 ### Certificate Requirements
 
 - **Format:** X.509, PEM-encoded files (DER-encoded internally)
-- **Key type:** RSA for the RSA policies; ECDSA P-256 or P-384 for the nistP256 / nistP384 ECC policies; Ed25519 for `ECC_curve25519`
-- **Key files:** PKCS #1 (`RSA PRIVATE KEY`), PKCS #8 (`PRIVATE KEY`: RSA, ECDSA, Ed25519) or SEC 1 (`EC PRIVATE KEY`), PEM or DER; `uapolicy.ParsePrivateKey` reads all of them
+- **Key type:** RSA for the RSA policies; ECDSA P-256 or P-384 for the nistP256 / nistP384 ECC policies; ECDSA brainpoolP256r1 or brainpoolP384r1 for the Brainpool policies; Ed25519 for `ECC_curve25519`; Ed448 for `ECC_curve448`
+- **Key files:** PKCS #1 (`RSA PRIVATE KEY`), PKCS #8 (`PRIVATE KEY`: RSA, ECDSA, Ed25519, Ed448) or SEC 1 (`EC PRIVATE KEY`, NIST and Brainpool curves), PEM or DER; `uapolicy.ParsePrivateKey` reads all of them
 - **Key size:** RSA 2048+ bits for `Basic256Sha256`, `Aes128_Sha256_RsaOaep` and `Aes256_Sha256_RsaPss` (4096 is also accepted)
 - **SAN:** Must include an `ApplicationURI` as a URI subject alternative name
 - **Key usage:** RSA: `DigitalSignature`, `KeyEncipherment`, `DataEncipherment`. ECC: `DigitalSignature` (an ECC key enciphers nothing)
@@ -417,13 +482,13 @@ ep, err := opcua.SelectEndpoint(endpoints, policy, mode, cert)
 opts := []opcua.Option{
     opcua.SecurityFromEndpoint(ep, authType),
     opcua.Certificate(cert),
-    opcua.PrivateKeySigner(key), // RSA, ECDSA or Ed25519
+    opcua.PrivateKeySigner(key), // RSA, ECDSA, Ed25519 or Ed448
 }
 ```
 
 `opcua.SelectEndpoint` ranks by the server's `SecurityLevel` like `ua.SelectEndpoint`, but only among the endpoints the client can use: it leaves out policies this library does not implement and secured endpoints whose policy does not fit the key type of the certificate. That matters with servers that offer RSA and ECC endpoints, where the highest ranked endpoint is an ECC one that a client with an RSA certificate cannot open.
 
-Where a server gives several usable endpoints the same `SecurityLevel` the ranking of this library decides (see [ECC Security Policies](#ecc-security-policies)). open62541 does that for all its ECC policies; a client with a P-256 certificate then gets `ECC_nistP256_ChaChaPoly`, one with an Ed25519 certificate `ECC_curve25519`.
+Where a server gives several usable endpoints the same `SecurityLevel` the ranking of this library decides (see [ECC Security Policies](#ecc-security-policies)). open62541 does that for all its ECC policies; a client with a P-256 certificate then gets `ECC_nistP256_ChaChaPoly`, one with an Ed25519 certificate `ECC_curve25519`, one with an Ed448 certificate `ECC_curve448`.
 
 ---
 
@@ -658,7 +723,7 @@ discovery server knows is public to everybody who can reach it.
 A server with `WithDiscoveryRegistration` opens a channel to the discovery
 server with its own certificate: it takes the most secure endpoint of the
 discovery server that one of its certificates fits (an RSA certificate for
-the RSA policies, an ECDSA or Ed25519 one for the ECC policies). It refuses to register without security
+the RSA policies, an ECDSA, Ed25519 or Ed448 one for the ECC policies). It refuses to register without security
 unless `RegisterInsecure()` is given, and then still prefers a secured
 endpoint if both sides have one. **The certificate of the discovery server
 is not validated by default**: a party that can impersonate the discovery

@@ -309,10 +309,12 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | ECC_nistP256_AesGcm / SignAndEncrypt | ✓ | ✓ |
 | ECC_nistP256_ChaChaPoly / SignAndEncrypt | ✓ | ✓ |
 | ECC_curve25519 / SignAndEncrypt | ✓ | ✓ |
-| ECC (all five policies) — subscription, SecurityToken renewal | ✓ | ✓ |
-| ECC (all five policies) — UserName token (EccEncryptedSecret), valid / invalid | ✓ | ✓ |
-| ECC AEAD policies — Write and read back | ✓ | ✓ |
-| ECC policies not implemented by go-opcua (brainpool, curve448) refused cleanly | ✓ | ✓ |
+| ECC_brainpoolP256r1 / SignAndEncrypt | ✓ | ✓ |
+| ECC_brainpoolP384r1 / SignAndEncrypt | ✓ | ✓ |
+| ECC_curve448 / SignAndEncrypt | ✓ | ✓ |
+| ECC (all eight policies) — subscription, SecurityToken renewal | ✓ | ✓ |
+| ECC (all eight policies) — UserName token (EccEncryptedSecret), valid / invalid | ✓ | ✓ |
+| ECC policies offered in SignAndEncrypt only (AEAD, Brainpool, curve448) — Write and read back | ✓ | ✓ |
 | Reverse connect (ReverseHello) — read, subscription, discovery | ✓ | ✓ |
 | Reverse connect secured — Basic256Sha256, ECC_nistP256, ECC_nistP384 | ✓ | ✓ |
 | JSON DataEncoding — built-in scalars, arrays, matrix | ✓ | ✓ |
@@ -668,7 +670,7 @@ open62541 limits found by these tests (recorded in opcua-interop's contract): it
 | `monitoreditem.percent-deadband` | all four (AnalogItem `Analog.Level`, EURange 0..100; rejected without EURange and above 100 %) |
 | `security.ecc-nistp256.*`, `security.ecc-nistp384.*` (sign, sign-encrypt, subscription, username.valid / invalid, renewal) | C→O, O→S |
 | `security.ecc-nistp256-aesgcm.*`, `security.ecc-nistp256-chachapoly.*`, `security.ecc-curve25519.*` (sign-encrypt, write, subscription, username.valid / invalid, renewal ×5) | C→O, O→S (the adapter offers the AEAD policies in SignAndEncrypt only) |
-| `security.ecc.unimplemented-policy` | C→O, O→S (brainpoolP256r1, brainpoolP384r1, curve448: not selectable, refused at once; with a P-256 certificate `opcua.SelectEndpoint` picks `ECC_nistP256_ChaChaPoly` — open62541 gives its ECC endpoints one SecurityLevel and the library ranking breaks the tie) |
+| `security.ecc.unimplemented-policy` | C→O, O→S (brainpoolP256r1, brainpoolP384r1, curve448: not selectable, refused at once). Retired when go-opcua implemented these policies, see below |
 | `transport.reverse-connect`, `.subscription` | C→O (Go client listens), O→S (Go server dials) |
 | `transport.reverse-connect.secure` | C→O, O→S (Basic256Sha256, ECC_nistP256, ECC_nistP384) |
 | `encoding.json.variant`, `encoding.xml.variant` | all four |
@@ -681,11 +683,18 @@ open62541 limits found by these tests (recorded in opcua-interop's contract): it
 | `discovery.multicast` | C→O (go-opcua discovers open62541), O→S (open62541 discovers go-opcua) |
 | `subscription.publishing-mode` | O→S, M→S assert the exact `[3,4,5]` window again (adapters request SamplingInterval 0) |
 
+### ECC_brainpoolP256r1, ECC_brainpoolP384r1 and ECC_curve448
+
+| Capability | Directions |
+|---|---|
+| `security.ecc-brainpoolp256r1.*`, `security.ecc-brainpoolp384r1.*`, `security.ecc-curve448.*` (sign-encrypt, write, subscription, username.valid / invalid, renewal; ×5 for curve448) | C→O, O→S against open62541 1.5.9 (OpenSSL); the opcua-interop v0.10.1 adapter offers these policies in SignAndEncrypt only. Milo, asyncua, async-opcua, node-opcua and UA-.NETStandard (adapter) `unsupported` |
+
+The capability `security.ecc.unimplemented-policy` (the three policies refused cleanly) is retired with these rows.
+
 ### Remaining gaps (summary)
 
 - **Unsupported (behavioural):** `write.encoding-mask` C→M — Milo soft-accepts; claim requires `BadWriteNotSupported`. `nodemgmt.add-nodes` / `nodemgmt.delete-nodes` C→M — the Milo reference server has no NodeManagement service set.
 - **Unsupported (peer stack lacks the feature):** all `security.ecc-*` and `transport.reverse-connect*` rows for Milo (no ECC policy, no ReverseHello); Milo as a discovery server (`discovery.lds-registration`, `discovery.register-server2.mdns`, `discovery.find-servers-on-network` C→M) and `discovery.multicast` C→M / M→S (no mDNS); `encoding.xml.datavalue` C→O / O→S (open62541 has no XML DataValue); `encoding.json.datavalue` C→M (Milo decodes only its nested DataValue form).
-- **Not implemented in go-opcua:** the ECC policies `ECC_brainpoolP256r1`, `ECC_brainpoolP384r1`, `ECC_curve448` (open62541 offers them; the ledger only claims that they are refused cleanly).
 - **Known representation limits** (asserted, not claimed away): go-opcua has no null String (`""` is the null String in binary and `""` in JSON / XML); open62541 cannot decode XmlElement from XML nor encode a matrix to XML; Milo's XML decoder keeps a DateTime to the millisecond.
 - **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query, IssuedIdentityToken, A&C, GDS, dynamic EO decode, custom event emission, general WhereClause surface, HistoryRead modified/at-time/processed/events, HistoryUpdate, certificate chains / CRL, secured LDS registration against a peer LDS, the JSON / XML encodings as a transport (only the DataEncoding of values is verified).
 

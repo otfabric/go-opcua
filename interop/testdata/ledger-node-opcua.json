@@ -1772,14 +1772,252 @@
       "fixture": "baseline"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "nextAction": "node-opcua 2.187.12 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",

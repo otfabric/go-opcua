@@ -42,12 +42,22 @@ type eccPKI struct {
 	// A P-256 CA and a client certificate issued by it, for trust lists.
 	caCert []byte
 	issued *eccIdentity
+
+	// By curve: user identity certificates, CAs and client certificates
+	// issued by them.
+	users      map[string]*eccIdentity
+	cas        map[string]*eccIdentity
+	issuedByCA map[string]*eccIdentity
 }
 
 const (
 	curveP256    = testpki.CurveP256
 	curveP384    = testpki.CurveP384
 	curveEd25519 = testpki.CurveEd25519
+
+	curveBrainpoolP256r1 = testpki.CurveBrainpoolP256r1
+	curveBrainpoolP384r1 = testpki.CurveBrainpoolP384r1
+	curveEd448           = testpki.CurveEd448
 )
 
 // aeadPolicies lists the ECC security policies of OPC UA 1.05.07 with
@@ -85,12 +95,18 @@ func adaptECC(src *testpki.ECC) *eccPKI {
 		edUser:   conv(src.EdUser),
 		caCert:   src.CACert,
 		issued:   conv(src.Issued),
+
+		users:      map[string]*eccIdentity{},
+		cas:        map[string]*eccIdentity{},
+		issuedByCA: map[string]*eccIdentity{},
 	}
-	for curve, id := range src.Server {
-		p.server[curve] = conv(id)
-	}
-	for curve, id := range src.Client {
-		p.client[curve] = conv(id)
+	for dst, from := range map[*map[string]*eccIdentity]map[string]*testpki.Identity{
+		&p.server: src.Server, &p.client: src.Client, &p.users: src.Users,
+		&p.cas: src.CAs, &p.issuedByCA: src.IssuedByCA,
+	} {
+		for curve, id := range from {
+			(*dst)[curve] = conv(id)
+		}
 	}
 	return p
 }

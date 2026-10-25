@@ -3,6 +3,8 @@ module github.com/otfabric/go-opcua
 go 1.26.0
 
 require (
+	github.com/ProtonMail/go-crypto v1.5.2
+	github.com/cloudflare/circl v1.6.5
 	github.com/google/uuid v1.6.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.58.0
@@ -12,8 +14,6 @@ require (
 )
 
 require (
-	github.com/ProtonMail/go-crypto v1.5.2 // indirect
-	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect

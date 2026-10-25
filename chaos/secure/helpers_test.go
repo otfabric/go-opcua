@@ -49,17 +49,20 @@ type policy struct {
 }
 
 var (
-	polRSA        = policy{"Basic256Sha256", ua.SecurityPolicyURIBasic256Sha256, ""}
-	polP256       = policy{"ECC_nistP256", ua.SecurityPolicyURIECCNistP256, testpki.CurveP256}
-	polP384       = policy{"ECC_nistP384", ua.SecurityPolicyURIECCNistP384, testpki.CurveP384}
-	polAesGcm     = policy{"ECC_nistP256_AesGcm", ua.SecurityPolicyURIECCNistP256AesGcm, testpki.CurveP256}
-	polChaChaPoly = policy{"ECC_nistP256_ChaChaPoly", ua.SecurityPolicyURIECCNistP256ChaChaPoly, testpki.CurveP256}
-	polCurve25519 = policy{"ECC_curve25519", ua.SecurityPolicyURIECCCurve25519, testpki.CurveEd25519}
+	polRSA          = policy{"Basic256Sha256", ua.SecurityPolicyURIBasic256Sha256, ""}
+	polP256         = policy{"ECC_nistP256", ua.SecurityPolicyURIECCNistP256, testpki.CurveP256}
+	polP384         = policy{"ECC_nistP384", ua.SecurityPolicyURIECCNistP384, testpki.CurveP384}
+	polAesGcm       = policy{"ECC_nistP256_AesGcm", ua.SecurityPolicyURIECCNistP256AesGcm, testpki.CurveP256}
+	polChaChaPoly   = policy{"ECC_nistP256_ChaChaPoly", ua.SecurityPolicyURIECCNistP256ChaChaPoly, testpki.CurveP256}
+	polCurve25519   = policy{"ECC_curve25519", ua.SecurityPolicyURIECCCurve25519, testpki.CurveEd25519}
+	polBrainpool256 = policy{"ECC_brainpoolP256r1", ua.SecurityPolicyURIECCBrainpoolP256r1, testpki.CurveBrainpoolP256r1}
+	polBrainpool384 = policy{"ECC_brainpoolP384r1", ua.SecurityPolicyURIECCBrainpoolP384r1, testpki.CurveBrainpoolP384r1}
+	polCurve448     = policy{"ECC_curve448", ua.SecurityPolicyURIECCCurve448, testpki.CurveEd448}
 
 	// allPolicies is every secured policy the suite covers: one RSA policy,
-	// the two ECC policies and the three ECC policies with authenticated
-	// encryption.
-	allPolicies = []policy{polRSA, polP256, polP384, polAesGcm, polChaChaPoly, polCurve25519}
+	// the four ECC policies with CBC and HMAC (NIST and Brainpool curves) and
+	// the four ECC policies with authenticated encryption.
+	allPolicies = []policy{polRSA, polP256, polP384, polAesGcm, polChaChaPoly, polCurve25519, polBrainpool256, polBrainpool384, polCurve448}
 )
 
 // selectedPolicies returns allPolicies, or the ones CHAOS_POLICY selects.
@@ -79,6 +82,14 @@ func selectedPolicies(t *testing.T) []policy {
 		t.Fatalf("%s=%q selects no security policy", envPolicy, want)
 	}
 	return out
+}
+
+// eccCurves are the key types of the ECC application instance certificates,
+// in the order the server is given them: it serves a policy with the first
+// certificate that fits.
+var eccCurves = []string{
+	testpki.CurveP256, testpki.CurveP384, testpki.CurveEd25519,
+	testpki.CurveBrainpoolP256r1, testpki.CurveBrainpoolP384r1, testpki.CurveEd448,
 }
 
 func pki(t testing.TB) *testpki.PKI {
@@ -188,7 +199,8 @@ func (e *env) onceID() *ua.NodeID            { return e.nodeID("Once") }
 func (e *env) objectsID() *ua.NodeID         { return ua.NewNumericNodeID(e.ns, id.ObjectsFolder) }
 
 // secureServerOptions returns the options of a server with one application
-// instance certificate per key type (RSA, ECC P-256, ECC P-384, Ed25519) that
+// instance certificate per key type (RSA, ECC P-256, ECC P-384, Ed25519,
+// brainpoolP256r1, brainpoolP384r1, Ed448) that
 // offers every policy under test in both secure modes, the None endpoint, and
 // anonymous and username identities.
 func secureServerOptions(t testing.TB) []server.Option {
@@ -203,7 +215,7 @@ func secureServerOptions(t testing.TB) []server.Option {
 		server.PrivateKey(p.ServerKey),
 		server.SetLogger(chaoskit.Logger()),
 	}
-	for _, curve := range []string{testpki.CurveP256, testpki.CurveP384, testpki.CurveEd25519} {
+	for _, curve := range eccCurves {
 		opts = append(opts, server.ApplicationIdentity(p.ECC.Server[curve].Cert, p.ECC.Server[curve].Key))
 	}
 	for _, pol := range allPolicies {
@@ -489,8 +501,10 @@ func (e *env) securityOptions(pol policy, mode ua.MessageSecurityMode, auth ua.U
 	p := pki(e.t)
 	opts := []opcua.Option{
 		opcua.SecurityFromEndpoint(e.endpoint(pol, mode), auth),
-		opcua.TrustedCertificates(p.ServerCertX509,
-			p.ECC.Server[testpki.CurveP256].X509, p.ECC.Server[testpki.CurveP384].X509, p.ECC.Server[testpki.CurveEd25519].X509),
+		opcua.TrustedCertificates(p.ServerCertX509),
+	}
+	for _, curve := range eccCurves {
+		opts = append(opts, opcua.TrustedCertificates(p.ECC.Server[curve].X509))
 	}
 	if pol.curve == "" {
 		opts = append(opts, opcua.Certificate(p.ClientCert), opcua.PrivateKey(p.ClientKey))

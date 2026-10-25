@@ -30,7 +30,6 @@ package main
 
 import (
 	"context"
-	"crypto"
 	"crypto/tls"
 	"flag"
 	"fmt"
@@ -46,7 +45,7 @@ import (
 func main() {
 	var (
 		endpoint = flag.String("endpoint", "opc.tcp://localhost:4840", "OPC UA Endpoint URL")
-		policy   = flag.String("sec-policy", "auto", "Security policy: None, Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss, ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519, or auto")
+		policy   = flag.String("sec-policy", "auto", "Security policy: None, Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss, ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519, ECC_brainpoolP256r1, ECC_brainpoolP384r1, ECC_curve448, or auto")
 		mode     = flag.String("sec-mode", "auto", "Security mode: None, Sign, SignAndEncrypt, or auto")
 		auth     = flag.String("auth", "anonymous", "Authentication: anonymous, username, certificate")
 		certfile = flag.String("cert", "", "Path to certificate PEM file (required for security != None)")
@@ -161,20 +160,15 @@ func main() {
 	// - Message signing (integrity)
 	// - Message encryption (confidentiality)
 	if *certfile != "" && *keyfile != "" {
-		c, err := tls.LoadX509KeyPair(*certfile, *keyfile)
-		if err != nil {
-			log.Fatalf("Failed to load certificate: %v", err)
-		}
 		// An RSA key for the RSA security policies, an ECDSA key (P-256 or
-		// P-384) for the nistP256 / nistP384 ECC policies, an Ed25519 key for
-		// ECC_curve25519.
-		pk, ok := c.PrivateKey.(crypto.Signer)
-		if !ok {
-			log.Fatal("Private key must be an RSA, ECDSA or Ed25519 key")
-		}
+		// P-384) for the nistP256 / nistP384 ECC policies, a brainpoolP256r1
+		// or brainpoolP384r1 key for the Brainpool policies, an Ed25519 key
+		// for ECC_curve25519 and an Ed448 key for ECC_curve448. The files
+		// are read with uapolicy.ParseCertificate and ParsePrivateKey, which
+		// also take the Brainpool and Ed448 keys crypto/tls cannot load.
 		opts = append(opts,
-			opcua.Certificate(c.Certificate[0]),
-			opcua.PrivateKeySigner(pk),
+			opcua.CertificateFile(*certfile),
+			opcua.PrivateKeyFile(*keyfile),
 		)
 	}
 

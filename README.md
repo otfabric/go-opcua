@@ -233,7 +233,7 @@ what the interop suite has actually exercised.
 | HTTPS / WebSockets transport | — | WebSocket server (build option) | — | — | HTTPS | — | — |
 | Reverse connect (ReverseHello) ¹ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — |
 | RSA security policies (Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss; Basic128Rsa15 and Basic256 for legacy peers) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| ECC security policies ² | ✅ nistP256/384, nistP256_AesGcm, nistP256_ChaChaPoly, curve25519 | ✅ also Brainpool, Curve448 (OpenSSL) | — | — | ✅ | — | — |
+| ECC security policies ² | ✅ nistP256/384, brainpoolP256r1/P384r1, nistP256_AesGcm, nistP256_ChaChaPoly, curve25519, curve448 | ✅ (OpenSSL) | — | — | ✅ | — | — |
 | User identity: anonymous, username, X.509 | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | User identity: issued token | ✅ carried to the application | ✅ | server side | · | ✅ | · | · |
 | Discovery: FindServers, GetEndpoints, RegisterServer2 as registrant | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ³ | ✅ |
@@ -276,7 +276,8 @@ node-opcua in both directions; the UA-.NETStandard adapter does not wire it.
 ² go-opcua follows open62541 1.5.9 where it and Part 6 1.05.07 differ (see
 [Security](docs/security.md)); open62541 is the only ECC peer the suite can
 test, because UA-.NETStandard 2.0.1 refuses ECC certificates from the RSA test
-CA. ECC_brainpoolP256r1/P384r1 and ECC_curve448 are not implemented.
+CA. The Brainpool curves come from a pure Go implementation that is not
+constant time; see [Security](docs/security.md#brainpool-and-curve448).
 
 ³ node-opcua registers only with a discovery server that has a certificate,
 and reports success when the registration failed.
@@ -344,8 +345,8 @@ call, reconnect with subscription recovery, retries and observability built
 in, and a server that includes discovery, history and query out of the box.
 
 **Choose open62541 if** you need a C library for embedded or bare-metal
-targets, time-scheduled PubSub over Ethernet (TSN), the Brainpool / Curve448 ECC security
-policies, or a stack with an OPC Foundation certified server profile.
+targets, time-scheduled PubSub over Ethernet (TSN), constant time Brainpool ECC security
+policies (OpenSSL), or a stack with an OPC Foundation certified server profile.
 
 **Choose Eclipse Milo if** you are on the JVM and want asynchronous client
 and server SDKs with strong support for dynamically decoded custom data
@@ -550,8 +551,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 | | ECC_nistP256_AesGcm (AES-128-GCM) | Yes |
 | | ECC_nistP256_ChaChaPoly (ChaCha20-Poly1305) | Yes |
 | | ECC_curve25519 (Ed25519, X25519, ChaCha20-Poly1305) | Yes |
-| | ECC_brainpoolP256r1 / ECC_brainpoolP384r1 | No |
-| | ECC_curve448 | No |
+| | ECC_brainpoolP256r1 / ECC_brainpoolP384r1 | Yes (not constant time, see [Security](docs/security.md#brainpool-and-curve448)) |
+| | ECC_curve448 (Ed448, X448, ChaCha20-Poly1305) | Yes |
 | | PubSub-Aes128-CTR / PubSub-Aes256-CTR | Yes (PubSub UADP message security) |
 
 PubSub (Part 14) is implemented in the `pubsub` packages: UDP (`opc.udp://`, unicast and multicast), Ethernet (`opc.eth://`, UADP only), MQTT 3.1.1 and 5.0 (`mqtt://`, `mqtts://`) and AMQP 1.0 (`amqp://`, `amqps://`) transports with the UADP and JSON message mappings; the PubSub-Aes128-CTR / PubSub-Aes256-CTR policies secure UADP messages and are not secure-channel policies. See [PubSub](docs/pubsub.md).
