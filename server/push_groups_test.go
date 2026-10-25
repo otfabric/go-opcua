@@ -322,15 +322,15 @@ func TestPushGenerateKey(t *testing.T) {
 	k, err := generateRSA(nil, 0, true)
 	require.NoError(t, err)
 	require.Equal(t, 2048, k.N.BitLen())
-	_, err = generateKey(groupApplication, id.EccApplicationCertificateType, nil, 0)
+	_, err = generateKey(id.EccNistP256ApplicationCertificateType, nil, 384)
 	require.Error(t, err)
 	p256, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
-	_, err = generateKey(groupHTTPS, 0, p256, 384)
+	_, err = generateKey(id.HTTPSCertificateType, p256, 384)
 	require.ErrorIs(t, err, errKeySize)
 	_, ed, err := ed25519.GenerateKey(rand.Reader)
 	require.NoError(t, err)
-	_, err = generateKey(groupHTTPS, 0, ed, 448)
+	_, err = generateKey(id.HTTPSCertificateType, ed, 448)
 	require.ErrorIs(t, err, errKeySize)
 }
 

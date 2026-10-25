@@ -113,80 +113,132 @@ func (s *serverConfig) certificateTypes() []*ua.NodeID {
 	return out
 }
 
-// groupTypes returns the CertificateTypes of a group.
+// groupTypes returns the CertificateTypes of a group: for the
+// DefaultApplicationGroup the types of the server's certificates and those
+// it started with.
 func (m *pushManager) groupTypes(g *certGroup) []*ua.NodeID {
-	switch g.kind {
-	case groupApplication:
-		return m.s.cfg.certificateTypes()
-	case groupHTTPS:
+	switch {
+	case g.kind == groupApplication:
+		out := m.s.cfg.certificateTypes()
+		for _, t := range m.appTypes {
+			if !slices.ContainsFunc(out, func(n *ua.NodeID) bool { return n.IntID() == t }) {
+				out = append(out, ua.NewNumericNodeID(0, t))
+			}
+		}
+		return out
+	case g.kind == groupHTTPS:
 		return []*ua.NodeID{ua.NewNumericNodeID(0, id.HTTPSCertificateType)}
-	case groupUserToken, numGroups:
+	case g.custom != nil:
+		out := []*ua.NodeID{}
+		for _, t := range g.custom.types {
+			out = append(out, ua.NewNumericNodeID(0, t))
+		}
+		return out
 	}
 	return []*ua.NodeID{}
 }
 
 // groupCerts returns the certificates of a group with their types.
-func (m *pushManager) groupCerts(g *certGroup) ([]uint32, []applicationIdentity) {
+func (m *pushManager) groupCerts(g *certGroup) ([]uint32, []groupCert) {
 	var types []uint32
-	var out []applicationIdentity
-	switch g.kind {
-	case groupApplication:
+	var out []groupCert
+	switch {
+	case g.kind == groupApplication:
 		for _, x := range m.s.cfg.identityCerts() {
 			if t, ok := certTypeOf(x.certificate); ok {
+				types = append(types, t)
+				out = append(out, groupCert{cert: x.certificate, key: x.key})
+			}
+		}
+	case g.kind == groupHTTPS:
+		if x := m.https.Load(); x != nil {
+			types = append(types, id.HTTPSCertificateType)
+			out = append(out, groupCert{cert: x.cert, issuers: x.issuers, key: x.key})
+		}
+	case g.custom != nil:
+		for _, t := range g.custom.types {
+			if x, ok := g.custom.get(t); ok {
 				types = append(types, t)
 				out = append(out, x)
 			}
 		}
-	case groupHTTPS:
-		if x := m.https.Load(); x != nil {
-			types = append(types, id.HTTPSCertificateType)
-			out = append(out, applicationIdentity{certificate: x.cert, key: x.key})
-		}
-	case groupUserToken, numGroups:
 	}
 	return types, out
+}
+
+// hasCertificates reports whether a group has certificate types, which
+// the DefaultUserTokenGroup, a trust list only, has not.
+func (m *pushManager) hasCertificates(g *certGroup) bool {
+	return g.kind == groupApplication || g.kind == groupHTTPS || g.custom != nil && len(g.custom.types) > 0
+}
+
+// slot returns the certificate of a group for a requested type (0: the
+// first) with its concrete type; the certificate is empty where the group
+// has a type but no certificate of it. It reports false if the group has
+// no such type.
+func (m *pushManager) slot(g *certGroup, want uint32) (groupCert, uint32, bool) {
+	switch {
+	case g.kind == groupApplication:
+		for _, x := range m.s.cfg.identityCerts() {
+			if t, ok := certTypeOf(x.certificate); ok && typeMatches(want, t) {
+				return groupCert{cert: x.certificate, key: x.key}, t, true
+			}
+		}
+		// A type whose certificate DeleteCertificate removed.
+		for _, t := range m.appTypes {
+			if typeMatches(want, t) {
+				return groupCert{}, t, true
+			}
+		}
+	case g.kind == groupHTTPS:
+		if httpsTypeMatches(want) {
+			var cur groupCert
+			if x := m.https.Load(); x != nil {
+				cur = groupCert{cert: x.cert, issuers: x.issuers, key: x.key}
+			}
+			return cur, id.HTTPSCertificateType, true
+		}
+	case g.custom != nil:
+		// The type itself first, then a type it is a supertype of.
+		for _, exact := range []bool{true, false} {
+			for _, t := range g.custom.types {
+				if exact && want == t || !exact && groupTypeMatches(want, t) {
+					x, _ := g.custom.get(t)
+					return x, t, true
+				}
+			}
+		}
+	}
+	// The DefaultUserTokenGroup has a trust list only.
+	return groupCert{}, 0, false
 }
 
 // certOfType returns the certificate of the group and type arguments with
 // its concrete type: argument i is the CertificateGroupId (null is the
 // DefaultApplicationGroup) and i+1 the CertificateTypeId. The certificate
-// of a DefaultHttpsGroup without one is empty.
-func (m *pushManager) certOfType(args []*ua.Variant, i int) (*certGroup, applicationIdentity, uint32, ua.StatusCode) {
+// of a type the group has no certificate of is empty.
+func (m *pushManager) certOfType(args []*ua.Variant, i int) (*certGroup, groupCert, uint32, ua.StatusCode) {
 	gid, ok1 := argValue[*ua.NodeID](args, i)
 	typ, ok2 := argValue[*ua.NodeID](args, i+1)
 	if !ok1 || !ok2 {
-		return nil, applicationIdentity{}, 0, ua.StatusBadTypeMismatch
+		return nil, groupCert{}, 0, ua.StatusBadTypeMismatch
 	}
 	g, ok := m.group(gid)
 	if !ok {
-		return nil, applicationIdentity{}, 0, ua.StatusBadInvalidArgument
+		return nil, groupCert{}, 0, ua.StatusBadInvalidArgument
 	}
 	var want uint32
 	if !isNullNodeID(typ) {
 		if typ.Namespace() != 0 || !isNumericNodeID(typ) {
-			return nil, applicationIdentity{}, 0, ua.StatusBadInvalidArgument
+			return nil, groupCert{}, 0, ua.StatusBadInvalidArgument
 		}
 		want = typ.IntID()
 	}
-	switch g.kind {
-	case groupApplication:
-		for _, x := range m.s.cfg.identityCerts() {
-			if t, ok := certTypeOf(x.certificate); ok && typeMatches(want, t) {
-				return g, x, t, ua.StatusOK
-			}
-		}
-	case groupHTTPS:
-		if httpsTypeMatches(want) {
-			var cur applicationIdentity
-			if x := m.https.Load(); x != nil {
-				cur = applicationIdentity{certificate: x.cert, key: x.key}
-			}
-			return g, cur, id.HTTPSCertificateType, ua.StatusOK
-		}
-	case groupUserToken, numGroups:
-		// The DefaultUserTokenGroup has a trust list only.
+	cur, t, ok := m.slot(g, want)
+	if !ok {
+		return nil, groupCert{}, 0, ua.StatusBadInvalidArgument
 	}
-	return nil, applicationIdentity{}, 0, ua.StatusBadInvalidArgument
+	return g, cur, t, ua.StatusOK
 }
 
 func isNumericNodeID(n *ua.NodeID) bool {
@@ -203,25 +255,19 @@ func isNullNodeID(n *ua.NodeID) bool {
 	return n == nil || isNumericNodeID(n) && n.Namespace() == 0 && n.IntID() == 0
 }
 
-// checkNewCert checks a certificate for a group: its type, the key the
-// group can use, the ApplicationUri of an application instance
-// certificate and the validity period.
-func (m *pushManager) checkNewCert(g *certGroup, certType uint32, der []byte) (*x509.Certificate, ua.StatusCode) {
+// checkNewCert checks a certificate of a type: the key the type can use,
+// the ApplicationUri of an application instance certificate and the
+// validity period.
+func (m *pushManager) checkNewCert(certType uint32, der []byte) (*x509.Certificate, ua.StatusCode) {
 	cert, err := uapolicy.ParseCertificate(der)
 	if err != nil || !bytes.Equal(cert.Raw, der) {
 		return nil, ua.StatusBadCertificateInvalid
 	}
-	if g.kind == groupHTTPS {
-		if !tlsKeySupported(cert.PublicKey) {
-			return nil, ua.StatusBadCertificateInvalid
-		}
-	} else {
-		if t, ok := certTypeOf(der); !ok || !typeMatches(certType, t) {
-			return nil, ua.StatusBadCertificateInvalid
-		}
-		if uri := m.s.cfg.applicationURI; uri != "" && (len(cert.URIs) == 0 || cert.URIs[0].String() != uri) {
-			return nil, ua.StatusBadCertificateURIInvalid
-		}
+	if !certFitsType(certType, cert, der) {
+		return nil, ua.StatusBadCertificateInvalid
+	}
+	if uri := m.s.cfg.applicationURI; isAppType(certType) && uri != "" && (len(cert.URIs) == 0 || cert.URIs[0].String() != uri) {
+		return nil, ua.StatusBadCertificateURIInvalid
 	}
 	if now := time.Now(); now.Before(cert.NotBefore) || now.After(cert.NotAfter) {
 		return nil, ua.StatusBadCertificateTimeInvalid
@@ -252,7 +298,7 @@ func (m *pushManager) updateCertificate(ctx context.Context, c *MethodCaller, ar
 	if !ok1 || !ok2 || !ok3 {
 		return nil, ua.StatusBadTypeMismatch
 	}
-	cert, sc := m.checkNewCert(g, certType, der)
+	cert, sc := m.checkNewCert(certType, der)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -319,7 +365,7 @@ func (m *pushManager) updateCertificate(ctx context.Context, c *MethodCaller, ar
 	if _, isRSA := priv.(*rsa.PrivateKey); isRSAType(certType) && !isRSA {
 		return nil, ua.StatusBadSecurityChecksFailed
 	}
-	required, sc := m.addCertLocked(ctx, c.SessionID, g, &pendingCert{key: key, old: cur.certificate, cert: slices.Clone(der), issuers: issuers, priv: priv})
+	required, sc := m.addCertLocked(ctx, c.SessionID, g, &pendingCert{key: key, old: cur.cert, cert: slices.Clone(der), issuers: issuers, priv: priv})
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -368,16 +414,23 @@ func (m *pushManager) createSigningRequest(_ context.Context, _ *MethodCaller, a
 		return nil, ua.StatusBadTypeMismatch
 	}
 	tmpl := &x509.CertificateRequest{}
-	if cur.certificate != nil {
-		curCert, err := uapolicy.ParseCertificate(cur.certificate)
+	if cur.cert != nil {
+		curCert, err := uapolicy.ParseCertificate(cur.cert)
 		if err != nil {
 			return nil, ua.StatusBadInternalError
 		}
 		tmpl.Subject, tmpl.DNSNames, tmpl.IPAddresses, tmpl.URIs = curCert.Subject, curCert.DNSNames, curCert.IPAddresses, curCert.URIs
 	} else if subject == "" || !regenerate {
-		// A DefaultHttpsGroup without a certificate has neither a subject
+		// A group without a certificate of the type has neither a subject
 		// nor a key to sign the request with.
 		return nil, ua.StatusBadInvalidArgument
+	} else if uri := m.s.cfg.applicationURI; isAppType(certType) && uri != "" {
+		// The ApplicationUri an application instance certificate needs.
+		u, err := url.Parse(uri)
+		if err != nil {
+			return nil, ua.StatusBadInternalError
+		}
+		tmpl.URIs = []*url.URL{u}
 	}
 	if subject != "" {
 		name, err := parseSubjectName(subject)
@@ -392,7 +445,7 @@ func (m *pushManager) createSigningRequest(_ context.Context, _ *MethodCaller, a
 			return nil, ua.StatusBadInvalidArgument
 		}
 		var err error
-		if key, err = generateKey(g.kind, certType, cur.key, 0); err != nil {
+		if key, err = generateKey(certType, cur.key, 0); err != nil {
 			return nil, ua.StatusBadNotSupported
 		}
 	}
@@ -422,12 +475,12 @@ var keyBits = map[uint32][]int{
 
 var errKeySize = errors.New("server: key size not supported")
 
-// generateKey returns a new key for a certificate of the group and type:
-// the curve of an ECC type, RSA of bits (0: the size of the current key,
-// at least 2048), and for the DefaultHttpsGroup a key of the kind of the
-// current one (RSA without one).
-func generateKey(g groupKind, certType uint32, cur crypto.Signer, bits int) (crypto.Signer, error) {
-	if g == groupHTTPS {
+// generateKey returns a new key for a certificate of the type: the curve
+// of an ECC application type, RSA of bits (0: the size of the current key,
+// at least 2048), and for the other types (HttpsCertificateType, the TLS
+// and user types) a key of the kind of the current one (RSA without one).
+func generateKey(certType uint32, cur crypto.Signer, bits int) (crypto.Signer, error) {
+	if !isAppType(certType) {
 		switch k := cur.(type) {
 		case *ecdsa.PrivateKey:
 			if bits != 0 && bits != k.Curve.Params().BitSize {
@@ -461,11 +514,10 @@ func generateKey(g groupKind, certType uint32, cur crypto.Signer, bits int) (cry
 	case id.EccCurve25519ApplicationCertificateType:
 		_, k, err := ed25519.GenerateKey(rand.Reader)
 		return k, err
-	case id.EccCurve448ApplicationCertificateType:
+	default: // EccCurve448ApplicationCertificateType: isAppType holds
 		_, k, err := ed448.GenerateKey(rand.Reader)
 		return k, err
 	}
-	return nil, x509.ErrUnsupportedAlgorithm
 }
 
 // generateRSA returns a new RSA key of bits: 2048, 3072 or 4096 (2048 only
@@ -551,8 +603,8 @@ func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *Method
 		return nil, ua.StatusBadTypeMismatch
 	}
 	tmpl := &x509.Certificate{}
-	if cur.certificate != nil {
-		curCert, err := uapolicy.ParseCertificate(cur.certificate)
+	if cur.cert != nil {
+		curCert, err := uapolicy.ParseCertificate(cur.cert)
 		if err != nil {
 			return nil, ua.StatusBadInternalError
 		}
@@ -593,7 +645,7 @@ func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *Method
 	if days == 0 {
 		days = defaultCertLifetime
 	}
-	key, err := generateKey(g.kind, certType, cur.key, int(bits))
+	key, err := generateKey(certType, cur.key, int(bits))
 	if err != nil {
 		return nil, ua.StatusBadInvalidArgument
 	}
@@ -616,15 +668,53 @@ func (m *pushManager) createSelfSignedCertificate(ctx context.Context, c *Method
 		m.logger().Warn("push management: creating the self-signed certificate failed", "error", err)
 		return nil, ua.StatusBadInternalError
 	}
-	if _, sc := m.checkNewCert(g, certType, der); sc != ua.StatusOK {
+	if _, sc := m.checkNewCert(certType, der); sc != ua.StatusOK {
 		return nil, sc
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, sc := m.addCertLocked(ctx, c.SessionID, g, &pendingCert{key: certKey{g.kind, certType}, old: cur.certificate, cert: der, priv: key}); sc != ua.StatusOK {
+	if _, sc := m.addCertLocked(ctx, c.SessionID, g, &pendingCert{key: certKey{g.kind, certType}, old: cur.cert, cert: der, priv: key}); sc != ua.StatusOK {
 		return nil, sc
 	}
 	return []*ua.Variant{ua.MustVariant(der)}, ua.StatusOK
+}
+
+// deleteCertificate is DeleteCertificate (Part 12 1.05 §7.10): removes the
+// certificate of the group and type when the changes are applied. It
+// fails with Bad_InvalidState if the group has no certificate of the type,
+// counting the changes of the session's transaction; ApplyChanges refuses
+// the deletion of a certificate an endpoint uses (checkDeletesLocked).
+// Deleting and then creating or updating the certificate of the type in
+// one transaction replaces it.
+func (m *pushManager) deleteCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	g, cur, certType, sc := m.certOfType(args, 0)
+	if sc != ua.StatusOK {
+		return nil, sc
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	key := certKey{g.kind, certType}
+	present := cur.cert != nil
+	if m.tx != nil && m.tx.session.Equal(c.SessionID) {
+		if p := m.tx.certs[key]; p != nil {
+			present = !p.deletes()
+		}
+	}
+	if !present {
+		return nil, ua.StatusBadInvalidState
+	}
+	if _, sc := m.addCertLocked(ctx, c.SessionID, g, &pendingCert{key: key, old: cur.cert}); sc != ua.StatusOK {
+		if m.cfg.ApplyImmediately && m.tx != nil && m.tx.session.Equal(c.SessionID) {
+			// The deletion that could not be applied does not stay pending.
+			delete(m.tx.certs, key)
+			if len(m.tx.certs) == 0 && len(m.tx.trust) == 0 {
+				m.tx = nil
+				m.endDiagnostics(sc)
+			}
+		}
+		return nil, sc
+	}
+	return nil, ua.StatusOK
 }
 
 // stringsArg returns a String array argument; null is an empty array.
@@ -652,7 +742,7 @@ func (m *pushManager) getCertificates(_ context.Context, _ *MethodCaller, args [
 	ders := make([][]byte, len(certs))
 	for i := range types {
 		tids[i] = ua.NewNumericNodeID(0, types[i])
-		ders[i] = slices.Clone(certs[i].certificate)
+		ders[i] = slices.Clone(certs[i].cert)
 	}
 	return []*ua.Variant{ua.MustVariant(tids), ua.MustVariant(ders)}, ua.StatusOK
 }
@@ -711,11 +801,10 @@ func (m *pushManager) resetToServerDefaults(ctx context.Context, c *MethodCaller
 	if m.otherTxLocked(c.SessionID) {
 		return nil, ua.StatusBadTransactionPending
 	}
-	initial := [numGroups]*ua.TrustListDataType{m.cfg.TrustList, m.cfg.HTTPSTrustList, m.cfg.UserTokenTrustList}
 	trust := map[groupKind]*trustList{}
-	for k := range numGroups {
-		tl, _ := newTrustList(initial[k], m.cfg.MaxTrustListSize) // checked by the option
-		trust[k] = tl
+	for _, g := range m.groups {
+		tl, _ := newTrustList(g.initialTrust, m.cfg.MaxTrustListSize) // checked by the option
+		trust[g.kind] = tl
 	}
 	var certs []*pendingCert
 	for _, x := range m.initial.certs() {
@@ -723,8 +812,23 @@ func (m *pushManager) resetToServerDefaults(ctx context.Context, c *MethodCaller
 			certs = append(certs, &pendingCert{key: certKey{groupApplication, t}, cert: x.certificate, priv: x.key})
 		}
 	}
+	httpsKey := certKey{groupHTTPS, id.HTTPSCertificateType}
 	if x := m.initial.https; x != nil {
-		certs = append(certs, &pendingCert{key: certKey{groupHTTPS, id.HTTPSCertificateType}, cert: x.cert, issuers: x.issuers, priv: x.key})
+		certs = append(certs, &pendingCert{key: httpsKey, cert: x.cert, issuers: x.issuers, priv: x.key})
+	} else if x := m.https.Load(); x != nil {
+		certs = append(certs, &pendingCert{key: httpsKey, old: x.cert})
+	}
+	// The certificates of the groups of the application; those the
+	// defaults do not have are deleted.
+	for _, g := range m.groups[numDefaultGroups:] {
+		for _, t := range g.custom.types {
+			key := certKey{g.kind, t}
+			if x, ok := g.custom.initial[t]; ok {
+				certs = append(certs, &pendingCert{key: key, cert: x.cert, issuers: x.issuers, priv: x.key})
+			} else if x, ok := g.custom.get(t); ok {
+				certs = append(certs, &pendingCert{key: key, old: x.cert})
+			}
+		}
 	}
 	if sc := m.storeLocked(ctx, trust, certs); sc != ua.StatusOK {
 		return nil, sc
@@ -746,6 +850,9 @@ func (m *pushManager) resetToServerDefaults(ctx context.Context, c *MethodCaller
 	clear(m.csrKeys)
 	m.s.cfg.restoreIdentities(m.initial)
 	m.https.Store(m.initial.https)
+	for _, g := range m.groups[numDefaultGroups:] {
+		g.custom.restore()
+	}
 	m.s.initEndpoints()
 	m.evaluateAlarms()
 	go m.changed()

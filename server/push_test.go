@@ -718,7 +718,7 @@ func TestPushHelpers(t *testing.T) {
 		mustECDSA(t, elliptic.P384()),
 		func() crypto.Signer { _, k, _ := ed25519.GenerateKey(rand.Reader); return k }(),
 	} {
-		nk, err := generateKey(groupHTTPS, 0, k, 0)
+		nk, err := generateKey(id.HTTPSCertificateType, k, 0)
 		require.NoError(t, err)
 		require.IsType(t, k, nk)
 	}
