@@ -249,6 +249,28 @@ func TestImportNodeSetXML_BadInput(t *testing.T) {
 		assert.Contains(t, err.Error(), "unknown reference type")
 	})
 
+	t.Run("role permissions by NodeId and name", func(t *testing.T) {
+		srv := newTestServer()
+		require.NoError(t, srv.ImportNodeSetXML(wrap(`
+  <UAObject NodeId="ns=1;i=4000" BrowseName="1:Obj">
+    <DisplayName>Obj</DisplayName>
+    <RolePermissions>
+      <RolePermission Permissions="4097">i=15704</RolePermission>
+      <RolePermission Permissions="1">ns=1;i=17</RolePermission>
+      <RolePermission Permissions="1">Observer</RolePermission>
+      <RolePermission Permissions="1">not a role</RolePermission>
+      <RolePermission Permissions="1">i=x</RolePermission>
+    </RolePermissions>
+  </UAObject>`)))
+		n := srv.Node(ua.NewNumericNodeID(1, 4000))
+		require.NotNil(t, n)
+		require.Len(t, n.rolePermissions, 3)
+		require.True(t, ua.RoleSecurityAdmin.NodeID().Equal(n.rolePermissions[0].RoleID))
+		require.Equal(t, ua.PermissionType(4097), n.rolePermissions[0].Permissions)
+		require.True(t, ua.NewNumericNodeID(1, 17).Equal(n.rolePermissions[1].RoleID))
+		require.True(t, ua.RoleObserver.NodeID().Equal(n.rolePermissions[2].RoleID))
+	})
+
 	t.Run("minimal valid XML succeeds", func(t *testing.T) {
 		srv := newTestServer()
 		err := srv.ImportNodeSetXML(wrap(""))

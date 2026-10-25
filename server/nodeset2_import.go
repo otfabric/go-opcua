@@ -868,12 +868,22 @@ func resolveRolePermissions(rp *schema.ListOfRolePermissions, nid *ua.NodeID) []
 
 	if rp != nil && len(rp.RolePermission) > 0 {
 		for _, p := range rp.RolePermission {
-			role, ok := ua.RoleByName[p.Value]
-			if !ok {
+			// The role is a NodeId ("i=15704", "ns=1;i=1661"), as a NodeSet
+			// writes it, or the name of a well-known role.
+			var roleID *ua.NodeID
+			if role, ok := ua.RoleByName[p.Value]; ok {
+				roleID = role.NodeID()
+			} else if v := strings.TrimSpace(p.Value); strings.Contains(v, "=") {
+				n, err := ua.ParseNodeID(v)
+				if err != nil {
+					continue
+				}
+				roleID = n
+			} else {
 				continue
 			}
 			perms = append(perms, &ua.RolePermissionType{
-				RoleID:      role.NodeID(),
+				RoleID:      roleID,
 				Permissions: ua.PermissionType(p.PermissionsAttr),
 			})
 		}
