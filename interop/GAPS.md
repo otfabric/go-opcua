@@ -8,13 +8,14 @@ Pinned opcua-interop version: **v0.13.0**
 
 - `deferred`: 60
 - `not-applicable`: 42
-- `unsupported`: 212
-- `unverified`: 17
-- `verified`: 457
+- `unsupported`: 217
+- `unverified`: 22
+- `verified`: 467
 
 ## Unverified by reason
 
 - `adapter-command-missing`: 13
+- `adapter-fixture-missing`: 5
 - `peer-capability-unknown`: 4
 
 ## Unverified rows
@@ -34,6 +35,11 @@ Pinned opcua-interop version: **v0.13.0**
 | `pubsub.uadp.discovery` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.discovery` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.security-header` | O→S | `adapter-command-missing` | The open62541 codec operations have no keys (contract §14.9): the →S direction of signed / encrypted messages is pubsub.security.* |
+| `alarms.alarm-groups` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without alarm groups and GetGroupMemberships; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
+| `alarms.alarm-state-methods` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
+| `alarms.audit-events` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without AuditConditionEventType events of the condition methods; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
+| `alarms.branches` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without condition branches; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
+| `alarms.dialog` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without Respond / Respond2 of a DialogConditionType; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
 | `certmgmt.push.access` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.certificate-update` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.rejected-list` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |

@@ -1216,6 +1216,81 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105",
+      "case": "coverage/alarms.alarm-state-methods/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no Respond / Respond2 of a DialogConditionType; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105",
+      "case": "coverage/alarms.dialog/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no condition branches; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105",
+      "case": "coverage/alarms.branches/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no alarm groups and GetGroupMemberships; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105",
+      "case": "coverage/alarms.alarm-groups/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no AuditConditionEventType events of the condition methods; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105",
+      "case": "coverage/alarms.audit-events/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-asyncua-server",
       "status": "deferred",

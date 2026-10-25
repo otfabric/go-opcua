@@ -1301,6 +1301,86 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-state-methods",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105",
+      "case": "coverage/alarms.alarm-state-methods/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Respond / Respond2 of a DialogConditionType; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.dialog",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105",
+      "case": "coverage/alarms.dialog/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without condition branches; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.branches",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105",
+      "case": "coverage/alarms.branches/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without alarm groups and GetGroupMemberships; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-groups",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105",
+      "case": "coverage/alarms.alarm-groups/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AuditConditionEventType events of the condition methods; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audit-events",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105",
+      "case": "coverage/alarms.audit-events/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-node-opcua-server",
       "status": "deferred",

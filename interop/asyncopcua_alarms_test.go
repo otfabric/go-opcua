@@ -18,3 +18,14 @@ func TestGoServer_AsyncOpcuaClient_Alarms(t *testing.T) {
 	t.Run("coverage/alarms.condition-refresh/async-opcua-client-to-go-server", r.assertRefresh)
 	t.Run("coverage/alarms.acknowledgeable/async-opcua-client-to-go-server", r.assertActions)
 }
+
+func TestGoServer_AsyncOpcuaClient_Alarms105(t *testing.T) {
+	requireAdapterOp(t, asyncOpcuaEnv, defaultAsyncOpcuaImage, "call")
+	requireAdapterOp(t, asyncOpcuaEnv, defaultAsyncOpcuaImage, "event-subscribe")
+	p := startAlarms105(t, runAsyncOpcuaClientResult)
+	t.Run("coverage/alarms.alarm-state-methods/async-opcua-client-to-go-server", p.assertStateMethods)
+	t.Run("coverage/alarms.dialog/async-opcua-client-to-go-server", p.assertDialog)
+	t.Run("coverage/alarms.branches/async-opcua-client-to-go-server", p.assertBranches)
+	t.Run("coverage/alarms.alarm-groups/async-opcua-client-to-go-server", p.assertGroups)
+	t.Run("coverage/alarms.audit-events/async-opcua-client-to-go-server", p.assertAudit)
+}

@@ -944,6 +944,61 @@
       ]
     },
     {
+      "id": "alarms.alarm-state-methods",
+      "title": "AlarmConditionType Suppress / Unsuppress / RemoveFromService / PlaceInService / Silence / Reset and the v1.05 *2 variants (with ShelvingState TimedShelve2 / OneShotShelve2 / Unshelve2)",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "alarms.dialog",
+      "title": "DialogConditionType Respond / Respond2",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "alarms.branches",
+      "title": "Condition branches (BranchId, Acknowledge / Confirm of a branch by its EventId, ConditionRefresh of branches)",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "alarms.alarm-groups",
+      "title": "Alarm groups (AlarmGroupType, AlarmSuppressionGroupType, GetGroupMemberships)",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "alarms.audit-events",
+      "title": "AuditConditionEventType and its subtypes for the condition methods",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "nodeset2.import",
       "title": "NodeSet2 import peer model",
       "profile": "information-model",
