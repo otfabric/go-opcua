@@ -175,7 +175,31 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 
 // receive reads the requests of one channel and hands them to the request
 // handler until the channel ends.
+//
+// The requests of all channels are handled by one goroutine, which can be
+// busy for a while (an ActivateSession on a Brainpool policy, a large Browse
+// on a loaded machine). The channel is not stalled behind it: the requests
+// it has read wait for the handler in a queue of their own, fed in order to
+// the handler by forward, and receive goes on reading. That matters for the
+// OpenSecureChannel requests, which are answered right here: a renewal that
+// the client sent in time must not sit unread in the socket behind requests
+// that wait for the handler while the lifetime of the token it renews runs
+// out (Part 4 §5.5.2.1). The in-flight slots still bound what a channel may
+// queue, so a client that does not read its responses is held off by TCP
+// back pressure as before.
 func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *channelWriter, secureChannelID uint32) {
+	queue := make(chan inbound, cap(w.slots))
+	forwarded := make(chan struct{})
+	go c.forward(ctx, w, queue, forwarded)
+	// Whatever ends the channel, the requests read before the end are still
+	// handled (a CloseSession before the CloseSecureChannel, say) before the
+	// channel is torn down; forward stops early only when the writer or the
+	// server is gone.
+	defer func() {
+		close(queue)
+		<-forwarded
+	}()
+
 	// A panic while decoding a message cannot be attributed to a request
 	// (it has not been decoded) and leaves the stream in an unknown state.
 	// It ends this channel, not the process.
@@ -239,18 +263,29 @@ func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *
 			}
 		}
 
-		// Take an in-flight slot before handing the request over. This is
-		// what applies back pressure to a client that sends requests faster
-		// than it reads the responses.
+		// Take an in-flight slot before queueing the request. This is what
+		// applies back pressure to a client that sends requests faster than
+		// it reads the responses, and it keeps the queue from filling up: it
+		// has room for every slot.
 		if !w.acquire(ctx) {
 			return
 		}
+		queue <- inbound{msg: msg, sc: sc, w: w}
+	}
+}
+
+// forward hands the requests receive queued for a channel to the request
+// handler, in the order they were read, until the queue is closed and empty
+// or the channel's writer or ctx ends. It closes done when it returns.
+func (c *channelBroker) forward(ctx context.Context, w *channelWriter, queue <-chan inbound, done chan<- struct{}) {
+	defer close(done)
+	for in := range queue {
 		select {
 		case <-ctx.Done():
 			return
 		case <-w.done:
 			return
-		case c.msgChan <- inbound{msg: msg, sc: sc, w: w}:
+		case c.msgChan <- in:
 		}
 	}
 }
