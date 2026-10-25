@@ -229,7 +229,7 @@ func TestSigningRequestAndUpdateCertificate(t *testing.T) {
 
 	props, err := g.Properties(ctx)
 	require.NoError(t, err)
-	require.Equal(t, []string{"PEM"}, props.SupportedPrivateKeyFormats)
+	require.Equal(t, []string{"PEM", "PFX"}, props.SupportedPrivateKeyFormats)
 	require.Len(t, props.CertificateTypes, 1)
 	require.True(t, props.CertificateTypes[0].Equal(gds.RsaSha256ApplicationCertificateType))
 

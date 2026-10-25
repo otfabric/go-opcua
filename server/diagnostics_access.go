@@ -159,6 +159,9 @@ func (s *Server) checkRead(ctx context.Context, sess *session, nid *ua.NodeID) u
 	if st := s.diag.checkRead(sess, nid); st != ua.StatusOK {
 		return st
 	}
+	if st := s.push.checkRead(sess, nid); st != ua.StatusOK {
+		return st
+	}
 	return s.cfg.accessController.CheckRead(ctx, sess, nid)
 }
 

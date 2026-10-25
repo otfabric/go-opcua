@@ -199,7 +199,7 @@ func TestPushFileHandles(t *testing.T) {
 	out, sc := tlCall(t, s, ctx, mOpen, byte(0x01))
 	require.Equal(t, ua.StatusOK, sc)
 	h := out[0].Value().(uint32)
-	require.EqualValues(t, 1, s.push.openCount.Load())
+	require.EqualValues(t, 1, s.push.groups[groupApplication].openCount.Load())
 
 	// Another session cannot use the handle.
 	_, sc = tlCall(t, s, other, mRead, h, int32(10))
@@ -274,7 +274,7 @@ func TestPushFileHandles(t *testing.T) {
 	require.Equal(t, ua.StatusOK, sc)
 	_, sc = tlCall(t, s, ctx, mClose, w)
 	require.Equal(t, ua.StatusOK, sc)
-	require.EqualValues(t, 0, s.push.openCount.Load())
+	require.EqualValues(t, 0, s.push.groups[groupApplication].openCount.Load())
 }
 
 func TestPushFileHandleLimitAndPrune(t *testing.T) {
@@ -292,7 +292,7 @@ func TestPushFileHandleLimitAndPrune(t *testing.T) {
 	ctx2, _ := adminCtx(s)
 	_, sc = tlCall(t, s, ctx2, mOpen, byte(0x06))
 	require.Equal(t, ua.StatusOK, sc)
-	require.EqualValues(t, 1, s.push.openCount.Load())
+	require.EqualValues(t, 1, s.push.groups[groupApplication].openCount.Load())
 }
 
 func TestPushCloseAndUpdate(t *testing.T) {
@@ -351,7 +351,7 @@ func TestPushAddRemove(t *testing.T) {
 	crl := testCRL(t, ca, p.CAKey)
 	tl, sc := newTrustList(&ua.TrustListDataType{IssuerCertificates: [][]byte{p.CACert}, IssuerCrls: [][]byte{crl}}, 0)
 	require.Equal(t, ua.StatusOK, sc)
-	s.push.trust.Store(tl)
+	s.push.groups[groupApplication].trust.Store(tl)
 
 	_, sc = tlCall(t, s, ctx, mAdd, p.StrangerCert, true)
 	require.Equal(t, ua.StatusOK, sc)
@@ -532,7 +532,8 @@ func TestPushUpdateCertificateErrors(t *testing.T) {
 	require.Equal(t, ua.StatusBadCertificateTimeInvalid, update(defaultGroup, rsaType, expired, [][]byte{}, "", []byte{}))
 	require.Equal(t, ua.StatusBadCertificateInvalid, update(defaultGroup, rsaType, good, [][]byte{{0x30, 0}}, "", []byte{}))
 	require.Equal(t, ua.StatusBadInvalidArgument, update(defaultGroup, rsaType, good, [][]byte{}, "", []byte{1}))
-	require.Equal(t, ua.StatusBadNotSupported, update(defaultGroup, rsaType, good, [][]byte{}, "PFX", []byte{1}))
+	require.Equal(t, ua.StatusBadSecurityChecksFailed, update(defaultGroup, rsaType, good, [][]byte{}, "PFX", []byte{1}))
+	require.Equal(t, ua.StatusBadNotSupported, update(defaultGroup, rsaType, good, [][]byte{}, "DER", []byte{1}))
 	require.Equal(t, ua.StatusBadSecurityChecksFailed, update(defaultGroup, rsaType, good, [][]byte{}, "PEM", []byte("junk")))
 	other := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(p.ClientKey)})
 	require.Equal(t, ua.StatusBadSecurityChecksFailed, update(defaultGroup, rsaType, good, [][]byte{}, "pem", other))
@@ -624,15 +625,16 @@ func TestPushECCIdentities(t *testing.T) {
 		{id.EccNistP256ApplicationCertificateType, ua.StatusOK},
 		{id.EccApplicationCertificateType, ua.StatusOK},
 		{id.EccCurve25519ApplicationCertificateType, ua.StatusOK},
-		{id.EccBrainpoolP256r1ApplicationCertificateType, ua.StatusBadNotSupported},
+		{id.EccBrainpoolP256r1ApplicationCertificateType, ua.StatusOK},
 	} {
 		out, sc := pushCall(t, s, ctx, scObj, mCSR, defaultGroup, ua.NewNumericNodeID(0, tc.typ), "CN=ecc,O=otfabric", true, nonce)
 		require.Equal(t, tc.want, sc, "type %d", tc.typ)
 		if sc != ua.StatusOK {
 			continue
 		}
-		req, err := x509.ParseCertificateRequest(out[0].Value().([]byte))
+		req, err := uapolicy.ParseCertificateRequest(out[0].Value().([]byte))
 		require.NoError(t, err)
+		require.NoError(t, uapolicy.CheckCertificateRequestSignature(req))
 		require.Equal(t, "ecc", req.Subject.CommonName)
 	}
 
@@ -716,12 +718,10 @@ func TestPushHelpers(t *testing.T) {
 		mustECDSA(t, elliptic.P384()),
 		func() crypto.Signer { _, k, _ := ed25519.GenerateKey(rand.Reader); return k }(),
 	} {
-		nk, err := generateKeyLike(k)
+		nk, err := generateKey(groupHTTPS, 0, k, 0)
 		require.NoError(t, err)
 		require.IsType(t, k, nk)
 	}
-	_, err = generateKeyLike(mustECDSA(t, elliptic.P224()))
-	require.Error(t, err)
 
 	require.True(t, isNullNodeID(nil))
 	require.True(t, isNullNodeID(ua.NewNumericNodeID(0, 0)))
@@ -755,7 +755,7 @@ func TestPushValidateClient(t *testing.T) {
 	require.NoError(t, err)
 
 	m := newPushManager(&PushManagement{MaxTrustListSize: defaultMaxTrustListSize, MaxRejectedCertificates: 2,
-		TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{p.CACert}}})
+		TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{p.CACert}}}, &serverConfig{})
 	require.NoError(t, m.validateClient(nil))
 	require.Equal(t, ua.StatusBadCertificateInvalid, m.validateClient([]byte{1, 2}))
 	// The leaf needs its intermediate: presented in the chain, or in the
@@ -764,14 +764,14 @@ func TestPushValidateClient(t *testing.T) {
 	require.NoError(t, m.validateClient(append(append([]byte{}, leafDER...), interDER...)))
 	tl, sc := newTrustList(&ua.TrustListDataType{TrustedCertificates: [][]byte{p.CACert}, IssuerCertificates: [][]byte{interDER}}, 0)
 	require.Equal(t, ua.StatusOK, sc)
-	m.trust.Store(tl)
+	m.groups[groupApplication].trust.Store(tl)
 	require.NoError(t, m.validateClient(leafDER))
 
 	// The CA revokes the intermediate.
 	tl, sc = newTrustList(&ua.TrustListDataType{TrustedCertificates: [][]byte{p.CACert}, IssuerCertificates: [][]byte{interDER},
 		TrustedCrls: [][]byte{testCRL(t, ca, p.CAKey, inter.SerialNumber)}}, 0)
 	require.Equal(t, ua.StatusOK, sc)
-	m.trust.Store(tl)
+	m.groups[groupApplication].trust.Store(tl)
 	require.Equal(t, ua.StatusBadCertificateIssuerRevoked, m.validateClient(leafDER))
 
 	// A CRL whose issuer is not in the lists is not used.
@@ -780,7 +780,7 @@ func TestPushValidateClient(t *testing.T) {
 	tl, sc = newTrustList(&ua.TrustListDataType{TrustedCertificates: [][]byte{p.CACert}, IssuerCertificates: [][]byte{interDER},
 		IssuerCrls: [][]byte{testCRL(t, other.X509, other.Key, inter.SerialNumber)}}, 0)
 	require.Equal(t, ua.StatusOK, sc)
-	m.trust.Store(tl)
+	m.groups[groupApplication].trust.Store(tl)
 	require.NoError(t, m.validateClient(leafDER))
 
 	// The rejected list holds the latest MaxRejectedCertificates.
@@ -807,22 +807,27 @@ func TestPushModel(t *testing.T) {
 		require.NotNil(t, dv)
 		return dv.Value.Value()
 	}
-	require.Equal(t, []string{"PEM"}, value(id.ServerConfigurationSupportedPrivateKeyFormats))
+	require.Equal(t, []string{"PEM", "PFX"}, value(id.ServerConfigurationSupportedPrivateKeyFormats))
 	require.Equal(t, []string{"NA"}, value(id.ServerConfigurationServerCapabilities))
 	require.Equal(t, uint32(defaultMaxTrustListSize), value(id.ServerConfigurationMaxTrustListSize))
 	require.Equal(t, false, value(id.ServerConfigurationMulticastDNSEnabled))
 	require.Equal(t, testpki.ServerAppURI, value(id.ServerConfigurationApplicationURI))
 	require.NotEmpty(t, value(id.ServerConfigurationProductURI))
 	require.Equal(t, int32(ua.ApplicationTypeServer), value(id.ServerConfigurationApplicationType))
-	require.Equal(t, uint64(s.push.trust.Load().size), value(id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListSize))
+	require.Equal(t, uint64(s.push.groups[groupApplication].trust.Load().size), value(id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListSize))
 	require.Equal(t, uint16(0), value(id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListOpenCount))
 	require.IsType(t, time.Time{}, value(id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustListLastUpdateTime))
 	require.Equal(t, []*ua.NodeID{rsaType}, value(id.ServerConfigurationCertificateGroupsDefaultApplicationGroupCertificateTypes))
 
 	g := s.Node(ua.NewNumericNodeID(0, id.ServerConfigurationCertificateGroups))
+	var groups []uint32
 	for _, r := range g.refsSnapshot() {
-		require.NotEqual(t, uint32(id.ServerConfigurationCertificateGroupsDefaultHTTPSGroup), r.NodeID.NodeID.IntID())
+		if r.IsForward && r.ReferenceTypeID.IntID() == id.HasComponent {
+			groups = append(groups, r.NodeID.NodeID.IntID())
+		}
 	}
+	require.Subset(t, groups, []uint32{id.ServerConfigurationCertificateGroupsDefaultApplicationGroup,
+		id.ServerConfigurationCertificateGroupsDefaultHTTPSGroup, id.ServerConfigurationCertificateGroupsDefaultUserTokenGroup})
 
 	// Rejected list over the method.
 	ctx, _ := adminCtx(s)

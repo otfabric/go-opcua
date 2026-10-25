@@ -264,15 +264,18 @@ func New(opts ...Option) (*Server, error) {
 	if cfg.accessController == nil {
 		cfg.accessController = DefaultAccessController{}
 	}
-	cfg.warnUnvalidatedAuthModes()
 	var push *pushManager
 	if cfg.push != nil {
 		if cfg.clientCertificateValidator != nil {
 			return nil, fmt.Errorf("server: WithPushManagement validates client certificates against its trust list; pass the trusted certificates in PushManagement.TrustList instead of WithClientCertificateTrustList")
 		}
-		push = newPushManager(cfg.push)
+		push = newPushManager(cfg.push, cfg)
 		cfg.clientCertificateValidator = push.validateClient
+		// X.509 user tokens are validated against the trust list of the
+		// DefaultUserTokenGroup, then by the validator of the application.
+		cfg.x509UserValidator = push.userValidator(cfg.x509UserValidator)
 	}
+	cfg.warnUnvalidatedAuthModes()
 	// listenAddr controls where the server binds (TCP).  It defaults to the
 	// first endpoint URL, but can be overridden with ListenOn() so that the
 	// server can listen on 0.0.0.0 without advertising that address.
@@ -366,7 +369,9 @@ func New(opts ...Option) (*Server, error) {
 	for _, n := range ServerCapabilitiesNodes(s) {
 		s.namespaces[0].AddNode(n)
 	}
-	s.buildPushModel()
+	if err := s.buildPushModel(); err != nil {
+		return nil, err
+	}
 	s.bindAuditing()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
@@ -659,6 +664,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	go s.acceptAndRegister(mctx, s.l)
 	s.serveTransports(mctx)
+	if s.push != nil && s.push.alarms != nil {
+		s.push.alarms.start()
+	}
 	go s.superviseMonitor(mctx)
 	go s.reapSessions(mctx)
 
@@ -691,6 +699,9 @@ func (s *Server) Close() error {
 
 	// Stop publishing and subscribing before the address space goes away.
 	s.closePubSub()
+	if s.push != nil && s.push.alarms != nil {
+		s.push.alarms.stop()
+	}
 	s.alarms.close()
 
 	if s.cancelMonitor != nil {

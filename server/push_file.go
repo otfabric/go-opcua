@@ -52,20 +52,20 @@ func decodeTrustList(b []byte) (*ua.TrustListDataType, ua.StatusCode) {
 
 // pruneLocked forgets the handles of sessions that are closed: a handle is
 // valid for its session only (Part 20 §4.2.1).
-func (m *pushManager) pruneLocked() {
-	for h, x := range m.handles {
+func (m *pushManager) pruneLocked(g *certGroup) {
+	for h, x := range g.handles {
 		if m.s != nil && !m.s.sb.hasID(x.session) {
-			delete(m.handles, h)
-			m.openCount.Add(-1)
+			delete(g.handles, h)
+			g.openCount.Add(-1)
 		}
 	}
 }
 
 // addHandleLocked opens a handle.
-func (m *pushManager) addHandleLocked(x *trustListHandle) ([]*ua.Variant, ua.StatusCode) {
-	m.pruneLocked()
+func (m *pushManager) addHandleLocked(g *certGroup, x *trustListHandle) ([]*ua.Variant, ua.StatusCode) {
+	m.pruneLocked(g)
 	// Reading may be shared, writing is exclusive.
-	for _, h := range m.handles {
+	for _, h := range g.handles {
 		if x.mode&fileModeWrite != 0 {
 			return nil, ua.StatusBadNotWritable
 		}
@@ -73,24 +73,24 @@ func (m *pushManager) addHandleLocked(x *trustListHandle) ([]*ua.Variant, ua.Sta
 			return nil, ua.StatusBadNotReadable
 		}
 	}
-	if len(m.handles) >= maxTrustListHandles {
+	if len(g.handles) >= maxTrustListHandles {
 		return nil, ua.StatusBadTooManyOperations
 	}
 	for {
 		m.next++
-		if _, used := m.handles[m.next]; m.next != 0 && !used {
+		if _, used := g.handles[m.next]; m.next != 0 && !used {
 			break
 		}
 	}
-	m.handles[m.next] = x
-	m.openCount.Add(1)
+	g.handles[m.next] = x
+	g.openCount.Add(1)
 	go m.changed()
 	return []*ua.Variant{ua.MustVariant(m.next)}, ua.StatusOK
 }
 
 // readContent returns the lists of the active trust list masks selects.
-func (m *pushManager) readContent(masks ua.TrustListMasks) ([]byte, ua.StatusCode) {
-	b, err := encodeTrustList(maskTrustList(m.trust.Load().data, masks))
+func (m *pushManager) readContent(g *certGroup, masks ua.TrustListMasks) ([]byte, ua.StatusCode) {
+	b, err := encodeTrustList(maskTrustList(g.trust.Load().data, masks))
 	if err != nil {
 		return nil, ua.StatusBadInternalError
 	}
@@ -98,7 +98,7 @@ func (m *pushManager) readContent(masks ua.TrustListMasks) ([]byte, ua.StatusCod
 }
 
 // fileOpen is Open (Part 12 §7.8.2.1): Read, or Write with EraseExisting.
-func (m *pushManager) fileOpen(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileOpen(_ context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	mode, ok := argValue[byte](args, 0)
 	if !ok {
 		return nil, ua.StatusBadTypeMismatch
@@ -106,7 +106,7 @@ func (m *pushManager) fileOpen(_ context.Context, c *MethodCaller, args []*ua.Va
 	x := &trustListHandle{session: c.SessionID, mode: mode}
 	switch mode {
 	case fileModeRead:
-		b, sc := m.readContent(ua.TrustListMasksAll)
+		b, sc := m.readContent(g, ua.TrustListMasksAll)
 		if sc != ua.StatusOK {
 			return nil, sc
 		}
@@ -117,60 +117,60 @@ func (m *pushManager) fileOpen(_ context.Context, c *MethodCaller, args []*ua.Va
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.addHandleLocked(x)
+	return m.addHandleLocked(g, x)
 }
 
 // fileOpenWithMasks is OpenWithMasks (Part 12 §7.8.2.2): reads only the
 // lists of the masks.
-func (m *pushManager) fileOpenWithMasks(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileOpenWithMasks(_ context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	masks, ok := argValue[uint32](args, 0)
 	if !ok {
 		return nil, ua.StatusBadTypeMismatch
 	}
-	b, sc := m.readContent(ua.TrustListMasks(masks))
+	b, sc := m.readContent(g, ua.TrustListMasks(masks))
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.addHandleLocked(&trustListHandle{session: c.SessionID, mode: fileModeRead, buf: b})
+	return m.addHandleLocked(g, &trustListHandle{session: c.SessionID, mode: fileModeRead, buf: b})
 }
 
 // handleLocked returns the handle of argument 0, which must be one of the
 // calling session.
-func (m *pushManager) handleLocked(c *MethodCaller, args []*ua.Variant) (uint32, *trustListHandle, ua.StatusCode) {
+func (m *pushManager) handleLocked(c *MethodCaller, g *certGroup, args []*ua.Variant) (uint32, *trustListHandle, ua.StatusCode) {
 	h, ok := argValue[uint32](args, 0)
 	if !ok {
 		return 0, nil, ua.StatusBadTypeMismatch
 	}
-	x := m.handles[h]
+	x := g.handles[h]
 	if x == nil || !x.session.Equal(c.SessionID) {
 		return 0, nil, ua.StatusBadInvalidArgument
 	}
 	return h, x, ua.StatusOK
 }
 
-func (m *pushManager) closeLocked(h uint32) {
-	delete(m.handles, h)
-	m.openCount.Add(-1)
+func (m *pushManager) closeLocked(g *certGroup, h uint32) {
+	delete(g.handles, h)
+	g.openCount.Add(-1)
 	go m.changed()
 }
 
-func (m *pushManager) fileClose(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileClose(_ context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	h, _, sc := m.handleLocked(c, args)
+	h, _, sc := m.handleLocked(c, g, args)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	m.closeLocked(h)
+	m.closeLocked(g, h)
 	return nil, ua.StatusOK
 }
 
-func (m *pushManager) fileRead(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileRead(_ context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	_, x, sc := m.handleLocked(c, args)
+	_, x, sc := m.handleLocked(c, g, args)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -190,10 +190,10 @@ func (m *pushManager) fileRead(_ context.Context, c *MethodCaller, args []*ua.Va
 	return []*ua.Variant{ua.MustVariant(b)}, ua.StatusOK
 }
 
-func (m *pushManager) fileWrite(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileWrite(_ context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	_, x, sc := m.handleLocked(c, args)
+	_, x, sc := m.handleLocked(c, g, args)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -217,20 +217,20 @@ func (m *pushManager) fileWrite(_ context.Context, c *MethodCaller, args []*ua.V
 	return nil, ua.StatusOK
 }
 
-func (m *pushManager) fileGetPosition(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileGetPosition(_ context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	_, x, sc := m.handleLocked(c, args)
+	_, x, sc := m.handleLocked(c, g, args)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
 	return []*ua.Variant{ua.MustVariant(uint64(x.pos))}, ua.StatusOK
 }
 
-func (m *pushManager) fileSetPosition(_ context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileSetPosition(_ context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	_, x, sc := m.handleLocked(c, args)
+	_, x, sc := m.handleLocked(c, g, args)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -246,10 +246,10 @@ func (m *pushManager) fileSetPosition(_ context.Context, c *MethodCaller, args [
 // fileCloseAndUpdate is CloseAndUpdate (Part 12 §7.8.2.3): closes a handle
 // opened for writing and replaces the lists the written TrustListDataType
 // specifies. The output tells whether ApplyChanges is required.
-func (m *pushManager) fileCloseAndUpdate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) fileCloseAndUpdate(ctx context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	h, x, sc := m.handleLocked(c, args)
+	h, x, sc := m.handleLocked(c, g, args)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -258,16 +258,16 @@ func (m *pushManager) fileCloseAndUpdate(ctx context.Context, c *MethodCaller, a
 	}
 	// The handle is closed whatever the outcome: the client cannot fix
 	// what it wrote.
-	m.closeLocked(h)
+	m.closeLocked(g, h)
 	upd, sc := decodeTrustList(x.buf)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	tl, sc := newTrustList(mergeTrustList(m.baseTrustLocked(c.SessionID).data, upd), m.cfg.MaxTrustListSize)
+	tl, sc := newTrustList(mergeTrustList(m.baseTrustLocked(g, c.SessionID).data, upd), m.cfg.MaxTrustListSize)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	required, sc := m.changeTrustLocked(ctx, c.SessionID, tl)
+	required, sc := m.changeTrustLocked(ctx, c.SessionID, g, tl)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -276,14 +276,14 @@ func (m *pushManager) fileCloseAndUpdate(ctx context.Context, c *MethodCaller, a
 
 // openLocked reports whether the trust list has open handles, during which
 // AddCertificate and RemoveCertificate are refused.
-func (m *pushManager) openLocked() bool {
-	m.pruneLocked()
-	return len(m.handles) > 0
+func (m *pushManager) openLocked(g *certGroup) bool {
+	m.pruneLocked(g)
+	return len(g.handles) > 0
 }
 
 // addCertificate is AddCertificate (Part 12 §7.8.2.4): adds one certificate
 // to the trusted or to the issuer certificates.
-func (m *pushManager) addCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) addCertificate(ctx context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	der, ok1 := argValue[[]byte](args, 0)
 	trusted, ok2 := argValue[bool](args, 1)
 	if !ok1 || !ok2 {
@@ -295,10 +295,10 @@ func (m *pushManager) addCertificate(ctx context.Context, c *MethodCaller, args 
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.openLocked() {
+	if m.openLocked(g) {
 		return nil, ua.StatusBadInvalidState
 	}
-	d := cloneTrustListData(m.baseTrustLocked(c.SessionID).data)
+	d := cloneTrustListData(m.baseTrustLocked(g, c.SessionID).data)
 	if trusted {
 		d.TrustedCertificates = append(d.TrustedCertificates, slices.Clone(der))
 	} else {
@@ -308,7 +308,7 @@ func (m *pushManager) addCertificate(ctx context.Context, c *MethodCaller, args 
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	if _, sc := m.changeTrustLocked(ctx, c.SessionID, tl); sc != ua.StatusOK {
+	if _, sc := m.changeTrustLocked(ctx, c.SessionID, g, tl); sc != ua.StatusOK {
 		return nil, sc
 	}
 	return nil, ua.StatusOK
@@ -317,7 +317,7 @@ func (m *pushManager) addCertificate(ctx context.Context, c *MethodCaller, args 
 // removeCertificate is RemoveCertificate (Part 12 §7.8.2.5): removes the
 // certificate with the thumbprint (hexadecimal SHA-1) from the trusted or
 // the issuer certificates, with the CRLs it issued.
-func (m *pushManager) removeCertificate(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pushManager) removeCertificate(ctx context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	thumb, ok1 := argValue[string](args, 0)
 	trusted, ok2 := argValue[bool](args, 1)
 	if !ok1 || !ok2 {
@@ -325,10 +325,10 @@ func (m *pushManager) removeCertificate(ctx context.Context, c *MethodCaller, ar
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.openLocked() {
+	if m.openLocked(g) {
 		return nil, ua.StatusBadInvalidState
 	}
-	base := m.baseTrustLocked(c.SessionID)
+	base := m.baseTrustLocked(g, c.SessionID)
 	d := cloneTrustListData(base.data)
 	certs, crls, parsed := &d.TrustedCertificates, &d.TrustedCrls, base.trusted
 	if !trusted {
@@ -349,7 +349,7 @@ func (m *pushManager) removeCertificate(ctx context.Context, c *MethodCaller, ar
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	if _, sc := m.changeTrustLocked(ctx, c.SessionID, tl); sc != ua.StatusOK {
+	if _, sc := m.changeTrustLocked(ctx, c.SessionID, g, tl); sc != ua.StatusOK {
 		return nil, sc
 	}
 	return nil, ua.StatusOK

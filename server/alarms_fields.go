@@ -118,7 +118,7 @@ func (c *Condition) fields() []condField {
 		}
 	}
 	if !c.isAlarm {
-		return fs
+		return c.extraProperties(fs)
 	}
 	// AlarmConditionType (Part 9 §5.8.2)
 	fs = twoState(fs, "ActiveState", "Active", "Inactive", func(st *conditionState) (bool, time.Time) { return st.active, st.activeTime }, false)
@@ -228,6 +228,16 @@ func (c *Condition) fields() []condField {
 				continue
 			}
 			fs = twoState(fs, s.name, s.t, s.f, func(st *conditionState) (bool, time.Time) { return s.get(st.nonExclusive), st.nonExclTimes[i] }, false)
+		}
+	}
+	return c.extraProperties(fs)
+}
+
+// extraProperties adds the Properties of ConditionConfig.
+func (c *Condition) extraProperties(fs []condField) []condField {
+	for _, p := range c.cfg.Properties {
+		if p.Name != "" && p.Value != nil {
+			fs = append(fs, prop(p.Name, p.DataType, true, func(*Condition, *conditionState) any { return p.Value() }))
 		}
 	}
 	return fs

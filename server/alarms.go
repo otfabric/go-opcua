@@ -254,6 +254,11 @@ type ConditionConfig struct {
 	NormalState *ua.NodeID
 	// Limits are the limits of a LimitAlarmType (and subtypes).
 	Limits AlarmLimits
+	// Properties are further Properties of the condition, such as those
+	// of a subtype of the types above (ExpirationDate of
+	// CertificateExpirationAlarmType). They are nodes of the instance and
+	// fields of its events.
+	Properties []ConditionProperty
 
 	// The hooks are called when a client calls the method, after the
 	// checks of the state (a call the state machine refuses does not reach
@@ -292,6 +297,16 @@ type DialogConfig struct {
 type dialogInfo struct {
 	options                                     []*ua.LocalizedText
 	defaultResponse, okResponse, cancelResponse int32
+}
+
+// ConditionProperty is a Property of a condition that ConditionConfig adds
+// (scalar, with a DataType of namespace 0).
+type ConditionProperty struct {
+	Name     string
+	DataType uint32
+	// Value returns the value. It is called with the lock of the
+	// condition held: it must not call methods of the Condition.
+	Value func() any
 }
 
 // ConditionState is a snapshot of the state of a condition.
