@@ -1,5 +1,5 @@
 {
-  "interopVersion": "v0.10.1",
+  "interopVersion": "v0.11.0",
   "peer": {
     "stack": "async-opcua",
     "version": "0.19.0"
@@ -2087,28 +2087,28 @@
       "capability": "transport.wss",
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss",
       "direction": "async-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "async-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.10.1 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {

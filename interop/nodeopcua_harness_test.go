@@ -4,7 +4,7 @@
 
 // Harness for the node-opcua (TypeScript / Node.js,
 // https://github.com/node-opcua/node-opcua) adapter of opcua-interop, new in
-// opcua-interop v0.10.1 (node-opcua 2.187.12).
+// opcua-interop v0.11.0 (node-opcua 2.187.12).
 //
 //	NODE_OPCUA_IMAGE   Docker image of the node-opcua adapter (default: defaultNodeOpcuaImage)
 //
@@ -25,7 +25,7 @@
 //
 // node-opcua validates peer certificates against the trusted CA of the
 // adapter's PKI (<pki>/trusted/certs), so the node-opcua-server /
-// node-opcua-client identities of the opcua-interop v0.10.1 test PKI
+// node-opcua-client identities of the opcua-interop v0.11.0 test PKI
 // (certs/generate.sh, or certs/generate.sh --add-node-opcua for an existing
 // PKI) are all the secure tests need.
 package interop
@@ -43,7 +43,7 @@ import (
 
 // defaultNodeOpcuaImage is the node-opcua adapter of the opcua-interop release
 // named by interopVersion (multi-arch index digest; see harness_test.go).
-const defaultNodeOpcuaImage = "ghcr.io/otfabric/opcua-interop-node-opcua@sha256:22a33b9dbf3e53757bc5e68d58771c6c2356325708b8e0773d88701d64069dab"
+const defaultNodeOpcuaImage = "ghcr.io/otfabric/opcua-interop-node-opcua@sha256:62f2fb08fbcda6f23e4183ed2271b0cfd9d8bfa9ee163728019e8dc6bc43a061"
 
 // requireNodeOpcuaImage skips (or fails with
 // OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 when NODE_OPCUA_IMAGE is set) when
