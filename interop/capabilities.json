@@ -1690,6 +1690,28 @@
       ]
     },
     {
+      "id": "transport.wss-uajson",
+      "title": "opc.wss with UA JSON (Part 6 §7.5, wss-uajson): one JSON service message per WebSocket message with the opcua+uajson sub-protocol, TLS only (security policy None); session, Read, Write, Browse and a subscription",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "transport.https-uajson",
+      "title": "opc.https with UA JSON (Part 6 §7.4, https-uajson): JSON service messages as HTTPS POSTs (application/json); session, Read, Write, Browse and a subscription",
+      "profile": "transport",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "encoding.json.variant",
       "title": "JSON DataEncoding (1.05): built-in scalars, arrays, matrix (C→ = go-opcua encodes, peer decodes; →S = peer encodes, go-opcua decodes)",
       "profile": "encoding",

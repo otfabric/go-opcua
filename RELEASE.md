@@ -17,7 +17,7 @@ The UA JSON mappings of HTTPS and WebSockets, client and server: https-uajson (P
   - The client keeps a pool of WebSockets with one request in flight each, so it also works with servers that answer one request per socket at a time (UA-.NETStandard), and checks the RequestHandle of each response.
 - **Endpoints.** The JSON endpoints are advertised next to the binary ones, at the same URLs, with the TransportProfileUris `ua.TransportProfileHTTPSJSON` and `ua.TransportProfileWSSJSON`. `SelectEndpointForTransport` selects them; `SelectEndpoint` prefers UA Binary.
 - NodeIds of other namespaces than 0 are written with their namespace URI (Part 6 §5.4.2.10). Requests in the verbose and the 1.04 forms are decoded too.
-- API: `opcua.TransportProfile`, `server.EnableUAJSON`, `ua.IsJSONTransportProfile`, `ua.TransportProfileScheme`, `uasc.NewHTTPSJSONChannel`, `uasc.NewWebSocketJSONChannel`, `uasc.EncodeServiceMessageJSON` / `DecodeServiceMessageJSON`, `uacp.MessageConn`, `Dialer.DialWebSocketJSON`, `Listener.ServeWebSocketJSON`.
+- API: `opcua.TransportProfile`, `opcua.HTTPSJSONContentType` (with `uasc.Config.HTTPSJSONContentType`), `server.EnableUAJSON`, `ua.IsJSONTransportProfile`, `ua.TransportProfileScheme`, `uasc.NewHTTPSJSONChannel`, `uasc.NewWebSocketJSONChannel`, `uasc.EncodeServiceMessageJSON` / `DecodeServiceMessageJSON`, `uacp.MessageConn`, `Dialer.DialWebSocketJSON`, `Listener.ServeWebSocketJSON`.
 
 ### Tests
 
@@ -25,7 +25,9 @@ The UA JSON mappings of HTTPS and WebSockets, client and server: https-uajson (P
 
 ### Interop
 
-- **UA-.NETStandard 2.0.1 server over wss-uajson and https-uajson** (`TestDotnetServer_Transport_WSSJSON`, `TestDotnetServer_Transport_HTTPSJSON`), on the JSON endpoints it advertises at the security mode None. UA-.NETStandard takes JSON over HTTPS only as `application/opcua+uajson`; the test sends it through `HTTPClient` ([client guide](docs/client-guide.md#ua-json-https-uajson-wss-uajson)). No other peer stack implements either mapping.
+- **UA-.NETStandard 2.0.1 server over wss-uajson and https-uajson** (`TestDotnetServer_Transport_WSSJSON`, `TestDotnetServer_Transport_HTTPSJSON`), on the JSON endpoints it advertises at the security mode None. UA-.NETStandard takes JSON over HTTPS only as `application/opcua+uajson`, which the client sends with `opcua.HTTPSJSONContentType(uasc.HTTPSJSONContentTypeLegacy)` ([client guide](docs/client-guide.md#ua-json-https-uajson-wss-uajson)). No other peer stack implements either mapping.
+- New capabilities `transport.wss-uajson` and `transport.https-uajson` in every ledger: verified go-opcua client → UA-.NETStandard server; the UA-.NETStandard adapter client selects UA Binary endpoints only (unverified, `adapter-command-missing`); open62541 1.5.9, Milo 1.1.8, node-opcua 2.187, asyncua 2.1.0 and async-opcua 0.19.0 implement neither mapping (unsupported).
+- **Pinned opcua-interop v0.16.0** ([release run](https://github.com/otfabric/opcua-interop/actions/runs/40222483139)): the asyncua client passes the leaf of a server certificate chain and browses with the null ViewDescription, the dotnet and dotnet-gds servers take `--no-certificate-chain`, and the async-opcua trust list check takes the leaf of a chain. No ledger row changes.
 
 ---
 

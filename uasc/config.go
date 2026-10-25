@@ -116,6 +116,12 @@ type Config struct {
 	// StatusBadCertificateUntrusted) to reject the channel open.
 	// Nil means no application-certificate trust check at channel open.
 	ClientCertificateValidator func(certDER []byte) error
+
+	// HTTPSJSONContentType is the Content-Type of the requests of an
+	// https-uajson channel (NewHTTPSJSONChannel). Empty means
+	// HTTPSJSONContentType (Part 6 §7.4.2); HTTPSJSONContentTypeLegacy
+	// reaches servers that take only that one (UA-.NETStandard 2.0.1).
+	HTTPSJSONContentType string
 }
 
 // localKey returns the private key of the application instance certificate,

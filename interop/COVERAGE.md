@@ -331,6 +331,8 @@ Go↔Go tests never earn ✅.
 | Multi-chunk messages on secured channels: a ByteString of about 200 KB (sized to the server's limits) written and read back over Basic256Sha256 and Aes256_Sha256_RsaPss SignAndEncrypt, request and response in several chunks (go-opcua client) | ✅ | ✅ | N/A | N/A | C→O: `TestOpen62541Server_ChunkedSecureMessages`; C→M: `TestMiloServer_ChunkedSecureMessages` |
 | opc.wss (Part 6 §7.5, wss-uasc-uabinary): UA Secure Conversation over a TLS WebSocket with the opcua+uacp sub-protocol; session, Read, Write, Browse, GetEndpoints and a subscription | N/A | N/A | N/A | N/A | — |
 | opc.https (Part 6 §7.4, https-uabinary): UA Binary requests as HTTPS POSTs (application/octet-stream, OPCUA-SecurityPolicy header); session, Read, Write, Browse, GetEndpoints and a subscription with Publish as a long-polled POST | N/A | N/A | N/A | N/A | — |
+| opc.wss with UA JSON (Part 6 §7.5, wss-uajson): one JSON service message per WebSocket message with the opcua+uajson sub-protocol, TLS only (security policy None); session, Read, Write, Browse and a subscription | N/A | N/A | N/A | N/A | — |
+| opc.https with UA JSON (Part 6 §7.4, https-uajson): JSON service messages as HTTPS POSTs (application/json); session, Read, Write, Browse and a subscription | N/A | N/A | N/A | N/A | — |
 
 ## view
 

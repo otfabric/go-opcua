@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -142,4 +143,19 @@ func TestTransportsJSONNotEnabled(t *testing.T) {
 		require.Error(t, c.Connect(ctx), tc.profile)
 		_ = c.Close(ctx)
 	}
+}
+
+// TestTransportsJSONLegacyContentType: a client that sends
+// application/opcua+uajson (HTTPSJSONContentType) is served too.
+func TestTransportsJSONLegacyContentType(t *testing.T) {
+	t.Parallel()
+	_, urls := testutil.NewTransportTestServer(t, server.EnableUAJSON())
+	c := testutil.NewTransportTestClient(t, urls.HTTPS,
+		opcua.TransportProfile(ua.TransportProfileHTTPSJSON),
+		opcua.HTTPSJSONContentType(uasc.HTTPSJSONContentTypeLegacy),
+		opcua.SecurityMode(ua.MessageSecurityModeNone))
+	require.True(t, c.SecureChannel().IsJSON())
+	v, err := c.Node(ua.NewNumericNodeID(0, id.ServerServerStatusState)).Value(context.Background())
+	require.NoError(t, err)
+	require.Equal(t, int32(ua.ServerStateRunning), v.Value())
 }

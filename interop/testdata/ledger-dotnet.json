@@ -2265,6 +2265,36 @@
       "fixture": "baseline"
     },
     {
+      "capability": "transport.wss-uajson",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Transport_WSSJSON",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.wss-uajson",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard 2.0.1 has a wss-uajson client (WssJsonTransportChannel.cs), but the opcua-interop dotnet adapter client selects UA Binary endpoints only (CLIENT_CONTRACT §1); the adapter would need a transport-profile option",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https-uajson",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_Transport_HTTPSJSON",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https-uajson",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard 2.0.1 has a https-uajson client (HttpsTransportChannel.cs with application/opcua+uajson), but the opcua-interop dotnet adapter client selects UA Binary endpoints only (CLIENT_CONTRACT §1); the adapter would need a transport-profile option",
+      "fixture": "baseline"
+    },
+    {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-dotnet-server",
       "status": "verified",

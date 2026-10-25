@@ -185,21 +185,13 @@ JSON profile whose scheme is not that of the URL fails `Connect` with
 - A message is limited to `uasc.MaxWebSocketJSONMessageSize`; a larger one
   ends the WebSocket with status 1009 (Part 6 §7.5.2).
 - UA-.NETStandard 2.0.1 takes JSON over HTTPS only with the (non-standard)
-  Content-Type `application/opcua+uajson`. To talk to it, give `HTTPClient` a
-  transport that sends `uasc.HTTPSJSONContentTypeLegacy`:
+  Content-Type `application/opcua+uajson`. To talk to it, set that one with
+  `HTTPSJSONContentType`:
 
 ```go
-type legacyJSON struct{ next http.RoundTripper }
-
-func (l legacyJSON) RoundTrip(r *http.Request) (*http.Response, error) {
-    r = r.Clone(r.Context())
-    r.Header.Set("Content-Type", uasc.HTTPSJSONContentTypeLegacy)
-    return l.next.RoundTrip(r)
-}
-
-hc := uasc.NewHTTPSClient(tlsCfg)
-hc.Transport = legacyJSON{hc.Transport}
-c, _ := opcua.NewClient(url, opcua.HTTPClient(hc), opcua.TransportProfile(ua.TransportProfileHTTPSJSON) /* ... */)
+c, _ := opcua.NewClient(url,
+    opcua.TransportProfile(ua.TransportProfileHTTPSJSON),
+    opcua.HTTPSJSONContentType(uasc.HTTPSJSONContentTypeLegacy) /* ... */)
 ```
 
 ### Reverse Connect

@@ -19,7 +19,6 @@ package interop
 import (
 	"context"
 	"crypto/tls"
-	"net/http"
 	"testing"
 	"time"
 
@@ -27,16 +26,6 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
 )
-
-// legacyJSONContentType makes an HTTP client send the Content-Type
-// application/opcua+uajson, as UA-.NETStandard expects.
-type legacyJSONContentType struct{ next http.RoundTripper }
-
-func (l legacyJSONContentType) RoundTrip(r *http.Request) (*http.Response, error) {
-	r = r.Clone(r.Context())
-	r.Header.Set("Content-Type", uasc.HTTPSJSONContentTypeLegacy)
-	return l.next.RoundTrip(r)
-}
 
 // dialJSONTransportClient connects a go-opcua client to the endpoint of the
 // UA JSON profile at url, with security None and the test CA trusted for
@@ -90,7 +79,7 @@ func TestDotnetServer_Transport_WSSJSON(t *testing.T) {
 // opc.https with JSON bodies; Publish is a long-polled POST.
 func TestDotnetServer_Transport_HTTPSJSON(t *testing.T) {
 	h := startDotnetTransportServer(t)
-	hc := uasc.NewHTTPSClient(&tls.Config{RootCAs: testCAPool(t), MinVersion: tls.VersionTLS12})
-	hc.Transport = legacyJSONContentType{hc.Transport}
-	exerciseTransport(t, dialJSONTransportClient(t, h.https, ua.TransportProfileHTTPSJSON, true, opcua.HTTPClient(hc)))
+	// UA-.NETStandard takes JSON over HTTPS only as application/opcua+uajson.
+	exerciseTransport(t, dialJSONTransportClient(t, h.https, ua.TransportProfileHTTPSJSON, true,
+		opcua.HTTPSJSONContentType(uasc.HTTPSJSONContentTypeLegacy)))
 }

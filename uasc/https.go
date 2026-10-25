@@ -283,6 +283,9 @@ func newHTTPSChannel(endpoint string, httpClient *http.Client, cfg *Config, errC
 	t := &directTransport{client: httpClient, url: target, json: json, contentType: HTTPSContentType}
 	if json {
 		t.contentType = HTTPSJSONContentType
+		if cfg.HTTPSJSONContentType != "" {
+			t.contentType = cfg.HTTPSJSONContentType
+		}
 	}
 	return newDirectChannel(endpoint, cfg, errCh, t), nil
 }
