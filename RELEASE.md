@@ -1,5 +1,40 @@
 # go-opcua Releases
 
+## v1.26.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.25.0
+
+### Summary
+
+Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a notifier made a HistoricalEventNode with `Server.EnableEventHistory` keeps the events reported on it in the history provider, the default `*Historian` included, and serves HistoryRead `ReadEventDetails` and HistoryUpdate `UpdateEventDetails` / `DeleteEventDetails`. The client's `HistoryReadEvent`, `HistoryUpdateEvents` and `HistoryDeleteEvents` work against it unchanged.
+
+### Added
+
+- **Event history.** An Object or View whose EventNotifier has the HistoryRead bit (Part 3 §5.4, Part 11 §5.4.4) is a HistoricalEventNode: the events reported on it go to the `EventHistoryProvider` of the server — `EmitBaseEvent`, conditions and audit events, also those reported on the Server object and on the other notifiers of an event, as its event items receive them.
+  - `Server.EnableEventHistory(notifier, EventHistoryOptions{Writable, Filter})` sets SubscribeToEvents | HistoryRead (| HistoryWrite) and the HistoricalEventFilter Property (Part 11 §5.4.2): its WhereClause selects the events stored, its SelectClauses the fields. Without a filter whole events are stored.
+  - `*Historian.EnableEvents(notifier, maxEvents)` keeps up to `maxEvents` events per notifier (default 1000), ordered by Time; a full history drops its oldest event. `RecordEvent` with `NewHistoricalEvent` seeds it.
+- **HistoryRead `ReadEventDetails`** (and `ReadEventDetails2` without ReadModified): the time range and its direction (Part 11 §6.5.2.2), `NumValuesPerNode` counting the events the WhereClause passes, the SelectClauses as the fields (`Bad_NoData` for a field the history does not store, null for one the event does not have), `Good_NoData`, session-bound continuation points that resume after the last event returned, so pages stay consistent while events are added or deleted. Fewer than two of NumValuesPerNode / StartTime / EndTime is the service result `Bad_HistoryOperationInvalid`, a filter without SelectClauses `Bad_EventFilterInvalid`. Audit events go to the sessions an `EventAccessController` allows.
+- **HistoryUpdate `UpdateEventDetails`** (insert, replace, update; events matched by EventId) **and `DeleteEventDetails`**, with a result per event: `Good_EntryInserted`, `Good_EntryReplaced`, `Bad_EntryExists`, `Bad_NoEntryExists`, `Good_DataIgnored`, `Bad_TypeDefinitionInvalid`, `Bad_SourceNodeIdInvalid`, `Bad_OutOfRange`; `Bad_NoData` for an unknown EventId to delete; `Bad_NotWritable` without the HistoryWrite bit.
+- **HistoryServerCapabilities** report what the provider of `SetHistorian` implements: AccessHistoryEventsCapability, Insert/Replace/Update/DeleteEventCapability, and the data capabilities, which were all false before.
+- `MaxNodesPerHistoryReadEvents` and `MaxNodesPerHistoryUpdateEvents` are enforced (`Bad_TooManyOperations`).
+- API: `server.EventHistoryProvider`, `EventHistoryUpdater`, `EventHistoryDeleter`, `HistoricalEvent`, `NewHistoricalEvent`, `EventHistoryOptions`, `Server.EnableEventHistory`, `Historian.EnableEvents` / `EventsEnabled` / `RecordEvent` / `ReadEvents` / `UpdateEvents` / `DeleteEvents`.
+
+### Fixed
+
+- **server: `SetHistorian` while the server runs is race free.** The provider was read by the History services without synchronisation.
+- **server: a condition keeps the history bits of its source.** `AddCondition` set the EventNotifier of the source to SubscribeToEvents, dropping HistoryRead and HistoryWrite.
+
+### Tests
+
+- Unit tests of the store (ranges, direction, paging, paging while the history changes, bounds, continuation point expiry, concurrency) and of the services (details checks, per-node results, filters, audit events, capabilities), conformance tests end to end with the go-opcua client, a chaos test paging through the history while events are reported and deleted, reads are abandoned or released, sessions closed and connections dropped, and fuzz tests of the event details and of the store.
+
+### Interop
+
+- No peer runs event history yet: the opcua-interop adapters have no command for it. Of the peer servers UA-.NETStandard 2.0.1 serves event history with its stack (`InMemoryHistorianProvider`), asyncua 2.1.0 reads only (no WhereClause, no continuation points, no HistoryUpdate), open62541 1.5.9 has plugin hooks without a default store and no UpdateEventDetails, Milo 1.1.8 and async-opcua 0.19.0 leave it to the application, node-opcua 2.187 has none. The ledger rows `history.read.events` and `history.update.events` stay deferred.
+
+---
+
 ## v1.25.0
 
 **Date:** 2026-10-25

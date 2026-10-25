@@ -11,7 +11,7 @@
 | **Discovery** | `GetEndpoints`, `FindServers`, `FindServersWithFilter`, `FindServersOnNetwork`, `FindServersOnNetworkWithFilter`, `RegisterServer`, `RegisterServer2`, `DiscoverServers` | Fully implemented |
 | **Session** | Automatic via `Connect` / `Close` | Fully implemented |
 | **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented (`IndexRange`, `TimestampsToReturn`) |
-| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryUpdateData`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, … | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed + update/delete) |
+| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryReadEvent`, `HistoryUpdateData`, `HistoryUpdateEvents`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed and events + update/delete) |
 | **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
@@ -1149,8 +1149,36 @@ for dv, err := range c.ReadHistoryAll(ctx, nodeID, start, end) {
 Low-level `HistoryReadRawModified` / `HistoryReadProcessed` / `HistoryReadAtTime` and the
 HistoryUpdate helpers accept full details and continuation points. Against go-opcua servers
 with the default `*Historian`, raw/modified/at-time/processed and data update/delete paths
-are available after `SetHistorian` + `EnableNode`. Historical **events** are not served by
-go-opcua servers (`HistoryReadEvent` works against servers that have them).
+are available after `SetHistorian` + `EnableNode`.
+
+Historical events are read with `HistoryReadEvent` (an `EventFilter` selects the fields
+and filters the events) and changed with `HistoryUpdateEvents` / `HistoryDeleteEvents`;
+go-opcua servers serve them on the notifiers they historize (`EnableEventHistory`):
+
+```go
+d := &ua.ReadEventDetails{
+    StartTime:        start, // two of StartTime, EndTime, NumValuesPerNode (Part 11 §6.5.2)
+    EndTime:          end,
+    NumValuesPerNode: 100,
+    Filter:           ua.NewEventFilter().Select("EventId", "Time", "Message", "Severity").Build(),
+}
+var cp []byte
+for {
+    resp, err := c.HistoryReadEvent(ctx, []*ua.HistoryReadValueID{{NodeID: notifier, ContinuationPoint: cp}}, d)
+    if err != nil {
+        log.Fatal(err)
+    }
+    r := resp.Results[0] // Good, Good_NoData, or a Bad status of the node
+    if he, ok := r.HistoryData.Value.(*ua.HistoryEvent); ok {
+        for _, ev := range he.Events {
+            fmt.Println(ev.EventFields[1].Value(), ev.EventFields[2].Value())
+        }
+    }
+    if cp = r.ContinuationPoint; len(cp) == 0 {
+        break
+    }
+}
+```
 Peer-proven history is raw HistoryRead (`history.read.raw`) in both directions with all six
 peers, and its continuation points (`history.read.continuation`) in both directions with all
 of them but the asyncua server, which returns none (see [INTEROP.md](../INTEROP.md)).

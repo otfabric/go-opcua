@@ -251,6 +251,7 @@ what the interop suite has actually exercised.
 | Alarms & Conditions (Part 9) | ✅ conditions, acknowledge, confirm, shelving, limit alarms, ConditionRefresh, v1.05 suppress / silence / out-of-service / latch methods, dialogs, branches, alarm groups, audit events, OnDelay / OffDelay, re-alarm, AudibleSound, FirstInGroup, AlarmMetrics | experimental | types only | · | ✅ | ✅ | · |
 | HistoryRead raw with a built-in store | ✅ | ✅ | delegated ⁵ | delegated | delegated | ✅ | ✅ |
 | HistoryRead modified / at-time / processed, HistoryUpdate | ✅ built-in historian, pluggable provider | raw and update; rest via backend plugin | delegated ⁵ | delegated | delegated | raw only | raw and events |
+| Historical events: HistoryRead events, HistoryUpdate events | ✅ built-in historian (filters, continuation points, insert / replace / update / delete), pluggable provider | read and delete via backend plugin, no default store; no UpdateEventDetails | delegated ⁵ | delegated | ✅ built-in historian | — | read only: no WhereClause, no continuation points |
 | Server diagnostics (ServerDiagnostics, DiagnosticInfo) | ✅ summary, session objects, ReturnDiagnostics | ✅ | — | — | ✅ | ✅ | — |
 | PubSub (Part 14) ⁷ | ✅ UADP and JSON over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, security, SKS | ✅ UDP, Ethernet, MQTT | — | — | ✅ UDP, MQTT | commercial add-on | experimental UADP over UDP |
 | JSON / XML data encoding of values ⁸ | ✅ JSON 1.05 Compact and Verbose, 1.04; XML | ✅ JSON; XML for built-in types | ✅ JSON Compact and Verbose; XML | JSON 1.04 form; NodeSet2 XML | ✅ JSON Compact and Verbose; XML | JSON | — NodeSet2 XML only |
@@ -399,7 +400,7 @@ you rely on.
 | Area | Capabilities |
 |------|-------------|
 | **Namespaces** | Custom `NameSpace` interface, `NodeNameSpace` in-memory implementation |
-| **Services** | Read, Write, HistoryRead/HistoryUpdate (via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
+| **Services** | Read, Write, HistoryRead/HistoryUpdate of data and events (via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences |
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode; revise clamps, `MoreNotifications`, Publish ACK |
 | **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; `DataChangeFilter` (Status / StatusValue / StatusValueTimestamp, absolute and percent deadband), sampling interval, per-item `IndexRange`; per-item rejection for unknown nodes and unusable filters |
@@ -409,7 +410,7 @@ you rely on.
 | **Methods** | Register handlers via `RegisterMethod`, argument introspection |
 | **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + custom `Fields` + EventFilter SelectClauses / WhereClause) |
 | **Alarms & Conditions** | `AddCondition`: ConditionType, AcknowledgeableConditionType, AlarmConditionType and the limit / off-normal alarm subtypes with their standard components; Enable / Disable, AddComment, Acknowledge / Confirm with EventId checks, Retain, shelving, suppression, ConditionRefresh / ConditionRefresh2; v1.05 OutOfService / Silence / Latched states with Suppress / Unsuppress / RemoveFromService / PlaceInService / Silence / Reset and every `*2` variant, DialogConditionType (Respond / Respond2), condition branches, alarm groups and alarm suppression groups, AuditConditionEventType events (`WithAuditing`), OnDelay / OffDelay, ReAlarmTime / ReAlarmRepeatCount, AudibleEnabled / AudibleSound, FirstInGroupFlag / FirstInGroup, AlarmMetricsType with Reset (`AddAlarmMetrics`, `WithAlarmClock`); methods run through the Call service and the `AccessController` (Part 9) |
-| **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces |
+| **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces; historical events (`EnableEventHistory`, HistoricalEventFilter, ReadEventDetails, UpdateEventDetails, DeleteEventDetails) |
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
 | **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML`, including variable values, data types and access levels |
 | **Reverse connect** | `WithReverseConnect` / `AddReverseConnect`: connect to listening clients, keep one idle connection available, retry with back-off, add and remove targets at run time |
@@ -435,8 +436,8 @@ you rely on.
 | | Cancel | — | Yes |
 | **Attribute** | Read | Yes | Yes |
 | | Write | Yes | Yes |
-| | HistoryRead | Yes | Yes (via `HistoryProvider`; default `*Historian` supports raw/modified/at-time/processed) |
-| | HistoryUpdate | Yes | Yes (when historian implements optional updater/deleter interfaces; default `*Historian` does) |
+| | HistoryRead | Yes | Yes (via `HistoryProvider`; default `*Historian` supports raw/modified/at-time/processed and events) |
+| | HistoryUpdate | Yes | Yes (when historian implements optional updater/deleter interfaces; default `*Historian` does, for data and events) |
 | **View** | Browse | Yes | Yes |
 | | BrowseNext | Yes | Yes |
 | | TranslateBrowsePathsToNodeIDs | Yes | Yes |
@@ -470,7 +471,7 @@ you rely on.
 |---------|---------|
 | `opcua` | Client, Node, Subscription (incl. Republish / TransferSubscriptions), config options, recovery handler, retry, metrics |
 | `ua` | OPC-UA types and codec: Variant, DataValue, NodeID, StatusCode, NumericRange, EventFilter helpers, ExtensionObject registry, `SelectEndpoint` |
-| `server` | Server, NameSpace, AccessController, events (`EmitBaseEvent`), pluggable `HistoryProvider` / `*Historian`, service handlers |
+| `server` | Server, NameSpace, AccessController, events (`EmitBaseEvent`), pluggable `HistoryProvider` / `*Historian` (data and event history), service handlers |
 | `server/attrs` | Attribute helper constructors for building nodes |
 | `server/refs` | Reference helper constructors for address-space links |
 | `monitor` | High-level `NodeMonitor` with callback and channel-based subscriptions |

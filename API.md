@@ -2421,6 +2421,83 @@ Limitations:
   bounding values are not implemented for raw reads
 - Without `SetHistorian`, HistoryRead returns unsupported / non-historized results
 
+#### Event history
+
+An Object or View whose EventNotifier has the HistoryRead bit is a
+HistoricalEventNode (Part 11 §5.4): the events reported on it (`EmitBaseEvent`,
+conditions, audit events, also those reported on the Server object and the
+other notifiers of an event) go to the provider when it implements
+`EventHistoryProvider`. HistoryRead `ReadEventDetails` (and `ReadEventDetails2`
+without ReadModified) reads the history; `UpdateEventDetails` and
+`DeleteEventDetails` change it when the HistoryWrite bit is set too.
+
+```go
+type EventHistoryProvider interface {
+    RecordEvent(notifier *ua.NodeID, ev *HistoricalEvent)
+    ReadEvents(notifier *ua.NodeID, startTime, endTime time.Time, numValues uint32, match func(*HistoricalEvent) bool, continuationPoint []byte) ([]*HistoricalEvent, []byte, ua.StatusCode)
+}
+
+type EventHistoryUpdater interface {
+    UpdateEvents(notifier *ua.NodeID, perform ua.PerformUpdateType, events []*HistoricalEvent) *ua.HistoryUpdateResult
+}
+
+type EventHistoryDeleter interface {
+    DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.HistoryUpdateResult
+}
+
+// The fields of an event by BrowsePath ("EventId", "AckedState/Id"); the key
+// "" holds the ConditionId of a condition event.
+type HistoricalEvent struct {
+    Fields map[string]*ua.Variant
+}
+
+func NewHistoricalEvent(ev *BaseEvent) *HistoricalEvent
+func (e *HistoricalEvent) EventID() []byte
+func (e *HistoricalEvent) Time() time.Time
+func (e *HistoricalEvent) EventType() *ua.NodeID
+
+type EventHistoryOptions struct {
+    Writable bool           // HistoryWrite bit: HistoryUpdate may change the history
+    Filter   *ua.EventFilter // HistoricalEventFilter Property; nil stores whole events
+}
+
+func (s *Server) EnableEventHistory(notifier *ua.NodeID, opts EventHistoryOptions) error
+
+// *Historian implements all three:
+func (h *Historian) EnableEvents(notifier *ua.NodeID, maxEvents int)
+func (h *Historian) EventsEnabled(notifier *ua.NodeID) bool
+func (h *Historian) RecordEvent(notifier *ua.NodeID, ev *HistoricalEvent)
+func (h *Historian) ReadEvents(notifier *ua.NodeID, startTime, endTime time.Time, numValues uint32, match func(*HistoricalEvent) bool, continuationPoint []byte) ([]*HistoricalEvent, []byte, ua.StatusCode)
+func (h *Historian) UpdateEvents(notifier *ua.NodeID, perform ua.PerformUpdateType, events []*HistoricalEvent) *ua.HistoryUpdateResult
+func (h *Historian) DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.HistoryUpdateResult
+```
+
+- `EnableEventHistory` sets SubscribeToEvents | HistoryRead (| HistoryWrite) on
+  the EventNotifier and adds the HistoricalEventFilter Property (Part 11
+  §5.4.2). With a `Filter`, its WhereClause selects the events stored and its
+  SelectClauses the fields (EventId, EventType, Time and ReceiveTime are always
+  stored); a read of a field not stored gets `Bad_NoData`. Without one, whole
+  events are stored and the Property lists the BaseEventType fields as a guide.
+- `*Historian` keeps at most `maxEvents` (default 1000) events per notifier,
+  ordered by Time; a full history drops its oldest event.
+- Time range (Part 11 §6.5.2.2): start ≤ Time < end oldest first; start > end
+  newest first (start inclusive, end exclusive); start = end the events of that
+  Time; only start (with NumValuesPerNode) forward, only end newest first up to
+  end. Fewer than two of NumValuesPerNode / StartTime / EndTime is the service
+  result `Bad_HistoryOperationInvalid`, a filter without SelectClauses
+  `Bad_EventFilterInvalid`. `NumValuesPerNode` counts the events the WhereClause
+  passes; no events is `Good_NoData`. Continuation points are session-bound and
+  resume after the last event returned.
+- UpdateEventDetails matches events by EventId: Insert `Good_EntryInserted` /
+  `Bad_EntryExists`, Replace `Good_EntryReplaced` / `Bad_NoEntryExists`, Update
+  either. DeleteEventDetails answers `Good` or `Bad_NoData` per EventId. A
+  notifier without the HistoryWrite bit answers `Bad_NotWritable`.
+- Audit events in the history go to the sessions an `EventAccessController`
+  allows.
+- The HistoryServerCapabilities (`AccessHistoryEventsCapability`,
+  `Insert/Replace/Update/DeleteEventCapability`, and the data capabilities)
+  report what the provider of `SetHistorian` implements.
+
 Peer HistoryRead raw interoperability: all four directions verified
 (`history.read.raw`) since opcua-interop v0.6.0; continuation points verified
 open62541→Go and Milo→Go. Go↔Go covered.
