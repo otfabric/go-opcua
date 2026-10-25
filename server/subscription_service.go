@@ -124,7 +124,7 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 
 	// A subscription belongs to a session (Part 4 §5.13.2). Without one there
 	// is nobody to deliver notifications to.
-	sess := s.srv.Session(r.Header())
+	sess := s.srv.session(r.Header())
 	if sess == nil {
 		return nil, ua.StatusBadSessionIDInvalid
 	}
@@ -188,7 +188,7 @@ func (s *SubscriptionService) ModifySubscription(ctx context.Context, sc *uasc.S
 		return nil, err
 	}
 
-	session := s.srv.Session(req.Header())
+	session := s.srv.session(req.Header())
 
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -267,7 +267,7 @@ func (s *SubscriptionService) SetPublishingMode(ctx context.Context, sc *uasc.Se
 		return nil, err
 	}
 
-	session := s.srv.Session(req.Header())
+	session := s.srv.session(req.Header())
 
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
@@ -314,7 +314,7 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 		return nil, err
 	}
 
-	session := s.srv.Session(req.RequestHeader)
+	session := s.srv.session(req.RequestHeader)
 
 	if session == nil {
 		response := &ua.PublishResponse{
@@ -548,7 +548,7 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 		return nil, err
 	}
 
-	requester := s.srv.Session(req.Header())
+	requester := s.srv.session(req.Header())
 	if requester == nil {
 		return nil, ua.StatusBadSessionIDInvalid
 	}
@@ -677,7 +677,7 @@ func (s *SubscriptionService) DeleteSubscriptions(ctx context.Context, sc *uasc.
 	if err != nil {
 		return nil, err
 	}
-	session := s.srv.Session(req.Header())
+	session := s.srv.session(req.Header())
 
 	// The subscriptions are taken out of the table under the lock, so a
 	// second request for the same id is answered with

@@ -511,7 +511,7 @@ func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r u
 	// of requests successfully cancelled.
 	// In this implementation outstanding requests are limited to
 	// queued Publish requests on the session.
-	session := s.srv.Session(req.Header())
+	session := s.srv.session(req.Header())
 	var cancelCount uint32
 
 	if session != nil {

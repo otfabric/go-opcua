@@ -3,6 +3,7 @@
 package server
 
 import (
+	"log/slog"
 	"testing"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -36,4 +37,16 @@ func TestSessionHandle(t *testing.T) {
 
 	bare := &session{ID: ua.NewNumericNodeID(1, 7)}
 	require.Same(t, bare.ID, bare.handle().ID(), "a session made without the broker still has a handle")
+}
+
+func TestServerSession(t *testing.T) {
+	srv := &Server{sb: newSessionBroker(slog.New(slog.DiscardHandler))}
+	s := srv.sb.NewSession()
+
+	require.Nil(t, srv.Session(nil))
+	require.Nil(t, srv.Session(&ua.RequestHeader{}), "no token")
+	require.Nil(t, srv.Session(&ua.RequestHeader{AuthenticationToken: ua.NewNumericNodeID(0, 1)}), "unknown token")
+	h := srv.Session(&ua.RequestHeader{AuthenticationToken: s.AuthTokenID})
+	require.Same(t, s.handle(), h)
+	require.Same(t, s.ID, h.ID())
 }
