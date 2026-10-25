@@ -408,9 +408,15 @@ func (s *SessionService) decryptUserPassword(sc *uasc.SecureChannel, sess *sessi
 	if policyURI == ua.SecurityPolicyURINone {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
-	_, key, ok := s.srv.cfg.identityFor(policyURI)
-	if !ok || key == nil {
-		return nil, ua.StatusBadIdentityTokenInvalid
+	// The key of the channel: after push certificate management replaced
+	// the certificate, a channel opened before keeps the key it has.
+	key := sc.LocalPrivateKey()
+	if key == nil {
+		_, k, ok := s.srv.cfg.identityFor(policyURI)
+		if !ok || k == nil {
+			return nil, ua.StatusBadIdentityTokenInvalid
+		}
+		key = k
 	}
 	enc, err := uapolicy.AsymmetricKeys(policyURI, key, nil)
 	if err != nil {
@@ -548,7 +554,8 @@ func (s *SessionService) serverCertificate(sc *uasc.SecureChannel) []byte {
 			return cert
 		}
 	}
-	return s.srv.cfg.certificate
+	cert, _ := s.srv.cfg.primaryIdentity()
+	return cert
 }
 
 // userTokenPolicy returns the security policy that protects the user identity

@@ -140,6 +140,12 @@ func (s *SecureChannel) LocalCertificate() []byte {
 	return s.cfg.Certificate
 }
 
+// LocalPrivateKey returns the private key of LocalCertificate, or nil if
+// there is none.
+func (s *SecureChannel) LocalPrivateKey() crypto.PrivateKey {
+	return s.cfg.localKey()
+}
+
 // userTokenPolicy returns the security policy that protects a user identity
 // token: the one of its UserTokenPolicy, or the policy of the channel if the
 // token policy does not name one.

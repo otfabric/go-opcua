@@ -113,9 +113,15 @@ type Server struct {
 
 	// diag holds the server diagnostics (diagnostics.go).
 	diag *serverDiagnostics
+	// push is the push certificate management (push.go), nil without
+	// WithPushManagement.
+	push *pushManager
 }
 
 type serverConfig struct {
+	// idMu guards privateKey, certificate and identities, which push
+	// certificate management replaces at run time (push_methods.go).
+	idMu           sync.RWMutex
 	privateKey     *rsa.PrivateKey
 	certificate    []byte
 	applicationURI string
@@ -180,6 +186,8 @@ type serverConfig struct {
 	// diagnosticsOff starts the server with EnabledFlag false
 	// (WithServerDiagnostics).
 	diagnosticsOff bool
+	// push is the configuration of WithPushManagement (nil: none).
+	push *PushManagement
 }
 
 var capabilities = ServerCapabilities{
@@ -252,6 +260,14 @@ func New(opts ...Option) (*Server, error) {
 		cfg.accessController = DefaultAccessController{}
 	}
 	cfg.warnUnvalidatedAuthModes()
+	var push *pushManager
+	if cfg.push != nil {
+		if cfg.clientCertificateValidator != nil {
+			return nil, fmt.Errorf("server: WithPushManagement validates client certificates against its trust list; pass the trusted certificates in PushManagement.TrustList instead of WithClientCertificateTrustList")
+		}
+		push = newPushManager(cfg.push)
+		cfg.clientCertificateValidator = push.validateClient
+	}
 	// listenAddr controls where the server binds (TCP).  It defaults to the
 	// first endpoint URL, but can be overridden with ListenOn() so that the
 	// server can listen on 0.0.0.0 without advertising that address.
@@ -295,6 +311,10 @@ func New(opts ...Option) (*Server, error) {
 	s.publishNamespaces()
 	s.disc = newDiscoveryManager(s)
 	s.registerAlarmMethods()
+	if push != nil {
+		push.s = s
+		s.push = push
+	}
 
 	builtinNodeSetOnce.Do(func() {
 		builtinNodeSetErr = xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet)
@@ -341,6 +361,7 @@ func New(opts ...Option) (*Server, error) {
 	for _, n := range ServerCapabilitiesNodes(s) {
 		s.namespaces[0].AddNode(n)
 	}
+	s.buildPushModel()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
@@ -762,7 +783,8 @@ func (s *Server) serveConn(ctx context.Context, c *uacp.Conn) {
 			_ = c.Close()
 		}
 	}()
-	_ = s.cb.RegisterConn(ctx, c, s.cfg.certificate, s.cfg.privateKey)
+	cert, key := s.cfg.primaryIdentity()
+	_ = s.cb.RegisterConn(ctx, c, cert, key)
 }
 
 // monitorConnections reads messages off the secure channel connection and
