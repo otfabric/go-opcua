@@ -346,7 +346,7 @@ func (m *pubsubModel) bindDiagChildren(parent *Node, path, name string) {
 		ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 	}, nil, val)
-	m.s.namespaces[0].AddNode(n)
+	m.s.ns0().AddNode(n)
 	m.typeDef(n, id.PropertyType)
 	linkChild(parent, n, id.HasProperty)
 }

@@ -44,13 +44,12 @@ func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r u
 	}
 
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
-	ac := s.srv.cfg.accessController
 
 	results := make([]*ua.DataValue, len(req.NodesToRead))
 	for i, n := range req.NodesToRead {
 		s.srv.cfg.logger.Debug("read", "node_id", n.NodeID, "attribute", n.AttributeID)
 
-		if sc := ac.CheckRead(ctx, sess, n.NodeID); sc != ua.StatusOK {
+		if sc := s.srv.checkRead(ctx, sess, n.NodeID); sc != ua.StatusOK {
 			// Error DataValues must not receive fabricated timestamps.
 			results[i] = &ua.DataValue{
 				EncodingMask: ua.DataValueStatusCode,
@@ -284,7 +283,6 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 	}
 
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
-	ac := s.srv.cfg.accessController
 
 	status := make([]ua.StatusCode, len(req.NodesToWrite))
 
@@ -292,8 +290,12 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 		n := req.NodesToWrite[i]
 		s.srv.cfg.logger.Debug("write", "node_id", n.NodeID, "attribute", n.AttributeID)
 
-		if sc := ac.CheckWrite(ctx, sess, n.NodeID); sc != ua.StatusOK {
+		if sc := s.srv.checkWrite(ctx, sess, n.NodeID); sc != ua.StatusOK {
 			status[i] = sc
+			continue
+		}
+		if isEnabledFlag(n) {
+			status[i] = s.srv.diag.writeEnabledFlag(n)
 			continue
 		}
 

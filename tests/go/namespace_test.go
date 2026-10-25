@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -38,6 +39,8 @@ func TestNamespace(t *testing.T) {
 			"http://opcfoundation.org/UA/",
 			"NodeNamespace",
 			"http://otfabric.com/",
+			// created with the first session (server diagnostics)
+			server.DiagnosticsNamespaceURI,
 		}
 		require.Equal(t, want, got, "NamespaceArray not equal")
 	})

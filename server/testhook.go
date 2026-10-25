@@ -77,5 +77,8 @@ func (s *Server) resourceCounts() testhook.ServerResources {
 		r.MonitoredItems = len(ms.Items)
 		ms.Mu.Unlock()
 	}
+	if s.diag != nil {
+		r.DiagnosticsSessionObjects = s.diag.sessionObjectCount()
+	}
 	return r
 }

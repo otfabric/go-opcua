@@ -77,6 +77,9 @@ type Config struct {
 	retryPolicy         RetryPolicy
 	skipNamespaceUpdate bool
 	certValidator       serverCertValidator
+	// returnDiagnostics is the ReturnDiagnostics mask of every request
+	// (ReturnDiagnostics option).
+	returnDiagnostics uint32
 
 	// reverse is set when the client waits for the server to connect
 	// (reverse connect) instead of connecting to it.

@@ -70,6 +70,7 @@ func (s *MonitoredItemService) deleteMonitoredItemNeedsLock(id uint32) {
 	// we've got to go backwards because we're deleting from the slice as we go.
 	// I'm guessing this loop is less efficient than slices.DeleteFunc but it's what we've got.
 	delete(s.Items, id)
+	s.diagnostics().untrackItem(item)
 	// A postponed sample dies with the item, and the sampler timer with the
 	// last postponed sample.
 	s.cancelDeferredSample(item)
@@ -396,6 +397,11 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			}
 			continue
 		}
+		// The diagnostics of other sessions cannot be monitored either.
+		if st := s.diagnostics().checkRead(sess, nodeid); st != ua.StatusOK {
+			res[i] = &ua.MonitoredItemCreateResult{StatusCode: st, FilterResult: ua.NewExtensionObject(nil)}
+			continue
+		}
 
 		if itemreq.RequestedParameters == nil {
 			itemreq.RequestedParameters = &ua.MonitoringParameters{DiscardOldest: true}
@@ -480,6 +486,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 
 		// book keeping of the new item
 		s.Items[item.ID] = &item
+		s.diagnostics().trackItem(&item)
 		list, ok := s.Nodes[item.Req.ItemToMonitor.NodeID.String()]
 		if !ok {
 			list = make([]*MonitoredItem, 0, 1)
@@ -575,6 +582,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 			revisedSampling = reviseSamplingInterval(item.RequestedParameters.SamplingInterval,
 				float64(pubInterval)/float64(time.Millisecond))
 			mi.samplingInterval = time.Duration(revisedSampling * float64(time.Millisecond))
+			s.diagnostics().trackItem(mi)
 			// A sample that was postponed under the old interval becomes
 			// due under the new one.
 			if !mi.sampleDue.IsZero() {
@@ -668,6 +676,7 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 
 		prev := item.Mode
 		item.Mode = req.MonitoringMode
+		s.diagnostics().trackItem(item)
 		if req.MonitoringMode == ua.MonitoringModeDisabled {
 			item.queue = item.queue[:0]
 			// Nothing is cached while disabled: the first change after the
