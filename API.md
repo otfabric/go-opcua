@@ -1899,6 +1899,17 @@ func NewFolderNode(nodeID *ua.NodeID, name string) *Node
 func NewVariableNode(nodeID *ua.NodeID, name string, value any) *Node
 ```
 
+`NewFolderNode` and `NewVariableNode` put the BrowseName in the namespace of
+`nodeID`. `NewVariableNode` sets the DataType attribute to the DataType of
+the initial value (Part 3 §5.6.2): the built-in type of its Variant
+(`float64` → Double i=11, `int` → Int32, `[]string` → String, ...), the
+DataType of a namespace-0 structure, `Structure` for other structures and
+`BaseDataType` for nil. ValueRank is Scalar (-1), the number of dimensions of
+an array (ArrayDimensions 0 = any length) or Any (-2) for nil. For a
+`ValueFunc` / `func() *ua.DataValue` the DataType is that of the value it
+returns, worked out on each read, and ValueRank is Any. `SetAttribute`
+overrides any of them.
+
 #### Methods
 
 ```go

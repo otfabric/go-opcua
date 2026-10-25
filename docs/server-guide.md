@@ -417,7 +417,13 @@ You can mix both in the same server — use `NodeNameSpace` for complex subsyste
 
 ### Variable Nodes
 
-Variable nodes hold data values. Use a `ValueFunc` for dynamic data:
+Variable nodes hold data values. Pass the initial value, or a `ValueFunc`
+for dynamic data. The node's BrowseName is in its own namespace and its
+DataType is the DataType of the value (a `float64` is a Double, an `int` an
+Int32, `nil` BaseDataType), with the matching ValueRank (Scalar, or the
+number of array dimensions). Set other attributes with `SetAttribute`.
+
+Use a `ValueFunc` for dynamic data:
 
 ```go
 node := server.NewVariableNode(

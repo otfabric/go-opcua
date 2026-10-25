@@ -40,7 +40,9 @@ func TestNodeManagementService_AddNodes(t *testing.T) {
 
 		// Verify node exists.
 		n := ns.Node(newNodeID)
-		assert.NotNil(t, n, "node should exist in namespace after AddNodes")
+		require.NotNil(t, n, "node should exist in namespace after AddNodes")
+		// The BrowseName is the one requested, namespace included.
+		assert.Equal(t, &ua.QualifiedName{NamespaceIndex: ns.ID(), Name: "dynamic_var_1"}, n.BrowseName())
 	})
 
 	t.Run("add duplicate node returns error", func(t *testing.T) {

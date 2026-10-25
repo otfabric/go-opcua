@@ -210,11 +210,10 @@ func (as *NodeNameSpace) Attribute(id *ua.NodeID, attr ua.AttributeID) *ua.DataV
 // a Variable node, or nil to report the stored attribute unchanged.
 //
 // The DataType attribute is a NodeId (Part 3 §5.6.2). Nodes built with
-// NewVariableNode store an ExpandedNodeId placeholder (i=267, which is not a
-// data type) because the same slot doubles as the type definition used for
-// browsing. For those the data type is derived from the current value, the
-// same way MapNamespace does; other stored ExpandedNodeIds are reported as
-// the plain NodeId they wrap.
+// NewVariableNode for a value function store an ExpandedNodeId placeholder
+// (i=267, which is not a data type): their data type is derived from the
+// current value, the same way MapNamespace does. Other stored
+// ExpandedNodeIds are reported as the plain NodeId they wrap.
 func variableDataType(n *Node, stored *ua.DataValue) *ua.NodeID {
 	if n.NodeClass() != ua.NodeClassVariable || stored == nil || stored.Value == nil {
 		return nil
@@ -226,8 +225,8 @@ func variableDataType(n *Node, stored *ua.DataValue) *ua.NodeID {
 	if en.NodeID.Namespace() != 0 || en.NodeID.IntID() != id.VariableNode {
 		return en.NodeID
 	}
-	if dv := n.Value(); dv != nil && dv.Value != nil && dv.Value.Value() != nil {
-		return ua.NewNumericNodeID(0, uint32(dv.Value.Type()))
+	if dv := n.Value(); dv != nil {
+		return variantDataType(dv.Value)
 	}
 	return ua.NewNumericNodeID(0, id.BaseDataType)
 }
