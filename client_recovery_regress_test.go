@@ -305,3 +305,57 @@ func TestLeftSession_SessionBeingReplaced(t *testing.T) {
 	require.Nil(t, c.leaving.Load())
 	require.False(t, c.leftSession(prev.resp.AuthenticationToken))
 }
+
+// Good_SubscriptionTransferred for a subscription that left the session the
+// client uses: another session took it, so the client forgets it (it would
+// otherwise recreate it on the next Bad_NoSubscription and duplicate it).
+// For a session the client has left as well, the subscription moved with the
+// client: it stays, and its sequence numbers are untouched.
+//
+// Regression (TestDiagnostics_Transfer on CI): the client whose subscription
+// another client had taken recreated it.
+func TestPublish_SubscriptionTransferred(t *testing.T) {
+	transferred := func(id, seq uint32) *ua.PublishResponse {
+		eo := ua.NewExtensionObject(&ua.StatusChangeNotification{Status: ua.StatusGoodSubscriptionTransferred})
+		return &ua.PublishResponse{
+			SubscriptionID:      id,
+			Results:             []ua.StatusCode{},
+			NotificationMessage: &ua.NotificationMessage{SequenceNumber: seq, NotificationData: []*ua.ExtensionObject{eo}},
+		}
+	}
+	setup := func(t *testing.T) (*Client, *Subscription, <-chan *PublishNotificationData) {
+		c := newNotifyTestClient(t)
+		sub, ch := newNotifyTestSub(7)
+		sub.lastSeq, sub.nextSeq = 4, 5
+		c.subMux.Lock()
+		c.subs[7] = sub
+		c.subMux.Unlock()
+		c.setPublishPaused(false)
+		return c, sub, ch
+	}
+
+	t.Run("taken by another session", func(t *testing.T) {
+		c, _, ch := setup(t)
+		require.Zero(t, c.deliverPublishResponseOf(context.Background(), transferred(7, 5), false))
+		require.Len(t, ch, 1, "the consumer sees the notification")
+		n := <-ch
+		sc, ok := n.Value.(*ua.StatusChangeNotification)
+		require.True(t, ok, "got %T", n.Value)
+		require.Equal(t, ua.StatusGoodSubscriptionTransferred, sc.Status)
+		assert.Empty(t, c.SubscriptionIDs(), "the subscription is forgotten")
+		assert.Empty(t, c.subRecoverCh, "nothing is recreated")
+		assert.Empty(t, c.pendingAcks)
+		paused, _ := c.publishState()
+		assert.True(t, paused, "nothing is left to publish for")
+	})
+
+	t.Run("moved with the client", func(t *testing.T) {
+		c, sub, ch := setup(t)
+		require.Zero(t, c.deliverPublishResponseOf(context.Background(), transferred(7, 5), true))
+		assert.Empty(t, ch)
+		assert.Equal(t, []uint32{7}, c.SubscriptionIDs())
+		assert.Equal(t, uint32(4), sub.lastSeq)
+		assert.Equal(t, uint32(5), sub.nextSeq)
+		assert.Empty(t, c.pendingAcks)
+	})
+}
