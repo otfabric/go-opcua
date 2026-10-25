@@ -221,6 +221,32 @@ level := uapolicy.SecurityLevel(
 
 ---
 
+## TLS for opc.wss and opc.https
+
+The WebSocket (`opc.wss`, Part 6 §7.5) and HTTPS (`opc.https`, Part 6 §7.4)
+transports run over TLS. Its certificate is separate from the application
+instance certificate (Part 6 §7.5.3): typically one from a web PKI that the
+clients already trust for the host name.
+
+- **Server**: `server.TLSConfig(&tls.Config{Certificates: ...})`; without it the
+  RSA application instance certificate serves TLS (clients then have to trust
+  it for TLS too). `ClientAuth: tls.RequireAndVerifyClientCert` with
+  `ClientCAs` requires client TLS certificates.
+- **Client**: `opcua.TLSConfig(&tls.Config{RootCAs: pool})` trusts the server's
+  TLS certificate; the host name of the endpoint URL must match it.
+  `Certificates` presents a client TLS certificate. `opcua.InsecureSkipVerify`
+  does not affect TLS.
+- TLS 1.2 is the minimum on both sides, whatever the configuration says.
+
+Over opc.wss the secure conversation runs inside TLS as over opc.tcp, with
+every policy and mode. Over opc.https there is no secure conversation: TLS is
+the only protection of the messages, and the security policy of the endpoint
+(sent in the `OPCUA-SecurityPolicy` header) only selects how the client and
+server nonces are signed in CreateSession / ActivateSession. The AEAD ECC
+policies are not offered over HTTPS: their session signatures are bound to a
+secure channel thumbprint that HTTPS does not have. A None endpoint over HTTPS
+accepts user names in plain text, protected by TLS.
+
 ## Message Security Modes
 
 Each policy can operate in three modes:

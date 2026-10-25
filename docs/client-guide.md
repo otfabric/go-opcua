@@ -100,6 +100,44 @@ c, _ := opcua.NewClient(ep.EndpointURL,
 )
 ```
 
+### HTTPS and WebSocket endpoints
+
+Besides `opc.tcp`, the client dials `opc.wss://` (OPC UA Secure Conversation
+over a TLS WebSocket, Part 6 §7.5) and `opc.https://` / `https://` (UA Binary
+requests as HTTPS POSTs, Part 6 §7.4). The endpoint URL picks the transport;
+everything else (sessions, subscriptions, reconnect, security policies) works
+as over `opc.tcp`.
+
+The TLS certificate of the server is checked against `TLSConfig` (its
+`RootCAs`, or the system roots) and the host name of the URL. It is not the
+application instance certificate: that one is still checked as usual for the
+session.
+
+```go
+pool := x509.NewCertPool()
+pool.AppendCertsFromPEM(caPEM)
+
+c, err := opcua.NewClient("opc.wss://server:4843",
+    opcua.SecurityMode(ua.MessageSecurityModeNone), // TLS protects the channel
+    opcua.TLSConfig(&tls.Config{RootCAs: pool}),
+)
+```
+
+Over HTTPS there is no secure channel: the security policy only decides how
+the session nonces are signed, and `Publish` is a POST the server holds until
+it has a notification. A server usually offers user names on the None
+endpoints of HTTPS (TLS protects the password). To pick the endpoint of a
+transport from a GetEndpoints result, use `SelectEndpointForTransport`:
+
+```go
+eps, _ := opcua.GetEndpoints(ctx, "opc.https://server:4843", opcua.TLSConfig(tlsCfg))
+ep, err := opcua.SelectEndpointForTransport(eps, ua.TransportProfileHTTPS, "None", ua.MessageSecurityModeNone, nil)
+```
+
+`SelectEndpoint` prefers `opc.tcp` endpoints when the server offers any.
+`HTTPClient` replaces the `*http.Client` of HTTPS endpoints (for a proxy, for
+example); `opc.wss` connections are always direct (no HTTP proxy).
+
 ### Reverse Connect
 
 When the client cannot reach the server (the server sits behind a firewall
@@ -297,6 +335,8 @@ A "ping" or connection-test command can run these steps in order and report whic
 | `ReverseConnect(listenAddr, opts...)` | Wait for the server to connect instead of dialling it ([reverse connect](#reverse-connect)) |
 | `ReverseConnectListener(l, opts...)` | Reverse connect through a shared `*uacp.ReverseListener` |
 | `DialTimeout(d)` | Time allowed to establish the connection, or to wait for a reverse connection |
+| `TLSConfig(cfg)` | TLS of `opc.wss` / `opc.https` endpoints (trusted roots, client certificate for mutual TLS) |
+| `HTTPClient(c)` | `*http.Client` of `opc.https` endpoints |
 
 ---
 

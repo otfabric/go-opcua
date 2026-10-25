@@ -9,8 +9,9 @@
 
 OPC UA defines three *DataEncodings* for the same values (Part 6 §5): UA
 Binary, JSON (§5.4) and XML (§5.3). go-opcua speaks UA Binary on the wire and
-that does not change: **the transport is OPC UA TCP with the binary encoding
-only**. There is no HTTPS/JSON or WebSocket transport.
+that does not change: **the transports (`opc.tcp`, `opc.wss`, `opc.https`)
+carry the binary encoding only**. There is no HTTPS/JSON or WebSocket/JSON
+transport (`https-uajson`, `wss-uajson`).
 
 JSON and XML are available as encodings of *values*, for everything that is
 not the wire:

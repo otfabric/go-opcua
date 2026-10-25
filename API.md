@@ -832,6 +832,8 @@ All option functions return `Option` and are passed to `NewClient`:
 | `WithLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE) |
 | `TrustedCertificates(certs ...*x509.Certificate)` | Add CA/self-signed certs to the trust pool |
+| `TLSConfig(c *tls.Config)` | TLS of `opc.wss` and `opc.https` endpoints: `RootCAs` for the server's TLS certificate (system roots when nil), `Certificates` for mutual TLS. TLS 1.2 is the minimum. Separate from the application instance certificate |
+| `HTTPClient(c *http.Client)` | The `*http.Client` of `opc.https` endpoints (proxies, transports); `TLSConfig` is then not used for them |
 
 Server certificates may be presented as a **DER chain** (leaf followed by intermediates); validation parses the full chain and verifies the leaf against the trust pool.
 
@@ -1083,6 +1085,16 @@ func ApplyTimestampsToReturn(dv *DataValue, ts TimestampsToReturn) StatusCode
 `SliceVariantRead` / `MergeVariantWrite` return Part 4 status codes (`BadIndexRangeInvalid`, `BadIndexRangeNoData`, `BadIndexRangeDataMismatch`, …). `ApplyTimestampsToReturn` filters or synthesizes DataValue timestamp fields for Read and monitored-item delivery; invalid enum → `BadTimestampsToReturnInvalid`.
 
 ---
+
+### Transport profiles
+
+```go
+const TransportProfileUATCP = "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary"
+const TransportProfileWSS   = "http://opcfoundation.org/UA-Profile/Transport/wss-uasc-uabinary"
+const TransportProfileHTTPS = "http://opcfoundation.org/UA-Profile/Transport/https-uabinary"
+
+func TransportProfileForURL(endpointURL string) string // by scheme; "" for an unknown scheme
+```
 
 ### StatusCode
 
@@ -1413,9 +1425,10 @@ These are the concrete types delivered in `PublishNotificationData.Value`.
 
 ```go
 func SelectEndpoint(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error)
+func SelectEndpointForTransport(endpoints []*ua.EndpointDescription, transportProfileURI, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error)
 ```
 
-`opcua.SelectEndpoint` returns the endpoint with the highest security level that the client can use with its application instance certificate (DER) and that matches `policy` and `mode` (`""` / `ua.MessageSecurityModeInvalid` match anything). Unlike `ua.SelectEndpoint` it leaves out endpoints with a security policy the library does not implement and secured endpoints whose policy does not fit the key type of the certificate (RSA vs. ECC, and the curve); with an empty certificate only unsecured endpoints remain. Endpoints the server gives the same security level are ranked by `uapolicy.SecurityLevel`, which puts the AEAD policies first.
+`opcua.SelectEndpoint` returns the endpoint with the highest security level that the client can use with its application instance certificate (DER) and that matches `policy` and `mode` (`""` / `ua.MessageSecurityModeInvalid` match anything). Unlike `ua.SelectEndpoint` it leaves out endpoints with a security policy the library does not implement and secured endpoints whose policy does not fit the key type of the certificate (RSA vs. ECC, and the curve); with an empty certificate only unsecured endpoints remain. Endpoints the server gives the same security level are ranked by `uapolicy.SecurityLevel`, which puts the AEAD policies first. When the list has `opc.tcp` endpoints, `SelectEndpoint` only considers those; `SelectEndpointForTransport` selects among the endpoints of one transport profile (`ua.TransportProfileUATCP`, `ua.TransportProfileWSS`, `ua.TransportProfileHTTPS`; an endpoint without a profile counts as `opc.tcp`).
 
 ### Display name and endpoint helpers
 
@@ -1649,6 +1662,13 @@ func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discove
 | `WithRoleMapper(rm RoleMapper)` | Maps a session to a `ua.UserRole`; used by the default access controller |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
 | `WithReverseConnect(clientURL string, opts ...ReverseConnectOption)` | Open reverse connections to the client listening at `clientURL`; see [Reverse connect (server)](#reverse-connect-server) |
+| `WebSocketEndPoint(host string, port int)` | Add an `opc.wss://host:port` endpoint (Part 6 §7.5, wss-uasc-uabinary); the server listens on the first one, port 0 picks a free port |
+| `ListenWebSocketOn(addr string)` | Bind address of the WebSocket listener |
+| `HTTPSEndPoint(host string, port int)` | Add an `opc.https://host:port` endpoint (Part 6 §7.4, https-uabinary): each enabled policy without SecureChannelEnhancements, in its strongest enabled mode |
+| `ListenHTTPSOn(addr string)` | Bind address of the HTTPS listener |
+| `TLSConfig(cfg *tls.Config)` | TLS certificate (and client authentication) of the `opc.wss` / `opc.https` listeners; default: the RSA application instance certificate. TLS 1.2 minimum |
+
+`Server.URLs()` lists the `opc.tcp`, then the `opc.wss` and the `opc.https` endpoint URLs; `Server.WebSocketAddr()` and `Server.HTTPSAddr()` return the bound listener addresses. Each `EndpointDescription` carries the `TransportProfileUri` of its transport.
 
 ---
 
@@ -2373,7 +2393,9 @@ func Join(errs ...error) error
 
 ## Package `uacp`
 
-TCP transport layer (OPC-UA Connection Protocol).
+OPC-UA Connection Protocol over TCP (`opc.tcp`) and over a TLS WebSocket
+(`opc.wss`, Part 6 §7.5: sub-protocol `opcua+uacp`, one MessageChunk per binary
+frame).
 
 ### Endpoint parsing
 
@@ -2387,7 +2409,9 @@ func ParseEndpoint(endpoint string) (network string, u *url.URL, err error)
 
 ### Conn
 
-`Conn` embeds `*net.TCPConn` and adds OPC-UA Connection Protocol framing.
+`Conn` adds OPC-UA Connection Protocol framing to a TCP connection or a
+WebSocket. The embedded `*net.TCPConn` is nil for an `opc.wss` connection; the
+`net.Conn` methods of `Conn` work on either transport.
 
 ```go
 type Conn struct { ... }
@@ -2395,7 +2419,7 @@ type Conn struct { ... }
 func NewConn(c *net.TCPConn, ack *Acknowledge) (*Conn, error)
 ```
 
-#### Inherited from `*net.TCPConn`
+#### `net.Conn` methods
 
 ```go
 func (c *Conn) Read(b []byte) (int, error)
@@ -2438,6 +2462,19 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error)
 ```
 
 `Dial` performs TCP connect, OPC UA HEL/ACK handshake, and returns a UACP `*Conn`. For TCP-only reachability (e.g. ping or diagnostics without HEL/ACK), use `DialTCP`.
+
+`Dialer.TLSConfig` (`*tls.Config`) is the TLS configuration of `opc.wss` endpoints: `Dial` then connects over TLS (1.2 minimum), upgrades to a WebSocket with the `opcua+uacp` sub-protocol and runs HEL/ACK over it, all within the dial timeout.
+
+```go
+const SchemeWebSocket = "opc.wss"
+const WebSocketSubprotocol = "opcua+uacp"
+
+func IsWebSocketEndpoint(endpoint string) bool
+func ParseWebSocketEndpoint(endpoint string) (*url.URL, error)
+func ListenWebSocket(ctx context.Context, endpoint string, tlsConfig *tls.Config, ack *Acknowledge) (*Listener, error)
+```
+
+`ListenWebSocket` returns a `Listener` whose `Accept` yields connections that completed TLS, the WebSocket upgrade and HEL/ACK.
 
 ```go
 func Dial(ctx context.Context, endpoint string) (*Conn, error)
@@ -2619,10 +2656,36 @@ The symmetric algorithm of `ECC_nistP256_AesGcm`, `ECC_nistP256_ChaChaPoly` and 
 
 Secure conversation layer.
 
+### HTTPS (Part 6 §7.4)
+
+`NewHTTPSChannel` returns a `SecureChannel` for an `opc.https://` (or `https://`)
+endpoint. There is no secure conversation: every request is an HTTP/1.1 POST
+of the UA Binary encoded message (`Content-Type: application/octet-stream`)
+and the response is the body of its answer; TLS protects the messages. The
+security policy of `cfg` only selects how the session nonces are signed and is
+sent in the `OPCUA-SecurityPolicy` header. `Open` and `Renew` do nothing. A
+lost connection is reported on `errCh` as an error wrapping `io.EOF`.
+
+```go
+const SchemeHTTPS = "opc.https"
+const HTTPSContentType = "application/octet-stream"
+const HTTPSContentTypeLegacy = "application/opcua+uabinary"
+const HTTPSSecurityPolicyHeader = "OPCUA-SecurityPolicy"
+const MaxHTTPSMessageSize = 16 << 20
+
+func IsHTTPSEndpoint(endpoint string) bool
+func HTTPSURL(endpoint string) (string, error)         // the https:// URL to post to
+func HTTPSPolicySupported(policyURI string) bool        // None, or a policy without SecureChannelEnhancements
+func NewHTTPSClient(tlsConfig *tls.Config) *http.Client // HTTP/1.1, TLS 1.2 minimum, no redirects
+func EncodeServiceMessage(v any) ([]byte, error)        // TypeId + UA Binary body
+```
+
 ### SecureChannel
 
 ```go
 func NewSecureChannel(endpoint string, conn *uacp.Conn, cfg *Config, errCh chan<- error) (*SecureChannel, error)
+func NewHTTPSChannel(endpoint string, httpClient *http.Client, cfg *Config, errCh chan<- error) (*SecureChannel, error)
+func (s *SecureChannel) IsHTTPS() bool
 func (s *SecureChannel) RemoteCertificate() []byte // DER certificate of the peer; nil without security
 ```
 

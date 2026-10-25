@@ -101,8 +101,53 @@ This creates a server with:
 | `WithAccessController(ac)` | Custom authorization logic |
 | `ApplicationURI(uri)` | ApplicationUri of a server without a certificate (otherwise taken from the certificate) |
 | `WithReverseConnect(clientURL, opts...)` | Connect to a listening client ([reverse connect](#reverse-connect)) |
+| `WebSocketEndPoint(host, port)`, `ListenWebSocketOn(addr)` | An `opc.wss` endpoint and its bind address ([HTTPS and WebSocket endpoints](#https-and-websocket-endpoints)) |
+| `HTTPSEndPoint(host, port)`, `ListenHTTPSOn(addr)` | An `opc.https` endpoint and its bind address |
+| `TLSConfig(cfg)` | TLS certificate of the `opc.wss` / `opc.https` listeners |
 
 ---
+
+## HTTPS and WebSocket endpoints
+
+Next to its `opc.tcp` listener a server can serve `opc.wss` (OPC UA Secure
+Conversation over a TLS WebSocket, Part 6 §7.5, transport profile
+wss-uasc-uabinary) and `opc.https` (UA Binary over HTTPS POST, Part 6 §7.4,
+https-uabinary), each on a listener of its own:
+
+```go
+srv, err := server.New(
+    server.EndPoint("plc.example.com", 4840),
+    server.WebSocketEndPoint("plc.example.com", 4843),
+    server.HTTPSEndPoint("plc.example.com", 4443),
+    server.TLSConfig(&tls.Config{Certificates: []tls.Certificate{tlsCert}}),
+    server.EnableSecurity("None", ua.MessageSecurityModeNone),
+    server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
+    server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+)
+```
+
+- **TLS.** `TLSConfig` sets the TLS certificate; it may differ from the
+  application instance certificate (Part 6 §7.5.3). Without it the RSA
+  application certificate serves TLS. TLS 1.2 is the minimum. Set
+  `ClientAuth` / `ClientCAs` to require client TLS certificates.
+- **Endpoints.** Every endpoint description carries its
+  `TransportProfileUri`. opc.wss offers all enabled policies and modes, as
+  opc.tcp does. opc.https offers each enabled policy that needs no secure
+  conversation (`uasc.HTTPSPolicySupported`: not the AEAD ECC policies, whose
+  session signatures are bound to a channel thumbprint) once, in its strongest
+  enabled mode; a user name is accepted on the None endpoint because TLS
+  protects it.
+- **HTTPS requests.** All HTTPS requests to the server share one virtual secure
+  channel per policy, selected by the `OPCUA-SecurityPolicy` header (None
+  without it). The body is limited to the maximum message size (413), POST
+  only (405), `application/octet-stream` or `application/opcua+uabinary`
+  (415); bodies must arrive within 10 s and headers are limited to 64 KiB.
+  A Publish request is answered when a notification is due (long poll); one
+  whose HTTP request has ended is dropped and not answered.
+- **Ports.** Port 0 picks a free port; `Server.URLs()` lists the bound URLs
+  and `Server.WebSocketAddr()` / `Server.HTTPSAddr()` the listener addresses.
+  `ListenWebSocketOn` / `ListenHTTPSOn` bind elsewhere than the advertised
+  host (for example `0.0.0.0:4843`).
 
 ## Reverse Connect
 
