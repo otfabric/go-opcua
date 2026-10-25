@@ -93,6 +93,8 @@ type applicationIdentity struct {
 // identityFor returns the application instance certificate and private key
 // the server uses with the security policy.
 func (s *serverConfig) identityFor(policyURI string) ([]byte, crypto.Signer, bool) {
+	s.idMu.RLock()
+	defer s.idMu.RUnlock()
 	// The Certificate / PrivateKey pair comes first: it is what a server
 	// without ApplicationIdentity has, and it must keep behaving as before.
 	var primary crypto.Signer
@@ -118,7 +120,17 @@ func (s *serverConfig) identityFor(policyURI string) ([]byte, crypto.Signer, boo
 // with ApplicationIdentity (which is all a server with ECC certificates only
 // has).
 func (s *serverConfig) canSecure() bool {
+	s.idMu.RLock()
+	defer s.idMu.RUnlock()
 	return (len(s.certificate) > 0 && s.privateKey != nil) || len(s.identities) > 0
+}
+
+// primaryIdentity returns the certificate and RSA key a channel starts with,
+// before its security policy selects one (see localIdentity).
+func (s *serverConfig) primaryIdentity() ([]byte, *rsa.PrivateKey) {
+	s.idMu.RLock()
+	defer s.idMu.RUnlock()
+	return s.certificate, s.privateKey
 }
 
 // certificateFor returns the certificate an endpoint with the security policy

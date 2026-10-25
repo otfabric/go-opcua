@@ -99,6 +99,7 @@ type PKI struct {
 
 	// A CA plus a client certificate issued by it, for trust-list tests.
 	CACert         []byte
+	CAKey          *rsa.PrivateKey
 	IssuedCert     []byte
 	IssuedKey      *rsa.PrivateKey
 	UserCert       []byte // self-signed X.509 user identity certificate
@@ -152,7 +153,7 @@ func build() (*PKI, error) {
 	}
 	caTmpl := CertTemplate("conformance CA", "")
 	caTmpl.IsCA = true
-	caTmpl.KeyUsage |= x509.KeyUsageCertSign
+	caTmpl.KeyUsage |= x509.KeyUsageCertSign | x509.KeyUsageCRLSign
 	if p.CACert, err = x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKey.PublicKey, caKey); err != nil {
 		return nil, err
 	}
@@ -160,6 +161,7 @@ func build() (*PKI, error) {
 	if err != nil {
 		return nil, err
 	}
+	p.CAKey = caKey
 	if p.IssuedKey, err = rsa.GenerateKey(rand.Reader, 2048); err != nil {
 		return nil, err
 	}
@@ -256,7 +258,7 @@ func NewCA(curve, cn string) (*Identity, error) {
 	}
 	tmpl := CertTemplate(cn, "")
 	tmpl.IsCA = true
-	tmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign
+	tmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign | x509.KeyUsageCRLSign
 	return issue(tmpl, key, nil, nil)
 }
 
@@ -276,6 +278,26 @@ func issue(tmpl *x509.Certificate, key crypto.Signer, issuer *x509.Certificate, 
 		return nil, err
 	}
 	return &Identity{Cert: der, Key: key, X509: parsed}, nil
+}
+
+// IssueFromCSR issues an application instance certificate for a PKCS #10
+// certificate signing request (DER): its subject, alternative names and key,
+// signed by issuer, valid from an hour ago for a day.
+func IssueFromCSR(csrDER []byte, issuer *x509.Certificate, issuerKey crypto.Signer) ([]byte, error) {
+	csr, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil {
+		return nil, err
+	}
+	if err := csr.CheckSignature(); err != nil {
+		return nil, err
+	}
+	tmpl := CertTemplate(csr.Subject.CommonName, "")
+	tmpl.Subject = csr.Subject
+	tmpl.DNSNames, tmpl.IPAddresses, tmpl.URIs = csr.DNSNames, csr.IPAddresses, csr.URIs
+	if _, ok := csr.PublicKey.(*rsa.PublicKey); !ok {
+		tmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment
+	}
+	return uapolicy.CreateCertificate(rand.Reader, tmpl, issuer, csr.PublicKey, issuerKey)
 }
 
 func buildECC() (*ECC, error) {
