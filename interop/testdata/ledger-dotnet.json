@@ -1258,15 +1258,43 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.condition-refresh",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "test": "TestDotnetServer_Alarms",
+      "case": "coverage/alarms.condition-refresh/go-client-to-dotnet-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 dotnet image has no alarm fixture; TestDotnetServer_Alarms passes against the opcua-interop 0.11.0 image (serverFeatures \"alarms\", UA-.NETStandard's own A&C): promote to verified when v0.11.0 is pinned",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.condition-refresh",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_DotnetClient_Alarms",
+      "case": "coverage/alarms.condition-refresh/dotnet-client-to-go-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 dotnet image has no client alarms operation; TestGoServer_DotnetClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
+      "fixture": "baseline"
+    },
+    {
       "capability": "alarms.acknowledgeable",
       "direction": "go-client-to-dotnet-server",
-      "status": "deferred",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "test": "TestDotnetServer_Alarms",
+      "case": "coverage/alarms.acknowledgeable/go-client-to-dotnet-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 dotnet image has no alarm fixture; TestDotnetServer_Alarms (Acknowledge, stale-EventId Acknowledge = Bad_ConditionBranchAlreadyAcked, Confirm, AddComment, Disable / Enable) passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "dotnet-client-to-go-server",
-      "status": "deferred",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_DotnetClient_Alarms",
+      "case": "coverage/alarms.acknowledgeable/dotnet-client-to-go-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 dotnet image has no client alarms operation; TestGoServer_DotnetClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {

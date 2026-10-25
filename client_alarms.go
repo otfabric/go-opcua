@@ -97,8 +97,15 @@ func (e *ConditionEvent) IsRefreshStart() bool { return isType(e.EventType, id.R
 // ConditionRefresh (Part 9 §5.11.3).
 func (e *ConditionEvent) IsRefreshEnd() bool { return isType(e.EventType, id.RefreshEndEventType) }
 
+// isType reports whether n is the ns=0 numeric NodeId t, in any of its
+// encodings (TwoByte, FourByte, Numeric; Part 6 §5.2.2.9): peers send the
+// compact ones.
 func isType(n *ua.NodeID, t uint32) bool {
-	return n != nil && n.Namespace() == 0 && n.Type() == ua.NodeIDTypeNumeric && n.IntID() == t
+	if n == nil || n.Namespace() != 0 || n.IntID() != t {
+		return false
+	}
+	k := n.Type()
+	return k == ua.NodeIDTypeTwoByte || k == ua.NodeIDTypeFourByte || k == ua.NodeIDTypeNumeric
 }
 
 // ParseConditionEvent decodes the fields of an event of an item created with
@@ -172,8 +179,14 @@ func (c *Client) callStatus(ctx context.Context, objectID, methodID *ua.NodeID, 
 }
 
 // eventMethod calls a condition method that takes an EventId and a Comment.
+// A non-empty comment carries the first session locale (Locales; "en-us"
+// by default): open62541 1.5.9 ignores a Comment without a locale.
 func (c *Client) eventMethod(ctx context.Context, method uint32, conditionID *ua.NodeID, eventID []byte, comment string) error {
-	lt := ua.NewLocalizedText(comment)
+	locale := ""
+	if ids := c.cfg.session.LocaleIDs; comment != "" && len(ids) > 0 {
+		locale = ids[0]
+	}
+	lt := ua.NewLocalizedTextWithLocale(comment, locale)
 	return c.callStatus(ctx, conditionID, ua.NewNumericNodeID(0, method), ua.MustVariant(eventID), ua.MustVariant(lt))
 }
 

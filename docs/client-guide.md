@@ -19,6 +19,7 @@
 | **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
+| **Alarms & Conditions** (Part 9, over Method + Monitored Items) | `NewConditionEventFilter`, `ParseConditionEvent`, `Acknowledge`, `Confirm`, `AddComment`, `EnableCondition`, `DisableCondition`, `TimedShelve`, `OneShotShelve`, `Unshelve`, `ConditionRefresh`, `ConditionRefresh2` | Implemented; see [Alarms and Conditions](#alarms-and-conditions) |
 
 For services not wrapped by a dedicated method, use `Client.Send(ctx, req, handler)` directly; the handler receives the `ua.Response`.
 
@@ -771,6 +772,63 @@ for msg := range notifyCh {
 ```
 
 The same EOF wrapping applies: if the server closes the connection during `Subscribe` or `Monitor`, the error wraps `io.EOF` with a hint; use `errors.Is(err, io.EOF)` to detect it.
+
+### Alarms and Conditions
+
+`NewConditionEventFilter` selects the ConditionId and the condition fields
+of Part 9 (EventId, EventType, SourceNode, Time, Message, Severity,
+ConditionName, Retain, EnabledState, AckedState, ConfirmedState,
+ActiveState, Comment, ShelvingState, ...); `ParseConditionEvent` turns each
+event of such an item into a `ConditionEvent`. After `ConditionRefresh` the
+server sends a RefreshStartEvent, the retained conditions and a
+RefreshEndEvent (Part 9 §5.5.7):
+
+```go
+sub, ch, err := c.NewSubscription().
+    Interval(200*time.Millisecond).
+    MonitorEvents(opcua.NewConditionEventFilter(), ua.NewNumericNodeID(0, id.Server)).
+    Start(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+if err := sub.ConditionRefresh(ctx); err != nil { // or sub.ConditionRefresh2(ctx, itemID)
+    log.Fatal(err)
+}
+for msg := range ch {
+    enl, ok := msg.Value.(*ua.EventNotificationList)
+    if !ok {
+        continue
+    }
+    for _, f := range enl.Events {
+        ev, err := opcua.ParseConditionEvent(f)
+        if err != nil || ev.ConditionID == nil { // RefreshStart / RefreshEnd have none
+            continue
+        }
+        if ev.Acked != nil && !*ev.Acked {
+            // Acknowledge the state of this event; the EventId identifies it.
+            err := c.Acknowledge(ctx, ev.ConditionID, ev.EventID, "seen")
+            if errors.Is(err, ua.StatusBadConditionBranchAlreadyAcked) {
+                // someone else was faster
+            }
+        }
+    }
+}
+```
+
+| Helper | Part 9 |
+|---|---|
+| `Acknowledge`, `Confirm` (conditionID, eventID, comment) | §5.7.3, §5.7.4 |
+| `AddComment` (conditionID, eventID, comment) | §5.5.6 |
+| `EnableCondition`, `DisableCondition` | §5.5.4, §5.5.5 |
+| `TimedShelve` (duration), `OneShotShelve`, `Unshelve` | §5.8.10 |
+| `ConditionRefresh`, `ConditionRefresh2` (Client: server ids; Subscription: its own ids) | §5.5.7, §5.5.8 |
+
+A refused call returns its StatusCode as the error (`errors.Is(err,
+ua.StatusBadEventIDUnknown)`). The comment is sent with the first session
+locale (`opcua.Locales`, "en-us" by default), because open62541 ignores a
+comment without one. For your own filters, `ua.EventFilterBuilder.SelectPaths`
+selects BrowsePaths such as `AckedState/Id` and `SelectConditionID` the
+ConditionId; `ua.FieldPath` is the WhereClause operand of a BrowsePath.
 
 ### Monitor Package (Callback-Based)
 

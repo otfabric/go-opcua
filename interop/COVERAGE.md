@@ -24,7 +24,8 @@ Go↔Go tests never earn ✅.
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
 |---|:---:|:---:|:---:|:---:|---|
-| AcknowledgeableConditionType | Deferred | Deferred | Deferred | Deferred | — |
+| ConditionRefresh (RefreshStart / condition events / RefreshEnd) | ⬜ | N/A | ⬜ | ⬜ | — |
+| AcknowledgeableConditionType Acknowledge / Confirm / AddComment | ⬜ | N/A | ⬜ | ⬜ | — |
 
 ## attribute
 

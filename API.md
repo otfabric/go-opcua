@@ -76,7 +76,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [AccessController](#accesscontroller)
   - [Authentication validators](#authentication-validators)
   - [EventEmitter](#eventemitter)
-  - [Alarms & Conditions (deferred)](#alarms--conditions-deferred)
+  - [Alarms & Conditions](#alarms--conditions)
   - [Registered Custom DataTypes](#registered-custom-datatypes)
   - [HistoryProvider](#historyprovider)
   - [ServerMetrics](#servermetrics)
@@ -1959,18 +1959,119 @@ deferred. Go↔Go covered.
 
 ---
 
-### Alarms & Conditions (deferred)
+### Alarms & Conditions
 
-Full Alarms & Conditions (Part 9) state machines, Acknowledge/Confirm methods,
-and alarm catalogs are not implemented. The library exposes the standard type
-NodeId and an explicit capability probe so applications and coverage tooling
-can treat A&C as optional / deferred:
+Condition instances (Part 9 §5.5) with their standard components and state
+machines. The standard methods (Enable, Disable, AddComment, Acknowledge,
+Confirm, TimedShelve, OneShotShelve, Unshelve, ConditionRefresh,
+ConditionRefresh2) are served through the Call service and the
+`AccessController`. Guide: [server-guide.md](docs/server-guide.md#alarms-and-conditions).
 
 ```go
 var AcknowledgeableConditionTypeNodeID = ua.NewNumericNodeID(0, id.AcknowledgeableConditionType)
 
-func AlarmsConditionsSupported() bool // always false in the current library
+func AlarmsConditionsSupported() bool // true
+
+func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error)
+func (s *Server) Condition(conditionID *ua.NodeID) (*Condition, bool)
+func (s *Server) Conditions() []*Condition
+func (s *Server) RemoveCondition(conditionID *ua.NodeID) error
+
+type ConditionConfig struct {
+    Type               *ua.NodeID // ConditionType or a subtype; default AlarmConditionType
+    NodeID             *ua.NodeID // the ConditionId; default a new numeric NodeId
+    Namespace          *NodeNameSpace
+    Name               string     // BrowseName and ConditionName
+    Source             *ua.NodeID // required: gets HasCondition, becomes a notifier
+    SourceName         string
+    Notifiers          []*ua.NodeID
+    ConditionClassID   *ua.NodeID
+    ConditionClassName string
+    Severity           uint16 // 1..1000, 0 = 500
+    Message            string
+    Retain             bool // ConditionType only; derived for the others
+    Disabled           bool
+    Confirmable        bool // ConfirmedState + Confirm
+    Suppressible       bool // SuppressedState
+    Shelving           bool // ShelvingState + TimedShelve / OneShotShelve / Unshelve
+    MaxTimeShelved     time.Duration
+    InputNode          *ua.NodeID
+    NormalState        *ua.NodeID // OffNormalAlarmType
+    Limits             AlarmLimits
+
+    // Called before the change, after the state checks; a non-Good status
+    // refuses the call. They run without locks held.
+    OnAcknowledge func(ctx context.Context, c *Condition, comment *ua.LocalizedText) ua.StatusCode
+    OnConfirm     func(ctx context.Context, c *Condition, comment *ua.LocalizedText) ua.StatusCode
+    OnAddComment  func(ctx context.Context, c *Condition, comment *ua.LocalizedText) ua.StatusCode
+    OnEnable      func(ctx context.Context, c *Condition, enable bool) ua.StatusCode
+    OnShelve      func(ctx context.Context, c *Condition, state ShelvingState, shelvingTime time.Duration) ua.StatusCode
+}
+
+type AlarmLimits struct{ HighHigh, High, Low, LowLow *float64 }
+type NonExclusiveLimits struct{ HighHigh, High, Low, LowLow bool }
+type LimitState int    // LimitNone, LimitHighHigh, LimitHigh, LimitLow, LimitLowLow
+type ShelvingState int // Unshelved, TimedShelved, OneShotShelved
+
+func (c *Condition) NodeID() *ua.NodeID
+func (c *Condition) Name() string
+func (c *Condition) TypeID() *ua.NodeID
+func (c *Condition) Source() *ua.NodeID
+func (c *Condition) State() ConditionState // snapshot
+func (c *Condition) Update(u ConditionUpdate) error // nil fields unchanged; reports an event
+func (c *Condition) Report() error
+func (c *Condition) SetActive(active bool) error
+func (c *Condition) SetSeverity(severity uint16) error
+func (c *Condition) SetMessage(msg string) error
+func (c *Condition) SetQuality(q ua.StatusCode) error
+func (c *Condition) SetRetain(retain bool) error
+func (c *Condition) SetSuppressed(s bool) error
+func (c *Condition) SetLimitState(l LimitState) error
+func (c *Condition) SetNonExclusiveLimits(l NonExclusiveLimits) error
+func (c *Condition) EvaluateLimits(v float64) error
+func (c *Condition) Enable() error  // Bad_ConditionAlreadyEnabled
+func (c *Condition) Disable() error // Bad_ConditionAlreadyDisabled
+
+var ErrConditionRemoved, ErrConditionNotAlarm, ErrConditionUnsupport error
 ```
+
+Event fields resolve by "/"-joined BrowsePath (`AckedState/Id`); a select
+clause with an empty BrowsePath and AttributeId NodeId returns the
+ConditionId. Not implemented: condition branches (BranchId is null), audit
+events, dialogs, Latched / Silence / OutOfService, the AlarmConditionType
+Suppress / Silence / Reset / RemoveFromService / PlaceInService methods and
+the `*2` method variants.
+
+Client side (package `opcua`):
+
+```go
+func ConditionEventFields() []string
+func NewConditionEventFilter() *ua.EventFilter
+func ParseConditionEvent(ev *ua.EventFieldList) (*ConditionEvent, error)
+func (e *ConditionEvent) IsRefreshStart() bool
+func (e *ConditionEvent) IsRefreshEnd() bool
+
+func (c *Client) Acknowledge(ctx context.Context, conditionID *ua.NodeID, eventID []byte, comment string) error
+func (c *Client) Confirm(ctx context.Context, conditionID *ua.NodeID, eventID []byte, comment string) error
+func (c *Client) AddComment(ctx context.Context, conditionID *ua.NodeID, eventID []byte, comment string) error
+func (c *Client) EnableCondition(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) DisableCondition(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) TimedShelve(ctx context.Context, conditionID *ua.NodeID, d time.Duration) error
+func (c *Client) OneShotShelve(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) Unshelve(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) ConditionRefresh(ctx context.Context, subscriptionID uint32) error
+func (c *Client) ConditionRefresh2(ctx context.Context, subscriptionID, monitoredItemID uint32) error
+func (s *Subscription) ConditionRefresh(ctx context.Context) error
+func (s *Subscription) ConditionRefresh2(ctx context.Context, monitoredItemID uint32) error
+
+// package ua
+func (b *EventFilterBuilder) SelectPaths(paths ...string) *EventFilterBuilder
+func (b *EventFilterBuilder) SelectConditionID() *EventFilterBuilder
+func FieldPath(path string) *FieldOperand
+```
+
+A refused method call returns its StatusCode as the error. Guide:
+[client-guide.md](docs/client-guide.md#alarms-and-conditions).
 
 ---
 

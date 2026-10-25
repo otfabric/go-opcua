@@ -28,10 +28,12 @@ not registered with the server returns `StatusBadServiceUnsupported`.
 
 Not implemented in the server, so plan around them:
 
-- **Alarms & Conditions** (Part 9): no condition state machines, Acknowledge,
-  Confirm or ConditionRefresh (`AlarmsConditionsSupported()` reports false).
-  Emit `BaseEventType` or your own event types and keep condition state in
-  the application.
+- **Alarms & Conditions** (Part 9): no condition branches (BranchId is
+  always null), no audit events, no dialogs (DialogConditionType), no
+  Latched / Silence / OutOfService states, no AlarmConditionType
+  Suppress / Unsuppress / Silence / Reset / RemoveFromService / PlaceInService
+  methods (the application sets SuppressedState), no `*2` variants (e.g.
+  TimedShelve2, Suppress2). See [Alarms and Conditions](#alarms-and-conditions).
 - **Diagnostics**: no live `ServerDiagnosticsSummary` or session diagnostics
   counters, and responses carry an empty `DiagnosticInfo` even when the
   request sets `ReturnDiagnostics`. Use the metrics callbacks and `log/slog`
@@ -462,6 +464,76 @@ err := s.EmitBaseEvent(nodeID, &server.BaseEvent{
     Severity:   500,
 })
 ```
+
+### Alarms and Conditions
+
+`Server.AddCondition` creates a condition instance (Part 9 §5.5) with the
+standard components of its type: ConditionType, AcknowledgeableConditionType,
+AlarmConditionType (the default) and its subtypes, including the exclusive and
+non-exclusive limit alarms (level, deviation, rate of change) and the
+off-normal alarms. The condition gets a HasCondition reference from its
+source, the source becomes an event notifier, and the Server object reports
+its events (HasNotifier) unless a notifier path already exists.
+
+```go
+src := server.NewFolderNode(ua.NewStringNodeID(ns.ID(), "Tank"), "Tank")
+ns.AddNode(src)
+ns.Objects().AddRef(src, server.RefTypeIDOrganizes, true)
+
+hi, hihi := 80.0, 95.0
+level, err := s.AddCondition(server.ConditionConfig{
+    Type:        ua.NewNumericNodeID(0, id.ExclusiveLevelAlarmType),
+    NodeID:      ua.NewStringNodeID(ns.ID(), "Tank.LevelAlarm"),
+    Name:        "LevelAlarm",
+    Source:      src.ID(),
+    Severity:    700,
+    Message:     "Tank level high",
+    Confirmable: true, // ConfirmedState and Confirm
+    Shelving:    true, // ShelvingState with TimedShelve / OneShotShelve / Unshelve
+    Limits:      server.AlarmLimits{High: &hi, HighHigh: &hihi},
+    OnAcknowledge: func(ctx context.Context, c *server.Condition, comment *ua.LocalizedText) ua.StatusCode {
+        log.Printf("%s acknowledged: %v", c.Name(), comment)
+        return ua.StatusOK // any other status refuses the call
+    },
+})
+
+// The application drives the state; every change reports a condition event
+// with a new EventId.
+_ = level.EvaluateLimits(87.5)  // HighState, ActiveState true
+_ = level.SetSeverity(800)      // LastSeverity takes the old value
+_ = level.SetActive(false)      // alarms only
+st := level.State()             // snapshot: Acked, Confirmed, Retain, Shelving, ...
+```
+
+Clients call the standard methods through the Call service, so the
+`AccessController` decides who may call them like any other method:
+
+| Method | Part 9 | Refusals |
+|---|---|---|
+| Enable / Disable | §5.5.4, §5.5.5 | Bad_ConditionAlreadyEnabled / Bad_ConditionAlreadyDisabled |
+| AddComment | §5.5.6 | Bad_EventIdUnknown, Bad_ConditionDisabled |
+| Acknowledge / Confirm | §5.7.3, §5.7.4 | Bad_EventIdUnknown (EventId not one of the condition's recent events), Bad_ConditionBranchAlreadyAcked / Bad_ConditionBranchAlreadyConfirmed, Bad_ConditionDisabled |
+| TimedShelve / OneShotShelve / Unshelve | §5.8.10 | Bad_ConditionAlreadyShelved, Bad_ConditionNotShelved, Bad_ShelvingTimeOutOfRange |
+| ConditionRefresh / ConditionRefresh2 | §5.5.7, §5.5.8 | Bad_SubscriptionIdInvalid (not a subscription of the caller's session), Bad_MonitoredItemIdInvalid, Bad_RefreshInProgress |
+
+The method sets Comment (a null comment keeps it, except for AddComment) and
+ClientUserId (the user name, the certificate subject, `IssuedToken` or
+`Anonymous`). Retain follows the state: an acknowledgeable condition is
+retained while it is unacknowledged or (if confirmable) unconfirmed, an
+alarm also while it is active; a disabled condition is not retained, reports
+no events and reads `Bad_ConditionDisabled` for its non-identifying
+variables (§5.5.2).
+
+ConditionRefresh sends a RefreshStartEvent, the latest event of every
+retained condition the item can see (with its original EventId, so clients
+can still acknowledge it) and a RefreshEndEvent. RefreshStart / RefreshEnd
+bypass the item's WhereClause (§5.11.2). Event fields resolve by the full
+BrowsePath (`AckedState/Id`, `ShelvingState/CurrentState/Id`), and a select
+clause with an empty BrowsePath and AttributeId NodeId returns the
+ConditionId.
+
+`RemoveCondition` deletes the instance and its references;
+`Server.Conditions` and `Server.Condition` list and look them up.
 
 ### Historical Access (raw)
 

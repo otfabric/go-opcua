@@ -51,6 +51,20 @@ func TestConditionEventFilter(t *testing.T) {
 	require.False(t, ev.IsRefreshStart())
 	require.Nil(t, ev.Acked)
 	require.Nil(t, ev.Quality)
+
+	// Peers send the compact NodeId encodings (Part 6 §5.2.2.9).
+	null[2] = ua.MustVariant(ua.NewFourByteNodeID(0, id.RefreshStartEventType))
+	ev, err = opcua.ParseConditionEvent(&ua.EventFieldList{EventFields: null})
+	require.NoError(t, err)
+	require.True(t, ev.IsRefreshStart())
+	null[2] = ua.MustVariant(ua.NewTwoByteNodeID(1))
+	ev, err = opcua.ParseConditionEvent(&ua.EventFieldList{EventFields: null})
+	require.NoError(t, err)
+	require.False(t, ev.IsRefreshStart())
+	null[2] = ua.MustVariant(ua.NewStringNodeID(0, "x"))
+	ev, err = opcua.ParseConditionEvent(&ua.EventFieldList{EventFields: null})
+	require.NoError(t, err)
+	require.False(t, ev.IsRefreshEnd())
 }
 
 // FuzzParseConditionEvent: any decodable EventFieldList parses or fails

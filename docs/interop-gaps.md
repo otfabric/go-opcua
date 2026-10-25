@@ -15,7 +15,7 @@ Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 
 | Gap | Who has it | Workaround |
 |---|---|---|
-| **Alarms & Conditions** (Part 9: condition state machines, Acknowledge, Confirm, ConditionRefresh). The server exposes the type NodeIds only. | UA-.NETStandard, node-opcua; open62541 (experimental) | Emit `BaseEventType` or your own event types with `Server.EmitBaseEvent` and keep the condition state in the application. The client subscribes to the A&C events of other servers like any event. |
+| **Alarms & Conditions: branches, audit events, dialogs, Latched / Silence / OutOfService** and the AlarmConditionType Suppress / Reset / PlaceInService methods. Conditions, Acknowledge / Confirm, AddComment, Enable / Disable, shelving, limit alarms and ConditionRefresh are implemented (`Server.AddCondition`). | UA-.NETStandard, node-opcua | Keep one state per condition (no previous states to acknowledge); set SuppressedState and the other states from the application (`Condition.Update`). |
 | **JSON over HTTPS and WebSockets** (`https-uajson`, `wss-uajson`, the OpenAPI mapping). The binary `opc.https` and `opc.wss` transports are implemented. | UA-.NETStandard | Use the binary transports. |
 | **GDS and certificate management** (Part 12 push and pull), CRLs, a file-based PKI store | UA-.NETStandard (push and pull); open62541 and node-opcua (push) | Manage certificates out of band. Trust is configured in code (`opcua.TrustedCertificates`, `server.WithClientCertificateTrustList`); a new client or a restarted server picks up rotated files. |
 | **Historical events on the server.** The history provider interfaces cover data only; the client has `HistoryReadEvent`. | UA-.NETStandard (framework), asyncua | Store events in the application, or keep event history in another historian. |
@@ -53,6 +53,7 @@ on the side of the application that talks to the peer.
 - **ECC endpoints** all have the same SecurityLevel: pin the policy rather than relying on `opcua.SelectEndpoint`.
 - **PubSub:** publishes its own ConfigurationVersion, discards KeepAlive and delta frames, wraps JSON sequence numbers at 65535, MQTT is QoS 0 without TLS, GetSecurityKeys may return a negative TimeToNextKey, and a reader in Error after its MessageReceiveTimeout stays there. go-opcua handles the sequence numbers and the TimeToNextKey ([PubSub](pubsub.md)).
 - **MQTT publisher** started before its broker accepts connections stays in Error, and a refusing broker can crash it (double free); fixed in the opcua-interop adapter (v0.8.2), not upstream. Start the broker first.
+- **Alarms & Conditions** (experimental in 1.5.9, a build option): ignores an Acknowledge / Confirm / AddComment comment without a locale (the go-opcua client sends the session locale), sends RefreshStart / RefreshEnd only to event items on the Server object, rewrites Message on every method call, and reports the Confirm event with a null Time. A repeated Acknowledge answers `Bad_EventIdUnknown`. ConditionRefresh needed a fix in the opcua-interop adapter to accept the SubscriptionId.
 - **Client** stalls its subscription when a node-opcua server answers a request under the token that was current when the request was sent (see node-opcua below).
 
 ### Eclipse Milo 1.1.8
@@ -82,6 +83,7 @@ on the side of the application that talks to the peer.
 - The XmlDecoder reads namespace-qualified elements only: do not use `ua.WithoutXMLNamespace` with .NET peers.
 - ECC application certificates issued by an RSA CA are refused; ECC between go-opcua and .NET is untested.
 - The OPC Foundation LDS is a separate product; there is no multicast discovery.
+- Alarms & Conditions: a repeated Acknowledge with the same EventId answers `Bad_ConditionBranchAlreadyAcked`; every method call reports an event with a new Time.
 - PubSub (Opc.Ua.PubSub 2.0.1): an MQTT publisher needs MQTT 5.0 (it sets the MQTT 5 content type on every publication); subscribing works on 3.1.1 too. Its UDP transport sends with TTL 1 unless configured, which also limits unicast. The encoder writes an empty String with length 0 (go-opcua: the null String, length -1), always sets MessageIsValid and drops a DataSetMessage without it; the JSON encoder leaves out the `UaType` the DataSetMetaData implies (go-opcua decodes it since v1.9.0). Discovery answers DataSetMetaData and DataSetWriterConfiguration probes only. No SKS, no PublishSubscribe information model, no Ethernet, no AMQP.
 
 ### node-opcua 2.187.12
@@ -89,6 +91,7 @@ on the side of the application that talks to the peer.
 - After a SecureChannel renewal the server answers a request under the token the request used. The go-opcua client copes; open62541's client stalls.
 - A Read with an IndexRange on a scalar returns `Good` (want `BadIndexRangeNoData`).
 - Event queues are revised to at least 100, so a small event queue overflows late.
+- Alarms & Conditions: RefreshStart / RefreshEnd go only to event items on the Server object (monitor `i=2253` for ConditionRefresh), the source of a condition must be a HasEventSource target, Message is rewritten by each method, and a repeated Acknowledge answers `Bad_EventIdUnknown`.
 - A Write with a SourceTimestamp is accepted (`Good`).
 - UserName over a None endpoint works only with an encrypted password.
 - The server registers only with a discovery server that has a certificate, and reports success when the registration failed: give the go-opcua LDS a secured endpoint (the default) and check `Server.RegisteredServers()`.

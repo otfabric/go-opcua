@@ -97,24 +97,110 @@
       }
     },
     {
+      "capability": "alarms.condition-refresh",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "test": "TestOpen62541Server_Alarms",
+      "case": "coverage/alarms.condition-refresh/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the pinned opcua-interop v0.10.1 open62541 image has no alarm fixture; TestOpen62541Server_Alarms passes against the opcua-interop 0.11.0 image (serverFeatures \"alarms\", the experimental A&C of open62541 1.5.9): promote to verified when v0.11.0 is pinned"
+    },
+    {
+      "capability": "alarms.condition-refresh",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no condition state machine (the ConditionType / AcknowledgeableConditionType methods are abstract generated stubs and OpcUaNamespace$ConditionRefreshMethodImpl only posts RefreshStart / RefreshEnd), so the Milo adapter has no alarm fixture; revisit when a pinned Milo release implements conditions"
+    },
+    {
+      "capability": "alarms.condition-refresh",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_Open62541Client_Alarms",
+      "case": "coverage/alarms.condition-refresh/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the pinned opcua-interop v0.10.1 open62541 image has no client alarms operation; TestGoServer_Open62541Client_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned"
+    },
+    {
+      "capability": "alarms.condition-refresh",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_MiloClient_Alarms",
+      "case": "coverage/alarms.condition-refresh/milo-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the pinned opcua-interop v0.10.1 Milo image has no client alarms operation; TestGoServer_MiloClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned"
+    },
+    {
       "capability": "alarms.acknowledgeable",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "test": "TestOpen62541Server_Alarms",
+      "case": "coverage/alarms.acknowledgeable/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the pinned opcua-interop v0.10.1 open62541 image has no alarm fixture; TestOpen62541Server_Alarms (Acknowledge, stale-EventId Acknowledge, Confirm, AddComment, Disable / Enable) passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no condition state machine: Acknowledge / Confirm / AddComment / Enable / Disable of AcknowledgeableConditionType / ConditionType are abstract generated stubs, so the Milo adapter has no alarm fixture; revisit when a pinned Milo release implements them"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_Open62541Client_Alarms",
+      "case": "coverage/alarms.acknowledgeable/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "the pinned opcua-interop v0.10.1 open62541 image has no client alarms operation; TestGoServer_Open62541Client_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_MiloClient_Alarms",
+      "case": "coverage/alarms.acknowledgeable/milo-client-to-go-server",
+      "fixture": "baseline",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the pinned opcua-interop v0.10.1 Milo image has no client alarms operation; TestGoServer_MiloClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned"
     },
     {
       "capability": "browse.filtering",
