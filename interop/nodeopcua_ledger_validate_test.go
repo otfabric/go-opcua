@@ -20,6 +20,13 @@ var nodeOpcuaLedgerDirections = map[string]bool{
 	"node-opcua-client-to-go-server": true,
 }
 
+// nodeOpcuaDirectionConst names the constants (nodeopcua_harness_test.go)
+// that shared peer tests turn into coverage/<capability>/<direction>
+// subtests.
+var nodeOpcuaDirectionConst = map[string]string{
+	"node-opcua-client-to-go-server": "dirNodeOpcuaClientToGoServer",
+}
+
 // nodeOpcuaUnverifiedReasons are the controlled reasons of an unverified row
 // (as in TestCoverageManifestValid).
 var nodeOpcuaUnverifiedReasons = map[string]bool{
@@ -127,7 +134,13 @@ func TestNodeOpcuaLedgerValid(t *testing.T) {
 			if !strings.HasPrefix(e.Case, "coverage/"+e.Capability+"/") {
 				t.Errorf("%s: case %q is not a coverage subtest of the capability", key, e.Case)
 			}
-			if body, ok := sources[e.Test]; !ok || !strings.Contains(body, `"`+e.Case+`"`) {
+			// The case is a literal of the test, or a shared test helper
+			// (following the test in its file) builds it from the direction
+			// constant.
+			body, ok := sources[e.Test]
+			dirConst, built := nodeOpcuaDirectionConst[e.Direction]
+			fromConst := built && e.Case == "coverage/"+key && strings.Contains(body, dirConst)
+			if !ok || (!strings.Contains(body, `"`+e.Case+`"`) && !fromConst) {
 				t.Errorf("%s: test %s has no subtest %q", key, e.Test, e.Case)
 			}
 			cased[e.Case] = true
