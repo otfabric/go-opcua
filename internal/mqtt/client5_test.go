@@ -420,7 +420,8 @@ func TestV5NoReconnectAfterTakeover(t *testing.T) {
 		OnConnectionLost: func(err error) { lost <- err }})
 	second := dial5(t, mqtt.Options{Server: b.URL(), ClientID: "c", MinReconnectDelay: time.Hour, MaxReconnectDelay: time.Hour})
 	select {
-	case <-lost:
+	case err := <-lost:
+		t.Logf("connection lost: %v", err)
 	case <-time.After(5 * time.Second):
 		t.Fatal("no connection loss")
 	}

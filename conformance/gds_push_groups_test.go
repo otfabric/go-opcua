@@ -26,7 +26,7 @@ func tlsPeerCertificate(t *testing.T, addr net.Addr) []byte {
 	d := &tls.Dialer{Config: &tls.Config{InsecureSkipVerify: true}} //nolint:gosec // the test reads the certificate only
 	conn, err := d.DialContext(context.Background(), "tcp", addr.String())
 	require.NoError(t, err)
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	return conn.(*tls.Conn).ConnectionState().PeerCertificates[0].Raw
 }
 

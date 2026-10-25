@@ -602,7 +602,7 @@ func TestPushGroupStore(t *testing.T) {
 	require.Equal(t, [][]byte{der}, st.certs)
 	st.mu.Unlock()
 	// The CertificateStore methods are not used.
-	require.Empty(t, st.recordingStore.tls)
+	require.Empty(t, st.tls)
 
 	st.setErr(errors.New("disk full"))
 	_, sc = pushCall(t, s, ctx, httpsTL, id.ServerConfigurationCertificateGroupsDefaultHTTPSGroupTrustListRemoveCertificate, gdsThumb(p.CACert), true)
