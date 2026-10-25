@@ -734,8 +734,9 @@ func (c *Client) publish(ctx context.Context) error {
 	session := c.Session()
 	res, err := c.sendPublishRequest(ctx)
 	stats.RecordError(err)
+	left := session != c.Session() || session != nil && session == c.leaving.Load()
 	switch {
-	case err != nil && (session != c.Session() || session != nil && session == c.leaving.Load()) && staleSessionError(err):
+	case err != nil && left && staleSessionError(err):
 		// The request was sent in a session the client has left in the
 		// meantime (the application activated another one, or the reconnect
 		// logic replaced it), and the server says that this session is
@@ -799,7 +800,7 @@ func (c *Client) publish(ctx context.Context) error {
 		return err
 
 	default:
-		if orphan := c.deliverPublishResponse(ctx, res); orphan != 0 {
+		if orphan := c.deliverPublishResponseOf(ctx, res, left); orphan != 0 {
 			c.deleteOrphanSubscription(ctx, orphan)
 		}
 	}
@@ -823,6 +824,12 @@ func staleSessionError(err error) bool {
 // failed CreateSubscription request left behind on the server, which the
 // caller is to delete, and 0 otherwise.
 func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResponse) (orphan uint32) {
+	return c.deliverPublishResponseOf(ctx, res, false)
+}
+
+// deliverPublishResponseOf is deliverPublishResponse for a response to a
+// request sent in a session the client has left (left) or not.
+func (c *Client) deliverPublishResponseOf(ctx context.Context, res *ua.PublishResponse, left bool) (orphan uint32) {
 	// For markSilentSubscriptions: a response arrived, and it was for this
 	// subscription.
 	now := time.Now().UnixNano()
@@ -862,6 +869,27 @@ func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResp
 		if isOrphan {
 			return res.SubscriptionID
 		}
+		return 0
+	}
+
+	// Good_SubscriptionTransferred (Part 4 §5.13.7): the subscription has
+	// moved to another session. When it left the session the client uses,
+	// another session (of this application or another) took it: it is no
+	// longer this client's, and recreating it would duplicate it. When it
+	// left a session the client has left as well, it moved with the client
+	// (its reconnect, or the application, transferred it): nothing changes,
+	// and the message, which carries the subscription's next sequence
+	// number, must not be taken for a notification of it.
+	if subscriptionTransferred(res.NotificationMessage) {
+		if left {
+			c.subMux.Unlock()
+			c.cfg.logger.Debug("publish: subscription transferred from a session the client has left", "sub_id", res.SubscriptionID)
+			return 0
+		}
+		c.forgetSubscriptionNeedsSubMuxLock(ctx, res.SubscriptionID)
+		c.subMux.Unlock()
+		c.cfg.logger.Debug("publish: subscription transferred to another session, forgetting it", "sub_id", res.SubscriptionID)
+		c.notifySubscription(ctx, sub, res.NotificationMessage)
 		return 0
 	}
 
@@ -920,6 +948,23 @@ func subscriptionEnded(msg *ua.NotificationMessage) bool {
 			continue
 		}
 		if sc, ok := data.Value.(*ua.StatusChangeNotification); ok && sc != nil && sc.Status&0x80000000 != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// subscriptionTransferred reports whether a notification message carries a
+// StatusChangeNotification with Good_SubscriptionTransferred.
+func subscriptionTransferred(msg *ua.NotificationMessage) bool {
+	if msg == nil {
+		return false
+	}
+	for _, data := range msg.NotificationData {
+		if data == nil {
+			continue
+		}
+		if sc, ok := data.Value.(*ua.StatusChangeNotification); ok && sc != nil && sc.Status == ua.StatusGoodSubscriptionTransferred {
 			return true
 		}
 	}

@@ -14,6 +14,12 @@ Certificate management by the Part 12 push model (§7), on the server and in a n
 - **server: `WithPushManagement`.** ServerConfiguration (i=12637) with the DefaultApplicationGroup TrustList (Open, OpenWithMasks, Read, Write, Close, CloseAndUpdate, AddCertificate, RemoveCertificate, LastUpdateTime, UpdateFrequency), CertificateTypes, UpdateCertificate, CreateSigningRequest (RSA and ECC), GetRejectedList, and ApplyChanges / CancelChanges: changes are a transaction of the calling session that ApplyChanges applies. New channels and sessions are validated against the trust list (issuers, CRLs, size limits); after ApplyChanges new channels use the new application instance certificate and open ones keep theirs. Only SecurityAdmin over SignAndEncrypt may call the methods. An optional `CertificateStore` persists the trust list and the certificate.
 - **`gds` package:** a push client for the trust list, signing requests, certificate updates, the rejected list and ApplyChanges / CancelChanges.
 
+### Fixed
+
+- **server: the session a subscription is transferred from gets a StatusChangeNotification with Good_SubscriptionTransferred** (Part 4 §5.13.7), with its queued Publish request or its next one; its other queued Publish requests are answered with Bad_NoSubscription when it has no subscription left. It used to get a keep-alive.
+- **client: a subscription that another session took over is forgotten** when Good_SubscriptionTransferred arrives; the client used to see Bad_NoSubscription next and recreate it, so the subscription existed twice. A transfer the client made itself (its reconnect, or a new session of the application) changes nothing.
+- **RELEASE.md v1.13.0** said that `opc.https` supports the non-ECC policies: it supports SecurityPolicy None and every policy without SecureChannelEnhancements, including ECC_nistP256, ECC_nistP384, ECC_curve25519, ECC_curve448 and the two Brainpool policies (`uasc.HTTPSPolicySupported`).
+
 ### Not implemented
 
 - The pull model (a GDS that issues certificates), GetCertificates, CreateSelfSignedCertificate, ResetToServerDefaults, the HTTPS and UserToken certificate groups, certificate expiration alarms, TransactionDiagnostics, PFX private keys, signing requests for Brainpool and Ed448 keys, CRLs of Brainpool or Ed448 CAs.

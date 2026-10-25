@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -393,6 +394,32 @@ func statusChangeResponse(req *ua.PublishRequest, change pendingStatusChange, ac
 	}
 }
 
+// nextSequenceNumber is the sequence number of the notification message
+// after last, which a keep-alive or a StatusChangeNotification carries
+// without consuming it.
+func nextSequenceNumber(last uint32) uint32 {
+	seq := last + 1
+	if seq == 0 {
+		seq = 1
+	}
+	return seq
+}
+
+// announce sends change to the client of sess with one of its queued Publish
+// requests, or keeps it on sess for the next one. ch is the channel of a
+// request that does not name its own.
+func (s *Subscription) announce(sess *session, ch *uasc.SecureChannel, change pendingStatusChange) {
+	select {
+	case pubreq := <-sess.PublishRequests:
+		resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements))
+		if err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, resp); err == nil {
+			return
+		}
+	default:
+	}
+	sess.addStatusChange(change)
+}
+
 // announceExpiry tells the client that the subscription's lifetime has
 // expired, with a StatusChangeNotification carrying BadTimeout
 // (Part 4 §5.13.1.1). The lifetime expires precisely because the client sent
@@ -403,22 +430,8 @@ func (s *Subscription) announceExpiry(sess *session) {
 	if sess == nil {
 		return
 	}
-	seq := s.SequenceID + 1
-	if seq == 0 {
-		seq = 1
-	}
-	change := pendingStatusChange{subID: s.ID, seq: seq, status: ua.StatusBadTimeout}
-
-	select {
-	case pubreq := <-sess.PublishRequests:
-		_, ch := s.sessionChannel()
-		resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements))
-		if err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, resp); err == nil {
-			return
-		}
-	default:
-	}
-	sess.addStatusChange(change)
+	_, ch := s.sessionChannel()
+	s.announce(sess, ch, pendingStatusChange{subID: s.ID, seq: nextSequenceNumber(s.SequenceID), status: ua.StatusBadTimeout})
 }
 
 // releasePublishRequests answers every Publish request that is queued for
@@ -558,22 +571,18 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 	}
 	s.Mu.Unlock()
 
-	// A Publish request that is queued in the session a subscription has
-	// left waits for a notification of a subscription the session no longer
-	// has. A client that carries on in the new session (the usual case: it
-	// replaced its session and took the subscriptions along) would not
-	// publish again before that request has timed out, and would receive
-	// nothing until then. The request is answered with a keep-alive message
-	// of the subscription: it consumes no sequence number, so it cannot be
-	// mistaken for, or hide, a notification of the subscription.
+	// The session a subscription has left learns it from a
+	// StatusChangeNotification with Good_SubscriptionTransferred
+	// (Part 4 §5.13.7), sent with one of its queued Publish requests or kept
+	// for its next one. It carries the subscription's next sequence number
+	// without consuming it, so it cannot hide a notification of the
+	// subscription in its new session. Publish requests still queued in a
+	// session that has no subscription left would wait for nothing: they are
+	// answered with Bad_NoSubscription (Part 4 §5.13.5).
 	for _, m := range left {
-		select {
-		case pubreq := <-m.from.PublishRequests:
-			if pubreq.Channel == nil {
-				pubreq.Channel = m.channel
-			}
-			_ = m.sub.keepalive(pubreq)
-		default:
+		m.sub.announce(m.from, m.channel, pendingStatusChange{subID: m.sub.ID, seq: nextSequenceNumber(m.sub.seq.Load()), status: ua.StatusGoodSubscriptionTransferred})
+		if !s.sessionHasSubscriptions(m.from) {
+			s.releasePublishRequests(m.from, ua.StatusBadNoSubscription)
 		}
 	}
 
@@ -714,6 +723,9 @@ type Subscription struct {
 	Priority                   uint8
 	Channel                    *uasc.SecureChannel
 	SequenceID                 uint32
+	// seq is SequenceID for the goroutines other than run, which alone
+	// changes SequenceID (TransferSubscriptions reads it).
+	seq atomic.Uint32
 	//SeqNums                   map[uint32]struct{}
 	T *time.Ticker
 
@@ -914,7 +926,7 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 
 	// Keepalive: empty NotificationData, next sequence number (not consumed).
 	msg := ua.NotificationMessage{
-		SequenceNumber:   s.SequenceID + 1,
+		SequenceNumber:   nextSequenceNumber(s.SequenceID),
 		PublishTime:      time.Now(),
 		NotificationData: []*ua.ExtensionObject{},
 	}
@@ -958,6 +970,8 @@ func (s *Subscription) touchSession() {
 // to the client at the correct rate assuming there are publish requests queued up.
 // if the function returns it deletes the subscription.
 func (s *Subscription) run() {
+	s.seq.Store(s.SequenceID)
+
 	// if this go routine dies, we need to delete ourselves.
 	defer func() {
 		// A panic here (for instance in a value function called while the
@@ -1159,6 +1173,7 @@ func (s *Subscription) run() {
 			if s.SequenceID == 0 {
 				s.SequenceID = 1
 			}
+			s.seq.Store(s.SequenceID)
 			s.srv.srv.cfg.logger.Debug("got publish request", "sub_id", s.ID, "sequence_id", s.SequenceID)
 
 			s.Mu.Lock()
