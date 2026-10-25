@@ -82,3 +82,23 @@ func TestScheduleRenewalWaitsForSubSecondLifetimes(t *testing.T) {
 		t.Fatal("scheduleRenewal did not stop when the channel was closed")
 	}
 }
+
+// The 75 % of the lifetime after which a client renews its token are counted
+// from when it sent the request that issued the token: the server created the
+// token after that, and the time the response took to arrive and to be
+// processed is time the server has already counted against the token.
+func TestRenewalDelayCountsFromTheRequest(t *testing.T) {
+	now := time.Now()
+	instance := &channelInstance{revisedLifetime: 4 * time.Second}
+	if got, want := renewalDelay(instance, now), 3*time.Second; got != want {
+		t.Errorf("without a request time: renew after %v, want %v", got, want)
+	}
+	instance.requestedAt = now.Add(-700 * time.Millisecond)
+	if got, want := renewalDelay(instance, now), 2300*time.Millisecond; got != want {
+		t.Errorf("response 700ms after the request: renew after %v, want %v", got, want)
+	}
+	instance.requestedAt = now.Add(-5 * time.Second)
+	if got := renewalDelay(instance, now); got != 0 {
+		t.Errorf("response after the lifetime: renew after %v, want at once", got)
+	}
+}

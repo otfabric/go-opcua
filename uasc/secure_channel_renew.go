@@ -114,6 +114,14 @@ func (s *SecureChannel) removeInstanceNeedsLock(instance *channelInstance) {
 // token is still the active one by then the client never renewed it, so the
 // channel is closed.
 //
+// A renewal that has been received by then has been requested in time: the
+// token runs out while the server decrypts the request and works out the
+// keys of its successor, which takes a while on the expensive curves and
+// on a busy machine. The decision is then left to the end of the renewal
+// (endRenewalProcessing): the channel lives on with the new token, or is
+// closed if the renewal failed. Only a request received in full counts, so
+// a peer cannot keep a token alive by sending part of one.
+//
 // instancesMu must be held.
 func (s *SecureChannel) scheduleServerTokenExpiry(instance *channelInstance) {
 	lifetime := instance.revisedLifetime
@@ -122,16 +130,65 @@ func (s *SecureChannel) scheduleServerTokenExpiry(instance *channelInstance) {
 	}
 	instance.expiry = time.AfterFunc(tokenGrace(lifetime), func() {
 		s.instancesMu.Lock()
+		if s.renewing && s.activeInstance == instance {
+			s.expiryDeferred = instance
+			s.instancesMu.Unlock()
+			s.cfg.Logger.Debug("security token expired while its renewal is processed",
+				"channel_id", s.c.ID(), "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
+			return
+		}
 		s.removeInstanceNeedsLock(instance)
 		stillActive := s.activeInstance == instance
 		s.instancesMu.Unlock()
 
 		if stillActive {
-			s.cfg.Logger.Warn("security token expired without renewal, closing secure channel",
-				"channel_id", s.c.ID(), "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
-			_ = s.c.Close()
+			s.closeExpired(instance)
 		}
 	})
+}
+
+// closeExpired closes a server channel whose active token expired without
+// being renewed.
+func (s *SecureChannel) closeExpired(instance *channelInstance) {
+	s.cfg.Logger.Warn("security token expired without renewal, closing secure channel",
+		"channel_id", s.c.ID(), "secure_channel_id", instance.secureChannelID, "token_id", instance.securityTokenID)
+	_ = s.c.Close()
+}
+
+// beginRenewalProcessing records that a server channel has received an
+// OpenSecureChannel renewal in full and is processing it.
+func (s *SecureChannel) beginRenewalProcessing() {
+	s.instancesMu.Lock()
+	s.renewing = true
+	s.instancesMu.Unlock()
+}
+
+// endRenewalProcessing ends what beginRenewalProcessing began, once the
+// renewal has been answered or has failed. A token that expired meanwhile is
+// retired now; if it is still the active one the renewal did not replace it,
+// and the channel is closed as it would have been at its expiry.
+func (s *SecureChannel) endRenewalProcessing() {
+	if s.kind != server {
+		return
+	}
+	s.instancesMu.Lock()
+	if !s.renewing {
+		s.instancesMu.Unlock()
+		return
+	}
+	s.renewing = false
+	expired := s.expiryDeferred
+	s.expiryDeferred = nil
+	stillActive := false
+	if expired != nil {
+		s.removeInstanceNeedsLock(expired)
+		stillActive = s.activeInstance == expired
+	}
+	s.instancesMu.Unlock()
+
+	if stillActive {
+		s.closeExpired(expired)
+	}
 }
 
 // installClientToken makes a SecurityToken received from the server the
