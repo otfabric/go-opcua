@@ -2940,9 +2940,8 @@
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "asyncua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -2955,9 +2954,8 @@
     {
       "capability": "certmgmt.push.access",
       "direction": "asyncua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -2970,9 +2968,8 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "asyncua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3015,9 +3012,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "asyncua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3090,9 +3086,8 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "asyncua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {

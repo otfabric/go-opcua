@@ -2975,9 +2975,8 @@
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "async-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -2990,9 +2989,8 @@
     {
       "capability": "certmgmt.push.access",
       "direction": "async-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3005,9 +3003,8 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "async-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3050,9 +3047,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "async-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3125,9 +3121,8 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "async-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_AsyncOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {

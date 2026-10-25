@@ -387,8 +387,15 @@ func loadTestCA(t *testing.T) (*x509.Certificate, crypto.Signer) {
 // role.
 func startPushGoServer(t *testing.T) (string, *server.Server) {
 	t.Helper()
-	ca := loadCACertDER(t)
-	return startGoServerWithOptions(t,
+	return startPushGoServerWith(t, server.PushManagement{})
+}
+
+// startPushGoServerWith is startPushGoServer with more push management
+// settings (pm.TrustList is set to the test CA) and server options.
+func startPushGoServerWith(t *testing.T, pm server.PushManagement, extra ...server.Option) (string, *server.Server) {
+	t.Helper()
+	pm.TrustList = &ua.TrustListDataType{TrustedCertificates: [][]byte{loadCACertDER(t)}}
+	return startGoServerWithOptions(t, append([]server.Option{
 		server.Certificate(loadGoServerCert(t)),
 		server.PrivateKey(loadGoServerKey(t)),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
@@ -405,10 +412,8 @@ func startPushGoServer(t *testing.T) (string, *server.Server) {
 			}
 			return server.DefaultRoleMapper(tok)
 		}),
-		server.WithPushManagement(server.PushManagement{
-			TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{ca}},
-		}),
-	)
+		server.WithPushManagement(pm),
+	}, extra...)...)
 }
 
 // pushClientResult is the result of the adapter's `client push`.
