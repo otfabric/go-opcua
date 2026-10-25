@@ -1659,7 +1659,20 @@ func (s *Server) Namespaces() []NameSpace
 type MethodHandler func(ctx context.Context, objectID, methodID *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
 
 func (s *Server) RegisterMethod(objectID, methodID *ua.NodeID, handler MethodHandler)
+func (n *Node) SetMethodArguments(in, out []*ua.Argument) error
 ```
+
+`SetMethodArguments` adds (or replaces) the InputArguments and
+OutputArguments Properties of a Method node already added to a namespace
+(Part 3 §5.7: PropertyType, DataType Argument i=296, ValueRank 1,
+HasProperty), with the string NodeIds `<id>.InputArguments` /
+`<id>.OutputArguments` in the method's namespace (`<id>` is the identifier of
+a string NodeId, else e.g. `i=7001`). A nil or empty list leaves the
+Property out. The Call service checks the input arguments against
+InputArguments; `Client.MethodArguments` reads both. Errors:
+`Bad_NodeClassInvalid` for a node that is not a Method,
+`Bad_NodeIdUnknown` for one in no namespace, `Bad_InvalidArgument` for a nil
+argument.
 
 #### Custom service handlers
 
@@ -1929,6 +1942,7 @@ func (n *Node) SetNodeClass(nc ua.NodeClass)
 func (n *Node) AddObject(o *Node) *Node
 func (n *Node) AddVariable(o *Node) *Node
 func (n *Node) AddRef(o *Node, rt RefType, forward bool)
+func (n *Node) SetMethodArguments(in, out []*ua.Argument) error
 func (n *Node) Access(flag ua.AccessLevelType) bool
 ```
 

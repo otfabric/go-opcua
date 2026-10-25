@@ -33,7 +33,6 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/server"
-	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -125,19 +124,24 @@ func newServer(host string, port int) *server.Server {
 	objNode.AddRef(methodNode, id.HasComponent, true)
 
 	// Expose the method signature via InputArguments/OutputArguments properties
-	// so that Client.MethodArguments can report it.
-	addArgumentsProperty(ns, methodNode, nsIdx, "InputArguments", &ua.Argument{
-		Name:        "n",
-		DataType:    ua.NewNumericNodeID(0, id.Int64),
-		ValueRank:   -1,
-		Description: ua.NewLocalizedText("value to square"),
-	})
-	addArgumentsProperty(ns, methodNode, nsIdx, "OutputArguments", &ua.Argument{
-		Name:        "result",
-		DataType:    ua.NewNumericNodeID(0, id.Int64),
-		ValueRank:   -1,
-		Description: ua.NewLocalizedText("n squared"),
-	})
+	// so that Client.MethodArguments can report it and the server checks the
+	// arguments of a call.
+	if err := methodNode.SetMethodArguments(
+		[]*ua.Argument{{
+			Name:        "n",
+			DataType:    ua.NewNumericNodeID(0, id.Int64),
+			ValueRank:   -1,
+			Description: ua.NewLocalizedText("value to square"),
+		}},
+		[]*ua.Argument{{
+			Name:        "result",
+			DataType:    ua.NewNumericNodeID(0, id.Int64),
+			ValueRank:   -1,
+			Description: ua.NewLocalizedText("n squared"),
+		}},
+	); err != nil {
+		log.Fatalf("method arguments: %v", err)
+	}
 
 	// Register the handler: square returns n*n.
 	s.RegisterMethod(objectID, methodID,
@@ -150,31 +154,6 @@ func newServer(host string, port int) *server.Server {
 		})
 
 	return s
-}
-
-// addArgumentsProperty adds an InputArguments/OutputArguments property node
-// (a Variable holding an array of Argument) referenced from the method node.
-func addArgumentsProperty(ns *server.NodeNameSpace, methodNode *server.Node, nsIdx uint16, name string, args ...*ua.Argument) {
-	eos := make([]*ua.ExtensionObject, len(args))
-	for i, a := range args {
-		eos[i] = ua.NewExtensionObject(a)
-	}
-	value := &ua.DataValue{
-		EncodingMask: ua.DataValueValue,
-		Value:        ua.MustVariant(eos),
-	}
-	node := server.NewNode(
-		ua.NewStringNodeID(nsIdx, "square."+name),
-		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDNodeClass:  server.DataValueFromValue(uint32(ua.NodeClassVariable)),
-			ua.AttributeIDBrowseName: server.DataValueFromValue(attrs.BrowseName(name)),
-			ua.AttributeIDDataType:   server.DataValueFromValue(ua.NewNumericExpandedNodeID(0, id.Argument)),
-		},
-		nil,
-		func() *ua.DataValue { return value },
-	)
-	ns.AddNode(node)
-	methodNode.AddRef(node, id.HasProperty, true)
 }
 
 func runClient(endpoint string) {
