@@ -33,6 +33,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"testing"
@@ -469,6 +470,50 @@ func TestPubSubCodec_UADPSecurityHeader(t *testing.T) {
 	}
 	r.NetworkMessage.Security = nil
 	assertSameDesc(t, "payload of the signed message", describeUADP(t, nm, nil), *r.NetworkMessage)
+}
+
+// TestPubSubCodec_Open62541UADPSecurityHeader_GoDecodes: the security header
+// of a message open62541 encodes, as go-opcua reads it. The codec has no keys
+// (contract §14.9): open62541 writes the header fields and no signature, so
+// go-opcua stops after the header (DecodeOptions.Accept), before it would
+// verify the message.
+func TestPubSubCodec_Open62541UADPSecurityHeader_GoDecodes(t *testing.T) {
+	requirePubSubCodec(t)
+	nm := uadpCodecCases()[1].nm // publisher-id-uint16
+	nonce := []byte{1, 2, 3, 4, 0, 0, 0, 9}
+	desc := describeUADP(t, nm, nil)
+	desc.Security = &psSecurity{Signed: true, SecurityTokenID: 4711, Nonce: base64.StdEncoding.EncodeToString(nonce)}
+	doc, err := json.Marshal(desc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := psOpen62541.runCodec(t, "pubsub-uadp-encode", doc, "")
+	var b64 string
+	if err := json.Unmarshal(r.Encoded, &b64); err != nil {
+		t.Fatalf("encoded %s: %v", r.Encoded, err)
+	}
+	b, err := base64.StdEncoding.DecodeString(b64)
+	if err != nil {
+		t.Fatalf("encoded %s: %v", b64, err)
+	}
+	var hdr *message.NetworkMessage
+	_, err = uadp.Decode(b, &uadp.DecodeOptions{Accept: func(h *message.NetworkMessage) bool {
+		hdr = h
+		return false
+	}})
+	if !errors.Is(err, uadp.ErrFiltered) || hdr == nil {
+		t.Fatalf("uadp.Decode of open62541's %x: %v", b, err)
+	}
+	s := hdr.Security
+	if s == nil {
+		t.Fatalf("go-opcua found no security header in open62541's %x", b)
+	}
+	if !s.Signed || s.Encrypted || s.ForceKeyReset || s.SecurityTokenID != 4711 || !bytes.Equal(s.MessageNonce, nonce) {
+		t.Errorf("security header: go-opcua read %+v from open62541's %x", *s, b)
+	}
+	if !hdr.PublisherID.Equal(nm.PublisherID) {
+		t.Errorf("publisher id: go-opcua read %v, open62541 was given %v", hdr.PublisherID, nm.PublisherID)
+	}
 }
 
 // ---------------------------------------------------------------------------

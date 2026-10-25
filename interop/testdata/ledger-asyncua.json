@@ -2903,9 +2903,8 @@
     {
       "capability": "certmgmt.push.trust-list",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's standard address space has Server.ServerConfiguration (i=12637) with UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, ResetToServerDefaults and the DefaultApplicationGroup TrustList, but binds no callback to any of them (only ConditionRefresh in asyncua/server/internal_server.py), so Call answers BadNothingToDo (asyncua/server/address_space.py MethodService._call); it keeps no rejected-certificate store (asyncua/crypto/truststore.py). Revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -2919,9 +2918,8 @@
     {
       "capability": "certmgmt.push.certificate-update",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's standard address space has Server.ServerConfiguration (i=12637) with UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, ResetToServerDefaults and the DefaultApplicationGroup TrustList, but binds no callback to any of them (only ConditionRefresh in asyncua/server/internal_server.py), so Call answers BadNothingToDo (asyncua/server/address_space.py MethodService._call); it keeps no rejected-certificate store (asyncua/crypto/truststore.py). Revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -2935,9 +2933,8 @@
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's standard address space has Server.ServerConfiguration (i=12637) with UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, ResetToServerDefaults and the DefaultApplicationGroup TrustList, but binds no callback to any of them (only ConditionRefresh in asyncua/server/internal_server.py), so Call answers BadNothingToDo (asyncua/server/address_space.py MethodService._call); it keeps no rejected-certificate store (asyncua/crypto/truststore.py). Revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -2951,9 +2948,8 @@
     {
       "capability": "certmgmt.push.access",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 binds no ServerConfiguration method (Call answers BadNothingToDo) and has no SecurityAdmin role (asyncua/crypto/permission_rules.py UserRole: Admin, Anonymous, User), so there is no access check to verify; revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -2967,9 +2963,8 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's address space has no ServerConfiguration.GetCertificates / CreateSelfSignedCertificate / DeleteCertificate instance methods (i=32333 / 19342 / 19345; only the ServerConfigurationType declarations) and binds no push-management callbacks; revisit when a pinned asyncua release serves them",
       "fixture": "baseline"
     },
     {
@@ -2983,9 +2978,8 @@
     {
       "capability": "certmgmt.push.create-self-signed",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's address space has no ServerConfiguration.GetCertificates / CreateSelfSignedCertificate / DeleteCertificate instance methods (i=32333 / 19342 / 19345; only the ServerConfigurationType declarations) and binds no push-management callbacks; revisit when a pinned asyncua release serves them",
       "fixture": "baseline"
     },
     {
@@ -2999,9 +2993,8 @@
     {
       "capability": "certmgmt.push.delete-certificate",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's address space has no ServerConfiguration.GetCertificates / CreateSelfSignedCertificate / DeleteCertificate instance methods (i=32333 / 19342 / 19345; only the ServerConfigurationType declarations) and binds no push-management callbacks; revisit when a pinned asyncua release serves them",
       "fixture": "baseline"
     },
     {
@@ -3015,9 +3008,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's standard address space has Server.ServerConfiguration (i=12637) with UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, ResetToServerDefaults and the DefaultApplicationGroup TrustList, but binds no callback to any of them (only ConditionRefresh in asyncua/server/internal_server.py), so Call answers BadNothingToDo (asyncua/server/address_space.py MethodService._call); it keeps no rejected-certificate store (asyncua/crypto/truststore.py). Revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -3031,9 +3023,8 @@
     {
       "capability": "certmgmt.push.https-group",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 serves opc.tcp only (asyncua/server/server.py starts a BinaryServer) and its DefaultHttpsGroup node (i=14088) is unbacked: no TrustList or UpdateCertificate callback; revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -3047,9 +3038,8 @@
     {
       "capability": "certmgmt.push.usertoken-group",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0's DefaultUserTokenGroup node (i=14122) is unbacked: no TrustList, UpdateCertificate or ApplyChanges callback (Call answers BadNothingToDo); revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -3063,9 +3053,8 @@
     {
       "capability": "certmgmt.push.pfx",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 binds no UpdateCertificate callback (ServerConfiguration i=13737; Call answers BadNothingToDo), so no private key format, PFX or other, is accepted; revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -3079,9 +3068,8 @@
     {
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 creates ServerConfiguration.TransactionDiagnostics (i=32336) as a static node that no server code writes, and serves no push-management transaction (no ServerConfiguration callbacks); revisit when a pinned asyncua release serves push management",
       "fixture": "baseline"
     },
     {
@@ -3095,9 +3083,8 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 does not create the DefaultApplicationGroup CertificateExpired alarm (i=22568) and raises no CertificateExpirationAlarm / TrustListOutOfDateAlarm (asyncua/server has no such code); revisit when a pinned asyncua release monitors its certificates",
       "fixture": "baseline"
     },
     {
@@ -3111,9 +3098,8 @@
     {
       "capability": "gds.pull.directory",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "opcua-asyncio 2.1 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no Global Discovery Server: the package has no GDS namespace and no Directory / RegisterApplication / StartSigningRequest / FinishRequest / GetTrustList / RevokeCertificate implementation; revisit when a pinned asyncua release adds one",
       "fixture": "baseline"
     },
     {
@@ -3127,9 +3113,8 @@
     {
       "capability": "gds.pull.certificate-request",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "opcua-asyncio 2.1 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no Global Discovery Server: the package has no GDS namespace and no Directory / RegisterApplication / StartSigningRequest / FinishRequest / GetTrustList / RevokeCertificate implementation; revisit when a pinned asyncua release adds one",
       "fixture": "baseline"
     },
     {
@@ -3143,9 +3128,8 @@
     {
       "capability": "gds.pull.trust-list",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "opcua-asyncio 2.1 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no Global Discovery Server: the package has no GDS namespace and no Directory / RegisterApplication / StartSigningRequest / FinishRequest / GetTrustList / RevokeCertificate implementation; revisit when a pinned asyncua release adds one",
       "fixture": "baseline"
     },
     {
@@ -3159,9 +3143,8 @@
     {
       "capability": "gds.pull.revocation",
       "direction": "go-client-to-asyncua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "opcua-asyncio 2.1 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no Global Discovery Server: the package has no GDS namespace and no Directory / RegisterApplication / StartSigningRequest / FinishRequest / GetTrustList / RevokeCertificate implementation; revisit when a pinned asyncua release adds one",
       "fixture": "baseline"
     },
     {

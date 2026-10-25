@@ -193,9 +193,8 @@
     {
       "capability": "alarms.alarm-state-methods",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for the AlarmConditionType Suppress / Unsuppress / Silence / RemoveFromService / PlaceInService / Reset (and the *2 variants), and shelving; a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -240,9 +239,8 @@
     {
       "capability": "alarms.dialog",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Respond / Respond2 of a DialogConditionType; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for DialogConditionType Respond / Respond2 (CONDITION_FIELD_RESPOND / _DIALOGSTATE are defined but unused); a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -287,9 +285,8 @@
     {
       "capability": "alarms.branches",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without condition branches; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for condition branches (\"conditionBranchId is always equal to NULL NodeId\", one branch per condition, \"Condition Branch not implemented\"); a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -334,9 +331,8 @@
     {
       "capability": "alarms.alarm-groups",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without alarm groups and GetGroupMemberships; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for AlarmGroups and GetGroupMemberships; a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -381,9 +377,8 @@
     {
       "capability": "alarms.audit-events",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AuditConditionEventType events of the condition methods; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for AuditConditionEventType events (no NS0ID_AUDIT* is used anywhere in src/); a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -428,9 +423,8 @@
     {
       "capability": "alarms.alarm-timing",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for OnDelay / OffDelay / ReAlarmTime / ReAlarmRepeatCount; a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -475,9 +469,8 @@
     {
       "capability": "alarms.audible-sound",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AudibleEnabled / AudibleSound (AudioVariableType); establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for AudibleEnabled / AudibleSound and Silence; a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -522,9 +515,8 @@
     {
       "capability": "alarms.first-in-group",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without FirstInGroupFlag / FirstInGroup; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for FirstInGroupFlag / FirstInGroup; a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -569,9 +561,8 @@
     {
       "capability": "alarms.alarm-metrics",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The open62541 alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without an AlarmMetricsType object with its counters and Reset; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9's A&C (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS, EXPERIMENTAL) binds only Disable, Enable, AddComment, ConditionRefresh(2), Acknowledge and Confirm (src/server/ua_subscription_alarms_conditions.c setConditionMethodCallbacks) and has no code for AlarmMetricsType and its Reset; a fixture would have to emulate the Part 9 logic in adapter code rather than exercise open62541. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
@@ -7672,14 +7663,14 @@
     {
       "capability": "pubsub.uadp.security-header",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
+      "status": "verified",
       "fixture": "baseline",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "reason": "adapter-command-missing",
-      "nextAction": "The open62541 codec operations have no keys (contract §14.9): the →S direction of signed / encrypted messages is pubsub.security.*"
+      "test": "TestPubSubCodec_Open62541UADPSecurityHeader_GoDecodes",
+      "interopVersion": "v0.14.0"
     },
     {
       "capability": "pubsub.uadp.security-header",
@@ -8009,15 +8000,14 @@
     {
       "capability": "pubsub.uadp.chunk",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
+      "nextAction": "open62541 v1.5.9 has no UADP chunking: UA_WriterGroupConfig has no MaxNetworkMessageSize, the binary codec only sets / reads the ExtendedFlags2 chunk bit (src/pubsub/ua_pubsub_networkmessage_binary.c) without the chunk payload (MessageSequenceNumber, ChunkOffset, TotalSize, ChunkData), and no reader reassembles chunks; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
     },
     {
       "capability": "pubsub.uadp.chunk",
@@ -8035,15 +8025,14 @@
     {
       "capability": "pubsub.uadp.chunk",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
+      "nextAction": "open62541 v1.5.9 has no UADP chunking: UA_WriterGroupConfig has no MaxNetworkMessageSize, the binary codec only sets / reads the ExtendedFlags2 chunk bit (src/pubsub/ua_pubsub_networkmessage_binary.c) without the chunk payload (MessageSequenceNumber, ChunkOffset, TotalSize, ChunkData), and no reader reassembles chunks; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
     },
     {
       "capability": "pubsub.uadp.chunk",
@@ -8061,15 +8050,14 @@
     {
       "capability": "pubsub.uadp.discovery",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json)"
+      "nextAction": "open62541 v1.5.9 implements no PubSub discovery messages: UA_NETWORKMESSAGE_DISCOVERY_REQUEST / _RESPONSE exist only as enum values, every UADP payload encode / decode path answers BadNotImplemented for non-DataSet NetworkMessages (src/pubsub/ua_pubsub_networkmessage_binary.c) and the JSON codec has none (\"no discovery message implemented\"); go-opcua's discovery is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
     },
     {
       "capability": "pubsub.uadp.discovery",
@@ -8087,15 +8075,14 @@
     {
       "capability": "pubsub.uadp.discovery",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json)"
+      "nextAction": "open62541 v1.5.9 implements no PubSub discovery messages: UA_NETWORKMESSAGE_DISCOVERY_REQUEST / _RESPONSE exist only as enum values, every UADP payload encode / decode path answers BadNotImplemented for non-DataSet NetworkMessages (src/pubsub/ua_pubsub_networkmessage_binary.c) and the JSON codec has none (\"no discovery message implemented\"); go-opcua's discovery is verified against UA-.NETStandard (testdata/ledger-dotnet.json)"
     },
     {
       "capability": "pubsub.uadp.discovery",
@@ -9245,15 +9232,14 @@
     {
       "capability": "certmgmt.push.trust-list",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.trust-list",
@@ -9296,15 +9282,14 @@
     {
       "capability": "certmgmt.push.certificate-update",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.certificate-update",
@@ -9347,15 +9332,14 @@
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.rejected-list",
@@ -9398,15 +9382,14 @@
     {
       "capability": "certmgmt.push.access",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.access",
@@ -9450,15 +9433,14 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.get-certificates",
@@ -9502,15 +9484,14 @@
     {
       "capability": "certmgmt.push.create-self-signed",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.create-self-signed",
@@ -9554,15 +9535,14 @@
     {
       "capability": "certmgmt.push.delete-certificate",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.delete-certificate",
@@ -9593,9 +9573,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "open62541 v1.5.9 answers ResetToServerDefaults with Bad_InternalError in the adapter (the test skips); whether a differently configured server supports it is not established",
+      "status": "unsupported",
+      "nextAction": "open62541 v1.5.9 binds no callback to ServerConfiguration.ResetToServerDefaults (src/server/ua_server_ns0_gds.c binds only UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges and the TrustList methods), so the ns0 method node answers Bad_InternalError (src/server/ua_services_method.c callWithResolvedMethodAndObject: no method callback); no build option adds it. Revisit when a pinned open62541 release implements it",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
@@ -9606,15 +9585,14 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.reset-to-defaults",
@@ -9658,15 +9636,14 @@
     {
       "capability": "certmgmt.push.https-group",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either; Milo 1.1.8 also has no server-side HTTPS transport. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.https-group",
@@ -9709,15 +9686,14 @@
     {
       "capability": "certmgmt.push.usertoken-group",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.usertoken-group",
@@ -9761,15 +9737,14 @@
     {
       "capability": "certmgmt.push.pfx",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.pfx",
@@ -9813,15 +9788,14 @@
     {
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either. Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.transaction-diagnostics",
@@ -9865,15 +9839,14 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+      "nextAction": "Eclipse Milo 1.1.8's server has no push certificate management: Server.ServerConfiguration (i=12637) is only the generated ns0 node, and every ServerConfigurationType method (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults) is an abstract generated stub (sdk-server model/objects/ServerConfigurationType.java) with no implementation, so a call answers Bad_NotImplemented (UaMethodNode's default MethodInvocationHandler.NOT_IMPLEMENTED; OpcUaNamespace binds only GetMonitoredItems / ResendData / ConditionRefresh); sdk-server has no TrustList / FileType method handlers either; and it has no CertificateExpirationAlarmType / TrustListOutOfDateAlarmType instances (no condition state machine). Revisit when a pinned Milo release serves push management"
     },
     {
       "capability": "certmgmt.push.alarms",
@@ -9904,28 +9877,26 @@
     {
       "capability": "gds.pull.directory",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server: no source implements the Directory / CertificateDirectory methods (RegisterApplication, FindApplications, StartSigningRequest, FinishRequest, GetTrustList, RevokeCertificate, …) and the GDS namespace is not built in; UA_ENABLE_GDS_PUSHMANAGEMENT covers only the push model of Part 12 §7 (src/server/ua_server_ns0_gds.c) and UA_INFORMATION_MODEL_AUTOLOAD=GDS would only load nodes without method callbacks; nothing to test against"
     },
     {
       "capability": "gds.pull.directory",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server: its modules (stack-core, sdk-core, sdk-server, sdk-client, codec-json, dtd-*) contain no GDS namespace, no ApplicationRecordDataType and no Directory / CertificateDirectory implementation; nothing to test against"
     },
     {
       "capability": "gds.pull.directory",
@@ -9956,28 +9927,26 @@
     {
       "capability": "gds.pull.certificate-request",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server: no source implements the Directory / CertificateDirectory methods (RegisterApplication, FindApplications, StartSigningRequest, FinishRequest, GetTrustList, RevokeCertificate, …) and the GDS namespace is not built in; UA_ENABLE_GDS_PUSHMANAGEMENT covers only the push model of Part 12 §7 (src/server/ua_server_ns0_gds.c) and UA_INFORMATION_MODEL_AUTOLOAD=GDS would only load nodes without method callbacks; nothing to test against"
     },
     {
       "capability": "gds.pull.certificate-request",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server: its modules (stack-core, sdk-core, sdk-server, sdk-client, codec-json, dtd-*) contain no GDS namespace, no ApplicationRecordDataType and no Directory / CertificateDirectory implementation; nothing to test against"
     },
     {
       "capability": "gds.pull.certificate-request",
@@ -10008,28 +9977,26 @@
     {
       "capability": "gds.pull.trust-list",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server: no source implements the Directory / CertificateDirectory methods (RegisterApplication, FindApplications, StartSigningRequest, FinishRequest, GetTrustList, RevokeCertificate, …) and the GDS namespace is not built in; UA_ENABLE_GDS_PUSHMANAGEMENT covers only the push model of Part 12 §7 (src/server/ua_server_ns0_gds.c) and UA_INFORMATION_MODEL_AUTOLOAD=GDS would only load nodes without method callbacks; nothing to test against"
     },
     {
       "capability": "gds.pull.trust-list",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server: its modules (stack-core, sdk-core, sdk-server, sdk-client, codec-json, dtd-*) contain no GDS namespace, no ApplicationRecordDataType and no Directory / CertificateDirectory implementation; nothing to test against"
     },
     {
       "capability": "gds.pull.trust-list",
@@ -10060,28 +10027,26 @@
     {
       "capability": "gds.pull.revocation",
       "direction": "go-client-to-open62541-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server: no source implements the Directory / CertificateDirectory methods (RegisterApplication, FindApplications, StartSigningRequest, FinishRequest, GetTrustList, RevokeCertificate, …) and the GDS namespace is not built in; UA_ENABLE_GDS_PUSHMANAGEMENT covers only the push model of Part 12 §7 (src/server/ua_server_ns0_gds.c) and UA_INFORMATION_MODEL_AUTOLOAD=GDS would only load nodes without method callbacks; nothing to test against"
     },
     {
       "capability": "gds.pull.revocation",
       "direction": "go-client-to-milo-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
+      "status": "unsupported",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server: its modules (stack-core, sdk-core, sdk-server, sdk-client, codec-json, dtd-*) contain no GDS namespace, no ApplicationRecordDataType and no Directory / CertificateDirectory implementation; nothing to test against"
     },
     {
       "capability": "gds.pull.revocation",

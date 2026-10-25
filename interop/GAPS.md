@@ -8,15 +8,13 @@ Pinned opcua-interop version: **v0.14.0**
 
 - `deferred`: 60
 - `not-applicable`: 42
-- `unsupported`: 228
-- `unverified`: 70
-- `verified`: 476
+- `unsupported`: 263
+- `unverified`: 34
+- `verified`: 477
 
 ## Unverified by reason
 
-- `adapter-command-missing`: 39
-- `adapter-fixture-missing`: 9
-- `peer-capability-unknown`: 22
+- `adapter-command-missing`: 34
 
 ## Unverified rows
 
@@ -56,40 +54,4 @@ Pinned opcua-interop version: **v0.14.0**
 | `gds.pull.revocation` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
 | `gds.pull.trust-list` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
 | `gds.pull.trust-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
-| `pubsub.uadp.chunk` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
-| `pubsub.uadp.chunk` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
-| `pubsub.uadp.discovery` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
-| `pubsub.uadp.discovery` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
-| `pubsub.uadp.security-header` | O→S | `adapter-command-missing` | The open62541 codec operations have no keys (contract §14.9): the →S direction of signed / encrypted messages is pubsub.security.* |
-| `alarms.alarm-groups` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without alarm groups and GetGroupMemberships; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.alarm-metrics` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without an AlarmMetricsType object with its counters and Reset; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.alarm-state-methods` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.alarm-timing` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.audible-sound` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without AudibleEnabled / AudibleSound (AudioVariableType); establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.audit-events` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without AuditConditionEventType events of the condition methods; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.branches` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without condition branches; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.dialog` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without Respond / Respond2 of a DialogConditionType; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `alarms.first-in-group` | C→O | `adapter-fixture-missing` | The open62541 alarm fixture (opcua-interop fixtures/baseline "Alarms") is an AlarmConditionType without FirstInGroupFlag / FirstInGroup; establish whether open62541 1.5.9 (UA_ENABLE_SUBSCRIPTIONS_ALARMS_CONDITIONS) serves them, then extend the fixture or mark the row unsupported |
-| `certmgmt.push.access` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.alarms` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.certificate-update` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.create-self-signed` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.delete-certificate` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.get-certificates` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.https-group` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.pfx` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.rejected-list` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.reset-to-defaults` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.reset-to-defaults` | C→O | `peer-capability-unknown` | open62541 v1.5.9 answers ResetToServerDefaults with Bad_InternalError in the adapter (the test skips); whether a differently configured server supports it is not established |
-| `certmgmt.push.transaction-diagnostics` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.trust-list` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `certmgmt.push.usertoken-group` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
-| `gds.pull.certificate-request` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
-| `gds.pull.certificate-request` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
-| `gds.pull.directory` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
-| `gds.pull.directory` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
-| `gds.pull.revocation` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
-| `gds.pull.revocation` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
-| `gds.pull.trust-list` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
-| `gds.pull.trust-list` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
 
