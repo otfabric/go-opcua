@@ -179,3 +179,39 @@ func TestOfType(t *testing.T) {
 		t.Fatalf("FilterOperands: got %d, want 1", len(elem.FilterOperands))
 	}
 }
+
+// SelectPaths and FieldPath take "<index>:<name>" segments as BrowseNames of
+// that namespace and every other segment as a namespace 0 BrowseName.
+func TestSelectPathsQualifiedNames(t *testing.T) {
+	for _, tc := range []struct {
+		path string
+		want []QualifiedName
+	}{
+		{"Message", []QualifiedName{{0, "Message"}}},
+		{"AckedState/Id", []QualifiedName{{0, "AckedState"}, {0, "Id"}}},
+		{"2:Temperature", []QualifiedName{{2, "Temperature"}}},
+		{"2:Pump/3:Speed", []QualifiedName{{2, "Pump"}, {3, "Speed"}}},
+		{"AckedState/2:Id", []QualifiedName{{0, "AckedState"}, {2, "Id"}}},
+		{"0:1:Odd", []QualifiedName{{0, "1:Odd"}}},
+		{"65535:Max", []QualifiedName{{65535, "Max"}}},
+		{"65536:Big", []QualifiedName{{0, "65536:Big"}}},
+		{"ns:Name", []QualifiedName{{0, "ns:Name"}}},
+		{":Name", []QualifiedName{{0, ":Name"}}},
+		{"2:", []QualifiedName{{2, ""}}},
+	} {
+		t.Run(tc.path, func(t *testing.T) {
+			sc := NewEventFilter().SelectPaths(tc.path).Build().SelectClauses[0]
+			op := FieldPath(tc.path).Equals(true).FilterOperands[0].Value.(SimpleAttributeOperand)
+			for _, bp := range [][]*QualifiedName{sc.BrowsePath, op.BrowsePath} {
+				if len(bp) != len(tc.want) {
+					t.Fatalf("BrowsePath: got %d names, want %d", len(bp), len(tc.want))
+				}
+				for i, q := range bp {
+					if *q != tc.want[i] {
+						t.Errorf("BrowsePath[%d]: got %+v, want %+v", i, *q, tc.want[i])
+					}
+				}
+			}
+		})
+	}
+}

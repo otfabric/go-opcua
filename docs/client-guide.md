@@ -932,8 +932,11 @@ A refused call returns its StatusCode as the error (`errors.Is(err,
 ua.StatusBadEventIDUnknown)`). The comment is sent with the first session
 locale (`opcua.Locales`, "en-us" by default), because open62541 ignores a
 comment without one. For your own filters, `ua.EventFilterBuilder.SelectPaths`
-selects BrowsePaths such as `AckedState/Id` and `SelectConditionID` the
-ConditionId; `ua.FieldPath` is the WhereClause operand of a BrowsePath.
+selects BrowsePaths such as `AckedState/Id` (a segment `ns:Name`, e.g.
+`2:Temperature` or `AckedState/2:Note`, is a BrowseName of namespace `ns`;
+write `0:Name` for a namespace 0 name that itself starts with digits and a colon)
+and `SelectConditionID` the ConditionId; `ua.FieldPath` is the WhereClause
+operand of a BrowsePath, with the same segments.
 
 The filter also selects BranchId and the Part 9 v1.05 fields SuppressedState,
 OutOfServiceState, SilenceState, LatchedState, DialogState, Prompt and
