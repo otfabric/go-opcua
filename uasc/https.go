@@ -6,11 +6,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -115,7 +117,8 @@ func NewHTTPSClient(tlsConfig *tls.Config) *http.Client {
 }
 
 // EncodeServiceMessage encodes a service request or response as the body of
-// an HTTPS message: the encoding NodeId of its type and the structure.
+// an HTTPS message in UA Binary: the encoding NodeId of its type and the
+// structure (Part 6 §7.4.4).
 func EncodeServiceMessage(v any) ([]byte, error) {
 	typeID := ua.ServiceTypeID(v)
 	if typeID == 0 {
@@ -130,10 +133,25 @@ func EncodeServiceMessage(v any) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// httpsTransport is the transport of a client channel to an HTTPS endpoint.
-type httpsTransport struct {
+// directTransport is the transport of a client channel without a secure
+// conversation: HTTPS (NewHTTPSChannel, NewHTTPSJSONChannel), or WebSockets
+// with the sub-protocol opcua+uajson (NewWebSocketJSONChannel). Each request
+// is an encoded service message sent on its own, and the message that comes
+// back is its response.
+type directTransport struct {
+	// client posts the requests to url over HTTPS; nil with ws.
 	client *http.Client
 	url    string
+	// ws are the WebSockets of a wss-uajson channel.
+	ws *wsPool
+
+	// json selects the JSON encoding (Part 6 §5.4.9) over UA Binary.
+	// contentType is the Content-Type of an HTTPS request.
+	json        bool
+	contentType string
+	// namespaces is the NamespaceArray of the server, which the JSON
+	// encoding uses for the NodeIds of other namespaces (SetNamespaces).
+	namespaces atomic.Pointer[[]string]
 
 	// ctx is cancelled when the channel is closed; it ends the requests in
 	// flight.
@@ -145,7 +163,7 @@ type httpsTransport struct {
 }
 
 // goAsync runs f in the background unless the channel is closed.
-func (t *httpsTransport) goAsync(f func()) bool {
+func (t *directTransport) goAsync(f func()) bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.closed {
@@ -159,40 +177,63 @@ func (t *httpsTransport) goAsync(f func()) bool {
 	return true
 }
 
-// NewHTTPSChannel returns a client channel to an opc.https (or https)
-// endpoint. It has no connection of its own: Open does nothing and every
-// request is posted with httpClient, NewHTTPSClient(nil) if nil. The session
-// signatures use cfg like those of a secure conversation, and cfg's
-// SecurityPolicyURI is sent in the OPCUA-SecurityPolicy header.
-//
-// errCh receives the errors that ask for recovery, as for NewSecureChannel:
-// a fault that invalidates the session, and the failure of a request to
-// reach the server (wrapping io.EOF).
-func NewHTTPSChannel(endpoint string, httpClient *http.Client, cfg *Config, errCh chan<- error) (*SecureChannel, error) {
+// nsArray returns the NamespaceArray the JSON encoding uses.
+func (t *directTransport) nsArray() []string {
+	if ns := t.namespaces.Load(); ns != nil {
+		return *ns
+	}
+	return nil
+}
+
+// encode encodes a request in the encoding of the transport.
+func (t *directTransport) encode(req ua.Request) ([]byte, error) {
+	if t.json {
+		return EncodeServiceMessageJSON(req, t.nsArray())
+	}
+	return EncodeServiceMessage(req)
+}
+
+// decode decodes a response in the encoding of the transport.
+func (t *directTransport) decode(b []byte) (any, error) {
+	if t.json {
+		return DecodeServiceMessageJSON(b, t.nsArray())
+	}
+	_, v, err := ua.DecodeService(b)
+	return v, err
+}
+
+// lostError is the failure of a request to reach the server or to get its
+// response back: the connection to the server is gone.
+type lostError struct{ err error }
+
+func (e *lostError) Error() string { return e.err.Error() }
+func (e *lostError) Unwrap() error { return e.err }
+
+// checkDirectConfig checks the security configuration of a channel without
+// a secure conversation.
+func checkDirectConfig(cfg *Config, errCh chan<- error) error {
 	if cfg == nil {
-		return nil, fmt.Errorf("%w: no secure channel config", errors.ErrInvalidSecurityConfig)
+		return fmt.Errorf("%w: no secure channel config", errors.ErrInvalidSecurityConfig)
 	}
 	if errCh == nil {
-		return nil, fmt.Errorf("%w: no error channel", errors.ErrInvalidState)
-	}
-	target, err := HTTPSURL(endpoint)
-	if err != nil {
-		return nil, err
+		return fmt.Errorf("%w: no error channel", errors.ErrInvalidState)
 	}
 	switch {
 	case cfg.SecurityPolicyURI == ua.SecurityPolicyURINone && cfg.SecurityMode != ua.MessageSecurityModeNone:
-		return nil, fmt.Errorf("%w: policy '%s' cannot be used with '%s'", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI, cfg.SecurityMode)
+		return fmt.Errorf("%w: policy '%s' cannot be used with '%s'", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI, cfg.SecurityMode)
 	case cfg.SecurityPolicyURI != ua.SecurityPolicyURINone && cfg.SecurityMode != ua.MessageSecurityModeSignAndEncrypt && cfg.SecurityMode != ua.MessageSecurityModeSign:
-		return nil, fmt.Errorf("%w: policy '%s' can only be used with '%s' or '%s'", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI, ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt)
+		return fmt.Errorf("%w: policy '%s' can only be used with '%s' or '%s'", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI, ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt)
 	case cfg.SecurityPolicyURI != ua.SecurityPolicyURINone && cfg.localKey() == nil:
-		return nil, fmt.Errorf("%w: policy '%s' requires a private key", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI)
+		return fmt.Errorf("%w: policy '%s' requires a private key", errors.ErrInvalidSecurityConfig, cfg.SecurityPolicyURI)
 	case !HTTPSPolicySupported(cfg.SecurityPolicyURI):
-		return nil, fmt.Errorf("%w: %s over HTTPS", errors.ErrUnsupportedSecurityPolicy, cfg.SecurityPolicyURI)
+		return fmt.Errorf("%w: %s over HTTPS", errors.ErrUnsupportedSecurityPolicy, cfg.SecurityPolicyURI)
 	}
-	if httpClient == nil {
-		httpClient = NewHTTPSClient(nil)
-	}
-	ctx, cancel := context.WithCancel(context.Background())
+	return nil
+}
+
+// newDirectChannel returns a client channel with transport t.
+func newDirectChannel(endpoint string, cfg *Config, errCh chan<- error, t *directTransport) *SecureChannel {
+	t.ctx, t.cancel = context.WithCancel(context.Background())
 	return &SecureChannel{
 		endpointURL:  endpoint,
 		cfg:          cfg,
@@ -204,31 +245,93 @@ func NewHTTPSChannel(endpoint string, httpClient *http.Client, cfg *Config, errC
 		instances:    make(map[uint32][]*channelInstance),
 		chunks:       make(map[uint32][]*MessageChunk),
 		handlers:     make(map[uint32]pendingRequest),
-		https:        &httpsTransport{client: httpClient, url: target, ctx: ctx, cancel: cancel},
-	}, nil
+		direct:       t,
+	}
 }
 
-// IsHTTPS reports whether the channel is an HTTPS channel (NewHTTPSChannel).
-func (s *SecureChannel) IsHTTPS() bool { return s.https != nil }
+// NewHTTPSChannel returns a client channel to an opc.https (or https)
+// endpoint. It has no connection of its own: Open does nothing and every
+// request is posted with httpClient, NewHTTPSClient(nil) if nil. The session
+// signatures use cfg like those of a secure conversation, and cfg's
+// SecurityPolicyURI is sent in the OPCUA-SecurityPolicy header.
+//
+// errCh receives the errors that ask for recovery, as for NewSecureChannel:
+// a fault that invalidates the session, and the failure of a request to
+// reach the server (wrapping io.EOF).
+func NewHTTPSChannel(endpoint string, httpClient *http.Client, cfg *Config, errCh chan<- error) (*SecureChannel, error) {
+	return newHTTPSChannel(endpoint, httpClient, cfg, errCh, false)
+}
 
-// closeHTTPS closes an HTTPS channel: the requests in flight are cancelled.
-func (s *SecureChannel) closeHTTPS() error {
-	s.https.mu.Lock()
-	s.https.closed = true
-	s.https.mu.Unlock()
-	s.https.cancel()
-	s.https.wg.Wait()
+// NewHTTPSJSONChannel is NewHTTPSChannel for the JSON encoding (Part 6
+// §7.4.5, transport profile https-uajson): the requests and responses are
+// JSON messages (Part 6 §5.4.9) with the Content-Type application/json.
+func NewHTTPSJSONChannel(endpoint string, httpClient *http.Client, cfg *Config, errCh chan<- error) (*SecureChannel, error) {
+	return newHTTPSChannel(endpoint, httpClient, cfg, errCh, true)
+}
+
+func newHTTPSChannel(endpoint string, httpClient *http.Client, cfg *Config, errCh chan<- error, json bool) (*SecureChannel, error) {
+	if err := checkDirectConfig(cfg, errCh); err != nil {
+		return nil, err
+	}
+	target, err := HTTPSURL(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	if httpClient == nil {
+		httpClient = NewHTTPSClient(nil)
+	}
+	t := &directTransport{client: httpClient, url: target, json: json, contentType: HTTPSContentType}
+	if json {
+		t.contentType = HTTPSJSONContentType
+	}
+	return newDirectChannel(endpoint, cfg, errCh, t), nil
+}
+
+// IsHTTPS reports whether the channel is an HTTPS channel (NewHTTPSChannel,
+// NewHTTPSJSONChannel).
+func (s *SecureChannel) IsHTTPS() bool { return s.direct != nil && s.direct.client != nil }
+
+// IsJSON reports whether the channel sends its messages in the JSON
+// encoding (NewHTTPSJSONChannel, NewWebSocketJSONChannel).
+func (s *SecureChannel) IsJSON() bool { return s.direct != nil && s.direct.json }
+
+// SetNamespaces sets the NamespaceArray of the server. The JSON encoding
+// writes the NodeIds of namespaces other than 0 with their namespace URI
+// and reads them back with it (Part 6 §5.4.2.10); without the array, or for
+// an index it does not have, the namespace index is used. It has no effect
+// on the other channels.
+func (s *SecureChannel) SetNamespaces(ns []string) {
+	if s.direct != nil {
+		ns = slices.Clone(ns)
+		s.direct.namespaces.Store(&ns)
+	}
+}
+
+// closeDirect closes a channel without a secure conversation: the requests
+// in flight are cancelled.
+func (s *SecureChannel) closeDirect() error {
+	t := s.direct
+	t.mu.Lock()
+	t.closed = true
+	t.mu.Unlock()
+	t.cancel()
+	t.wg.Wait()
+	if t.ws != nil {
+		t.ws.close()
+	}
 	close(s.closing)
 	close(s.disconnected)
-	if t, ok := s.https.client.Transport.(interface{ CloseIdleConnections() }); ok {
-		t.CloseIdleConnections()
+	if t.client != nil {
+		if tr, ok := t.client.Transport.(interface{ CloseIdleConnections() }); ok {
+			tr.CloseIdleConnections()
+		}
 	}
 	return nil
 }
 
-// sendHTTPS posts req and hands the response to h. Without h the request is
-// sent in the background and its response dropped.
-func (s *SecureChannel) sendHTTPS(ctx context.Context, req ua.Request, authToken *ua.NodeID, timeout time.Duration, h ResponseHandler) error {
+// sendDirect sends req and hands the response to h. Without h the request
+// is sent in the background and its response dropped.
+func (s *SecureChannel) sendDirect(ctx context.Context, req ua.Request, authToken *ua.NodeID, timeout time.Duration, h ResponseHandler) error {
 	select {
 	case <-s.closing:
 		return errors.ErrSecureChannelClosed
@@ -238,18 +341,18 @@ func (s *SecureChannel) sendHTTPS(ctx context.Context, req ua.Request, authToken
 	if _, err := s.setRequestHeader(req, reqID, authToken, timeout); err != nil {
 		return err
 	}
-	body, err := EncodeServiceMessage(req)
+	body, err := s.direct.encode(req)
 	if err != nil {
 		return err
 	}
 	if h == nil {
-		if !s.https.goAsync(func() { _, _ = s.postHTTPS(context.WithoutCancel(ctx), reqID, body, timeout) }) {
+		if !s.direct.goAsync(func() { _, _ = s.exchange(context.WithoutCancel(ctx), reqID, body, timeout) }) {
 			return errors.ErrSecureChannelClosed
 		}
 		return nil
 	}
 
-	msg, err := s.postHTTPS(ctx, reqID, body, timeout)
+	msg, err := s.exchange(ctx, reqID, body, timeout)
 	if err != nil {
 		return err
 	}
@@ -272,11 +375,11 @@ func (s *SecureChannel) report(err error) {
 	}
 }
 
-// postHTTPS posts the encoded request and decodes the response.
-func (s *SecureChannel) postHTTPS(ctx context.Context, reqID uint32, body []byte, timeout time.Duration) (*MessageBody, error) {
+// exchange sends the encoded request reqID and decodes the response.
+func (s *SecureChannel) exchange(ctx context.Context, reqID uint32, body []byte, timeout time.Duration) (*MessageBody, error) {
 	rctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	stop := context.AfterFunc(s.https.ctx, cancel)
+	stop := context.AfterFunc(s.direct.ctx, cancel)
 	defer stop()
 	var expired atomic.Bool
 	if timeout > 0 {
@@ -289,38 +392,37 @@ func (s *SecureChannel) postHTTPS(ctx context.Context, reqID uint32, body []byte
 		defer t.Stop()
 	}
 
-	hreq, err := http.NewRequestWithContext(rctx, http.MethodPost, s.https.url, bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	hreq.Header.Set("Content-Type", HTTPSContentType)
-	hreq.Header.Set(HTTPSSecurityPolicyHeader, s.cfg.SecurityPolicyURI)
-
-	s.cfg.Logger.Debug("https send", "request_id", reqID, "url", s.https.url, "bytes", len(body))
-	resp, err := s.https.client.Do(hreq)
-	if err != nil {
-		return nil, s.httpsError(ctx, &expired, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	b, err := io.ReadAll(io.LimitReader(resp.Body, MaxHTTPSMessageSize+1))
-	if err != nil {
-		return nil, s.httpsError(ctx, &expired, err)
+	s.cfg.Logger.Debug("direct send", "request_id", reqID, "url", s.endpointURL, "bytes", len(body))
+	var (
+		b   []byte
+		err error
+	)
+	if s.direct.ws != nil {
+		b, err = s.exchangeWebSocket(rctx, reqID, body)
+	} else {
+		b, err = s.postHTTPS(rctx, body)
 	}
 	// A server may answer a request it saw cancelled (an empty 200 from a
 	// handler that returned), and that answer can win the race with the
 	// cancellation. Its failure is then the end of ctx, the timeout or the
 	// closed channel.
-	if err := s.httpsEnded(ctx, &expired); err != nil {
+	if end := s.directEnded(ctx, &expired); end != nil {
+		return nil, end
+	}
+	var lost *lostError
+	if stderrors.As(err, &lost) {
+		// The connection to the server is gone. The monitor recovers it
+		// the way it recovers a closed TCP connection. The cause is kept
+		// as text only: an error that is a connection refusal would make
+		// the monitor give up instead of retrying.
+		err = fmt.Errorf("%w: %s: %v", io.EOF, s.directName(), lost.err)
+		s.report(err)
 		return nil, err
 	}
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("%w: HTTP status %s", ua.StatusBadCommunicationError, resp.Status)
+	if err != nil {
+		return nil, err
 	}
-	if len(b) > MaxHTTPSMessageSize {
-		return nil, fmt.Errorf("%w: response larger than %d bytes", errors.ErrMessageTooLarge, MaxHTTPSMessageSize)
-	}
-	_, v, err := ua.DecodeService(b)
+	v, err := s.direct.decode(b)
 	if err != nil {
 		return nil, err
 	}
@@ -328,7 +430,12 @@ func (s *SecureChannel) postHTTPS(ctx context.Context, reqID uint32, body []byte
 	if !ok {
 		return nil, fmt.Errorf("%w: %T is not a response", ua.StatusBadUnknownResponse, v)
 	}
-	s.cfg.Logger.Debug("https recv", "request_id", reqID, "type", fmt.Sprintf("%T", r), "bytes", len(b))
+	if hdr := r.Header(); s.direct.ws != nil && hdr != nil && hdr.RequestHandle != reqID && hdr.RequestHandle != 0 {
+		// A WebSocket carries one request at a time, so this is a
+		// server that answered some other request.
+		return nil, fmt.Errorf("%w: response to request %d, sent %d", ua.StatusBadUnknownResponse, hdr.RequestHandle, reqID)
+	}
+	s.cfg.Logger.Debug("direct recv", "request_id", reqID, "type", fmt.Sprintf("%T", r), "bytes", len(b))
 	msg := &MessageBody{RequestID: reqID, body: r}
 	if hdr := r.Header(); hdr != nil && hdr.ServiceResult != ua.StatusOK {
 		msg.Err = hdr.ServiceResult
@@ -336,32 +443,54 @@ func (s *SecureChannel) postHTTPS(ctx context.Context, reqID uint32, body []byte
 	return msg, nil
 }
 
-// httpsEnded returns why a request must stop, or nil: the end of ctx, the
+// directName names the transport of a channel without a secure
+// conversation in errors.
+func (s *SecureChannel) directName() string {
+	if s.direct.ws != nil {
+		return "wss"
+	}
+	return "https"
+}
+
+// postHTTPS posts an encoded request and returns the body of the response.
+func (s *SecureChannel) postHTTPS(ctx context.Context, body []byte) ([]byte, error) {
+	t := s.direct
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, t.url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	hreq.Header.Set("Content-Type", t.contentType)
+	hreq.Header.Set(HTTPSSecurityPolicyHeader, s.cfg.SecurityPolicyURI)
+
+	resp, err := t.client.Do(hreq)
+	if err != nil {
+		return nil, &lostError{err}
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	b, err := io.ReadAll(io.LimitReader(resp.Body, MaxHTTPSMessageSize+1))
+	if err != nil {
+		return nil, &lostError{err}
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("%w: HTTP status %s", ua.StatusBadCommunicationError, resp.Status)
+	}
+	if len(b) > MaxHTTPSMessageSize {
+		return nil, fmt.Errorf("%w: response larger than %d bytes", errors.ErrMessageTooLarge, MaxHTTPSMessageSize)
+	}
+	return b, nil
+}
+
+// directEnded returns why a request must stop, or nil: the end of ctx, the
 // closed channel or the timeout of the request.
-func (s *SecureChannel) httpsEnded(ctx context.Context, expired *atomic.Bool) error {
+func (s *SecureChannel) directEnded(ctx context.Context, expired *atomic.Bool) error {
 	switch {
 	case ctx.Err() != nil:
 		return ctx.Err()
-	case s.https.ctx.Err() != nil:
+	case s.direct.ctx.Err() != nil:
 		return errors.ErrSecureChannelClosed
 	case expired.Load():
 		return ua.StatusBadTimeout
 	}
 	return nil
-}
-
-// httpsError maps the failure of an HTTP request: the end of ctx, the
-// timeout of the request, a closed channel, or a server that could not be
-// reached, which is reported to the monitor as a lost connection.
-func (s *SecureChannel) httpsError(ctx context.Context, expired *atomic.Bool, err error) error {
-	if err := s.httpsEnded(ctx, expired); err != nil {
-		return err
-	}
-	// The connection to the server is gone. The monitor recovers it the
-	// way it recovers a closed TCP connection. The cause is kept as text
-	// only: an error that is a connection refusal would make the monitor
-	// give up instead of retrying.
-	lost := fmt.Errorf("%w: https: %v", io.EOF, err)
-	s.report(lost)
-	return lost
 }

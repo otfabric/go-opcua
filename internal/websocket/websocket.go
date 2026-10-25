@@ -307,6 +307,9 @@ func (c *Conn) ReadMessage(maxSize int64) ([]byte, error) {
 	var msg bytes.Buffer
 	for {
 		if err := c.nextFrame(); err != nil {
+			if errors.Is(err, ErrFrameTooLarge) {
+				err = fmt.Errorf("%w: %w", ErrMessageTooLarge, err)
+			}
 			c.readErr = err
 			return nil, err
 		}
