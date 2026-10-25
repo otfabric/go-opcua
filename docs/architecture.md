@@ -19,7 +19,8 @@ The library follows a layered architecture aligned with the OPC-UA specification
 ├──────────────────────────────────────────────────┤
 │     Secure Conversation Layer (uasc/)             │
 │   Encryption, signing, token management;          │
-│   the HTTPS channel (no secure conversation)      │
+│   the HTTPS and WSS JSON channels (no secure      │
+│   conversation)                                   │
 ├──────────────────────────────────────────────────┤
 │     Connection Protocol Layer (uacp/)             │
 │   TCP and TLS WebSocket transports, HEL/ACK       │
@@ -53,8 +54,8 @@ Packages are tiered by intended audience and stability commitment:
 
 | Package | Responsibility |
 |---------|---------------|
-| `uacp/` | TCP and WebSocket (`opc.wss`) transports, connection handshake, listeners, reverse connect |
-| `uasc/` | Secure channel management, message chunking, token renewal; the HTTPS channel (`opc.https`) |
+| `uacp/` | TCP and WebSocket (`opc.wss`) transports, connection handshake, listeners, reverse connect; hands `opcua+uajson` WebSockets over as message connections |
+| `uasc/` | Secure channel management, message chunking, token renewal; the direct transports without secure conversation: HTTPS (`opc.https`, UA Binary or UA JSON) and wss-uajson; JSON service messages |
 | `uapolicy/` | Cryptographic algorithms per security policy; certificates and keys `crypto/x509` cannot handle |
 | `schema/` | OPC-UA schema input files (CSVs, BSD, XSD) for code generators |
 | `server/attrs/` | Server attribute helpers |
@@ -68,7 +69,7 @@ Packages are tiered by intended audience and stability commitment:
 | `internal/stats/` | Metrics collection (experimental, `expvar`-based) |
 | `internal/testutil/` | Test server/client helpers for integration tests |
 | `internal/goname/` | Shared identifier normalization for code generators |
-| `internal/websocket/` | RFC 6455 framing and handshake of the `opc.wss` transport |
+| `internal/websocket/` | RFC 6455 framing, messages and handshake of the `opc.wss` transport |
 | `internal/mqtt/`, `internal/amqp/`, `internal/mdns/` | MQTT 3.1.1 / 5.0 and AMQP 1.0 clients of the PubSub transports; the mDNS responder of multicast discovery |
 | `internal/cmd/gen/` | Go-based code generation driver |
 
@@ -113,6 +114,7 @@ Client receives typed response
 
 Key details:
 - Over `opc.https` there is no UACP connection and no secure conversation: `SecureChannel.SendRequest` posts the encoded request over HTTPS and the response body is the answer
+- The UA JSON mappings (https-uajson, wss-uajson) use the same direct transport of the `SecureChannel` with a JSON body: an HTTPS POST, or one text message on a pooled `opcua+uajson` WebSocket that carries one request at a time; the response is matched by its RequestHandle
 - `SecureChannel` correlates requests and responses by `requestID`
 - Responses are delivered through Go channels to the waiting caller
 - The secure channel is stored in an `atomic.Value` for lock-free reads
@@ -152,7 +154,7 @@ The handler signature is:
 type Handler func(ctx context.Context, sc *uasc.SecureChannel, req ua.Request, reqID uint32) (ua.Response, error)
 ```
 
-An `opc.https` request takes another path in: the HTTPS listener decodes the POST body and hands the request to the same dispatch on a virtual secure channel per security policy, and writes the response as the HTTP answer.
+An `opc.https` request takes another path in: the HTTPS listener decodes the POST body (UA Binary or, with `EnableUAJSON`, UA JSON by its Content-Type) and hands the request to the same dispatch on a virtual secure channel per security policy, and writes the response as the HTTP answer. An `opcua+uajson` WebSocket is handed over by the `opc.wss` listener after the upgrade (`uacp.Listener.ServeWebSocketJSON`); `server/wss_json.go` reads its JSON messages and serves them concurrently on a virtual secure channel with the policy None. A decoded JSON message passes through UA Binary once, so that the fields the compact form leaves out get their defaults.
 
 Handlers receive a request-scoped `context.Context` for cancellation and timeouts; use it for downstream calls (e.g. access control, method handlers) where applicable.
 

@@ -876,6 +876,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `TrustedCertificates(certs ...*x509.Certificate)` | Add CA/self-signed certs to the trust pool |
 | `TLSConfig(c *tls.Config)` | TLS of `opc.wss` and `opc.https` endpoints: `RootCAs` for the server's TLS certificate (system roots when nil), `Certificates` for mutual TLS. TLS 1.2 is the minimum. Separate from the application instance certificate |
 | `HTTPClient(c *http.Client)` | The `*http.Client` of `opc.https` endpoints (proxies, transports); `TLSConfig` is then not used for them |
+| `TransportProfile(uri string)` | The transport mapping of the endpoint by its TransportProfileUri: `ua.TransportProfileHTTPSJSON` (an `opc.https` endpoint) or `ua.TransportProfileWSSJSON` (an `opc.wss` endpoint) select UA JSON instead of UA Binary; a scheme mismatch fails `Connect` with `errors.ErrInvalidEndpoint`. `SecurityFromEndpoint` sets it from the endpoint |
 
 Server certificates may be presented as a **DER chain** (leaf followed by intermediates); validation parses the full chain and verifies the leaf against the trust pool.
 
@@ -1135,8 +1136,12 @@ func ApplyTimestampsToReturn(dv *DataValue, ts TimestampsToReturn) StatusCode
 const TransportProfileUATCP = "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary"
 const TransportProfileWSS   = "http://opcfoundation.org/UA-Profile/Transport/wss-uasc-uabinary"
 const TransportProfileHTTPS = "http://opcfoundation.org/UA-Profile/Transport/https-uabinary"
+const TransportProfileWSSJSON   = "http://opcfoundation.org/UA-Profile/Transport/wss-uajson"
+const TransportProfileHTTPSJSON = "http://opcfoundation.org/UA-Profile/Transport/https-uajson"
 
-func TransportProfileForURL(endpointURL string) string // by scheme; "" for an unknown scheme
+func TransportProfileForURL(endpointURL string) string // by scheme (the UA Binary profile); "" for an unknown scheme
+func TransportProfileScheme(profile string) string     // the URL scheme of a profile; "" for an unknown one
+func IsJSONTransportProfile(profile string) bool       // wss-uajson or https-uajson
 ```
 
 ### StatusCode
@@ -1485,7 +1490,7 @@ func SelectEndpoint(endpoints []*ua.EndpointDescription, policy string, mode ua.
 func SelectEndpointForTransport(endpoints []*ua.EndpointDescription, transportProfileURI, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error)
 ```
 
-`opcua.SelectEndpoint` returns the endpoint with the highest security level that the client can use with its application instance certificate (DER) and that matches `policy` and `mode` (`""` / `ua.MessageSecurityModeInvalid` match anything). Unlike `ua.SelectEndpoint` it leaves out endpoints with a security policy the library does not implement and secured endpoints whose policy does not fit the key type of the certificate (RSA vs. ECC, and the curve); with an empty certificate only unsecured endpoints remain. Endpoints the server gives the same security level are ranked by `uapolicy.SecurityLevel`, which puts the AEAD policies first. When the list has `opc.tcp` endpoints, `SelectEndpoint` only considers those; `SelectEndpointForTransport` selects among the endpoints of one transport profile (`ua.TransportProfileUATCP`, `ua.TransportProfileWSS`, `ua.TransportProfileHTTPS`; an endpoint without a profile counts as `opc.tcp`).
+`opcua.SelectEndpoint` returns the endpoint with the highest security level that the client can use with its application instance certificate (DER) and that matches `policy` and `mode` (`""` / `ua.MessageSecurityModeInvalid` match anything). Unlike `ua.SelectEndpoint` it leaves out endpoints with a security policy the library does not implement and secured endpoints whose policy does not fit the key type of the certificate (RSA vs. ECC, and the curve); with an empty certificate only unsecured endpoints remain. Endpoints the server gives the same security level are ranked by `uapolicy.SecurityLevel`, which puts the AEAD policies first. When the list has `opc.tcp` endpoints, `SelectEndpoint` only considers those; `SelectEndpointForTransport` selects among the endpoints of one transport profile (`ua.TransportProfileUATCP`, `ua.TransportProfileWSS`, `ua.TransportProfileHTTPS`, `ua.TransportProfileWSSJSON`, `ua.TransportProfileHTTPSJSON`; an endpoint without a profile counts as `opc.tcp`). Without `opc.tcp` endpoints, `SelectEndpoint` prefers the UA Binary ones over UA JSON.
 
 ### Display name and endpoint helpers
 
@@ -1730,9 +1735,10 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `HTTPSEndPoint(host string, port int)` | Add an `opc.https://host:port` endpoint (Part 6 §7.4, https-uabinary): each enabled policy without SecureChannelEnhancements, in its strongest enabled mode |
 | `ListenHTTPSOn(addr string)` | Bind address of the HTTPS listener |
 | `TLSConfig(cfg *tls.Config)` | TLS certificate (and client authentication) of the `opc.wss` / `opc.https` listeners; default: the RSA application instance certificate. TLS 1.2 minimum |
+| `EnableUAJSON()` | Serve the UA JSON mappings on the same listeners: https-uajson (Part 6 §7.4.5, `application/json` or `application/opcua+uajson`, optionally gzip) with the policies of https-uabinary, and wss-uajson (Part 6 §7.5.2, sub-protocol `opcua+uajson`) with None / None only; advertised as twins of the binary endpoints |
 | `WithPushManagement(pm PushManagement)` | Push certificate management (Part 12 §7): the ServerConfiguration object with the DefaultApplicationGroup (client application certificates), DefaultHttpsGroup (TLS), DefaultUserTokenGroup (X.509 user tokens) and the certificate groups of the application, their trust lists and alarms; see [Push certificate management (server)](#push-certificate-management-server) |
 
-`Server.URLs()` lists the `opc.tcp`, then the `opc.wss` and the `opc.https` endpoint URLs; `Server.WebSocketAddr()` and `Server.HTTPSAddr()` return the bound listener addresses. Each `EndpointDescription` carries the `TransportProfileUri` of its transport.
+`Server.URLs()` lists the `opc.tcp`, then the `opc.wss` and the `opc.https` endpoint URLs; `Server.WebSocketAddr()` and `Server.HTTPSAddr()` return the bound listener addresses. Each `EndpointDescription` carries the `TransportProfileUri` of its transport; with `EnableUAJSON` the JSON endpoints share the URLs of the binary ones.
 
 ---
 
@@ -2972,6 +2978,26 @@ func ListenWebSocket(ctx context.Context, endpoint string, tlsConfig *tls.Config
 
 `ListenWebSocket` returns a `Listener` whose `Accept` yields connections that completed TLS, the WebSocket upgrade and HEL/ACK.
 
+The sub-protocol `opcua+uajson` (Part 6 §7.5.2, wss-uajson) carries one JSON message per WebSocket message, with no HEL/ACK:
+
+```go
+const WebSocketJSONSubprotocol = "opcua+uajson"
+
+type MessageConn interface {
+    ReadMessage(maxSize int64) ([]byte, error) // a larger message closes with status 1009
+    WriteMessage(p []byte) error               // one text message
+    SetReadDeadline(t time.Time) error
+    SetWriteDeadline(t time.Time) error
+    RemoteAddr() net.Addr
+    Close() error
+}
+
+func (d *Dialer) DialWebSocketJSON(ctx context.Context, endpoint string) (MessageConn, error)
+func (l *Listener) ServeWebSocketJSON(h func(MessageConn))
+```
+
+`ServeWebSocketJSON` makes a WebSocket listener accept the `opcua+uajson` sub-protocol as well and hand such connections to `h` (in a goroutine of their own) instead of `Accept`. Call it before the first connection.
+
 ```go
 func Dial(ctx context.Context, endpoint string) (*Conn, error)
 func DialWithTimeout(ctx context.Context, endpoint string, timeout time.Duration) (*Conn, error)
@@ -3184,6 +3210,31 @@ func HTTPSURL(endpoint string) (string, error)         // the https:// URL to po
 func HTTPSPolicySupported(policyURI string) bool        // None, or a policy without SecureChannelEnhancements
 func NewHTTPSClient(tlsConfig *tls.Config) *http.Client // HTTP/1.1, TLS 1.2 minimum, no redirects
 func EncodeServiceMessage(v any) ([]byte, error)        // TypeId + UA Binary body
+```
+
+### UA JSON (Part 6 §7.4.5, §7.5.2)
+
+`NewHTTPSJSONChannel` (https-uajson) posts each request as a JSON message
+(Part 6 §5.4.9, compact form) with `Content-Type: application/json` (Part 6
+§7.4.2 Table 80). `NewWebSocketJSONChannel` (wss-uajson, security policy None
+only) sends each request as one text message over a WebSocket with the
+sub-protocol `opcua+uajson`, from a pool of connections with one request in
+flight each, and checks the RequestHandle of the response. `SetNamespaces`
+gives both the namespace array that NodeIds of other namespaces than 0 are
+written with (`nsu=`, Part 6 §5.4.2.10).
+
+```go
+const HTTPSJSONContentType = "application/json"
+const HTTPSJSONContentTypeLegacy = "application/opcua+uajson" // what UA-.NETStandard sends and expects
+const MaxWebSocketJSONMessageSize = MaxHTTPSMessageSize
+
+func NewHTTPSJSONChannel(endpoint string, httpClient *http.Client, cfg *Config, errCh chan<- error) (*SecureChannel, error)
+func NewWebSocketJSONChannel(endpoint string, dialer *uacp.Dialer, cfg *Config, errCh chan<- error) (*SecureChannel, error)
+func EncodeServiceMessageJSON(v any, namespaces []string) ([]byte, error) // UaTypeId (the DataType) + fields
+func DecodeServiceMessageJSON(b []byte, namespaces []string) (any, error) // compact, verbose or 1.04 form
+func (s *SecureChannel) IsJSON() bool
+func (s *SecureChannel) IsWebSocketJSON() bool
+func (s *SecureChannel) SetNamespaces(ns []string)
 ```
 
 ### SecureChannel

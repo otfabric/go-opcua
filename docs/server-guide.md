@@ -169,6 +169,7 @@ This creates a server with:
 | `WebSocketEndPoint(host, port)`, `ListenWebSocketOn(addr)` | An `opc.wss` endpoint and its bind address ([HTTPS and WebSocket endpoints](#https-and-websocket-endpoints)) |
 | `HTTPSEndPoint(host, port)`, `ListenHTTPSOn(addr)` | An `opc.https` endpoint and its bind address |
 | `TLSConfig(cfg)` | TLS certificate of the `opc.wss` / `opc.https` listeners |
+| `EnableUAJSON()` | The UA JSON mappings https-uajson and wss-uajson on those listeners ([UA JSON](#ua-json-https-uajson-wss-uajson)) |
 | `WithServerDiagnostics(enabled)` | Start with server diagnostics on (default) or off ([Server diagnostics](#server-diagnostics)) |
 | `WithLocalDiscoveryServer`, `WithDiscoveryRegistration`, `WithMulticastDiscovery` | Discovery server role, registration with one, mDNS ([Discovery](#discovery)) |
 | `WithAuditing(enabled)`, `WithAlarmClock(clock)` | Audit events of the condition methods and of the GDS; the clock of the alarm timers ([Alarms and Conditions](#alarms-and-conditions)) |
@@ -221,6 +222,50 @@ srv, err := server.New(
   and `Server.WebSocketAddr()` / `Server.HTTPSAddr()` the listener addresses.
   `ListenWebSocketOn` / `ListenHTTPSOn` bind elsewhere than the advertised
   host (for example `0.0.0.0:4843`).
+
+### UA JSON (https-uajson, wss-uajson)
+
+`EnableUAJSON` makes the same listeners serve the UA JSON mappings of their
+transports: every service message is a JSON message (Part 6 §5.4.9) and there
+is no secure conversation.
+
+```go
+srv, err := server.New(
+    server.EndPoint("plc.example.com", 4840),
+    server.WebSocketEndPoint("plc.example.com", 4843),
+    server.HTTPSEndPoint("plc.example.com", 4443),
+    server.TLSConfig(&tls.Config{Certificates: []tls.Certificate{tlsCert}}),
+    server.EnableSecurity("None", ua.MessageSecurityModeNone),
+    server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+    server.EnableUAJSON(),
+)
+```
+
+- **Endpoints.** The JSON endpoints are twins of the binary ones at the same
+  URLs, with the TransportProfileUri of https-uajson or wss-uajson. https-uajson
+  offers the policies of https-uabinary. A WebSocket cannot name a security
+  policy, so wss-uajson is offered only with None / None (when it is enabled,
+  or no security is configured at all).
+- **https-uajson** (Part 6 §7.4.5). A POST with the Content-Type
+  `application/json` (Part 6 §7.4.2 Table 80), or `application/opcua+uajson`
+  as UA-.NETStandard sends it, carries one request; the response has the
+  request's Content-Type. The body may be gzip compressed (`Content-Encoding:
+  gzip`); the size limit (413) applies to the decompressed body. A body that is
+  no request is answered with a ServiceFault (with the RequestHandle when it
+  can be read), a bad gzip stream with 400. The `OPCUA-SecurityPolicy` header
+  selects the virtual channel, as for UA Binary.
+- **wss-uajson** (Part 6 §7.5.2). A WebSocket whose client offers the
+  sub-protocol `opcua+uajson` carries one JSON message per WebSocket message
+  (text frames; binary ones are accepted) with no HEL/ACK. Up to 64 requests of
+  a connection are served at the same time and answered as they complete; the
+  RequestHandle correlates them. A message over the maximum message size ends
+  the connection with status 1009, invalid UTF-8 with 1007. A connection
+  without a request in flight is closed after 2 minutes.
+- **Encoding.** Responses use the compact form; requests may use the compact
+  or the verbose form, and the 1.04 form. NodeIds of namespaces other than 0
+  are written with their namespace URI (Part 6 §5.4.2.10).
+- **Sessions.** The AuthenticationToken travels in the RequestHeader; the
+  HTTP `Authorization: Bearer` header of Part 6 §7.4.5 is not used.
 
 ## Reverse Connect
 

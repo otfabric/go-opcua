@@ -141,9 +141,66 @@ eps, _ := opcua.GetEndpoints(ctx, "opc.https://server:4843", opcua.TLSConfig(tls
 ep, err := opcua.SelectEndpointForTransport(eps, ua.TransportProfileHTTPS, "None", ua.MessageSecurityModeNone, nil)
 ```
 
-`SelectEndpoint` prefers `opc.tcp` endpoints when the server offers any.
+`SelectEndpoint` prefers `opc.tcp` endpoints when the server offers any, and
+the UA Binary endpoints over the UA JSON ones otherwise.
 `HTTPClient` replaces the `*http.Client` of HTTPS endpoints (for a proxy, for
 example); `opc.wss` connections are always direct (no HTTP proxy).
+
+#### UA JSON (https-uajson, wss-uajson)
+
+Both transports also have a UA JSON mapping, with a transport profile of its
+own: every service message is a JSON message (Part 6 §5.4.9, compact form)
+and there is no secure conversation. Over HTTPS (Part 6 §7.4.5, profile
+`ua.TransportProfileHTTPSJSON`) each request is a POST with the Content-Type
+`application/json`; over a WebSocket (Part 6 §7.5.2, profile
+`ua.TransportProfileWSSJSON`) the client negotiates the sub-protocol
+`opcua+uajson` and sends each request as one text message. The URL scheme does
+not tell the mappings apart, so the client uses JSON only when the
+`TransportProfile` option says so; `SecurityFromEndpoint` sets it from the
+endpoint it is given:
+
+```go
+eps, _ := opcua.GetEndpoints(ctx, "opc.wss://server:4843", opcua.TLSConfig(tlsCfg))
+ep, err := opcua.SelectEndpointForTransport(eps, ua.TransportProfileWSSJSON, "None", ua.MessageSecurityModeNone, nil)
+c, _ := opcua.NewClient(ep.EndpointURL,
+    opcua.TLSConfig(tlsCfg),
+    opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous), // selects wss-uajson
+)
+```
+
+or explicitly with `opcua.TransportProfile(ua.TransportProfileHTTPSJSON)`. A
+JSON profile whose scheme is not that of the URL fails `Connect` with
+`errors.ErrInvalidEndpoint`.
+
+- TLS is the only protection. A WebSocket cannot name a security policy, so
+  wss-uajson is always None; over https-uajson the policy only decides how the
+  session nonces are signed, as over https-uabinary.
+- The client keeps up to 8 idle WebSockets to a wss-uajson server and has one
+  request in flight on each, so a Publish request waiting for a notification
+  holds up no other request, also with servers that answer the requests of a
+  WebSocket one at a time. It checks the RequestHandle of each response.
+- NodeIds of other namespaces than 0 are written with their namespace URI
+  (`nsu=`, Part 6 §5.4.2.10), from the namespace array the client reads after
+  connecting.
+- A message is limited to `uasc.MaxWebSocketJSONMessageSize`; a larger one
+  ends the WebSocket with status 1009 (Part 6 §7.5.2).
+- UA-.NETStandard 2.0.1 takes JSON over HTTPS only with the (non-standard)
+  Content-Type `application/opcua+uajson`. To talk to it, give `HTTPClient` a
+  transport that sends `uasc.HTTPSJSONContentTypeLegacy`:
+
+```go
+type legacyJSON struct{ next http.RoundTripper }
+
+func (l legacyJSON) RoundTrip(r *http.Request) (*http.Response, error) {
+    r = r.Clone(r.Context())
+    r.Header.Set("Content-Type", uasc.HTTPSJSONContentTypeLegacy)
+    return l.next.RoundTrip(r)
+}
+
+hc := uasc.NewHTTPSClient(tlsCfg)
+hc.Transport = legacyJSON{hc.Transport}
+c, _ := opcua.NewClient(url, opcua.HTTPClient(hc), opcua.TransportProfile(ua.TransportProfileHTTPSJSON) /* ... */)
+```
 
 ### Reverse Connect
 
