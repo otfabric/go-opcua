@@ -643,7 +643,29 @@
     },
     {
       "id": "history.read.events",
-      "title": "HistoryRead events",
+      "title": "HistoryRead events: ReadEventDetails forward and reverse, the s=History.Events fixture (Part 11 §6.5.2)",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.events.continuation",
+      "title": "HistoryRead events: continuation points of ReadEventDetails, their release and reuse (Part 4 §5.10.3, Part 11 §6.5.2)",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.read.events.filter",
+      "title": "HistoryRead events: the WhereClause of ReadEventDetails, OfType and Severity (Part 11 §6.5.2)",
       "profile": "history",
       "applicableDirections": [
         "go-client-to-open62541-server",
@@ -665,7 +687,7 @@
     },
     {
       "id": "history.update.events",
-      "title": "HistoryUpdate events",
+      "title": "HistoryUpdate events: UpdateEventDetails insert / replace / update (Part 11 §6.9.4)",
       "profile": "history",
       "applicableDirections": [
         "go-client-to-open62541-server",
@@ -677,6 +699,17 @@
     {
       "id": "history.delete",
       "title": "History delete",
+      "profile": "history",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "history.delete.events",
+      "title": "HistoryUpdate DeleteEventDetails: delete events by EventId (Part 11 §6.9.7)",
       "profile": "history",
       "applicableDirections": [
         "go-client-to-open62541-server",

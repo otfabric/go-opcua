@@ -878,13 +878,49 @@
     {
       "capability": "history.read.events",
       "direction": "go-client-to-dotnet-server",
-      "status": "deferred",
+      "status": "verified",
+      "test": "TestDotnetServer_HistoryReadEvents",
+      "case": "coverage/history.read.events/go-client-to-dotnet-server",
       "fixture": "baseline"
     },
     {
       "capability": "history.read.events",
       "direction": "dotnet-client-to-go-server",
-      "status": "deferred",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_HistoryReadEvents",
+      "case": "coverage/history.read.events/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events.continuation",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_HistoryReadEventsContinuation",
+      "case": "coverage/history.read.events.continuation/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events.continuation",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_HistoryReadEventsContinuation",
+      "case": "coverage/history.read.events.continuation/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events.filter",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_HistoryReadEventsFilter",
+      "case": "coverage/history.read.events.filter/go-client-to-dotnet-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.read.events.filter",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_HistoryReadEventsFilter",
+      "case": "coverage/history.read.events.filter/dotnet-client-to-go-server",
       "fixture": "baseline"
     },
     {
@@ -902,13 +938,17 @@
     {
       "capability": "history.update.events",
       "direction": "go-client-to-dotnet-server",
-      "status": "deferred",
+      "status": "verified",
+      "test": "TestDotnetServer_HistoryUpdateEvents",
+      "case": "coverage/history.update.events/go-client-to-dotnet-server",
       "fixture": "baseline"
     },
     {
       "capability": "history.update.events",
       "direction": "dotnet-client-to-go-server",
-      "status": "deferred",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_HistoryUpdateEvents",
+      "case": "coverage/history.update.events/dotnet-client-to-go-server",
       "fixture": "baseline"
     },
     {
@@ -921,6 +961,23 @@
       "capability": "history.delete",
       "direction": "dotnet-client-to-go-server",
       "status": "deferred",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "history.delete.events",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestDotnetServer_HistoryDeleteEvents",
+      "case": "coverage/history.delete.events/go-client-to-dotnet-server",
+      "fixture": "baseline",
+      "nextAction": "UA-.NETStandard 2.0.1 answers an unknown EventId with Bad_NoEntryExists, go-opcua with Bad_NoData (Part 11 §6.9.7.2); both are asserted"
+    },
+    {
+      "capability": "history.delete.events",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_HistoryDeleteEvents",
+      "case": "coverage/history.delete.events/dotnet-client-to-go-server",
       "fixture": "baseline"
     },
     {
