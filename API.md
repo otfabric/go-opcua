@@ -9,9 +9,11 @@ Complete reference for all public types, functions, and interfaces in `github.co
 - [Package `opcua` (root)](#package-opcua-root)
   - [Client](#client)
     - [Connection](#connection)
+    - [Lifecycle and concurrency](#lifecycle-and-concurrency)
     - [Session management](#session-management)
     - [Namespace helpers](#namespace-helpers)
     - [Security info](#security-info)
+    - [Server diagnostics](#server-diagnostics)
     - [Read](#read)
     - [Write](#write)
     - [Browse](#browse)
@@ -57,6 +59,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [LocalizedText](#localizedtext)
   - [DataValue](#datavalue)
   - [NumericRange](#numericrange)
+  - [Transport profiles](#transport-profiles)
   - [StatusCode](#statuscode)
   - [DiagnosticInfo](#diagnosticinfo)
   - [EventFilterBuilder](#eventfilterbuilder)
@@ -64,6 +67,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [ReferenceDescription](#referencedescription)
   - [Service message types (selection)](#service-message-types-selection)
   - [Notification types](#notification-types)
+  - [Endpoint selection for a client certificate](#endpoint-selection-for-a-client-certificate)
   - [Display name and endpoint helpers](#display-name-and-endpoint-helpers)
   - [Buffer](#buffer)
   - [JSON and XML DataEncoding](#json-and-xml-dataencoding)
@@ -81,7 +85,12 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [HistoryProvider](#historyprovider)
   - [ServerMetrics](#servermetrics)
   - [Push certificate management (server)](#push-certificate-management-server)
+- [Package `pubsub`](#package-pubsub)
+  - [Runtime](#runtime)
+  - [Sub-packages](#sub-packages)
+  - [Server integration](#server-integration)
 - [Package `gds`](#package-gds)
+- [Package `gds/gdsserver`](#package-gdsgdsserver)
 - [Package `monitor`](#package-monitor)
   - [NodeMonitor](#nodemonitor)
   - [Subscription (monitor)](#subscription-monitor)
@@ -99,6 +108,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Reverse connect (transport)](#reverse-connect-transport)
 - [Package `uapolicy`](#package-uapolicy)
 - [Package `uasc`](#package-uasc)
+  - [HTTPS (Part 6 §7.4)](#https-part-6-74)
   - [SecureChannel](#securechannel)
   - [Config](#config)
   - [SessionConfig](#sessionconfig)
@@ -1028,7 +1038,7 @@ func (n *NodeID) Encode() ([]byte, error)
 Extended node ID with optional namespace URI and server index.
 
 ```go
-func NewExpandedNodeID(hasURI bool, uri string, hasIndex bool, index uint32, nodeID *NodeID) *ExpandedNodeID
+func NewExpandedNodeID(nodeID *NodeID, uri string, idx uint32) *ExpandedNodeID
 func NewNumericExpandedNodeID(ns uint16, id uint32) *ExpandedNodeID
 func NewStringExpandedNodeID(ns uint16, id string) *ExpandedNodeID
 func NewTwoByteExpandedNodeID(id uint8) *ExpandedNodeID
@@ -1036,8 +1046,9 @@ func NewFourByteExpandedNodeID(ns uint8, id uint16) *ExpandedNodeID
 
 func (e *ExpandedNodeID) HasNamespaceURI() bool
 func (e *ExpandedNodeID) HasServerIndex() bool
-func (e *ExpandedNodeID) NodeID() *NodeID
 ```
+
+The fields are `NodeID *NodeID`, `NamespaceURI string` and `ServerIndex uint32`.
 
 ---
 
@@ -1081,8 +1092,8 @@ type DataValue struct {
 ```
 
 ```go
-func (d *DataValue) NodeID() *NodeID
-func (d *DataValue) StatusOK() bool
+func (d *DataValue) Has(mask byte) bool
+func (d *DataValue) UpdateMask() // sets EncodingMask from the fields
 func (d *DataValue) Decode(b []byte) (int, error)
 func (d *DataValue) Encode() ([]byte, error)
 ```
@@ -1161,9 +1172,8 @@ const (
 func (s StatusCode) Error() string
 func (s StatusCode) Symbol() string
 func (s StatusCode) Uint32() uint32
-func (s StatusCode) IsGood() bool
-func (s StatusCode) IsBad() bool
-func (s StatusCode) IsUncertain() bool
+func (s StatusCode) WithOverflow() StatusCode // sets the DataValue Overflow InfoBit
+func (s StatusCode) HasOverflow() bool
 ```
 
 `Uint32()` returns the raw 32-bit value for consistent CSV/JSON serialization. `Error()` returns a verbose message (e.g. "The operation succeeded. StatusGood (0x0)"); `Symbol()` returns the short symbolic name only (e.g. "Good", "BadServiceUnsupported", "BadUserAccessDenied"), stripping the "Status" prefix. Use `Symbol()` for compact status rendering.
@@ -1520,7 +1530,7 @@ func (b *Buffer) ReadFloat64() float64
 func (b *Buffer) ReadString() string
 func (b *Buffer) ReadBytes() []byte
 func (b *Buffer) ReadTime() time.Time
-func (b *Buffer) ReadStruct(v interface{}) error
+func (b *Buffer) ReadStruct(v interface{})
 func (b *Buffer) WriteBool(v bool)
 func (b *Buffer) WriteInt16(v int16)
 func (b *Buffer) WriteInt32(v int32)
@@ -1529,7 +1539,7 @@ func (b *Buffer) WriteUint32(v uint32)
 func (b *Buffer) WriteFloat32(v float32)
 func (b *Buffer) WriteFloat64(v float64)
 func (b *Buffer) WriteString(s string)
-func (b *Buffer) WriteBytes(v []byte)
+func (b *Buffer) WriteByteString(v []byte)
 func (b *Buffer) WriteTime(t time.Time)
 func (b *Buffer) Pos() int
 func (b *Buffer) Len() int
@@ -1899,7 +1909,7 @@ func (n *Node) SetNodeClass(nc ua.NodeClass)
 func (n *Node) AddObject(o *Node) *Node
 func (n *Node) AddVariable(o *Node) *Node
 func (n *Node) AddRef(o *Node, rt RefType, forward bool)
-func (n Node) Access(flag ua.AccessLevelType) bool
+func (n *Node) Access(flag ua.AccessLevelType) bool
 ```
 
 ```go
@@ -2004,7 +2014,7 @@ Unknown field names resolve to null (as per Part 4).
 **Monitored-item modification:** `ModifyMonitoredItems` re-validates and applies an
 updated `EventFilter` to an existing event item when a new filter is supplied.
 
-Peer EventFilter / event-subscription interoperability against opcua-interop v0.6.0:
+Peer EventFilter / event-subscription interoperability (since opcua-interop v0.6.0):
 `event.subscription`, SelectClauses, OfType, and severity-threshold filters are
 verified in all applicable directions. Broad WhereClause and custom emission remain
 deferred. Go↔Go covered.
@@ -2016,7 +2026,9 @@ deferred. Go↔Go covered.
 Condition instances (Part 9 §5.5) with their standard components and state
 machines. The standard methods (Enable, Disable, AddComment, Acknowledge,
 Confirm, TimedShelve, OneShotShelve, Unshelve, ConditionRefresh,
-ConditionRefresh2) are served through the Call service and the
+ConditionRefresh2; of Part 9 1.05 Suppress, Unsuppress, RemoveFromService,
+PlaceInService, Silence, Reset, Respond, GetGroupMemberships and the `*2`
+variants with a Comment) are served through the Call service and the
 `AccessController`. Guide: [server-guide.md](docs/server-guide.md#alarms-and-conditions).
 
 ```go
@@ -2376,7 +2388,7 @@ Limitations:
 - Without `SetHistorian`, HistoryRead returns unsupported / non-historized results
 
 Peer HistoryRead raw interoperability: all four directions verified
-(`history.read.raw`) against opcua-interop v0.6.0; continuation points verified
+(`history.read.raw`) since opcua-interop v0.6.0; continuation points verified
 open62541→Go and Milo→Go. Go↔Go covered.
 
 ---
@@ -2389,75 +2401,6 @@ type ServerMetrics interface {
     OnResponse(service string, duration time.Duration)
     OnError(service string, duration time.Duration, err error)
 }
-```
-
----
-
-## Package `pubsub`
-
-OPC UA PubSub (Part 14). The guide is [docs/pubsub.md](docs/pubsub.md); the
-configuration is the generated `ua.PubSubConfigurationDataType` model.
-
-### Runtime
-
-```go
-func New(cfg *ua.PubSubConfigurationDataType, opts ...Option) (*PubSub, error)
-func (p *PubSub) Start(ctx context.Context) error
-func (p *PubSub) Close() error
-func (p *PubSub) Running() bool
-
-// Components: connections, groups, writers, readers, published data sets.
-func (p *PubSub) AddPublishedDataSet(cfg *ua.PublishedDataSetDataType) (ComponentID, error)
-func (p *PubSub) AddConnection(cfg *ua.PubSubConnectionDataType) (ComponentID, error)
-func (p *PubSub) AddWriterGroup(conn ComponentID, cfg *ua.WriterGroupDataType) (ComponentID, error)
-func (p *PubSub) AddReaderGroup(conn ComponentID, cfg *ua.ReaderGroupDataType) (ComponentID, error)
-func (p *PubSub) AddDataSetWriter(group ComponentID, cfg *ua.DataSetWriterDataType) (ComponentID, error)
-func (p *PubSub) AddDataSetReader(group ComponentID, cfg *ua.DataSetReaderDataType) (ComponentID, error)
-// Remove*, Enable, Disable, State, Status, Components, Component, Lookup,
-// Configuration, SetKeySource, KeySource.
-
-// Part 14 §9.1.11 diagnostics objects: counters, totals, SubError, LiveValues.
-func (p *PubSub) Diagnostics(id ComponentID) (Diagnostics, error)
-func (p *PubSub) ResetDiagnostics(id ComponentID) error
-func (p *PubSub) SetDiagnosticsLevel(id ComponentID, l ua.DiagnosticsLevel) error
-```
-
-Options: `WithDataSource`, `WithEventSource`, `WithDataSetHandler`,
-`WithTargetWriter`, `WithEventHandler`, `WithKeySource`,
-`WithKeySourceLookup`, `WithTransportConfig`, `WithRetryInterval`,
-`WithDiagnosticsLevel`, `WithLogger`.
-
-Builders: `NewConfiguration`, `UDPConnection`, `EthernetConnection`,
-`MQTTConnection` (`MappingUADP`, `MappingJSON`), `AttachWriterGroups`, `AttachReaderGroups`, `WriterGroup`,
-`JSONWriterGroup`, `Secure`, `DataSetWriter`, `SetWriterQueue`,
-`PublishedDataItems` / `Var`, `MetaData` / `Field`, `DataSetMetaDataOf`,
-`ReaderGroup`, `DataSetReader`, `SetReaderQueue`, `Target`,
-`SetTargetVariables`, `SetMirror`, `PublisherIDVariant`; `Validate` checks a
-configuration (`*ConfigError`), `NewMemoryDataSource` holds values to publish.
-
-### Sub-packages
-
-| Package | Main API |
-|---------|----------|
-| `pubsub/message` | `NetworkMessage`, `DataSetMessage`, `Field`, `PublisherID`, `MetaDataLookup` |
-| `pubsub/uadp` | `Encode(nm, *EncodeOptions)`, `Decode(b, *DecodeOptions)`; errors `ErrFiltered`, `ErrMalformed`, `ErrUnsupported`, `ErrSecurityMode`, `ErrSecurityChecksFailed`, `ErrNoMetaData` |
-| `pubsub/jsonmsg` | `Encode`, `Decode`, `DecodeAny`, `EncodeMetaData` / `DecodeMetaData`, `EncodeStatus` / `DecodeStatus`, `MessageType` |
-| `pubsub/transport` | `Open(ctx, Config)`, `Connection`, `Register`; `udp` registers `opc.udp`, `eth` registers `opc.eth` (`ParseURL`, `Address`, `EtherType`, `MaxPayload`, `ErrNotSupported`, `Supported`), `mqtt` registers `mqtt` and `mqtts` |
-| `pubsub/security` | `Aes128CTR()`, `Aes256CTR()`, `PolicyByURI`, `KeyRing`, `KeyRings`, `KeyService` (`AddSecurityGroup`, `GetSecurityKeys`, `KeySource`) |
-| `pubsub/sks` | `GetSecurityKeys`, `SetSecurityKeys`, `Push`, `NewKeySource(ctx, Config)` |
-| `pubsub/remote` | `New(*opcua.Client)`; `AddConnection`, `AddWriterGroup`, `AddReaderGroup`, `AddDataSetWriter`, `AddDataSetReader`, `AddPublishedDataItems`, `AddPublishedDataItemsTemplate`, `Remove*`, `Enable`, `Disable`, `State`, `Property`, `Connections`, `WriterGroups`, `ReaderGroups`, `DataSetWriters`, `DataSetReaders`, `PublishedDataSets` |
-
-### Server integration
-
-```go
-func WithPubSub(cfg *ua.PubSubConfigurationDataType, opts ...pubsub.Option) Option
-func WithPubSubAuthorizer(a PubSubAuthorizer) Option
-func (s *Server) PubSub() *pubsub.PubSub
-func (s *Server) PubSubNodeID(c pubsub.ComponentID) (*ua.NodeID, bool)
-func (s *Server) PubSubComponentID(nodeID *ua.NodeID) (pubsub.ComponentID, bool)
-func (s *Server) EnableSecurityKeyService(ks *security.KeyService, opts ...SKSOption) (*SecurityKeyService, error)
-func (s *Server) EnableSecurityKeyPush(rings *security.KeyRings, opts ...SKSOption) error
-func MethodCallerFromContext(ctx context.Context) (*MethodCaller, bool)
 ```
 
 ### Push certificate management (server)
@@ -2521,6 +2464,84 @@ func (s *Server) VerifyGroupCertificate(certificateGroup *ua.NodeID, chain []byt
 ```
 
 See [docs/server-guide.md](docs/server-guide.md#certificate-management-push-model).
+
+---
+
+## Package `pubsub`
+
+OPC UA PubSub (Part 14). The guide is [docs/pubsub.md](docs/pubsub.md); the
+configuration is the generated `ua.PubSubConfigurationDataType` model.
+
+### Runtime
+
+```go
+func New(cfg *ua.PubSubConfigurationDataType, opts ...Option) (*PubSub, error)
+func (p *PubSub) Start(ctx context.Context) error
+func (p *PubSub) Close() error
+func (p *PubSub) Running() bool
+
+// Components: connections, groups, writers, readers, published data sets.
+func (p *PubSub) AddPublishedDataSet(cfg *ua.PublishedDataSetDataType) (ComponentID, error)
+func (p *PubSub) AddConnection(cfg *ua.PubSubConnectionDataType) (ComponentID, error)
+func (p *PubSub) AddWriterGroup(conn ComponentID, cfg *ua.WriterGroupDataType) (ComponentID, error)
+func (p *PubSub) AddReaderGroup(conn ComponentID, cfg *ua.ReaderGroupDataType) (ComponentID, error)
+func (p *PubSub) AddDataSetWriter(group ComponentID, cfg *ua.DataSetWriterDataType) (ComponentID, error)
+func (p *PubSub) AddDataSetReader(group ComponentID, cfg *ua.DataSetReaderDataType) (ComponentID, error)
+// Remove*, Enable, Disable, State, Status, Components, Component, Lookup,
+// Configuration, SetKeySource, KeySource.
+
+// Part 14 §9.1.11 diagnostics objects: counters, totals, SubError, LiveValues.
+func (p *PubSub) Diagnostics(id ComponentID) (Diagnostics, error)
+func (p *PubSub) ResetDiagnostics(id ComponentID) error
+func (p *PubSub) SetDiagnosticsLevel(id ComponentID, l ua.DiagnosticsLevel) error
+
+// Actions (Part 14 §6.2.11.2): request / response, Requestor and Responder.
+func (p *PubSub) CallAction(ctx context.Context, t ActionTarget, inputs []*ua.Variant) (*ActionResult, error)
+func (p *PubSub) DiscoverAction(ctx context.Context, t ActionTarget) (*ActionMetaData, error)
+func (p *PubSub) SetActionHandler(dataSetName string, actionTargetID uint16, h ActionHandler)
+```
+
+Options: `WithDataSource`, `WithEventSource`, `WithDataSetHandler`,
+`WithTargetWriter`, `WithEventHandler`, `WithKeySource`,
+`WithKeySourceLookup`, `WithTransportConfig`, `WithRetryInterval`,
+`WithDiagnosticsLevel`, `WithChunkReassembly`, `WithDiscovery`,
+`WithJSONDecompressionLimit`, `WithActionHandler`, `WithActionOptions`,
+`WithActionMethodCaller`, `WithLogger`.
+
+Builders: `NewConfiguration`, `UDPConnection`, `EthernetConnection`,
+`MQTTConnection` (`MappingUADP`, `MappingJSON`), `AMQPConnection`,
+`SetMQTTVersion`, `SetConnectionProperty`, `SetJSONCompression`, `AttachWriterGroups`, `AttachReaderGroups`, `WriterGroup`,
+`JSONWriterGroup`, `Secure`, `DataSetWriter`, `SetWriterQueue`,
+`PublishedDataItems` / `Var`, `PublishedActions`, `PublishedActionMethods`,
+`MetaData` / `Field`, `DataSetMetaDataOf`,
+`ReaderGroup`, `DataSetReader`, `SetReaderQueue`, `Target`,
+`SetTargetVariables`, `SetMirror`, `PublisherIDVariant`; `Validate` checks a
+configuration (`*ConfigError`), `NewMemoryDataSource` holds values to publish.
+
+### Sub-packages
+
+| Package | Main API |
+|---------|----------|
+| `pubsub/message` | `NetworkMessage`, `DataSetMessage`, `Field`, `PublisherID`, `MetaDataLookup` |
+| `pubsub/uadp` | `Encode(nm, *EncodeOptions)`, `Decode(b, *DecodeOptions)`; errors `ErrFiltered`, `ErrMalformed`, `ErrUnsupported`, `ErrSecurityMode`, `ErrSecurityChecksFailed`, `ErrNoMetaData` |
+| `pubsub/jsonmsg` | `Encode`, `Decode`, `DecodeAny`, `EncodeMetaData` / `DecodeMetaData`, `EncodeStatus` / `DecodeStatus`, `MessageType` |
+| `pubsub/transport` | `Open(ctx, Config)`, `Connection`, `Register`; `udp` registers `opc.udp`, `eth` registers `opc.eth` (`ParseURL`, `Address`, `EtherType`, `MaxPayload`, `ErrNotSupported`, `Supported`), `mqtt` registers `mqtt` and `mqtts`, `amqp` registers `amqp` and `amqps` |
+| `pubsub/security` | `Aes128CTR()`, `Aes256CTR()`, `PolicyByURI`, `KeyRing`, `KeyRings`, `KeyService` (`AddSecurityGroup`, `GetSecurityKeys`, `KeySource`) |
+| `pubsub/sks` | `GetSecurityKeys`, `SetSecurityKeys`, `Push`, `NewKeySource(ctx, Config)` |
+| `pubsub/remote` | `New(*opcua.Client)`; `AddConnection`, `AddWriterGroup`, `AddReaderGroup`, `AddDataSetWriter`, `AddDataSetReader`, `AddPublishedDataItems`, `AddPublishedDataItemsTemplate`, `Remove*`, `Enable`, `Disable`, `State`, `Property`, `Connections`, `WriterGroups`, `ReaderGroups`, `DataSetWriters`, `DataSetReaders`, `PublishedDataSets` |
+
+### Server integration
+
+```go
+func WithPubSub(cfg *ua.PubSubConfigurationDataType, opts ...pubsub.Option) Option
+func WithPubSubAuthorizer(a PubSubAuthorizer) Option
+func (s *Server) PubSub() *pubsub.PubSub
+func (s *Server) PubSubNodeID(c pubsub.ComponentID) (*ua.NodeID, bool)
+func (s *Server) PubSubComponentID(nodeID *ua.NodeID) (pubsub.ComponentID, bool)
+func (s *Server) EnableSecurityKeyService(ks *security.KeyService, opts ...SKSOption) (*SecurityKeyService, error)
+func (s *Server) EnableSecurityKeyPush(rings *security.KeyRings, opts ...SKSOption) error
+func MethodCallerFromContext(ctx context.Context) (*MethodCaller, bool)
+```
 
 ## Package `gds`
 
