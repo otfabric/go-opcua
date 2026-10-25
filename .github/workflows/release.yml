@@ -25,4 +25,7 @@ jobs:
       bump: ${{ inputs.bump }}
       release-name-prefix: go-opcua
       update-major-tag: false
+      # chaos/... runs in the chaos job of CI (see ci.yml): next to the
+      # other packages under the race detector it starves them of CPU.
+      test-exclude-regex: "(/examples($|/)|/cmd($|/)|/chaos($|/))"
     secrets: inherit
