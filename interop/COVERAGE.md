@@ -6,7 +6,7 @@ Source of truth: [`capabilities.json`](capabilities.json) + [`coverage.json`](co
 Regenerate with `go generate ./interop`.
 Gap summary: `go run ./internal/cmd/render-interop-coverage -summary`.
 
-Pinned opcua-interop version: **v0.15.0**
+Pinned opcua-interop version: **v0.16.0**
 
 | Status | Meaning |
 |---|---|
