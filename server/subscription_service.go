@@ -348,6 +348,12 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 	// is answered right away. Queuing it instead would leave the client
 	// waiting for a response that no subscription will ever produce.
 	if !s.sessionHasSubscriptions(session) {
+		// A subscription that has just left the session queued its
+		// Good_SubscriptionTransferred before it left: it may not have
+		// been there yet when the queue was looked at above.
+		if change, ok := session.takeStatusChange(); ok {
+			return statusChangeResponse(req, change, s.ackPublishAcknowledgements(req.SubscriptionAcknowledgements)), nil
+		}
 		return nil, ua.StatusBadNoSubscription
 	}
 
@@ -418,6 +424,31 @@ func (s *Subscription) announce(sess *session, ch *uasc.SecureChannel, change pe
 	default:
 	}
 	sess.addStatusChange(change)
+}
+
+// sendStatusChange sends the oldest StatusChangeNotification queued on sess
+// with one of its queued Publish requests; without one it stays queued for
+// the next. ch is the channel of a request that does not name its own.
+func (s *Subscription) sendStatusChange(sess *session, ch *uasc.SecureChannel) {
+	var pubreq PubReq
+	select {
+	case pubreq = <-sess.PublishRequests:
+	default:
+		return
+	}
+	change, ok := sess.takeStatusChange()
+	if !ok {
+		// A Publish request of its own took the notification meanwhile.
+		select {
+		case sess.PublishRequests <- pubreq:
+		default:
+		}
+		return
+	}
+	resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements))
+	if err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, resp); err != nil {
+		sess.addStatusChange(change)
+	}
 }
 
 // announceExpiry tells the client that the subscription's lifetime has
@@ -557,6 +588,12 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 		if owner != requester {
 			left = append(left, moved{sub: sub, from: owner, channel: ownerChannel})
 			requester.dropStatusChanges(sub.ID)
+			// Queued before the subscription leaves: a Publish request of
+			// the old session that finds it without the subscription
+			// finds the notification (see Publish).
+			if owner != nil {
+				owner.addStatusChange(pendingStatusChange{subID: sub.ID, seq: nextSequenceNumber(sub.seq.Load()), status: ua.StatusGoodSubscriptionTransferred})
+			}
 		}
 
 		// Reassign the subscription to the requesting session and channel.
@@ -581,7 +618,10 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 	// session that has no subscription left would wait for nothing: they are
 	// answered with Bad_NoSubscription (Part 4 §5.13.5).
 	for _, m := range left {
-		m.sub.announce(m.from, m.channel, pendingStatusChange{subID: m.sub.ID, seq: nextSequenceNumber(m.sub.seq.Load()), status: ua.StatusGoodSubscriptionTransferred})
+		if m.from == nil {
+			continue
+		}
+		m.sub.sendStatusChange(m.from, m.channel)
 		if !s.sessionHasSubscriptions(m.from) {
 			s.releasePublishRequests(m.from, ua.StatusBadNoSubscription)
 		}

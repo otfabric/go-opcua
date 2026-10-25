@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -244,4 +245,87 @@ func TestTransferSubscriptions_BackDropsTheStaleAnnouncement(t *testing.T) {
 	require.Nil(t, r, "queued, not answered with the first transfer's notification")
 	require.Len(t, a.PublishRequests, 1)
 	<-a.PublishRequests
+}
+
+// TestTransferSubscriptions_PublishDuringTheTransfer: a Publish request of
+// the old session that arrives while its last subscription is being
+// transferred gets the Good_SubscriptionTransferred notification, not
+// Bad_NoSubscription: the notification is queued before the subscription
+// leaves.
+//
+// Regression (client TestClientCovMonitorTriggers on CI): the request found
+// the session without the subscription and without the notification, which
+// was queued only after the subscription had left.
+func TestTransferSubscriptions_PublishDuringTheTransfer(t *testing.T) {
+	srv, err := New(
+		EndPoint("localhost", 0),
+		EnableSecurity("None", ua.MessageSecurityModeNone),
+		EnableAuthMode(ua.UserTokenTypeAnonymous),
+	)
+	require.NoError(t, err)
+	require.NoError(t, srv.Start(context.Background()))
+	defer func() { _ = srv.Close() }()
+
+	sessions := &SessionService{srv: srv}
+	newSession := func() *ua.RequestHeader {
+		resp, err := sessions.CreateSession(context.Background(), scNone(), &ua.CreateSessionRequest{
+			RequestHeader:           reqHeader(),
+			EndpointURL:             "opc.tcp://localhost:4840",
+			RequestedSessionTimeout: 60000,
+			ClientNonce:             make([]byte, 32),
+		}, 1)
+		require.NoError(t, err)
+		h := reqHeader()
+		h.AuthenticationToken = resp.(*ua.CreateSessionResponse).AuthenticationToken
+		return h
+	}
+	oldHeader, newHeader := newSession(), newSession()
+	oldSession := srv.sb.peek(oldHeader.AuthenticationToken)
+	require.NotNil(t, oldSession)
+	oldSession.activated.Store(true)
+
+	subs := srv.SubscriptionService
+	for i := range 500 {
+		id := uint32(1000 + i)
+		sub := NewSubscription()
+		sub.srv = subs
+		sub.ID = id
+		sub.Session = oldSession
+		subs.Mu.Lock()
+		subs.Subs[id] = sub
+		subs.Mu.Unlock()
+
+		start := make(chan struct{})
+		var (
+			wg     sync.WaitGroup
+			pubErr error
+		)
+		wg.Go(func() {
+			<-start
+			_, pubErr = subs.Publish(context.Background(), scNone(), &ua.PublishRequest{
+				RequestHeader:                oldHeader,
+				SubscriptionAcknowledgements: []*ua.SubscriptionAcknowledgement{},
+			}, 5)
+		})
+		close(start)
+		_, err := subs.TransferSubscriptions(context.Background(), scNone(), &ua.TransferSubscriptionsRequest{
+			RequestHeader:   newHeader,
+			SubscriptionIDs: []uint32{id},
+		}, 4)
+		require.NoError(t, err)
+		wg.Wait()
+		require.NotErrorIs(t, pubErr, ua.StatusBadNoSubscription, "iteration %d", i)
+
+		subs.Mu.Lock()
+		delete(subs.Subs, id)
+		subs.Mu.Unlock()
+		for {
+			if _, ok := oldSession.takeStatusChange(); !ok {
+				break
+			}
+		}
+		for len(oldSession.PublishRequests) > 0 {
+			<-oldSession.PublishRequests
+		}
+	}
 }
