@@ -90,6 +90,10 @@ type channelWriter struct {
 	// the HTTPS transport hands each one to the HTTP request it answers.
 	// It must not block. conn is nil then.
 	deliver func(reqID uint32, resp ua.Response)
+
+	// waiting, set with deliver, reports whether request reqID still waits
+	// for its response: the client of an HTTPS request may have gone.
+	waiting func(reqID uint32) bool
 }
 
 func newChannelWriter(sc *uasc.SecureChannel, conn *uacp.Conn, logger *slog.Logger, timeout time.Duration, maxPending int) *channelWriter {

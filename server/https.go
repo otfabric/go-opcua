@@ -77,6 +77,14 @@ func (c *httpsChannel) wait(reqID uint32) chan ua.Response {
 	return ch
 }
 
+// isWaiting reports whether request reqID still waits for its response.
+func (c *httpsChannel) isWaiting(reqID uint32) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	_, ok := c.waiting[reqID]
+	return ok
+}
+
 func (c *httpsChannel) forget(reqID uint32) {
 	c.mu.Lock()
 	delete(c.waiting, reqID)
@@ -161,6 +169,7 @@ func (h *httpsServer) start() {
 		w := newChannelWriter(sc, nil, s.cfg.logger, s.cfg.responseWriteTimeout, s.cfg.maxPendingResponses)
 		c := &httpsChannel{sc: sc, w: w, waiting: make(map[uint32]chan ua.Response)}
 		w.deliver = c.deliver
+		w.waiting = c.isWaiting
 		h.channels[policy] = c
 		s.cb.addWriter(sc, w)
 		go w.run()
@@ -275,6 +284,13 @@ func (h *httpsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", uasc.HTTPSContentType)
 	w.Header().Set("Content-Length", strconv.Itoa(len(b)))
 	_, _ = w.Write(b)
+}
+
+// publishAbandoned reports whether a parked Publish request can no longer be
+// answered because the HTTP request that carried it has ended.
+func (s *Server) publishAbandoned(pr PubReq) bool {
+	w := s.channelWriter(pr.Channel)
+	return w != nil && w.waiting != nil && !w.waiting(pr.ID)
 }
 
 // requestHandleOf returns the request handle a response carries.

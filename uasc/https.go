@@ -223,7 +223,7 @@ func (s *SecureChannel) closeHTTPS() error {
 	if t, ok := s.https.client.Transport.(interface{ CloseIdleConnections() }); ok {
 		t.CloseIdleConnections()
 	}
-	return io.EOF
+	return nil
 }
 
 // sendHTTPS posts req and hands the response to h. Without h the request is

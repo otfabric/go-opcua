@@ -1087,6 +1087,11 @@ func (s *Subscription) run() {
 			case <-s.shutdown:
 				return
 			case pubreq = <-sess.PublishRequests:
+				if s.srv.srv.publishAbandoned(pubreq) {
+					// Its client has gone (HTTPS): a notification
+					// message sent there would be lost.
+					continue
+				}
 				break L2
 			case <-s.NotifyChannel:
 				pendingData = true
