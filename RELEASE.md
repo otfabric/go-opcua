@@ -15,6 +15,7 @@ Fixes found by the 25-run hardening batch of v1.23.0: subscription recovery afte
 - **client: no false retransmission gap.** The recovery reported an unrecoverable gap (or a partial recovery) when the server's available sequence numbers were all below the next one the client expects: those are messages the client has received but not yet acknowledged. A gap is now reported only when the server holds later messages but not the next one (serial number comparison, so wrap-around is handled).
 - **client: the activations of a session take turns.** The reconnect logic and the application could activate the same session at the same time and both read and wrote its server nonce and ephemeral key (a data race). Each activation uses the nonce the previous one brought.
 - **server: Good_SubscriptionTransferred is queued before the subscription leaves the session** (Part 4 §5.13.7). A Publish request of the old session that came in during TransferSubscriptions could get Bad_NoSubscription instead.
+- **server: an HTTPS request whose client has already gone away is not served.** The request reached the service handlers when the select between handing it over and the ended context picked the hand-over.
 - **uapolicy: decrypted PFX contents that do not parse are `ErrPFXPassword`** ("wrong PFX password or corrupt PFX"), also with a verified MAC. A wrong decryption password gives valid padding about 1 in 256 times; the MAC covers the ciphertext, and a PFX may use another password for encryption than for its MAC (`openssl pkcs12 -twopass`). It used to report a malformed key.
 
 ### Tests
@@ -29,6 +30,7 @@ Fixes found by the 25-run hardening batch of v1.23.0: subscription recovery afte
 - **`TestRecovery_ServerRestart`:** the restarted server gets its fixture before it starts, so the fixture keeps its namespace index; the diagnostics namespace is created with the first session.
 - **`TestReverseConnect_AutoReconnectAfterServerRestart`:** the reverse-connect servers get their fixture before they start (`conformkit.NewServerPrepared`), for the same reason.
 - **AMQP test broker streams a delivery within the session window** (AMQP 1.0 §2.5.6). It sent a delivery only when all its frames fitted in the client's incoming window, so a message larger than the window stalled until a test timed out. `TestSessionWindowReopens` now uses a 64-frame window (an internal `SessionWindow` option of the AMQP client and the broker) and runs in milliseconds instead of transferring 17 MB.
+- **`TestServerRestartOnSamePort`:** the fixed port comes from `testport` (outside the ephemeral range, free on IPv4 and IPv6), and the server and client use 127.0.0.1: "localhost" may resolve to ::1 first, where a parallel package can listen on the same port.
 - **Failure diagnostics:** the recovery tests report the recorded states and events when they fail.
 
 ### Interop
