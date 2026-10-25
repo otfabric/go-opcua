@@ -6,7 +6,7 @@ Source of truth: [`capabilities.json`](capabilities.json) + [`coverage.json`](co
 Regenerate with `go generate ./interop`.
 Gap summary: `go run ./internal/cmd/render-interop-coverage -summary`.
 
-Pinned opcua-interop version: **v0.11.0**
+Pinned opcua-interop version: **v0.12.0**
 
 | Status | Meaning |
 |---|---|
@@ -24,8 +24,8 @@ Go↔Go tests never earn ✅.
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
 |---|:---:|:---:|:---:|:---:|---|
-| ConditionRefresh (RefreshStart / condition events / RefreshEnd) | ⬜ | N/A | ⬜ | ⬜ | — |
-| AcknowledgeableConditionType Acknowledge / Confirm / AddComment | ⬜ | N/A | ⬜ | ⬜ | — |
+| ConditionRefresh (RefreshStart / condition events / RefreshEnd) | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541Server_Alarms / coverage/alarms.condition-refresh/go-client-to-open62541-server`; O→S: `TestGoServer_Open62541Client_Alarms / coverage/alarms.condition-refresh/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_Alarms / coverage/alarms.condition-refresh/milo-client-to-go-server` |
+| AcknowledgeableConditionType Acknowledge / Confirm / AddComment | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541Server_Alarms / coverage/alarms.acknowledgeable/go-client-to-open62541-server`; O→S: `TestGoServer_Open62541Client_Alarms / coverage/alarms.acknowledgeable/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_Alarms / coverage/alarms.acknowledgeable/milo-client-to-go-server` |
 
 ## attribute
 

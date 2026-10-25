@@ -1,5 +1,5 @@
 {
-  "interopVersion": "v0.11.0",
+  "interopVersion": "v0.12.0",
   "peer": {
     "stack": "async-opcua",
     "version": "0.19.0"
@@ -1277,11 +1277,9 @@
     {
       "capability": "alarms.condition-refresh",
       "direction": "async-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
       "test": "TestGoServer_AsyncOpcuaClient_Alarms",
       "case": "coverage/alarms.condition-refresh/async-opcua-client-to-go-server",
-      "nextAction": "the pinned opcua-interop v0.10.1 async-opcua image has no client alarms operation; TestGoServer_AsyncOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -1295,11 +1293,9 @@
     {
       "capability": "alarms.acknowledgeable",
       "direction": "async-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
       "test": "TestGoServer_AsyncOpcuaClient_Alarms",
       "case": "coverage/alarms.acknowledgeable/async-opcua-client-to-go-server",
-      "nextAction": "the pinned opcua-interop v0.10.1 async-opcua image has no client alarms operation; TestGoServer_AsyncOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2111,28 +2107,28 @@
       "capability": "transport.wss",
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss",
       "direction": "async-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "async-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "async-opcua 0.19.0 implements opc.tcp only (no WebSocket or HTTPS transport), so opcua-interop async-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
