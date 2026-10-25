@@ -80,6 +80,8 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Registered Custom DataTypes](#registered-custom-datatypes)
   - [HistoryProvider](#historyprovider)
   - [ServerMetrics](#servermetrics)
+  - [Push certificate management (server)](#push-certificate-management-server)
+- [Package `gds`](#package-gds)
 - [Package `monitor`](#package-monitor)
   - [NodeMonitor](#nodemonitor)
   - [Subscription (monitor)](#subscription-monitor)
@@ -1716,6 +1718,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `HTTPSEndPoint(host string, port int)` | Add an `opc.https://host:port` endpoint (Part 6 §7.4, https-uabinary): each enabled policy without SecureChannelEnhancements, in its strongest enabled mode |
 | `ListenHTTPSOn(addr string)` | Bind address of the HTTPS listener |
 | `TLSConfig(cfg *tls.Config)` | TLS certificate (and client authentication) of the `opc.wss` / `opc.https` listeners; default: the RSA application instance certificate. TLS 1.2 minimum |
+| `WithPushManagement(pm PushManagement)` | Push certificate management (Part 12 §7): the ServerConfiguration object, the DefaultApplicationGroup trust list validates client application certificates; see [Push certificate management (server)](#push-certificate-management-server) |
 
 `Server.URLs()` lists the `opc.tcp`, then the `opc.wss` and the `opc.https` endpoint URLs; `Server.WebSocketAddr()` and `Server.HTTPSAddr()` return the bound listener addresses. Each `EndpointDescription` carries the `TransportProfileUri` of its transport.
 
@@ -2321,6 +2324,57 @@ func (s *Server) EnableSecurityKeyService(ks *security.KeyService, opts ...SKSOp
 func (s *Server) EnableSecurityKeyPush(rings *security.KeyRings, opts ...SKSOption) error
 func MethodCallerFromContext(ctx context.Context) (*MethodCaller, bool)
 ```
+
+### Push certificate management (server)
+
+```go
+type PushManagement struct {
+    TrustList               *ua.TrustListDataType // initial trust list (nil: empty)
+    MaxTrustListSize        uint32                // 0: 1 MiB
+    MaxRejectedCertificates int                   // 0: 64
+    ApplyImmediately        bool                  // no transactions: changes apply when their method returns
+    Authorizer              PushAuthorizer        // nil: SecurityAdmin role (always SignAndEncrypt)
+    Store                   CertificateStore      // nil: nothing is persisted
+}
+type PushAuthorizer func(ctx context.Context, caller *MethodCaller, method string) ua.StatusCode
+type CertificateStore interface {
+    StoreTrustList(ctx context.Context, tl *ua.TrustListDataType) error
+    StoreCertificate(ctx context.Context, certificateType *ua.NodeID, cert []byte, issuers [][]byte, key crypto.Signer) error
+}
+func WithPushManagement(pm PushManagement) Option
+func (s *Server) TrustList() *ua.TrustListDataType    // the trust list in effect (nil without push management)
+func (s *Server) RejectedCertificates() [][]byte      // the most recently rejected client certificates
+```
+
+See [docs/server-guide.md](docs/server-guide.md#certificate-management-push-model).
+
+## Package `gds`
+
+Push certificate management client (Part 12 §7) against any server's
+ServerConfiguration object.
+
+```go
+func New(c *opcua.Client) *Client                     // Client.TrustList: the TrustList object (default DefaultTrustList)
+func (g *Client) ReadTrustList(ctx context.Context, masks ua.TrustListMasks) (*ua.TrustListDataType, error)
+func (g *Client) WriteTrustList(ctx context.Context, tl *ua.TrustListDataType) (applyChangesRequired bool, err error)
+func (g *Client) AddCertificate(ctx context.Context, cert []byte, trusted bool) error
+func (g *Client) RemoveCertificate(ctx context.Context, thumbprint string, trusted bool) error
+func (g *Client) CreateSigningRequest(ctx context.Context, req *SigningRequest) ([]byte, error)
+func (g *Client) UpdateCertificate(ctx context.Context, u *CertificateUpdate) (applyChangesRequired bool, err error)
+func (g *Client) GetRejectedList(ctx context.Context) ([][]byte, error)
+func (g *Client) ApplyChanges(ctx context.Context) error
+func (g *Client) CancelChanges(ctx context.Context) error
+func (g *Client) Properties(ctx context.Context) (*Properties, error)
+func Thumbprint(cert []byte) string                  // upper-case hex SHA-1, for RemoveCertificate
+func EncodeTrustList(tl *ua.TrustListDataType) ([]byte, error)
+func DecodeTrustList(b []byte) (*ua.TrustListDataType, error)
+type Error struct{ Method string; Status ua.StatusCode } // errors.Is(err, ua.StatusBad…)
+```
+
+`SigningRequest{CertificateGroup, CertificateType, SubjectName, RegeneratePrivateKey, Nonce}`,
+`CertificateUpdate{CertificateGroup, CertificateType, Certificate, IssuerCertificates, PrivateKeyFormat, PrivateKey}`;
+NodeIds `ServerConfiguration`, `DefaultApplicationGroup`, `DefaultTrustList` and the
+`…ApplicationCertificateType` variables. See [docs/client-guide.md](docs/client-guide.md#certificate-management-gds-push).
 
 ## Package `monitor`
 
