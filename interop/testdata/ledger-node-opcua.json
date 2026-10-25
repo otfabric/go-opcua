@@ -3049,7 +3049,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_delete_test.go",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_delete_test.go",
       "fixture": "baseline"
     },
     {
