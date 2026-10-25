@@ -349,7 +349,7 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 	subSess, _ := sub.sessionChannel()
 	pubInterval, _, _ := sub.timing()
 
-	sess := s.SubService.srv.Session(req.RequestHeader)
+	sess := s.SubService.srv.session(req.RequestHeader)
 	if sess == nil || subSess == nil || subSess.AuthTokenID == nil ||
 		sess.AuthTokenID == nil || !subSess.AuthTokenID.Equal(sess.AuthTokenID) {
 		// Wrong/missing session must not become BadUnexpectedError via a plain error.
@@ -544,7 +544,7 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
-	sess := s.SubService.srv.Session(req.RequestHeader)
+	sess := s.SubService.srv.session(req.RequestHeader)
 
 	results := make([]*ua.MonitoredItemModifyResult, len(req.ItemsToModify))
 	for i, item := range req.ItemsToModify {
@@ -659,7 +659,7 @@ func (s *MonitoredItemService) SetMonitoringMode(ctx context.Context, sc *uasc.S
 
 	results := make([]ua.StatusCode, len(req.MonitoredItemIDs))
 
-	sess := s.SubService.srv.Session(req.RequestHeader)
+	sess := s.SubService.srv.session(req.RequestHeader)
 
 	for i := range req.MonitoredItemIDs {
 		id := req.MonitoredItemIDs[i]
@@ -732,7 +732,7 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 		}, nil
 	}
 
-	sess := s.SubService.srv.Session(req.RequestHeader)
+	sess := s.SubService.srv.session(req.RequestHeader)
 	if !triggerItem.Sub.ownedBy(sess) {
 		return &ua.SetTriggeringResponse{
 			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadSessionIDInvalid),
@@ -781,7 +781,7 @@ func (s *MonitoredItemService) DeleteMonitoredItems(ctx context.Context, sc *uas
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 
-	sess := s.SubService.srv.Session(req.RequestHeader)
+	sess := s.SubService.srv.session(req.RequestHeader)
 
 	results := make([]ua.StatusCode, len(req.MonitoredItemIDs))
 	for i := range req.MonitoredItemIDs {

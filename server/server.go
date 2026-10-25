@@ -438,7 +438,17 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 	return s, nil
 }
 
-func (s *Server) Session(hdr *ua.RequestHeader) *session {
+// Session returns the session whose AuthenticationToken hdr carries, nil if
+// there is none: no header, no token or no live session with that token.
+func (s *Server) Session(hdr *ua.RequestHeader) *Session {
+	return s.session(hdr).handle()
+}
+
+// session is the session whose AuthenticationToken hdr carries, or nil.
+func (s *Server) session(hdr *ua.RequestHeader) *session {
+	if hdr == nil {
+		return nil
+	}
 	return s.sb.Session(hdr.AuthenticationToken)
 }
 

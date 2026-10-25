@@ -1952,6 +1952,13 @@ func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper; a copy
 func (s *Session) ClientCertificate() []byte      // of CreateSession; a copy
 ```
 
+`Server.Session` looks up the session of a request header, for code that
+handles a request itself (a method handler, a custom service):
+
+```go
+func (s *Server) Session(hdr *ua.RequestHeader) *Session  // nil: no header, no token or no live session
+```
+
 ---
 
 ### Authentication validators
