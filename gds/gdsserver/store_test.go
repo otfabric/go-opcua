@@ -201,7 +201,23 @@ func TestAttach_Errors(t *testing.T) {
 // Store, a request in flight included.
 func TestRestart(t *testing.T) {
 	t.Parallel()
-	e := newEnv(t, Config{SelfAdmin: selfAdminAll})
+	for name, store := range map[string]func(t *testing.T) Store{
+		"memory": func(*testing.T) Store { return NewMemoryStore() },
+		"file": func(t *testing.T) Store {
+			s, err := NewFileStore(t.TempDir())
+			require.NoError(t, err)
+			return s
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			testRestart(t, store(t))
+		})
+	}
+}
+
+func testRestart(t *testing.T, store Store) {
+	e := newEnv(t, Config{SelfAdmin: selfAdminAll, Store: store})
 	ctx := ctxT(t)
 	appID := e.registerClient()
 	self := e.anonymous()

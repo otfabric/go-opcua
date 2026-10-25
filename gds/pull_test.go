@@ -241,7 +241,7 @@ func TestPull_Methods(t *testing.T) {
 
 	groups, err := admin.GetCertificateGroups(ctx, appID)
 	require.NoError(t, err)
-	require.Len(t, groups, 1)
+	require.Len(t, groups, 3, "a server: the application, HTTPS and user token groups")
 	types, certs, err := admin.GetCertificates(ctx, appID, nil)
 	require.NoError(t, err)
 	require.Len(t, types, 1)
@@ -452,6 +452,9 @@ func TestNewCertificateRequest(t *testing.T) {
 	require.Error(t, err)
 	ed448Key, err := testpki.NewKey(testpki.CurveEd448)
 	require.NoError(t, err)
-	_, err = gds.NewCertificateRequest(ed448Key, "urn:a", "CN=A/O=B", nil)
-	require.Error(t, err, "crypto/x509 makes no Ed448 requests")
+	der, err = gds.NewCertificateRequest(ed448Key, "urn:a", "CN=A/O=B", nil)
+	require.NoError(t, err, "uapolicy makes Ed448 requests")
+	csr, err = uapolicy.ParseCertificateRequest(der)
+	require.NoError(t, err)
+	require.NoError(t, uapolicy.CheckCertificateRequestSignature(csr))
 }

@@ -44,6 +44,7 @@ type env struct {
 	url   string
 	store *MemoryStore
 	cfg   Config
+	opts  []server.Option // more options of the server
 }
 
 func pkiOf(t *testing.T) *testpki.PKI {
@@ -55,7 +56,7 @@ func pkiOf(t *testing.T) *testpki.PKI {
 
 // newEnv starts a GDS whose application group issues NIST P-256
 // certificates (cheap keys) unless cfg sets other types.
-func newEnv(t *testing.T, cfg Config) *env {
+func newEnv(t *testing.T, cfg Config, opts ...server.Option) *env {
 	t.Helper()
 	if cfg.CertificateTypes == nil {
 		cfg.CertificateTypes = []*ua.NodeID{p256Type}
@@ -66,7 +67,7 @@ func newEnv(t *testing.T, cfg Config) *env {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.New(slog.DiscardHandler)
 	}
-	e := &env{t: t, cfg: cfg}
+	e := &env{t: t, cfg: cfg, opts: opts}
 	e.store, _ = cfg.Store.(*MemoryStore)
 	e.start()
 	return e
@@ -77,7 +78,7 @@ func (e *env) start() {
 	t.Helper()
 	ecc := pkiOf(t).ECC
 	var g atomic.Pointer[GDS]
-	srv, err := server.New(
+	srv, err := server.New(append([]server.Option{
 		server.EndPoint("localhost", 0),
 		server.ApplicationIdentity(ecc.Server[testpki.CurveP256].Cert, ecc.Server[testpki.CurveP256].Key),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
@@ -107,7 +108,7 @@ func (e *env) start() {
 			}
 			return roles
 		}),
-	)
+	}, e.opts...)...)
 	require.NoError(t, err)
 	gd, err := Attach(srv, e.cfg)
 	require.NoError(t, err)

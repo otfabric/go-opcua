@@ -87,7 +87,18 @@ type IssuedCertificate struct {
 	// Revoked tells that RevokeCertificate or UnregisterApplication
 	// revoked it.
 	Revoked bool
+	// CertificateGroup is the group it was issued for: GroupApplication,
+	// GroupHTTPS or GroupUserToken.
+	CertificateGroup string
 }
+
+// The certificate groups of the Directory, as Request.CertificateGroup and
+// IssuedCertificate.CertificateGroup name them.
+const (
+	GroupApplication = ""          // DefaultApplicationGroup
+	GroupHTTPS       = "https"     // DefaultHttpsGroup
+	GroupUserToken   = "usertoken" // DefaultUserTokenGroup
+)
 
 // RequestState is the state of a certificate request.
 type RequestState int
@@ -124,13 +135,17 @@ type Request struct {
 	// CertificateType is the numeric id of the certificate type in
 	// namespace 0.
 	CertificateType uint32
-	State           RequestState
-	Created         time.Time
+	// CertificateGroup is the group of the request (GroupApplication,
+	// GroupHTTPS).
+	CertificateGroup string
+	State            RequestState
+	Created          time.Time
 
 	// CertificateRequest is the PKCS #10 request of StartSigningRequest.
 	CertificateRequest []byte
 
-	// The arguments of StartNewKeyPairRequest.
+	// The arguments of StartNewKeyPairRequest; PrivateKeyFormat is
+	// gds.PrivateKeyFormatPEM or gds.PrivateKeyFormatPFX.
 	SubjectName        string
 	DomainNames        []string
 	PrivateKeyFormat   string
@@ -140,7 +155,7 @@ type Request struct {
 // Issuer is a certificate authority of the GDS.
 type Issuer struct {
 	// Name is the key type of the CA: "RSA", "NistP256", "NistP384",
-	// "Curve25519" or "Curve448".
+	// "BrainpoolP256r1", "BrainpoolP384r1", "Curve25519" or "Curve448".
 	Name string
 	// Certificate is the CA certificate (DER).
 	Certificate []byte
@@ -169,9 +184,13 @@ type Meta struct {
 	NextRecordID uint32
 	// CounterResetTime is when the record identifiers started.
 	CounterResetTime time.Time
-	// TrustList holds the entries of the trust list besides the CA
-	// certificates and CRLs of the GDS.
+	// TrustList holds the entries of the trust list of the
+	// DefaultApplicationGroup besides the CA certificates and CRLs of the
+	// GDS.
 	TrustList *ua.TrustListDataType
+	// GroupTrustLists holds those of the other groups by GroupHTTPS and
+	// GroupUserToken.
+	GroupTrustLists map[string]*ua.TrustListDataType
 }
 
 // MemoryStore is a Store that keeps the state in memory: it lives as long
@@ -372,5 +391,11 @@ func cloneTrustList(d *ua.TrustListDataType) *ua.TrustListDataType {
 func cloneMeta(m *Meta) *Meta {
 	out := *m
 	out.TrustList = cloneTrustList(m.TrustList)
+	if m.GroupTrustLists != nil {
+		out.GroupTrustLists = make(map[string]*ua.TrustListDataType, len(m.GroupTrustLists))
+		for k, v := range m.GroupTrustLists {
+			out.GroupTrustLists[k] = cloneTrustList(v)
+		}
+	}
 	return &out
 }

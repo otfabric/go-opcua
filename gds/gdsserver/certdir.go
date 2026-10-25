@@ -6,9 +6,9 @@ import (
 	"bytes"
 	"context"
 	"crypto"
+	"crypto/elliptic"
 	"crypto/x509"
 	"crypto/x509/pkix"
-	"encoding/asn1"
 	"errors"
 	"fmt"
 	"net"
@@ -19,7 +19,6 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/otfabric/go-opcua/gds"
-	"github.com/otfabric/go-opcua/gds/gdsid"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
 )
@@ -31,22 +30,36 @@ const clockSkew = time.Hour
 // maxDomainNames bounds the DomainNames of StartNewKeyPairRequest.
 const maxDomainNames = 32
 
-// groupOK reports whether a CertificateGroupId names the
-// DefaultApplicationGroup (a null NodeId does too).
-func (g *GDS) groupOK(n *ua.NodeID) bool {
-	return isNull(n) || n.Equal(g.DefaultApplicationGroup())
-}
-
-// certType returns the certificate type a request asks for: the first
-// type of the group for a null NodeId.
-func (g *GDS) certType(n *ua.NodeID) (*certType, ua.StatusCode) {
-	if isNull(n) {
-		return certTypes[g.types[0]], ua.StatusOK
+// certType returns the certificate type of a group a request asks for:
+// the first type of the group for a null NodeId. A group that issues no
+// certificates (the DefaultUserTokenGroup) has none.
+func (g *GDS) certType(gr *group, n *ua.NodeID) (*certType, ua.StatusCode) {
+	if len(gr.types) == 0 {
+		return nil, ua.StatusBadInvalidArgument
 	}
-	if n.Namespace() != 0 || !slices.Contains(g.types, n.IntID()) {
+	if isNull(n) {
+		return certTypes[gr.types[0]], ua.StatusOK
+	}
+	if n.Namespace() != 0 || !slices.Contains(gr.types, n.IntID()) {
 		return nil, ua.StatusBadInvalidArgument
 	}
 	return certTypes[n.IntID()], ua.StatusOK
+}
+
+// target returns the group and the certificate type a certificate request
+// names, and notes them for its audit event.
+func (g *GDS) target(c *caller, groupID, typeID *ua.NodeID) (*group, *certType, ua.StatusCode) {
+	gr := g.groupOf(groupID)
+	if gr == nil {
+		return nil, nil, ua.StatusBadInvalidArgument
+	}
+	c.auditGroup = g.node(gr.node)
+	ct, sc := g.certType(gr, typeID)
+	if sc != ua.StatusOK {
+		return nil, nil, sc
+	}
+	c.auditType = ua.NewNumericNodeID(0, ct.id)
+	return gr, ct, ua.StatusOK
 }
 
 // pruneRequestsLocked drops the requests older than RequestLifetime.
@@ -90,25 +103,14 @@ func (g *GDS) addRequestLocked(ctx context.Context, req *Request) ([]*ua.Variant
 	return []*ua.Variant{ua.MustVariant(g.guidNode(req.ID))}, ua.StatusOK
 }
 
-var errUnsupportedCSR = errors.New("gdsserver: unsupported certificate request")
-
-// parseCSR parses and checks a PKCS #10 request. A request crypto/x509
-// cannot parse but that is well-formed (a Brainpool or Ed448 key) is
-// errUnsupportedCSR.
+// parseCSR parses a PKCS #10 request, with the keys of every certificate
+// type (Brainpool and Ed448 included), and checks its signature.
 func parseCSR(der []byte) (*x509.CertificateRequest, error) {
-	csr, err := x509.ParseCertificateRequest(der)
+	csr, err := uapolicy.ParseCertificateRequest(der)
 	if err != nil {
-		var outer struct {
-			Info      asn1.RawValue
-			Algorithm pkix.AlgorithmIdentifier
-			Signature asn1.BitString
-		}
-		if rest, err2 := asn1.Unmarshal(der, &outer); err2 == nil && len(rest) == 0 && len(outer.Signature.Bytes) > 0 {
-			return nil, errUnsupportedCSR
-		}
 		return nil, err
 	}
-	if err := csr.CheckSignature(); err != nil {
+	if err := uapolicy.CheckCertificateRequestSignature(csr); err != nil {
 		return nil, err
 	}
 	return csr, nil
@@ -116,8 +118,9 @@ func parseCSR(der []byte) (*x509.CertificateRequest, error) {
 
 // startSigningRequest is StartSigningRequest (Part 12 §7.9.4): the
 // CertificateAuthorityAdmin role or the application itself, over an
-// encrypted channel. The request must carry the ApplicationUri of the
-// application and a key of the certificate type.
+// encrypted channel. The request must have a key of the certificate type
+// and carry the ApplicationUri of the application (an HTTPS certificate
+// request may have no URI).
 func (g *GDS) startSigningRequest(ctx context.Context, c *caller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if sc := c.channelCheck(true); sc != ua.StatusOK {
 		return nil, sc
@@ -131,37 +134,32 @@ func (g *GDS) startSigningRequest(ctx context.Context, c *caller, args []*ua.Var
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	gr, ct, sc := g.target(c, group, typ)
+	if sc != ua.StatusOK {
+		return nil, sc
+	}
 	app, sc := g.authorizeAppLocked(c, g.guidOf(appID), g.isCAAdmin(c))
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	if !g.groupOK(group) {
-		return nil, ua.StatusBadInvalidArgument
-	}
-	ct, sc := g.certType(typ)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
 	csr, err := parseCSR(der)
-	switch {
-	case errors.Is(err, errUnsupportedCSR):
-		return nil, ua.StatusBadNotSupported
-	case err != nil:
+	if err != nil {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	if !ct.accepts(csr.PublicKey) {
+	if !ct.accepts(csr.PublicKey) || g.cas[ct.issuerFor(csr.PublicKey)] == nil {
 		return nil, ua.StatusBadInvalidArgument
 	}
 	uris := make([]string, len(csr.URIs))
 	for i, u := range csr.URIs {
 		uris[i] = u.String()
 	}
-	if !slices.Contains(uris, app.Record.ApplicationURI) {
+	if !slices.Contains(uris, app.Record.ApplicationURI) && (gr.key != GroupHTTPS || len(uris) > 0) {
 		return nil, ua.StatusBadCertificateURIInvalid
 	}
 	return g.addRequestLocked(ctx, &Request{
 		ApplicationID:      app.ID,
 		CertificateType:    ct.id,
+		CertificateGroup:   gr.key,
 		CertificateRequest: slices.Clone(der),
 	})
 }
@@ -169,7 +167,9 @@ func (g *GDS) startSigningRequest(ctx context.Context, c *caller, args []*ua.Var
 // startNewKeyPairRequest is StartNewKeyPairRequest (Part 12 §7.9.5): the
 // CertificateAuthorityAdmin role or the application itself, over an
 // encrypted channel. The application itself may only ask for the host
-// names of its discovery URLs; the private key format must be PEM.
+// names of its discovery URLs. The private key format is PEM (PKCS #8,
+// encrypted with the password if one is given) or PFX (PKCS #12 with the
+// certificate and its issuer, protected with the password).
 func (g *GDS) startNewKeyPairRequest(ctx context.Context, c *caller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if sc := c.channelCheck(true); sc != ua.StatusOK {
 		return nil, sc
@@ -186,22 +186,21 @@ func (g *GDS) startNewKeyPairRequest(ctx context.Context, c *caller, args []*ua.
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	gr, ct, sc := g.target(c, group, typ)
+	if sc != ua.StatusOK {
+		return nil, sc
+	}
 	admin := g.isCAAdmin(c)
 	app, sc := g.authorizeAppLocked(c, g.guidOf(appID), admin)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	if !g.groupOK(group) {
-		return nil, ua.StatusBadInvalidArgument
-	}
-	ct, sc := g.certType(typ)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	if format == "" {
+	switch {
+	case format == "" || strings.EqualFold(format, gds.PrivateKeyFormatPEM):
 		format = gds.PrivateKeyFormatPEM
-	}
-	if !strings.EqualFold(format, gds.PrivateKeyFormatPEM) {
+	case strings.EqualFold(format, gds.PrivateKeyFormatPFX):
+		format = gds.PrivateKeyFormatPFX
+	default:
 		return nil, ua.StatusBadInvalidArgument
 	}
 	if !validString(subject) || !validString(password) {
@@ -228,9 +227,10 @@ func (g *GDS) startNewKeyPairRequest(ctx context.Context, c *caller, args []*ua.
 	return g.addRequestLocked(ctx, &Request{
 		ApplicationID:      app.ID,
 		CertificateType:    ct.id,
+		CertificateGroup:   gr.key,
 		SubjectName:        subject,
 		DomainNames:        slices.Clone(domains),
-		PrivateKeyFormat:   gds.PrivateKeyFormatPEM,
+		PrivateKeyFormat:   format,
 		PrivateKeyPassword: password,
 	})
 }
@@ -260,6 +260,10 @@ func (g *GDS) finishRequest(ctx context.Context, c *caller, args []*ua.Variant) 
 	}
 	g.pruneRequestsLocked(ctx)
 	req := g.reqs[rid]
+	if req != nil && req.ApplicationID == app.ID {
+		c.auditGroup = g.node(g.groupByKey(req.CertificateGroup).node)
+		c.auditType = ua.NewNumericNodeID(0, req.CertificateType)
+	}
 	switch {
 	case req == nil || req.ApplicationID != app.ID:
 		sc = ua.StatusBadInvalidArgument
@@ -273,13 +277,13 @@ func (g *GDS) finishRequest(ctx context.Context, c *caller, args []*ua.Variant) 
 		return nil, sc
 	}
 	req = cloneRequest(req)
-	issuer := g.cas[certTypes[req.CertificateType].issuer]
 	rec := cloneRecord(app.Record)
 	g.issuing[rid] = true
 	g.mu.Unlock()
 
-	// Key generation and signing happen without the lock.
-	certDER, keyPEM, sc := g.issue(issuer, rec, req)
+	// Key generation and signing happen without the lock (g.cas does not
+	// change after Attach, nor do the certificate and key of a CA).
+	certDER, keyPEM, issuer, sc := g.issue(rec, req)
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -293,7 +297,8 @@ func (g *GDS) finishRequest(ctx context.Context, c *caller, args []*ua.Variant) 
 		return nil, ua.StatusBadInvalidArgument
 	}
 	app = cloneApplication(app)
-	app.Certificates = append(app.Certificates, &IssuedCertificate{CertificateType: req.CertificateType, Certificate: certDER})
+	app.Certificates = append(app.Certificates, &IssuedCertificate{CertificateType: req.CertificateType, Certificate: certDER,
+		CertificateGroup: req.CertificateGroup})
 	if sc := g.putApplicationLocked(ctx, app, nil); sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -306,13 +311,26 @@ func (g *GDS) finishRequest(ctx context.Context, c *caller, args []*ua.Variant) 
 	return []*ua.Variant{
 		ua.MustVariant(certDER),
 		ua.MustVariant(keyPEM),
-		ua.MustVariant([][]byte{slices.Clone(issuer.rec.Certificate)}),
+		ua.MustVariant([][]byte{slices.Clone(issuer.cert.Raw)}),
 	}, ua.StatusOK
 }
 
+// newKey makes the key of a new key pair request: of the certificate type,
+// for an HTTPS certificate RSA, or ECDSA on P-256 or P-384 when the GDS has
+// no RSA CA.
+func (g *GDS) newKey(ct *certType) (crypto.Signer, error) {
+	if ct.issuer == "" && g.cas["RSA"] == nil {
+		if g.cas["NistP256"] != nil {
+			return genECDSA(elliptic.P256())(0)
+		}
+		return genECDSA(elliptic.P384())(0)
+	}
+	return ct.generate(g.cfg.RSAKeySize)
+}
+
 // issue makes the certificate (and for a new key pair request the private
-// key, encoded) of an approved request.
-func (g *GDS) issue(issuer *ca, rec *gds.ApplicationRecord, req *Request) (certDER, keyPEM []byte, sc ua.StatusCode) {
+// key, encoded) of an approved request, and returns the CA that signed it.
+func (g *GDS) issue(rec *gds.ApplicationRecord, req *Request) (certDER, keyData []byte, issuer *ca, sc ua.StatusCode) {
 	ct := certTypes[req.CertificateType]
 	now := g.now()
 	l := &leaf{uri: rec.ApplicationURI, notBefore: now.Add(-clockSkew), notAfter: now.Add(g.cfg.CertificateLifetime)}
@@ -325,15 +343,15 @@ func (g *GDS) issue(issuer *ca, rec *gds.ApplicationRecord, req *Request) (certD
 	if len(req.CertificateRequest) > 0 {
 		csr, err := parseCSR(req.CertificateRequest)
 		if err != nil {
-			return nil, nil, ua.StatusBadInvalidArgument
+			return nil, nil, nil, ua.StatusBadInvalidArgument
 		}
 		l.pub = csr.PublicKey
 		l.subject = csr.Subject
 	} else {
 		var err error
-		if key, err = ct.generate(g.cfg.RSAKeySize); err != nil {
+		if key, err = g.newKey(ct); err != nil {
 			g.log.Warn("gds: key generation failed", "error", err)
-			return nil, nil, ua.StatusBadInternalError
+			return nil, nil, nil, ua.StatusBadInternalError
 		}
 		l.pub = key.Public()
 		l.subject, _ = parseSubjectName(req.SubjectName)
@@ -351,18 +369,29 @@ func (g *GDS) issue(issuer *ca, rec *gds.ApplicationRecord, req *Request) (certD
 	if len(l.subject.Names) == 0 && l.subject.CommonName == "" && len(l.subject.Organization) == 0 {
 		l.subject = pkix.Name{CommonName: name}
 	}
+	issuer = g.cas[ct.issuerFor(l.pub)]
+	if issuer == nil {
+		// The CA of an HTTPS key the GDS does not have (checked by
+		// StartSigningRequest).
+		return nil, nil, nil, ua.StatusBadInvalidArgument
+	}
 	certDER, err := issuer.issue(l)
 	if err != nil {
 		g.log.Warn("gds: signing the certificate failed", "error", err)
-		return nil, nil, ua.StatusBadInternalError
+		return nil, nil, nil, ua.StatusBadInternalError
 	}
 	if key != nil {
-		if keyPEM, err = gds.EncodePrivateKey(req.PrivateKeyFormat, key, req.PrivateKeyPassword); err != nil {
+		if req.PrivateKeyFormat == gds.PrivateKeyFormatPFX {
+			keyData, err = uapolicy.EncodePFX(key, [][]byte{certDER, issuer.cert.Raw}, req.PrivateKeyPassword)
+		} else {
+			keyData, err = gds.EncodePrivateKey(gds.PrivateKeyFormatPEM, key, req.PrivateKeyPassword)
+		}
+		if err != nil {
 			g.log.Warn("gds: encoding the private key failed", "error", err)
-			return nil, nil, ua.StatusBadInternalError
+			return nil, nil, nil, ua.StatusBadInternalError
 		}
 	}
-	return certDER, keyPEM, ua.StatusOK
+	return certDER, keyData, issuer, ua.StatusOK
 }
 
 // revokeLocked revokes an issued certificate: its CA lists it in a new CRL.
@@ -393,9 +422,7 @@ func (g *GDS) revokeLocked(ctx context.Context, ic *IssuedCertificate) ua.Status
 			return ua.StatusBadInternalError
 		}
 		c.revoked[serialKey(cert.SerialNumber)] = true
-		if g.trust != nil {
-			g.trust.Changed()
-		}
+		g.trustChanged()
 		return ua.StatusOK
 	}
 	// A CA the GDS no longer has: nothing to revoke with.
@@ -442,7 +469,8 @@ func (g *GDS) revokeCertificate(ctx context.Context, c *caller, args []*ua.Varia
 	return nil, ua.StatusOK
 }
 
-// getCertificateGroups is GetCertificateGroups (Part 12 §7.9.10).
+// getCertificateGroups is GetCertificateGroups (Part 12 §7.9.10): the
+// groups of the application (see groupsOf).
 func (g *GDS) getCertificateGroups(_ context.Context, c *caller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	appID, ok := argNodeID(args, 0)
 	if !ok {
@@ -450,18 +478,23 @@ func (g *GDS) getCertificateGroups(_ context.Context, c *caller, args []*ua.Vari
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if _, sc := g.authorizeAppLocked(c, g.guidOf(appID), g.isCAAdmin(c)); sc != ua.StatusOK {
+	app, sc := g.authorizeAppLocked(c, g.guidOf(appID), g.isCAAdmin(c))
+	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{ua.MustVariant([]*ua.NodeID{g.DefaultApplicationGroup()})}, ua.StatusOK
+	var ids []*ua.NodeID
+	for _, gr := range g.groupsOf(app) {
+		ids = append(ids, g.node(gr.node))
+	}
+	return []*ua.Variant{ua.MustVariant(ids)}, ua.StatusOK
 }
 
-// validIssuedLocked returns the certificates of the application that are
-// not revoked, with their types.
-func (g *GDS) validIssuedLocked(app *Application) []*IssuedCertificate {
+// validIssuedLocked returns the certificates of a group of the application
+// that are not revoked.
+func (g *GDS) validIssuedLocked(app *Application, gr *group) []*IssuedCertificate {
 	var out []*IssuedCertificate
 	for _, ic := range app.Certificates {
-		if ic.Revoked {
+		if ic.Revoked || ic.CertificateGroup != gr.key {
 			continue
 		}
 		cert, err := uapolicy.ParseCertificate(ic.Certificate)
@@ -476,7 +509,7 @@ func (g *GDS) validIssuedLocked(app *Application) []*IssuedCertificate {
 }
 
 // getCertificates is GetCertificates (Part 12 §7.9.11): the certificates
-// the GDS issued to the application and did not revoke.
+// of the group the GDS issued to the application and did not revoke.
 func (g *GDS) getCertificates(_ context.Context, c *caller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	appID, ok1 := argNodeID(args, 0)
 	group, ok2 := argNodeID(args, 1)
@@ -489,12 +522,13 @@ func (g *GDS) getCertificates(_ context.Context, c *caller, args []*ua.Variant) 
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	if !g.groupOK(group) {
+	gr := g.groupOf(group)
+	if gr == nil {
 		return nil, ua.StatusBadInvalidArgument
 	}
 	types := []*ua.NodeID{}
 	certs := [][]byte{}
-	for _, ic := range g.validIssuedLocked(app) {
+	for _, ic := range g.validIssuedLocked(app, gr) {
 		types = append(types, ua.NewNumericNodeID(0, ic.CertificateType))
 		certs = append(certs, slices.Clone(ic.Certificate))
 	}
@@ -514,10 +548,11 @@ func (g *GDS) getTrustList(_ context.Context, c *caller, args []*ua.Variant) ([]
 	if _, sc := g.authorizeAppLocked(c, g.guidOf(appID), g.isCAAdmin(c)); sc != ua.StatusOK {
 		return nil, sc
 	}
-	if !g.groupOK(group) {
+	gr := g.groupOf(group)
+	if gr == nil {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	return []*ua.Variant{ua.MustVariant(g.node(gdsid.DirectoryCertificateGroupsDefaultApplicationGroupTrustList))}, ua.StatusOK
+	return []*ua.Variant{ua.MustVariant(g.node(gr.trustNode))}, ua.StatusOK
 }
 
 // getCertificateStatus is GetCertificateStatus (Part 12 §7.9.13): true
@@ -537,18 +572,19 @@ func (g *GDS) getCertificateStatus(_ context.Context, c *caller, args []*ua.Vari
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	if !g.groupOK(group) {
+	gr := g.groupOf(group)
+	if gr == nil {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	types := g.types
+	types := gr.types
 	if !isNull(typ) {
-		ct, sc := g.certType(typ)
+		ct, sc := g.certType(gr, typ)
 		if sc != ua.StatusOK {
 			return nil, sc
 		}
 		types = []uint32{ct.id}
 	}
-	valid := g.validIssuedLocked(app)
+	valid := g.validIssuedLocked(app, gr)
 	now := g.now()
 	update := false
 	for _, t := range types {
@@ -559,7 +595,7 @@ func (g *GDS) getCertificateStatus(_ context.Context, c *caller, args []*ua.Vari
 			}
 			cert, _ := uapolicy.ParseCertificate(ic.Certificate)
 			renewAt := cert.NotBefore.Add(cert.NotAfter.Sub(cert.NotBefore) * 2 / 3)
-			if now.Before(renewAt) && g.cas[certTypes[t].issuer].issues(cert) {
+			if ca := g.cas[certTypes[t].issuerFor(cert.PublicKey)]; now.Before(renewAt) && ca != nil && ca.issues(cert) {
 				fresh = true
 			}
 		}
@@ -617,10 +653,11 @@ type PendingRequest struct {
 	// ID is the GUID of the RequestId.
 	ID string
 	// ApplicationURI is the URI of the application that made it.
-	ApplicationURI  string
-	CertificateType *ua.NodeID
-	State           RequestState
-	Created         time.Time
+	ApplicationURI   string
+	CertificateGroup *ua.NodeID
+	CertificateType  *ua.NodeID
+	State            RequestState
+	Created          time.Time
 	// NewKeyPair tells a StartNewKeyPairRequest from a
 	// StartSigningRequest.
 	NewKeyPair bool
@@ -633,11 +670,12 @@ func (g *GDS) Requests() []*PendingRequest {
 	out := make([]*PendingRequest, 0, len(g.reqs))
 	for _, r := range g.reqs {
 		p := &PendingRequest{
-			ID:              r.ID,
-			CertificateType: ua.NewNumericNodeID(0, r.CertificateType),
-			State:           r.State,
-			Created:         r.Created,
-			NewKeyPair:      len(r.CertificateRequest) == 0,
+			ID:               r.ID,
+			CertificateGroup: g.node(g.groupByKey(r.CertificateGroup).node),
+			CertificateType:  ua.NewNumericNodeID(0, r.CertificateType),
+			State:            r.State,
+			Created:          r.Created,
+			NewKeyPair:       len(r.CertificateRequest) == 0,
 		}
 		if a := g.apps[r.ApplicationID]; a != nil {
 			p.ApplicationURI = a.Record.ApplicationURI
