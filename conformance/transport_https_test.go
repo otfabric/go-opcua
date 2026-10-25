@@ -137,7 +137,7 @@ func post(t *testing.T, endpoint, method, contentType, policy string, body []byt
 	}
 	resp, err := uasc.NewHTTPSClient(testutil.TLS(t).ClientConfig()).Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	return resp, b

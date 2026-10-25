@@ -301,7 +301,7 @@ func (s *SecureChannel) postHTTPS(ctx context.Context, reqID uint32, body []byte
 	if err != nil {
 		return nil, s.httpsError(ctx, &expired, err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	b, err := io.ReadAll(io.LimitReader(resp.Body, MaxHTTPSMessageSize+1))
 	if err != nil {

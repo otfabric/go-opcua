@@ -52,10 +52,10 @@ func TestWebSocketDialAndExchange(t *testing.T) {
 	d := &Dialer{TLSConfig: tlsPKI(t).ClientConfig()}
 	c, err := d.Dial(ctx, url)
 	require.NoError(t, err)
-	defer c.Close()
+	defer func() { _ = c.Close() }()
 	s := <-accepted
 	require.NotNil(t, s)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 
 	require.Nil(t, c.TCPConn, "a WebSocket connection has no TCP connection of its own")
 	require.NotNil(t, c.LocalAddr())
@@ -121,13 +121,13 @@ func TestWebSocketDialFailures(t *testing.T) {
 		// A TLS server that answers the upgrade with 404.
 		ln, err := tls.Listen("tcp", "127.0.0.1:0", tlsPKI(t).ServerConfig())
 		require.NoError(t, err)
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		go func() {
 			c, err := ln.Accept()
 			if err != nil {
 				return
 			}
-			defer c.Close()
+			defer func() { _ = c.Close() }()
 			if _, err := http.ReadRequest(bufio.NewReader(c)); err == nil {
 				_, _ = io.WriteString(c, "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
 			}
@@ -139,11 +139,11 @@ func TestWebSocketDialFailures(t *testing.T) {
 		// A TCP server that never answers the TLS handshake.
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
-		defer ln.Close()
+		defer func() { _ = ln.Close() }()
 		go func() {
 			c, err := ln.Accept()
 			if err == nil {
-				defer c.Close()
+				defer func() { _ = c.Close() }()
 				_, _ = io.Copy(io.Discard, c)
 			}
 		}()
