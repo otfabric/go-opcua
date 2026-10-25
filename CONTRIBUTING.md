@@ -5,11 +5,12 @@ Thank you for your interest in contributing. This document explains how to get s
 ## Development setup
 
 - **Go**: 1.26 or later.
-- **Python**: 3.11+ (optional, for integration tests against the Python client).
+- **Python**: 3.11+ (optional, for the integration tests against the FreeOpcUa Python server; `make install-py-opcua`).
+- **Docker**: optional, for the interop tests.
 
 ```sh
 git clone https://github.com/otfabric/go-opcua.git
-cd opcua
+cd go-opcua
 go mod download
 ```
 
@@ -17,13 +18,15 @@ go mod download
 
 - **Unit and API tests**: `make test` (runs tests with race detector).
 - **Coverage**: `make coverage` to generate `coverage.out`; `make cover` to view the report in the browser.
-- **Integration tests** (tag-gated; require a running server or Python client):
-  - `make integration` — Python client vs Go server.
+- **Integration tests** (tag-gated):
+  - `make integration` — Go client vs FreeOpcUa Python server.
   - `make selfintegration` — Go client vs in-process server.
 
 - **Chaos and parallelism tests**: the packages under `chaos/` run with `make test` (short fault-injection phase) and, for longer, with `make chaos` (`CHAOS_DURATION=10m CHAOS_SEED=42 make chaos`). A failing randomized scenario prints its seed and the command to replay it. They are bug-finding tests: when one fails, fix the product and pin the defect with a small deterministic regression test; do not loosen the invariant. See `chaos/doc.go`.
 
-By default, `go test ./...` does not run integration tests; use the targets above.
+- **Interop tests** (tag-gated, need Docker): `make interop` runs `go test -tags=interop ./interop/...` against the opcua-interop adapter images of the six peer stacks; see [INTEROP.md](INTEROP.md). A new capability needs an entry in `interop/capabilities.json`, rows in `interop/coverage.json` and in every `interop/testdata/ledger-*.json`, then `go generate ./interop/` to regenerate `interop/COVERAGE.md` and `interop/GAPS.md` (never edit those by hand). `go test ./interop/` checks the ledgers without Docker.
+
+By default, `go test ./...` does not run integration or interop tests; use the targets above.
 
 CI runs `go test -race -timeout=120s` per package on a small runner. Keep every test package well below that (about 40 s locally with `-race`): put a new group of slow tests into a package of its own rather than growing `conformance/` or `chaos/`.
 
