@@ -9258,14 +9258,16 @@
       "capability": "certmgmt.push.trust-list",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.trust-list/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.certificate-update",
@@ -9308,14 +9310,16 @@
       "capability": "certmgmt.push.certificate-update",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.certificate-update/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.rejected-list",
@@ -9504,14 +9508,16 @@
       "capability": "certmgmt.push.create-self-signed",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.create-self-signed/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.delete-certificate",
@@ -9555,14 +9561,16 @@
       "capability": "certmgmt.push.delete-certificate",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.delete-certificate/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.reset-to-defaults",
@@ -9654,14 +9662,16 @@
       "capability": "certmgmt.push.https-group",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.https-group/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.usertoken-group",
@@ -9704,14 +9714,16 @@
       "capability": "certmgmt.push.usertoken-group",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.usertoken-group/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.pfx",
@@ -9755,14 +9767,16 @@
       "capability": "certmgmt.push.pfx",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.pfx/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.transaction-diagnostics",
@@ -9806,14 +9820,16 @@
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_MiloClient_GoServer",
+      "case": "coverage/certmgmt.push.transaction-diagnostics/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.alarms",
@@ -9905,14 +9921,16 @@
       "capability": "gds.pull.directory",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_MiloClient_GoServer",
+      "case": "coverage/gds.pull.directory/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "gds.pull.certificate-request",
@@ -9955,14 +9973,16 @@
       "capability": "gds.pull.certificate-request",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_MiloClient_GoServer",
+      "case": "coverage/gds.pull.certificate-request/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "gds.pull.trust-list",
@@ -10005,14 +10025,16 @@
       "capability": "gds.pull.trust-list",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_MiloClient_GoServer",
+      "case": "coverage/gds.pull.trust-list/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "gds.pull.revocation",
@@ -10055,14 +10077,16 @@
       "capability": "gds.pull.revocation",
       "direction": "milo-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_MiloClient_GoServer",
+      "case": "coverage/gds.pull.revocation/milo-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/milo-push image; promote when v0.15.0 is pinned"
     }
   ],
   "interopVersion": "v0.14.0"
