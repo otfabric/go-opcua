@@ -1,5 +1,34 @@
 # go-opcua Releases
 
+## v1.16.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.15.0
+
+### Summary
+
+Certificate management by the Part 12 push model (§7), on the server and in a new `gds` client package.
+
+### Added
+
+- **server: `WithPushManagement`.** ServerConfiguration (i=12637) with the DefaultApplicationGroup TrustList (Open, OpenWithMasks, Read, Write, Close, CloseAndUpdate, AddCertificate, RemoveCertificate, LastUpdateTime, UpdateFrequency), CertificateTypes, UpdateCertificate, CreateSigningRequest (RSA and ECC), GetRejectedList, and ApplyChanges / CancelChanges: changes are a transaction of the calling session that ApplyChanges applies. New channels and sessions are validated against the trust list (issuers, CRLs, size limits); after ApplyChanges new channels use the new application instance certificate and open ones keep theirs. Only SecurityAdmin over SignAndEncrypt may call the methods. An optional `CertificateStore` persists the trust list and the certificate.
+- **`gds` package:** a push client for the trust list, signing requests, certificate updates, the rejected list and ApplyChanges / CancelChanges.
+
+### Not implemented
+
+- The pull model (a GDS that issues certificates), GetCertificates, CreateSelfSignedCertificate, ResetToServerDefaults, the HTTPS and UserToken certificate groups, certificate expiration alarms, TransactionDiagnostics, PFX private keys, signing requests for Brainpool and Ed448 keys, CRLs of Brainpool or Ed448 CAs.
+
+### Tests
+
+- Unit, fuzz, e2e, conformance and chaos tests (invariants of concurrent trust list and certificate changes).
+- Interop: the Go client against the open62541, UA-.NETStandard and node-opcua servers, and the node-opcua push client against the Go server (opcua-interop v0.13.0); ledger capabilities `certmgmt.push.*`.
+
+### Interop
+
+- Pinned opcua-interop v0.13.0.
+
+---
+
 ## v1.15.0
 
 **Date:** 2026-10-25
