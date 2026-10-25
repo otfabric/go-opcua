@@ -2052,6 +2052,10 @@ type ConditionConfig struct {
     Branching          bool // keep an unacknowledged / unconfirmed occurrence as a branch
     Dialog             *DialogConfig // DialogConditionType: Prompt, ResponseOptionSet, ...
     SuppressionGroups  []*ua.NodeID  // AlarmSuppressionGroups (HasAlarmSuppressionGroup)
+    AudibleSound       *AudibleSound // AudibleEnabled + AudibleSound (AudioVariableType)
+    OnDelay, OffDelay  time.Duration // delay an activation / a return to normal
+    ReAlarmTime        time.Duration // re-annunciate while active; ReAlarmRepeatCount
+    FirstInGroup       *ua.NodeID    // an AlarmGroup: FirstInGroupFlag + FirstInGroup
     MaxTimeShelved     time.Duration
     InputNode          *ua.NodeID
     NormalState        *ua.NodeID // OffNormalAlarmType
@@ -2077,6 +2081,47 @@ type DialogConfig struct {
     DefaultResponse, OkResponse, CancelResponse     *int32
     Active                                          bool
 }
+
+type AudibleSound struct {
+    Sound                       []byte // the AudioDataType value
+    ListID, AgencyID, VersionID string // optional AudioVariableType Properties
+}
+
+// ConditionState (snapshot) adds AudibleEnabled, ReAlarmRepeatCount,
+// FirstInGroup and PendingActive / PendingInactive (an OnDelay / OffDelay
+// runs); ConditionUpdate adds AudibleEnabled *bool.
+
+// The alarm timers (shelving, OnDelay / OffDelay, ReAlarmTime) and the
+// metrics run on the alarm clock; the default is the system clock.
+type Clock interface {
+    Now() time.Time
+    AfterFunc(d time.Duration, f func()) (stop func() bool)
+}
+func WithAlarmClock(c Clock) Option
+
+// AlarmMetricsType (Part 9 1.05 §8.5): counts the activations of every
+// alarm, or of the members of Group
+type AlarmMetricsConfig struct {
+    NodeID      *ua.NodeID
+    Namespace   *NodeNameSpace
+    Name        string     // default "AlarmMetrics"
+    Parent      *ua.NodeID // default the Server object (HasComponent)
+    Group       *ua.NodeID // an AlarmGroup; nil: every alarm
+    RateMinutes uint16     // the period of the alarm rates; default 1
+}
+type AlarmMetricsValues struct {
+    AlarmCount                                           uint32
+    StartTime                                            time.Time
+    MaximumActiveState, MaximumUnAck                     time.Duration
+    MaximumReAlarmCount                                  uint32
+    CurrentAlarmRate, MaximumAlarmRate, AverageAlarmRate float64
+}
+func (s *Server) AddAlarmMetrics(cfg AlarmMetricsConfig) (*AlarmMetrics, error)
+func (s *Server) AlarmMetrics(id *ua.NodeID) (*AlarmMetrics, bool)
+func (s *Server) RemoveAlarmMetrics(id *ua.NodeID) error
+func (m *AlarmMetrics) NodeID() *ua.NodeID
+func (m *AlarmMetrics) Values() AlarmMetricsValues
+func (m *AlarmMetrics) Reset() // also the Reset method (audited)
 
 func (c *Condition) ShowDialog(prompt string) error
 func (c *Condition) CloseDialog() error
@@ -2144,8 +2189,7 @@ var ErrConditionRemoved, ErrConditionNotAlarm, ErrConditionUnsupport error
 
 Event fields resolve by "/"-joined BrowsePath (`AckedState/Id`); a select
 clause with an empty BrowsePath and AttributeId NodeId returns the
-ConditionId. Not implemented: AudibleSound, OnDelay / OffDelay, ReAlarmTime,
-FirstInGroup and the AlarmMetrics of Part 9 v1.05.
+ConditionId.
 
 Client side (package `opcua`):
 
@@ -2188,6 +2232,19 @@ func (c *Client) Unshelve2(ctx context.Context, conditionID *ua.NodeID, comment 
 func (c *Client) Respond(ctx context.Context, conditionID *ua.NodeID, selectedResponse int32) error
 func (c *Client) Respond2(ctx context.Context, conditionID *ua.NodeID, selectedResponse int32, comment string) error
 func (c *Client) GetGroupMemberships(ctx context.Context, conditionID *ua.NodeID) ([]*ua.NodeID, error)
+
+// ConditionEvent adds AudibleEnabled *bool, ReAlarmRepeatCount *int16 and
+// FirstInGroup *bool (FirstInGroupFlag)
+type AlarmMetrics struct {
+    AlarmCount                                           uint32
+    StartTime                                            time.Time
+    MaximumActiveState, MaximumUnAck                     time.Duration
+    MaximumReAlarmCount                                  uint32
+    CurrentAlarmRate, MaximumAlarmRate, AverageAlarmRate float64
+    RateMinutes                                          uint16
+}
+func (c *Client) ReadAlarmMetrics(ctx context.Context, metricsID *ua.NodeID) (*AlarmMetrics, error)
+func (c *Client) ResetAlarmMetrics(ctx context.Context, metricsID *ua.NodeID) error
 
 // audit events
 func NewAuditConditionEventFilter() *ua.EventFilter

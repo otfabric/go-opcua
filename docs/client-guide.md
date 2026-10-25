@@ -869,6 +869,7 @@ for msg := range ch {
 | `Suppress`, `Unsuppress`, `RemoveFromService`, `PlaceInService`, `Silence`, `Reset`; `Suppress2`, `Unsuppress2`, `RemoveFromService2`, `PlaceInService2`, `Reset2` (with a comment) | §5.8 |
 | `Respond` (selectedResponse), `Respond2` (selectedResponse, comment) of a dialog | §5.6.3, §5.6.4 |
 | `GetGroupMemberships` (the alarm groups of an alarm) | §5.8 |
+| `ReadAlarmMetrics`, `ResetAlarmMetrics` (an AlarmMetricsType object) | §8.5 |
 | `ConditionRefresh`, `ConditionRefresh2` (Client: server ids; Subscription: its own ids) | §5.5.7, §5.5.8 |
 
 A refused call returns its StatusCode as the error (`errors.Is(err,
@@ -885,6 +886,20 @@ LastResponse (`ConditionEvent.Suppressed`, `OutOfService`, `Silenced`,
 not report them). `ev.IsBranch()` tells the event of a condition branch: a
 previous occurrence the server keeps until it is acknowledged or confirmed.
 Acknowledge and Confirm it with its own EventId like the condition.
+It also selects AudibleEnabled, ReAlarmRepeatCount and FirstInGroupFlag
+(`ConditionEvent.AudibleEnabled`, `ReAlarmRepeatCount`, `FirstInGroup`).
+`ParseConditionEvent` still reads the shorter field lists of earlier filters.
+
+`ReadAlarmMetrics` reads the counters of an AlarmMetricsType object (one
+TranslateBrowsePathsToNodeIDs and one Read) and `ResetAlarmMetrics` calls its
+Reset method:
+
+```go
+m, err := c.ReadAlarmMetrics(ctx, metricsID)
+if err == nil {
+    log.Printf("%d alarms since %v, %.1f per %d min", m.AlarmCount, m.StartTime, m.CurrentAlarmRate, m.RateMinutes)
+}
+```
 
 Audit events: `NewAuditConditionEventFilter` selects the AuditConditionEventType
 events (who called which condition method, with which arguments and result)

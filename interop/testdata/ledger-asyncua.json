@@ -1291,6 +1291,66 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.alarm-timing",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-timing",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-timing/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no AudibleEnabled / AudibleSound (AudioVariableType); revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105Timing",
+      "case": "coverage/alarms.audible-sound/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no FirstInGroupFlag / FirstInGroup; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105Timing",
+      "case": "coverage/alarms.first-in-group/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 has no condition method handlers, so the asyncua adapter builds no alarm fixture (no serverFeatures \"alarms\") and has no an AlarmMetricsType object with its counters and Reset; revisit when a pinned asyncua release serves them",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "asyncua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-metrics/asyncua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-asyncua-server",
       "status": "deferred",

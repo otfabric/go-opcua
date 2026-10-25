@@ -35,3 +35,13 @@ func TestGoServer_NodeOpcuaClient_Alarms105(t *testing.T) {
 	t.Run("coverage/alarms.alarm-groups/node-opcua-client-to-go-server", p.assertGroups)
 	t.Run("coverage/alarms.audit-events/node-opcua-client-to-go-server", p.assertAudit)
 }
+
+func TestGoServer_NodeOpcuaClient_Alarms105Timing(t *testing.T) {
+	requireAdapterOp(t, nodeOpcuaEnv, defaultNodeOpcuaImage, "read")
+	requireAdapterOp(t, nodeOpcuaEnv, defaultNodeOpcuaImage, "call")
+	p := startAlarmTiming(t, runNodeOpcuaClientResult)
+	t.Run("coverage/alarms.alarm-timing/node-opcua-client-to-go-server", p.assertTiming)
+	t.Run("coverage/alarms.audible-sound/node-opcua-client-to-go-server", p.assertAudible)
+	t.Run("coverage/alarms.first-in-group/node-opcua-client-to-go-server", p.assertFirstInGroup)
+	t.Run("coverage/alarms.alarm-metrics/node-opcua-client-to-go-server", p.assertMetrics)
+}

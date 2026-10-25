@@ -1372,6 +1372,70 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.alarm-timing",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount; establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-timing",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-timing/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AudibleEnabled / AudibleSound (AudioVariableType); establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Alarms105Timing",
+      "case": "coverage/alarms.audible-sound/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without FirstInGroupFlag / FirstInGroup; establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Alarms105Timing",
+      "case": "coverage/alarms.first-in-group/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without an AlarmMetricsType object with its counters and Reset; establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "dotnet-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-metrics/dotnet-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-dotnet-server",
       "status": "deferred",

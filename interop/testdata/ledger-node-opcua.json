@@ -1381,6 +1381,70 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.alarm-timing",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-timing",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-timing/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AudibleEnabled / AudibleSound (AudioVariableType); node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.audible-sound",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.audible-sound/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without FirstInGroupFlag / FirstInGroup; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.first-in-group",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.first-in-group/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without an AlarmMetricsType object with its counters and Reset; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.alarm-metrics",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms105Timing",
+      "case": "coverage/alarms.alarm-metrics/node-opcua-client-to-go-server",
+      "fixture": "baseline"
+    },
+    {
       "capability": "nodeset2.import",
       "direction": "go-client-to-node-opcua-server",
       "status": "deferred",
