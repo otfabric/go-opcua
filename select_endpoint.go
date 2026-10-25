@@ -34,10 +34,57 @@ import (
 //
 // certificate is the DER encoded application instance certificate of the
 // client, as given to the Certificate option.
+//
+// A server with opc.wss or opc.https endpoints next to opc.tcp ones returns
+// all of them when the URL of the GetEndpoints request matches none exactly.
+// SelectEndpoint then keeps to the opc.tcp endpoints, the transport of a
+// client that has not asked for another one; with no opc.tcp endpoint in the
+// list, every transport is considered. SelectEndpointForTransport selects
+// among the endpoints of one transport.
 func SelectEndpoint(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error) {
 	if len(endpoints) == 0 {
 		return nil, errors.ErrNoEndpoints
 	}
+	if tcp := endpointsOfTransport(endpoints, ua.TransportProfileUATCP); len(tcp) > 0 {
+		endpoints = tcp
+	}
+	return selectEndpoint(endpoints, policy, mode, certificate)
+}
+
+// SelectEndpointForTransport is SelectEndpoint for the endpoints with the
+// transport profile transportProfileURI, such as ua.TransportProfileWSS or
+// ua.TransportProfileHTTPS. An endpoint without a TransportProfileUri counts
+// as opc.tcp.
+func SelectEndpointForTransport(endpoints []*ua.EndpointDescription, transportProfileURI, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error) {
+	if len(endpoints) == 0 {
+		return nil, errors.ErrNoEndpoints
+	}
+	matching := endpointsOfTransport(endpoints, transportProfileURI)
+	if len(matching) == 0 {
+		return nil, fmt.Errorf("%w: no endpoint with transport profile %s", errors.ErrNoMatchingEndpoint, transportProfileURI)
+	}
+	return selectEndpoint(matching, policy, mode, certificate)
+}
+
+// endpointsOfTransport returns the endpoints with transport profile uri.
+func endpointsOfTransport(endpoints []*ua.EndpointDescription, uri string) []*ua.EndpointDescription {
+	var out []*ua.EndpointDescription
+	for _, ep := range endpoints {
+		if ep == nil {
+			continue
+		}
+		profile := ep.TransportProfileURI
+		if profile == "" {
+			profile = ua.TransportProfileUATCP
+		}
+		if profile == uri {
+			out = append(out, ep)
+		}
+	}
+	return out
+}
+
+func selectEndpoint(endpoints []*ua.EndpointDescription, policy string, mode ua.MessageSecurityMode, certificate []byte) (*ua.EndpointDescription, error) {
 
 	supported := make(map[string]bool)
 	for _, uri := range uapolicy.SupportedPolicies() {

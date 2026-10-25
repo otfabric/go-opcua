@@ -5,12 +5,14 @@ package opcua
 import (
 	"crypto"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"math/rand"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -79,6 +81,12 @@ type Config struct {
 	// reverse is set when the client waits for the server to connect
 	// (reverse connect) instead of connecting to it.
 	reverse *reverseConfig
+
+	// tlsConfig is the TLS configuration of opc.wss and opc.https
+	// endpoints, httpClient the HTTP client of opc.https endpoints (nil:
+	// one is made from tlsConfig).
+	tlsConfig  *tls.Config
+	httpClient *http.Client
 }
 
 func DefaultDialer() *uacp.Dialer {
@@ -641,6 +649,31 @@ func RequestTimeout(t time.Duration) Option {
 func Dialer(d *uacp.Dialer) Option {
 	return func(cfg *Config) error {
 		cfg.dialer = d
+		return nil
+	}
+}
+
+// TLSConfig sets the TLS configuration of opc.wss (Part 6 §7.5) and
+// opc.https (Part 6 §7.4) endpoints: RootCAs, the roots the server's TLS
+// certificate is verified against (nil for the system roots), a client TLS
+// certificate for servers that require one, ServerName. The TLS certificates
+// are separate from the application instance certificates, which secure the
+// session as on opc.tcp. TLS 1.2 is the minimum version. A uacp.Dialer
+// given with the Dialer option keeps its own TLSConfig if it has one.
+func TLSConfig(c *tls.Config) Option {
+	return func(cfg *Config) error {
+		cfg.tlsConfig = c
+		return nil
+	}
+}
+
+// HTTPClient sets the HTTP client that posts the requests to an opc.https
+// endpoint, for a proxy or transport of the application's own. Without it
+// the client uses uasc.NewHTTPSClient with the TLSConfig option. It must not
+// time requests out on its own: a Publish request waits on the server.
+func HTTPClient(c *http.Client) Option {
+	return func(cfg *Config) error {
+		cfg.httpClient = c
 		return nil
 	}
 }

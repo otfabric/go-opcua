@@ -87,9 +87,21 @@ func (c *channelInstance) nextSequenceNumber() uint32 {
 }
 
 func (c *channelInstance) newRequestMessage(req ua.Request, reqID uint32, authToken *ua.NodeID, timeout time.Duration) (*Message, error) {
+	typeID, err := c.sc.setRequestHeader(req, reqID, authToken, timeout)
+	if err != nil {
+		return nil, err
+	}
+
+	// encode the message
+	return c.newMessage(req, typeID, reqID), nil
+}
+
+// setRequestHeader gives req the RequestHeader for request reqID and returns
+// the type id of the request.
+func (s *SecureChannel) setRequestHeader(req ua.Request, reqID uint32, authToken *ua.NodeID, timeout time.Duration) (uint16, error) {
 	typeID := ua.ServiceTypeID(req)
 	if typeID == 0 {
-		return nil, fmt.Errorf("%w: %T", errors.ErrUnknownService, req)
+		return 0, fmt.Errorf("%w: %T", errors.ErrUnknownService, req)
 	}
 	if authToken == nil {
 		authToken = ua.NewTwoByteNodeID(0)
@@ -97,7 +109,7 @@ func (c *channelInstance) newRequestMessage(req ua.Request, reqID uint32, authTo
 
 	reqHdr := &ua.RequestHeader{
 		AuthenticationToken: authToken,
-		Timestamp:           c.sc.timeNow(),
+		Timestamp:           s.timeNow(),
 		RequestHandle:       reqID, // client-assigned; reusing reqID for simple correlation
 	}
 
@@ -112,14 +124,12 @@ func (c *channelInstance) newRequestMessage(req ua.Request, reqID uint32, authTo
 		reqHdr.AdditionalHeader = prev.AdditionalHeader
 	}
 
-	if timeout > 0 && timeout < c.sc.cfg.RequestTimeout {
-		timeout = c.sc.cfg.RequestTimeout
+	if timeout > 0 && timeout < s.cfg.RequestTimeout {
+		timeout = s.cfg.RequestTimeout
 	}
 	reqHdr.TimeoutHint = uint32(timeout / time.Millisecond)
 	req.SetHeader(reqHdr)
-
-	// encode the message
-	return c.newMessage(req, typeID, reqID), nil
+	return typeID, nil
 }
 
 func (c *channelInstance) newMessage(srv interface{}, typeID uint16, requestID uint32) *Message {

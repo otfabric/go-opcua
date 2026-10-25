@@ -4,6 +4,7 @@ package uacp
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"log/slog"
@@ -93,16 +94,21 @@ type Dialer struct {
 	// Logger is the logger for connection-level messages.
 	// If nil, logging is disabled.
 	Logger *slog.Logger
+
+	// TLSConfig configures TLS for opc.wss endpoints: the roots the server's
+	// TLS certificate is verified against (RootCAs, nil for the system
+	// roots), a client TLS certificate, ServerName. The TLS certificates are
+	// independent of the application instance certificates (Part 6
+	// §7.5.3). TLS 1.2 is the minimum version. Ignored for opc.tcp.
+	TLSConfig *tls.Config
 }
 
+// Dial connects to endpoint and performs the HEL/ACK handshake. An opc.tcp
+// endpoint is reached over TCP, an opc.wss endpoint over a TLS secured
+// WebSocket with the sub-protocol opcua+uacp (Part 6 §7.5).
 func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 	if d.Logger != nil {
 		d.Logger.Debug("connecting", "endpoint", endpoint)
-	}
-
-	_, raddr, err := ParseEndpoint(endpoint)
-	if err != nil {
-		return nil, err
 	}
 
 	dl := d.Dialer
@@ -110,26 +116,48 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 		dl = defaultNetDialer()
 	}
 
-	c, err := dl.DialContext(ctx, "tcp", raddr.Host)
-	if err != nil {
-		return nil, err
-	}
+	var (
+		conn *Conn
+		err  error
+	)
+	if IsWebSocketEndpoint(endpoint) {
+		// TLS and the WebSocket upgrade are part of establishing the
+		// connection: the dial timeout covers them and the HEL/ACK.
+		if dl.Timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, dl.Timeout)
+			defer cancel()
+		}
+		var nc net.Conn
+		if nc, err = d.dialWebSocket(ctx, dl, endpoint); err != nil {
+			return nil, err
+		}
+		conn = newConn(nc, d.ClientACK)
+	} else {
+		_, raddr, err := ParseEndpoint(endpoint)
+		if err != nil {
+			return nil, err
+		}
+		c, err := dl.DialContext(ctx, "tcp", raddr.Host)
+		if err != nil {
+			return nil, err
+		}
+		if conn, err = NewConn(c.(*net.TCPConn), d.ClientACK); err != nil {
+			_ = c.Close()
+			return nil, err
+		}
 
-	conn, err := NewConn(c.(*net.TCPConn), d.ClientACK)
-	if err != nil {
-		_ = c.Close()
-		return nil, err
+		// The connection is only usable once the HEL/ACK exchange is done,
+		// so the dial timeout covers it as well: a peer that accepts the
+		// TCP connection but stays silent must not hold up the caller
+		// indefinitely.
+		if dl.Timeout > 0 {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, dl.Timeout)
+			defer cancel()
+		}
 	}
 	conn.logger = d.Logger
-
-	// The connection is only usable once the HEL/ACK exchange is done, so the
-	// dial timeout covers it as well: a peer that accepts the TCP connection
-	// but stays silent must not hold up the caller indefinitely.
-	if dl.Timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, dl.Timeout)
-		defer cancel()
-	}
 
 	conn.logDebug("starting HEL/ACK handshake", "conn_id", conn.id)
 	if err := conn.Handshake(ctx, endpoint); err != nil {
@@ -192,6 +220,11 @@ type Listener struct {
 
 	mu      sync.Mutex
 	pending map[*net.TCPConn]struct{} // connections in handshake
+
+	// upgrade turns an accepted TCP connection into the connection UACP
+	// runs on, within the handshake deadline: TLS and the WebSocket opening
+	// handshake for opc.wss. Nil for opc.tcp.
+	upgrade func(*net.TCPConn) (net.Conn, error)
 }
 
 // acceptResult is the outcome of accepting one connection.
@@ -208,6 +241,15 @@ type acceptResult struct {
 // on all available unicast and anycast IP addresses of the local system.
 // If the Port field of laddr is 0, a port number is automatically chosen.
 func Listen(ctx context.Context, endpoint string, ack *Acknowledge) (*Listener, error) {
+	_, laddr, err := ParseEndpoint(endpoint)
+	if err != nil {
+		return nil, err
+	}
+	return listen(ctx, laddr.Host, endpoint, ack)
+}
+
+// listen returns a Listener on the TCP address hostport for endpoint.
+func listen(ctx context.Context, hostport, endpoint string, ack *Acknowledge) (*Listener, error) {
 	if ack == nil {
 		a := *DefaultServerACK
 		ack = &a
@@ -217,13 +259,8 @@ func Listen(ctx context.Context, endpoint string, ack *Acknowledge) (*Listener, 
 		a := *ack
 		ack = &a
 	}
-	_, laddr, err := ParseEndpoint(endpoint)
-	if err != nil {
-		return nil, err
-	}
-
 	var lc net.ListenConfig
-	l, err := lc.Listen(ctx, "tcp", laddr.Host)
+	l, err := lc.Listen(ctx, "tcp", hostport)
 	if err != nil {
 		return nil, err
 	}
@@ -305,14 +342,8 @@ func (l *Listener) acceptLoop() {
 func (l *Listener) handshake(c *net.TCPConn) {
 	// Clone listener ACK; srvhandshake also clones before negotiating, but
 	// the initial HEL receive must use a per-connection copy.
-	ackCopy := *l.ack
-	conn := &Conn{TCPConn: c, id: nextid(), ack: &ackCopy}
-	conn.bufPool.New = func() any {
-		b := make([]byte, ackCopy.ReceiveBufSize)
-		return &b
-	}
-
 	_ = c.SetDeadline(time.Now().Add(serverHandshakeTimeout))
+	var conn *Conn
 	err := func() (err error) {
 		// A panic while decoding what a peer sent must end this connection,
 		// not the process: this goroutine belongs to the listener.
@@ -321,6 +352,13 @@ func (l *Listener) handshake(c *net.TCPConn) {
 				err = fmt.Errorf("uacp: panic during handshake: %v\n%s", r, debug.Stack())
 			}
 		}()
+		var nc net.Conn = c
+		if l.upgrade != nil {
+			if nc, err = l.upgrade(c); err != nil {
+				return err
+			}
+		}
+		conn = newConn(nc, l.ack)
 		return conn.srvhandshake(l.endpoint)
 	}()
 	if err == nil {
@@ -332,6 +370,9 @@ func (l *Listener) handshake(c *net.TCPConn) {
 	l.mu.Unlock()
 
 	if err != nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
 		_ = c.Close()
 		l.deliver(acceptResult{err: err})
 		return
@@ -365,8 +406,14 @@ func (l *Listener) Endpoint() string {
 	return l.endpoint
 }
 
+// Conn is a UACP connection. It runs over TCP (opc.tcp) or over a WebSocket
+// (opc.wss); all I/O goes through the methods of Conn, which use the
+// transport of the connection.
 type Conn struct {
+	// TCPConn is the TCP connection of an opc.tcp connection. It is nil for
+	// an opc.wss connection, which runs over TLS and a WebSocket.
 	*net.TCPConn
+	nc     net.Conn // the transport: TCPConn, or the WebSocket
 	id     uint32
 	ack    *Acknowledge
 	logger *slog.Logger
@@ -382,16 +429,50 @@ func NewConn(c *net.TCPConn, ack *Acknowledge) (*Conn, error) {
 	if ack == nil {
 		ack = DefaultClientACK
 	}
+	return newConn(c, ack), nil
+}
+
+// newConn returns a Conn on nc with a copy of ack, which must not be nil.
+func newConn(nc net.Conn, ack *Acknowledge) *Conn {
+	if ack == nil {
+		ack = DefaultClientACK
+	}
 	// Always clone: DefaultClientACK / caller templates must not be mutated by
 	// handshake negotiation or shared across concurrent connections.
 	ackCopy := *ack
-	conn := &Conn{TCPConn: c, id: nextid(), ack: &ackCopy}
+	conn := &Conn{nc: nc, id: nextid(), ack: &ackCopy}
+	if tc, ok := nc.(*net.TCPConn); ok {
+		conn.TCPConn = tc
+	}
 	conn.bufPool.New = func() any {
 		b := make([]byte, ackCopy.ReceiveBufSize)
 		return &b
 	}
-	return conn, nil
+	return conn
 }
+
+// Read reads from the transport of the connection.
+func (c *Conn) Read(b []byte) (int, error) { return c.nc.Read(b) }
+
+// Write writes to the transport of the connection. Over a WebSocket every
+// Write is one binary frame, which is why a MessageChunk is always written
+// in one call (Part 6 §7.5.2).
+func (c *Conn) Write(b []byte) (int, error) { return c.nc.Write(b) }
+
+// LocalAddr returns the local network address.
+func (c *Conn) LocalAddr() net.Addr { return c.nc.LocalAddr() }
+
+// RemoteAddr returns the remote network address.
+func (c *Conn) RemoteAddr() net.Addr { return c.nc.RemoteAddr() }
+
+// SetDeadline sets the read and write deadlines of the transport.
+func (c *Conn) SetDeadline(t time.Time) error { return c.nc.SetDeadline(t) }
+
+// SetReadDeadline sets the read deadline of the transport.
+func (c *Conn) SetReadDeadline(t time.Time) error { return c.nc.SetReadDeadline(t) }
+
+// SetWriteDeadline sets the write deadline of the transport.
+func (c *Conn) SetWriteDeadline(t time.Time) error { return c.nc.SetWriteDeadline(t) }
 
 // SetLogger sets the logger for connection-level messages.
 func (c *Conn) SetLogger(l *slog.Logger) {
@@ -444,7 +525,7 @@ func (c *Conn) Close() (err error) {
 
 func (c *Conn) close() error {
 	c.logDebug("closing connection", "conn_id", c.id)
-	return c.TCPConn.Close()
+	return c.nc.Close()
 }
 
 func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
@@ -652,6 +733,9 @@ func endpointMatch(clientURL, serverURL string) bool {
 	}
 	if cp == "" {
 		cp = defaultPort
+		if strings.EqualFold(cu.Scheme, SchemeWebSocket) {
+			cp = defaultWebSocketPort
+		}
 	}
 	return cp == sp
 }
