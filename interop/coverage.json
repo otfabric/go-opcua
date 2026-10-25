@@ -9245,14 +9245,16 @@
       "capability": "certmgmt.push.trust-list",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.trust-list/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.trust-list",
@@ -9297,14 +9299,16 @@
       "capability": "certmgmt.push.certificate-update",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.certificate-update/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.certificate-update",
@@ -9495,14 +9499,16 @@
       "capability": "certmgmt.push.create-self-signed",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.create-self-signed/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.create-self-signed",
@@ -9548,14 +9554,16 @@
       "capability": "certmgmt.push.delete-certificate",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.delete-certificate/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.delete-certificate",
@@ -9649,14 +9657,16 @@
       "capability": "certmgmt.push.https-group",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.https-group/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.https-group",
@@ -9701,14 +9711,16 @@
       "capability": "certmgmt.push.usertoken-group",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.usertoken-group/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.usertoken-group",
@@ -9754,14 +9766,16 @@
       "capability": "certmgmt.push.pfx",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.pfx/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.pfx",
@@ -9807,14 +9821,16 @@
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_Open62541Client_GoServer",
+      "case": "coverage/certmgmt.push.transaction-diagnostics/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "certmgmt.push.transaction-diagnostics",
@@ -9908,14 +9924,16 @@
       "capability": "gds.pull.directory",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_Open62541Client_GoServer",
+      "case": "coverage/gds.pull.directory/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "gds.pull.directory",
@@ -9960,14 +9978,16 @@
       "capability": "gds.pull.certificate-request",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_Open62541Client_GoServer",
+      "case": "coverage/gds.pull.certificate-request/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "gds.pull.certificate-request",
@@ -10012,14 +10032,16 @@
       "capability": "gds.pull.trust-list",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_Open62541Client_GoServer",
+      "case": "coverage/gds.pull.trust-list/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "gds.pull.trust-list",
@@ -10064,14 +10086,16 @@
       "capability": "gds.pull.revocation",
       "direction": "open62541-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_Open62541Client_GoServer",
+      "case": "coverage/gds.pull.revocation/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+      "nextAction": "verified with the opcua-interop feat/open62541-push image; promote when v0.15.0 is pinned"
     },
     {
       "capability": "gds.pull.revocation",
