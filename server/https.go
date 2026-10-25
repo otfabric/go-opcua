@@ -328,6 +328,11 @@ func (h *httpsServer) handle(ctx context.Context, policy string, body []byte) ua
 		h.srv.sb.touchToken(hdr.AuthenticationToken)
 	}
 
+	// A select between a ready send and a done context picks either, so an
+	// ended request is caught here before it can be served.
+	if ctx.Err() != nil || h.ctx.Err() != nil {
+		return nil
+	}
 	// Take an in-flight slot like a request on a secure conversation; it
 	// is released when the response has been handed over.
 	if !c.w.acquire(ctx) {
