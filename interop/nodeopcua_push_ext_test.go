@@ -62,24 +62,47 @@ import (
 	"github.com/otfabric/go-opcua/uapolicy"
 )
 
-// requireNodeOpcuaV015 skips when the node-opcua adapter image does not
-// advertise a capability of opcua-interop v0.15.0 (list: clientOperations,
+// pushExtClient is an adapter whose `client push` has the flags of
+// opcua-interop v0.15.0 (CLIENT_CONTRACT §1 "push flags"); the push tests
+// against the go server run once per such adapter.
+type pushExtClient struct {
+	name         string // adapter name, in subjects and certificate names
+	env          string // image env variable
+	defaultImage string
+	pki          string // client identity in the test PKI
+	direction    string // ledger direction
+	// require skips (or fails) unless the adapter image is usable.
+	require func(t *testing.T) *adapterCaps
+	// coreRows: the adapter's certmgmt.push.trust-list and
+	// certmgmt.push.certificate-update rows are verified here too (node-opcua
+	// has them from TestCertMgmtPush_NodeOpcuaClient_GoServer).
+	coreRows bool
+}
+
+// requireV015 skips when the adapter image of pc does not advertise a
+// capability of opcua-interop v0.15.0 (list: clientOperations,
 // clientFeatures or serverFeatures). It skips also under
 // OPCUA_INTEROP_REQUIRE_CAPABILITIES=1: v0.15.0 is not released yet, so the
 // pinned image cannot have it. Once v0.15.0 is pinned, replace it with
 // requireAdapterOp / requireAdapterFeature.
-func requireNodeOpcuaV015(t *testing.T, list, capability string) {
+func requireV015(t *testing.T, pc pushExtClient, list, capability string) {
 	t.Helper()
-	caps := requireNodeOpcuaImage(t)
+	caps := pc.require(t)
 	have := map[string][]string{
 		"clientOperations": caps.ClientOperations,
 		"clientFeatures":   caps.ClientFeatures,
 		"serverFeatures":   caps.ServerFeatures,
 	}[list]
 	if !slices.Contains(have, capability) {
-		t.Skipf("the node-opcua adapter (version %s) has no %s %q: added in opcua-interop v0.15.0 (unreleased); "+
-			"set %s to a build of it", caps.Adapter.Version, list, capability, nodeOpcuaEnv)
+		t.Skipf("the %s adapter (version %s) has no %s %q: added in opcua-interop v0.15.0 (unreleased); "+
+			"set %s to a build of it", pc.name, caps.Adapter.Version, list, capability, pc.env)
 	}
+}
+
+// requireNodeOpcuaV015 is requireV015 for the node-opcua adapter.
+func requireNodeOpcuaV015(t *testing.T, list, capability string) {
+	t.Helper()
+	requireV015(t, nodeOpcuaPushClient, list, capability)
 }
 
 // pushExtResult is the result of `client push` with the v0.15.0 keys
@@ -89,6 +112,7 @@ type pushExtResult struct {
 	TrustList                         trustListJSON      `json:"trustList"`
 	TrustListAfter                    *trustListJSON     `json:"trustListAfter"`
 	AddCertificateStatus              *statusCodeObj     `json:"addCertificateStatus"`
+	RemoveCertificateStatus           *statusCodeObj     `json:"removeCertificateStatus"`
 	GetCertificatesStatus             *statusCodeObj     `json:"getCertificatesStatus"`
 	CertificateTypeIDs                []string           `json:"certificateTypeIds"`
 	Certificates                      []string           `json:"certificates"`
@@ -121,11 +145,10 @@ type txDiagnosticsJSON struct {
 // good reports whether a step status is present and Good.
 func good(s *statusCodeObj) bool { return s != nil && s.Code == 0 }
 
-// runNodeOpcuaPushExt runs the node-opcua adapter's `client push` against
-// the go server as the SecurityAdmin user over Basic256Sha256
-// SignAndEncrypt. files are written to a directory mounted at /work, so
-// args can name them as /work/<name>.
-func runNodeOpcuaPushExt(t *testing.T, endpoint string, files map[string][]byte, args ...string) (adapterResult, pushExtResult) {
+// runPushExt runs the `client push` of pc against the go server as the
+// SecurityAdmin user over Basic256Sha256 SignAndEncrypt. files are written
+// to a directory mounted at /work, so args can name them as /work/<name>.
+func runPushExt(t *testing.T, pc pushExtClient, endpoint string, files map[string][]byte, args ...string) (adapterResult, pushExtResult) {
 	t.Helper()
 	pki := pkiDir(t)
 	dir := containerScratchDir(t)
@@ -139,11 +162,11 @@ func runNodeOpcuaPushExt(t *testing.T, endpoint string, files map[string][]byte,
 	}
 	cmdArgs := []string{"run", "--rm",
 		"--add-host=host.docker.internal:host-gateway",
-		"-v", filepath.Join(pki, "node-opcua-client", "cert.crt") + ":/certs/cert.crt:ro",
-		"-v", filepath.Join(pki, "node-opcua-client", "cert.key") + ":/certs/cert.key:ro",
+		"-v", filepath.Join(pki, pc.pki, "cert.crt") + ":/certs/cert.crt:ro",
+		"-v", filepath.Join(pki, pc.pki, "cert.key") + ":/certs/cert.key:ro",
 		"-v", filepath.Join(pki, "ca", "ca.crt") + ":/certs/ca.crt:ro",
 		"-v", dir + ":/work:ro",
-		getEnvOr(nodeOpcuaEnv, defaultNodeOpcuaImage),
+		getEnvOr(pc.env, pc.defaultImage),
 		"client", "push",
 		"--endpoint", strings.ReplaceAll(endpoint, "localhost", "host.docker.internal"),
 		"--certificate", "/certs/cert.crt",
@@ -166,11 +189,10 @@ func runNodeOpcuaPushExt(t *testing.T, endpoint string, files map[string][]byte,
 	return res, items[0]
 }
 
-// mustPush is runNodeOpcuaPushExt that fails the test unless the command
-// succeeded.
-func mustPush(t *testing.T, endpoint string, files map[string][]byte, args ...string) pushExtResult {
+// mustPush is runPushExt that fails the test unless the command succeeded.
+func mustPush(t *testing.T, pc pushExtClient, endpoint string, files map[string][]byte, args ...string) pushExtResult {
 	t.Helper()
-	res, out := runNodeOpcuaPushExt(t, endpoint, files, args...)
+	res, out := runPushExt(t, pc, endpoint, files, args...)
 	if !res.Success {
 		t.Fatalf("client push %v: %s %s", args, res.ServiceResult, res.Error)
 	}
@@ -234,13 +256,75 @@ func caSignedServerCertificate(t *testing.T, cur *x509.Certificate, publicKey an
 // ClientPushCertificateManagement plus plain Calls) against
 // server.WithPushManagement.
 func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
-	requireNodeOpcuaImage(t)
-	appType := fmt.Sprintf("i=%d", id.RsaSha256ApplicationCertificateType)
+	testCertMgmtPushExt(t, nodeOpcuaPushClient)
+}
 
-	t.Run("coverage/certmgmt.push.get-certificates/node-opcua-client-to-go-server", func(t *testing.T) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-certificates")
+// nodeOpcuaPushClient is the node-opcua adapter's `client push`.
+var nodeOpcuaPushClient = pushExtClient{
+	name: "node-opcua", env: nodeOpcuaEnv, defaultImage: defaultNodeOpcuaImage, pki: "node-opcua-client",
+	direction: dirNodeOpcuaClientToGoServer, require: requireNodeOpcuaImage,
+}
+
+// testCertMgmtPushExt runs the `client push` of pc with the v0.15.0 flags
+// against server.WithPushManagement; with pc.coreRows also the trust list
+// and certificate update rows.
+func testCertMgmtPushExt(t *testing.T, pc pushExtClient) {
+	pc.require(t)
+	appType := fmt.Sprintf("i=%d", id.RsaSha256ApplicationCertificateType)
+	dir := pc.direction
+	push := func(t *testing.T, endpoint string, files map[string][]byte, args ...string) pushExtResult {
+		t.Helper()
+		return mustPush(t, pc, endpoint, files, args...)
+	}
+	selfSigned := func(t *testing.T, what string) []byte {
+		t.Helper()
+		der, _, err := testpki.SelfSigned("go-opcua interop "+what+" "+pc.name, "urn:otfabric:interop:"+strings.ToLower(what))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return der
+	}
+
+	if pc.coreRows {
+		t.Run("coverage/certmgmt.push.trust-list/"+dir, func(t *testing.T) {
+			requireV015(t, pc, "clientOperations", "push")
+			endpoint, srv := startPushGoServer(t)
+			extra := selfSigned(t, "push")
+			out := push(t, endpoint, map[string][]byte{"add.der": extra}, "--add-certificate", "/work/add.der", "--apply")
+			if !good(out.AddCertificateStatus) || !good(out.ApplyChangesStatus) {
+				t.Fatalf("AddCertificate %+v, ApplyChanges %+v", out.AddCertificateStatus, out.ApplyChangesStatus)
+			}
+			if !out.TrustList.has(loadCACertDER(t)) || out.TrustList.has(extra) {
+				t.Fatalf("the trust list read before AddCertificate: %+v", out.TrustList)
+			}
+			if out.TrustListAfter == nil || !out.TrustListAfter.has(extra) {
+				t.Fatalf("the trust list read after ApplyChanges lacks the added certificate: %+v", out.TrustListAfter)
+			}
+			if !containsCert(srv.TrustList().TrustedCertificates, extra) {
+				t.Fatalf("the go server does not trust the certificate %s added", pc.name)
+			}
+			// RemoveCertificate by thumbprint, applied.
+			out = push(t, endpoint, nil, "--remove-certificate", gds.Thumbprint(extra), "--apply")
+			if !good(out.RemoveCertificateStatus) || !good(out.ApplyChangesStatus) {
+				t.Fatalf("RemoveCertificate %+v, ApplyChanges %+v", out.RemoveCertificateStatus, out.ApplyChangesStatus)
+			}
+			if containsCert(srv.TrustList().TrustedCertificates, extra) || out.TrustListAfter == nil || out.TrustListAfter.has(extra) {
+				t.Fatal("the certificate is still trusted after RemoveCertificate")
+			}
+			// --issuer: AddCertificate to the issuer list.
+			issuer := selfSigned(t, "issuer")
+			out = push(t, endpoint, map[string][]byte{"issuer.der": issuer}, "--add-certificate", "/work/issuer.der", "--issuer", "--apply")
+			if !good(out.AddCertificateStatus) || !containsCert(srv.TrustList().IssuerCertificates, issuer) ||
+				containsCert(srv.TrustList().TrustedCertificates, issuer) {
+				t.Fatalf("AddCertificate --issuer %+v: not (only) in the issuer list of the go server", out.AddCertificateStatus)
+			}
+		})
+	}
+
+	t.Run("coverage/certmgmt.push.get-certificates/"+dir, func(t *testing.T) {
+		requireV015(t, pc, "clientFeatures", "push-certificates")
 		endpoint, _ := startPushGoServer(t)
-		out := mustPush(t, endpoint, nil, "--get-certificates")
+		out := push(t, endpoint, nil, "--get-certificates")
 		if !good(out.GetCertificatesStatus) {
 			t.Fatalf("GetCertificates: %+v", out.GetCertificatesStatus)
 		}
@@ -256,13 +340,14 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		}
 	})
 
-	t.Run("coverage/certmgmt.push.create-self-signed/node-opcua-client-to-go-server", func(t *testing.T) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-certificates")
+	t.Run("coverage/certmgmt.push.create-self-signed/"+dir, func(t *testing.T) {
+		requireV015(t, pc, "clientFeatures", "push-certificates")
 		endpoint, srv := startPushGoServer(t)
 		before := groupCertificate(t, srv)
-		out := mustPush(t, endpoint, nil, "--create-self-signed",
+		cn := pc.name + " self-signed"
+		out := push(t, endpoint, nil, "--create-self-signed",
 			"--certificate-type-id", appType,
-			"--subject", "CN=node-opcua self-signed/O=otfabric",
+			"--subject", "CN="+cn+"/O=otfabric",
 			"--dns", "interop.example", "--ip", "192.0.2.7",
 			"--lifetime-days", "2", "--key-size", "2048")
 		if !good(out.CreateSelfSignedCertificateStatus) || !good(out.CancelChangesStatus) || out.ApplyChangesStatus != nil {
@@ -281,8 +366,8 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		if err := x.CheckSignature(x.SignatureAlgorithm, x.RawTBSCertificate, x.Signature); err != nil {
 			t.Fatalf("not signed by its own key: %v", err)
 		}
-		if x.Subject.CommonName != "node-opcua self-signed" || !slices.Equal(x.Subject.Organization, []string{"otfabric"}) {
-			t.Errorf("subject %v, want CN=node-opcua self-signed, O=otfabric", x.Subject)
+		if x.Subject.CommonName != cn || !slices.Equal(x.Subject.Organization, []string{"otfabric"}) {
+			t.Errorf("subject %v, want CN=%s, O=otfabric", x.Subject, cn)
 		}
 		if !slices.Equal(x.DNSNames, []string{"interop.example"}) || len(x.IPAddresses) != 1 || x.IPAddresses[0].String() != "192.0.2.7" {
 			t.Errorf("SANs DNS %v IP %v, want interop.example / 192.0.2.7", x.DNSNames, x.IPAddresses)
@@ -299,19 +384,19 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		}
 	})
 
-	t.Run("coverage/certmgmt.push.delete-certificate/node-opcua-client-to-go-server", func(t *testing.T) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-certificates")
+	t.Run("coverage/certmgmt.push.delete-certificate/"+dir, func(t *testing.T) {
+		requireV015(t, pc, "clientFeatures", "push-certificates")
 		endpoint, srv := startPushGoServer(t)
 		before := groupCertificate(t, srv)
 		// Accepted, then cancelled.
-		out := mustPush(t, endpoint, nil, "--delete-certificate", appType)
+		out := push(t, endpoint, nil, "--delete-certificate", appType)
 		if !good(out.DeleteCertificateStatus) || !good(out.CancelChangesStatus) {
 			t.Fatalf("delete %+v, cancel %+v; want Good", out.DeleteCertificateStatus, out.CancelChangesStatus)
 		}
 		// Applied: the certificate the endpoints use "shall not be
 		// deleted. This determination happens when ApplyChanges is called"
 		// (Part 12 1.05 §7.10): Bad_InvalidState.
-		res, out := runNodeOpcuaPushExt(t, endpoint, nil, "--delete-certificate", appType, "--apply")
+		res, out := runPushExt(t, pc, endpoint, nil, "--delete-certificate", appType, "--apply")
 		if !good(out.DeleteCertificateStatus) {
 			t.Fatalf("DeleteCertificate: %+v", out.DeleteCertificateStatus)
 		}
@@ -323,20 +408,17 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		}
 		// A type the go server has no certificate of (it has an RSA one) is
 		// refused at once.
-		res, out = runNodeOpcuaPushExt(t, endpoint, nil, "--delete-certificate", fmt.Sprintf("i=%d", id.EccNistP256ApplicationCertificateType))
+		res, out = runPushExt(t, pc, endpoint, nil, "--delete-certificate", fmt.Sprintf("i=%d", id.EccNistP256ApplicationCertificateType))
 		if res.Success || out.DeleteCertificateStatus == nil || out.DeleteCertificateStatus.Code == 0 {
 			t.Fatalf("DeleteCertificate of an ECC type: success %v, %+v; want a Bad status", res.Success, out.DeleteCertificateStatus)
 		}
 	})
 
 	groupTrustList := func(t *testing.T, group string, groupID *ua.NodeID) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-groups")
+		requireV015(t, pc, "clientFeatures", "push-groups")
 		endpoint, srv := startPushGoServer(t)
-		extra, _, err := testpki.SelfSigned("go-opcua interop "+group+" node-opcua", "urn:otfabric:interop:"+strings.ToLower(group))
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := mustPush(t, endpoint, map[string][]byte{"add.der": extra}, "--group", group, "--add-certificate", "/work/add.der", "--apply")
+		extra := selfSigned(t, group)
+		out := push(t, endpoint, map[string][]byte{"add.der": extra}, "--group", group, "--add-certificate", "/work/add.der", "--apply")
 		if out.CertificateGroupID != groupID.String() {
 			t.Errorf("certificateGroupId %q, want %v", out.CertificateGroupID, groupID)
 		}
@@ -344,21 +426,21 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 			t.Fatalf("the %s trust list before / after AddCertificate + ApplyChanges: %+v / %+v", group, out.TrustList, out.TrustListAfter)
 		}
 		if !containsCert(srv.GroupTrustList(groupID).TrustedCertificates, extra) {
-			t.Fatalf("the go server's %s trust list does not trust the certificate node-opcua added", group)
+			t.Fatalf("the go server's %s trust list does not trust the certificate %s added", group, pc.name)
 		}
 		if containsCert(srv.TrustList().TrustedCertificates, extra) {
 			t.Fatalf("the certificate added to the %s group is in the application trust list", group)
 		}
 	}
-	t.Run("coverage/certmgmt.push.https-group/node-opcua-client-to-go-server", func(t *testing.T) {
+	t.Run("coverage/certmgmt.push.https-group/"+dir, func(t *testing.T) {
 		groupTrustList(t, "Https", gds.DefaultHTTPSGroup)
 	})
-	t.Run("coverage/certmgmt.push.usertoken-group/node-opcua-client-to-go-server", func(t *testing.T) {
+	t.Run("coverage/certmgmt.push.usertoken-group/"+dir, func(t *testing.T) {
 		groupTrustList(t, "UserToken", gds.DefaultUserTokenGroup)
 	})
 
-	t.Run("coverage/certmgmt.push.pfx/node-opcua-client-to-go-server", func(t *testing.T) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-certificates")
+	t.Run("coverage/certmgmt.push.pfx/"+dir, func(t *testing.T) {
+		requireV015(t, pc, "clientFeatures", "push-certificates")
 		endpoint, srv := startPushGoServer(t)
 		cur := mustParse(t, groupCertificate(t, srv))
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -370,7 +452,7 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		out := mustPush(t, endpoint, map[string][]byte{"new.der": newDER, "new.pfx": pfx, "ca.der": caDER},
+		out := push(t, endpoint, map[string][]byte{"new.der": newDER, "new.pfx": pfx, "ca.der": caDER},
 			"--update-certificate", "/work/new.der", "--update-private-key", "/work/new.pfx",
 			"--issuer-certificate", "/work/ca.der", "--apply")
 		if !good(out.UpdateCertificateStatus) || !good(out.ApplyChangesStatus) {
@@ -386,14 +468,11 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		pushClient(t, endpoint, false)
 	})
 
-	t.Run("coverage/certmgmt.push.transaction-diagnostics/node-opcua-client-to-go-server", func(t *testing.T) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-transaction-diagnostics")
+	t.Run("coverage/certmgmt.push.transaction-diagnostics/"+dir, func(t *testing.T) {
+		requireV015(t, pc, "clientFeatures", "push-transaction-diagnostics")
 		endpoint, _ := startPushGoServer(t)
-		extra, _, err := testpki.SelfSigned("go-opcua interop diagnostics node-opcua", "urn:otfabric:interop:diagnostics")
-		if err != nil {
-			t.Fatal(err)
-		}
-		out := mustPush(t, endpoint, map[string][]byte{"add.der": extra}, "--add-certificate", "/work/add.der", "--apply", "--transaction-diagnostics")
+		extra := selfSigned(t, "diagnostics")
+		out := push(t, endpoint, map[string][]byte{"add.der": extra}, "--add-certificate", "/work/add.der", "--apply", "--transaction-diagnostics")
 		d := out.TransactionDiagnostics
 		if !good(out.TransactionDiagnosticsStatus) || d == nil {
 			t.Fatalf("TransactionDiagnostics: %+v", out.TransactionDiagnosticsStatus)
@@ -407,8 +486,7 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		}
 
 		// A failed ApplyChanges: its status and an error entry.
-		appType := fmt.Sprintf("i=%d", id.RsaSha256ApplicationCertificateType)
-		res, out := runNodeOpcuaPushExt(t, endpoint, nil, "--delete-certificate", appType, "--apply", "--transaction-diagnostics")
+		res, out := runPushExt(t, pc, endpoint, nil, "--delete-certificate", appType, "--apply", "--transaction-diagnostics")
 		d = out.TransactionDiagnostics
 		if res.Success || !good(out.TransactionDiagnosticsStatus) || d == nil {
 			t.Fatalf("the failed transaction: success %v, diagnostics %+v %+v", res.Success, out.TransactionDiagnosticsStatus, d)
@@ -422,18 +500,15 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 		}
 	})
 
-	t.Run("coverage/certmgmt.push.reset-to-defaults/node-opcua-client-to-go-server", func(t *testing.T) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-certificates")
+	t.Run("coverage/certmgmt.push.reset-to-defaults/"+dir, func(t *testing.T) {
+		requireV015(t, pc, "clientFeatures", "push-certificates")
 		endpoint, srv := startPushGoServer(t)
-		extra, _, err := testpki.SelfSigned("go-opcua interop reset node-opcua", "urn:otfabric:interop:reset")
-		if err != nil {
-			t.Fatal(err)
-		}
-		mustPush(t, endpoint, map[string][]byte{"add.der": extra}, "--add-certificate", "/work/add.der", "--apply")
+		extra := selfSigned(t, "reset")
+		push(t, endpoint, map[string][]byte{"add.der": extra}, "--add-certificate", "/work/add.der", "--apply")
 		if !containsCert(srv.TrustList().TrustedCertificates, extra) {
 			t.Fatal("the added certificate is not trusted")
 		}
-		out := mustPush(t, endpoint, nil, "--reset-to-defaults")
+		out := push(t, endpoint, nil, "--reset-to-defaults")
 		if !good(out.ResetToServerDefaultsStatus) {
 			t.Fatalf("ResetToServerDefaults: %+v", out.ResetToServerDefaultsStatus)
 		}
@@ -442,26 +517,37 @@ func TestCertMgmtPushExt_NodeOpcuaClient_GoServer(t *testing.T) {
 			t.Fatalf("the trust list after ResetToServerDefaults (%d trusted) is not the configured one", len(tl.TrustedCertificates))
 		}
 		if out.TrustListAfter == nil || out.TrustListAfter.has(extra) {
-			t.Fatalf("the trust list node-opcua reads after ResetToServerDefaults: %+v", out.TrustListAfter)
+			t.Fatalf("the trust list %s reads after ResetToServerDefaults: %+v", pc.name, out.TrustListAfter)
 		}
 	})
 
-	// UpdateCertificate without a private key (the server keeps the key of
-	// its signing request), with a PEM issuer. The
-	// certmgmt.push.certificate-update row is verified by
-	// TestCertMgmtPush_NodeOpcuaClient_GoServer (--csr); this adds the
-	// update itself, so the subtest is not a coverage case.
-	t.Run("update-certificate/node-opcua-client-to-go-server", func(t *testing.T) {
-		requireNodeOpcuaV015(t, "clientFeatures", "push-certificates")
+	// CreateSigningRequest, then UpdateCertificate without a private key (the
+	// server keeps the key of its signing request) with a PEM issuer. For
+	// node-opcua the certmgmt.push.certificate-update row is verified by
+	// TestCertMgmtPush_NodeOpcuaClient_GoServer (--csr), so the subtest is
+	// not a coverage case there.
+	updateCase := "update-certificate/" + dir
+	if pc.coreRows {
+		updateCase = "coverage/certmgmt.push.certificate-update/" + dir
+	}
+	t.Run(updateCase, func(t *testing.T) {
+		requireV015(t, pc, "clientFeatures", "push-certificates")
 		endpoint, srv := startPushGoServer(t)
-		out := mustPush(t, endpoint, nil, "--csr")
+		out := push(t, endpoint, nil, "--csr")
 		csr, err := x509.ParseCertificateRequest(decodeB64(t, out.CertificateSigningRequest))
 		if err != nil {
 			t.Fatalf("the CSR does not parse: %v", err)
 		}
-		newDER, caDER := caSignedServerCertificate(t, mustParse(t, groupCertificate(t, srv)), csr.PublicKey)
+		if err := csr.CheckSignature(); err != nil {
+			t.Fatalf("CSR signature: %v", err)
+		}
+		cur := mustParse(t, groupCertificate(t, srv))
+		if !publicKeysEqual(csr.PublicKey, cur.PublicKey) {
+			t.Fatal("the CSR is not for the key of the go server certificate")
+		}
+		newDER, caDER := caSignedServerCertificate(t, cur, csr.PublicKey)
 		caPEM := pemEncodeCert(caDER)
-		out = mustPush(t, endpoint, map[string][]byte{"new.der": newDER, "ca.pem": caPEM},
+		out = push(t, endpoint, map[string][]byte{"new.der": newDER, "ca.pem": caPEM},
 			"--update-certificate", "/work/new.der", "--issuer-certificate", "/work/ca.pem", "--apply")
 		if !good(out.UpdateCertificateStatus) || !good(out.ApplyChangesStatus) || out.ApplyChangesRequired == nil {
 			t.Fatalf("UpdateCertificate %+v (applyChangesRequired %v), ApplyChanges %+v",

@@ -401,11 +401,22 @@ type gdsPullResult struct {
 	UnregisterStatus   statusCodeObj `json:"unregisterStatus"`
 }
 
-// runDotnetGDSPull runs `client gds-pull` of the dotnet-gds adapter against
-// endpoint as gds-admin over Basic256Sha256 SignAndEncrypt.
-func runDotnetGDSPull(t *testing.T, endpoint string, args ...string) gdsPullResult {
+// gdsPullClient is an adapter with `client gds-pull` (CLIENT_CONTRACT
+// §16.2); the GDS pull tests against the go server run once per such
+// adapter.
+type gdsPullClient struct {
+	name         string // adapter name, in the ApplicationUris
+	env          string // image env variable
+	defaultImage string
+	pki          string // client identity in the test PKI
+	direction    string // ledger direction
+}
+
+// runGDSPull runs `client gds-pull` of c against endpoint as gds-admin over
+// Basic256Sha256 SignAndEncrypt.
+func runGDSPull(t *testing.T, c gdsPullClient, endpoint string, args ...string) gdsPullResult {
 	t.Helper()
-	res := runSecureAdapterClient(t, dotnetGDSEnv, defaultDotnetGDSImage, "dotnet-client", endpoint, "gds-pull",
+	res := runSecureAdapterClient(t, c.env, c.defaultImage, c.pki, endpoint, "gds-pull",
 		"Basic256Sha256", "SignAndEncrypt", append([]string{"--username", gdsAdminUser, "--password", gdsAdminPass}, args...)...)
 	if !res.Success {
 		t.Fatalf("client gds-pull %v: %s %s\n%s", args, res.ServiceResult.Name, res.Error, res.Results)
@@ -430,25 +441,37 @@ func decodeB64(t *testing.T, s string) []byte {
 // UA-.NETStandard 1.5.378 against gdsserver.
 func TestDotnetGDSPull_DotnetClient_GoServer(t *testing.T) {
 	requireDotnetGDS(t, "clientOperations")
+	testGDSPullGoServer(t, dotnetGDSPullClient)
+}
+
+// dotnetGDSPullClient is the dotnet-gds adapter's `client gds-pull`.
+var dotnetGDSPullClient = gdsPullClient{
+	name: "dotnet", env: dotnetGDSEnv, defaultImage: defaultDotnetGDSImage, pki: "dotnet-client",
+	direction: dirDotnetClientToGoServer,
+}
+
+// testGDSPullGoServer runs the `client gds-pull` of c against gdsserver.
+func testGDSPullGoServer(t *testing.T, c gdsPullClient) {
 	endpoint, g := startGDSGoServer(t)
 	ca := loadCACertDER(t)
 	group := g.DefaultApplicationGroup().String()
-	const uri = "urn:otfabric:interop:gds-pull:dotnet-client"
+	uri := "urn:otfabric:interop:gds-pull:" + c.name + "-client"
+	dir := c.direction
 
 	var csr gdsPullResult
-	t.Run("coverage/gds.pull.directory/"+dirDotnetClientToGoServer, func(t *testing.T) {
-		csr = runDotnetGDSPull(t, endpoint, "--app-uri", uri, "--request", "csr", "--certificate-type", "RsaSha256")
+	t.Run("coverage/gds.pull.directory/"+dir, func(t *testing.T) {
+		csr = runGDSPull(t, c, endpoint, "--app-uri", uri, "--request", "csr", "--certificate-type", "RsaSha256")
 		if !csr.Registered || len(csr.FindApplications) != 0 || csr.ApplicationID == "" {
 			t.Fatalf("FindApplications / RegisterApplication: %+v", csr)
 		}
 		// A second run finds the record.
-		again := runDotnetGDSPull(t, endpoint, "--app-uri", uri, "--request", "csr", "--certificate-type", "NistP256")
+		again := runGDSPull(t, c, endpoint, "--app-uri", uri, "--request", "csr", "--certificate-type", "NistP256")
 		if again.Registered || !slices.Equal(again.FindApplications, []string{csr.ApplicationID}) || again.ApplicationID != csr.ApplicationID {
 			t.Fatalf("the second run did not find the record: %+v", again)
 		}
 	})
 
-	t.Run("coverage/gds.pull.certificate-request/"+dirDotnetClientToGoServer, func(t *testing.T) {
+	t.Run("coverage/gds.pull.certificate-request/"+dir, func(t *testing.T) {
 		if csr.Certificate == "" {
 			t.Fatal("no certificate from the CSR run")
 		}
@@ -462,7 +485,7 @@ func TestDotnetGDSPull_DotnetClient_GoServer(t *testing.T) {
 		if len(csr.IssuerCertificates) == 0 || !bytes.Equal(decodeB64(t, csr.IssuerCertificates[0]), ca) {
 			t.Fatal("the issuer is not the RSA CA of the go GDS")
 		}
-		nk := runDotnetGDSPull(t, endpoint, "--app-uri", uri+":nk", "--request", "new-key-pair", "--certificate-type", "NistP256")
+		nk := runGDSPull(t, c, endpoint, "--app-uri", uri+":nk", "--request", "new-key-pair", "--certificate-type", "NistP256")
 		if nk.PrivateKeyFormat != "PEM" {
 			t.Fatalf("privateKeyFormat %q", nk.PrivateKeyFormat)
 		}
@@ -475,7 +498,7 @@ func TestDotnetGDSPull_DotnetClient_GoServer(t *testing.T) {
 		}
 	})
 
-	t.Run("coverage/gds.pull.trust-list/"+dirDotnetClientToGoServer, func(t *testing.T) {
+	t.Run("coverage/gds.pull.trust-list/"+dir, func(t *testing.T) {
 		if !slices.Contains(csr.CertificateGroups, group) {
 			t.Fatalf("certificateGroups %v, want %s", csr.CertificateGroups, group)
 		}
@@ -487,8 +510,8 @@ func TestDotnetGDSPull_DotnetClient_GoServer(t *testing.T) {
 		}
 	})
 
-	t.Run("coverage/gds.pull.revocation/"+dirDotnetClientToGoServer, func(t *testing.T) {
-		res := runDotnetGDSPull(t, endpoint, "--app-uri", uri+":revoke", "--request", "new-key-pair",
+	t.Run("coverage/gds.pull.revocation/"+dir, func(t *testing.T) {
+		res := runGDSPull(t, c, endpoint, "--app-uri", uri+":revoke", "--request", "new-key-pair",
 			"--certificate-type", "NistP256", "--revoke", "--unregister")
 		if res.RevokeStatus.Code != 0 || res.UnregisterStatus.Code != 0 {
 			t.Fatalf("revoke %+v unregister %+v", res.RevokeStatus, res.UnregisterStatus)

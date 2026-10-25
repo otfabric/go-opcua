@@ -43,6 +43,10 @@ import (
 
 // defaultNodeOpcuaImage is the node-opcua adapter of the opcua-interop release
 // named by interopVersion (multi-arch index digest; see harness_test.go).
+// dirNodeOpcuaClientToGoServer is the ledger direction of the node-opcua
+// client against the go server, for subtests a shared test builds.
+const dirNodeOpcuaClientToGoServer = "node-opcua-client-to-go-server"
+
 const defaultNodeOpcuaImage = "ghcr.io/otfabric/opcua-interop-node-opcua@sha256:da5539fee9f763dc3d4ee93f162e97300ddde35eea451ee95fc243ef4ce14fb1"
 
 // requireNodeOpcuaImage skips (or fails with
