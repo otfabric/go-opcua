@@ -327,7 +327,9 @@ func TestHTTPSLateAnswerAfterCancel(t *testing.T) {
 	cancel()
 	require.ErrorIs(t, <-errc, context.Canceled)
 
-	go func() { errc <- sc.SendRequestWithTimeout(context.Background(), &ua.ReadRequest{}, nil, time.Minute, h) }()
+	go func() {
+		errc <- sc.SendRequestWithTimeout(context.Background(), &ua.ReadRequest{}, nil, time.Minute, h)
+	}()
 	<-started
 	require.NoError(t, sc.Close())
 	require.ErrorIs(t, <-errc, errors.ErrSecureChannelClosed)
