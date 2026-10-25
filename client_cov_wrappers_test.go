@@ -202,7 +202,12 @@ func TestClientCovHistory(t *testing.T) {
 	nodes := []*ua.HistoryReadValueID{{NodeID: f.HistoryVar}}
 	resps := map[string]func() (*ua.HistoryReadResponse, error){
 		"event": func() (*ua.HistoryReadResponse, error) {
-			return c.HistoryReadEvent(ctx, nodes, &ua.ReadEventDetails{StartTime: start, EndTime: end, Filter: &ua.EventFilter{}})
+			filter := &ua.EventFilter{SelectClauses: []*ua.SimpleAttributeOperand{{
+				TypeDefinitionID: ua.NewNumericNodeID(0, id.BaseEventType),
+				BrowsePath:       []*ua.QualifiedName{{Name: "Time"}},
+				AttributeID:      ua.AttributeIDValue,
+			}}}
+			return c.HistoryReadEvent(ctx, nodes, &ua.ReadEventDetails{StartTime: start, EndTime: end, Filter: filter})
 		},
 		"processed": func() (*ua.HistoryReadResponse, error) {
 			return c.HistoryReadProcessed(ctx, nodes, &ua.ReadProcessedDetails{StartTime: start, EndTime: end, ProcessingInterval: 1000})
