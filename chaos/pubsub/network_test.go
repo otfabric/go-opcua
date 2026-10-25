@@ -232,28 +232,49 @@ func TestChaosUDPNetworkFaults(t *testing.T) {
 // remember the sequence numbers of the previous one. The readers must take
 // the new publisher's messages at the latest after their
 // MessageReceiveTimeout.
+//
+// Each publisher counts from a base of its own. A busy subscriber may still
+// be working through datagrams of the previous publisher when the next one
+// starts; those are told apart by their counter and kept out of the next
+// run's checks, instead of waiting a fixed time for them to arrive.
 func TestChaosPublisherRestart(t *testing.T) {
 	t.Parallel()
 	const timeout = 200 * time.Millisecond
+	const runBase = 1 << 32 // counters of run r are r*runBase+1, ...
 	stalls := chaoskit.WatchStalls(t)
 	port := freeUDPPort(t)
-	var cur atomic.Pointer[checker]
-	cur.Store(newChecker())
+	type run struct {
+		chk  *checker
+		base int64
+	}
+	var cur atomic.Pointer[run]
+	cur.Store(&run{chk: newChecker()})
+	var stale atomic.Int64
+	handle := func(d *pubsub.ReceivedDataSet) {
+		r := cur.Load()
+		if nv := d.Field("n"); nv != nil && nv.Value != nil {
+			if n, ok := nv.Value.Value().(int64); ok && n <= r.base {
+				stale.Add(1) // a data set of an earlier publisher
+				return
+			}
+		}
+		r.chk.handle(d)
+	}
 	r := pubsub.DataSetReader("ds0", uint16(7), 1, 1, pubsub.DataSetMetaDataOf(counterPDS("ds0")))
 	r.MessageReceiveTimeout = float64(timeout / time.Millisecond)
 	sub := startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(pubsub.UDPConnection("sub", udpURL(port), nil), pubsub.ReaderGroup("rg", r))),
-		pubsub.WithDataSetHandler(func(d *pubsub.ReceivedDataSet) { cur.Load().handle(d) }))
+		pubsub.WithDataSetHandler(handle))
 	rid := compID(t, sub, pubsub.KindDataSetReader, "ds0")
 	for round := range 3 {
-		// Let the last datagrams of the previous publisher arrive: far
-		// less than the MessageReceiveTimeout, the reader still has the
-		// sequence numbers of the previous run.
+		// Far less than the MessageReceiveTimeout: the reader still has
+		// the sequence numbers of the previous run.
 		time.Sleep(30 * time.Millisecond)
 		chk := newChecker()
-		cur.Store(chk)
+		base := int64(round) * runBase
+		cur.Store(&run{chk: chk, base: base})
 		pub, err := pubsub.New(pubsub.NewConfiguration([]*ua.PublishedDataSetDataType{counterPDS("ds0")},
 			pubsub.AttachWriterGroups(pubsub.UDPConnection("pub", udpURL(port), uint16(7)), pubsub.WriterGroup("wg", 1, 10*time.Millisecond, pubsub.DataSetWriter("w", 1, "ds0")))),
-			pubsub.WithDataSource(newCounterSource()))
+			pubsub.WithDataSource(newCounterSourceFrom(base)))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -268,7 +289,7 @@ func TestChaosPublisherRestart(t *testing.T) {
 			stalls.SkipIfStalled(t, 500*time.Millisecond, "the first message after a restart is bounded by MessageReceiveTimeout + 1 s")
 			t.Errorf("round %d: the first message of the restarted publisher was delivered after %v (MessageReceiveTimeout %v)", round, d, timeout)
 		}
-		t.Logf("round %d: first data set after %v", round, time.Since(begin))
+		t.Logf("round %d: first data set after %v (%d data sets of earlier publishers delivered so far)", round, time.Since(begin), stale.Load())
 		time.Sleep(1500 * time.Millisecond) // the sequence numbers get ahead of the next run's
 		closeRuntime(t, pub)
 		chk.sink.Report(t)
