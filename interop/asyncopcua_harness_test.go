@@ -25,7 +25,7 @@
 // async-opcua 0.19 trusts peer certificates by exact certificate only (no CA
 // chain validation in its CertificateStore), so the adapter server trusts the
 // certificates listed in <pki>/trusted/certs — the test PKI of opcua-interop
-// v0.16.0 lists the consumer certificate there for the async-opcua-server
+// v0.17.0 lists the consumer certificate there for the async-opcua-server
 // identity. The adapter client validates the server certificate against
 // --trust-list itself (exact match or CA-signed). The secure tests need the
 // async-opcua-server / async-opcua-client identities of that PKI.
@@ -44,7 +44,7 @@ import (
 
 // defaultAsyncOpcuaImage is the async-opcua adapter of the opcua-interop release
 // named by interopVersion (multi-arch index digest; see harness_test.go).
-const defaultAsyncOpcuaImage = "ghcr.io/otfabric/opcua-interop-async-opcua@sha256:820aa4281957f6abfae3e92069f04d3f32d7c29fa244b7f8b88382d07b1458fb"
+const defaultAsyncOpcuaImage = "ghcr.io/otfabric/opcua-interop-async-opcua@sha256:dcb809cc8eaa20de7f1a34893a24300e228c8067a79d60e330997b3a0d413caa"
 
 // requireAsyncOpcuaImage skips (or fails with
 // OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 when ASYNC_OPCUA_IMAGE is set) when
