@@ -85,6 +85,11 @@ type channelWriter struct {
 	done    chan struct{} // closed when the channel is being torn down
 	exited  chan struct{} // closed when run has returned
 	stopped sync.Once
+
+	// deliver, if set, takes the responses instead of the secure channel:
+	// the HTTPS transport hands each one to the HTTP request it answers.
+	// It must not block. conn is nil then.
+	deliver func(reqID uint32, resp ua.Response)
 }
 
 func newChannelWriter(sc *uasc.SecureChannel, conn *uacp.Conn, logger *slog.Logger, timeout time.Duration, maxPending int) *channelWriter {
@@ -204,6 +209,11 @@ func (w *channelWriter) write(o outbound) {
 		}
 	}()
 
+	if w.deliver != nil {
+		w.deliver(o.reqID, o.resp)
+		return
+	}
+
 	// The watchdog closes the connection, which is what unblocks a write to
 	// a peer that has stopped reading, wherever that write is stuck.
 	watchdog := time.AfterFunc(w.timeout, func() {
@@ -243,7 +253,9 @@ func (w *channelWriter) write(o outbound) {
 func (w *channelWriter) close() {
 	w.stopped.Do(func() {
 		close(w.done)
-		_ = w.conn.Close()
+		if w.conn != nil {
+			_ = w.conn.Close()
+		}
 	})
 }
 

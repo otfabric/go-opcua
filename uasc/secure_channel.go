@@ -191,6 +191,10 @@ type SecureChannel struct {
 	keyChain []byte
 
 	closeOnce sync.Once
+
+	// https is the transport of a channel to an HTTPS endpoint, which has no
+	// UACP connection and no secure conversation (NewHTTPSChannel).
+	https *httpsTransport
 }
 
 func NewSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, errCh chan<- error) (*SecureChannel, error) {
@@ -267,7 +271,12 @@ func newSecureChannel(endpoint string, c *uacp.Conn, cfg *Config, kind channelKi
 	return s, nil
 }
 
+// RemoteAddr returns the address of the peer, nil for a channel without a
+// connection (an HTTPS or crypto-only channel).
 func (s *SecureChannel) RemoteAddr() net.Addr {
+	if s.c == nil {
+		return nil
+	}
 	return s.c.RemoteAddr()
 }
 
@@ -885,6 +894,10 @@ func (s *SecureChannel) LocalEndpoint() string {
 }
 
 func (s *SecureChannel) Open(ctx context.Context) error {
+	if s.https != nil {
+		// HTTPS has no secure conversation to open (Part 6 §7.4.1).
+		return nil
+	}
 	return s.open(ctx, nil, ua.SecurityTokenRequestTypeIssue)
 }
 
@@ -1378,6 +1391,9 @@ func (s *SecureChannel) popHandler(reqID uint32) (chan *MessageBody, bool) {
 }
 
 func (s *SecureChannel) Renew(ctx context.Context) error {
+	if s.https != nil {
+		return nil // no security token to renew
+	}
 	instance, err := s.getActiveChannelInstance()
 	if err != nil {
 		return err
@@ -1392,6 +1408,9 @@ func (s *SecureChannel) SendRequest(ctx context.Context, req ua.Request, authTok
 }
 
 func (s *SecureChannel) SendRequestWithTimeout(ctx context.Context, req ua.Request, authToken *ua.NodeID, timeout time.Duration, h ResponseHandler) error {
+	if s.https != nil {
+		return s.sendHTTPS(ctx, req, authToken, timeout, h)
+	}
 	// Only the transmission is done under the gate; waiting for the response
 	// must not hold up a token renewal.
 	s.sendGate.RLock()
@@ -1684,6 +1703,9 @@ func (s *SecureChannel) Close() (err error) {
 }
 
 func (s *SecureChannel) close() error {
+	if s.https != nil {
+		return s.closeHTTPS()
+	}
 	s.cfg.Logger.Debug("closing secure channel", "channel_id", s.c.ID())
 
 	defer func() {

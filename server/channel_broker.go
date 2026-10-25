@@ -18,11 +18,13 @@ import (
 	"github.com/otfabric/go-opcua/uasc"
 )
 
-// inbound is a request together with the channel it arrived on.
+// inbound is a request together with the channel it arrived on and the
+// writer of its response.
 type inbound struct {
-	msg *uasc.MessageBody
-	sc  *uasc.SecureChannel
-	w   *channelWriter
+	reqID uint32
+	req   ua.Request
+	sc    *uasc.SecureChannel
+	w     *channelWriter
 }
 
 type channelBroker struct {
@@ -270,7 +272,7 @@ func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *
 		if !w.acquire(ctx) {
 			return
 		}
-		queue <- inbound{msg: msg, sc: sc, w: w}
+		queue <- inbound{reqID: msg.RequestID, req: msg.Request(), sc: sc, w: w}
 	}
 }
 
@@ -288,6 +290,21 @@ func (c *channelBroker) forward(ctx context.Context, w *channelWriter, queue <-c
 		case c.msgChan <- in:
 		}
 	}
+}
+
+// addWriter registers the response writer of a channel that has no
+// connection of its own (the virtual channels of HTTPS).
+func (c *channelBroker) addWriter(sc *uasc.SecureChannel, w *channelWriter) {
+	c.mu.Lock()
+	c.writers[sc] = w
+	c.mu.Unlock()
+}
+
+// removeWriter unregisters a writer registered with addWriter.
+func (c *channelBroker) removeWriter(sc *uasc.SecureChannel) {
+	c.mu.Lock()
+	delete(c.writers, sc)
+	c.mu.Unlock()
 }
 
 // writer returns the response writer of a registered channel, or nil.

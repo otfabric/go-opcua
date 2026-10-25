@@ -798,11 +798,20 @@ func (c *Client) Dial(ctx context.Context) error {
 		endpoint = c.endpointURL
 		err      error
 	)
-	if c.cfg.reverse != nil {
+	switch {
+	case c.cfg.reverse != nil:
 		// reverse connect: wait for the server to connect to us
 		conn, endpoint, err = c.acceptReverse(ctx)
-	} else {
-		conn, err = c.cfg.dialer.Dial(ctx, c.endpointURL)
+	case uasc.IsHTTPSEndpoint(c.endpointURL):
+		return c.dialHTTPS()
+	default:
+		d := c.cfg.dialer
+		if uacp.IsWebSocketEndpoint(c.endpointURL) && d.TLSConfig == nil && c.cfg.tlsConfig != nil {
+			withTLS := *d
+			withTLS.TLSConfig = c.cfg.tlsConfig
+			d = &withTLS
+		}
+		conn, err = d.Dial(ctx, c.endpointURL)
 	}
 	if err != nil {
 		return err
@@ -840,6 +849,32 @@ func (c *Client) Dial(ctx context.Context) error {
 		return err
 	}
 
+	return nil
+}
+
+// dialHTTPS sets up the channel to an opc.https endpoint (Part 6 §7.4).
+// Nothing goes over the network: HTTPS has no connection or secure
+// conversation to establish, each request is posted on its own.
+func (c *Client) dialHTTPS() error {
+	hc := c.cfg.httpClient
+	if hc == nil {
+		hc = uasc.NewHTTPSClient(c.cfg.tlsConfig)
+	}
+	errCh := make(chan error, 1)
+	sc, err := uasc.NewHTTPSChannel(c.endpointURL, hc, c.cfg.sechan, errCh)
+	if err != nil {
+		return err
+	}
+	if err := c.cfg.validateServerCertificate(c.cfg.sechan.RemoteCertificate, c.cfg.sechan.SecurityMode); err != nil {
+		_ = sc.Close()
+		return err
+	}
+	c.connMu.Lock()
+	c.conn = nil
+	c.activeEndpoint = c.endpointURL
+	c.sechanErr = errCh
+	c.connMu.Unlock()
+	c.setSecureChannel(sc)
 	return nil
 }
 

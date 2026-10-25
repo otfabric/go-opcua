@@ -6,6 +6,7 @@ package server
 import (
 	"context"
 	"crypto/rsa"
+	"crypto/tls"
 	"encoding/xml"
 	stderrors "errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uapolicy"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 const defaultListenAddr = "opc.tcp://localhost:0"
@@ -61,6 +63,8 @@ type Server struct {
 	namespaces []NameSpace
 
 	l  *uacp.Listener
+	wl *uacp.Listener // opc.wss, nil without WebSocket endpoints
+	hs *httpsServer   // opc.https, nil without HTTPS endpoints
 	cb *channelBroker
 	sb *sessionBroker
 
@@ -150,6 +154,13 @@ type serverConfig struct {
 	maxPendingResponses  int
 
 	logger *slog.Logger
+
+	// wss and https are the WebSocket and HTTPS transports (transport.go).
+	wss   transportConfig
+	https transportConfig
+	// tlsConfig is the TLS configuration of both; nil means the RSA
+	// application instance certificate is the TLS certificate.
+	tlsConfig *tls.Config
 
 	// pubsub is the PubSub configuration of WithPubSub (nil: no PubSub).
 	pubsub *pubsubConfig
@@ -449,8 +460,15 @@ func (s *Server) Status() *ua.ServerStatusDataType {
 }
 
 // URLs returns opc endpoint that the server is listening on.
+//
+// The opc.tcp endpoints come first, then the opc.wss and the opc.https ones.
 func (s *Server) URLs() []string {
-	return s.cfg.endpoints
+	if len(s.cfg.wss.endpoints) == 0 && len(s.cfg.https.endpoints) == 0 {
+		return s.cfg.endpoints
+	}
+	urls := slices.Clone(s.cfg.endpoints)
+	urls = append(urls, s.cfg.wss.endpoints...)
+	return append(urls, s.cfg.https.endpoints...)
 }
 
 // Port returns the TCP port the server is bound to after [Server.Start], or 0
@@ -546,6 +564,11 @@ func (s *Server) Start(ctx context.Context) error {
 	if tcp, ok := s.l.Addr().(*net.TCPAddr); ok {
 		s.applyBoundPort(tcp.Port)
 	}
+	// The opc.wss and opc.https listeners, next to opc.tcp.
+	if err := s.listenTransports(ctx); err != nil {
+		_ = s.l.Close()
+		return err
+	}
 	s.cfg.logger.Info("started listening", "urls", s.URLs())
 
 	s.initEndpoints()
@@ -566,6 +589,7 @@ func (s *Server) Start(ctx context.Context) error {
 	// sockets can fail here; a discovery server that is down cannot.
 	if err := s.disc.start(ctx); err != nil {
 		_ = s.l.Close()
+		s.closeTransports()
 		s.setServerState(ua.ServerStateFailed)
 		return err
 	}
@@ -579,12 +603,14 @@ func (s *Server) Start(ctx context.Context) error {
 	s.cancelMonitor = cancel
 
 	go s.acceptAndRegister(mctx, s.l)
+	s.serveTransports(mctx)
 	go s.superviseMonitor(mctx)
 	go s.reapSessions(mctx)
 
 	if err := s.startPubSub(mctx); err != nil {
 		cancel()
 		_ = s.l.Close()
+		s.closeTransports()
 		s.setServerState(ua.ServerStateFailed)
 		return err
 	}
@@ -619,6 +645,8 @@ func (s *Server) Close() error {
 	if s.l != nil {
 		_ = s.l.Close()
 	}
+	// The same for opc.wss; HTTPS requests in flight are ended here.
+	s.closeTransports()
 
 	// Shut down all secure channels and UACP connections
 	err := s.cb.Close(context.Background())
@@ -717,19 +745,19 @@ func (s *Server) monitorConnections(ctx context.Context) {
 		if !ok {
 			continue // ctx is likely done, ctx.Err will be non-nil
 		}
-		s.cfg.logger.Debug("monitorConnections: received message", "type", fmt.Sprintf("%T", in.msg.Request()))
+		s.cfg.logger.Debug("monitorConnections: received message", "type", fmt.Sprintf("%T", in.req))
 
 		// Requests are handled one at a time: the services rely on it (a
 		// Write and the data change it triggers, for example, are applied
 		// in request order). What must not happen here is waiting for a
 		// client, so the response is only queued on the channel's writer.
-		resp := s.serve(ctx, in.sc, in.msg.RequestID, in.msg.Request())
+		resp := s.serve(ctx, in.sc, in.reqID, in.req)
 		if resp == nil {
 			// answered later (Publish): the request is no longer in flight
 			in.w.release()
 			continue
 		}
-		if err := in.w.send(in.msg.RequestID, resp); err != nil {
+		if err := in.w.send(in.reqID, resp); err != nil {
 			s.cfg.logger.Debug("response dropped", "error", err)
 		}
 	}
@@ -738,82 +766,100 @@ func (s *Server) monitorConnections(ctx context.Context) {
 // initEndpoints builds the endpoint list from the server's configuration.
 func (s *Server) initEndpoints() {
 	var endpoints []*ua.EndpointDescription
-	for _, sec := range s.cfg.enabledSec {
-		for _, url := range s.cfg.endpoints {
-			secLevel := uapolicy.SecurityLevel(sec.secPolicy, sec.secMode)
-
-			ep := &ua.EndpointDescription{
-				EndpointURL:         url, // todo: be able to listen on multiple adapters
-				SecurityLevel:       secLevel,
-				Server:              s.applicationDescription(),
-				ServerCertificate:   s.cfg.certificateFor(sec.secPolicy),
-				SecurityMode:        sec.secMode,
-				SecurityPolicyURI:   sec.secPolicy,
-				TransportProfileURI: "http://opcfoundation.org/UA-Profile/Transport/uatcp-uasc-uabinary",
+	// The opc.tcp endpoints first, then those of opc.wss and opc.https.
+	httpsModes := s.httpsModes()
+	for _, t := range s.transportEndpoints() {
+		isHTTPS := t.profile == ua.TransportProfileHTTPS
+		for _, sec := range s.cfg.enabledSec {
+			// HTTPS offers a security policy once, with the strongest
+			// mode enabled for it, and only a policy that needs no secure
+			// conversation (Part 6 §7.4.1).
+			if isHTTPS && (!uasc.HTTPSPolicySupported(sec.secPolicy) || httpsModes[sec.secPolicy] != sec.secMode) {
+				continue
 			}
-
-			for _, auth := range s.cfg.enabledAuth {
-				// Each endpoint's UserIdentityToken policies are scoped to the
-				// endpoint's own security level.  Advertising cross-policy token
-				// policies (e.g. username_basic256sha256 on a None/None endpoint)
-				// confuses clients that try to encrypt the password using the
-				// "wrong" key material for that channel.
-				//
-				// Anonymous always uses SecurityPolicyURI=None.
-				// Non-anonymous tokens use the endpoint's security policy, with
-				// a special exemption: AllowUsernameOnNone lets UserName appear on
-				// None endpoints (password sent plaintext over the unencrypted channel).
-				authSecPolicy := sec.secPolicy
-				if auth.tokenType == ua.UserTokenTypeAnonymous {
-					authSecPolicy = "http://opcfoundation.org/UA/SecurityPolicy#None"
-				}
-
-				if auth.tokenType != ua.UserTokenTypeAnonymous &&
-					authSecPolicy == "http://opcfoundation.org/UA/SecurityPolicy#None" &&
-					!s.cfg.allowUsernameOnNone {
-					continue
-				}
-
-				policyID := strings.ToLower(
-					strings.TrimPrefix(auth.tokenType.String(), "UserTokenType") +
-						"_" +
-						strings.TrimPrefix(authSecPolicy, "http://opcfoundation.org/UA/SecurityPolicy#"),
-				)
-
-				var dup bool
-				for _, uit := range ep.UserIdentityTokens {
-					if uit.PolicyID == policyID {
-						dup = true
-						break
-					}
-				}
-
-				if dup {
-					continue
-				}
-				// Per OPC UA Part 4 §7.36.1: SecurityPolicyURI in the token
-				// policy specifies how the credential is encrypted.  An empty
-				// string means "inherit from the SecureChannel's policy",
-				// which is the most interoperable choice.  Using the explicit
-				// None URI here can confuse some clients (e.g. open62541 v1.5)
-				// that treat the explicit None differently from the empty string.
-				tok := &ua.UserTokenPolicy{
-					PolicyID:          policyID,
-					TokenType:         auth.tokenType,
-					IssuedTokenType:   "",
-					IssuerEndpointURL: "",
-					SecurityPolicyURI: "",
-				}
-
-				ep.UserIdentityTokens = append(ep.UserIdentityTokens, tok)
+			for _, url := range t.urls {
+				endpoints = append(endpoints, s.endpointDescription(url, t.profile, sec))
 			}
-			endpoints = append(endpoints, ep)
 		}
 	}
 
 	s.mu.Lock()
 	s.endpoints = endpoints
 	s.mu.Unlock()
+}
+
+// endpointDescription describes the endpoint at url with transport profile
+// profile and security sec.
+func (s *Server) endpointDescription(url, profile string, sec security) *ua.EndpointDescription {
+	secLevel := uapolicy.SecurityLevel(sec.secPolicy, sec.secMode)
+
+	ep := &ua.EndpointDescription{
+		EndpointURL:         url,
+		SecurityLevel:       secLevel,
+		Server:              s.applicationDescription(),
+		ServerCertificate:   s.cfg.certificateFor(sec.secPolicy),
+		SecurityMode:        sec.secMode,
+		SecurityPolicyURI:   sec.secPolicy,
+		TransportProfileURI: profile,
+	}
+
+	for _, auth := range s.cfg.enabledAuth {
+		// Each endpoint's UserIdentityToken policies are scoped to the
+		// endpoint's own security level.  Advertising cross-policy token
+		// policies (e.g. username_basic256sha256 on a None/None endpoint)
+		// confuses clients that try to encrypt the password using the
+		// "wrong" key material for that channel.
+		//
+		// Anonymous always uses SecurityPolicyURI=None.
+		// Non-anonymous tokens use the endpoint's security policy, with
+		// a special exemption: AllowUsernameOnNone lets UserName appear on
+		// None endpoints (password sent plaintext over the unencrypted channel).
+		authSecPolicy := sec.secPolicy
+		if auth.tokenType == ua.UserTokenTypeAnonymous {
+			authSecPolicy = "http://opcfoundation.org/UA/SecurityPolicy#None"
+		}
+
+		// Over HTTPS TLS encrypts the token whatever the policy.
+		if auth.tokenType != ua.UserTokenTypeAnonymous &&
+			authSecPolicy == "http://opcfoundation.org/UA/SecurityPolicy#None" &&
+			!s.cfg.allowUsernameOnNone && profile != ua.TransportProfileHTTPS {
+			continue
+		}
+
+		policyID := strings.ToLower(
+			strings.TrimPrefix(auth.tokenType.String(), "UserTokenType") +
+				"_" +
+				strings.TrimPrefix(authSecPolicy, "http://opcfoundation.org/UA/SecurityPolicy#"),
+		)
+
+		var dup bool
+		for _, uit := range ep.UserIdentityTokens {
+			if uit.PolicyID == policyID {
+				dup = true
+				break
+			}
+		}
+
+		if dup {
+			continue
+		}
+		// Per OPC UA Part 4 §7.36.1: SecurityPolicyURI in the token
+		// policy specifies how the credential is encrypted.  An empty
+		// string means "inherit from the SecureChannel's policy",
+		// which is the most interoperable choice.  Using the explicit
+		// None URI here can confuse some clients (e.g. open62541 v1.5)
+		// that treat the explicit None differently from the empty string.
+		tok := &ua.UserTokenPolicy{
+			PolicyID:          policyID,
+			TokenType:         auth.tokenType,
+			IssuedTokenType:   "",
+			IssuerEndpointURL: "",
+			SecurityPolicyURI: "",
+		}
+
+		ep.UserIdentityTokens = append(ep.UserIdentityTokens, tok)
+	}
+	return ep
 }
 
 func (s *Server) Node(nid *ua.NodeID) *Node {
