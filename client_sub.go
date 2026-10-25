@@ -752,13 +752,19 @@ func (c *Client) publish(ctx context.Context) error {
 	stats.RecordError(err)
 	left := session != c.Session() || session != nil && session == c.leaving.Load()
 	switch {
-	case err != nil && left && staleSessionError(err):
+	case err != nil && left && (staleSessionError(err) || errors.Is(err, ua.StatusBadNoSubscription)):
 		// The request was sent in a session the client has left in the
 		// meantime (the application activated another one, or the reconnect
 		// logic replaced it), and the server says that this session is
-		// gone. That is no news and says nothing about the session the
-		// client has now: carry on publishing there. Returning the error
-		// would pause the publish loop, and nothing would resume it.
+		// gone, or that it has no subscriptions left: the reconnect logic
+		// has just transferred them to the new session, and the server
+		// answers the Publish requests of the old one with
+		// Bad_NoSubscription (Part 4 §5.13.5). That is no news and says
+		// nothing about the session the client has now: carry on publishing
+		// there. Returning the error would pause the publish loop, and
+		// nothing would resume it; marking the subscriptions broken would
+		// recreate the ones that were just transferred, losing their
+		// notifications.
 		c.cfg.logger.Debug("publish: error for a session the client has left, ignoring", "error", err)
 	case errors.Is(err, io.EOF):
 		c.cfg.logger.Debug("publish: eof: pausing publish loop")
