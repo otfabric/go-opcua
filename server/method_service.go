@@ -45,7 +45,7 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 	for i, m := range req.MethodsToCall {
 		m = s.srv.instanceMethod(m)
 		if m.MethodID != nil {
-			if sc := ac.CheckCall(ctx, sess, m.MethodID); sc != ua.StatusOK {
+			if sc := ac.CheckCall(ctx, sess.handle(), m.MethodID); sc != ua.StatusOK {
 				results[i] = &ua.CallMethodResult{StatusCode: sc}
 				continue
 			}

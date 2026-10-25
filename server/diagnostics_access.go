@@ -162,7 +162,7 @@ func (s *Server) checkRead(ctx context.Context, sess *session, nid *ua.NodeID) u
 	if st := s.push.checkRead(sess, nid); st != ua.StatusOK {
 		return st
 	}
-	return s.cfg.accessController.CheckRead(ctx, sess, nid)
+	return s.cfg.accessController.CheckRead(ctx, sess.handle(), nid)
 }
 
 // checkWrite is checkRead for writing a node.
@@ -170,7 +170,7 @@ func (s *Server) checkWrite(ctx context.Context, sess *session, nid *ua.NodeID) 
 	if st := s.diag.checkWrite(sess, nid); st != ua.StatusOK {
 		return st
 	}
-	return s.cfg.accessController.CheckWrite(ctx, sess, nid)
+	return s.cfg.accessController.CheckWrite(ctx, sess.handle(), nid)
 }
 
 // checkBrowse is checkRead for browsing a node.
@@ -180,5 +180,5 @@ func (s *Server) checkBrowse(ctx context.Context, sess *session, nid *ua.NodeID)
 			return st
 		}
 	}
-	return s.cfg.accessController.CheckBrowse(ctx, sess, nid)
+	return s.cfg.accessController.CheckBrowse(ctx, sess.handle(), nid)
 }

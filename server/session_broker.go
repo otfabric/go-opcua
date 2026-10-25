@@ -65,6 +65,10 @@ type session struct {
 
 	// diag holds the diagnostics of the session (diagnostics.go).
 	diag sessionDiag
+
+	// pub is the Session handle of the session, handed to the
+	// AccessController (session_handle.go).
+	pub Session
 }
 
 // pendingStatusChange is a StatusChangeNotification waiting for a Publish
@@ -226,6 +230,7 @@ func (sb *sessionBroker) NewSession() *session {
 		AuthTokenID:     newAuthenticationToken(),
 		PublishRequests: make(chan PubReq, 100),
 	}
+	s.pub.s = s
 	s.diag.created = time.Now()
 	s.touch()
 
