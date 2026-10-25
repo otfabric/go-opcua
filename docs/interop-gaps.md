@@ -7,7 +7,7 @@ peer entry comes from the interop suite ([INTEROP.md](../INTEROP.md)): the
 test that found it skips with the reason or pins the behaviour, and the
 ledger row says `unsupported` with the same reason.
 
-Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
+Versions: go-opcua v1.22.0; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 0.19.0, UA-.NETStandard 2.0.1, node-opcua 2.187.12 and opcua-asyncio
 (`asyncua`) 2.1.0, as packaged by opcua-interop v0.14.0.
 
@@ -16,7 +16,7 @@ Versions: go-opcua v1.8.1; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 | Gap | Who has it | Workaround |
 |---|---|---|
 | **JSON over HTTPS and WebSockets** (`https-uajson`, `wss-uajson`, the OpenAPI mapping). The binary `opc.https` and `opc.wss` transports are implemented. | UA-.NETStandard | Use the binary transports. |
-| **A file-based PKI store.** The pull model of Part 12 (package `gds/gdsserver`, `gds.PullClient`) and the push model (`server.WithPushManagement`, package `gds`) are implemented, the push model with the three default certificate groups and certificate groups of the application, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults, TransactionDiagnostics, PFX keys and the certificate alarms of 1.05; the pull model with the three default certificate groups, CSRs of every key type, PEM and PFX keys, the RolePermissions and audit events of the GDS NodeSet, and a `MemoryStore` or a file-based `gdsserver.NewFileStore`. | UA-.NETStandard | Implement `server.CertificateStore` over the application's storage. |
+| **A file-based certificate store for the push model.** `server.CertificateStore` has no implementation in the library: without one, pushed trust lists, certificates and keys live in memory only. The pull model of Part 12 (package `gds/gdsserver`, `gds.PullClient`) and the push model (`server.WithPushManagement`, package `gds`) are implemented, the push model with the three default certificate groups and certificate groups of the application, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults, TransactionDiagnostics, PFX keys and the certificate alarms of 1.05; the pull model with the three default certificate groups, CSRs of every key type, PEM and PFX keys, the RolePermissions and audit events of the GDS NodeSet, and a `MemoryStore` or a file-based `gdsserver.NewFileStore`. | UA-.NETStandard | Implement `server.CertificateStore` over the application's storage. |
 | **Historical events on the server.** The history provider interfaces cover data only; the client has `HistoryReadEvent`. | UA-.NETStandard (framework), asyncua | Store events in the application, or keep event history in another historian. |
 | **Dynamic decoding of custom structures** from the server's DataTypeDefinition | Milo, UA-.NETStandard, node-opcua, asyncua | Generate or register Go types (`ua.RegisterExtensionObject`); unknown structures stay ExtensionObject bodies. |
 | **Time-scheduled Ethernet (TSN)**, AMQP over WebSockets, PubSub Actions bound to server Methods (go-opcua runs Go handlers) | open62541 (Ethernet / TSN) | Plain Ethernet, UDP, MQTT or AMQP for data; register an `ActionHandler` that calls the Method. |

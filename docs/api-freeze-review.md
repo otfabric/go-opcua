@@ -1,5 +1,12 @@
 # Public API freeze review (v1.3.0)
 
+> **Historical.** This review records the freeze of the v1.3.0 surface. The
+> freeze has been lifted since: Query, NodeManagement, issued identity tokens,
+> Alarms & Conditions, server diagnostics, PubSub and certificate management
+> (packages `gds` and `gds/gdsserver`) were added as public API afterwards, and
+> this document is not kept in step with them. [API.md](../API.md) is the
+> current reference; the release notes are in [RELEASE.md](../RELEASE.md).
+
 Focused review of the surface added or expanded through v1.3.0.
 Goal: freeze the public API before more protocol features; prefer documentation
 and small consistency fixes over new services.

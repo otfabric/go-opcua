@@ -11,19 +11,22 @@ The library follows a layered architecture aligned with the OPC-UA specification
 ```
 ┌──────────────────────────────────────────────────┐
 │              Application Layer                    │
-│   opcua (client)  │  server/  │  monitor/        │
+│   opcua (client) │ server/ │ monitor/ │ gds/      │
+│   pubsub/ (Part 14, beside the client/server)     │
 ├──────────────────────────────────────────────────┤
 │           Service Layer (ua/)                     │
 │   Request/Response types, encoding/decoding       │
 ├──────────────────────────────────────────────────┤
 │     Secure Conversation Layer (uasc/)             │
-│   Encryption, signing, token management           │
+│   Encryption, signing, token management;          │
+│   the HTTPS channel (no secure conversation)      │
 ├──────────────────────────────────────────────────┤
 │     Connection Protocol Layer (uacp/)             │
-│   TCP transport, HEL/ACK handshake                │
+│   TCP and TLS WebSocket transports, HEL/ACK       │
 ├──────────────────────────────────────────────────┤
 │     Security Policies (uapolicy/)                 │
-│   RSA, AES, HMAC algorithm implementations        │
+│   RSA, ECC (ECDH, ECDSA, EdDSA), AES, ChaCha20,   │
+│   HMAC, HKDF; certificate parsing                 │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -40,16 +43,19 @@ Packages are tiered by intended audience and stability commitment:
 | `ua/` | OPC-UA data types, service request/response structs, binary encoding |
 | `id/` | Generated OPC-UA standard node ID constants and reverse lookup |
 | `monitor/` | Convenience subscription API with callback/channel patterns |
+| `gds/` | Certificate management clients of Part 12: push model (`Client`, against a server's ServerConfiguration) and pull model (`PullClient`, against a Global Discovery Server) |
+| `gds/gdsserver/` | Global Discovery Server (Part 12 §6, §7.9) attached to a `server.Server` |
+| `gds/gdsid/` | NodeIds of the GDS information model |
+| `pubsub/` | PubSub runtime (Part 14) and its sub-packages (`message`, `uadp`, `jsonmsg`, `transport/...`, `security`, `sks`, `remote`) |
 | `errors/` | Sentinel errors and error types for `errors.Is` / `errors.As` |
 
 **Tier 2 — Advanced public API.** Public but specialized. Useful for custom transports, security, or schema loading. Documented and versioned but more likely to evolve.
 
 | Package | Responsibility |
 |---------|---------------|
-| `uacp/` | TCP transport, connection handshake, listener |
-| `uasc/` | Secure channel management, message chunking, token renewal |
-| `uapolicy/` | Cryptographic algorithms per security policy |
-
+| `uacp/` | TCP and WebSocket (`opc.wss`) transports, connection handshake, listeners, reverse connect |
+| `uasc/` | Secure channel management, message chunking, token renewal; the HTTPS channel (`opc.https`) |
+| `uapolicy/` | Cryptographic algorithms per security policy; certificates and keys `crypto/x509` cannot handle |
 | `schema/` | OPC-UA schema input files (CSVs, BSD, XSD) for code generators |
 | `server/attrs/` | Server attribute helpers |
 | `server/refs/` | Server reference helpers |
@@ -62,6 +68,8 @@ Packages are tiered by intended audience and stability commitment:
 | `internal/stats/` | Metrics collection (experimental, `expvar`-based) |
 | `internal/testutil/` | Test server/client helpers for integration tests |
 | `internal/goname/` | Shared identifier normalization for code generators |
+| `internal/websocket/` | RFC 6455 framing and handshake of the `opc.wss` transport |
+| `internal/mqtt/`, `internal/amqp/`, `internal/mdns/` | MQTT 3.1.1 / 5.0 and AMQP 1.0 clients of the PubSub transports; the mDNS responder of multicast discovery |
 | `internal/cmd/gen/` | Go-based code generation driver |
 
 ---
@@ -85,13 +93,13 @@ Client.Send(ctx, req, h)      ← Generic send; h type-asserts the response
 SecureChannel.SendRequest()   ← Serialize, encrypt, sign, chunk
   │
   ▼
-UACP conn.Write()             ← TCP send
+UACP conn.Write()             ← TCP or WebSocket send
   │
   ▼
   ... network ...
   │
   ▼
-UACP conn.Read()              ← TCP receive
+UACP conn.Read()              ← TCP or WebSocket receive
   │
   ▼
 SecureChannel handler          ← Reassemble chunks, decrypt, verify
@@ -104,6 +112,7 @@ Client receives typed response
 ```
 
 Key details:
+- Over `opc.https` there is no UACP connection and no secure conversation: `SecureChannel.SendRequest` posts the encoded request over HTTPS and the response body is the answer
 - `SecureChannel` correlates requests and responses by `requestID`
 - Responses are delivered through Go channels to the waiting caller
 - The secure channel is stored in an `atomic.Value` for lock-free reads
@@ -113,7 +122,7 @@ Key details:
 Incoming requests flow through the server's handler dispatch:
 
 ```
-UACP Listener.Accept()
+UACP Listener.Accept()              ← opc.tcp, or opc.wss (TLS + WebSocket upgrade)
   │
   ▼
 Server.acceptAndRegister()          ← One goroutine per connection
@@ -142,6 +151,8 @@ The handler signature is:
 ```go
 type Handler func(ctx context.Context, sc *uasc.SecureChannel, req ua.Request, reqID uint32) (ua.Response, error)
 ```
+
+An `opc.https` request takes another path in: the HTTPS listener decodes the POST body and hands the request to the same dispatch on a virtual secure channel per security policy, and writes the response as the HTTP answer.
 
 Handlers receive a request-scoped `context.Context` for cancellation and timeouts; use it for downstream calls (e.g. access control, method handlers) where applicable.
 
@@ -175,7 +186,8 @@ Client                              Server
   │                                    │
 ```
 
-- Uses RSA encryption (1024–4096 bits depending on policy)
+- RSA policies: the messages are encrypted and signed with RSA (1024–4096 bit keys depending on policy) and the nonces are random
+- ECC policies: the messages are signed (ECDSA or EdDSA), not encrypted, and the nonces are ephemeral ECDH public keys (Part 6 §6.8)
 - Each side proves identity via certificate
 - Nonces are exchanged to derive symmetric keys
 
@@ -184,9 +196,9 @@ Client                              Server
 After the handshake, both sides derive symmetric keys from the exchanged nonces:
 
 ```
-Client nonce + Server nonce → Key derivation
-  → Symmetric encryption key (AES-128 or AES-256)
-  → Symmetric signing key (HMAC-SHA1 or HMAC-SHA256)
+Client nonce + Server nonce → Key derivation (P_SHA for RSA, HKDF over the ECDH secret for ECC)
+  → Symmetric encryption key (AES-128, AES-256 or ChaCha20)
+  → Symmetric signing key (HMAC-SHA1 / SHA256 / SHA384), or an AEAD tag (AES-GCM, Poly1305)
 ```
 
 All subsequent messages use symmetric encryption, which is much faster than asymmetric.
@@ -200,7 +212,13 @@ All subsequent messages use symmetric encryption, which is much faster than asym
 | Basic256 | AES-256 / HMAC-SHA1 | RSA-OAEP | Deprecated |
 | Basic256Sha256 | AES-256 / HMAC-SHA256 | RSA-OAEP | Active |
 | Aes128_Sha256_RsaOaep | AES-128 / HMAC-SHA256 | RSA-OAEP | Modern |
-| Aes256_Sha256_RsaPss | AES-256 / HMAC-SHA256 | RSA-OAEP-256 | Modern |
+| Aes256_Sha256_RsaPss | AES-256 / HMAC-SHA256 | RSA-OAEP-SHA256, RSA-PSS-SHA256 | Modern |
+| ECC_nistP256, ECC_nistP384 | AES-128 / HMAC-SHA256, AES-256 / HMAC-SHA384 | ECDSA, ECDH P-256 / P-384 | ECC |
+| ECC_brainpoolP256r1, ECC_brainpoolP384r1 | as the NIST pair | ECDSA, ECDH on Brainpool | ECC (not constant time) |
+| ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly | AES-128-GCM, ChaCha20-Poly1305 | ECDSA, ECDH P-256 | ECC, AEAD |
+| ECC_curve25519, ECC_curve448 | ChaCha20-Poly1305 | Ed25519 / X25519, Ed448 / X448 | ECC, AEAD |
+
+Details and the points where the library follows open62541 rather than the text of the specification are in the [Security Guide](security.md#security-policies).
 
 ---
 

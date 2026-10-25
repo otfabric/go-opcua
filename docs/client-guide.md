@@ -19,7 +19,9 @@
 | **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
-| **Alarms & Conditions** (Part 9, over Method + Monitored Items) | `NewConditionEventFilter`, `ParseConditionEvent`, `Acknowledge`, `Confirm`, `AddComment`, `EnableCondition`, `DisableCondition`, `TimedShelve`, `OneShotShelve`, `Unshelve`, `ConditionRefresh`, `ConditionRefresh2` | Implemented; see [Alarms and Conditions](#alarms-and-conditions) |
+| **Alarms & Conditions** (Part 9, over Method + Monitored Items) | `NewConditionEventFilter`, `ParseConditionEvent`, `Acknowledge`, `Confirm`, `AddComment`, `EnableCondition`, `DisableCondition`, `TimedShelve`, `OneShotShelve`, `Unshelve`, `ConditionRefresh`, `ConditionRefresh2`; of Part 9 1.05 `Suppress`, `Unsuppress`, `RemoveFromService`, `PlaceInService`, `Silence`, `Reset`, `Respond`, `GetGroupMemberships` and the `*2` variants; `ReadAlarmMetrics`, `ResetAlarmMetrics`; `NewAuditConditionEventFilter`, `ParseAuditConditionEvent` | Implemented; see [Alarms and Conditions](#alarms-and-conditions) |
+| **Server diagnostics** (Part 5 §6.3.3, over Read / Write) | `ServerDiagnosticsSummary`, `ServerDiagnosticsEnabled`, `SetServerDiagnosticsEnabled`, `SessionDiagnostics`, `SessionSecurityDiagnostics`, `SessionDiagnosticsOf`, `SessionSecurityDiagnosticsOf`, `SubscriptionDiagnostics`, `SamplingIntervalDiagnostics`; `ReturnDiagnostics`, `*ServiceError` | Implemented; see [Server diagnostics](#server-diagnostics) |
+| **Certificate management** (Part 12, over Method + Call) | package `gds`: push model (`gds.Client`: trust lists of every group, `CreateSigningRequest`, `UpdateCertificate`, `GetRejectedList`, `ApplyChanges`, `GetCertificates`, `CreateSelfSignedCertificate`, `DeleteCertificate`, `ResetToServerDefaults`, `TransactionDiagnostics`, ...); pull model (`gds.PullClient`: application directory, `StartSigningRequest`, `StartNewKeyPairRequest`, `FinishRequest`, trust lists, revocation, `Enroll`) | Implemented; see [push](#certificate-management-gds-push) and [pull](#certificate-management-gds-pull) |
 
 For services not wrapped by a dedicated method, use `Client.Send(ctx, req, handler)` directly; the handler receives the `ua.Response`.
 
@@ -67,6 +69,10 @@ c, _ := opcua.NewClient("opc.tcp://server:4840",
     opcua.AuthUsername("user", "password"),
 )
 ```
+
+The ECC policies (`ECC_nistP256`, `ECC_curve25519`, `ECC_brainpoolP256r1`,
+`ECC_curve448`, ...) take an ECC certificate with `PrivateKeySigner` or
+`PrivateKeyFile`; see the [Security Guide](security.md#ecc-security-policies).
 
 ### With Auto-Reconnection
 
@@ -364,7 +370,8 @@ if _, err := c.Read(ctx, req); err != nil {
 | `SecurityPolicy(name)` | Security policy (`"None"`, `"Basic256Sha256"`, etc.) |
 | `SecurityMode(mode)` | Message security mode |
 | `Certificate(cert)` | Client certificate (DER bytes) |
-| `PrivateKey(key)` | Client private key |
+| `PrivateKey(key)` | Client private key (RSA) |
+| `PrivateKeySigner(key)`, `PrivateKeyFile(path)` | Client private key of any supported type: RSA, ECDSA (NIST or Brainpool), Ed25519, Ed448 (a `crypto.Signer`, e.g. an HSM) |
 | `AuthAnonymous()` | Anonymous authentication |
 | `AuthUsername(user, pass)` | Username/password authentication |
 | `AuthCertificate(cert)` | Certificate-based authentication |
@@ -1093,9 +1100,11 @@ for dv, err := range c.ReadHistoryAll(ctx, nodeID, start, end) {
 Low-level `HistoryReadRawModified` / `HistoryReadProcessed` / `HistoryReadAtTime` and the
 HistoryUpdate helpers accept full details and continuation points. Against go-opcua servers
 with the default `*Historian`, raw/modified/at-time/processed and data update/delete paths
-are available after `SetHistorian` + `EnableNode`. Historical **events** remain unsupported.
-Peer-proven history is raw HistoryRead in all four directions on opcua-interop v0.6.0
-(`history.read.raw`); continuation points are verified open62541→Go and Milo→Go.
+are available after `SetHistorian` + `EnableNode`. Historical **events** are not served by
+go-opcua servers (`HistoryReadEvent` works against servers that have them).
+Peer-proven history is raw HistoryRead (`history.read.raw`) in both directions with all six
+peers, and its continuation points (`history.read.continuation`) in both directions with all
+of them but the asyncua server, which returns none (see [INTEROP.md](../INTEROP.md)).
 
 IndexRange on current Values uses the same NumericRange grammar as servers:
 `"i"`, `"i:j"`, or multi-dimensional `"a:b,c:d"` via `ReadItem.IndexRange` / `ReadMulti`.

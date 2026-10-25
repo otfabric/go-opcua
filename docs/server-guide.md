@@ -157,6 +157,7 @@ This creates a server with:
 | `EnableAuthMode(tokenType)` | Enable an authentication mechanism |
 | `Certificate(cert)` | DER-encoded X.509 certificate |
 | `PrivateKey(key)` | RSA private key |
+| `ApplicationIdentity(cert, key)` | An application instance certificate per key type (RSA, ECDSA on NIST or Brainpool curves, Ed25519, Ed448) for the ECC policies |
 | `ServerName(name)` | Human-readable name |
 | `ManufacturerName(name)` | Manufacturer metadata |
 | `ProductName(name)` | Product metadata |
@@ -168,6 +169,13 @@ This creates a server with:
 | `WebSocketEndPoint(host, port)`, `ListenWebSocketOn(addr)` | An `opc.wss` endpoint and its bind address ([HTTPS and WebSocket endpoints](#https-and-websocket-endpoints)) |
 | `HTTPSEndPoint(host, port)`, `ListenHTTPSOn(addr)` | An `opc.https` endpoint and its bind address |
 | `TLSConfig(cfg)` | TLS certificate of the `opc.wss` / `opc.https` listeners |
+| `WithServerDiagnostics(enabled)` | Start with server diagnostics on (default) or off ([Server diagnostics](#server-diagnostics)) |
+| `WithLocalDiscoveryServer`, `WithDiscoveryRegistration`, `WithMulticastDiscovery` | Discovery server role, registration with one, mDNS ([Discovery](#discovery)) |
+| `WithAuditing(enabled)`, `WithAlarmClock(clock)` | Audit events of the condition methods and of the GDS; the clock of the alarm timers ([Alarms and Conditions](#alarms-and-conditions)) |
+| `WithPushManagement(pm)` | ServerConfiguration push model ([Certificate Management](#certificate-management-push-model)) |
+| `WithPubSub(cfg, opts...)` | PubSub runtime with the PublishSubscribe information model ([PubSub](pubsub.md)) |
+
+The full list is in [API.md](../API.md#server-configuration-options).
 
 ---
 
@@ -197,8 +205,9 @@ srv, err := server.New(
 - **Endpoints.** Every endpoint description carries its
   `TransportProfileUri`. opc.wss offers all enabled policies and modes, as
   opc.tcp does. opc.https offers each enabled policy that needs no secure
-  conversation (`uasc.HTTPSPolicySupported`: not the AEAD ECC policies, whose
-  session signatures are bound to a channel thumbprint) once, in its strongest
+  conversation (`uasc.HTTPSPolicySupported`: not `ECC_nistP256_AesGcm` and
+  `ECC_nistP256_ChaChaPoly`, whose SecureChannelEnhancements bind the session
+  signatures to a channel thumbprint) once, in its strongest
   enabled mode; a user name is accepted on the None endpoint because TLS
   protects it.
 - **HTTPS requests.** All HTTPS requests to the server share one virtual secure

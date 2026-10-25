@@ -38,11 +38,11 @@ The `uapolicy` package implements fourteen security policies:
 
 Everything is implemented with the Go standard library, except ChaCha20-Poly1305, which comes from `golang.org/x/crypto`, Ed448 and X448, which come from `github.com/cloudflare/circl`, and the Brainpool curves, which come from `github.com/ProtonMail/go-crypto` (see [Brainpool and Curve448](#brainpool-and-curve448) for why, and for what that costs).
 
-**Recommendation:** Use `Basic256Sha256` for broad compatibility or `Aes256_Sha256_RsaPss` for maximum security with RSA certificates. Avoid `Basic128Rsa15` and `Basic256` — they are deprecated by the OPC Foundation. Use the ECC policies where the peer supports them and you want forward secrecy and small keys; among them prefer the three with authenticated encryption (AEAD), which are the ones current stacks enable by default.
+**Recommendation:** Use `Basic256Sha256` for broad compatibility or `Aes256_Sha256_RsaPss` for maximum security with RSA certificates. Avoid `Basic128Rsa15` and `Basic256` — they are deprecated by the OPC Foundation. Use the ECC policies where the peer supports them and you want forward secrecy and small keys; among them prefer the four with authenticated encryption (AEAD); the first three are the ones current stacks enable by default.
 
 ### ECC Security Policies
 
-`ECC_nistP256` and `ECC_nistP384` are the elliptic curve policies of OPC UA 1.05 (Part 6 §6.8). They work differently from the RSA policies. The three newer policies with authenticated encryption share everything in this table and are described in [the next section](#ecc-policies-with-authenticated-encryption):
+`ECC_nistP256` and `ECC_nistP384` are the elliptic curve policies of OPC UA 1.05 (Part 6 §6.8). They work differently from the RSA policies. The newer policies with authenticated encryption share everything in this table and are described in [the next section](#ecc-policies-with-authenticated-encryption):
 
 | | RSA policies | ECC policies |
 |---|---|---|
@@ -244,9 +244,10 @@ Over opc.wss the secure conversation runs inside TLS as over opc.tcp, with
 every policy and mode. Over opc.https there is no secure conversation: TLS is
 the only protection of the messages, and the security policy of the endpoint
 (sent in the `OPCUA-SecurityPolicy` header) only selects how the client and
-server nonces are signed in CreateSession / ActivateSession. The AEAD ECC
-policies are not offered over HTTPS: their session signatures are bound to a
-secure channel thumbprint that HTTPS does not have. A None endpoint over HTTPS
+server nonces are signed in CreateSession / ActivateSession. `ECC_nistP256_AesGcm`
+and `ECC_nistP256_ChaChaPoly` are not offered over HTTPS: their
+SecureChannelEnhancements bind the session signatures to a secure channel
+thumbprint that HTTPS does not have (`uasc.HTTPSPolicySupported`). A None endpoint over HTTPS
 accepts user names in plain text, protected by TLS.
 
 ## Message Security Modes
@@ -840,7 +841,8 @@ from what others announce. mDNS has no authentication:
 - [ ] Always pair username/password auth with encryption
 - [ ] Set file permissions on private keys (`0600`)
 - [ ] Validate server certificates with `TrustedCertificates()` or use `InsecureSkipVerify()` explicitly
-- [ ] On servers, configure `WithClientCertificateTrustList` when accepting encrypted client connections
+- [ ] On servers, configure `WithClientCertificateTrustList` (or the trust list of `WithPushManagement`, which replaces it) when accepting encrypted client connections
+- [ ] For `opc.wss` / `opc.https`, give the listeners a TLS certificate the clients trust (`server.TLSConfig`) and require TLS client certificates where the network calls for it
 - [ ] For reverse connect: use a secured endpoint, pin the server certificate, set `ReverseServerURI`, and bind and firewall the client's listener
 - [ ] Implement `AccessController` for fine-grained server authorization
 - [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart
