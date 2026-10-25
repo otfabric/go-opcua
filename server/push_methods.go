@@ -127,6 +127,8 @@ func isNumericNodeID(n *ua.NodeID) bool {
 	switch n.Type() {
 	case ua.NodeIDTypeTwoByte, ua.NodeIDTypeFourByte, ua.NodeIDTypeNumeric:
 		return true
+	case ua.NodeIDTypeString, ua.NodeIDTypeGUID, ua.NodeIDTypeByteString:
+		return false
 	}
 	return false
 }
