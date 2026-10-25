@@ -1,5 +1,36 @@
 # go-opcua Releases
 
+## v1.14.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.13.0
+
+### Summary
+
+Alarms & Conditions (Part 9) on the server, with client helpers to receive, refresh and act on conditions.
+
+### Added
+
+- **server: conditions.** `Server.AddCondition` creates ConditionType, AcknowledgeableConditionType, AlarmConditionType, LimitAlarm (exclusive and non-exclusive) and OffNormalAlarmType instances with their standard components. `Condition` has the state machines (Enabled, Acked, Confirmed, Active, Suppressed, Shelving, limit states), `Update` and the `Set…` helpers, `EvaluateLimits`, `Report`, and `RemoveCondition`.
+- **server: the Part 9 methods** Enable, Disable, AddComment, Acknowledge, Confirm, TimedShelve, OneShotShelve, Unshelve, ConditionRefresh and ConditionRefresh2, through the Call service and the `AccessController`, with the Part 9 status codes; `MaxTimeShelved` and automatic unshelving; the hooks `OnAcknowledge`, `OnConfirm`, `OnAddComment`, `OnEnable` and `OnShelve`, which can refuse a call. `AlarmsConditionsSupported()` is now true.
+- **server: event fields resolve by BrowsePath** (`AckedState/Id`), and a select clause with an empty BrowsePath and AttributeId NodeId returns the ConditionId.
+- **client:** `NewConditionEventFilter`, `ConditionEventFields`, `ParseConditionEvent` (with `IsRefreshStart` / `IsRefreshEnd`), `Acknowledge`, `Confirm`, `AddComment`, `EnableCondition`, `DisableCondition`, `TimedShelve`, `OneShotShelve`, `Unshelve`, `ConditionRefresh` and `ConditionRefresh2`. **ua:** `EventFilterBuilder.SelectPaths` and `SelectConditionID`, and `FieldPath`.
+
+### Not implemented
+
+- Condition branches (BranchId is null), audit events, dialogs (DialogConditionType), the Latched / Silence / OutOfService states, the AlarmConditionType Suppress / Unsuppress / Silence / Reset / RemoveFromService / PlaceInService methods and the `*2` method variants.
+
+### Tests
+
+- Unit, e2e and conformance tests; a fuzz test of the condition state machine; chaos: sessions acknowledge, confirm, comment, disable / enable and refresh concurrently while the server flips states, removes and re-adds a condition and a proxy drops connections, with the events checked for consistency.
+- Interop: the Go client against the UA-.NETStandard, node-opcua and open62541 alarm fixtures, and every adapter client against the Go server (opcua-interop v0.12.0); ledger capabilities `alarms.*`.
+
+### Interop
+
+- Pinned opcua-interop v0.12.0.
+
+---
+
 ## v1.13.0
 
 **Date:** 2026-10-25
