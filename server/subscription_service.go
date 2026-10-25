@@ -865,6 +865,15 @@ func (s *Subscription) storeSentMessage(msg *ua.NotificationMessage) {
 	}
 }
 
+// retransmittable reports whether the message with sequence number seq is
+// still in the retransmission queue.
+func (s *Subscription) retransmittable(seq uint32) bool {
+	s.Mu.Lock()
+	defer s.Mu.Unlock()
+	_, ok := s.sentMessages[seq]
+	return ok
+}
+
 // availableSequenceNumbers returns the sequence numbers available for retransmission.
 func (s *Subscription) availableSequenceNumbers() []uint32 {
 	s.Mu.Lock()
@@ -983,6 +992,18 @@ func (s *Subscription) run() {
 	s.T = ticker
 	s.Mu.Unlock()
 
+	// unsent is a notification message whose Publish response could not be
+	// sent because the connection of its Publish request was gone (a request
+	// may be queued just before its channel closes). It goes out with the
+	// next Publish request: otherwise the client learns of it only from the
+	// sequence number of a later message, which may be a keep-alive many
+	// publishing intervals away.
+	var unsent *ua.NotificationMessage
+
+	// Events wait here until a notification message carries them; a resent
+	// message leaves them for the next one.
+	var eventQueue []*ua.EventFieldList
+
 	// This is the master run event loop.  It has effectively 3 states that it can be in.  The first two are designated with
 	// the labels L0, and L2.  Everything after the L2 loop is the third state where we send any pending notifications.
 	// The states always go L0 -> L2 -> Sending -> L0.  L0 and L2 are both places where we wait so they are done as for loops with
@@ -1005,8 +1026,12 @@ func (s *Subscription) run() {
 
 		// NotifyChannel wakes are ignored for payload; real samples live in
 		// per-monitored-item queues (Part 4 QueueSize / DiscardOldest).
-		var eventQueue []*ua.EventFieldList
 		pendingData := false
+		if unsent != nil && !s.retransmittable(unsent.SequenceNumber) {
+			// Acknowledged after a Republish, or evicted: the client has it
+			// or can no longer get it.
+			unsent = nil
+		}
 
 		// Collect notifications until our publication interval is ready
 	L0:
@@ -1047,7 +1072,7 @@ func (s *Subscription) run() {
 					lifetimeCounter = 0
 				}
 
-				hasQueued := pendingData || s.srv.srv.MonitoredItemService.PendingReportableNotifications(s.ID)
+				hasQueued := unsent != nil || pendingData || s.srv.srv.MonitoredItemService.PendingReportableNotifications(s.ID)
 				if (!hasQueued && len(eventQueue) == 0) || !enabled {
 					keepaliveCounter++
 					if keepaliveCounter > maxKeepAlive {
@@ -1121,45 +1146,55 @@ func (s *Subscription) run() {
 
 		ackResults := s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements)
 
-		s.SequenceID++
-		if s.SequenceID == 0 {
-			s.SequenceID = 1
-		}
-		s.srv.srv.cfg.logger.Debug("got publish request", "sub_id", s.ID, "sequence_id", s.SequenceID)
-
-		s.Mu.Lock()
-		maxNotif := s.MaxNotificationsPerPublish
-		s.Mu.Unlock()
-		finalItems, moreData := s.srv.srv.MonitoredItemService.DrainQueuedNotifications(s.ID, maxNotif)
-
-		// Events currently drain fully in one Publish (event overflow is Phase 15).
-		moreEvents := false
-		eo := make([]*ua.ExtensionObject, 0, 2)
-		if len(finalItems) > 0 {
-			dcn := ua.DataChangeNotification{
-				MonitoredItems:  finalItems,
-				DiagnosticInfos: []*ua.DiagnosticInfo{},
+		var (
+			msg                  ua.NotificationMessage
+			finalItems           []*ua.MonitoredItemNotification
+			moreData, moreEvents bool
+		)
+		if unsent != nil {
+			msg, unsent = *unsent, nil
+			s.srv.srv.cfg.logger.Debug("resending publish response", "sub_id", s.ID, "sequence_id", msg.SequenceNumber)
+		} else {
+			s.SequenceID++
+			if s.SequenceID == 0 {
+				s.SequenceID = 1
 			}
-			dcnEO := ua.NewExtensionObject(&dcn)
-			dcnEO.UpdateMask()
-			eo = append(eo, dcnEO)
-		}
-		if len(eventQueue) > 0 {
-			enl := ua.EventNotificationList{
-				Events: eventQueue,
-			}
-			enlEO := ua.NewExtensionObject(&enl)
-			enlEO.UpdateMask()
-			eo = append(eo, enlEO)
-			eventQueue = nil
-		}
+			s.srv.srv.cfg.logger.Debug("got publish request", "sub_id", s.ID, "sequence_id", s.SequenceID)
 
-		msg := ua.NotificationMessage{
-			SequenceNumber:   s.SequenceID,
-			PublishTime:      time.Now(),
-			NotificationData: eo,
+			s.Mu.Lock()
+			maxNotif := s.MaxNotificationsPerPublish
+			s.Mu.Unlock()
+			finalItems, moreData = s.srv.srv.MonitoredItemService.DrainQueuedNotifications(s.ID, maxNotif)
+
+			// Events currently drain fully in one Publish (event overflow is Phase 15).
+			moreEvents = false
+			eo := make([]*ua.ExtensionObject, 0, 2)
+			if len(finalItems) > 0 {
+				dcn := ua.DataChangeNotification{
+					MonitoredItems:  finalItems,
+					DiagnosticInfos: []*ua.DiagnosticInfo{},
+				}
+				dcnEO := ua.NewExtensionObject(&dcn)
+				dcnEO.UpdateMask()
+				eo = append(eo, dcnEO)
+			}
+			if len(eventQueue) > 0 {
+				enl := ua.EventNotificationList{
+					Events: eventQueue,
+				}
+				enlEO := ua.NewExtensionObject(&enl)
+				enlEO.UpdateMask()
+				eo = append(eo, enlEO)
+				eventQueue = nil
+			}
+
+			msg = ua.NotificationMessage{
+				SequenceNumber:   s.SequenceID,
+				PublishTime:      time.Now(),
+				NotificationData: eo,
+			}
+			s.storeSentMessage(&msg)
 		}
-		s.storeSentMessage(&msg)
 
 		response := &ua.PublishResponse{
 			ResponseHeader: &ua.ResponseHeader{
@@ -1190,6 +1225,7 @@ func (s *Subscription) run() {
 			// can fetch it with Republish; the subscription itself lives on
 			// until its lifetime expires (Part 4 §5.13.1.1).
 			s.srv.srv.cfg.logger.Warn("problem sending publish response", "sub_id", s.ID, "error", err)
+			unsent = &msg
 			continue
 		}
 		s.srv.srv.cfg.logger.Debug("published items", "count", len(finalItems), "more", moreData, "sub_id", s.ID)
