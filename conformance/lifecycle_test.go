@@ -92,26 +92,45 @@ func TestSession_TimeoutEnforced(t *testing.T) {
 	ctx := context.Background()
 	const timeout = 3 * time.Second
 
-	idle := newClient(t, url, opcua.SessionTimeout(timeout))
-	busy := newClient(t, url, opcua.SessionTimeout(timeout))
-	require.Equal(t, timeout, idle.Session().RevisedTimeout())
+	// A busy session is one whose requests reach the server less than a
+	// timeout apart. When the test process is held up for longer than that
+	// (seen on a heavily loaded machine), the session was idle as far as the
+	// server can tell and rightly timed out: the attempt proves nothing and
+	// is made again with new sessions.
+	for attempt := 1; ; attempt++ {
+		idle := newClient(t, url, opcua.SessionTimeout(timeout))
+		busy := newClient(t, url, opcua.SessionTimeout(timeout))
+		require.Equal(t, timeout, idle.Session().RevisedTimeout())
 
-	// Keep one session busy for one and a half timeouts.
-	deadline := time.Now().Add(timeout + timeout/2)
-	for time.Now().Before(deadline) {
+		// Keep one session busy for one and a half timeouts.
+		deadline := time.Now().Add(timeout + timeout/2)
+		last := time.Now()
+		stalled := false
+		for time.Now().Before(deadline) {
+			dv, err := busy.ReadValue(ctx, f.Int32)
+			if gap := time.Since(last); err != nil && gap >= timeout && attempt < 3 {
+				t.Logf("attempt %d: no request for %v, longer than the session timeout; trying again", attempt, gap)
+				stalled = true
+				break
+			}
+			require.NoError(t, err, "a session in use must not time out (%v since the previous read)", time.Since(last))
+			last = time.Now()
+			require.Equal(t, int32(42), dv.Value.Value())
+			time.Sleep(100 * time.Millisecond)
+		}
+		if stalled {
+			continue
+		}
+
+		// The other one was idle all that time and is gone.
+		_, err := idle.ReadValue(ctx, f.Int32)
+		require.ErrorIs(t, err, ua.StatusBadSessionIDInvalid)
+		// The busy one is still fine.
 		dv, err := busy.ReadValue(ctx, f.Int32)
-		require.NoError(t, err, "a session in use must not time out")
+		require.NoError(t, err)
 		require.Equal(t, int32(42), dv.Value.Value())
-		time.Sleep(100 * time.Millisecond)
+		return
 	}
-
-	// The other one was idle all that time and is gone.
-	_, err := idle.ReadValue(ctx, f.Int32)
-	require.ErrorIs(t, err, ua.StatusBadSessionIDInvalid)
-	// The busy one is still fine.
-	dv, err := busy.ReadValue(ctx, f.Int32)
-	require.NoError(t, err)
-	require.Equal(t, int32(42), dv.Value.Value())
 }
 
 // TestSession_RequiresActivation verifies services are refused without an

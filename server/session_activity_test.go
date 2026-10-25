@@ -90,7 +90,7 @@ func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 	// request now waits behind the blocked handler.
 	timeout := time.Duration(sess.timeout.Load())
 	require.Greater(t, timeout, time.Minute)
-	sess.touchAt(time.Now().Add(-timeout + time.Minute))
+	backdate(sess, time.Now().Add(-timeout+time.Minute))
 	read := make(chan error, 1)
 	go func() {
 		_, err := waiter.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{
@@ -119,7 +119,7 @@ func TestExpiredSessionNotRevived(t *testing.T) {
 	sb := newSessionBroker(slog.New(slog.DiscardHandler))
 	sess := sb.NewSession()
 	sess.setTimeout(time.Second)
-	sess.touchAt(time.Now().Add(-2 * time.Second))
+	backdate(sess, time.Now().Add(-2*time.Second))
 
 	sb.touchToken(sess.AuthTokenID)
 	require.True(t, sess.expired(time.Now()), "the arriving request revived the session")
@@ -130,8 +130,31 @@ func TestExpiredSessionNotRevived(t *testing.T) {
 	// A session that has not timed out is still found and touched.
 	live := sb.NewSession()
 	live.setTimeout(time.Minute)
-	live.touchAt(time.Now().Add(-30 * time.Second))
+	backdate(live, time.Now().Add(-30*time.Second))
 	sb.touchToken(live.AuthTokenID)
 	require.Less(t, live.idle(time.Now()), time.Second)
 	require.Same(t, live, sb.Session(live.AuthTokenID))
+}
+
+// backdate sets the last activity of s to t, also when that is earlier than
+// the activity recorded so far, which touchAt does not do.
+func backdate(s *session, t time.Time) {
+	s.lastActivity.Store(int64(t.Sub(monoEpoch)))
+}
+
+// The last activity of a session only moves forward.
+//
+// Regression (conformance TestSession_TimeoutEnforced under load): a request
+// read the clock when it arrived and recorded the time after a later request
+// had recorded its own, taking the activity back by however long it waited
+// in between. A session in use could time out.
+func TestSessionActivityOnlyMovesForward(t *testing.T) {
+	sb := newSessionBroker(slog.New(slog.DiscardHandler))
+	sess := sb.NewSession()
+	now := time.Now()
+	sess.touchAt(now)
+	sess.touchAt(now.Add(-time.Minute))
+	require.Equal(t, time.Duration(0), sess.idle(now))
+	sess.touchAt(now.Add(time.Second))
+	require.Equal(t, -time.Second, sess.idle(now))
 }

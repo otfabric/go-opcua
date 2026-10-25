@@ -125,9 +125,17 @@ func (s *session) touch() {
 	s.touchAt(time.Now())
 }
 
-// touchAt records activity at t.
+// touchAt records activity at t. The activity time only moves forward: a
+// request that read the clock before another one but records it after must
+// not take the session's last activity back.
 func (s *session) touchAt(t time.Time) {
-	s.lastActivity.Store(int64(t.Sub(monoEpoch)))
+	at := int64(t.Sub(monoEpoch))
+	for {
+		last := s.lastActivity.Load()
+		if at <= last || s.lastActivity.CompareAndSwap(last, at) {
+			return
+		}
+	}
 }
 
 // touchIfAlive restarts the timeout of a session that has not timed out at
