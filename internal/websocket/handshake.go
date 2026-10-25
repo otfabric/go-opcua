@@ -79,6 +79,11 @@ func Client(ctx context.Context, nc net.Conn, u *url.URL, opts ClientOptions) (*
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
+		// The connection deadline is the deadline of ctx: it may expire a
+		// moment before ctx reports it.
+		if dl, ok := ctx.Deadline(); ok && !time.Now().Before(dl) {
+			return nil, context.DeadlineExceeded
+		}
 		return nil, err
 	}
 	return c, nil
