@@ -64,6 +64,18 @@ Canonical definitions live in [`errors/sentinel.go`](errors/sentinel.go). Groups
 
 Match with `errors.Is`. When wrapping, use `%w`.
 
+Other packages define the errors of their own API next to it: package
+`server` the condition errors (`ErrConditionRemoved`, `ErrConditionNotAlarm`,
+`ErrConditionUnsupport`, `ErrBranchUnknown`, `ErrTooManyBranches`), package
+`gds/gdsserver` `ErrClosed` and `ErrUnknownRequest`.
+
+Errors that carry a wire status unwrap to it, so `errors.Is(err, ua.StatusBad…)`
+matches them: `*opcua.ServiceError` (a refused request with the
+DiagnosticInfo asked for by `opcua.ReturnDiagnostics`), `*gds.Error` (the
+certificate management method that failed and its status); the A&C helpers
+of the client (`Acknowledge`, `Suppress2`, ...) return the StatusCode of the
+method call itself.
+
 Package documentation: [`errors/doc.go`](errors/doc.go).
 
 ## Wire status codes

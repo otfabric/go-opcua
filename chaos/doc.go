@@ -72,6 +72,11 @@
 //     list and certificate updates, ApplyChanges and dropped transactions
 //     while clients connect, each channel validated against one complete
 //     trust list.
+//   - chaos/gdspull: the Global Discovery Server (package gds/gdsserver) and
+//     the pull model client (Part 12 §6, §7.9): registrations, signing and
+//     new key pair requests, FinishRequest races, revocations and directory
+//     queries while requests are approved and rejected and the GDS is
+//     restarted on the same Store.
 //   - chaos/pubsub: PubSub publishers and subscribers over UDP and MQTT
 //     under datagram faults, broker outages, attacks on the message
 //     security, key rotation storms, SKS outages, runtime and information
