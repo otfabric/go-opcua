@@ -452,8 +452,8 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 	}
 
 	authToken := req.RequestHeader.AuthenticationToken
-	if s.srv.historyCPs != nil && authToken != nil {
-		s.srv.historyCPs.releaseSession(authToken.String())
+	if _, cps := s.srv.history(); cps != nil && authToken != nil {
+		cps.releaseSession(authToken.String())
 	}
 
 	// The Publish requests queued for the session will not be answered by

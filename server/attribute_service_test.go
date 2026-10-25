@@ -432,15 +432,18 @@ func TestAttributeService_HistoryWithHistorian(t *testing.T) {
 		}
 	})
 
-	t.Run("unsupported details type", func(t *testing.T) {
+	t.Run("event details on an unknown node", func(t *testing.T) {
+		// Hist.Svc has data history but is no node of the address space.
 		req := &ua.HistoryReadRequest{
-			RequestHeader:      reqHeader(),
-			HistoryReadDetails: ua.NewExtensionObject(&ua.ReadEventDetails{}),
-			NodesToRead:        []*ua.HistoryReadValueID{{NodeID: nodeID}},
+			RequestHeader: reqHeader(),
+			HistoryReadDetails: ua.NewExtensionObject(&ua.ReadEventDetails{
+				StartTime: time.Unix(1, 0), EndTime: time.Now(), Filter: ua.NewEventFilter().Select("EventId").Build(),
+			}),
+			NodesToRead: []*ua.HistoryReadValueID{{NodeID: nodeID}},
 		}
 		resp, err := svc.HistoryRead(context.Background(), nil, req, 7)
 		require.NoError(t, err)
-		assert.Equal(t, ua.StatusBadHistoryOperationUnsupported, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
+		assert.Equal(t, ua.StatusBadNodeIDUnknown, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
 	})
 }
 
