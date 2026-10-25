@@ -147,7 +147,7 @@ This creates a server with:
 
 | Option | Purpose |
 |--------|---------|
-| `EndPoint(host, port)` | Listen address (can be called multiple times) |
+| `EndPoint(host, port)` | Listen address (can be called multiple times); IPv6 literals such as `::1` or `fe80::1%eth0` are bracketed in the URL (`opc.tcp://[::1]:4840`) |
 | `EnableSecurity(policy, mode)` | Register a security policy + mode combination |
 | `EnableAuthMode(tokenType)` | Enable an authentication mechanism |
 | `Certificate(cert)` | DER-encoded X.509 certificate |

@@ -8,6 +8,8 @@ import (
 	"crypto/x509"
 	"fmt"
 	"log/slog"
+	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -168,15 +170,34 @@ func (s *serverConfig) localIdentity(policyURI string) ([]byte, crypto.Signer, e
 // EndPoint adds an advertised endpoint to the server based on the host name
 // and port.  The first EndPoint registered is also used as the TCP bind
 // address unless ListenOn is called explicitly.
+//
+// host is a host name or an IP address. An IPv6 literal is bracketed in the
+// endpoint URL ("::1" gives opc.tcp://[::1]:4840) and may be given with or
+// without the brackets; a zone ("fe80::1%eth0") is written as %25 in the URL
+// (RFC 6874) and the server binds to that zone.
 func EndPoint(host string, port int) Option {
 	return func(s *serverConfig) error {
 		if s.endpoints == nil {
 			s.endpoints = make([]string, 0)
 		}
-		ep := fmt.Sprintf("opc.tcp://%s:%d", host, port)
-		s.endpoints = append(s.endpoints, ep)
+		s.endpoints = append(s.endpoints, endpointURL("opc.tcp", host, port))
 		return nil
 	}
+}
+
+// endpointURL returns the URL scheme://host:port with an IPv6 literal host
+// bracketed and its zone escaped (RFC 3986 §3.2.2, RFC 6874). A host that is
+// already bracketed is accepted as is.
+func endpointURL(scheme, host string, port int) string {
+	host = strings.TrimSuffix(strings.TrimPrefix(host, "["), "]")
+	if strings.Contains(host, ":") {
+		// The zone of an IPv6 literal is separated by "%", which is
+		// written "%25" in a URL; an escaped zone is kept as it is.
+		if i := strings.IndexByte(host, '%'); i >= 0 && !strings.HasPrefix(host[i:], "%25") {
+			host = host[:i] + "%25" + host[i+1:]
+		}
+	}
+	return scheme + "://" + net.JoinHostPort(host, strconv.Itoa(port))
 }
 
 // ListenOn sets the TCP address the server binds to (e.g. "0.0.0.0:4840").

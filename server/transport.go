@@ -62,7 +62,7 @@ func (t *transportConfig) applyPort(addr net.Addr) {
 // offered, as on opc.tcp. The TLS certificate is set with TLSConfig.
 func WebSocketEndPoint(host string, port int) Option {
 	return func(s *serverConfig) error {
-		s.wss.endpoints = append(s.wss.endpoints, fmt.Sprintf("%s://%s", uacp.SchemeWebSocket, net.JoinHostPort(host, fmt.Sprint(port))))
+		s.wss.endpoints = append(s.wss.endpoints, endpointURL(uacp.SchemeWebSocket, host, port))
 		return nil
 	}
 }
@@ -87,7 +87,7 @@ func ListenWebSocketOn(addr string) Option {
 // TLSConfig.
 func HTTPSEndPoint(host string, port int) Option {
 	return func(s *serverConfig) error {
-		s.https.endpoints = append(s.https.endpoints, fmt.Sprintf("%s://%s", uasc.SchemeHTTPS, net.JoinHostPort(host, fmt.Sprint(port))))
+		s.https.endpoints = append(s.https.endpoints, endpointURL(uasc.SchemeHTTPS, host, port))
 		return nil
 	}
 }

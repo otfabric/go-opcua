@@ -1706,7 +1706,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 
 | Function | Description |
 |----------|-------------|
-| `EndPoint(host string, port int)` | Listen address |
+| `EndPoint(host string, port int)` | Advertised `opc.tcp` endpoint and, the first one, the listen address; an IPv6 literal (`::1`, `fe80::1%eth0`) is bracketed and its zone escaped, as by `WebSocketEndPoint` and `HTTPSEndPoint` |
 | `ListenOn(addr string)` | Override the TCP bind address (e.g. `"0.0.0.0:4840"`) |
 | `Certificate(cert []byte)` | Server certificate (DER) |
 | `PrivateKey(key *rsa.PrivateKey)` | Server private key (RSA) |
