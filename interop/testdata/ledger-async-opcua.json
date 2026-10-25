@@ -1091,9 +1091,8 @@
     {
       "capability": "query.first",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "test-missing",
-      "nextAction": "async-opcua dispatches QueryFirst / QueryNext to the node managers; the adapter's fixture node manager does not implement them and no test sends a Query",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server answers QueryFirst / QueryNext with BadServiceUnsupported: the service calls every node manager and returns the first error, and the default NodeManager::query (async-opcua-server/src/node_manager/mod.rs) is BadServiceUnsupported and is not overridden by the CoreNodeManager or DiagnosticsNodeManager (session/services/query.rs: \"TODO: This is pretty much impossible to implement until we actually implement this in the core node manager\")",
       "fixture": "baseline"
     },
     {
@@ -1101,15 +1100,14 @@
       "direction": "async-opcua-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "The async-opcua adapter client has no query operation (the contract defines none)",
+      "nextAction": "async-opcua 0.19.0's client has no QueryFirst / QueryNext API, but the requests are in RequestMessage and AsyncSecureChannel::send is public; the adapter needs a `client query` op sending them raw on a manually created session (the Session's auth token is not exposed)",
       "fixture": "baseline"
     },
     {
       "capability": "query.next",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "test-missing",
-      "nextAction": "async-opcua dispatches QueryFirst / QueryNext to the node managers; the adapter's fixture node manager does not implement them and no test sends a Query",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server answers QueryFirst / QueryNext with BadServiceUnsupported: the service calls every node manager and returns the first error, and the default NodeManager::query (async-opcua-server/src/node_manager/mod.rs) is BadServiceUnsupported and is not overridden by the CoreNodeManager or DiagnosticsNodeManager (session/services/query.rs: \"TODO: This is pretty much impossible to implement until we actually implement this in the core node manager\")",
       "fixture": "baseline"
     },
     {
@@ -1117,7 +1115,7 @@
       "direction": "async-opcua-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "The async-opcua adapter client has no query operation (the contract defines none)",
+      "nextAction": "async-opcua 0.19.0's client has no QueryFirst / QueryNext API, but the requests are in RequestMessage and AsyncSecureChannel::send is public; the adapter needs a `client query` op sending them raw on a manually created session (the Session's auth token is not exposed)",
       "fixture": "baseline"
     },
     {
@@ -1271,9 +1269,8 @@
     {
       "capability": "alarms.condition-refresh",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.11.0): establish whether async-opcua's server serves the condition methods and ConditionRefresh, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData (here ConditionRefresh / ConditionRefresh2) is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method)",
       "fixture": "baseline"
     },
     {
@@ -1287,9 +1284,8 @@
     {
       "capability": "alarms.acknowledgeable",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.11.0): establish whether async-opcua's server serves Acknowledge / Confirm / AddComment, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData (here Acknowledge / Confirm / AddComment) is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method)",
       "fixture": "baseline"
     },
     {
@@ -1303,9 +1299,8 @@
     {
       "capability": "alarms.alarm-state-methods",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData (here Suppress, Silence, RemoveFromService, PlaceInService, Reset and the *2 variants) is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method)",
       "fixture": "baseline"
     },
     {
@@ -1319,9 +1314,8 @@
     {
       "capability": "alarms.dialog",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves Respond / Respond2 of a DialogConditionType, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData (here Respond / Respond2) is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method)",
       "fixture": "baseline"
     },
     {
@@ -1335,9 +1329,8 @@
     {
       "capability": "alarms.branches",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves condition branches, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method); no condition model, so no branches (BranchId, ConditionRefresh)",
       "fixture": "baseline"
     },
     {
@@ -1351,9 +1344,8 @@
     {
       "capability": "alarms.alarm-groups",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves alarm groups and GetGroupMemberships, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData (here GetGroupMemberships) is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method); no AlarmGroupType instances",
       "fixture": "baseline"
     },
     {
@@ -1367,9 +1359,8 @@
     {
       "capability": "alarms.audit-events",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves AuditConditionEventType events of the condition methods, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method); no condition methods, so no AuditConditionEventType events",
       "fixture": "baseline"
     },
     {
@@ -1383,9 +1374,8 @@
     {
       "capability": "alarms.alarm-timing",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method); no AlarmConditionType state machine (OnDelay / OffDelay / ReAlarmTime / ReAlarmRepeatCount)",
       "fixture": "baseline"
     },
     {
@@ -1399,9 +1389,8 @@
     {
       "capability": "alarms.audible-sound",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves AudibleEnabled / AudibleSound (AudioVariableType), then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method); no AlarmConditionType instances (AudibleEnabled / AudibleSound)",
       "fixture": "baseline"
     },
     {
@@ -1415,9 +1404,8 @@
     {
       "capability": "alarms.first-in-group",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves FirstInGroupFlag / FirstInGroup, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method); no AlarmConditionType / AlarmGroupType instances (FirstInGroupFlag / FirstInGroup)",
       "fixture": "baseline"
     },
     {
@@ -1431,9 +1419,8 @@
     {
       "capability": "alarms.alarm-metrics",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.13.0): establish whether async-opcua's server serves an AlarmMetricsType object with its counters and Reset, then build the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no Alarms & Conditions model: async-opcua-server has no condition / alarm code, async-opcua-core-namespace only generates event payload structs (AlarmConditionType, AcknowledgeableConditionType, …), and every ns=0 method other than Server_GetMonitoredItems / Server_ResendData (here AlarmMetricsType Reset) is answered BadNotSupported by the CoreNodeManager (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method); no AlarmMetricsType object",
       "fixture": "baseline"
     },
     {
@@ -2951,9 +2938,8 @@
     {
       "capability": "certmgmt.push.trust-list",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -2967,9 +2953,8 @@
     {
       "capability": "certmgmt.push.certificate-update",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -2983,9 +2968,8 @@
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -2999,9 +2983,8 @@
     {
       "capability": "certmgmt.push.access",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3015,9 +2998,8 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3031,9 +3013,8 @@
     {
       "capability": "certmgmt.push.create-self-signed",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3047,9 +3028,8 @@
     {
       "capability": "certmgmt.push.delete-certificate",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3063,9 +3043,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3079,9 +3058,8 @@
     {
       "capability": "certmgmt.push.https-group",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3095,9 +3073,8 @@
     {
       "capability": "certmgmt.push.usertoken-group",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3111,9 +3088,8 @@
     {
       "capability": "certmgmt.push.pfx",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code",
       "fixture": "baseline"
     },
     {
@@ -3127,9 +3103,8 @@
     {
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code, and no TransactionDiagnostics",
       "fixture": "baseline"
     },
     {
@@ -3143,9 +3118,8 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0's server has no push certificate management: the ServerConfiguration object (i=12637) is only the generated core-nodeset node, and its methods (UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, GetCertificates, the TrustList FileType / TrustListType methods, …) are ns=0 methods the CoreNodeManager answers BadNotSupported (async-opcua-server/src/node_manager/memory/core.rs call_builtin_method handles only Server_GetMonitoredItems / Server_ResendData); async-opcua-server has no CertificateGroup / TrustList code, and no CertificateExpirationAlarmType / TrustListOutOfDateAlarmType instances",
       "fixture": "baseline"
     },
     {
@@ -3159,9 +3133,8 @@
     {
       "capability": "gds.pull.directory",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0 has no Global Discovery Server: no crate implements the Directory / CertificateDirectory methods (RegisterApplication, StartSigningRequest, FinishRequest, GetTrustList, …), the GDS namespace is not shipped and the async-opcua features offer no GDS; nothing to test against",
       "fixture": "baseline"
     },
     {
@@ -3175,9 +3148,8 @@
     {
       "capability": "gds.pull.certificate-request",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0 has no Global Discovery Server: no crate implements the Directory / CertificateDirectory methods (RegisterApplication, StartSigningRequest, FinishRequest, GetTrustList, …), the GDS namespace is not shipped and the async-opcua features offer no GDS; nothing to test against",
       "fixture": "baseline"
     },
     {
@@ -3191,9 +3163,8 @@
     {
       "capability": "gds.pull.trust-list",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0 has no Global Discovery Server: no crate implements the Directory / CertificateDirectory methods (RegisterApplication, StartSigningRequest, FinishRequest, GetTrustList, …), the GDS namespace is not shipped and the async-opcua features offer no GDS; nothing to test against",
       "fixture": "baseline"
     },
     {
@@ -3207,9 +3178,8 @@
     {
       "capability": "gds.pull.revocation",
       "direction": "go-client-to-async-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19.0 has no Global Discovery Server: no crate implements the Directory / CertificateDirectory methods (RegisterApplication, StartSigningRequest, FinishRequest, GetTrustList, …), the GDS namespace is not shipped and the async-opcua features offer no GDS; nothing to test against",
       "fixture": "baseline"
     },
     {
