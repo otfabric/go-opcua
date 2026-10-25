@@ -197,6 +197,20 @@ func TestQuery_Errors(t *testing.T) {
 		require.Equal(t, ua.StatusBadTypeDefinitionInvalid, resp.ParsingResults[0].StatusCode)
 	})
 
+	t.Run("type definition that is no type", func(t *testing.T) {
+		// Part 4 §5.9.3: a NodeId that does not reference an ObjectType or
+		// VariableType, unknown or of another NodeClass.
+		for _, nid := range []*ua.NodeID{ua.NewNumericNodeID(0, 999999), ua.NewNumericNodeID(0, id.ObjectsFolder)} {
+			resp, err := c.QueryFirst(ctx, &ua.QueryFirstRequest{
+				NodeTypes: []*ua.NodeTypeDescription{{TypeDefinitionNode: ua.NewExpandedNodeID(nid, "", 0)}},
+			})
+			require.NoError(t, err)
+			require.Empty(t, resp.QueryDataSets)
+			require.Len(t, resp.ParsingResults, 1)
+			require.Equal(t, ua.StatusBadTypeDefinitionInvalid, resp.ParsingResults[0].StatusCode, "%s", nid)
+		}
+	})
+
 	t.Run("invalid filter operator", func(t *testing.T) {
 		_, err := c.QueryFirst(ctx, &ua.QueryFirstRequest{
 			NodeTypes: []*ua.NodeTypeDescription{

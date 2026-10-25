@@ -69,7 +69,10 @@ func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r
 			DataDiagnosticInfos: []*ua.DiagnosticInfo{},
 		}
 		if ntd == nil || ntd.TypeDefinitionNode == nil || ntd.TypeDefinitionNode.NodeID == nil ||
-			ntd.TypeDefinitionNode.NodeID.Equal(ua.NewTwoByteNodeID(0)) {
+			ntd.TypeDefinitionNode.NodeID.Equal(ua.NewTwoByteNodeID(0)) || !s.isTypeNode(ntd.TypeDefinitionNode.NodeID) {
+			// Part 4 §5.9.3: the NodeId does not reference an
+			// appropriate type node (none, or not an ObjectType or
+			// VariableType).
 			pr.StatusCode = ua.StatusBadTypeDefinitionInvalid
 		} else {
 			pr.DataStatusCodes = make([]ua.StatusCode, len(ntd.DataToReturn))
@@ -99,6 +102,17 @@ func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r
 	}
 
 	return resp, nil
+}
+
+// isTypeNode reports whether id is an ObjectType or VariableType of the
+// address space.
+func (s *QueryService) isTypeNode(id *ua.NodeID) bool {
+	n := s.srv.Node(id)
+	if n == nil {
+		return false
+	}
+	c := n.NodeClass()
+	return c == ua.NodeClassObjectType || c == ua.NodeClassVariableType
 }
 
 // scan enumerates candidate nodes, applies type matching and the filter, and
