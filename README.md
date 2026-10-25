@@ -244,7 +244,7 @@ what the interop suite has actually exercised.
 | Subscriptions: data change, Republish, TransferSubscriptions | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ ⁴ |
 | DataChangeFilter (deadband, trigger), sampling interval ⁶ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | client; server partial ⁴ |
 | Events: emission, SelectClauses, WhereClause | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Alarms & Conditions (Part 9) | — | experimental | types only | · | ✅ | ✅ | · |
+| Alarms & Conditions (Part 9) | ✅ conditions, acknowledge, confirm, shelving, limit alarms, ConditionRefresh | experimental | types only | · | ✅ | ✅ | · |
 | HistoryRead raw with a built-in store | ✅ | ✅ | delegated ⁵ | delegated | delegated | ✅ | ✅ |
 | HistoryRead modified / at-time / processed, HistoryUpdate | ✅ built-in historian, pluggable provider | raw and update; rest via backend plugin | delegated ⁵ | delegated | delegated | raw only | raw and events |
 | Server diagnostics (ServerDiagnostics, DiagnosticInfo) | — | ✅ | — | — | ✅ | ✅ | — |
@@ -353,7 +353,7 @@ and server SDKs with strong support for dynamically decoded custom data
 types.
 
 **Choose UA-.NETStandard if** you build on .NET and need the OPC Foundation
-reference implementation, Alarms & Conditions, or GDS certificate management.
+reference implementation or GDS certificate management.
 
 **Choose async-opcua, node-opcua or asyncua if** you work in Rust,
 JavaScript / TypeScript or Python; check the footnotes and
@@ -371,6 +371,7 @@ you rely on.
 | **Browsing** | Forward/inverse/both, continuation points, `BrowseAll`, `Walk` / `WalkLimit` (depth-limited), `WalkLimitDedup`, `BrowseWithDepth` (client-side recursive, returns slice) |
 | **Path resolution** | `NodeFromPath`, `NodeFromPathInNamespace`, `NodeFromQualifiedPath` (ns:name), `Node.TranslateBrowsePathInNamespaceToNodeID` (TranslateBrowsePathsToNodeIDs). Symbolic node names: `ua.StandardNodeID("CurrentTime")`, `id.NodeIDByName(name)` |
 | **Subscriptions** | Data-change, events, modify/cancel, `SetTriggering`, `SetPublishingMode`, builder `Timestamps`, `SamplingInterval` and `DataChangeFilter` (trigger, deadband); Part 4 queue / lifecycle semantics on go-opcua servers |
+| **Alarms & Conditions** | `NewConditionEventFilter` / `ParseConditionEvent`, `Acknowledge`, `Confirm`, `AddComment`, `EnableCondition` / `DisableCondition`, `TimedShelve` / `OneShotShelve` / `Unshelve`, `ConditionRefresh` / `ConditionRefresh2` (Part 9) |
 | **Monitoring** | `monitor` package: callback/channel subscriptions; batch add with per-item `ItemError`; zero-value `MonitoringMode` defaults to Reporting |
 | **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |
 | **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events |
@@ -396,6 +397,7 @@ you rely on.
 | **Session** | Create, Activate, Close (with DeleteSubscriptions), Cancel |
 | **Methods** | Register handlers via `RegisterMethod`, argument introspection |
 | **Events** | `EmitEvent` (raw fields) and `EmitBaseEvent` (`BaseEvent` + custom `Fields` + EventFilter SelectClauses / WhereClause) |
+| **Alarms & Conditions** | `AddCondition`: ConditionType, AcknowledgeableConditionType, AlarmConditionType and the limit / off-normal alarm subtypes with their standard components; Enable / Disable, AddComment, Acknowledge / Confirm with EventId checks, Retain, shelving, suppression, ConditionRefresh / ConditionRefresh2; methods run through the Call service and the `AccessController` (Part 9) |
 | **History** | Pluggable `HistoryProvider`; default in-memory `*Historian` with optional update/delete/at-time/modified/processed interfaces |
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
 | **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML`, including variable values, data types and access levels |

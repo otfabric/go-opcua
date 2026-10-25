@@ -1267,15 +1267,39 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.condition-refresh",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.11.0): establish whether async-opcua's server serves the condition methods and ConditionRefresh, then build the fixture or mark the row unsupported",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.condition-refresh",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms",
+      "case": "coverage/alarms.condition-refresh/async-opcua-client-to-go-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 async-opcua image has no client alarms operation; TestGoServer_AsyncOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
+      "fixture": "baseline"
+    },
+    {
       "capability": "alarms.acknowledgeable",
       "direction": "go-client-to-async-opcua-server",
-      "status": "deferred",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "no alarm fixture was attempted for the async-opcua server (no serverFeatures \"alarms\" in opcua-interop 0.11.0): establish whether async-opcua's server serves Acknowledge / Confirm / AddComment, then build the fixture or mark the row unsupported",
       "fixture": "baseline"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "async-opcua-client-to-go-server",
-      "status": "deferred",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_AsyncOpcuaClient_Alarms",
+      "case": "coverage/alarms.acknowledgeable/async-opcua-client-to-go-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 async-opcua image has no client alarms operation; TestGoServer_AsyncOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {

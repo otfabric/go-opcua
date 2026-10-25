@@ -922,8 +922,19 @@
       ]
     },
     {
+      "id": "alarms.condition-refresh",
+      "title": "ConditionRefresh (RefreshStart / condition events / RefreshEnd)",
+      "profile": "alarms-conditions",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "alarms.acknowledgeable",
-      "title": "AcknowledgeableConditionType",
+      "title": "AcknowledgeableConditionType Acknowledge / Confirm / AddComment",
       "profile": "alarms-conditions",
       "applicableDirections": [
         "go-client-to-open62541-server",

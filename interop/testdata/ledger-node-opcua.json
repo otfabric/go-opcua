@@ -1267,15 +1267,43 @@
       "fixture": "baseline"
     },
     {
+      "capability": "alarms.condition-refresh",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "test": "TestNodeOpcuaServer_Alarms",
+      "case": "coverage/alarms.condition-refresh/go-client-to-node-opcua-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no alarm fixture; TestNodeOpcuaServer_Alarms passes against the opcua-interop 0.11.0 image (serverFeatures \"alarms\"; node-opcua sends RefreshStart / RefreshEnd only to items on the Server object, which the test uses): promote to verified when v0.11.0 is pinned",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "alarms.condition-refresh",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms",
+      "case": "coverage/alarms.condition-refresh/node-opcua-client-to-go-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no client alarms operation; TestGoServer_NodeOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
+      "fixture": "baseline"
+    },
+    {
       "capability": "alarms.acknowledgeable",
       "direction": "go-client-to-node-opcua-server",
-      "status": "deferred",
+      "status": "unverified",
+      "reason": "adapter-fixture-missing",
+      "test": "TestNodeOpcuaServer_Alarms",
+      "case": "coverage/alarms.acknowledgeable/go-client-to-node-opcua-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no alarm fixture; TestNodeOpcuaServer_Alarms (Acknowledge, stale-EventId Acknowledge = Bad_EventIdUnknown, Confirm, AddComment, Disable / Enable) passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "node-opcua-client-to-go-server",
-      "status": "deferred",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "test": "TestGoServer_NodeOpcuaClient_Alarms",
+      "case": "coverage/alarms.acknowledgeable/node-opcua-client-to-go-server",
+      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no client alarms operation; TestGoServer_NodeOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {

@@ -145,7 +145,9 @@ func TestConditionLimits(t *testing.T) {
 		require.Equal(t, want, ex.State().Limit, "%v", v)
 		require.Equal(t, want != LimitNone, ex.State().Active)
 	}
-	// LowLow -> Low is a transition of the state machine.
+	// LowLow -> Low is a transition of the state machine (the map order
+	// above is random: start from LowLow).
+	require.NoError(t, ex.EvaluateLimits(-5))
 	require.NoError(t, ex.EvaluateLimits(10))
 	ex.mu.RLock()
 	ev := ex.eventLocked()
