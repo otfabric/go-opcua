@@ -46,18 +46,34 @@ type policy struct {
 	name  string
 	uri   string
 	curve string // key of the ECC certificates; empty for RSA
+	// slow is set for the Brainpool policies: their curve arithmetic runs on
+	// math/big through crypto/elliptic's generic code, which is some 20 to 70
+	// times slower than the NIST curves (more so under the race detector), so
+	// an OpenSecureChannel takes up to a second on a busy machine.
+	slow bool
+}
+
+// lifetime scales the SecurityToken lifetime d of a test to the cost of the
+// policy's handshake: a renewal must fit in the quarter of the lifetime the
+// server grants beyond it (uasc tokenGrace), and on the slow policies it
+// takes far longer than on the others.
+func (p policy) lifetime(d time.Duration) time.Duration {
+	if p.slow {
+		return 4 * d
+	}
+	return d
 }
 
 var (
-	polRSA          = policy{"Basic256Sha256", ua.SecurityPolicyURIBasic256Sha256, ""}
-	polP256         = policy{"ECC_nistP256", ua.SecurityPolicyURIECCNistP256, testpki.CurveP256}
-	polP384         = policy{"ECC_nistP384", ua.SecurityPolicyURIECCNistP384, testpki.CurveP384}
-	polAesGcm       = policy{"ECC_nistP256_AesGcm", ua.SecurityPolicyURIECCNistP256AesGcm, testpki.CurveP256}
-	polChaChaPoly   = policy{"ECC_nistP256_ChaChaPoly", ua.SecurityPolicyURIECCNistP256ChaChaPoly, testpki.CurveP256}
-	polCurve25519   = policy{"ECC_curve25519", ua.SecurityPolicyURIECCCurve25519, testpki.CurveEd25519}
-	polBrainpool256 = policy{"ECC_brainpoolP256r1", ua.SecurityPolicyURIECCBrainpoolP256r1, testpki.CurveBrainpoolP256r1}
-	polBrainpool384 = policy{"ECC_brainpoolP384r1", ua.SecurityPolicyURIECCBrainpoolP384r1, testpki.CurveBrainpoolP384r1}
-	polCurve448     = policy{"ECC_curve448", ua.SecurityPolicyURIECCCurve448, testpki.CurveEd448}
+	polRSA          = policy{"Basic256Sha256", ua.SecurityPolicyURIBasic256Sha256, "", false}
+	polP256         = policy{"ECC_nistP256", ua.SecurityPolicyURIECCNistP256, testpki.CurveP256, false}
+	polP384         = policy{"ECC_nistP384", ua.SecurityPolicyURIECCNistP384, testpki.CurveP384, false}
+	polAesGcm       = policy{"ECC_nistP256_AesGcm", ua.SecurityPolicyURIECCNistP256AesGcm, testpki.CurveP256, false}
+	polChaChaPoly   = policy{"ECC_nistP256_ChaChaPoly", ua.SecurityPolicyURIECCNistP256ChaChaPoly, testpki.CurveP256, false}
+	polCurve25519   = policy{"ECC_curve25519", ua.SecurityPolicyURIECCCurve25519, testpki.CurveEd25519, false}
+	polBrainpool256 = policy{"ECC_brainpoolP256r1", ua.SecurityPolicyURIECCBrainpoolP256r1, testpki.CurveBrainpoolP256r1, true}
+	polBrainpool384 = policy{"ECC_brainpoolP384r1", ua.SecurityPolicyURIECCBrainpoolP384r1, testpki.CurveBrainpoolP384r1, true}
+	polCurve448     = policy{"ECC_curve448", ua.SecurityPolicyURIECCCurve448, testpki.CurveEd448, false}
 
 	// allPolicies is every secured policy the suite covers: one RSA policy,
 	// the four ECC policies with CBC and HMAC (NIST and Brainpool curves) and

@@ -86,10 +86,10 @@ func (s *scenario) sleep(d time.Duration) {
 // short secure channel lifetime that forces a token renewal (with fresh
 // ephemeral keys on the ECC policies) every 900 ms, and a short session
 // timeout that lets the server reclaim sessions the storm orphaned.
-func persistentOptions() []opcua.Option {
+func persistentOptions(pol policy) []opcua.Option {
 	return []opcua.Option{
 		opcua.RequestTimeout(3 * time.Second),
-		opcua.Lifetime(1200 * time.Millisecond),
+		opcua.Lifetime(pol.lifetime(1200 * time.Millisecond)),
 		opcua.SessionTimeout(6 * time.Second),
 	}
 }
@@ -118,7 +118,7 @@ func (s *scenario) start() {
 	for i, pol := range s.pols {
 		mc := &monkeyClient{name: pol.name, pol: pol}
 		mc.rec = chaoskit.NewStateRecorder(mc.name, true)
-		mc.c = s.e.connect(mc.rec, pol, persistentOptions()...)
+		mc.c = s.e.connect(mc.rec, pol, persistentOptions(pol)...)
 		// a synchronous or a buffered notification channel
 		counters := [][]int{{0, 1}, {2, 3}}[i%2]
 		st, err := openStreamWith(ctx, s.e, mc.c, mc.name+".s", (i%2)*8, monkeyStreamParams(), counters...)
