@@ -22,8 +22,9 @@ type condField struct {
 	typeDef   uint32
 	dataType  uint32
 	valueRank int32
-	// value returns the value of a variable; Condition.mu is held.
-	value func(c *Condition) any
+	// value returns the value of a variable for the state st (the
+	// condition's own or one of its branches); Condition.mu is held.
+	value func(c *Condition, st *conditionState) any
 	// always marks the fields that stay valid while the condition is
 	// disabled (Part 9 §5.5.2); the others read Bad_ConditionDisabled.
 	always bool
@@ -45,106 +46,136 @@ func stateText(on bool, t, f string) *ua.LocalizedText {
 
 // twoState adds a TwoStateVariable with its Id and TransitionTime
 // (Part 9 §5.2).
-func twoState(fs []condField, name, t, f string, get func(c *Condition) (bool, time.Time), always bool) []condField {
+func twoState(fs []condField, name, t, f string, get func(st *conditionState) (bool, time.Time), always bool) []condField {
 	return append(fs,
 		condField{path: name, refType: id.HasComponent, typeDef: id.TwoStateVariableType, dataType: id.LocalizedText, valueRank: -1, always: always,
-			value: func(c *Condition) any { on, _ := get(c); return stateText(on, t, f) }},
+			value: func(_ *Condition, st *conditionState) any { on, _ := get(st); return stateText(on, t, f) }},
 		condField{path: name + "/Id", refType: id.HasProperty, typeDef: id.PropertyType, dataType: id.Boolean, valueRank: -1, always: always,
-			value: func(c *Condition) any { on, _ := get(c); return on }},
+			value: func(_ *Condition, st *conditionState) any { on, _ := get(st); return on }},
 		condField{path: name + "/TransitionTime", refType: id.HasProperty, typeDef: id.PropertyType, dataType: id.UtcTime, valueRank: -1, always: always,
-			value: func(c *Condition) any { _, at := get(c); return at }},
+			value: func(_ *Condition, st *conditionState) any { _, at := get(st); return at }},
 	)
 }
 
-func prop(path string, dataType uint32, always bool, v func(c *Condition) any) condField {
+func prop(path string, dataType uint32, always bool, v func(c *Condition, st *conditionState) any) condField {
 	return condField{path: path, refType: id.HasProperty, typeDef: id.PropertyType, dataType: dataType, valueRank: -1, value: v, always: always}
 }
 
 // conditionVariable adds a ConditionVariable with its SourceTimestamp
 // (Part 9 §5.3).
-func conditionVariable(fs []condField, name string, dataType uint32, v func(c *Condition) any, at func(c *Condition) time.Time) []condField {
+func conditionVariable(fs []condField, name string, dataType uint32, v func(c *Condition, st *conditionState) any, at func(st *conditionState) time.Time) []condField {
 	return append(fs,
-		condField{path: name, refType: id.HasComponent, typeDef: id.ConditionVariableType, dataType: dataType, valueRank: -1, value: v},
-		prop(name+"/SourceTimestamp", id.UtcTime, false, func(c *Condition) any { return at(c) }))
+		condField{path: name, refType: id.HasComponent, typeDef: id.ConditionVariableType, dataType: dataType, valueRank: -1,
+			value: v},
+		prop(name+"/SourceTimestamp", id.UtcTime, false, func(_ *Condition, st *conditionState) any { return at(st) }))
 }
 
 // fields returns the components of the condition for its type and options.
 func (c *Condition) fields() []condField {
 	fs := []condField{
 		// BaseEventType (Part 5 §6.4.2)
-		prop("EventId", id.ByteString, true, func(c *Condition) any { return c.st.eventID }),
-		prop("EventType", id.NodeID, true, func(c *Condition) any { return c.typeID }),
-		prop("SourceNode", id.NodeID, true, func(c *Condition) any { return c.cfg.Source }),
-		prop("SourceName", id.String, true, func(c *Condition) any { return c.sourceName }),
-		prop("Time", id.UtcTime, true, func(c *Condition) any { return c.st.time }),
-		prop("ReceiveTime", id.UtcTime, true, func(c *Condition) any { return c.st.receiveTime }),
-		prop("Message", id.LocalizedText, true, func(c *Condition) any { return c.st.message }),
-		prop("Severity", id.UInt16, true, func(c *Condition) any { return c.st.severity }),
+		prop("EventId", id.ByteString, true, func(_ *Condition, st *conditionState) any { return st.eventID }),
+		prop("EventType", id.NodeID, true, func(c *Condition, st *conditionState) any { return c.typeID }),
+		prop("SourceNode", id.NodeID, true, func(c *Condition, st *conditionState) any { return c.cfg.Source }),
+		prop("SourceName", id.String, true, func(c *Condition, st *conditionState) any { return c.sourceName }),
+		prop("Time", id.UtcTime, true, func(_ *Condition, st *conditionState) any { return st.time }),
+		prop("ReceiveTime", id.UtcTime, true, func(_ *Condition, st *conditionState) any { return st.receiveTime }),
+		prop("Message", id.LocalizedText, true, func(_ *Condition, st *conditionState) any { return st.message }),
+		prop("Severity", id.UInt16, true, func(_ *Condition, st *conditionState) any { return st.severity }),
 		// ConditionType (Part 9 §5.5.2)
-		prop("ConditionClassId", id.NodeID, true, func(c *Condition) any { return c.classID }),
-		prop("ConditionClassName", id.LocalizedText, true, func(c *Condition) any { return c.className }),
-		prop("ConditionName", id.String, true, func(c *Condition) any { return c.cfg.Name }),
-		prop("BranchId", id.NodeID, true, func(*Condition) any { return nullNodeID(nil) }),
-		prop("Retain", id.Boolean, true, func(c *Condition) any { return c.retainLocked() }),
+		prop("ConditionClassId", id.NodeID, true, func(c *Condition, st *conditionState) any { return c.classID }),
+		prop("ConditionClassName", id.LocalizedText, true, func(c *Condition, st *conditionState) any { return c.className }),
+		prop("ConditionName", id.String, true, func(c *Condition, st *conditionState) any { return c.cfg.Name }),
+		prop("BranchId", id.NodeID, true, func(_ *Condition, st *conditionState) any { return nullNodeID(st.branchID) }),
+		prop("Retain", id.Boolean, true, func(c *Condition, st *conditionState) any { return c.retainOfLocked(st) }),
 	}
-	fs = twoState(fs, "EnabledState", "Enabled", "Disabled", func(c *Condition) (bool, time.Time) { return c.st.enabled, c.st.enabledTime }, true)
-	fs = conditionVariable(fs, "Quality", id.StatusCode, func(c *Condition) any { return c.st.quality }, func(c *Condition) time.Time { return c.st.qualityTime })
-	fs = conditionVariable(fs, "LastSeverity", id.UInt16, func(c *Condition) any { return c.st.lastSeverity }, func(c *Condition) time.Time { return c.st.lastSeverityTime })
-	fs = conditionVariable(fs, "Comment", id.LocalizedText, func(c *Condition) any { return c.st.comment }, func(c *Condition) time.Time { return c.st.commentTime })
-	fs = append(fs, prop("ClientUserId", id.String, false, func(c *Condition) any { return c.st.clientUserID }))
+	fs = twoState(fs, "EnabledState", "Enabled", "Disabled", func(st *conditionState) (bool, time.Time) { return st.enabled, st.enabledTime }, true)
+	fs = conditionVariable(fs, "Quality", id.StatusCode, func(_ *Condition, st *conditionState) any { return st.quality }, func(st *conditionState) time.Time { return st.qualityTime })
+	fs = conditionVariable(fs, "LastSeverity", id.UInt16, func(_ *Condition, st *conditionState) any { return st.lastSeverity }, func(st *conditionState) time.Time { return st.lastSeverityTime })
+	fs = conditionVariable(fs, "Comment", id.LocalizedText, func(_ *Condition, st *conditionState) any { return st.comment }, func(st *conditionState) time.Time { return st.commentTime })
+	fs = append(fs, prop("ClientUserId", id.String, false, func(_ *Condition, st *conditionState) any { return st.clientUserID }))
+
+	if c.isDialog {
+		// DialogConditionType (Part 9 §5.6.2)
+		d := c.dialog
+		fs = twoState(fs, "DialogState", "Active", "Inactive", func(st *conditionState) (bool, time.Time) { return st.dialogActive, st.dialogTime }, false)
+		fs = append(fs,
+			prop("Prompt", id.LocalizedText, false, func(_ *Condition, st *conditionState) any { return st.prompt }),
+			condField{path: "ResponseOptionSet", refType: id.HasProperty, typeDef: id.PropertyType, dataType: id.LocalizedText, valueRank: 1,
+				value: func(*Condition, *conditionState) any { return d.options }},
+			prop("DefaultResponse", id.Int32, false, func(*Condition, *conditionState) any { return d.defaultResponse }),
+			prop("OkResponse", id.Int32, false, func(*Condition, *conditionState) any { return d.okResponse }),
+			prop("CancelResponse", id.Int32, false, func(*Condition, *conditionState) any { return d.cancelResponse }),
+			prop("LastResponse", id.Int32, false, func(_ *Condition, st *conditionState) any { return st.lastResponse }),
+		)
+	}
 
 	if c.isAck {
 		// AcknowledgeableConditionType (Part 9 §5.7.2)
-		fs = twoState(fs, "AckedState", "Acknowledged", "Unacknowledged", func(c *Condition) (bool, time.Time) { return c.st.acked, c.st.ackedTime }, false)
+		fs = twoState(fs, "AckedState", "Acknowledged", "Unacknowledged", func(st *conditionState) (bool, time.Time) { return st.acked, st.ackedTime }, false)
 		if c.cfg.Confirmable {
-			fs = twoState(fs, "ConfirmedState", "Confirmed", "Unconfirmed", func(c *Condition) (bool, time.Time) { return c.st.confirmed, c.st.confirmedTime }, false)
+			fs = twoState(fs, "ConfirmedState", "Confirmed", "Unconfirmed", func(st *conditionState) (bool, time.Time) { return st.confirmed, st.confirmedTime }, false)
 		}
 	}
 	if !c.isAlarm {
 		return fs
 	}
 	// AlarmConditionType (Part 9 §5.8.2)
-	fs = twoState(fs, "ActiveState", "Active", "Inactive", func(c *Condition) (bool, time.Time) { return c.st.active, c.st.activeTime }, false)
+	fs = twoState(fs, "ActiveState", "Active", "Inactive", func(st *conditionState) (bool, time.Time) { return st.active, st.activeTime }, false)
 	fs = append(fs,
-		prop("InputNode", id.NodeID, false, func(c *Condition) any { return nullNodeID(c.cfg.InputNode) }),
-		prop("SuppressedOrShelved", id.Boolean, false, func(c *Condition) any { return c.st.suppressed || c.st.shelving != Unshelved }))
+		prop("InputNode", id.NodeID, false, func(c *Condition, st *conditionState) any { return nullNodeID(c.cfg.InputNode) }),
+		prop("SuppressedOrShelved", id.Boolean, false, func(_ *Condition, st *conditionState) any { return st.suppressedOrShelved() }))
 	if c.cfg.Suppressible {
-		fs = twoState(fs, "SuppressedState", "Suppressed", "Unsuppressed", func(c *Condition) (bool, time.Time) { return c.st.suppressed, c.st.suppressedTime }, false)
+		fs = twoState(fs, "SuppressedState", "Suppressed", "Unsuppressed", func(st *conditionState) (bool, time.Time) { return st.suppressed, st.suppressedTime }, false)
+	}
+	if c.cfg.Serviceable {
+		// OutOfServiceState (Part 9 §5.8.2)
+		fs = twoState(fs, "OutOfServiceState", "Out of Service", "In Service", func(st *conditionState) (bool, time.Time) { return st.outOfService, st.outOfServiceTime }, false)
+	}
+	if c.cfg.Silenceable {
+		// SilenceState (Part 9 §5.8.2)
+		fs = twoState(fs, "SilenceState", "Silenced", "Not Silenced", func(st *conditionState) (bool, time.Time) { return st.silenced, st.silenceTime }, false)
+	}
+	if c.cfg.Latching {
+		// LatchedState (Part 9 §5.8.2)
+		fs = twoState(fs, "LatchedState", "Latched", "Unlatched", func(st *conditionState) (bool, time.Time) { return st.latched, st.latchedTime }, false)
 	}
 	if c.cfg.Shelving {
 		// ShelvedStateMachineType (Part 9 §5.8.10)
 		fs = append(fs,
 			condField{path: "ShelvingState", refType: id.HasComponent, object: true, typeDef: id.ShelvedStateMachineType},
 			condField{path: "ShelvingState/CurrentState", refType: id.HasComponent, typeDef: id.FiniteStateVariableType, dataType: id.LocalizedText, valueRank: -1,
-				value: func(c *Condition) any { return ua.NewLocalizedTextWithLocale(c.st.shelving.String(), "en") }},
-			prop("ShelvingState/CurrentState/Id", id.NodeID, false, func(c *Condition) any { return ua.NewNumericNodeID(0, c.st.shelving.stateID()) }),
+				value: func(c *Condition, st *conditionState) any {
+					return ua.NewLocalizedTextWithLocale(st.shelving.String(), "en")
+				}},
+			prop("ShelvingState/CurrentState/Id", id.NodeID, false, func(c *Condition, st *conditionState) any { return ua.NewNumericNodeID(0, st.shelving.stateID()) }),
 			condField{path: "ShelvingState/LastTransition", refType: id.HasComponent, typeDef: id.FiniteTransitionVariableType, dataType: id.LocalizedText, valueRank: -1,
-				value: func(c *Condition) any {
-					if shelvingTransitionID(c.st.shelvingFrom, c.st.shelving) == 0 {
+				value: func(c *Condition, st *conditionState) any {
+					if shelvingTransitionID(st.shelvingFrom, st.shelving) == 0 {
 						return &ua.LocalizedText{}
 					}
-					return ua.NewLocalizedTextWithLocale(c.st.shelvingFrom.String()+"To"+c.st.shelving.String(), "en")
+					return ua.NewLocalizedTextWithLocale(st.shelvingFrom.String()+"To"+st.shelving.String(), "en")
 				}},
-			prop("ShelvingState/LastTransition/Id", id.NodeID, false, func(c *Condition) any {
-				return nullNodeID(transitionNodeID(shelvingTransitionID(c.st.shelvingFrom, c.st.shelving)))
+			prop("ShelvingState/LastTransition/Id", id.NodeID, false, func(c *Condition, st *conditionState) any {
+				return nullNodeID(transitionNodeID(shelvingTransitionID(st.shelvingFrom, st.shelving)))
 			}),
-			prop("ShelvingState/LastTransition/TransitionTime", id.UtcTime, false, func(c *Condition) any { return c.st.shelvingTime }),
-			prop("ShelvingState/UnshelveTime", id.Duration, false, func(c *Condition) any {
-				if c.st.unshelveAt.IsZero() {
+			prop("ShelvingState/LastTransition/TransitionTime", id.UtcTime, false, func(_ *Condition, st *conditionState) any { return st.shelvingTime }),
+			prop("ShelvingState/UnshelveTime", id.Duration, false, func(c *Condition, st *conditionState) any {
+				if st.unshelveAt.IsZero() {
 					return float64(0)
 				}
-				return float64(max(time.Until(c.st.unshelveAt), 0)) / float64(time.Millisecond)
+				return float64(max(time.Until(st.unshelveAt), 0)) / float64(time.Millisecond)
 			}),
 		)
 		if c.cfg.MaxTimeShelved > 0 {
-			fs = append(fs, prop("MaxTimeShelved", id.Duration, true, func(c *Condition) any {
+			fs = append(fs, prop("MaxTimeShelved", id.Duration, true, func(c *Condition, st *conditionState) any {
 				return float64(c.cfg.MaxTimeShelved) / float64(time.Millisecond)
 			}))
 		}
 	}
 	if c.isOffNormal {
 		// OffNormalAlarmType (Part 9 §5.8.23)
-		fs = append(fs, prop("NormalState", id.NodeID, true, func(c *Condition) any { return nullNodeID(c.cfg.NormalState) }))
+		fs = append(fs, prop("NormalState", id.NodeID, true, func(c *Condition, st *conditionState) any { return nullNodeID(c.cfg.NormalState) }))
 	}
 	if c.isLimit {
 		// LimitAlarmType (Part 9 §5.8.11)
@@ -154,7 +185,7 @@ func (c *Condition) fields() []condField {
 		}{{"HighHighLimit", c.cfg.Limits.HighHigh}, {"HighLimit", c.cfg.Limits.High}, {"LowLimit", c.cfg.Limits.Low}, {"LowLowLimit", c.cfg.Limits.LowLow}} {
 			if l.v != nil {
 				v := *l.v
-				fs = append(fs, prop(l.name, id.Double, true, func(*Condition) any { return v }))
+				fs = append(fs, prop(l.name, id.Double, true, func(*Condition, *conditionState) any { return v }))
 			}
 		}
 	}
@@ -163,19 +194,21 @@ func (c *Condition) fields() []condField {
 		fs = append(fs,
 			condField{path: "LimitState", refType: id.HasComponent, object: true, typeDef: id.ExclusiveLimitStateMachineType},
 			condField{path: "LimitState/CurrentState", refType: id.HasComponent, typeDef: id.FiniteStateVariableType, dataType: id.LocalizedText, valueRank: -1,
-				value: func(c *Condition) any { return ua.NewLocalizedTextWithLocale(c.st.limit.String(), "en") }},
-			prop("LimitState/CurrentState/Id", id.NodeID, false, func(c *Condition) any { return nullNodeID(transitionNodeID(c.st.limit.stateID())) }),
+				value: func(c *Condition, st *conditionState) any {
+					return ua.NewLocalizedTextWithLocale(st.limit.String(), "en")
+				}},
+			prop("LimitState/CurrentState/Id", id.NodeID, false, func(c *Condition, st *conditionState) any { return nullNodeID(transitionNodeID(st.limit.stateID())) }),
 			condField{path: "LimitState/LastTransition", refType: id.HasComponent, typeDef: id.FiniteTransitionVariableType, dataType: id.LocalizedText, valueRank: -1,
-				value: func(c *Condition) any {
-					if exclusiveLimitTransitionID(c.st.limitFrom, c.st.limit) == 0 {
+				value: func(c *Condition, st *conditionState) any {
+					if exclusiveLimitTransitionID(st.limitFrom, st.limit) == 0 {
 						return &ua.LocalizedText{}
 					}
-					return ua.NewLocalizedTextWithLocale(c.st.limitFrom.String()+"To"+c.st.limit.String(), "en")
+					return ua.NewLocalizedTextWithLocale(st.limitFrom.String()+"To"+st.limit.String(), "en")
 				}},
-			prop("LimitState/LastTransition/Id", id.NodeID, false, func(c *Condition) any {
-				return nullNodeID(transitionNodeID(exclusiveLimitTransitionID(c.st.limitFrom, c.st.limit)))
+			prop("LimitState/LastTransition/Id", id.NodeID, false, func(c *Condition, st *conditionState) any {
+				return nullNodeID(transitionNodeID(exclusiveLimitTransitionID(st.limitFrom, st.limit)))
 			}),
-			prop("LimitState/LastTransition/TransitionTime", id.UtcTime, false, func(c *Condition) any { return c.st.limitTime }),
+			prop("LimitState/LastTransition/TransitionTime", id.UtcTime, false, func(_ *Condition, st *conditionState) any { return st.limitTime }),
 		)
 	}
 	if c.isNonExclusive {
@@ -194,7 +227,7 @@ func (c *Condition) fields() []condField {
 			if s.on == nil {
 				continue
 			}
-			fs = twoState(fs, s.name, s.t, s.f, func(c *Condition) (bool, time.Time) { return s.get(c.st.nonExclusive), c.st.nonExclTimes[i] }, false)
+			fs = twoState(fs, s.name, s.t, s.f, func(st *conditionState) (bool, time.Time) { return s.get(st.nonExclusive), st.nonExclTimes[i] }, false)
 		}
 	}
 	return fs
@@ -209,11 +242,11 @@ func transitionNodeID(n uint32) *ua.NodeID {
 
 // fieldValueLocked is the value of a field as a Variant: the value, or
 // Bad_ConditionDisabled for a field that is not valid while disabled.
-func (c *Condition) fieldValueLocked(f *condField) *ua.Variant {
-	if !c.st.enabled && !f.always {
+func (c *Condition) fieldValueLocked(st *conditionState, f *condField) *ua.Variant {
+	if !st.enabled && !f.always {
 		return ua.MustVariant(ua.StatusBadConditionDisabled)
 	}
-	v, err := ua.NewVariant(f.value(c))
+	v, err := ua.NewVariant(f.value(c, st))
 	if err != nil {
 		return ua.MustVariant(nil)
 	}
@@ -222,8 +255,11 @@ func (c *Condition) fieldValueLocked(f *condField) *ua.Variant {
 
 // eventLocked returns the event of the current state of the condition.
 // mu must be held.
-func (c *Condition) eventLocked() *BaseEvent {
-	st := &c.st
+func (c *Condition) eventLocked() *BaseEvent { return c.eventOfLocked(&c.st) }
+
+// eventOfLocked returns the event of st, the state of the condition or of
+// one of its branches. mu must be held.
+func (c *Condition) eventOfLocked(st *conditionState) *BaseEvent {
 	ev := &BaseEvent{
 		EventID:     st.eventID,
 		EventType:   c.typeID,
@@ -240,7 +276,7 @@ func (c *Condition) eventLocked() *BaseEvent {
 		if f.object {
 			continue
 		}
-		ev.Fields[f.path] = c.fieldValueLocked(f)
+		ev.Fields[f.path] = c.fieldValueLocked(st, f)
 	}
 	return ev
 }
@@ -359,6 +395,6 @@ func (c *Condition) valueFunc(f *condField) ValueFunc {
 		if !c.st.enabled && !f.always {
 			return badValue(ua.StatusBadConditionDisabled)
 		}
-		return DataValueFromValue(c.fieldValueLocked(f))
+		return DataValueFromValue(c.fieldValueLocked(&c.st, f))
 	}
 }

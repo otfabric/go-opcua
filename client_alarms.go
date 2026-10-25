@@ -33,7 +33,16 @@ var conditionFields = []conditionField{
 	{"AckedState/Id", id.AcknowledgeableConditionType}, {"ConfirmedState/Id", id.AcknowledgeableConditionType},
 	{"ActiveState/Id", id.AlarmConditionType}, {"SuppressedOrShelved", id.AlarmConditionType},
 	{"ShelvingState/CurrentState/Id", id.AlarmConditionType},
+	// Part 9 1.05 optional states, added after the v1.14.0 fields.
+	{"SuppressedState/Id", id.AlarmConditionType}, {"OutOfServiceState/Id", id.AlarmConditionType},
+	{"SilenceState/Id", id.AlarmConditionType}, {"LatchedState/Id", id.AlarmConditionType},
+	{"DialogState/Id", id.DialogConditionType}, {"Prompt", id.DialogConditionType},
+	{"LastResponse", id.DialogConditionType},
 }
+
+// conditionFieldsV114 is the number of fields of NewConditionEventFilter in
+// v1.14.0; ParseConditionEvent accepts events of such a filter.
+const conditionFieldsV114 = 21
 
 // ConditionEventFields lists the fields [NewConditionEventFilter] selects
 // after the ConditionId, as "/"-separated BrowsePaths.
@@ -87,6 +96,31 @@ type ConditionEvent struct {
 	// state of the ShelvedStateMachine) are those of an alarm.
 	SuppressedOrShelved *bool
 	ShelvingState       *ua.NodeID
+	// Suppressed, OutOfService, Silenced and Latched are the optional
+	// SuppressedState, OutOfServiceState, SilenceState and LatchedState of
+	// an alarm (Part 9 §5.8.2); nil when the alarm does not have them.
+	Suppressed   *bool
+	OutOfService *bool
+	Silenced     *bool
+	Latched      *bool
+	// DialogActive, Prompt and LastResponse are those of a dialog
+	// (DialogConditionType, Part 9 §5.6).
+	DialogActive *bool
+	Prompt       *ua.LocalizedText
+	LastResponse *int32
+}
+
+// IsBranch reports whether the event is that of a condition branch (Part 9
+// §5.5.2): its BranchId is not null.
+func (e *ConditionEvent) IsBranch() bool {
+	if e.BranchID == nil {
+		return false
+	}
+	if e.BranchID.Namespace() == 0 && e.BranchID.IntID() == 0 {
+		k := e.BranchID.Type()
+		return k != ua.NodeIDTypeTwoByte && k != ua.NodeIDTypeFourByte && k != ua.NodeIDTypeNumeric
+	}
+	return true
 }
 
 // IsRefreshStart reports whether the event is the RefreshStartEvent of a
@@ -114,12 +148,12 @@ func ParseConditionEvent(ev *ua.EventFieldList) (*ConditionEvent, error) {
 	if ev == nil {
 		return nil, fmt.Errorf("opcua: condition event: nil event")
 	}
-	if len(ev.EventFields) != len(conditionFields)+1 {
-		return nil, fmt.Errorf("opcua: condition event: %d fields, want %d", len(ev.EventFields), len(conditionFields)+1)
+	if n := len(ev.EventFields); n != len(conditionFields)+1 && n != conditionFieldsV114+1 {
+		return nil, fmt.Errorf("opcua: condition event: %d fields, want %d", n, len(conditionFields)+1)
 	}
 	f := ev.EventFields
 	val := func(i int) any {
-		if f[i] == nil {
+		if i >= len(f) || f[i] == nil {
 			return nil
 		}
 		return f[i].Value()
@@ -155,6 +189,15 @@ func ParseConditionEvent(ev *ua.EventFieldList) (*ConditionEvent, error) {
 	e.Active = boolField(val(19))
 	e.SuppressedOrShelved = boolField(val(20))
 	e.ShelvingState, _ = val(21).(*ua.NodeID)
+	e.Suppressed = boolField(val(22))
+	e.OutOfService = boolField(val(23))
+	e.Silenced = boolField(val(24))
+	e.Latched = boolField(val(25))
+	e.DialogActive = boolField(val(26))
+	e.Prompt, _ = val(27).(*ua.LocalizedText)
+	if r, ok := val(28).(int32); ok {
+		e.LastResponse = &r
+	}
 	return e, nil
 }
 
@@ -179,15 +222,19 @@ func (c *Client) callStatus(ctx context.Context, objectID, methodID *ua.NodeID, 
 }
 
 // eventMethod calls a condition method that takes an EventId and a Comment.
-// A non-empty comment carries the first session locale (Locales; "en-us"
-// by default): open62541 1.5.9 ignores a Comment without a locale.
 func (c *Client) eventMethod(ctx context.Context, method uint32, conditionID *ua.NodeID, eventID []byte, comment string) error {
+	return c.callStatus(ctx, conditionID, ua.NewNumericNodeID(0, method), ua.MustVariant(eventID), c.commentArg(comment))
+}
+
+// commentArg is a Comment argument. A non-empty comment carries the first
+// session locale (Locales; "en-us" by default): open62541 1.5.9 ignores a
+// Comment without a locale.
+func (c *Client) commentArg(comment string) *ua.Variant {
 	locale := ""
 	if ids := c.cfg.session.LocaleIDs; comment != "" && len(ids) > 0 {
 		locale = ids[0]
 	}
-	lt := ua.NewLocalizedTextWithLocale(comment, locale)
-	return c.callStatus(ctx, conditionID, ua.NewNumericNodeID(0, method), ua.MustVariant(eventID), ua.MustVariant(lt))
+	return ua.MustVariant(ua.NewLocalizedTextWithLocale(comment, locale))
 }
 
 // Acknowledge acknowledges the condition state of the event eventID (Part 9

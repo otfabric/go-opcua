@@ -255,6 +255,9 @@ type BaseEvent struct {
 
 	// conditionID is the ConditionId of a condition event.
 	conditionID *ua.NodeID
+	// audit marks an audit event: only the sessions an
+	// EventAccessController allows receive it.
+	audit bool
 }
 
 // selectEventFields applies SelectClauses to a BaseEvent, returning the event
@@ -512,7 +515,7 @@ func (s *Server) emitEvent(nodeID *ua.NodeID, event *BaseEvent, wait bool) {
 // continuously) or until the subscription ends.
 func (s *Server) deliverToItem(item *MonitoredItem, event *BaseEvent, bypassWhere, wait bool) {
 	emi := s.eventItems.get(item.ID)
-	if emi == nil || item.Sub == nil {
+	if emi == nil || item.Sub == nil || !s.mayReceive(item, event) {
 		return
 	}
 	if !bypassWhere {

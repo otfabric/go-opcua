@@ -230,7 +230,7 @@ func TestConditionMethodArguments(t *testing.T) {
 	_, sc := ack(ctx, nil, nil, []*ua.Variant{ua.MustVariant(c.State().EventID), ua.MustVariant(nil)})
 	require.Equal(t, ua.StatusBadConditionBranchAlreadyAcked, sc, "an inactive alarm is acknowledged")
 
-	timed := c.shelveMethod(TimedShelved)
+	timed := c.shelveMethod(TimedShelved, false)
 	for name, args := range map[string][]*ua.Variant{
 		"none":     nil,
 		"type":     {ua.MustVariant("x")},
@@ -258,7 +258,7 @@ func TestConditionMethodArguments(t *testing.T) {
 	require.NoError(t, s.RemoveCondition(c.NodeID()))
 	_, sc = c.enableMethod(false)(ctx, nil, nil, nil)
 	require.Equal(t, ua.StatusBadNodeIDUnknown, sc)
-	_, sc = c.shelveMethod(OneShotShelved)(ctx, nil, nil, nil)
+	_, sc = c.shelveMethod(OneShotShelved, false)(ctx, nil, nil, nil)
 	require.Equal(t, ua.StatusBadNodeIDUnknown, sc)
 	_, sc = ack(ctx, nil, nil, []*ua.Variant{ua.MustVariant([]byte{1}), ua.MustVariant(nil)})
 	require.Equal(t, ua.StatusBadNodeIDUnknown, sc)
@@ -319,7 +319,7 @@ func TestAlarmManagerClose(t *testing.T) {
 	c, err := s.AddCondition(ConditionConfig{Name: "A", Source: src.ID(), Shelving: true})
 	require.NoError(t, err)
 	require.NoError(t, c.SetActive(true))
-	_, sc := c.shelveMethod(TimedShelved)(callerCtx(nil), nil, nil, []*ua.Variant{ua.MustVariant(60_000.0)})
+	_, sc := c.shelveMethod(TimedShelved, false)(callerCtx(nil), nil, nil, []*ua.Variant{ua.MustVariant(60_000.0)})
 	require.Equal(t, ua.StatusOK, sc)
 	s.alarms.close()
 	c.mu.RLock()

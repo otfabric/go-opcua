@@ -23,6 +23,9 @@ type MethodCaller struct {
 	Identity ua.IdentityToken
 	// Roles are the role NodeIds granted to the session.
 	Roles []*ua.NodeID
+	// AuditEntryID is the AuditEntryId of the request header (Part 4
+	// §7.33), which audit events report as ClientAuditEntryId.
+	AuditEntryID string
 }
 
 type methodCallerKey struct{}

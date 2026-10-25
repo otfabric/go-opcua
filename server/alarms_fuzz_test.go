@@ -70,18 +70,18 @@ func FuzzConditionStateMachine(f *testing.F) {
 			case 5:
 				_, sc = c.enableMethod(arg%2 == 0)(ctx, nil, nil, nil)
 			case 6:
-				_, sc = c.shelveMethod(OneShotShelved)(ctx, nil, nil, nil)
+				_, sc = c.shelveMethod(OneShotShelved, false)(ctx, nil, nil, nil)
 			case 7:
-				_, sc = c.shelveMethod(Unshelved)(ctx, nil, nil, nil)
+				_, sc = c.shelveMethod(Unshelved, false)(ctx, nil, nil, nil)
 			case 8:
 				// Long enough never to expire during the run; 0 is out of range.
-				_, sc = c.shelveMethod(TimedShelved)(ctx, nil, nil, []*ua.Variant{ua.MustVariant(float64(arg) * 3.6e6)})
+				_, sc = c.shelveMethod(TimedShelved, false)(ctx, nil, nil, []*ua.Variant{ua.MustVariant(float64(arg) * 3.6e6)})
 			case 9:
 				_ = c.SetSuppressed(arg%2 == 0)
 			case 10:
 				_ = c.EvaluateLimits(float64(arg) / 2.55)
 			case 11:
-				_, sc = c.shelveMethod(TimedShelved)(ctx, nil, nil, []*ua.Variant{ua.MustVariant(int32(arg))})
+				_, sc = c.shelveMethod(TimedShelved, false)(ctx, nil, nil, []*ua.Variant{ua.MustVariant(int32(arg))})
 			case 12:
 				_, sc = c.actionMethod(actionAcknowledge)(ctx, nil, nil, []*ua.Variant{ua.MustVariant(eventID)})
 			default:

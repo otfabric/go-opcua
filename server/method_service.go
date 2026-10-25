@@ -55,7 +55,11 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 				}
 			}
 		}
-		results[i] = s.callMethod(withMethodCaller(ctx, sess, sc), m)
+		mctx := withMethodCaller(ctx, sess, sc)
+		if caller, ok := MethodCallerFromContext(mctx); ok && req.RequestHeader != nil {
+			caller.AuditEntryID = req.RequestHeader.AuditEntryID
+		}
+		results[i] = s.callMethod(mctx, m)
 	}
 
 	return &ua.CallResponse{

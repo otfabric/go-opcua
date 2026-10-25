@@ -28,11 +28,16 @@ import (
 // reports every state change as an event of the condition through its source
 // node and the Server object.
 //
-// Not implemented: condition branches (BranchId is always null, Part 9
-// §5.5.2), the audit events of the methods (Part 9 §5.10), dialogs, alarm
-// groups, and the optional AlarmConditionType state (Latched, Silence,
-// OutOfService) with the methods of Part 9 1.05 (Reset, Silence, Suppress,
-// the *2 variants of the methods).
+// Part 9 1.05 adds the optional AlarmConditionType states (SuppressedState,
+// OutOfServiceState, SilenceState, LatchedState) with their methods
+// (Suppress, Unsuppress, RemoveFromService, PlaceInService, Silence, Reset
+// and the *2 variants that take a Comment), dialogs (DialogConditionType
+// with Respond and Respond2), condition branches ([Condition.CreateBranch],
+// [ConditionConfig.Branching]), alarm groups ([Server.AddAlarmGroup]) and
+// the audit events of the methods ([WithAuditing]).
+//
+// Not implemented: the AudibleSound, OnDelay / OffDelay, ReAlarm and
+// FirstInGroup components of AlarmConditionType, and AlarmMetrics.
 
 // AcknowledgeableConditionTypeNodeID is the well-known ObjectType NodeId for
 // AcknowledgeableConditionType (Part 9 §5.7.2).
@@ -220,6 +225,29 @@ type ConditionConfig struct {
 	// the shelving time and is exposed as the MaxTimeShelved Property.
 	Shelving       bool
 	MaxTimeShelved time.Duration
+	// Serviceable adds the optional OutOfServiceState with the
+	// RemoveFromService(2) and PlaceInService(2) methods (alarm types).
+	Serviceable bool
+	// Silenceable adds the optional SilenceState with the Silence method
+	// (alarm types). A new activation of the alarm ends the silence.
+	Silenceable bool
+	// Latching adds the optional LatchedState with the Reset(2) methods
+	// (alarm types): the alarm latches when it becomes active and stays
+	// latched (and retained) until it is inactive and reset.
+	Latching bool
+	// Branching keeps the previous occurrence of an alarm that becomes
+	// active again before its last activation was acknowledged (and
+	// confirmed): the server moves that state to a branch with its own
+	// BranchId, which a client acknowledges and confirms with the EventId
+	// of the branch (Part 9 §5.5.2, §4.4). Acknowledgeable types.
+	Branching bool
+	// Dialog makes the condition a dialog (DialogConditionType and its
+	// subtypes, Part 9 §5.6); required for those types.
+	Dialog *DialogConfig
+	// SuppressionGroups are AlarmSuppressionGroups (see
+	// [Server.AddAlarmGroup]) whose suppression suppresses the alarm; it
+	// needs Suppressible.
+	SuppressionGroups []*ua.NodeID
 	// InputNode is the InputNode Property of an alarm.
 	InputNode *ua.NodeID
 	// NormalState is the NormalState Property of an OffNormalAlarmType.
@@ -237,6 +265,33 @@ type ConditionConfig struct {
 	OnAddComment  func(ctx context.Context, c *Condition, comment *ua.LocalizedText) ua.StatusCode
 	OnEnable      func(ctx context.Context, c *Condition, enable bool) ua.StatusCode
 	OnShelve      func(ctx context.Context, c *Condition, state ShelvingState, shelvingTime time.Duration) ua.StatusCode
+	// The hooks of the Part 9 1.05 methods; comment is nil for the
+	// variants without a Comment argument.
+	OnSuppress func(ctx context.Context, c *Condition, suppress bool, comment *ua.LocalizedText) ua.StatusCode
+	OnService  func(ctx context.Context, c *Condition, inService bool, comment *ua.LocalizedText) ua.StatusCode
+	OnSilence  func(ctx context.Context, c *Condition) ua.StatusCode
+	OnReset    func(ctx context.Context, c *Condition, comment *ua.LocalizedText) ua.StatusCode
+	OnRespond  func(ctx context.Context, c *Condition, selectedResponse int32, comment *ua.LocalizedText) ua.StatusCode
+}
+
+// DialogConfig describes a dialog (DialogConditionType, Part 9 §5.6).
+type DialogConfig struct {
+	// Prompt is the initial Prompt of the dialog.
+	Prompt string
+	// ResponseOptions are the options a client responds with, by index
+	// (ResponseOptionSet). Required.
+	ResponseOptions []string
+	// DefaultResponse, OkResponse and CancelResponse are indexes into
+	// ResponseOptions; nil means none (-1).
+	DefaultResponse, OkResponse, CancelResponse *int32
+	// Active creates the dialog active (shown to the operator).
+	Active bool
+}
+
+// dialogInfo are the static Properties of a dialog.
+type dialogInfo struct {
+	options                                     []*ua.LocalizedText
+	defaultResponse, okResponse, cancelResponse int32
 }
 
 // ConditionState is a snapshot of the state of a condition.
@@ -261,6 +316,15 @@ type ConditionState struct {
 	UnshelveAt         time.Time
 	Limit              LimitState
 	NonExclusiveLimits NonExclusiveLimits
+	// BranchID is the BranchId of a branch, nil for the condition itself.
+	BranchID     *ua.NodeID
+	OutOfService bool
+	Silenced     bool
+	Latched      bool
+	// DialogActive, Prompt and LastResponse are those of a dialog.
+	DialogActive bool
+	Prompt       *ua.LocalizedText
+	LastResponse int32
 }
 
 // ConditionUpdate is a change of the state of a condition made by the
@@ -291,6 +355,15 @@ type ConditionUpdate struct {
 	// NonExclusiveLimits sets the limit states of a non-exclusive limit
 	// alarm; ActiveState follows (active if any is).
 	NonExclusiveLimits *NonExclusiveLimits
+	// OutOfService, Silenced and Latched set the OutOfServiceState,
+	// SilenceState and LatchedState of an alarm that has them.
+	OutOfService *bool
+	Silenced     *bool
+	Latched      *bool
+	// DialogActive shows (true) or withdraws (false) a dialog; Prompt sets
+	// its Prompt.
+	DialogActive *bool
+	Prompt       *string
 }
 
 // Errors of the Condition API.
@@ -298,7 +371,12 @@ var (
 	ErrConditionRemoved   = errors.New("server: condition removed")
 	ErrConditionNotAlarm  = errors.New("server: condition is not an alarm")
 	ErrConditionUnsupport = errors.New("server: condition type does not have this state")
+	ErrBranchUnknown      = errors.New("server: condition branch not found")
+	ErrTooManyBranches    = errors.New("server: too many condition branches")
 )
+
+// maxConditionBranches bounds the branches of a condition.
+const maxConditionBranches = 256
 
 // conditionState is the mutable state of a condition, guarded by
 // Condition.mu.
@@ -342,6 +420,30 @@ type conditionState struct {
 	nonExclTimes [4]time.Time
 	recentIDs    [][]byte // EventIds of the recent events, newest last
 	removed      bool
+
+	outOfService     bool
+	outOfServiceTime time.Time
+	silenced         bool
+	silenceTime      time.Time
+	latched          bool
+	latchedTime      time.Time
+
+	dialogActive bool
+	dialogTime   time.Time
+	prompt       *ua.LocalizedText
+	lastResponse int32
+
+	// branchID is the BranchId of a branch state, nil for the condition.
+	branchID *ua.NodeID
+	// deleted marks a branch being deleted: its last event has Retain
+	// false.
+	deleted bool
+}
+
+// suppressedOrShelved is the SuppressedOrShelved of an alarm (Part 9
+// §5.8.2): suppressed, shelved or out of service.
+func (st *conditionState) suppressedOrShelved() bool {
+	return st.suppressed || st.shelving != Unshelved || st.outOfService
 }
 
 // recentEventIDs is how many EventIds of a condition the methods accept:
@@ -360,7 +462,8 @@ type Condition struct {
 	classID    *ua.NodeID
 	className  *ua.LocalizedText
 
-	isAck, isAlarm, isLimit, isExclusive, isNonExclusive, isOffNormal bool
+	isAck, isAlarm, isLimit, isExclusive, isNonExclusive, isOffNormal, isDialog bool
+	dialog                                                                      *dialogInfo
 
 	// targets are the notifiers whose event items receive the events.
 	targets []*ua.NodeID
@@ -380,6 +483,8 @@ type Condition struct {
 	emitMu sync.Mutex
 	mu     sync.RWMutex
 	st     conditionState
+	// branches are the branches of the condition, oldest first (mu).
+	branches []*conditionState
 }
 
 // alarmManager holds the conditions of a server.
@@ -389,10 +494,12 @@ type alarmManager struct {
 	shelving   map[string]*Condition // by ShelvingState NodeId
 	refreshing map[uint32]bool       // subscriptions with a ConditionRefresh running
 	closed     bool
+	groups     groupState
 }
 
 func newAlarmManager() *alarmManager {
-	return &alarmManager{conds: map[string]*Condition{}, shelving: map[string]*Condition{}, refreshing: map[uint32]bool{}}
+	return &alarmManager{conds: map[string]*Condition{}, shelving: map[string]*Condition{}, refreshing: map[uint32]bool{},
+		groups: groupState{groups: map[string]*AlarmGroup{}}}
 }
 
 func (m *alarmManager) list() []*Condition {
@@ -503,7 +610,11 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error) {
 	c := &Condition{srv: s, cfg: cfg, id: condID, typeID: typeID, ns: ns,
 		isAck: is(id.AcknowledgeableConditionType), isAlarm: is(id.AlarmConditionType),
 		isLimit: is(id.LimitAlarmType), isExclusive: is(id.ExclusiveLimitAlarmType),
-		isNonExclusive: is(id.NonExclusiveLimitAlarmType), isOffNormal: is(id.OffNormalAlarmType)}
+		isNonExclusive: is(id.NonExclusiveLimitAlarmType), isOffNormal: is(id.OffNormalAlarmType),
+		isDialog: is(id.DialogConditionType)}
+	if err := c.checkConfig(); err != nil {
+		return nil, err
+	}
 	c.sourceName = cfg.SourceName
 	if c.sourceName == "" {
 		c.sourceName = src.BrowseName().Name
@@ -539,7 +650,11 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error) {
 		enabled: !cfg.Disabled, enabledTime: now, retain: cfg.Retain,
 		severity: sev, lastSeverity: sev, lastSeverityTime: now,
 		message: ua.NewLocalizedText(cfg.Message), quality: ua.StatusOK, qualityTime: now,
-		comment: &ua.LocalizedText{}, acked: true, confirmed: true,
+		comment: &ua.LocalizedText{}, acked: true, confirmed: true, lastResponse: -1,
+	}
+	if c.isDialog {
+		c.st.prompt = ua.NewLocalizedText(cfg.Dialog.Prompt)
+		c.st.dialogActive, c.st.dialogTime = cfg.Dialog.Active, now
 	}
 
 	s.alarms.mu.Lock()
@@ -557,6 +672,7 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error) {
 		s.alarms.mu.Unlock()
 	}
 	c.registerMethods()
+	s.joinSuppressionGroups(c)
 
 	c.emitMu.Lock()
 	c.mu.Lock()
@@ -577,11 +693,15 @@ func (s *Server) RemoveCondition(conditionID *ua.NodeID) error {
 	if !ok {
 		return fmt.Errorf("server: condition %v not found", conditionID)
 	}
+	// The condition leaves its alarm groups after emitMu is released: a
+	// group change holds the groups' lock while it updates conditions.
+	defer s.leaveAlarmGroups(c)
 	c.emitMu.Lock()
 	defer c.emitMu.Unlock()
 	c.mu.Lock()
 	c.st.removed = true
 	c.stopShelveTimerLocked()
+	c.branches = nil
 	c.mu.Unlock()
 
 	s.alarms.mu.Lock()
@@ -618,29 +738,43 @@ func (c *Condition) Source() *ua.NodeID { return c.cfg.Source }
 func (c *Condition) State() ConditionState {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	st := &c.st
+	return c.snapshotLocked(&c.st)
+}
+
+func (c *Condition) snapshotLocked(st *conditionState) ConditionState {
 	return ConditionState{
-		EventID: slices.Clone(st.eventID), Time: st.time, Enabled: st.enabled, Retain: c.retainLocked(),
+		BranchID: st.branchID,
+		EventID:  slices.Clone(st.eventID), Time: st.time, Enabled: st.enabled, Retain: c.retainOfLocked(st),
 		Severity: st.severity, LastSeverity: st.lastSeverity, Message: st.message, Quality: st.quality,
 		Comment: st.comment, ClientUserID: st.clientUserID, Acked: st.acked, Confirmed: st.confirmed,
 		Active: st.active, Suppressed: st.suppressed, Shelving: st.shelving, UnshelveAt: st.unshelveAt,
 		Limit: st.limit, NonExclusiveLimits: st.nonExclusive,
+		OutOfService: st.outOfService, Silenced: st.silenced, Latched: st.latched,
+		DialogActive: st.dialogActive, Prompt: st.prompt, LastResponse: st.lastResponse,
 	}
 }
 
 // retainLocked is the Retain of the condition (Part 9 §5.5.2): false while
 // disabled; for the acknowledgeable types true while the condition waits for
 // an acknowledgement or confirmation, for alarms also while active.
-func (c *Condition) retainLocked() bool {
-	st := &c.st
-	if !st.enabled {
+func (c *Condition) retainLocked() bool { return c.retainOfLocked(&c.st) }
+
+// retainOfLocked is the Retain of st, the state of the condition or of a
+// branch: a branch is retained while it waits for an acknowledgement or a
+// confirmation, a dialog while it is active, an alarm also while it is
+// active or latched.
+func (c *Condition) retainOfLocked(st *conditionState) bool {
+	if !c.st.enabled || st.deleted {
 		return false
+	}
+	if c.isDialog {
+		return st.dialogActive
 	}
 	if !c.isAck {
 		return st.retain
 	}
 	r := !st.acked || (c.cfg.Confirmable && !st.confirmed)
-	if c.isAlarm && st.active {
+	if st.branchID == nil && c.isAlarm && (st.active || st.latched) {
 		r = true
 	}
 	return r
@@ -661,12 +795,14 @@ func (c *Condition) Update(u ConditionUpdate) error {
 		return err
 	}
 	now := time.Now()
-	c.applyLocked(u, now)
-	ev := c.newEventLocked()
+	evs := c.applyLocked(u, now)
+	evs = append(evs, c.newEventLocked())
 	enabled := c.st.enabled
 	c.mu.Unlock()
 	if enabled {
-		c.deliver(ev)
+		for _, ev := range evs {
+			c.deliver(ev)
+		}
 	}
 	c.notifyChanges()
 	return nil
@@ -694,10 +830,19 @@ func (c *Condition) checkUpdateLocked(u ConditionUpdate) error {
 	if u.NonExclusiveLimits != nil && !c.isNonExclusive {
 		return ErrConditionUnsupport
 	}
+	if (u.OutOfService != nil && !c.cfg.Serviceable) || (u.Silenced != nil && !c.cfg.Silenceable) || (u.Latched != nil && !c.cfg.Latching) {
+		return ErrConditionUnsupport
+	}
+	if (u.DialogActive != nil || u.Prompt != nil) && !c.isDialog {
+		return ErrConditionUnsupport
+	}
 	return nil
 }
 
-func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) {
+// applyLocked applies u to the state of the condition and returns the
+// event of a branch it creates (Branching).
+func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) []*BaseEvent {
+	var evs []*BaseEvent
 	st := &c.st
 	active := u.Active
 	if u.Limit != nil {
@@ -722,8 +867,23 @@ func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) {
 	if active != nil && *active != st.active {
 		st.active, st.activeTime = *active, now
 		if st.active {
+			// The previous occurrence, if it still waits for an
+			// acknowledgement or confirmation, moves to a branch.
+			if c.cfg.Branching && c.isAck && st.enabled && (!st.acked || (c.cfg.Confirmable && !st.confirmed)) &&
+				len(c.branches) < maxConditionBranches {
+				prev := *st
+				prev.active = false
+				evs = append(evs, c.newEventOfLocked(c.newBranchLocked(&prev)))
+			}
 			// A new activation needs a new acknowledgement (and
-			// confirmation): Part 9 §5.7.2, §5.8.2.
+			// confirmation): Part 9 §5.7.2, §5.8.2; it ends a silence and
+			// latches a latching alarm.
+			if c.cfg.Silenceable && st.silenced {
+				st.silenced, st.silenceTime = false, now
+			}
+			if c.cfg.Latching && !st.latched {
+				st.latched, st.latchedTime = true, now
+			}
 			if c.isAck {
 				st.acked, st.ackedTime = false, now
 				if c.cfg.Confirmable {
@@ -758,6 +918,22 @@ func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) {
 	if u.Suppressed != nil && *u.Suppressed != st.suppressed {
 		st.suppressed, st.suppressedTime = *u.Suppressed, now
 	}
+	if u.OutOfService != nil && *u.OutOfService != st.outOfService {
+		st.outOfService, st.outOfServiceTime = *u.OutOfService, now
+	}
+	if u.Silenced != nil && *u.Silenced != st.silenced {
+		st.silenced, st.silenceTime = *u.Silenced, now
+	}
+	if u.Latched != nil && *u.Latched != st.latched {
+		st.latched, st.latchedTime = *u.Latched, now
+	}
+	if u.Prompt != nil {
+		st.prompt = ua.NewLocalizedText(*u.Prompt)
+	}
+	if u.DialogActive != nil && *u.DialogActive != st.dialogActive {
+		st.dialogActive, st.dialogTime = *u.DialogActive, now
+	}
+	return evs
 }
 
 // Report reports the current state in a new event.
@@ -847,12 +1023,23 @@ func (c *Condition) setEnabled(enable bool) ua.StatusCode {
 		return sc
 	}
 	c.st.enabled, c.st.enabledTime = enable, time.Now()
-	// The event of the transition to Disabled reports Retain false and
-	// the state as Bad_ConditionDisabled (Part 9 §5.5.2); the enabled
+	// Disabling ends the branches: each reports a last event with Retain
+	// false. The event of the transition to Disabled reports Retain false
+	// and the state as Bad_ConditionDisabled (Part 9 §5.5.2); the enabled
 	// condition reports its current state.
-	ev := c.newEventLocked()
+	var evs []*BaseEvent
+	if !enable {
+		for _, b := range c.branches {
+			b.deleted, b.enabled, b.enabledTime = true, false, c.st.enabledTime
+			evs = append(evs, c.newEventOfLocked(b))
+		}
+		c.branches = nil
+	}
+	evs = append(evs, c.newEventLocked())
 	c.mu.Unlock()
-	c.deliver(ev)
+	for _, ev := range evs {
+		c.deliver(ev)
+	}
 	c.notifyChanges()
 	return ua.StatusOK
 }
@@ -878,8 +1065,11 @@ func newEventID() []byte {
 
 // newEventLocked gives the condition a new EventId and Time and returns its
 // event. mu must be held.
-func (c *Condition) newEventLocked() *BaseEvent {
-	st := &c.st
+func (c *Condition) newEventLocked() *BaseEvent { return c.newEventOfLocked(&c.st) }
+
+// newEventOfLocked gives st (the condition's state or a branch) a new
+// EventId and Time and returns its event. mu must be held.
+func (c *Condition) newEventOfLocked(st *conditionState) *BaseEvent {
 	now := time.Now()
 	if !now.After(st.time) {
 		// Time never goes back between the events of a condition.
@@ -890,18 +1080,32 @@ func (c *Condition) newEventLocked() *BaseEvent {
 	if len(st.recentIDs) > recentEventIDs {
 		st.recentIDs = slices.Delete(st.recentIDs, 0, len(st.recentIDs)-recentEventIDs)
 	}
-	return c.eventLocked()
+	return c.eventOfLocked(st)
 }
 
 // knownEventIDLocked reports whether eventID is one of the recent events of
-// the condition.
-func (c *Condition) knownEventIDLocked(eventID []byte) bool {
-	for _, e := range c.st.recentIDs {
+// st.
+func knownEventIDLocked(st *conditionState, eventID []byte) bool {
+	for _, e := range st.recentIDs {
 		if string(e) == string(eventID) {
 			return true
 		}
 	}
 	return false
+}
+
+// stateOfEventLocked returns the state an EventId refers to: the condition
+// or one of its branches; nil if the EventId is unknown.
+func (c *Condition) stateOfEventLocked(eventID []byte) *conditionState {
+	if knownEventIDLocked(&c.st, eventID) {
+		return &c.st
+	}
+	for _, b := range c.branches {
+		if knownEventIDLocked(b, eventID) {
+			return b
+		}
+	}
+	return nil
 }
 
 // deliver hands an event of the condition to the event items of its
