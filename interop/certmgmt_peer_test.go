@@ -72,6 +72,13 @@ func requirePushFeature(t *testing.T, imageEnv, defaultImage, list, feature stri
 // added into a directory the containers can read and returns it.
 func pushFixtureDir(t *testing.T) string {
 	t.Helper()
+	return fixtureDirWithUser(t, pushAdminUser, pushAdminPass, "AuthenticatedUser", "SecurityAdmin")
+}
+
+// fixtureDirWithUser writes the baseline fixture with a user added into a
+// directory the containers can read and returns it.
+func fixtureDirWithUser(t *testing.T, user, pass string, roles ...string) string {
+	t.Helper()
 	raw, err := os.ReadFile(filepath.Join(interopFixtureDir(t), "baseline.json"))
 	if err != nil {
 		t.Fatalf("read the baseline fixture: %v", err)
@@ -82,9 +89,9 @@ func pushFixtureDir(t *testing.T) string {
 	}
 	users, _ := fx["users"].([]any)
 	fx["users"] = append(users, map[string]any{
-		"username": pushAdminUser,
-		"password": pushAdminPass,
-		"roles":    []string{"AuthenticatedUser", "SecurityAdmin"},
+		"username": user,
+		"password": pass,
+		"roles":    roles,
 	})
 	out, err := json.MarshalIndent(fx, "", "  ")
 	if err != nil {

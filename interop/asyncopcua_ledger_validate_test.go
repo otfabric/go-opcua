@@ -25,6 +25,7 @@ var asyncOpcuaLedgerDirections = map[string]bool{
 var asyncOpcuaUnverifiedReasons = map[string]bool{
 	"test-missing":            true,
 	"adapter-command-missing": true,
+	"adapter-unreleased":      true,
 	"adapter-fixture-missing": true,
 	"fault-harness-missing":   true,
 	"consumer-demand-missing": true,
