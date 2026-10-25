@@ -2839,6 +2839,34 @@
       "fixture": "baseline"
     },
     {
+      "capability": "transport.wss-uajson",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements opc.tcp only (no WebSocket or HTTPS transport, with either encoding), so opcua-interop asyncua v0.16.0 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.wss-uajson",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements opc.tcp only (no WebSocket or HTTPS transport, with either encoding), so opcua-interop asyncua v0.16.0 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https-uajson",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements opc.tcp only (no WebSocket or HTTPS transport, with either encoding), so opcua-interop asyncua v0.16.0 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "transport.https-uajson",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements opc.tcp only (no WebSocket or HTTPS transport, with either encoding), so opcua-interop asyncua v0.16.0 accepts opc.tcp endpoints only",
+      "fixture": "baseline"
+    },
+    {
       "capability": "encoding.json-verbose.variant",
       "direction": "go-client-to-asyncua-server",
       "status": "unsupported",

@@ -704,6 +704,18 @@ func TransportProfile(uri string) Option {
 	}
 }
 
+// HTTPSJSONContentType sets the Content-Type of the requests over
+// https-uajson (TransportProfile ua.TransportProfileHTTPSJSON). The default
+// is uasc.HTTPSJSONContentType, application/json (Part 6 §7.4.2);
+// uasc.HTTPSJSONContentTypeLegacy, application/opcua+uajson, reaches
+// servers that take only that one, such as UA-.NETStandard 2.0.1.
+func HTTPSJSONContentType(contentType string) Option {
+	return func(cfg *Config) error {
+		cfg.sechan.HTTPSJSONContentType = contentType
+		return nil
+	}
+}
+
 // DialTimeout sets the timeout for establishing the UACP connection.
 // Defaults to DefaultDialTimeout. Set to zero for no timeout.
 func DialTimeout(d time.Duration) Option {

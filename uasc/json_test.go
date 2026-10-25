@@ -135,6 +135,17 @@ func TestHTTPSJSONRoundTrip(t *testing.T) {
 	require.Equal(t, ua.SecurityPolicyURINone, hr.Header.Get(HTTPSSecurityPolicyHeader))
 	require.Contains(t, string(peer.lastBody.Load().([]byte)), `"nsu=urn:one;s=a"`)
 
+	// Config.HTTPSJSONContentType replaces the Content-Type.
+	legacy := noneConfig()
+	legacy.HTTPSJSONContentType = HTTPSJSONContentTypeLegacy
+	scLegacy, err := NewHTTPSJSONChannel(peer.endpoint(), peer.Client(), legacy, make(chan error, 1))
+	require.NoError(t, err)
+	defer func() { _ = scLegacy.Close() }()
+	scLegacy.SetNamespaces(testNamespaces)
+	err = scLegacy.SendRequest(context.Background(), &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{NodeID: ua.NewStringNodeID(1, "a")}}}, nil, func(ua.Response) error { return nil })
+	require.NoError(t, err)
+	require.Equal(t, HTTPSJSONContentTypeLegacy, peer.lastReq.Load().Header.Get("Content-Type"))
+
 	// An undecodable response is an error of the request, not a lost
 	// connection.
 	bad := newRawHTTPSPeer(t, func(w http.ResponseWriter, _ *http.Request, _ []byte) { _, _ = io.WriteString(w, "{") })

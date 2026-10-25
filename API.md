@@ -877,6 +877,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `TLSConfig(c *tls.Config)` | TLS of `opc.wss` and `opc.https` endpoints: `RootCAs` for the server's TLS certificate (system roots when nil), `Certificates` for mutual TLS. TLS 1.2 is the minimum. Separate from the application instance certificate |
 | `HTTPClient(c *http.Client)` | The `*http.Client` of `opc.https` endpoints (proxies, transports); `TLSConfig` is then not used for them |
 | `TransportProfile(uri string)` | The transport mapping of the endpoint by its TransportProfileUri: `ua.TransportProfileHTTPSJSON` (an `opc.https` endpoint) or `ua.TransportProfileWSSJSON` (an `opc.wss` endpoint) select UA JSON instead of UA Binary; a scheme mismatch fails `Connect` with `errors.ErrInvalidEndpoint`. `SecurityFromEndpoint` sets it from the endpoint |
+| `HTTPSJSONContentType(contentType string)` | The Content-Type of https-uajson requests: default `uasc.HTTPSJSONContentType` (`application/json`, Part 6 §7.4.2); `uasc.HTTPSJSONContentTypeLegacy` (`application/opcua+uajson`) for servers that take only that one, such as UA-.NETStandard 2.0.1 |
 
 Server certificates may be presented as a **DER chain** (leaf followed by intermediates); validation parses the full chain and verifies the leaf against the trust pool.
 

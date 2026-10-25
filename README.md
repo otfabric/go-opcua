@@ -329,16 +329,17 @@ rows record what the peer (or its adapter) lacks or where it deviates from the
 specification; the test pins that behaviour or skips with the reason.
 `unverified` rows carry the reason they are still open: an adapter command
 that opcua-interop does not have yet (a node-opcua GDS pull client, reader
-state of the UA-.NETStandard PubSub adapter; see
+state of the UA-.NETStandard PubSub adapter, the UA JSON transport profiles
+in the UA-.NETStandard adapter client; see
 [`interop/GAPS.md`](interop/GAPS.md)).
 
 | Peer | Ledger | Verified | Unverified | Unsupported | Deferred | Not applicable |
 |---|---|---:|---:|---:|---:|---:|
-| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 511 | 0 | 263 | 60 | 42 |
-| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 167 | 0 | 222 | 28 | 21 |
-| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 249 | 2 | 134 | 32 | 21 |
-| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 173 | 4 | 215 | 25 | 21 |
-| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 140 | 0 | 245 | 32 | 21 |
+| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 511 | 0 | 271 | 60 | 42 |
+| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 167 | 0 | 226 | 28 | 21 |
+| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 251 | 4 | 134 | 32 | 21 |
+| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 173 | 4 | 219 | 25 | 21 |
+| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 140 | 0 | 249 | 32 | 21 |
 
 Interop with these stacks found and fixed go-opcua defects that a Go-to-Go
 test cannot show, among them the RSA-OAEP-SHA256 block size (UA-.NETStandard),
