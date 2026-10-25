@@ -2911,8 +2911,10 @@
       "capability": "certmgmt.push.trust-list",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.trust-list/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2926,8 +2928,10 @@
       "capability": "certmgmt.push.certificate-update",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.certificate-update/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2986,8 +2990,10 @@
       "capability": "certmgmt.push.create-self-signed",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.create-self-signed/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3001,8 +3007,10 @@
       "capability": "certmgmt.push.delete-certificate",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.delete-certificate/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3031,8 +3039,10 @@
       "capability": "certmgmt.push.https-group",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.https-group/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3046,8 +3056,10 @@
       "capability": "certmgmt.push.usertoken-group",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.usertoken-group/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3061,8 +3073,10 @@
       "capability": "certmgmt.push.pfx",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.pfx/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3076,8 +3090,10 @@
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_AsyncuaClient_GoServer",
+      "case": "coverage/certmgmt.push.transaction-diagnostics/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3106,8 +3122,10 @@
       "capability": "gds.pull.directory",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "opcua-asyncio 2.1 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_AsyncuaClient_GoServer",
+      "case": "coverage/gds.pull.directory/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3121,8 +3139,10 @@
       "capability": "gds.pull.certificate-request",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "opcua-asyncio 2.1 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_AsyncuaClient_GoServer",
+      "case": "coverage/gds.pull.certificate-request/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3136,8 +3156,10 @@
       "capability": "gds.pull.trust-list",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "opcua-asyncio 2.1 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_AsyncuaClient_GoServer",
+      "case": "coverage/gds.pull.trust-list/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3151,8 +3173,10 @@
       "capability": "gds.pull.revocation",
       "direction": "asyncua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "opcua-asyncio 2.1 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "reason": "adapter-unreleased",
+      "test": "TestGDSPull_AsyncuaClient_GoServer",
+      "case": "coverage/gds.pull.revocation/asyncua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/asyncua-push image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     }
   ]
