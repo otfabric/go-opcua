@@ -11,23 +11,26 @@ import (
 	"encoding/pem"
 	"fmt"
 
+	"github.com/cloudflare/circl/sign/ed448"
+
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/ua"
 )
 
 // CertificatePublicKey returns the public key of the leaf of a DER-encoded
 // certificate (or certificate chain), whatever its type: *rsa.PublicKey,
-// *ecdsa.PublicKey or ed25519.PublicKey.
+// *ecdsa.PublicKey (on a NIST or a Brainpool curve), ed25519.PublicKey or
+// ed448.PublicKey (github.com/cloudflare/circl/sign/ed448).
 //
-// The standard library validates an elliptic curve key while it parses the
-// certificate: a point that is not on the named curve is rejected.
+// An elliptic curve key is validated while the certificate is parsed: a point
+// that is not on the named curve is rejected.
 func CertificatePublicKey(c []byte) (crypto.PublicKey, error) {
 	leaf, err := leafCertificate(c)
 	if err != nil {
 		return nil, err
 	}
 	switch key := leaf.PublicKey.(type) {
-	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey:
+	case *rsa.PublicKey, *ecdsa.PublicKey, ed25519.PublicKey, ed448.PublicKey:
 		return key, nil
 	default:
 		return nil, fmt.Errorf("%w: unsupported public key type %T", errors.ErrInvalidCertificate, leaf.PublicKey)
@@ -39,7 +42,9 @@ func CertificatePublicKey(c []byte) (crypto.PublicKey, error) {
 // policy a key on one of the curves the policy permits: an ECDSA key on
 // nistP256 or nistP384 for ECC_nistP256, ECC_nistP256_AesGcm and
 // ECC_nistP256_ChaChaPoly, on nistP384 for ECC_nistP384, and an Ed25519 key
-// for ECC_curve25519. Every certificate is acceptable for the None policy,
+// for ECC_curve25519, an ECDSA key on brainpoolP256r1 or brainpoolP384r1
+// for ECC_brainpoolP256r1, on brainpoolP384r1 for ECC_brainpoolP384r1 and an
+// Ed448 key for ECC_curve448. Every certificate is acceptable for the None policy,
 // which does not use it.
 //
 // It checks the key type only. Trust and validity are the business of the
@@ -104,11 +109,7 @@ func ParsePrivateKey(data []byte) (crypto.Signer, error) {
 			}
 			return key, nil
 		case "EC PRIVATE KEY":
-			key, err := x509.ParseECPrivateKey(block.Bytes)
-			if err != nil {
-				return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
-			}
-			return key, nil
+			return parseECPrivateKey(block.Bytes)
 		case "PRIVATE KEY":
 			return parsePKCS8(block.Bytes)
 		default:
@@ -124,7 +125,7 @@ func ParsePrivateKey(data []byte) (crypto.Signer, error) {
 	if key, err := parsePKCS8(data); err == nil {
 		return key, nil
 	}
-	if key, err := x509.ParseECPrivateKey(data); err == nil {
+	if key, err := parseECPrivateKey(data); err == nil {
 		return key, nil
 	}
 	return nil, fmt.Errorf("%w: not a PKCS #1, PKCS #8 or SEC 1 private key", errors.ErrInvalidPrivateKey)
@@ -133,7 +134,11 @@ func ParsePrivateKey(data []byte) (crypto.Signer, error) {
 func parsePKCS8(der []byte) (crypto.Signer, error) {
 	key, err := x509.ParsePKCS8PrivateKey(der)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err)
+		ext, extErr := parseExtendedPKCS8(der)
+		if extErr != nil {
+			return nil, extendedKeyError(extErr, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err))
+		}
+		return ext, nil
 	}
 	switch k := key.(type) {
 	case *rsa.PrivateKey:
@@ -145,6 +150,18 @@ func parsePKCS8(der []byte) (crypto.Signer, error) {
 	default:
 		return nil, fmt.Errorf("%w: unsupported PKCS #8 key type %T", errors.ErrInvalidPrivateKey, key)
 	}
+}
+
+func parseECPrivateKey(der []byte) (crypto.Signer, error) {
+	key, err := x509.ParseECPrivateKey(der)
+	if err != nil {
+		ext, extErr := parseBrainpoolECPrivateKey(der, nil)
+		if extErr != nil {
+			return nil, extendedKeyError(extErr, fmt.Errorf("%w: %w", errors.ErrInvalidPrivateKey, err))
+		}
+		return ext, nil
+	}
+	return key, nil
 }
 
 // KeyMatchesCertificate reports whether key is the private key of the leaf of

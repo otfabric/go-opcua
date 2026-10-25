@@ -14,9 +14,9 @@ import (
 // some servers such as Siemens WinCC Unified Runtime) and returns the leaf
 // certificate. A blob containing a single certificate is returned as that
 // certificate. x509.ParseCertificate rejects trailing data, so a chain must be
-// parsed with x509.ParseCertificates.
+// parsed with ParseCertificates.
 func leafCertificate(c []byte) (*x509.Certificate, error) {
-	certs, err := x509.ParseCertificates(c)
+	certs, err := ParseCertificates(c)
 	if err != nil {
 		return nil, err
 	}

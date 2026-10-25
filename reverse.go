@@ -4,7 +4,6 @@ package opcua
 
 import (
 	"context"
-	"crypto/x509"
 	"fmt"
 	"net"
 	"net/url"
@@ -13,6 +12,7 @@ import (
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // reverseConfig is the reverse connect configuration of a client.
@@ -276,7 +276,7 @@ func (c *Client) checkReverseServerCertificate(rhe *uacp.ReverseHello) error {
 	if c.cfg.certValidator.insecureSkipVerify || len(sc.RemoteCertificate) == 0 {
 		return nil
 	}
-	certs, err := x509.ParseCertificates(sc.RemoteCertificate)
+	certs, err := uapolicy.ParseCertificates(sc.RemoteCertificate)
 	if err != nil {
 		return fmt.Errorf("opcua: reverse connect: server certificate: %w", err)
 	}

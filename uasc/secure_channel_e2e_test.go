@@ -54,6 +54,12 @@ var covPolicies = []covPolicy{
 	{"ECC_nistP256_ChaChaPoly/Sign", ua.SecurityPolicyURIECCNistP256ChaChaPoly, ua.MessageSecurityModeSign, testpki.CurveP256},
 	covCurve25519,
 	{"ECC_curve25519/SignAndEncrypt", ua.SecurityPolicyURIECCCurve25519, ua.MessageSecurityModeSignAndEncrypt, testpki.CurveEd25519},
+	{"ECC_brainpoolP256r1/Sign", ua.SecurityPolicyURIECCBrainpoolP256r1, ua.MessageSecurityModeSign, testpki.CurveBrainpoolP256r1},
+	{"ECC_brainpoolP256r1/SignAndEncrypt", ua.SecurityPolicyURIECCBrainpoolP256r1, ua.MessageSecurityModeSignAndEncrypt, testpki.CurveBrainpoolP256r1},
+	{"ECC_brainpoolP384r1/Sign", ua.SecurityPolicyURIECCBrainpoolP384r1, ua.MessageSecurityModeSign, testpki.CurveBrainpoolP384r1},
+	{"ECC_brainpoolP384r1/SignAndEncrypt", ua.SecurityPolicyURIECCBrainpoolP384r1, ua.MessageSecurityModeSignAndEncrypt, testpki.CurveBrainpoolP384r1},
+	{"ECC_curve448/Sign", ua.SecurityPolicyURIECCCurve448, ua.MessageSecurityModeSign, testpki.CurveEd448},
+	{"ECC_curve448/SignAndEncrypt", ua.SecurityPolicyURIECCCurve448, ua.MessageSecurityModeSignAndEncrypt, testpki.CurveEd448},
 }
 
 // covIdentity is an application instance certificate and its key.

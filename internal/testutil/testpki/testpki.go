@@ -2,7 +2,8 @@
 
 // Package testpki is a small in-memory PKI shared by the test suites of this
 // module: self-signed RSA, ECDSA (P-256, P-384) and Ed25519 application
-// instance certificates for a server and a client, user identity
+// instance certificates for a server and a client, ECDSA on the Brainpool
+// curves and Ed448 for the policies crypto/x509 has no keys for, user identity
 // certificates, certificates nobody trusts and a CA with an issued leaf per
 // key family.
 //
@@ -24,6 +25,11 @@ import (
 	"net/url"
 	"sync"
 	"time"
+
+	"github.com/ProtonMail/go-crypto/brainpool"
+	"github.com/cloudflare/circl/sign/ed448"
+
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // Application URIs of the application instance certificates.
@@ -37,10 +43,17 @@ const (
 	CurveP256    = "P-256"
 	CurveP384    = "P-384"
 	CurveEd25519 = "Ed25519"
+
+	CurveBrainpoolP256r1 = "brainpoolP256r1"
+	CurveBrainpoolP384r1 = "brainpoolP384r1"
+	CurveEd448           = "Ed448"
 )
 
+// Curves lists every curve of the ECC certificate maps.
+var Curves = []string{CurveP256, CurveP384, CurveEd25519, CurveBrainpoolP256r1, CurveBrainpoolP384r1, CurveEd448}
+
 // Identity is an ECC certificate with its private key: an ECDSA key or, for
-// the curve Ed25519, an EdDSA key.
+// the curves Ed25519 and Ed448, an EdDSA key.
 type Identity struct {
 	Cert []byte
 	Key  crypto.Signer
@@ -61,6 +74,15 @@ type ECC struct {
 
 	// EdUser is an Ed25519 X.509 user identity certificate.
 	EdUser *Identity
+
+	// Users are X.509 user identity certificates by curve, for the curves of
+	// Curves.
+	Users map[string]*Identity
+
+	// Per curve of Curves: a CA on that curve and a client certificate
+	// issued by it (on the same curve), for trust lists.
+	CAs        map[string]*Identity
+	IssuedByCA map[string]*Identity
 
 	// A P-256 CA and a client certificate issued by it, for trust lists.
 	CACert []byte
@@ -188,39 +210,68 @@ func SelfSigned(cn, appURI string) ([]byte, *rsa.PrivateKey, error) {
 }
 
 func eccCurve(name string) elliptic.Curve {
-	if name == CurveP384 {
+	switch name {
+	case CurveP384:
 		return elliptic.P384()
+	case CurveBrainpoolP256r1:
+		return brainpool.P256r1()
+	case CurveBrainpoolP384r1:
+		return brainpool.P384r1()
 	}
 	return elliptic.P256()
 }
 
-// NewIdentity creates a certificate for a new key on the curve: an ECDSA key
-// on a NIST curve or an Ed25519 key. A nil issuer makes it self-signed.
-func NewIdentity(curve, cn, appURI string, issuer *x509.Certificate, issuerKey crypto.Signer) (*Identity, error) {
-	var (
-		key crypto.Signer
-		err error
-	)
-	if curve == CurveEd25519 {
-		_, key, err = ed25519.GenerateKey(rand.Reader)
-	} else {
-		key, err = ecdsa.GenerateKey(eccCurve(curve), rand.Reader)
+// NewKey creates a new key on the curve: an ECDSA key on a NIST or Brainpool
+// curve, an Ed25519 or an Ed448 key.
+func NewKey(curve string) (crypto.Signer, error) {
+	switch curve {
+	case CurveEd25519:
+		_, key, err := ed25519.GenerateKey(rand.Reader)
+		return key, err
+	case CurveEd448:
+		_, key, err := ed448.GenerateKey(rand.Reader)
+		return key, err
 	}
+	return ecdsa.GenerateKey(eccCurve(curve), rand.Reader)
+}
+
+// NewIdentity creates a certificate for a new key on the curve (see NewKey).
+// A nil issuer makes it self-signed.
+func NewIdentity(curve, cn, appURI string, issuer *x509.Certificate, issuerKey crypto.Signer) (*Identity, error) {
+	key, err := NewKey(curve)
 	if err != nil {
 		return nil, err
 	}
 	tmpl := CertTemplate(cn, appURI)
 	// An ECC key signs; it neither enciphers keys nor data.
 	tmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageContentCommitment
+	return issue(tmpl, key, issuer, issuerKey)
+}
+
+// NewCA creates a self-signed CA certificate for a new key on the curve.
+func NewCA(curve, cn string) (*Identity, error) {
+	key, err := NewKey(curve)
+	if err != nil {
+		return nil, err
+	}
+	tmpl := CertTemplate(cn, "")
+	tmpl.IsCA = true
+	tmpl.KeyUsage = x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign
+	return issue(tmpl, key, nil, nil)
+}
+
+func issue(tmpl *x509.Certificate, key crypto.Signer, issuer *x509.Certificate, issuerKey crypto.Signer) (*Identity, error) {
 	parent, signer := tmpl, key
 	if issuer != nil {
 		parent, signer = issuer, issuerKey
 	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, parent, key.Public(), signer)
+	// uapolicy.CreateCertificate is x509.CreateCertificate with Brainpool and
+	// Ed448 keys in addition.
+	der, err := uapolicy.CreateCertificate(rand.Reader, tmpl, parent, key.Public(), signer)
 	if err != nil {
 		return nil, err
 	}
-	parsed, err := x509.ParseCertificate(der)
+	parsed, err := uapolicy.ParseCertificate(der)
 	if err != nil {
 		return nil, err
 	}
@@ -228,13 +279,30 @@ func NewIdentity(curve, cn, appURI string, issuer *x509.Certificate, issuerKey c
 }
 
 func buildECC() (*ECC, error) {
-	p := &ECC{Server: map[string]*Identity{}, Client: map[string]*Identity{}}
+	p := &ECC{
+		Server:     map[string]*Identity{},
+		Client:     map[string]*Identity{},
+		Users:      map[string]*Identity{},
+		CAs:        map[string]*Identity{},
+		IssuedByCA: map[string]*Identity{},
+	}
 	var err error
-	for _, curve := range []string{CurveP256, CurveP384, CurveEd25519} {
+	for _, curve := range Curves {
 		if p.Server[curve], err = NewIdentity(curve, "conformance server "+curve, ServerAppURI, nil, nil); err != nil {
 			return nil, err
 		}
 		if p.Client[curve], err = NewIdentity(curve, "conformance client "+curve, ClientAppURI, nil, nil); err != nil {
+			return nil, err
+		}
+		if p.Users[curve], err = NewIdentity(curve, "conformance user "+curve, "urn:otfabric:conformance:user", nil, nil); err != nil {
+			return nil, err
+		}
+		ca, err := NewCA(curve, "conformance CA "+curve)
+		if err != nil {
+			return nil, err
+		}
+		p.CAs[curve] = ca
+		if p.IssuedByCA[curve], err = NewIdentity(curve, "conformance issued client "+curve, ClientAppURI, ca.X509, ca.Key); err != nil {
 			return nil, err
 		}
 	}

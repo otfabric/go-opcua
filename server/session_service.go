@@ -6,7 +6,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"crypto/x509"
 	"encoding/binary"
 	"fmt"
 	"strings"
@@ -275,7 +274,7 @@ func (s *SessionService) validateX509UserToken(
 		return ua.StatusBadIdentityTokenInvalid
 	}
 
-	userCert, err := x509.ParseCertificate(tok.CertificateData)
+	userCert, err := uapolicy.ParseCertificate(tok.CertificateData)
 	if err != nil {
 		s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot parse certificate", "error", err)
 		return ua.StatusBadIdentityTokenInvalid
@@ -315,7 +314,7 @@ func (s *SessionService) validateX509UserToken(
 
 			// The key type of the user certificate has to fit the policy: an
 			// ECC policy verifies ECDSA signatures only, ECC_curve25519
-			// Ed25519 ones.
+			// Ed25519 ones and ECC_curve448 Ed448 ones.
 			if encErr := uapolicy.CheckPublicKey(policyURI, remoteKey); encErr != nil {
 				s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot build asymmetric context", "error", encErr)
 				return ua.StatusBadIdentityTokenInvalid

@@ -5,18 +5,13 @@ package uasc
 import (
 	"bytes"
 	"crypto"
-	"crypto/ed25519"
 	"crypto/elliptic"
-	"crypto/rand"
 	"crypto/sha256"
-	"crypto/x509"
-	"crypto/x509/pkix"
 	"encoding/binary"
-	"math/big"
 	"testing"
-	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
 	"github.com/stretchr/testify/require"
@@ -25,35 +20,24 @@ import (
 // aeadTestPolicies are the ECC policies with authenticated encryption.
 var aeadTestPolicies = []struct {
 	uri          string
-	ed25519      bool
+	curve        string // of the application instance certificates
 	enhancements bool
 }{
-	{ua.SecurityPolicyURIECCNistP256AesGcm, false, true},
-	{ua.SecurityPolicyURIECCNistP256ChaChaPoly, false, true},
-	{ua.SecurityPolicyURIECCCurve25519, true, false},
+	{ua.SecurityPolicyURIECCNistP256AesGcm, testpki.CurveP256, true},
+	{ua.SecurityPolicyURIECCNistP256ChaChaPoly, testpki.CurveP256, true},
+	{ua.SecurityPolicyURIECCCurve25519, testpki.CurveEd25519, false},
+	{ua.SecurityPolicyURIECCCurve448, testpki.CurveEd448, false},
 }
 
 var secureModes = []ua.MessageSecurityMode{ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt}
 
-// aeadTestCert returns an application instance key and certificate of the
-// type the policy needs.
-func aeadTestCert(t *testing.T, ed bool) (crypto.Signer, []byte) {
+// aeadTestCert returns an application instance key and certificate on the
+// testpki curve the policy needs.
+func aeadTestCert(t *testing.T, curve string) (crypto.Signer, []byte) {
 	t.Helper()
-	if !ed {
-		return testECCCert(t, elliptic.P256())
-	}
-	_, key, err := ed25519.GenerateKey(rand.Reader)
+	id, err := testpki.NewIdentity(curve, "go-opcua-aead-test", "", nil, nil)
 	require.NoError(t, err)
-	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(time.Now().UnixNano()),
-		Subject:      pkix.Name{CommonName: "go-opcua-ed25519-test"},
-		NotBefore:    time.Now().Add(-time.Hour),
-		NotAfter:     time.Now().Add(24 * time.Hour),
-		KeyUsage:     x509.KeyUsageDigitalSignature,
-	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
-	require.NoError(t, err)
-	return key, der
+	return id.Key, id.Cert
 }
 
 // aeadPair returns the two ends of an open AEAD channel after the
@@ -309,10 +293,10 @@ type opnPeer struct {
 	cert []byte
 }
 
-func newOPNPeers(t *testing.T, uri string, ed bool) (client, server *opnPeer) {
+func newOPNPeers(t *testing.T, uri string, curve string) (client, server *opnPeer) {
 	t.Helper()
-	clientKey, clientCert := aeadTestCert(t, ed)
-	serverKey, serverCert := aeadTestCert(t, ed)
+	clientKey, clientCert := aeadTestCert(t, curve)
+	serverKey, serverCert := aeadTestCert(t, curve)
 	calgo, err := uapolicy.AsymmetricKeys(uri, clientKey, serverKey.Public())
 	require.NoError(t, err)
 	salgo, err := uapolicy.AsymmetricKeys(uri, serverKey, clientKey.Public())
@@ -368,17 +352,35 @@ func exchange(t *testing.T, uri string, client, server *opnPeer) (request, respo
 	return request, response, plainResponse, err
 }
 
+// asymSignatureLength is the size of the asymmetric signatures of the policy:
+// 64 bytes for P-256 and Ed25519 keys, 114 for Ed448. key is the signing key,
+// or nil for the key type of aeadTestPolicies.
+func asymSignatureLength(t *testing.T, uri string, key crypto.Signer) int {
+	t.Helper()
+	if key == nil {
+		for _, pol := range aeadTestPolicies {
+			if pol.uri == uri {
+				k, _ := aeadTestCert(t, pol.curve)
+				key = k
+			}
+		}
+	}
+	algo, err := uapolicy.AsymmetricKeys(uri, key, nil)
+	require.NoError(t, err)
+	return algo.SignatureLength()
+}
+
 // TestAEAD_ChannelThumbprint covers the binding of the first OpenSecureChannel
 // exchange (Part 6 §6.7.5).
 func TestAEAD_ChannelThumbprint(t *testing.T) {
 	for _, pol := range aeadTestPolicies {
 		t.Run(pol.uri, func(t *testing.T) {
-			client, server := newOPNPeers(t, pol.uri, pol.ed25519)
+			client, server := newOPNPeers(t, pol.uri, pol.curve)
 			require.Nil(t, client.sc.ChannelThumbprint())
 
 			request, response, plainResponse, err := exchange(t, pol.uri, client, server)
 			require.NoError(t, err)
-			const sigLen = 64
+			sigLen := asymSignatureLength(t, pol.uri, server.key)
 			reqSig, respSig := request[len(request)-sigLen:], response[len(response)-sigLen:]
 			// The header carries the final size, as it is signed.
 			binary.LittleEndian.PutUint32(plainResponse[4:], uint32(len(response)))
@@ -420,7 +422,7 @@ func TestAEAD_ChannelThumbprint(t *testing.T) {
 			// A response made for another request is refused: a client that
 			// sent a request of its own does not accept the answer to
 			// someone else's, even though it is signed by the right server.
-			victim, _ := newOPNPeers(t, pol.uri, pol.ed25519)
+			victim, _ := newOPNPeers(t, pol.uri, pol.curve)
 			victim.algo, err = uapolicy.AsymmetricKeys(pol.uri, victim.key, server.key.Public())
 			require.NoError(t, err)
 			req := opnMessage(victim.channelInstance, pol.uri, victim.cert, server.cert,
@@ -436,7 +438,7 @@ func TestAEAD_ChannelThumbprint(t *testing.T) {
 
 			// A server that is handed a plainly signed response to verify
 			// (roles confused) gains no thumbprint from it either.
-			fresh, freshServer := newOPNPeers(t, pol.uri, pol.ed25519)
+			fresh, freshServer := newOPNPeers(t, pol.uri, pol.curve)
 			_, _, _, err = exchange(t, pol.uri, fresh, freshServer)
 			require.NoError(t, err)
 			require.NotEqual(t, respSig, fresh.sc.ChannelThumbprint(), "every channel has its own thumbprint")
@@ -457,10 +459,10 @@ func TestAEAD_ChannelThumbprint(t *testing.T) {
 
 // boundChannels returns the crypto channels of a client and a server that
 // share the given ChannelThumbprint.
-func boundChannels(t *testing.T, uri string, ed bool, thumbprint []byte) (client, server *SecureChannel, clientCert, serverCert []byte) {
+func boundChannels(t *testing.T, uri string, curve string, thumbprint []byte) (client, server *SecureChannel, clientCert, serverCert []byte) {
 	t.Helper()
-	clientKey, clientCert := aeadTestCert(t, ed)
-	serverKey, serverCert := aeadTestCert(t, ed)
+	clientKey, clientCert := aeadTestCert(t, curve)
+	serverKey, serverCert := aeadTestCert(t, curve)
 	client = eccCryptoChannel(uri, clientKey, clientCert)
 	client.cfg.RemoteCertificate = serverCert
 	server = eccCryptoChannel(uri, serverKey, serverCert)
@@ -486,8 +488,8 @@ func TestAEAD_SessionSignatures(t *testing.T) {
 	for _, pol := range aeadTestPolicies {
 		t.Run(pol.uri, func(t *testing.T) {
 			tp := bytes.Repeat([]byte{0x7b}, 64)
-			client, server, clientCert, serverCert := boundChannels(t, pol.uri, pol.ed25519, tp)
-			userKey, userCert := aeadTestCert(t, pol.ed25519)
+			client, server, clientCert, serverCert := boundChannels(t, pol.uri, pol.curve, tp)
+			userKey, userCert := aeadTestCert(t, pol.curve)
 			client.cfg.UserPrivateKey = userKey
 
 			verifyWith := func(cert, data, sig []byte) error {
@@ -513,7 +515,7 @@ func TestAEAD_SessionSignatures(t *testing.T) {
 			sig, alg, err := server.NewCreateSessionSignature(clientCert, clientNonce, serverNonce)
 			require.NoError(t, err)
 			require.Empty(t, alg, "SignatureData.Algorithm is empty")
-			require.Len(t, sig, 64)
+			require.Len(t, sig, asymSignatureLength(t, pol.uri, nil))
 			require.NoError(t, verifyWith(serverCert, createData, sig))
 			require.NoError(t, client.VerifyCreateSessionSignature(serverCert, clientNonce, serverNonce, sig))
 			require.Error(t, client.VerifyCreateSessionSignature(serverCert, serverNonce, clientNonce, sig))
@@ -611,7 +613,7 @@ func TestAEAD_SessionSignatures(t *testing.T) {
 func TestAEAD_UserSecret(t *testing.T) {
 	for _, pol := range aeadTestPolicies {
 		t.Run(pol.uri, func(t *testing.T) {
-			client, server, clientCert, serverCert := boundChannels(t, pol.uri, pol.ed25519, nil)
+			client, server, clientCert, serverCert := boundChannels(t, pol.uri, pol.curve, nil)
 			require.True(t, client.UserTokenPolicyIsECC(""))
 			nonce := []byte("the server nonce of the session!")
 

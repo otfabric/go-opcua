@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cloudflare/circl/sign/ed448"
 	"github.com/stretchr/testify/require"
 )
 
@@ -53,6 +54,8 @@ func eccTestKey(t *testing.T, uri string) (crypto.Signer, int) {
 		_, key, err := ed25519.GenerateKey(rand.Reader)
 		require.NoError(t, err)
 		return key, ed25519.SignatureSize
+	case ed448Suite:
+		return newEd448Key(t), ed448.SignatureSize
 	}
 	t.Fatalf("no test key for %s", uri)
 	return nil, 0
@@ -76,6 +79,13 @@ func newECDSAKey(t *testing.T, curve elliptic.Curve) *ecdsa.PrivateKey {
 	return key
 }
 
+func newEd448Key(t *testing.T) ed448.PrivateKey {
+	t.Helper()
+	_, key, err := ed448.GenerateKey(rand.Reader)
+	require.NoError(t, err)
+	return key
+}
+
 // selfSignedCert returns a DER encoded self-signed certificate for key.
 func selfSignedCert(t *testing.T, key crypto.Signer) []byte {
 	t.Helper()
@@ -86,7 +96,7 @@ func selfSignedCert(t *testing.T, key crypto.Signer) []byte {
 		NotAfter:     time.Now().Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 	}
-	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
+	der, err := CreateCertificate(rand.Reader, tmpl, tmpl, key.Public(), key)
 	require.NoError(t, err)
 	return der
 }

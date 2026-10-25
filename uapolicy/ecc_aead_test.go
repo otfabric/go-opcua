@@ -36,10 +36,19 @@ const (
 	rfc7748k  = "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
 )
 
+// RFC 7748 §6.2: X448 test vector, named as for X25519.
+const (
+	rfc7748x448a  = "9a8f4925d1519f5775cf46b04b5800d4ee9ee8bae8bc5565d498c28dd9c9baf574a9419744897391006382a6f127ab1d9ac2d8c0a598726b"
+	rfc7748x448pa = "9b08f7cc31b7e3e67d22d5aea121074a273bd2b83de09c63faa73d2c22c5d9bbc836647241d953d40c5b12da88120d53177f80e532c41fa0"
+	rfc7748x448b  = "1c306a7ac2a0e2e0990b294470cba339e6453772b075811d8fad0d1d6927c120bb5ee8972b0d3e21374c9c921b09d1b0366f10b65173992d"
+	rfc7748x448pb = "3eb7a829b0cd20f5bcfc0b599b6feccf6da4627107bdb0d4f345b43027d8b972fc3e34fb4232a13ca706dcb57aec3dae07bdc1c67bf33609"
+	rfc7748x448k  = "07fff4181ac6cc95ec1c16a94a0f74d12da232ce40a77552281d282bb60c0b56fd2464c335543936521c24403085d59a449a5037514a879d"
+)
+
 // Keys of the AEAD policies, computed with an independent implementation of
 // HKDF-SHA256 (Python, hmac and hashlib of the standard library only) from
 // the RFC 5903 exchange (nistP256 policies: client = initiator) and the RFC
-// 7748 exchange (ECC_curve25519: client = Alice):
+// 7748 exchanges (ECC_curve25519 and ECC_curve448: client = Alice):
 //
 //	Salt = UInt16LE(L) | label | first | second ; OKM = HKDF-SHA256(secret, Salt, Salt, L)
 //
@@ -62,6 +71,16 @@ const (
 		"817ad05f8deed346e0014ac9"
 	katCurve25519SecretKeys = "cb74f513b689616300cde9403c735b86ee26d7c5d08928e54ef48e32ca3210c0" + "32360f6ba8ddc899a54c2723"
 
+	// ECC_curve448 from the RFC 7748 §6.2 exchange (client = Alice), with
+	// the same HKDF-SHA256 and lengths as ECC_curve25519.
+	katCurve448ClientKeys = "1cf7125eb26b734f3ac23e761fe42b53970ca8e0207c273e43dd45f6a205ac65" +
+		"07a546069d167ab3571b33ebed711f83e20bd61de5390e31c89d90901535f4bd" +
+		"eb1ca9d326e7d9018333a102"
+	katCurve448ServerKeys = "af5ba22ea7092d68b41dc24f352b362012f9eb03ebcf4dd148544bf3678ce32e" +
+		"f785d07b05cc9ac5b7d0fb3e9595fb0a4a1893de20a408395c3f216fe1a316a6" +
+		"0fb9dc7ea97ec03247f3f648"
+	katCurve448SecretKeys = "034af62086266418a4dcefa8a1b357cbaa153535ee01e5cc3666484d5abfa9cb" + "4fe8dfbff2de216949676d2e"
+
 	// Renewal of an ECC_nistP256_AesGcm channel whose previous IKM is the
 	// bytes 00 01 .. 1f: IKM = previous XOR girx, and the client keys derived
 	// from it with the same nonces.
@@ -82,7 +101,7 @@ type aeadKAT struct {
 	newAEAD                  func([]byte) (cipher.AEAD, error)
 	enhancements             bool
 	nonceLength, sigLen      int
-	certificateKeyIsEd25519  bool
+	certificateKey           string // the only key type accepted; "" for p256 and p384
 	encryptionAlgorithmLabel string
 }
 
@@ -106,7 +125,15 @@ var aeadKATs = []aeadKAT{
 		clientPublic: rfc7748pa, serverPublic: rfc7748pb, secret: rfc7748k,
 		clientKeys: katCurve25519ClientKeys, serverKeys: katCurve25519ServerKeys, secretKeys: katCurve25519SecretKeys,
 		signKey: 32, encKey: 32, newAEAD: chacha20poly1305.New, nonceLength: 32, sigLen: 64,
-		certificateKeyIsEd25519:  true,
+		certificateKey:           "ed25519",
+		encryptionAlgorithmLabel: "http://opcfoundation.org/UA/security/chacha20-poly1305",
+	},
+	{
+		uri: ua.SecurityPolicyURIECCCurve448, client: rfc7748x448a, server: rfc7748x448b,
+		clientPublic: rfc7748x448pa, serverPublic: rfc7748x448pb, secret: rfc7748x448k,
+		clientKeys: katCurve448ClientKeys, serverKeys: katCurve448ServerKeys, secretKeys: katCurve448SecretKeys,
+		signKey: 32, encKey: 32, newAEAD: chacha20poly1305.New, nonceLength: 56, sigLen: 114,
+		certificateKey:           "ed448",
 		encryptionAlgorithmLabel: "http://opcfoundation.org/UA/security/chacha20-poly1305",
 	},
 }
@@ -122,6 +149,10 @@ func fixedEphemeralKeyFor(t *testing.T, uri, private string) *EphemeralKey {
 		key, err := ecdh.X25519().NewPrivateKey(unhex(t, private))
 		require.NoError(t, err)
 		k = x25519EphemeralKey{key: key}
+	case x448Agreement:
+		key, err := newX448Key(bytes.NewReader(unhex(t, private)))
+		require.NoError(t, err)
+		k = key
 	default:
 		key, err := ecdh.P256().NewPrivateKey(unhex(t, private))
 		require.NoError(t, err)
@@ -305,6 +336,7 @@ func TestAEADPolicyParameters(t *testing.T) {
 		"p384":    newECDSAKey(t, elliptic.P384()),
 		"p521":    newECDSAKey(t, elliptic.P521()),
 		"ed25519": edKey,
+		"ed448":   newEd448Key(t),
 	}
 
 	require.Len(t, aeadTestPolicies(), len(aeadKATs))
@@ -331,8 +363,8 @@ func TestAEADPolicyParameters(t *testing.T) {
 			// Which certificate keys the policy accepts.
 			for name, key := range keys {
 				want := name == "p256" || name == "p384"
-				if k.certificateKeyIsEd25519 {
-					want = name == "ed25519"
+				if k.certificateKey != "" {
+					want = name == k.certificateKey
 				}
 				cert := selfSignedCert(t, key)
 				if want {
@@ -373,6 +405,14 @@ func TestAEADPolicyParameters(t *testing.T) {
 			continue
 		}
 		require.Error(t, CheckPublicKey(uri, edKey.Public()), uri)
+	}
+	// Nor an Ed448 key with any other than ECC_curve448.
+	ed448Key := newEd448Key(t)
+	for _, uri := range SupportedPolicies() {
+		if uri == ua.SecurityPolicyURINone || uri == ua.SecurityPolicyURIECCCurve448 {
+			continue
+		}
+		require.Error(t, CheckPublicKey(uri, ed448Key.Public()), uri)
 	}
 	// The levels are distinct, so that an endpoint selection is never a tie.
 	seen := map[uint8]string{}

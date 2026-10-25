@@ -15,6 +15,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/ProtonMail/go-crypto/brainpool"
+	"github.com/cloudflare/circl/sign/ed448"
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -40,8 +42,8 @@ import (
 // eccPolicies; adding a curve the Go standard library does not provide means
 // implementing eccSignatureSuite and eccKeyAgreement for it.
 //
-// The symmetric suite is either HMAC plus AES-CBC (ECC_nistP256, ECC_nistP384)
-// or an AEAD cipher (the policies of OPC UA 1.05.07, see ecc_aead.go).
+// The symmetric suite is either HMAC plus AES-CBC (ECC_nistP256, ECC_nistP384,
+// ECC_brainpoolP256r1, ECC_brainpoolP384r1) or an AEAD cipher (the policies of OPC UA 1.05.07, see ecc_aead.go).
 
 // eccSignatureSuite creates the asymmetric signature algorithm of an ECC
 // policy for a pair of application instance keys.
@@ -168,6 +170,48 @@ var eccPolicies = map[string]*eccPolicy{
 		// SecureChannelEnhancements to it. See docs/security.md.
 		symmetric: aeadSuite{cipher: chacha20poly1305.New, keyLength: chacha20poly1305.KeySize, signKeyLength: chacha20poly1305.KeySize, uri: "http://opcfoundation.org/UA/security/chacha20-poly1305"},
 	},
+
+	// The Brainpool policies mirror ECC_nistP256 and ECC_nistP384 with the
+	// curves of RFC 5639: the same hashes, key derivation, nonce layout
+	// (x || y) and symmetric suites.
+	ua.SecurityPolicyURIECCBrainpoolP256r1: {
+		uri: ua.SecurityPolicyURIECCBrainpoolP256r1,
+		// CertificateKeyAlgorithm: brainpoolP256r1; brainpoolP384r1 may be
+		// used as well, as nistP384 with ECC_nistP256.
+		signature: ecdsaSuite{hash: crypto.SHA256, curves: []elliptic.Curve{brainpool.P256r1(), brainpool.P384r1()}},
+		agreement: brainpoolAgreement{curve: brainpool.P256r1()},
+		hash:      crypto.SHA256,
+		symmetric: cbcHMACSuite{
+			hash:          crypto.SHA256,
+			keyLength:     16, // AES128-CBC
+			signatureURI:  "http://www.w3.org/2000/09/xmldsig#hmac-sha256",
+			encryptionURI: "http://www.w3.org/2001/04/xmlenc#aes128-cbc",
+		},
+	},
+	ua.SecurityPolicyURIECCBrainpoolP384r1: {
+		uri:       ua.SecurityPolicyURIECCBrainpoolP384r1,
+		signature: ecdsaSuite{hash: crypto.SHA384, curves: []elliptic.Curve{brainpool.P384r1()}},
+		agreement: brainpoolAgreement{curve: brainpool.P384r1()},
+		hash:      crypto.SHA384,
+		symmetric: cbcHMACSuite{
+			hash:          crypto.SHA384,
+			keyLength:     32, // AES256-CBC
+			signatureURI:  "http://www.w3.org/2000/09/xmldsig#hmac-sha384",
+			encryptionURI: "http://www.w3.org/2001/04/xmlenc#aes256-cbc",
+		},
+	},
+	// ECC_curve448 is ECC_curve25519 with Ed448 and X448: 56 byte nonces,
+	// 114 byte signatures. Key derivation with HKDF-SHA256 and the symmetric
+	// suite (ChaCha20-Poly1305 with a separate key for the tags of Sign-only
+	// channels, no SecureChannelEnhancements) are those of ECC_curve25519 in
+	// open62541 v1.5.9, the reference implementation.
+	ua.SecurityPolicyURIECCCurve448: {
+		uri:       ua.SecurityPolicyURIECCCurve448,
+		signature: ed448Suite{},
+		agreement: x448Agreement{},
+		hash:      crypto.SHA256,
+		symmetric: aeadSuite{cipher: chacha20poly1305.New, keyLength: chacha20poly1305.KeySize, signKeyLength: chacha20poly1305.KeySize, uri: "http://opcfoundation.org/UA/security/chacha20-poly1305"},
+	},
 }
 
 // IsECC reports whether uri names a supported ECC security policy.
@@ -270,6 +314,8 @@ func describeKey(key crypto.PublicKey) string {
 		return "an RSA key"
 	case ed25519.PublicKey:
 		return "an Ed25519 key"
+	case ed448.PublicKey:
+		return "an Ed448 key"
 	}
 	return fmt.Sprintf("a key of type %T", key)
 }

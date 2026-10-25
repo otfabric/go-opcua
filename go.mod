@@ -12,6 +12,8 @@ require (
 )
 
 require (
+	github.com/ProtonMail/go-crypto v1.5.2 // indirect
+	github.com/cloudflare/circl v1.6.5 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	golang.org/x/mod v0.34.0 // indirect

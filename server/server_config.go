@@ -41,7 +41,10 @@ func PrivateKey(key *rsa.PrivateKey) Option {
 //     and ECC_nistP256_ChaChaPoly,
 //   - an ECDSA P-384 certificate serves ECC_nistP384 and the three
 //     ECC_nistP256 policies,
-//   - an Ed25519 certificate serves ECC_curve25519.
+//   - an Ed25519 certificate serves ECC_curve25519,
+//   - an ECDSA brainpoolP256r1 certificate serves ECC_brainpoolP256r1, a
+//     brainpoolP384r1 one ECC_brainpoolP384r1 and ECC_brainpoolP256r1,
+//   - an Ed448 certificate serves ECC_curve448.
 //
 // A server that offers RSA and ECC endpoints therefore has (at least) two
 // certificates. For every SecureChannel the server uses the first configured
@@ -50,11 +53,13 @@ func PrivateKey(key *rsa.PrivateKey) Option {
 // a server should carry the same ApplicationURI.
 //
 // cert is the DER encoded certificate. An ECC key only has to sign, so it may
-// be any crypto.Signer with an ECDSA or Ed25519 public key (for example a key
-// held in an HSM); an RSA key must be an *rsa.PrivateKey.
+// be any crypto.Signer with an ECDSA, Ed25519 or Ed448 public key (for
+// example a key held in an HSM); an RSA key must be an *rsa.PrivateKey.
+// Certificates with Brainpool and Ed448 keys are parsed with
+// uapolicy.ParseCertificate.
 func ApplicationIdentity(cert []byte, key crypto.Signer) Option {
 	return func(s *serverConfig) error {
-		x509cert, err := x509.ParseCertificate(cert)
+		x509cert, err := uapolicy.ParseCertificate(cert)
 		if err != nil {
 			return fmt.Errorf("server: failed to parse x509 certificate: %w", err)
 		}
@@ -179,7 +184,7 @@ func Certificate(cert []byte) Option {
 	return func(s *serverConfig) error {
 		s.certificate = cert
 
-		x509cert, err := x509.ParseCertificate(cert)
+		x509cert, err := uapolicy.ParseCertificate(cert)
 		if err != nil {
 			return fmt.Errorf("server: failed to parse x509 certificate: %w", err)
 		}
@@ -334,17 +339,21 @@ type ClientCertificateValidator func(certDER []byte) error
 // certificates are rejected with BadCertificateUntrusted at OpenSecureChannel
 // (CreateSession retains the same check as defense-in-depth).
 //
-// Each caCertDER is a DER-encoded X.509 CA certificate.
+// Each caCertDER is a DER-encoded X.509 CA certificate (or a trusted
+// self-signed application instance certificate). Brainpool and Ed448 keys
+// are supported; see uapolicy.VerifyCertificate.
 // Passing an empty list configures a server that rejects all client certificates.
 func WithClientCertificateTrustList(caCertDER ...[]byte) Option {
 	return func(s *serverConfig) error {
 		pool := x509.NewCertPool()
+		anchors := make([]*x509.Certificate, 0, len(caCertDER))
 		for _, der := range caCertDER {
-			cert, err := x509.ParseCertificate(der)
+			cert, err := uapolicy.ParseCertificate(der)
 			if err != nil {
 				return fmt.Errorf("WithClientCertificateTrustList: %w", err)
 			}
 			pool.AddCert(cert)
+			anchors = append(anchors, cert)
 		}
 		s.clientCertificateValidator = func(certDER []byte) error {
 			if len(certDER) == 0 {
@@ -354,20 +363,11 @@ func WithClientCertificateTrustList(caCertDER ...[]byte) Option {
 			// application instance certificate followed by its issuers;
 			// UA-.NETStandard does): the leaf is verified, the rest are
 			// candidate intermediates, never trust anchors.
-			certs, err := x509.ParseCertificates(certDER)
+			certs, err := uapolicy.ParseCertificates(certDER)
 			if err != nil || len(certs) == 0 {
 				return ua.StatusBadCertificateInvalid
 			}
-			intermediates := x509.NewCertPool()
-			for _, c := range certs[1:] {
-				intermediates.AddCert(c)
-			}
-			opts := x509.VerifyOptions{
-				Roots:         pool,
-				Intermediates: intermediates,
-				KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
-			}
-			if _, err := certs[0].Verify(opts); err != nil {
+			if err := uapolicy.VerifyCertificate(certs, pool, anchors); err != nil {
 				return ua.StatusBadCertificateUntrusted
 			}
 			return nil

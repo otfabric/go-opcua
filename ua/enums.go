@@ -66,6 +66,11 @@ const (
 	SecurityPolicyURIECCNistP256AesGcm     = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_AesGcm"
 	SecurityPolicyURIECCNistP256ChaChaPoly = "http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_ChaChaPoly"
 	SecurityPolicyURIECCCurve25519         = "http://opcfoundation.org/UA/SecurityPolicy#ECC_curve25519"
+
+	// The ECC policies with Brainpool curves (RFC 5639) and Curve448.
+	SecurityPolicyURIECCBrainpoolP256r1 = "http://opcfoundation.org/UA/SecurityPolicy#ECC_brainpoolP256r1"
+	SecurityPolicyURIECCBrainpoolP384r1 = "http://opcfoundation.org/UA/SecurityPolicy#ECC_brainpoolP384r1"
+	SecurityPolicyURIECCCurve448        = "http://opcfoundation.org/UA/SecurityPolicy#ECC_curve448"
 )
 
 var SecurityPolicyURIs = map[string]string{
@@ -81,6 +86,10 @@ var SecurityPolicyURIs = map[string]string{
 	"ECCNistP256AesGcm":     SecurityPolicyURIECCNistP256AesGcm,
 	"ECCNistP256ChaChaPoly": SecurityPolicyURIECCNistP256ChaChaPoly,
 	"ECCCurve25519":         SecurityPolicyURIECCCurve25519,
+
+	"ECCBrainpoolP256r1": SecurityPolicyURIECCBrainpoolP256r1,
+	"ECCBrainpoolP384r1": SecurityPolicyURIECCBrainpoolP384r1,
+	"ECCCurve448":        SecurityPolicyURIECCCurve448,
 }
 
 // FormatSecurityPolicyURI converts a short name for a security policy into a
