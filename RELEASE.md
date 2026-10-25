@@ -1,5 +1,40 @@
 # go-opcua Releases
 
+## v1.22.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.21.0
+
+### Summary
+
+The rest of the GDS pull model (Part 12 v1.05 §6, §7.9): signing requests of every key type, PFX keys, the HTTPS and user token certificate groups, the audit events of the Directory, the RolePermissions of the GDS NodeSet and a persistent store. The pull model is verified against the Global Discovery Server and the GDS client of UA-.NETStandard 1.5.378.182.
+
+### Added
+
+- **gdsserver: signing requests of every key type.** StartSigningRequest takes RSA, NIST P-256 / P-384, Brainpool P-256r1 / P-384r1, Ed25519 and Ed448 requests (uapolicy parses and checks them). The Brainpool types have Brainpool CAs, and their CRLs are signed with them.
+- **gdsserver: PFX private keys.** StartNewKeyPairRequest delivers the key as PEM or PFX (PKCS #12 with the certificate and its issuer, `uapolicy.EncodePFX`). `gds.EnrollRequest` and `gds.DecodePrivateKey` handle PFX.
+- **gdsserver: the HTTPS and user token certificate groups.** The DefaultHttpsGroup issues HttpsCertificateType certificates (RSA, P-256 and P-384 CAs); the DefaultUserTokenGroup serves a trust list of its own. GetCertificateGroups, GetCertificates, GetTrustList and GetCertificateStatus answer per group.
+- **gdsserver: audit events.** The Directory methods report the audit events of the GDS NodeSet through the server's auditing, without passwords and private keys.
+- **gdsserver: RolePermissions.** The RolePermissions of the GDS NodeSet are honoured besides the checks of the handlers.
+- **gdsserver: `NewFileStore`** keeps the GDS state in a directory (atomic writes, 0600 files).
+- **server: `ReportAuditEvent`** reports the audit event of an application method to the Server object and the given notifiers, filtered by the EventAccessController like the server's own audit events.
+
+### Fixed
+
+- **server: Call with the MethodId of the InstanceDeclaration.** A Method of the ObjectType of an Object (or of a supertype), called on the Object, is the Method of the Object with that BrowseName (Part 4 §5.11.2.2). It answered Bad_MethodInvalid; UA-.NETStandard's GDS client reads a TrustList that way.
+- **server: the NodeSet importer keeps RolePermissions that name the role by NodeId** (`i=15704`, `ns=1;i=1661`). It kept only those that named a well-known role.
+
+### Tests
+
+- Conformance (`conformance/certmgmt`: the three certificate groups, a request lifecycle, the HTTPS group, Brainpool, PFX, a FileStore and the audit events over the wire), chaos (`chaos/gdspull`) and unit tests.
+- Interop: the eight `gds.pull.*` rows of UA-.NETStandard are verified in both directions against the new opcua-interop adapter dotnet-gds (`TestDotnetGDSPull_GoClient_DotnetServer`, `TestDotnetGDSPull_DotnetClient_GoServer`). The Interop workflow pulls its image.
+
+### Interop
+
+- Pinned opcua-interop v0.14.0: the six adapters by their new digests, plus the dotnet-gds adapter (`sha256:7c2fc3d6…`, UA-.NETStandard 1.5.378.182 GDS).
+
+---
+
 ## v1.21.0
 
 **Date:** 2026-10-25
