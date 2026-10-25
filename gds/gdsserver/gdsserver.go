@@ -159,7 +159,7 @@ var errAttach = errors.New("gdsserver")
 // Attach makes srv a GDS: it imports the GDS information model (namespace
 // gdsid.NamespaceURI, which it adds to srv) with the Directory object,
 // loads the state from cfg.Store and serves the methods of the Directory
-// and its DefaultApplicationGroup TrustList. Call it once, before
+// and the TrustLists of its certificate groups. Call it once, before
 // srv.Start.
 //
 // The GDS namespace gets the next free namespace index: 1 when Attach is

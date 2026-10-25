@@ -156,6 +156,7 @@ go test -tags=interop -v ./interop/...
 | `MILO_IMAGE` | Milo (Java) adapter image | digest pin in `harness_test.go` |
 | `ASYNC_OPCUA_IMAGE` | async-opcua (Rust) adapter image (see [go-opcua ↔ async-opcua](#go-opcua--async-opcua)) | the v0.13.0 digest `ghcr.io/otfabric/opcua-interop-async-opcua@sha256:884b5766…bd6b577f` |
 | `DOTNET_IMAGE` | UA-.NETStandard (C#) adapter image (see [go-opcua ↔ UA-.NETStandard](#go-opcua--ua-netstandard)) | the v0.13.0 digest `ghcr.io/otfabric/opcua-interop-dotnet@sha256:7d3e3a1d…82ee2781` |
+| `DOTNET_GDS_IMAGE` | UA-.NETStandard 1.5.378 GDS adapter image (dotnet-gds, opt-in; see [GDS pull model](#gds-pull-model-part-12-6-79)) | `ghcr.io/otfabric/opcua-interop-dotnet-gds:v0.14.0` if present locally |
 | `NODE_OPCUA_IMAGE` | node-opcua (TypeScript / Node.js) adapter image (see [go-opcua ↔ node-opcua](#go-opcua--node-opcua)) | the v0.13.0 digest `ghcr.io/otfabric/opcua-interop-node-opcua@sha256:52b024b7…fc768e08` |
 | `ASYNCUA_IMAGE` | opcua-asyncio (Python, `asyncua`) adapter image (see [go-opcua ↔ opcua-asyncio](#go-opcua--opcua-asyncio)) | the v0.13.0 digest `ghcr.io/otfabric/opcua-interop-asyncua@sha256:927b5637…8091d757` |
 | `OPCUA_INTEROP_FIXTURE_DIR` | Path to fixture directory containing `baseline.json` | `testdata/` |
@@ -594,7 +595,7 @@ Go↔Go companions never earn a verified checkmark. A row may move to `verified`
 
 Every `unverified` row must carry a controlled `reason`:
 
-`test-missing` · `adapter-command-missing` · `adapter-fixture-missing` · `fault-harness-missing` · `consumer-demand-missing` · `peer-capability-unknown`
+`test-missing` · `adapter-command-missing` · `adapter-unreleased` (the adapter command exists on an opcua-interop branch and the test passes against a local build; verified once the release publishes the image) · `adapter-fixture-missing` · `fault-harness-missing` · `consumer-demand-missing` · `peer-capability-unknown`
 
 Adapter images are pinned to [opcua-interop v0.13.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.13.0) (digest-pinned below), the release the suite and the ledgers are written against (`interopVersion` in `harness_test.go`, `coverage.json`, `testdata/ledger-*.json`, `render-interop-coverage`). The peer versions are open62541 **1.5.9**, Eclipse Milo **1.1.8**, async-opcua **0.19.0**, UA-.NETStandard **2.0.1**, node-opcua **2.187.12** and opcua-asyncio **2.1.0**. CI sets `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` so that missing operations, features, security profiles or a missing test PKI fail rather than skip.
 
@@ -700,7 +701,14 @@ Profile `certificate-management`: `certmgmt.push.trust-list`, `.certificate-upda
 
 ### GDS pull model (Part 12 §6, §7.9)
 
-Profiles `discovery` and `certificate-management`: `gds.pull.directory`, `gds.pull.certificate-request`, `gds.pull.trust-list`, `gds.pull.revocation`. No peer of the matrix has a Global Discovery Server or a GDS pull client in the versions tested (open62541 1.5.9 and node-opcua 2.187 implement the push model only; UA-.NETStandard's GDS packages have no 2.0.1 release), so every row is `unverified` (`peer-capability-unknown` for the peer servers, `adapter-command-missing` for the UA-.NETStandard server and every peer client). The go side is covered by `conformance/certmgmt/gds_pull_test.go` (the address space and a request lifecycle over the wire), `gds/pull_test.go` (an enrolled server and client connect) and `chaos/gdspull`.
+Profiles `discovery` and `certificate-management`: `gds.pull.directory`, `gds.pull.certificate-request`, `gds.pull.trust-list`, `gds.pull.revocation`. open62541 1.5.9, Milo 1.1.8 and node-opcua 2.187 have no Global Discovery Server or GDS pull client (`peer-capability-unknown` for their servers, `adapter-command-missing` for their clients). UA-.NETStandard's GDS packages have no 2.0.1 release; their newest, 1.5.378.182, runs in the separate opcua-interop adapter **dotnet-gds** (opcua-interop v0.14.0, CLIENT_CONTRACT §16), an opt-in peer (`DOTNET_GDS_IMAGE`, default `ghcr.io/otfabric/opcua-interop-dotnet-gds:v0.14.0`; without the variable the tests run only when that image is present locally, and skip otherwise). `TestDotnetGDSPull_GoClient_DotnetServer` drives `gds.PullClient` against its GlobalDiscoverySampleServer (register / find / update / query / unregister, a P-256 CSR, a new key pair delivered as PFX, the trust list, revocation and the CRL) and `TestDotnetGDSPull_DotnetClient_GoServer` its GlobalDiscoveryServerClient (`client gds-pull`) against `gds/gdsserver`. Both pass against a local build of the adapter; the dotnet ledger rows stay `unverified` (`adapter-unreleased`) until v0.14.0 publishes the image:
+
+```bash
+DOTNET_GDS_IMAGE=ghcr.io/otfabric/opcua-interop-dotnet-gds:dev OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 \
+  go test -tags=interop -run 'TestDotnetGDSPull' ./interop/
+```
+
+The go side is also covered by `conformance/certmgmt/gds_pull_test.go` and `gds_pull_groups_test.go` (the address space with the three certificate groups, a request lifecycle, the HTTPS group, Brainpool, PFX, a FileStore and the audit events over the wire), `gds/pull_test.go` (an enrolled server and client connect) and `chaos/gdspull`.
 
 ### Remaining gaps (summary)
 
