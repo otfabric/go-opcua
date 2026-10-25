@@ -28,12 +28,9 @@ not registered with the server returns `StatusBadServiceUnsupported`.
 
 Not implemented in the server, so plan around them:
 
-- **Alarms & Conditions** (Part 9): no condition branches (BranchId is
-  always null), no audit events, no dialogs (DialogConditionType), no
-  Latched / Silence / OutOfService states, no AlarmConditionType
-  Suppress / Unsuppress / Silence / Reset / RemoveFromService / PlaceInService
-  methods (the application sets SuppressedState), no `*2` variants (e.g.
-  TimedShelve2, Suppress2). See [Alarms and Conditions](#alarms-and-conditions).
+- **Alarms & Conditions** (Part 9 v1.05): no AudibleSound, OnDelay /
+  OffDelay, ReAlarmTime / ReAlarmRepeatCount, FirstInGroup or AlarmMetrics.
+  See [Alarms and Conditions](#alarms-and-conditions).
 - **Historical events**: the history interfaces cover data only (see
   [Historical Access](#historical-access-raw)).
 - **Certificate management by the pull model** (Part 12 §6, a Global
@@ -584,8 +581,19 @@ Clients call the standard methods through the Call service, so the
 | Enable / Disable | §5.5.4, §5.5.5 | Bad_ConditionAlreadyEnabled / Bad_ConditionAlreadyDisabled |
 | AddComment | §5.5.6 | Bad_EventIdUnknown, Bad_ConditionDisabled |
 | Acknowledge / Confirm | §5.7.3, §5.7.4 | Bad_EventIdUnknown (EventId not one of the condition's recent events), Bad_ConditionBranchAlreadyAcked / Bad_ConditionBranchAlreadyConfirmed, Bad_ConditionDisabled |
-| TimedShelve / OneShotShelve / Unshelve | §5.8.10 | Bad_ConditionAlreadyShelved, Bad_ConditionNotShelved, Bad_ShelvingTimeOutOfRange |
+| TimedShelve / OneShotShelve / Unshelve (and `*2`) | §5.8.10 | Bad_ConditionAlreadyShelved, Bad_ConditionNotShelved, Bad_ShelvingTimeOutOfRange |
+| Suppress / Unsuppress (and `*2`) | §5.8 | Bad_ConditionDisabled; only with `Suppressible` |
+| RemoveFromService / PlaceInService (and `*2`) | §5.8 | Bad_ConditionDisabled; only with `Serviceable` |
+| Silence | §5.8 | Bad_ConditionDisabled; only with `Silenceable` |
+| Reset / Reset2 | §5.8 | Bad_InvalidState (the alarm is still active), Bad_ConditionDisabled; only with `Latching` |
+| Respond / Respond2 | §5.6.3, §5.6.4 | Bad_DialogNotActive, Bad_DialogResponseInvalid, Bad_ConditionDisabled |
+| GetGroupMemberships | §5.8 | every alarm; returns the alarm groups that list it |
 | ConditionRefresh / ConditionRefresh2 | §5.5.7, §5.5.8 | Bad_SubscriptionIdInvalid (not a subscription of the caller's session), Bad_MonitoredItemIdInvalid, Bad_RefreshInProgress |
+
+A method that is not configured for the condition answers Bad_MethodInvalid.
+A call for the state the alarm is already in (Suppress of a suppressed alarm)
+is Good and reports no event. The `*2` variants take a trailing Comment that
+sets the Comment of the condition.
 
 The method sets Comment (a null comment keeps it, except for AddComment) and
 ClientUserId (the user name, the certificate subject, `IssuedToken` or
@@ -605,6 +613,63 @@ ConditionId.
 
 `RemoveCondition` deletes the instance and its references;
 `Server.Conditions` and `Server.Condition` list and look them up.
+
+**Part 9 v1.05 states.** `Serviceable`, `Silenceable` and `Latching` add
+OutOfServiceState, SilenceState and LatchedState to an alarm, with their
+methods; `Condition.Update` sets them from the application as well. A latching
+alarm latches when it becomes active and stays latched after it returns to
+inactive until a client calls Reset. SuppressedOrShelved is true while the
+alarm is suppressed, shelved or out of service. Silence ends when the alarm
+becomes active again.
+
+**Dialogs.** A condition of `DialogConditionType` with a `Dialog` config has
+DialogState, Prompt, ResponseOptionSet, DefaultResponse, OkResponse,
+CancelResponse and LastResponse. `ShowDialog` activates it with a prompt;
+Respond sets LastResponse and deactivates it. A dialog is retained while it is
+active.
+
+```go
+ok, cancel := int32(0), int32(1)
+dlg, _ := s.AddCondition(server.ConditionConfig{
+    Type:   ua.NewNumericNodeID(0, id.DialogConditionType),
+    Name:   "StartPump",
+    Source: src.ID(),
+    Dialog: &server.DialogConfig{ResponseOptions: []string{"Ok", "Cancel"},
+        OkResponse: &ok, CancelResponse: &cancel, DefaultResponse: &cancel},
+    OnRespond: func(ctx context.Context, c *server.Condition, sel int32, _ *ua.LocalizedText) ua.StatusCode {
+        return ua.StatusOK
+    },
+})
+_ = dlg.ShowDialog("Start the pump?")
+```
+
+**Branches.** With `Branching`, an alarm that becomes active again while its
+previous occurrence is unacknowledged (or unconfirmed) keeps that occurrence
+as a branch: a copy of the state with its own BranchId and EventIds.
+`CreateBranch` makes one explicitly. ConditionRefresh reports the condition
+and then every retained branch; Acknowledge and Confirm find the branch by
+the EventId, and a branch that needs no more action reports a last event with
+Retain false and is deleted. The `On*` hooks read the branch with
+`BranchIDFromContext`. A condition keeps at most 256 branches
+(`ErrTooManyBranches`); disabling it ends all of them.
+
+**Alarm groups.** `Server.AddAlarmGroup` adds an AlarmGroupType object
+(AlarmGroupMember references to its alarms); `Suppression: true` makes it an
+AlarmSuppressionGroupType whose `SetSuppressing` or `Evaluate` (any of the
+Boolean `DigitalVariables` true) sets SuppressedState of every alarm that
+lists it in `ConditionConfig.SuppressionGroups` (HasAlarmSuppressionGroup).
+GetGroupMemberships returns the groups of an alarm.
+
+**Audit events.** With `server.WithAuditing(true)` (or `SetAuditing`, which
+also sets Server/Auditing) every call of a condition method reports an
+AuditConditionEventType subtype (Enable, Comment, Acknowledge, Confirm,
+Respond, Shelving, Suppression, OutOfService, Silence, Reset), also for a
+refused call, with ActionTimeStamp, Status, ServerId, ClientAuditEntryId (the
+request header's AuditEntryId), ClientUserId, MethodId, StatusCodeId,
+InputArguments and OutputArguments. An access controller that implements
+`EventAccessController` decides who receives them: the
+`RBACAccessController` requires the ReceiveEvents permission of the event
+type (namespace 0 grants it to SecurityAdmin, not to Anonymous).
 
 ### Historical Access (raw)
 

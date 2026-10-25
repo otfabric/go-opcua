@@ -11,8 +11,8 @@ import (
 
 // The methods of Part 9 1.05: Suppress, Unsuppress, RemoveFromService,
 // PlaceInService, Silence and Reset of AlarmConditionType with their *2
-// variants that take a Comment (§5.8.4 - §5.8.9), Respond and Respond2 of
-// DialogConditionType (§5.6.3, §5.6.4) and GetGroupMemberships (§5.8.10).
+// variants that take a Comment (Part 9 §5.8, AlarmConditionType), Respond and Respond2 of
+// DialogConditionType (§5.6.3, §5.6.4) and GetGroupMemberships (§5.8).
 
 // alarmOp is a method that changes an optional state of an alarm.
 type alarmOp int
@@ -76,7 +76,7 @@ func (c *Condition) checkAlarmOpLocked(op alarmOp) (bool, ua.StatusCode) {
 	case opSilence:
 		return !st.silenced, ua.StatusOK
 	case opReset:
-		// Only an inactive alarm can be reset (Part 9 §5.8.9).
+		// Only an inactive alarm can be reset (Part 9 §5.8, Reset).
 		if st.active {
 			return false, ua.StatusBadInvalidState
 		}
@@ -239,7 +239,7 @@ func (c *Condition) respondMethod(withComment bool) MethodHandler {
 	}
 }
 
-// groupMembershipsMethod implements GetGroupMemberships (Part 9 §5.8.10):
+// groupMembershipsMethod implements GetGroupMemberships (Part 9 §5.8):
 // the AlarmGroups the alarm is a member of.
 func (c *Condition) groupMembershipsMethod(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	c.mu.RLock()

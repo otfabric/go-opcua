@@ -2044,8 +2044,14 @@ type ConditionConfig struct {
     Retain             bool // ConditionType only; derived for the others
     Disabled           bool
     Confirmable        bool // ConfirmedState + Confirm
-    Suppressible       bool // SuppressedState
-    Shelving           bool // ShelvingState + TimedShelve / OneShotShelve / Unshelve
+    Suppressible       bool // SuppressedState + Suppress / Unsuppress (and *2)
+    Shelving           bool // ShelvingState + TimedShelve / OneShotShelve / Unshelve (and *2)
+    Serviceable        bool // OutOfServiceState + RemoveFromService / PlaceInService (and *2)
+    Silenceable        bool // SilenceState + Silence
+    Latching           bool // LatchedState + Reset / Reset2
+    Branching          bool // keep an unacknowledged / unconfirmed occurrence as a branch
+    Dialog             *DialogConfig // DialogConditionType: Prompt, ResponseOptionSet, ...
+    SuppressionGroups  []*ua.NodeID  // AlarmSuppressionGroups (HasAlarmSuppressionGroup)
     MaxTimeShelved     time.Duration
     InputNode          *ua.NodeID
     NormalState        *ua.NodeID // OffNormalAlarmType
@@ -2058,6 +2064,55 @@ type ConditionConfig struct {
     OnAddComment  func(ctx context.Context, c *Condition, comment *ua.LocalizedText) ua.StatusCode
     OnEnable      func(ctx context.Context, c *Condition, enable bool) ua.StatusCode
     OnShelve      func(ctx context.Context, c *Condition, state ShelvingState, shelvingTime time.Duration) ua.StatusCode
+    OnSuppress    func(ctx context.Context, c *Condition, suppress bool, comment *ua.LocalizedText) ua.StatusCode
+    OnService     func(ctx context.Context, c *Condition, inService bool, comment *ua.LocalizedText) ua.StatusCode
+    OnSilence     func(ctx context.Context, c *Condition) ua.StatusCode
+    OnReset       func(ctx context.Context, c *Condition, comment *ua.LocalizedText) ua.StatusCode
+    OnRespond     func(ctx context.Context, c *Condition, selectedResponse int32, comment *ua.LocalizedText) ua.StatusCode
+}
+
+type DialogConfig struct {
+    Prompt                                          string
+    ResponseOptions                                 []string
+    DefaultResponse, OkResponse, CancelResponse     *int32
+    Active                                          bool
+}
+
+func (c *Condition) ShowDialog(prompt string) error
+func (c *Condition) CloseDialog() error
+
+// Branches (Part 9 §5.5.2 BranchId, Annex B)
+func (c *Condition) CreateBranch() (*ua.NodeID, error) // copy of the current state
+func (c *Condition) Branches() []ConditionState
+func (c *Condition) Branch(branchID *ua.NodeID) (ConditionState, bool)
+func (c *Condition) DeleteBranch(branchID *ua.NodeID) error
+func BranchIDFromContext(ctx context.Context) *ua.NodeID // in the On* hooks
+var ErrBranchUnknown, ErrTooManyBranches error
+
+// Alarm groups (AlarmGroupType, AlarmSuppressionGroupType)
+type AlarmGroupConfig struct {
+    NodeID           *ua.NodeID
+    Namespace        *NodeNameSpace
+    Name             string
+    Parent           *ua.NodeID // default the Objects folder
+    Suppression      bool       // an AlarmSuppressionGroup
+    DigitalVariables []*ua.NodeID
+}
+func (s *Server) AddAlarmGroup(cfg AlarmGroupConfig) (*AlarmGroup, error)
+func (s *Server) AlarmGroup(groupID *ua.NodeID) (*AlarmGroup, bool)
+func (s *Server) RemoveAlarmGroup(groupID *ua.NodeID) error
+func (g *AlarmGroup) AddMember(c *Condition) error
+func (g *AlarmGroup) RemoveMember(c *Condition) error
+func (g *AlarmGroup) Members() []*ua.NodeID
+func (g *AlarmGroup) SetSuppressing(on bool) error // suppression groups
+func (g *AlarmGroup) Evaluate() error              // from the DigitalVariables
+
+// Audit events (AuditConditionEventType and subtypes); off by default
+func WithAuditing(enabled bool) Option
+func (s *Server) SetAuditing(enabled bool)
+func (s *Server) Auditing() bool
+type EventAccessController interface { // RBACAccessController: ReceiveEvents
+    CheckReceiveEvents(ctx context.Context, session *session, eventType *ua.NodeID) ua.StatusCode
 }
 
 type AlarmLimits struct{ HighHigh, High, Low, LowLow *float64 }
@@ -2089,10 +2144,8 @@ var ErrConditionRemoved, ErrConditionNotAlarm, ErrConditionUnsupport error
 
 Event fields resolve by "/"-joined BrowsePath (`AckedState/Id`); a select
 clause with an empty BrowsePath and AttributeId NodeId returns the
-ConditionId. Not implemented: condition branches (BranchId is null), audit
-events, dialogs, Latched / Silence / OutOfService, the AlarmConditionType
-Suppress / Silence / Reset / RemoveFromService / PlaceInService methods and
-the `*2` method variants.
+ConditionId. Not implemented: AudibleSound, OnDelay / OffDelay, ReAlarmTime,
+FirstInGroup and the AlarmMetrics of Part 9 v1.05.
 
 Client side (package `opcua`):
 
@@ -2115,6 +2168,31 @@ func (c *Client) ConditionRefresh(ctx context.Context, subscriptionID uint32) er
 func (c *Client) ConditionRefresh2(ctx context.Context, subscriptionID, monitoredItemID uint32) error
 func (s *Subscription) ConditionRefresh(ctx context.Context) error
 func (s *Subscription) ConditionRefresh2(ctx context.Context, monitoredItemID uint32) error
+func (e *ConditionEvent) IsBranch() bool
+
+// Part 9 v1.05: the *2 variants take a Comment
+func (c *Client) Suppress(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) Suppress2(ctx context.Context, conditionID *ua.NodeID, comment string) error
+func (c *Client) Unsuppress(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) Unsuppress2(ctx context.Context, conditionID *ua.NodeID, comment string) error
+func (c *Client) RemoveFromService(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) RemoveFromService2(ctx context.Context, conditionID *ua.NodeID, comment string) error
+func (c *Client) PlaceInService(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) PlaceInService2(ctx context.Context, conditionID *ua.NodeID, comment string) error
+func (c *Client) Silence(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) Reset(ctx context.Context, conditionID *ua.NodeID) error
+func (c *Client) Reset2(ctx context.Context, conditionID *ua.NodeID, comment string) error
+func (c *Client) TimedShelve2(ctx context.Context, conditionID *ua.NodeID, d time.Duration, comment string) error
+func (c *Client) OneShotShelve2(ctx context.Context, conditionID *ua.NodeID, comment string) error
+func (c *Client) Unshelve2(ctx context.Context, conditionID *ua.NodeID, comment string) error
+func (c *Client) Respond(ctx context.Context, conditionID *ua.NodeID, selectedResponse int32) error
+func (c *Client) Respond2(ctx context.Context, conditionID *ua.NodeID, selectedResponse int32, comment string) error
+func (c *Client) GetGroupMemberships(ctx context.Context, conditionID *ua.NodeID) ([]*ua.NodeID, error)
+
+// audit events
+func NewAuditConditionEventFilter() *ua.EventFilter
+func ParseAuditConditionEvent(ev *ua.EventFieldList) (*AuditConditionEvent, error)
+func WithAuditEntryID(ctx context.Context, auditEntryID string) context.Context
 
 // package ua
 func (b *EventFilterBuilder) SelectPaths(paths ...string) *EventFilterBuilder
