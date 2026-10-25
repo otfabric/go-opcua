@@ -72,6 +72,14 @@ Go↔Go tests never earn ✅.
 | Push model CreateSigningRequest / UpdateCertificate / ApplyChanges of the application instance certificate (Part 12 §7.10.4, §7.10.6, §7.10.8) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
 | Push model GetRejectedList (Part 12 §7.10.9) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
 | Push model access: ServerConfiguration properties, the methods need the SecurityAdmin role on a SignAndEncrypt channel (Part 12 §7.2) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
+| Push model GetCertificates of a certificate group: the certificate types and certificates the server uses (Part 12 §7.10.8, 1.05) | N/A | ⬜ | ⬜ | ⬜ | — |
+| Push model CreateSelfSignedCertificate: the server creates a key and a self-signed certificate for a group (Part 12 §7.10.6, 1.05) | N/A | ⬜ | ⬜ | ⬜ | — |
+| Push model ResetToServerDefaults: trust lists and certificates back to the server's defaults (Part 12 §7.10.13, 1.05) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| Push model DefaultHttpsGroup: its own TrustList read and changed with AddCertificate + ApplyChanges, apart from the application trust list (Part 12 §7.8.3) | N/A | ⬜ | ⬜ | ⬜ | — |
+| Push model DefaultUserTokenGroup: its own TrustList read and changed with AddCertificate + ApplyChanges, apart from the application trust list (Part 12 §7.8.3) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPushGroups_GoClient_PeerServers` |
+| Push model UpdateCertificate with a new key as a PKCS #12 (PFX) PrivateKey; the endpoints present the new certificate (Part 12 §7.10.4) | N/A | ⬜ | ⬜ | ⬜ | — |
+| Push model TransactionDiagnostics of ServerConfiguration after an applied transaction (Part 12 §7.10.11, 1.05) | N/A | ⬜ | ⬜ | ⬜ | — |
+| Push model certificate group alarms: CertificateExpired (CertificateExpirationAlarmType) and TrustListOutOfDate (TrustListOutOfDateAlarmType) of the DefaultApplicationGroup and their ActiveState (Part 12 §7.8.3) | N/A | ⬜ | ⬜ | ⬜ | — |
 
 ## custom-types
 

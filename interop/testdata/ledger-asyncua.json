@@ -2903,6 +2903,134 @@
       "reason": "adapter-command-missing",
       "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
       "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop asyncua adapter does not serve push certificate management; whether opcua-asyncio 2.1 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop asyncua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
     }
   ]
 }

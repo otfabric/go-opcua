@@ -2947,6 +2947,134 @@
       "reason": "adapter-command-missing",
       "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
       "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
     }
   ]
 }

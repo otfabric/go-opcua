@@ -9245,6 +9245,421 @@
         "version": "1.1.8"
       },
       "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "open62541 v1.5.9 has no GetCertificates method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "open62541 v1.5.9 has no CreateSelfSignedCertificate method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "open62541 v1.5.9 answers ResetToServerDefaults with Bad_InternalError in the adapter (the test skips); whether a differently configured server supports it is not established",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "open62541 v1.5.9 has no TrustList methods for the DefaultHttpsGroup (Bad_MethodInvalid; the test skips)",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "open62541 v1.5.9 publishes SupportedPrivateKeyFormats [PEM DER], no PFX (the test skips)",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "open62541 v1.5.9 has no TransactionDiagnostics object (Bad_NodeIdUnknown; the test skips)",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "open62541 v1.5.9 has no CertificateExpired / TrustListOutOfDate alarms under its certificate groups (Bad_NoMatch; the test skips)",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
     }
   ],
   "interopVersion": "v0.13.0"
