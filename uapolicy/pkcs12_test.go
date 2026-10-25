@@ -91,6 +91,9 @@ func TestParsePFX_OpenSSL(t *testing.T) {
 		{"rsa-emptypass.p12", "", "rsa", 1, false},
 		{"bp256-emptypass-legacy.p12", "", "brainpoolP256r1", 1, false},
 		{"rsa-chain.p12", pfxTestPassword, "rsa", 2, false},
+		// Java keytool: the JDK 17 default and the JDK 8 legacy format.
+		{"keytool-rsa.p12", "opcuaopcua", "rsa", 1, false},
+		{"keytool-p256-legacy.p12", "opcuaopcua", "P-256", 1, false},
 	} {
 		t.Run(tt.file, func(t *testing.T) {
 			data := readPFX(t, tt.file)

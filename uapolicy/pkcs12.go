@@ -56,10 +56,20 @@ import (
 // UTF-8 for PBKDF2, as OpenSSL does. An empty password is tried both as no
 // password and as the empty BMPString, as OpenSSL does.
 //
+// The file, the AuthenticatedSafe, the SafeContents and the decrypted keys
+// may be in BER (indefinite lengths, constructed OCTET STRINGs), as Java
+// keytool before JDK 8u301 and Windows write them; see ber.go.
+//
+// Deliberately not supported, as OpenSSL 3 by default: the RC4 PBE schemes
+// (pbeWithSHAAnd128BitRC4, pbeWithSHAAnd40BitRC4; RC4 is broken, RFC 7465)
+// and the public-key integrity and privacy modes (an authSafe of
+// signedData, contents of envelopedData), which need the certificate and
+// key of the recipient rather than a password and are not what Part 12
+// UpdateCertificate carries.
+//
 // Everything is bounded: the size of the file, the number of bags, the
-// nesting of safeContentsBags, the iteration count of each key derivation
-// and the iterations of all key derivations together. Only DER (definite
-// lengths) is read.
+// nesting of safeContentsBags and of BER elements, the iteration count of
+// each key derivation and the iterations of all key derivations together.
 
 // ErrPFXPassword reports a PKCS #12 file whose MAC does not verify or whose
 // contents do not decrypt: in practice, a wrong password. It also matches
@@ -611,6 +621,11 @@ func unpad(b []byte, blockSize int) ([]byte, error) {
 // decodeAuthSafe decodes the AuthenticatedSafe: a sequence of ContentInfos,
 // each data or encryptedData with SafeContents.
 func (d *pfxDecoder) decodeAuthSafe(authSafe []byte) error {
+	// The MAC covers the bytes as they are; they are parsed in DER.
+	authSafe, err := berToDER(authSafe)
+	if err != nil {
+		return pfxError("malformed PFX AuthenticatedSafe")
+	}
 	var (
 		in  = cryptobyte.String(authSafe)
 		seq cryptobyte.String
@@ -715,6 +730,10 @@ func (d *pfxDecoder) decryptEncryptedData(content cryptobyte.String) ([]byte, er
 // decodeSafeContents decodes a SafeContents, a sequence of SafeBags (RFC
 // 7292 §4.2).
 func (d *pfxDecoder) decodeSafeContents(data []byte, depth int) error {
+	data, err := berToDER(data)
+	if err != nil {
+		return pfxError("malformed PFX SafeContents")
+	}
 	var (
 		in  = cryptobyte.String(data)
 		seq cryptobyte.String
@@ -812,7 +831,14 @@ func ParsePFX(data []byte, password string) (crypto.Signer, []*x509.Certificate,
 	if len(password) > maxPFXPassword {
 		return nil, nil, pfxError("PFX password too long")
 	}
-	p, err := parsePFXStructure(data)
+	if len(data) > maxPFXSize {
+		return nil, nil, pfxError("PFX larger than %d bytes", maxPFXSize)
+	}
+	der, err := berToDER(data)
+	if err != nil {
+		return nil, nil, pfxError("malformed PFX: %v", err)
+	}
+	p, err := parsePFXStructure(der)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -859,7 +885,11 @@ func (d *pfxDecoder) decode(p *pfx) (crypto.Signer, []*x509.Certificate, error) 
 	default:
 		return nil, nil, pfxError("PFX holds %d private keys", len(d.keys))
 	}
-	key, err := parsePKCS8(d.keys[0])
+	pk, err := berToDER(d.keys[0])
+	if err != nil {
+		return nil, nil, d.decryptedError(pfxError("malformed PFX private key"))
+	}
+	key, err := parsePKCS8(pk)
 	if err != nil {
 		return nil, nil, d.decryptedError(err)
 	}
