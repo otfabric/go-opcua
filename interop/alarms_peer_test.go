@@ -293,17 +293,25 @@ type auditPeer struct {
 	// ackStatusCode: the Status of the Acknowledge and Confirm audit events
 	// is a StatusCode, not the Boolean of AuditEventType.
 	ackStatusCode bool
+	// instanceMethodID: MethodId is the method of the condition instance
+	// (its Acknowledge, Confirm, AddComment component), not the method of
+	// the type the client called.
+	instanceMethodID bool
+	// ackArgsOnly: the Acknowledge and Confirm audit events have no
+	// ConditionEventId and Comment; the EventId and the Comment are only in
+	// InputArguments.
+	ackArgsOnly bool
 }
 
-// newPeerAuditAlarmSession starts the peer server with the baseline fixture
-// plus a SecurityAdmin user (pushFixtureDir) and opens the alarm session as
+// newPeerAuditAlarmSession starts the peer server (with serverArgs) with the
+// baseline fixture plus a SecurityAdmin user (pushFixtureDir) and opens the alarm session as
 // that user over Basic256Sha256 SignAndEncrypt: the peers deliver Audit
 // Events only to sessions holding ReceiveEvents on the audit event types,
 // which Opc.Ua.NodeSet2.xml grants to SecurityAdmin alone (Part 2 §4.14,
 // Part 3 §5.2.10).
-func newPeerAuditAlarmSession(t *testing.T, env, image, pki string) *peerAlarmSession {
+func newPeerAuditAlarmSession(t *testing.T, env, image, pki string, serverArgs ...string) *peerAlarmSession {
 	t.Helper()
-	h := startSecureAdapterServerIn(t, env, image, pki, pushFixtureDir(t))
+	h := startSecureAdapterServerIn(t, env, image, pki, pushFixtureDir(t), serverArgs...)
 	return newPeerAlarmSessionOn(t, pushClient(t, h.endpoint, true))
 }
 
@@ -386,7 +394,17 @@ func (s *peerAlarmSession) assertAudit(t *testing.T, p auditPeer) {
 		t.Helper()
 		ev := nextAudit(m)
 		t.Logf("%s audit event: %+v", m.name, ev)
-		if !p.noMethodID && (ev.MethodID == nil || ev.MethodID.Namespace() != 0 || ev.MethodID.IntID() != m.method) {
+		switch {
+		case p.noMethodID:
+		case p.instanceMethodID:
+			want, err := s.c.Node(condID).TranslateBrowsePathsToNodeIDs(s.ctx, []*ua.QualifiedName{{Name: m.name}})
+			if err != nil {
+				t.Fatalf("%s of the condition: %v", m.name, err)
+			}
+			if ev.MethodID == nil || !ev.MethodID.Equal(want) {
+				t.Errorf("%s: MethodId = %v, want the condition's %v", m.name, ev.MethodID, want)
+			}
+		case ev.MethodID == nil || ev.MethodID.Namespace() != 0 || ev.MethodID.IntID() != m.method:
 			t.Errorf("%s: MethodId = %v, want i=%d", m.name, ev.MethodID, m.method)
 		}
 		if m.source != nil && (ev.SourceNode == nil || !ev.SourceNode.Equal(m.source)) {
@@ -395,11 +413,27 @@ func (s *peerAlarmSession) assertAudit(t *testing.T, p auditPeer) {
 		if m.sourceName != "" && ev.SourceName != m.sourceName {
 			t.Errorf("%s: SourceName = %q, want %q", m.name, ev.SourceName, m.sourceName)
 		}
-		if !bytes.Equal(ev.ConditionEventID, condEventID) {
-			t.Errorf("%s: ConditionEventId = %x, want %x", m.name, ev.ConditionEventID, condEventID)
-		}
-		if ev.Comment == nil || ev.Comment.Text != m.comment {
-			t.Errorf("%s: Comment = %v, want %s", m.name, ev.Comment, m.comment)
+		if p.ackArgsOnly && m.method != id.ConditionTypeAddComment {
+			// Only the InputArguments (EventId, Comment) of the call.
+			if len(ev.ConditionEventID) != 0 || ev.Comment != nil && ev.Comment.Text != "" {
+				t.Errorf("%s: ConditionEventId %x Comment %v, want none", m.name, ev.ConditionEventID, ev.Comment)
+			}
+			var gotID []byte
+			var gotComment *ua.LocalizedText
+			if len(ev.InputArguments) == 2 {
+				gotID, _ = ev.InputArguments[0].Value().([]byte)
+				gotComment, _ = ev.InputArguments[1].Value().(*ua.LocalizedText)
+			}
+			if !bytes.Equal(gotID, condEventID) || gotComment == nil || gotComment.Text != m.comment {
+				t.Errorf("%s: InputArguments %v, want [%x %s]", m.name, ev.InputArguments, condEventID, m.comment)
+			}
+		} else {
+			if !bytes.Equal(ev.ConditionEventID, condEventID) {
+				t.Errorf("%s: ConditionEventId = %x, want %x", m.name, ev.ConditionEventID, condEventID)
+			}
+			if ev.Comment == nil || ev.Comment.Text != m.comment {
+				t.Errorf("%s: Comment = %v, want %s", m.name, ev.Comment, m.comment)
+			}
 		}
 		if m.statusBool && !ev.Status {
 			t.Errorf("%s: Status = false, want true", m.name)

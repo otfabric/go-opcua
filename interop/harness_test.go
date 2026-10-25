@@ -1355,8 +1355,9 @@ func startSecureAdapterServer(t *testing.T, imageEnvVar, defaultImage, adapterPK
 }
 
 // startSecureAdapterServerIn is startSecureAdapterServer with the
-// baseline.json of fixtureDir (an absolute path).
-func startSecureAdapterServerIn(t *testing.T, imageEnvVar, defaultImage, adapterPKIName, fixtureDir string) *serverHandle {
+// baseline.json of fixtureDir (an absolute path) and serverArgs appended to
+// the `server` command line.
+func startSecureAdapterServerIn(t *testing.T, imageEnvVar, defaultImage, adapterPKIName, fixtureDir string, serverArgs ...string) *serverHandle {
 	t.Helper()
 	requireOptionalPeer(t, imageEnvVar, defaultImage)
 
@@ -1389,20 +1390,21 @@ func startSecureAdapterServerIn(t *testing.T, imageEnvVar, defaultImage, adapter
 	for range publishAttempts {
 		port := freePort(t)
 		cmdCtx, cmdCancel := context.WithCancel(context.Background())
-		cmd := exec.CommandContext(cmdCtx, "docker", "run", "--rm",
+		args := []string{"run", "--rm",
 			"--name", containerName,
 			"-p", fmt.Sprintf("%d:4840", port),
-			"-v", fixtureDir+":/fixtures:ro",
-			"-v", certFile+":/certs/cert.crt:ro",
-			"-v", keyFile+":/certs/cert.key:ro",
-			"-v", runtimePKI+":/certs/pki",
+			"-v", fixtureDir + ":/fixtures:ro",
+			"-v", certFile + ":/certs/cert.crt:ro",
+			"-v", keyFile + ":/certs/cert.key:ro",
+			"-v", runtimePKI + ":/certs/pki",
 			image,
 			"server",
 			"--fixture", "/fixtures/baseline.json",
 			"--certificate", "/certs/cert.crt",
 			"--private-key", "/certs/cert.key",
 			"--pki-dir", "/certs/pki",
-		)
+		}
+		cmd := exec.CommandContext(cmdCtx, "docker", append(args, serverArgs...)...)
 		run, err := startDockerRun(cmd, nil)
 		if err != nil {
 			cmdCancel()
