@@ -36,9 +36,9 @@ Not implemented in the server, so plan around them:
   TimedShelve2, Suppress2). See [Alarms and Conditions](#alarms-and-conditions).
 - **Historical events**: the history interfaces cover data only (see
   [Historical Access](#historical-access-raw)).
-- **Certificate management** (Part 12 GDS push and pull): certificates and
-  trust lists are configured in code (`server.Certificate`, `server.PrivateKey`,
-  `WithClientCertificateTrustList`).
+- **Certificate management by the pull model** (Part 12 §6, a Global
+  Discovery Server): the push model is supported
+  ([Certificate Management](#certificate-management-push-model)).
 
 ---
 
@@ -840,6 +840,63 @@ Things to know:
   `WithDiscoveryRegistration` across segments.
 - A discovery URL with an IP address cannot be expressed in DNS-SD; such a
   registered server is listed by `FindServers` but not announced.
+
+---
+
+## Certificate Management (Push Model)
+
+`WithPushManagement` lets a certificate manager — package [`gds`](client-guide.md#certificate-management-gds-push),
+or the push client of another stack — manage the server's trust list and
+application instance certificate at run time, by the push model of Part 12 §7.
+The server then exposes the ServerConfiguration object (Part 12 §7.10.3) as a
+component of the Server object:
+
+| Node | Content |
+|------|---------|
+| ServerConfiguration properties | ServerCapabilities, SupportedPrivateKeyFormats (`PEM`), MaxTrustListSize, MulticastDnsEnabled |
+| CertificateGroups / DefaultApplicationGroup | CertificateTypes (the types of the application identities), the TrustList |
+| DefaultApplicationGroup / TrustList | TrustListType file (Part 12 §7.8.2): Open, OpenWithMasks, Read, Write, GetPosition, SetPosition, Close, CloseAndUpdate, AddCertificate, RemoveCertificate; Size, LastUpdateTime, UpdateFrequency |
+| Methods | UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges |
+
+```go
+srv, _ := server.New(
+    server.Certificate(cert), server.PrivateKey(key),
+    server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
+    server.EnableAuthMode(ua.UserTokenTypeUserName),
+    server.WithUsernameValidator(checkPassword),
+    server.WithRoleMapper(func(tok ua.IdentityToken) []*ua.NodeID {
+        if u, ok := tok.(*ua.UserNameIdentityToken); ok && u.UserName == "secadmin" {
+            return []*ua.NodeID{ua.RoleAuthenticatedUser.NodeID(), ua.RoleSecurityAdmin.NodeID()}
+        }
+        return server.DefaultRoleMapper(tok)
+    }),
+    server.WithPushManagement(server.PushManagement{
+        // the CA (or the certificate) of the clients, the manager's among them
+        TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{caDER}},
+    }),
+)
+```
+
+| Behaviour | Detail |
+|-----------|--------|
+| Validation | New channels and sessions validate the client application certificate against the trust list (Part 4 §6.1.3): a chain to a trusted certificate, issuer certificates as intermediates, CRLs of the CAs (`Bad_CertificateRevoked`, `Bad_CertificateIssuerRevoked`). It replaces `WithClientCertificateTrustList` (`New` refuses both) |
+| Trust list input | CloseAndUpdate decodes the TrustListDataType exactly; every certificate and CRL must parse, a CRL must be signed by a CA of the lists; at most 1024 entries and `MaxTrustListSize` bytes (default 1 MiB; `Bad_EncodingLimitsExceeded` beyond) |
+| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. `ApplyImmediately` applies every change when its method returns |
+| UpdateCertificate | Replaces the application instance certificate of its type (RSA, ECDSA, Ed25519, Ed448). The key is the one of the last CreateSigningRequest, the current key, or a `PEM` private key (PFX: `Bad_NotSupported`). The certificate must carry the server's ApplicationUri and be issued by one of the issuer certificates when they are given |
+| After ApplyChanges | New channels and the endpoints use the new certificate; channels already open keep theirs and keep working |
+| CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new RSA, ECDSA P-256 / P-384 or Ed25519 key (nonce of at least 32 bytes); Brainpool and Ed448: `Bad_NotSupported` |
+| GetRejectedList | The most recent `MaxRejectedCertificates` (default 64) client certificates validation rejected |
+| Access | SignAndEncrypt only (`Bad_SecurityModeInsufficient`), and the SecurityAdmin role (`Bad_UserAccessDenied`), unless `Authorizer` decides otherwise |
+| Persistence | None by default: the server writes no files. A `CertificateStore` gets the trust list and the new certificate with its issuers and key at ApplyChanges, before they take effect; an error fails ApplyChanges with `Bad_InternalError` and keeps the change pending |
+
+`Server.TrustList()` and `Server.RejectedCertificates()` return the trust
+list in effect and the rejected certificates.
+
+Not implemented: the DefaultHttpsGroup and DefaultUserTokenGroup (only the
+DefaultApplicationGroup is managed), GetCertificates,
+CreateSelfSignedCertificate, ResetToServerDefaults, the certificate expiration
+alarms, TransactionDiagnostics, PFX private keys, and the pull model (a Global
+Discovery Server, Part 12 §6).
 
 ---
 

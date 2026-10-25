@@ -694,12 +694,16 @@ open62541 limits found by these tests (recorded in opcua-interop's contract): it
 
 The capability `security.ecc.unimplemented-policy` (the three policies refused cleanly) is retired with these rows.
 
+### Push certificate management (Part 12 §7, pending an opcua-interop release)
+
+Profile `certificate-management`: `certmgmt.push.trust-list`, `.certificate-update`, `.rejected-list`, `.access`. `TestCertMgmtPush_GoClient_PeerServers` drives package `gds` against open62541 1.5.9 (UA_ENABLE_GDS_PUSHMANAGEMENT), UA-.NETStandard 2.0.1 and node-opcua 2.187.12; `TestCertMgmtPush_NodeOpcuaClient_GoServer` drives node-opcua's ClientPushCertificateManagement (adapter `client push`) against `server.WithPushManagement`. They need the adapter images of opcua-interop `feat/gds` (serverFeatures `push-management`, client operation `push`, contract §15) and skip on older images — also with `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` — so their rows stay `unverified` (`adapter-fixture-missing` / `adapter-command-missing`) until that release is pinned. The UA-.NETStandard push client has no 2.0.1 package and open62541 has no push client API (D→S, O→S `adapter-command-missing`); Milo, async-opcua and asyncua are not wired (`peer-capability-unknown` for their servers).
+
 ### Remaining gaps (summary)
 
 - **Unsupported (behavioural):** `write.encoding-mask` C→M — Milo soft-accepts; claim requires `BadWriteNotSupported`. `nodemgmt.add-nodes` / `nodemgmt.delete-nodes` C→M — the Milo reference server has no NodeManagement service set.
 - **Unsupported (peer stack lacks the feature):** all `security.ecc-*` and `transport.reverse-connect*` rows for Milo (no ECC policy, no ReverseHello); Milo as a discovery server (`discovery.lds-registration`, `discovery.register-server2.mdns`, `discovery.find-servers-on-network` C→M) and `discovery.multicast` C→M / M→S (no mDNS); `encoding.xml.datavalue` C→O / O→S (open62541 has no XML DataValue); `encoding.json.datavalue` C→M (Milo decodes only its nested DataValue form).
 - **Known representation limits** (asserted, not claimed away): go-opcua has no null String (`""` is the null String in binary and `""` in JSON / XML); open62541 cannot decode XmlElement from XML nor encode a matrix to XML; Milo's XML decoder keeps a DateTime to the millisecond.
-- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query, IssuedIdentityToken, A&C, GDS, dynamic EO decode, custom event emission, general WhereClause surface, HistoryRead modified/at-time/processed/events, HistoryUpdate, certificate chains / CRL, secured LDS registration against a peer LDS, the JSON / XML encodings as a transport (only the DataEncoding of values is verified).
+- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query, IssuedIdentityToken, A&C, the GDS pull model, dynamic EO decode, custom event emission, general WhereClause surface, HistoryRead modified/at-time/processed/events, HistoryUpdate, certificate chains / CRL, secured LDS registration against a peer LDS, the JSON / XML encodings as a transport (only the DataEncoding of values is verified).
 
 ### Server defects found by peer evidence
 

@@ -366,6 +366,33 @@ For production, use a proper PKI infrastructure:
 4. **Include all SANs** — Every hostname and IP the server/client may use
 5. **Monitor expiration** — Set up alerts before certificate expiry
 
+### Push Certificate Management
+
+A server with `server.WithPushManagement` (Part 12 §7) is managed at run
+time: a client with the SecurityAdmin role (package `gds`) replaces the trust
+list and the application instance certificate. Its trust list then decides
+which client application certificates new channels and sessions accept —
+issuer certificates complete chains, CRLs revoke (`Bad_CertificateRevoked`,
+`Bad_CertificateIssuerRevoked`), rejected certificates are listed by
+GetRejectedList.
+
+- **Who may manage it.** The methods are refused on channels that are not
+  SignAndEncrypt (`Bad_SecurityModeInsufficient`) and to sessions without the
+  SecurityAdmin role (`Bad_UserAccessDenied`, Part 12 §7.2); grant the role
+  with `WithRoleMapper` to an authenticated user only. `PushManagement.Authorizer`
+  replaces the role check, not the SignAndEncrypt one.
+- **The first trust list** must trust the manager's certificate (or its CA),
+  or nobody can connect securely to change it.
+- **Changes are transactional**: they take effect at ApplyChanges, so a
+  half-written trust list never validates a channel; channels already open
+  keep their certificate and stay up.
+- **Limits.** CloseAndUpdate checks every certificate and CRL, accepts only
+  CRLs signed by a CA of the lists, at most 1024 entries and
+  `MaxTrustListSize` bytes.
+- **Persistence** is the application's (`PushManagement.Store`): the server
+  writes no files, so keys pushed with UpdateCertificate stay in memory unless
+  a store saves them.
+
 ---
 
 ## Authentication Modes
@@ -797,6 +824,7 @@ from what others announce. mDNS has no authentication:
 - [ ] On servers, configure `WithClientCertificateTrustList` when accepting encrypted client connections
 - [ ] For reverse connect: use a secured endpoint, pin the server certificate, set `ReverseServerURI`, and bind and firewall the client's listener
 - [ ] Implement `AccessController` for fine-grained server authorization
+- [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart
 - [ ] On a Local Discovery Server, keep secured registration (no `LDSAllowInsecureRegistration`) and configure `WithClientCertificateTrustList`
 - [ ] Enable `WithMulticastDiscovery` only on interfaces where the server should be discoverable, and never trust a discovered URL without validating the server certificate
 - [ ] Monitor certificate expiration dates

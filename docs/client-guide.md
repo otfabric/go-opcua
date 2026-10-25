@@ -1071,6 +1071,65 @@ IndexRange on current Values uses the same NumericRange grammar as servers:
 
 Internals (atomics, mutexes) are described in [architecture.md](architecture.md). Caller-facing contracts are also summarized in [API.md](../API.md).
 
+## Certificate Management (GDS Push)
+
+Package `gds` manages the certificates of a server by the push model of
+Part 12 §7 — a go-opcua server with `server.WithPushManagement`, open62541
+(UA_ENABLE_GDS_PUSHMANAGEMENT), UA-.NETStandard or node-opcua. The client
+needs a session with the SecurityAdmin role over SignAndEncrypt:
+
+```go
+c, _ := opcua.NewClient(endpoint,
+    opcua.SecurityPolicy(ua.SecurityPolicyURIBasic256Sha256),
+    opcua.SecurityMode(ua.MessageSecurityModeSignAndEncrypt),
+    opcua.Certificate(cert), opcua.PrivateKey(key),
+    opcua.AuthUsername("secadmin", password),
+)
+_ = c.Connect(ctx)
+g := gds.New(c)
+
+// Trust list of the DefaultApplicationGroup (Part 12 §7.8.2).
+tl, _ := g.ReadTrustList(ctx, ua.TrustListMasksAll)
+tl.TrustedCertificates = append(tl.TrustedCertificates, newClientCA)
+required, _ := g.WriteTrustList(ctx, tl)     // Open, Write, CloseAndUpdate
+_ = g.AddCertificate(ctx, peerCert, true)     // or one certificate at a time
+_ = g.RemoveCertificate(ctx, gds.Thumbprint(oldCert), true)
+
+// A new application instance certificate (Part 12 §7.10.4, §7.10.8).
+csr, _ := g.CreateSigningRequest(ctx, &gds.SigningRequest{
+    CertificateType: gds.RsaSha256ApplicationCertificateType,
+})
+issued := myCA.Sign(csr)
+required, _ = g.UpdateCertificate(ctx, &gds.CertificateUpdate{
+    CertificateType:    gds.RsaSha256ApplicationCertificateType,
+    Certificate:        issued,
+    IssuerCertificates: [][]byte{myCA.Cert},
+})
+if required {
+    _ = g.ApplyChanges(ctx) // or CancelChanges
+}
+rejected, _ := g.GetRejectedList(ctx)
+props, _ := g.Properties(ctx) // SupportedPrivateKeyFormats, MaxTrustListSize, CertificateTypes, …
+```
+
+A method that fails returns a `*gds.Error` with the method name and the
+status (`errors.Is(err, ua.StatusBadUserAccessDenied)`). The methods are found
+by BrowseName under the ServerConfiguration object, so servers with other
+NodeIds work too; `Client.TrustList` selects another certificate group's
+TrustList. `EncodeTrustList` / `DecodeTrustList` are the file format.
+`Thumbprint` is the upper-case hexadecimal SHA-1 that every tested server
+accepts (UA-.NETStandard compares the case).
+
+Peers differ in details: open62541 1.5.9 serves the methods to any session on a
+SignAndEncrypt channel and answers ApplyChanges without a pending change with
+`Bad_NothingToDo` (as node-opcua), and the endpoints of UA-.NETStandard and
+node-opcua carry the issuer chain after the certificate.
+
+The pull model (RegisterApplication, StartSigningRequest, FinishRequest of a
+Global Discovery Server) is not implemented.
+
+---
+
 ## Error Handling
 
 OPC-UA exposes **Go errors** (connection/session/config) and **wire `ua.StatusCode`**
