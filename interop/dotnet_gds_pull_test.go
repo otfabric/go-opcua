@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The GDS pull model (Part 12 §6, §7.9) against UA-.NETStandard: the
-// opcua-interop adapter dotnet-gds (opcua-interop v0.15.0, CLIENT_CONTRACT
+// opcua-interop adapter dotnet-gds (opcua-interop v0.16.0, CLIENT_CONTRACT
 // §16) runs the stack's Global Discovery Server and GDS client on
 // OPCFoundation.NetStandard.Opc.Ua.Gds.Server / .Gds.Client 2.0.1.
 //
@@ -42,8 +42,8 @@ import (
 const (
 	dotnetGDSEnv = "DOTNET_GDS_IMAGE"
 	// defaultDotnetGDSImage is the dotnet-gds adapter of opcua-interop
-	// v0.15.0, by digest; an opt-in peer until it moves to the pinned peers.
-	defaultDotnetGDSImage = "ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:c8f5b05d58a955840aaf819bcd9aeb1af62db8500c5bad360e6c4081ec9f176d"
+	// v0.16.0, by digest; an opt-in peer until it moves to the pinned peers.
+	defaultDotnetGDSImage = "ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:d06a5880cfe14c1b15e89bf6e3c5f30cb72f85521a2d3a353a485f92761e1ac7"
 
 	// The GDS administrator of the fixture (opcua-interop
 	// fixtures/gds/fixture.json) and of the go GDS.
@@ -53,7 +53,7 @@ const (
 
 func init() {
 	optionalPeerImageEnv[dotnetGDSEnv] = true
-	peerInteropVersion[dotnetGDSEnv] = "v0.15.0"
+	peerInteropVersion[dotnetGDSEnv] = "v0.16.0"
 }
 
 // requireDotnetGDS skips (or fails with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1)
@@ -68,7 +68,7 @@ func requireDotnetGDS(t *testing.T, list string) {
 		have = caps.ClientOperations
 	}
 	if !slices.Contains(have, "gds-pull") {
-		capabilityUnavailable(t, "adapter %s (version %s) has no %s gds-pull (opcua-interop v0.15.0 dotnet-gds)", image, caps.Adapter.Version, list)
+		capabilityUnavailable(t, "adapter %s (version %s) has no %s gds-pull (opcua-interop v0.16.0 dotnet-gds)", image, caps.Adapter.Version, list)
 	}
 }
 

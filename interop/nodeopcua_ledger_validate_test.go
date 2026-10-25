@@ -78,8 +78,8 @@ func TestNodeOpcuaLedgerValid(t *testing.T) {
 	}](t, filepath.Join(dir, "testdata", "ledger-node-opcua.json"))
 
 	// Keep in step with interopVersion (harness_test.go).
-	if ledger.InteropVersion != "v0.15.0" {
-		t.Errorf("interopVersion = %q, want v0.15.0", ledger.InteropVersion)
+	if ledger.InteropVersion != "v0.16.0" {
+		t.Errorf("interopVersion = %q, want v0.16.0", ledger.InteropVersion)
 	}
 	if ledger.Peer.Stack != "node-opcua" || ledger.Peer.Version == "" {
 		t.Errorf("peer = %+v, want stack node-opcua with a version", ledger.Peer)
