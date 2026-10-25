@@ -24,6 +24,7 @@ cover.*
 *.csr
 # OpenSSL-generated known-answer fixtures (test-only keys)
 !uapolicy/testdata/openssl/*.pem
+!uapolicy/testdata/pkix/*.pem
 # Claude Code agent worktrees
 .claude/
 coverage-gate.out
