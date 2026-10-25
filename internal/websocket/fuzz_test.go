@@ -50,3 +50,37 @@ func FuzzAccept(f *testing.F) {
 		_, _ = io.ReadAll(c)
 	})
 }
+
+// FuzzReadMessage feeds arbitrary bytes to the message reader of a server
+// (the opcua+uajson sub-protocol). It must never panic, never return a
+// message larger than the limit or than the input, and always end with an
+// error once the input is exhausted.
+func FuzzReadMessage(f *testing.F) {
+	f.Add(frame(0x80|opText, []byte(`{"UaTypeId":"i=631"}`), key))
+	f.Add(append(frame(opText, []byte("a"), key), frame(0x80|opContinuation, []byte("b"), key)...))
+	f.Add(frame(0x80|opText, []byte{0xff}, key))
+	f.Add(frame(0x80|opBinary, bytes.Repeat([]byte{1}, 300), key))
+	f.Add(frame(0x80|opClose, binary.BigEndian.AppendUint16(nil, 1000), key))
+	f.Add([]byte{})
+	const limit = 1 << 12
+	f.Fuzz(func(t *testing.T, data []byte) {
+		c, _ := serverReading(data, 1<<16)
+		total := 0
+		for {
+			msg, err := c.ReadMessage(limit)
+			if err != nil {
+				break
+			}
+			if len(msg) > limit {
+				t.Fatalf("message of %d bytes, limit %d", len(msg), limit)
+			}
+			total += len(msg)
+			if total > len(data) {
+				t.Fatalf("read %d bytes from %d bytes of input", total, len(data))
+			}
+		}
+		if _, err := c.ReadMessage(limit); err == nil {
+			t.Fatal("read after the end of the input succeeded")
+		}
+	})
+}
