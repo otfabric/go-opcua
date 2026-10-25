@@ -29,13 +29,11 @@ package interop
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"os"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -82,17 +80,11 @@ func runPubSubCodec(t *testing.T, op string, input []byte, metadata string) pubs
 // runCodec runs a codec pubsub-* operation of the peer with input on stdin.
 func (p *psPeer) runCodec(t *testing.T, op string, input []byte, metadata string) pubsubCodecResult {
 	t.Helper()
-	image := getEnvOr(p.env, p.image)
-	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	defer cancel()
-	args := []string{"run", "--rm", "-i", image, "client", "codec", op}
+	args := []string{"client", "codec", op}
 	if metadata != "" {
 		args = append(args, "--metadata", metadata)
 	}
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stdin = bytes.NewReader(input)
-	cmd.Stderr = os.Stderr
-	raw, _ := cmd.Output() // a failed encode / decode exits 4 but reports
+	raw := runStdinContainer(t, getEnvOr(p.env, p.image), input, os.Stderr, args...) // a failed encode / decode exits 4 but reports
 	result, err := parseAdapterOutput(raw)
 	if err != nil {
 		t.Fatalf("codec %s: %v\ninput: %s\nraw: %s", op, err, input, raw)

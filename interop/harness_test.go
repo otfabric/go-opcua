@@ -219,6 +219,33 @@ func dockerStop(name string) {
 	exec.Command("docker", "stop", "-t", "2", name).Run() //nolint:errcheck
 }
 
+// runStdinContainer runs a short-lived adapter command (docker run --rm -i
+// image args...) with stdin and returns its stdout. The container is named,
+// so that it is stopped when the run outlasts clientTimeout (killing the
+// docker CLI leaves the container running). A run that timed out without any
+// output is a stalled runner, not an adapter result: it is retried once.
+func runStdinContainer(t *testing.T, image string, stdin []byte, stderr io.Writer, args ...string) []byte {
+	t.Helper()
+	for attempt := 1; ; attempt++ {
+		name := fmt.Sprintf("%s-stdin-%d", dockerContainerName(t), clientContainers.Add(1))
+		ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
+		cmd := exec.CommandContext(ctx, "docker", append([]string{"run", "--rm", "-i", "--name", name, image}, args...)...)
+		cmd.Stdin = bytes.NewReader(stdin)
+		cmd.Stderr = stderr
+		raw, _ := cmd.Output() // a rejected input exits non-zero but still reports
+		timedOut := ctx.Err() != nil
+		cancel()
+		if !timedOut {
+			return raw
+		}
+		dockerStop(name)
+		if len(bytes.TrimSpace(raw)) > 0 || attempt == 2 {
+			return raw
+		}
+		t.Logf("docker run %s %v: no output within %v, retrying once", image, args, clientTimeout)
+	}
+}
+
 // dockerRemove removes the container name if it is left over (created but
 // not started, as after a failed docker run), so that the name can be used
 // again.

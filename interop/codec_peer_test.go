@@ -54,12 +54,11 @@ package interop
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"os"
-	"os/exec"
 	"testing"
 	"time"
 
@@ -359,19 +358,15 @@ func requireVerboseSymbol(t *testing.T, p codecPeer, name string, doc []byte) {
 // runCodecDecode hands a document to the adapter on stdin.
 func runCodecDecode(t *testing.T, p codecPeer, format, typ string, doc []byte) (adapterResult, []byte) {
 	t.Helper()
-	image := getEnvOr(p.imageEnv, p.defaultImage)
-	ctx, cancel := context.WithTimeout(context.Background(), clientTimeout)
-	defer cancel()
-	args := []string{"run", "--rm", "-i", image, "client", "codec", "--decode", format, "--type", typ}
+	args := []string{"client", "codec", "--decode", format, "--type", typ}
 	if format == "json" {
 		args = append(args, p.jsonModeArgs()...)
 	}
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stdin = bytes.NewReader(doc)
-	if p.name != "milo" { // the JVM warns about netty on every start
-		cmd.Stderr = os.Stderr
+	var stderr io.Writer = os.Stderr
+	if p.name == "milo" { // the JVM warns about netty on every start
+		stderr = nil
 	}
-	raw, _ := cmd.Output() // a rejected document exits non-zero but still reports
+	raw := runStdinContainer(t, getEnvOr(p.imageEnv, p.defaultImage), doc, stderr, args...)
 	result, err := parseAdapterOutput(raw)
 	if err != nil {
 		t.Fatalf("parse codec --decode %s output: %v\ndoc: %s\nraw: %s", format, err, doc, raw)
