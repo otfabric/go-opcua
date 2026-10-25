@@ -87,11 +87,18 @@ func counterPDS(ds string) *ua.PublishedDataSetDataType {
 
 // counterSource is the DataSource of the counter data sets.
 type counterSource struct {
-	mu sync.Mutex
-	n  map[string]int64
+	mu   sync.Mutex
+	base int64 // the counters start after base
+	n    map[string]int64
 }
 
-func newCounterSource() *counterSource { return &counterSource{n: map[string]int64{}} }
+func newCounterSource() *counterSource { return newCounterSourceFrom(0) }
+
+// newCounterSourceFrom returns a counterSource whose counters start at
+// base+1, which tells its data sets from those of another source.
+func newCounterSourceFrom(base int64) *counterSource {
+	return &counterSource{base: base, n: map[string]int64{}}
+}
 
 func (s *counterSource) ReadPublishedData(_ context.Context, vars []*ua.PublishedVariableDataType) []*ua.DataValue {
 	out := make([]*ua.DataValue, len(vars))
@@ -101,7 +108,7 @@ func (s *counterSource) ReadPublishedData(_ context.Context, vars []*ua.Publishe
 	ds, _, _ := strings.Cut(vars[0].PublishedVariable.StringID(), ".")
 	s.mu.Lock()
 	s.n[ds]++
-	n := s.n[ds]
+	n := s.base + s.n[ds]
 	s.mu.Unlock()
 	now := time.Now()
 	for i, v := range vars {
