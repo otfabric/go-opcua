@@ -241,8 +241,9 @@ func testRenewalDuringSessionActivation(t *testing.T) {
 			defer wg.Done()
 			// A lifetime of 3 s makes the client renew every 2.25 s, and
 			// leaves a renewal 1.5 s before the server gives up the
-			// channel: enough on a machine that is busy with other tests.
-			c, err := e.dial(nil, pol, opcua.Lifetime(3*time.Second), opcua.AutoReconnect(false))
+			// channel: enough on a machine that is busy with other tests
+			// (four times that on the slow policies, see policy.lifetime).
+			c, err := e.dial(nil, pol, opcua.Lifetime(pol.lifetime(3*time.Second)), opcua.AutoReconnect(false))
 			if err != nil {
 				sink.Addf("%s: connect: %v", pol.name, err)
 				return

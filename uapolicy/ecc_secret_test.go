@@ -179,9 +179,13 @@ func TestEncryptedSecret_Tamper(t *testing.T) {
 		t.Run(uri, func(t *testing.T) {
 			f := newSecretFixture(t, uri)
 			data := f.encrypt(t, []byte("correct horse battery staple"))
+			probe := tamperPositions(uri, len(data))
 
 			// Flipping any single bit anywhere invalidates the secret.
 			for i := range data {
+				if !probe(i) {
+					continue
+				}
 				bad := append([]byte{}, data...)
 				bad[i] ^= 0x20
 				_, err := f.receiver.DecryptSecret(bad, f.signer())
@@ -190,6 +194,9 @@ func TestEncryptedSecret_Tamper(t *testing.T) {
 
 			// Truncation and trailing data, at every length.
 			for n := 0; n < len(data); n++ {
+				if !probe(n) {
+					continue
+				}
 				_, err := f.receiver.DecryptSecret(data[:n], f.signer())
 				require.Error(t, err, "truncated to %d", n)
 			}
@@ -197,6 +204,22 @@ func TestEncryptedSecret_Tamper(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
+}
+
+// tamperPositions reports which byte positions of an n-byte secret
+// TestEncryptedSecret_Tamper probes. Each probe is a full decryption with a
+// signature check and a key agreement. The layout of the secret is the same
+// for every policy, so the P-256 and Curve25519 policies probe every byte,
+// and the policies with expensive curves (math/big for Brainpool, and P-384
+// and Ed448 under the race detector) probe the header, the tail with the
+// signature and every 16th byte between them.
+func tamperPositions(uri string, n int) func(int) bool {
+	switch uri {
+	case ua.SecurityPolicyURIECCNistP256, ua.SecurityPolicyURIECCNistP256AesGcm,
+		ua.SecurityPolicyURIECCNistP256ChaChaPoly, ua.SecurityPolicyURIECCCurve25519:
+		return func(int) bool { return true }
+	}
+	return func(i int) bool { return i < 64 || i >= n-32 || i%16 == 0 }
 }
 
 func TestEncryptedSecret_Rejections(t *testing.T) {

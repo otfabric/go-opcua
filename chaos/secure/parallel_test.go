@@ -369,16 +369,21 @@ func testRenewalUnderLoad(t *testing.T) {
 	// A lifetime of 3 s makes the client renew every 2.25 s. The server
 	// closes a channel whose token was not renewed 3.75 s after it was
 	// issued, so a renewal has 1.5 s to get through: enough on a machine
-	// that is busy with other test packages.
+	// that is busy with other test packages (four times that on the slow
+	// policies, see policy.lifetime).
 	const lifetime = 3 * time.Second
 	const renewals = 2
 	pols := selectedPolicies(t)
+	longest := lifetime
+	for _, pol := range pols {
+		longest = max(longest, pol.lifetime(lifetime))
+	}
 	// The workload runs until every channel had the time to be renewed
 	// twice and that many renewals were seen on the wire; a renewal that a
 	// busy machine delays delays the end of the test, it does not fail it.
 	want := int64(len(pols) * (1 + renewals))
 	begin := time.Now()
-	d := parallelDuration(t, renewals*lifetime*3/4+500*time.Millisecond)
+	d := parallelDuration(t, renewals*longest*3/4+500*time.Millisecond)
 	renewed := func() bool {
 		if time.Since(begin) > chaoskit.SettleLimit {
 			return true
@@ -393,7 +398,7 @@ func testRenewalUnderLoad(t *testing.T) {
 		go func(i int, pol policy) {
 			defer wg.Done()
 			rec := chaoskit.NewStateRecorder(pol.name, true)
-			c, err := e.dial(rec, pol, opcua.Lifetime(lifetime))
+			c, err := e.dial(rec, pol, opcua.Lifetime(pol.lifetime(lifetime)))
 			if err != nil {
 				sink.Addf("%s: connect: %v", pol.name, err)
 				return

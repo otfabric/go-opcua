@@ -151,8 +151,11 @@ func TestChunksFitTheSendBuffer(t *testing.T) {
 	for _, uri := range policies {
 		for _, mode := range secureModes {
 			t.Run(uri+"/"+mode.String(), func(t *testing.T) {
+				// One key exchange for all sizes: what this checks is the
+				// symmetric chunk layout, and the ephemeral keys of the
+				// Brainpool and Curve448 policies are costly.
+				server, client := symmetricPair(t, uri, mode)
 				for _, chunkSize := range sizes {
-					server, client := symmetricPair(t, uri, mode)
 					server.SetMaximumBodySize(chunkSize)
 					resp, value := response(chunkSize)
 
