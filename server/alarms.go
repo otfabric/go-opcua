@@ -5,7 +5,6 @@ package server
 import (
 	"context"
 	"crypto/rand"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"slices"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // Alarms & Conditions (Part 9).
@@ -1344,7 +1344,7 @@ func clientUserID(ctx context.Context) string {
 	case *ua.UserNameIdentityToken:
 		return t.UserName
 	case *ua.X509IdentityToken:
-		if cert, err := x509.ParseCertificate(t.CertificateData); err == nil {
+		if cert, err := uapolicy.LeafCertificate(t.CertificateData); err == nil {
 			return cert.Subject.String()
 		}
 		return "X509"
