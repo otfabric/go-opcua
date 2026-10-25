@@ -1,5 +1,33 @@
 # go-opcua Releases
 
+## v1.15.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.14.0
+
+### Summary
+
+Live server diagnostics (Part 5 §6.3.3): ServerDiagnosticsSummary, the diagnostics arrays and a SessionDiagnosticsObject per session, and DiagnosticInfo in responses when a request asks for it.
+
+### Added
+
+- **server: `Server.ServerDiagnostics` is live.** ServerDiagnosticsSummary counts current and cumulated sessions and subscriptions, rejected and security-rejected sessions and requests, session timeouts and publishing intervals; SamplingIntervalDiagnosticsArray, SubscriptionDiagnosticsArray, SessionDiagnosticsArray and SessionSecurityDiagnosticsArray are filled; every session gets a SessionDiagnosticsObject (namespace `urn:otfabric:go-opcua:diagnostics`) with its SessionDiagnostics (per-service request counters), SessionSecurityDiagnostics, SubscriptionDiagnosticsArray and CurrentRoleIds.
+- **server: EnabledFlag** is writable by SecurityAdmin and ConfigureAdmin; enabling resets the counters. `WithServerDiagnostics(false)` starts with diagnostics off; `Server.ServerDiagnosticsSummary`, `ServerDiagnosticsEnabled` and `SetServerDiagnosticsEnabled`. A session's object is readable by the session itself, SecurityAdmin and ConfigureAdmin; SessionSecurityDiagnosticsArray by SecurityAdmin over SignAndEncrypt.
+- **server: DiagnosticInfo** for the requests that set `ReturnDiagnostics`: service diagnostics on a fault and per-operation diagnostics, with the string table.
+- **client:** the `ReturnDiagnostics` option, `*ServiceError` (the status code with its resolved diagnostic), and typed reads `ServerDiagnosticsSummary`, `ServerDiagnosticsEnabled`, `SetServerDiagnosticsEnabled`, `SessionDiagnostics`, `SessionSecurityDiagnostics`, the `...Of` variants, `SubscriptionDiagnostics` and `SamplingIntervalDiagnostics`; `Subscription.Stats` now returns the server's values. **ua:** `Diagnostic`, `DiagnosticInfo.Resolve`, `ResponseHeader.ServiceDiagnostic` and `Diagnostic`.
+
+### Fixed
+
+- **server: a data race between `AddNamespace` and `Server.Node`.** Node now reads an immutable view of the namespaces that AddNamespace publishes.
+
+### Tests
+
+- Unit, e2e and conformance tests (summary, rejected sessions, session objects, subscriptions, EnabledFlag, disabled diagnostics, ReturnDiagnostics, no secrets in diagnostics).
+- Chaos: sessions and subscriptions churn while an observer reads the summary (cumulated counters monotonic, counts exact at quiescence), and while EnabledFlag flips (no deadlock, no leaked session objects).
+- Interop: `diagnostics.server-summary` verified with the open62541 and node-opcua servers and with all six peer clients against the Go server; `diagnostics.return-diagnostics` verified with the UA-.NETStandard server; ledger capabilities `diagnostics.*`.
+
+---
+
 ## v1.14.0
 
 **Date:** 2026-10-25
