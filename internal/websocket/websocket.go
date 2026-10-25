@@ -12,14 +12,20 @@
 // make the reader allocate more than the caller's buffer, whatever length it
 // announces.
 //
-// What is not implemented because the OPC UA binary sub-protocol has no use
-// for it: text messages (they end the connection with status 1003),
-// extensions (no extension is ever negotiated, so frames with RSV bits set are
-// a protocol error) and sending pings.
+// With the sub-protocol opcua+uajson every WebSocket message holds one OPC UA
+// message in the JSON encoding (Part 6 §7.5.2). ReadMessage and WriteText
+// serve that sub-protocol: they read and write whole messages, and a message
+// larger than the limit of the reader ends the connection with status 1009.
+//
+// What is not implemented because the OPC UA sub-protocols have no use for
+// it: text messages on the byte stream of Read (they end the connection with
+// status 1003), extensions (no extension is ever negotiated, so frames with
+// RSV bits set are a protocol error) and sending pings.
 package websocket
 
 import (
 	"bufio"
+	"bytes"
 	"crypto/rand"
 	"crypto/sha1" //nolint:gosec // mandated by RFC 6455 §4.2.2 for Sec-WebSocket-Accept
 	"encoding/base64"
@@ -31,6 +37,7 @@ import (
 	"net"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // Frame opcodes (RFC 6455 §5.2).
@@ -48,6 +55,7 @@ const (
 	CloseNormal          = 1000
 	CloseProtocolError   = 1002
 	CloseUnsupportedData = 1003
+	CloseInvalidPayload  = 1007
 	CloseMessageTooBig   = 1009
 
 	// closeNoStatus stands for a Close frame without a status code
@@ -71,8 +79,14 @@ var (
 	ErrProtocol = errors.New("websocket: protocol error")
 	// ErrFrameTooLarge is returned for a frame larger than the limit.
 	ErrFrameTooLarge = errors.New("websocket: frame too large")
-	// ErrUnsupportedData is returned for a text message.
+	// ErrUnsupportedData is returned for a text message read with Read.
 	ErrUnsupportedData = errors.New("websocket: text messages are not supported")
+	// ErrMessageTooLarge is returned by ReadMessage for a message larger
+	// than its limit.
+	ErrMessageTooLarge = errors.New("websocket: message too large")
+	// ErrInvalidUTF8 is returned by ReadMessage for a text message that is
+	// not valid UTF-8 (RFC 6455 §8.1).
+	ErrInvalidUTF8 = errors.New("websocket: text message is not valid UTF-8")
 )
 
 // Conn is a WebSocket connection that implements net.Conn. Read and Write
@@ -94,6 +108,8 @@ type Conn struct {
 	mask      [4]byte // its masking key
 	maskPos   int     // position in the key
 	inMessage bool    // a fragmented message is under way
+	messages  bool    // ReadMessage is used: text messages are accepted
+	text      bool    // the current message is a text message
 	readErr   error   // sticky: the stream ended or broke
 	peerClose int     // status code of the peer's Close frame
 
@@ -218,12 +234,14 @@ func (c *Conn) nextFrame() error {
 		if !c.inMessage {
 			return c.fail(CloseProtocolError, fmt.Errorf("%w: continuation without a message", ErrProtocol))
 		}
-	case opBinary:
+	case opBinary, opText:
 		if c.inMessage {
 			return c.fail(CloseProtocolError, fmt.Errorf("%w: new message inside a fragmented one", ErrProtocol))
 		}
-	case opText:
-		return c.fail(CloseUnsupportedData, ErrUnsupportedData)
+		if op == opText && !c.messages {
+			return c.fail(CloseUnsupportedData, ErrUnsupportedData)
+		}
+		c.text = op == opText
 	default:
 		return c.fail(CloseProtocolError, fmt.Errorf("%w: reserved opcode %#x", ErrProtocol, op))
 	}
@@ -272,6 +290,52 @@ func (c *Conn) control(op byte, fin bool, length int64) error {
 	default:
 		return c.fail(CloseProtocolError, fmt.Errorf("%w: reserved opcode %#x", ErrProtocol, op))
 	}
+}
+
+// ReadMessage reads the next message the peer sends, text or binary, with
+// the frames of a fragmented message joined. A message larger than maxSize
+// bytes ends the connection with status 1009 (Part 6 §7.5.2) and
+// ErrMessageTooLarge; the payload is buffered as it arrives, so a peer that
+// only announces a large frame does not make the reader allocate it. Control
+// frames are handled as by Read. A Conn is read either with Read or with
+// ReadMessage, not with both.
+func (c *Conn) ReadMessage(maxSize int64) ([]byte, error) {
+	if c.readErr != nil {
+		return nil, c.readErr
+	}
+	c.messages = true
+	var msg bytes.Buffer
+	for {
+		if err := c.nextFrame(); err != nil {
+			c.readErr = err
+			return nil, err
+		}
+		if int64(msg.Len())+c.remaining > maxSize {
+			c.readErr = c.fail(CloseMessageTooBig, fmt.Errorf("%w: more than %d bytes", ErrMessageTooLarge, maxSize))
+			return nil, c.readErr
+		}
+		start := msg.Len()
+		if _, err := io.CopyN(&msg, c.br, c.remaining); err != nil {
+			c.readErr = unexpected(err)
+			return nil, c.readErr
+		}
+		c.unmask(msg.Bytes()[start:])
+		c.remaining = 0
+		if c.inMessage {
+			continue
+		}
+		if c.text && !utf8.Valid(msg.Bytes()) {
+			c.readErr = c.fail(CloseInvalidPayload, ErrInvalidUTF8)
+			return nil, c.readErr
+		}
+		return msg.Bytes(), nil
+	}
+}
+
+// WriteText sends p as one text message in a single frame. It may be called
+// concurrently with itself and with Write: frames are never interleaved.
+func (c *Conn) WriteText(p []byte) error {
+	return c.writeFrame(opText, p)
 }
 
 func unexpected(err error) error {

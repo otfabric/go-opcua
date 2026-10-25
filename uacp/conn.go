@@ -5,6 +5,7 @@ package uacp
 import (
 	"context"
 	"crypto/tls"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -129,7 +130,7 @@ func (d *Dialer) Dial(ctx context.Context, endpoint string) (*Conn, error) {
 			defer cancel()
 		}
 		var nc net.Conn
-		if nc, err = d.dialWebSocket(ctx, dl, endpoint); err != nil {
+		if nc, err = d.dialWebSocket(ctx, dl, endpoint, WebSocketSubprotocol); err != nil {
 			return nil, err
 		}
 		conn = newConn(nc, d.ClientACK)
@@ -200,6 +201,10 @@ func DialTCPWithTimeout(ctx context.Context, endpoint string, timeout time.Durat
 	return (&net.Dialer{Timeout: timeout}).DialContext(ctx, "tcp", raddr.Host)
 }
 
+// errHandedOver ends the handshake of a connection that the listener handed
+// to the opcua+uajson handler.
+var errHandedOver = stderrors.New("uacp: connection handed over")
+
 // serverHandshakeTimeout bounds how long an accepted connection may take to
 // complete the HEL/ACK handshake before it is dropped.
 const serverHandshakeTimeout = 10 * time.Second
@@ -225,6 +230,10 @@ type Listener struct {
 	// runs on, within the handshake deadline: TLS and the WebSocket opening
 	// handshake for opc.wss. Nil for opc.tcp.
 	upgrade func(*net.TCPConn) (net.Conn, error)
+
+	// jsonHandler serves the WebSocket connections with the sub-protocol
+	// opcua+uajson (ServeWebSocketJSON).
+	jsonHandler atomic.Pointer[func(MessageConn)]
 }
 
 // acceptResult is the outcome of accepting one connection.
@@ -357,6 +366,9 @@ func (l *Listener) handshake(c *net.TCPConn) {
 			if nc, err = l.upgrade(c); err != nil {
 				return err
 			}
+			if l.handOver(nc) {
+				return errHandedOver
+			}
 		}
 		conn = newConn(nc, l.ack)
 		return conn.srvhandshake(l.endpoint)
@@ -369,6 +381,9 @@ func (l *Listener) handshake(c *net.TCPConn) {
 	delete(l.pending, c)
 	l.mu.Unlock()
 
+	if err == errHandedOver {
+		return
+	}
 	if err != nil {
 		if conn != nil {
 			_ = conn.Close()

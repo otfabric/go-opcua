@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/websocket"
@@ -18,6 +19,12 @@ import (
 // the UACP messages and the secure conversation on top of them travel in
 // binary WebSocket frames over TLS, one MessageChunk per frame. The HEL/ACK
 // handshake runs after the WebSocket opening handshake, as on TCP.
+//
+// The sub-protocol opcua+uajson (transport profile wss-uajson) carries no
+// UACP: each WebSocket message is one service request or response in the
+// JSON encoding (Part 6 §7.5.2, §5.4.9), there is neither a HEL/ACK nor a
+// secure conversation, and TLS alone protects the messages. Such connections
+// are MessageConns.
 const (
 	// SchemeWebSocket is the URL scheme of WebSocket endpoints.
 	SchemeWebSocket = "opc.wss"
@@ -25,6 +32,10 @@ const (
 	// WebSocketSubprotocol is the WebSocket sub-protocol that carries UACP
 	// (Part 6 §7.5.2).
 	WebSocketSubprotocol = "opcua+uacp"
+
+	// WebSocketJSONSubprotocol is the WebSocket sub-protocol that carries
+	// service messages in the JSON encoding (Part 6 §7.5.2).
+	WebSocketJSONSubprotocol = "opcua+uajson"
 
 	// defaultWebSocketPort is the port of an opc.wss URL without one: the
 	// HTTPS port, since the connection starts as an HTTPS request.
@@ -76,9 +87,51 @@ func transportTLS(cfg *tls.Config) *tls.Config {
 	return cfg
 }
 
+// MessageConn is a WebSocket connection with the sub-protocol opcua+uajson,
+// which carries whole messages instead of a byte stream.
+type MessageConn interface {
+	// ReadMessage reads the next message. A message larger than maxSize
+	// bytes ends the connection with WebSocket status 1009 (Part 6 §7.5.2).
+	// It must not be called from two goroutines at once.
+	ReadMessage(maxSize int64) ([]byte, error)
+	// WriteMessage sends p as one text message. It may be called
+	// concurrently.
+	WriteMessage(p []byte) error
+	SetReadDeadline(t time.Time) error
+	SetWriteDeadline(t time.Time) error
+	RemoteAddr() net.Addr
+	Close() error
+}
+
+// messageConn is the MessageConn of a WebSocket.
+type messageConn struct{ *websocket.Conn }
+
+func (c messageConn) WriteMessage(p []byte) error { return c.WriteText(p) }
+
+// DialWebSocketJSON opens a TLS secured WebSocket with the sub-protocol
+// opcua+uajson to an opc.wss endpoint (Part 6 §7.5.2), with the TLS
+// configuration and the dial timeout of d, which covers TLS and the
+// WebSocket upgrade. There is no HEL/ACK on such a connection.
+func (d *Dialer) DialWebSocketJSON(ctx context.Context, endpoint string) (MessageConn, error) {
+	dl := d.Dialer
+	if dl == nil {
+		dl = defaultNetDialer()
+	}
+	if dl.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, dl.Timeout)
+		defer cancel()
+	}
+	ws, err := d.dialWebSocket(ctx, dl, endpoint, WebSocketJSONSubprotocol)
+	if err != nil {
+		return nil, err
+	}
+	return messageConn{ws}, nil
+}
+
 // dialWebSocket opens the TLS connection to the host of an opc.wss endpoint
-// and upgrades it to a WebSocket with the sub-protocol opcua+uacp.
-func (d *Dialer) dialWebSocket(ctx context.Context, dl *net.Dialer, endpoint string) (net.Conn, error) {
+// and upgrades it to a WebSocket with the sub-protocol subprotocol.
+func (d *Dialer) dialWebSocket(ctx context.Context, dl *net.Dialer, endpoint, subprotocol string) (*websocket.Conn, error) {
 	u, err := ParseWebSocketEndpoint(endpoint)
 	if err != nil {
 		return nil, err
@@ -96,7 +149,7 @@ func (d *Dialer) dialWebSocket(ctx context.Context, dl *net.Dialer, endpoint str
 		_ = raw.Close()
 		return nil, fmt.Errorf("uacp: TLS handshake with %s: %w", u.Host, err)
 	}
-	ws, err := websocket.Client(ctx, tc, u, websocket.ClientOptions{Subprotocols: []string{WebSocketSubprotocol}})
+	ws, err := websocket.Client(ctx, tc, u, websocket.ClientOptions{Subprotocols: []string{subprotocol}})
 	if err != nil {
 		_ = tc.Close()
 		return nil, fmt.Errorf("uacp: WebSocket upgrade at %s: %w", endpoint, err)
@@ -111,7 +164,8 @@ func (d *Dialer) dialWebSocket(ctx context.Context, dl *net.Dialer, endpoint str
 // Part 6 §7.5.3), upgraded to a WebSocket with the sub-protocol opcua+uacp
 // and then goes through the HEL/ACK handshake. Accept returns connections
 // that completed all three. TLS 1.2 is the minimum version; set ClientAuth
-// and ClientCAs in tlsConfig to require client TLS certificates.
+// and ClientCAs in tlsConfig to require client TLS certificates. With
+// ServeWebSocketJSON the listener also accepts the sub-protocol opcua+uajson.
 func ListenWebSocket(ctx context.Context, endpoint string, tlsConfig *tls.Config, ack *Acknowledge) (*Listener, error) {
 	u, err := ParseWebSocketEndpoint(endpoint)
 	if err != nil {
@@ -130,11 +184,42 @@ func ListenWebSocket(ctx context.Context, endpoint string, tlsConfig *tls.Config
 		if err := tc.Handshake(); err != nil {
 			return nil, fmt.Errorf("uacp: TLS handshake: %w", err)
 		}
-		ws, _, err := websocket.Accept(tc, websocket.ServerOptions{Subprotocols: []string{WebSocketSubprotocol}})
+		protocols := []string{WebSocketSubprotocol}
+		if l.jsonHandler.Load() != nil {
+			protocols = append(protocols, WebSocketJSONSubprotocol)
+		}
+		ws, _, err := websocket.Accept(tc, websocket.ServerOptions{Subprotocols: protocols})
 		if err != nil {
 			return nil, fmt.Errorf("uacp: WebSocket upgrade: %w", err)
 		}
 		return ws, nil
 	}
 	return l, nil
+}
+
+// ServeWebSocketJSON makes a WebSocket listener accept the sub-protocol
+// opcua+uajson next to opcua+uacp (Part 6 §7.5.2): a connection that
+// selects it skips the HEL/ACK handshake and is handed to h in a goroutine
+// of its own instead of being returned by Accept. h owns the connection and
+// closes it. Call it before the first Accept; it has no effect on an opc.tcp
+// listener.
+func (l *Listener) ServeWebSocketJSON(h func(MessageConn)) {
+	l.jsonHandler.Store(&h)
+}
+
+// handOver hands nc to the opcua+uajson handler if it is a WebSocket with
+// that sub-protocol, and reports whether it did.
+func (l *Listener) handOver(nc net.Conn) bool {
+	ws, ok := nc.(*websocket.Conn)
+	if !ok || ws.Subprotocol() != WebSocketJSONSubprotocol {
+		return false
+	}
+	h := l.jsonHandler.Load()
+	if h == nil {
+		return false
+	}
+	// The handshake deadline ends here: h sets its own.
+	_ = ws.SetDeadline(time.Time{})
+	go (*h)(messageConn{ws})
+	return true
 }
