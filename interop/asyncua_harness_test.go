@@ -24,7 +24,7 @@
 //	asyncua-client-to-go-lds      asyncua client registers a server with a go-opcua LDS
 //
 // The secure tests use the asyncua-server / asyncua-client identities of the
-// test PKI (opcua-interop v0.12.0 certs/generate.sh, or --add-asyncua on an
+// test PKI (opcua-interop v0.13.0 certs/generate.sh, or --add-asyncua on an
 // older PKI): a PKI without them skips. Stack deviations skip with
 // asyncuaDeviation and are unsupported rows of the ledger.
 
@@ -36,7 +36,7 @@ import (
 
 // defaultAsyncuaImage is the asyncua adapter of the opcua-interop release
 // named by interopVersion (multi-arch index digest; see harness_test.go).
-const defaultAsyncuaImage = "ghcr.io/otfabric/opcua-interop-asyncua@sha256:3e1596233b3355b2ee96909400c519d43819781c3a6cc0c3d38fe31db8e1f2b8"
+const defaultAsyncuaImage = "ghcr.io/otfabric/opcua-interop-asyncua@sha256:927b56371ed40ee271cf1e92e46c243e248fc423b91b348fb881f4f38091d757"
 
 // asyncuaEnv is the image env variable of the asyncua peer, see harness_test.go.
 const asyncuaEnv = "ASYNCUA_IMAGE"

@@ -6,7 +6,7 @@ Source of truth: [`capabilities.json`](capabilities.json) + [`coverage.json`](co
 Regenerate with `go generate ./interop`.
 Gap summary: `go run ./internal/cmd/render-interop-coverage -summary`.
 
-Pinned opcua-interop version: **v0.12.0**
+Pinned opcua-interop version: **v0.13.0**
 
 | Status | Meaning |
 |---|---|
@@ -63,10 +63,10 @@ Go↔Go tests never earn ✅.
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
 |---|:---:|:---:|:---:|:---:|---|
-| Push model TrustList of the DefaultApplicationGroup: OpenWithMasks / Read / Close, Open / Write / CloseAndUpdate, AddCertificate / RemoveCertificate, ApplyChanges (Part 12 §7.8.2, §7.10.6) (C→ = go-opcua package gds pushes to the peer server; →S = the peer's push client pushes to server.WithPushManagement) | ⬜ | ⬜ | ⬜ | ⬜ | — |
-| Push model CreateSigningRequest / UpdateCertificate / ApplyChanges of the application instance certificate (Part 12 §7.10.4, §7.10.6, §7.10.8) | ⬜ | ⬜ | ⬜ | ⬜ | — |
-| Push model GetRejectedList (Part 12 §7.10.9) | ⬜ | ⬜ | ⬜ | ⬜ | — |
-| Push model access: ServerConfiguration properties, the methods need the SecurityAdmin role on a SignAndEncrypt channel (Part 12 §7.2) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| Push model TrustList of the DefaultApplicationGroup: OpenWithMasks / Read / Close, Open / Write / CloseAndUpdate, AddCertificate / RemoveCertificate, ApplyChanges (Part 12 §7.8.2, §7.10.6) (C→ = go-opcua package gds pushes to the peer server; →S = the peer's push client pushes to server.WithPushManagement) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
+| Push model CreateSigningRequest / UpdateCertificate / ApplyChanges of the application instance certificate (Part 12 §7.10.4, §7.10.6, §7.10.8) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
+| Push model GetRejectedList (Part 12 §7.10.9) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
+| Push model access: ServerConfiguration properties, the methods need the SecurityAdmin role on a SignAndEncrypt channel (Part 12 §7.2) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
 
 ## custom-types
 

@@ -12,9 +12,8 @@
 //	                              (adapter `client push`) against server.WithPushManagement
 //
 // The adapters declare serverFeatures "push-management" and, for node-opcua,
-// the client operation "push" (opcua-interop feat/gds). An image without them
-// skips — also with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1: the ledger rows stay
-// unverified until an opcua-interop release with feat/gds is pinned.
+// the client operation "push" (opcua-interop v0.13.0 and later). An image
+// without them skips, or fails with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1.
 
 package interop
 
@@ -28,6 +27,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -49,9 +49,8 @@ const (
 	pushAdminPass = "sec-admin-password"
 )
 
-// requirePushFeature skips when the adapter image does not declare the push
-// management feature. It never fails: the rows are unverified until the
-// opcua-interop release with it is pinned.
+// requirePushFeature skips (or fails with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1)
+// when the adapter image does not declare the push management feature.
 func requirePushFeature(t *testing.T, imageEnv, defaultImage, list, feature string) {
 	t.Helper()
 	caps, image := imageCapabilities(t, imageEnv, defaultImage)
@@ -60,8 +59,12 @@ func requirePushFeature(t *testing.T, imageEnv, defaultImage, list, feature stri
 		have = caps.ClientOperations
 	}
 	if !slices.Contains(have, feature) {
-		t.Skipf("adapter %s (version %s) has no %s %q (opcua-interop feat/gds; set %s to such an image)",
+		msg := fmt.Sprintf("adapter %s (version %s) has no %s %q (opcua-interop v0.13.0 or later; set %s to such an image)",
 			image, caps.Adapter.Version, list, feature, imageEnv)
+		if requireCapabilities() {
+			t.Fatal(msg)
+		}
+		t.Skip(msg)
 	}
 }
 
