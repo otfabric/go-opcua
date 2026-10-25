@@ -63,6 +63,14 @@ func TestReadMessageTooLarge(t *testing.T) {
 	}
 }
 
+func TestReadMessageFrameTooLarge(t *testing.T) {
+	c, mc := serverReading(frame(0x80|opText, bytes.Repeat([]byte("x"), 11), key), 10)
+	_, err := c.ReadMessage(1 << 10)
+	require.ErrorIs(t, err, ErrMessageTooLarge)
+	require.ErrorIs(t, err, ErrFrameTooLarge)
+	require.Equal(t, CloseMessageTooBig, closeCode(t, mc.written()))
+}
+
 func TestReadMessageInvalid(t *testing.T) {
 	tests := []struct {
 		name string

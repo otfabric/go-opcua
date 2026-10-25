@@ -19,11 +19,40 @@ const (
 	// TransportProfileHTTPS is UA Binary over HTTPS (Part 6 §7.4):
 	// opc.https endpoints.
 	TransportProfileHTTPS = "http://opcfoundation.org/UA-Profile/Transport/https-uabinary"
+
+	// TransportProfileWSSJSON is UA JSON over a WebSocket with the
+	// sub-protocol opcua+uajson, without secure conversation (Part 6
+	// §7.5.2): opc.wss endpoints.
+	TransportProfileWSSJSON = "http://opcfoundation.org/UA-Profile/Transport/wss-uajson"
+
+	// TransportProfileHTTPSJSON is UA JSON over HTTPS (Part 6 §7.4.5):
+	// opc.https endpoints.
+	TransportProfileHTTPSJSON = "http://opcfoundation.org/UA-Profile/Transport/https-uajson"
 )
+
+// IsJSONTransportProfile reports whether a transport profile carries the
+// service messages in the JSON encoding: wss-uajson or https-uajson.
+func IsJSONTransportProfile(profile string) bool {
+	return profile == TransportProfileWSSJSON || profile == TransportProfileHTTPSJSON
+}
+
+// TransportProfileScheme returns the URL scheme of the endpoints of a
+// transport profile this library implements, "" for any other profile.
+func TransportProfileScheme(profile string) string {
+	switch profile {
+	case TransportProfileUATCP:
+		return "opc.tcp"
+	case TransportProfileWSS, TransportProfileWSSJSON:
+		return "opc.wss"
+	case TransportProfileHTTPS, TransportProfileHTTPSJSON:
+		return "opc.https"
+	}
+	return ""
+}
 
 // TransportProfileForURL returns the transport profile of this library that
 // serves an endpoint URL, by its scheme: opc.tcp, opc.wss, or opc.https (and
-// https). It returns "" for any other URL.
+// https), with UA Binary. It returns "" for any other URL.
 func TransportProfileForURL(endpointURL string) string {
 	scheme, _, ok := strings.Cut(endpointURL, "://")
 	if !ok {

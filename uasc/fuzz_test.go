@@ -4,6 +4,8 @@ package uasc
 
 import (
 	"testing"
+
+	"github.com/otfabric/go-opcua/ua"
 )
 
 func FuzzHeaderDecode(f *testing.F) {
@@ -76,6 +78,40 @@ func FuzzAsymmetricSecurityHeaderDecode(f *testing.F) {
 		}
 		if n > len(data) {
 			t.Fatalf("AsymmetricSecurityHeader.Decode consumed %d bytes but input was %d", n, len(data))
+		}
+	})
+}
+
+// FuzzDecodeServiceMessageJSON feeds arbitrary bytes to the decoder of the
+// JSON messages of https-uajson and wss-uajson. It must never panic, and
+// what it decodes must encode and decode again.
+func FuzzDecodeServiceMessageJSON(f *testing.F) {
+	ns := []string{"http://opcfoundation.org/UA/", "urn:one"}
+	for _, v := range []any{
+		&ua.ReadRequest{RequestHeader: &ua.RequestHeader{RequestHandle: 1}, NodesToRead: []*ua.ReadValueID{{NodeID: ua.NewStringNodeID(1, "x"), AttributeID: ua.AttributeIDValue}}},
+		&ua.CreateSessionRequest{RequestHeader: &ua.RequestHeader{}, ClientNonce: []byte{1, 2}},
+		&ua.ServiceFault{ResponseHeader: &ua.ResponseHeader{ServiceResult: ua.StatusBadDecodingError}},
+	} {
+		b, err := EncodeServiceMessageJSON(v, ns)
+		if err != nil {
+			f.Fatal(err)
+		}
+		f.Add(b)
+	}
+	f.Add([]byte(`{"TypeId":{"Id":631},"Body":{}}`))
+	f.Add([]byte(`{"UaTypeId":"i=631","UaEncoding":1,"UaBody":"AA=="}`))
+	f.Add([]byte(`null`))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		v, err := DecodeServiceMessageJSON(data, ns)
+		if err != nil {
+			return
+		}
+		b, err := EncodeServiceMessageJSON(v, ns)
+		if err != nil {
+			t.Fatalf("decoded %T does not encode: %v", v, err)
+		}
+		if _, err := DecodeServiceMessageJSON(b, ns); err != nil {
+			t.Fatalf("re-encoded %T does not decode: %v\n%s", v, err, b)
 		}
 	})
 }

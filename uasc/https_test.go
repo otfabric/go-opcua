@@ -27,20 +27,31 @@ type httpsPeer struct {
 	*httptest.Server
 	requests atomic.Int32
 	lastReq  atomic.Pointer[http.Request]
+	lastBody atomic.Value // []byte
 }
 
 func newHTTPSPeer(t *testing.T, respond func(w http.ResponseWriter, r *http.Request, req ua.Request)) *httpsPeer {
+	t.Helper()
+	return newRawHTTPSPeer(t, func(w http.ResponseWriter, r *http.Request, b []byte) {
+		var req ua.Request
+		if _, v, err := ua.DecodeService(b); err == nil {
+			req, _ = v.(ua.Request)
+		}
+		respond(w, r, req)
+	})
+}
+
+// newRawHTTPSPeer is newHTTPSPeer for respond functions that decode the
+// body of the request themselves.
+func newRawHTTPSPeer(t *testing.T, respond func(w http.ResponseWriter, r *http.Request, body []byte)) *httpsPeer {
 	t.Helper()
 	p := &httpsPeer{}
 	p.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		p.requests.Add(1)
 		p.lastReq.Store(r)
 		b, _ := io.ReadAll(r.Body)
-		var req ua.Request
-		if _, v, err := ua.DecodeService(b); err == nil {
-			req, _ = v.(ua.Request)
-		}
-		respond(w, r, req)
+		p.lastBody.Store(b)
+		respond(w, r, b)
 	}))
 	t.Cleanup(p.Close)
 	return p
@@ -179,7 +190,7 @@ func TestHTTPSRoundTrip(t *testing.T) {
 }
 
 func TestHTTPSAsyncAfterClose(t *testing.T) {
-	tr := &httpsTransport{closed: true}
+	tr := &directTransport{closed: true}
 	require.False(t, tr.goAsync(func() { t.Error("must not run") }))
 }
 
