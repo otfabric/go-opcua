@@ -1,0 +1,1 @@
+Correction to the message: measured again (2026-10-25, go test -race -count=1 ./conformance/, two runs each on the same machine), the conformance package took 64-66 s before this commit and 44-55 s after it, not "45 s instead of over 70 s".
