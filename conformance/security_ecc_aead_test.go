@@ -232,7 +232,7 @@ func TestAEAD_Identities(t *testing.T) {
 					opcua.AuthCertificate(wrong.cert), opcua.AuthPrivateKeySigner(wrong.key))...)
 				require.ErrorIs(t, err, errors.ErrInvalidSecurityConfig)
 				_, err = dialClient(t, url, opts(ua.UserTokenTypeCertificate,
-					opcua.AuthCertificate(p.userCert), opcua.AuthPrivateKey(p.userKey))...)
+					opcua.AuthCertificate(p.UserCert), opcua.AuthPrivateKey(p.UserKey))...)
 				require.ErrorIs(t, err, errors.ErrInvalidSecurityConfig)
 
 				// Not trusted by the server.
@@ -491,7 +491,7 @@ func TestAEAD_SessionMovesToNewChannel(t *testing.T) {
 			c := newClient(t, url, append(eccClientOpts(t, ep, pol.curve, ua.UserTokenTypeUserName),
 				opcua.AuthUsername("alice", "wonderland"),
 				opcua.ReconnectInterval(50*time.Millisecond),
-				opcua.WithConnStateHandler(states.record),
+				opcua.WithConnStateHandler(states.Record),
 				opcua.AutoReconnect(true),
 			)...)
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -509,7 +509,7 @@ func TestAEAD_SessionMovesToNewChannel(t *testing.T) {
 			// recovers on a new one.
 			_, _ = c.ReadValue(ctx, f.Int32)
 			eventually(t, func() bool {
-				if !states.seenAfter(opcua.Reconnecting, opcua.Connected) {
+				if !states.SeenAfter(opcua.Reconnecting, opcua.Connected) {
 					return false
 				}
 				dv, err := c.ReadValue(ctx, f.Int32)
@@ -545,7 +545,7 @@ func TestAEAD_CertificatesAndPolicies(t *testing.T) {
 	gcmEP := endpointFor(t, url, ua.SecurityPolicyURIECCNistP256AesGcm, ua.MessageSecurityModeSignAndEncrypt)
 	chachaEP := endpointFor(t, url, ua.SecurityPolicyURIECCNistP256ChaChaPoly, ua.MessageSecurityModeSignAndEncrypt)
 	edEP := endpointFor(t, url, ua.SecurityPolicyURIECCCurve25519, ua.MessageSecurityModeSignAndEncrypt)
-	trust := opcua.TrustedCertificates(p.serverCertX509, ecc.server[curveP256].x509, ecc.server[curveEd25519].x509)
+	trust := opcua.TrustedCertificates(p.ServerCertX509, ecc.server[curveP256].x509, ecc.server[curveEd25519].x509)
 
 	t.Run("EndpointSelection", func(t *testing.T) {
 		// The best endpoint of the server needs an Ed25519 certificate.
@@ -558,7 +558,7 @@ func TestAEAD_CertificatesAndPolicies(t *testing.T) {
 			cert   []byte
 			policy string
 		}{
-			"rsa":     {p.clientCert, ua.SecurityPolicyURIAes256Sha256RsaPss},
+			"rsa":     {p.ClientCert, ua.SecurityPolicyURIAes256Sha256RsaPss},
 			"p256":    {ecc.client[curveP256].cert, ua.SecurityPolicyURIECCNistP256ChaChaPoly},
 			"p384":    {ecc.client[curveP384].cert, ua.SecurityPolicyURIECCNistP256ChaChaPoly},
 			"ed25519": {ecc.client[curveEd25519].cert, ua.SecurityPolicyURIECCCurve25519},
@@ -579,7 +579,7 @@ func TestAEAD_CertificatesAndPolicies(t *testing.T) {
 		require.ErrorIs(t, err, errors.ErrNoMatchingEndpoint)
 		_, err = opcua.SelectEndpoint(eps, "ECC_nistP256_AesGcm", ua.MessageSecurityModeInvalid, ecc.client[curveEd25519].cert)
 		require.ErrorIs(t, err, errors.ErrNoMatchingEndpoint)
-		_, err = opcua.SelectEndpoint(eps, "ECC_nistP256_ChaChaPoly", ua.MessageSecurityModeInvalid, p.clientCert)
+		_, err = opcua.SelectEndpoint(eps, "ECC_nistP256_ChaChaPoly", ua.MessageSecurityModeInvalid, p.ClientCert)
 		require.ErrorIs(t, err, errors.ErrNoMatchingEndpoint)
 
 		// Equal levels: the ranking of the library decides.
@@ -613,8 +613,8 @@ func TestAEAD_CertificatesAndPolicies(t *testing.T) {
 			"ed25519 certificate on ChaCha":   eccClientOpts(t, chachaEP, curveEd25519, ua.UserTokenTypeAnonymous),
 			"p256 certificate on curve25519":  eccClientOpts(t, edEP, curveP256, ua.UserTokenTypeAnonymous),
 			"p384 certificate on curve25519":  eccClientOpts(t, edEP, curveP384, ua.UserTokenTypeAnonymous),
-			"rsa certificate on AesGcm":       {opcua.SecurityFromEndpoint(gcmEP, ua.UserTokenTypeAnonymous), opcua.Certificate(p.clientCert), opcua.PrivateKey(p.clientKey), trust},
-			"rsa certificate on curve25519":   {opcua.SecurityFromEndpoint(edEP, ua.UserTokenTypeAnonymous), opcua.Certificate(p.clientCert), opcua.PrivateKey(p.clientKey), trust},
+			"rsa certificate on AesGcm":       {opcua.SecurityFromEndpoint(gcmEP, ua.UserTokenTypeAnonymous), opcua.Certificate(p.ClientCert), opcua.PrivateKey(p.ClientKey), trust},
+			"rsa certificate on curve25519":   {opcua.SecurityFromEndpoint(edEP, ua.UserTokenTypeAnonymous), opcua.Certificate(p.ClientCert), opcua.PrivateKey(p.ClientKey), trust},
 			"ed25519 certificate on RSA":      {opcua.SecurityFromEndpoint(endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt), ua.UserTokenTypeAnonymous), opcua.Certificate(ecc.client[curveEd25519].cert), opcua.PrivateKeySigner(ecc.client[curveEd25519].key), trust},
 			"ed25519 certificate on nistP256": eccClientOpts(t, endpointFor(t, url, ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt), curveEd25519, ua.UserTokenTypeAnonymous),
 		} {
@@ -687,7 +687,7 @@ func TestAEAD_CertificatesAndPolicies(t *testing.T) {
 				server.EnableSecurity(ua.SecurityPolicyURIECCNistP256AesGcm, ua.MessageSecurityModeSignAndEncrypt),
 			},
 			"ChaChaPoly with an RSA certificate": {
-				server.Certificate(p.serverCert), server.PrivateKey(p.serverKey),
+				server.Certificate(p.ServerCert), server.PrivateKey(p.ServerKey),
 				server.EnableSecurity(ua.SecurityPolicyURIECCNistP256ChaChaPoly, ua.MessageSecurityModeSign),
 			},
 		} {

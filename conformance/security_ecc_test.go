@@ -86,7 +86,7 @@ func awaitInt32Change(t *testing.T, ch <-chan *opcua.PublishNotificationData, wa
 	deadline := time.Now().Add(waitTimeout)
 	for time.Now().Before(deadline) {
 		for _, dc := range nextDataChanges(t, ch) {
-			if dc.dv != nil && dc.dv.Value != nil && dc.dv.Value.Value() == want {
+			if dc.DV != nil && dc.DV.Value != nil && dc.DV.Value.Value() == want {
 				return
 			}
 		}

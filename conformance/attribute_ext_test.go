@@ -293,9 +293,9 @@ func TestAttribute_IndexRangeWrite(t *testing.T) {
 	sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32Array).Start(ctx)
 	require.NoError(t, err)
 	defer func() { _ = sub.Cancel(ctx) }()
-	require.Equal(t, []int32{10, 20, 30, 4, 50}, nextDataChanges(t, ch)[0].dv.Value.Value())
+	require.Equal(t, []int32{10, 20, 30, 4, 50}, nextDataChanges(t, ch)[0].DV.Value.Value())
 	require.Equal(t, ua.StatusOK, write(f.Int32Array, "2", []int32{-3}))
-	require.Equal(t, []int32{10, 20, -3, 4, 50}, nextDataChanges(t, ch)[0].dv.Value.Value())
+	require.Equal(t, []int32{10, 20, -3, 4, 50}, nextDataChanges(t, ch)[0].DV.Value.Value())
 }
 
 func TestAttribute_WriteStatuses(t *testing.T) {

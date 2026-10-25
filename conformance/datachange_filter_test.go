@@ -75,11 +75,11 @@ func (r *filterRig) observe(change func()) map[uint32][]dataChange {
 	out := map[uint32][]dataChange{}
 	for done := false; !done; {
 		for _, s := range r.sub.nextData() {
-			if s.handle == sentinelHandle {
-				done = done || s.dv.Value.Value() == r.sentinel
+			if s.Handle == sentinelHandle {
+				done = done || s.DV.Value.Value() == r.sentinel
 				continue
 			}
-			out[s.handle] = append(out[s.handle], s)
+			out[s.Handle] = append(out[s.Handle], s)
 		}
 	}
 	return out
@@ -104,9 +104,9 @@ type obs struct {
 func obsOf(samples []dataChange) []obs {
 	out := make([]obs, len(samples))
 	for i, s := range samples {
-		out[i].st = s.dv.Status
-		if s.dv.Value != nil {
-			out[i].v = s.dv.Value.Value()
+		out[i].st = s.DV.Status
+		if s.DV.Value != nil {
+			out[i].v = s.DV.Value.Value()
 		}
 	}
 	return out
@@ -173,7 +173,7 @@ func TestDataChange_Triggers(t *testing.T) {
 	require.Equal(t, statusValue, obsOf(got[hStatusValue]), "StatusValue trigger")
 	require.Equal(t, statusValue, obsOf(got[hDefault]), "no filter behaves as StatusValue")
 	require.Equal(t, append([]obs{{1.0, ua.StatusOK}}, statusValue...), obsOf(got[hTimestamp]), "StatusValueTimestamp trigger")
-	require.True(t, got[hTimestamp][0].dv.SourceTimestamp.Equal(ts1), "the timestamp-only change carries the new timestamp")
+	require.True(t, got[hTimestamp][0].DV.SourceTimestamp.Equal(ts1), "the timestamp-only change carries the new timestamp")
 }
 
 // TestDataChange_AbsoluteDeadbandPerTrigger verifies an absolute deadband
@@ -288,9 +288,9 @@ func TestDataChange_ZeroDeadbandAndNaN(t *testing.T) {
 	})
 	require.Equal(t, good(int32(43), int32(42)), obsOf(got[1]))
 	require.Len(t, got[2], 3)
-	require.True(t, math.IsNaN(got[2][0].dv.Value.Value().(float64)))
-	require.Equal(t, 1.5, got[2][1].dv.Value.Value())
-	require.True(t, math.IsInf(got[2][2].dv.Value.Value().(float64), 1))
+	require.True(t, math.IsNaN(got[2][0].DV.Value.Value().(float64)))
+	require.Equal(t, 1.5, got[2][1].DV.Value.Value())
+	require.True(t, math.IsInf(got[2][2].DV.Value.Value().(float64), 1))
 	require.Equal(t, good("world"), obsOf(got[3]))
 }
 
@@ -583,10 +583,10 @@ func TestDataChange_SamplingIntervalThrottles(t *testing.T) {
 	var slow, fast []any
 	for len(slow) == 0 || slow[len(slow)-1] != any(last) {
 		for _, s := range sub.nextData() {
-			if s.handle == hSlow {
-				slow = append(slow, s.dv.Value.Value())
+			if s.Handle == hSlow {
+				slow = append(slow, s.DV.Value.Value())
 			} else {
-				fast = append(fast, s.dv.Value.Value())
+				fast = append(fast, s.DV.Value.Value())
 			}
 		}
 	}
@@ -762,7 +762,7 @@ func TestDataChange_EventItemsAndOtherAttributes(t *testing.T) {
 	})
 	require.Empty(t, got[hEvent], "data changes are not delivered to event items")
 	require.Len(t, got[hName], 1, "only the DisplayName change")
-	require.Equal(t, "renamed", got[hName][0].dv.Value.Value().(*ua.LocalizedText).Text)
+	require.Equal(t, "renamed", got[hName][0].DV.Value.Value().(*ua.LocalizedText).Text)
 }
 
 // TestDataChange_BuilderAndHelper drives the client-side helpers:

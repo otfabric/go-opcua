@@ -210,7 +210,7 @@ func dataOf(t *testing.T, p *ua.PublishResponse) []dataChange {
 			continue
 		}
 		for _, it := range dcn.MonitoredItems {
-			out = append(out, dataChange{handle: it.ClientHandle, dv: it.Value})
+			out = append(out, dataChange{Handle: it.ClientHandle, DV: it.Value})
 		}
 	}
 	return out
@@ -231,7 +231,7 @@ func eventsOf(p *ua.PublishResponse) []*ua.EventFieldList {
 func values(samples []dataChange) []any {
 	out := make([]any, len(samples))
 	for i, s := range samples {
-		out[i] = s.dv.Value.Value()
+		out[i] = s.DV.Value.Value()
 	}
 	return out
 }
@@ -239,7 +239,7 @@ func values(samples []dataChange) []any {
 func handles(samples []dataChange) []uint32 {
 	out := make([]uint32, len(samples))
 	for i, s := range samples {
-		out[i] = s.handle
+		out[i] = s.Handle
 	}
 	return out
 }
@@ -259,7 +259,7 @@ func (r *rawSub) primeItem(want any) *ua.PublishResponse {
 	require.False(r.t, isKeepAlive(p), "expected the initial value, got a keep-alive")
 	samples := dataOf(r.t, p)
 	require.Len(r.t, samples, 1)
-	require.Equal(r.t, want, samples[0].dv.Value.Value())
+	require.Equal(r.t, want, samples[0].DV.Value.Value())
 	return p
 }
 
@@ -909,6 +909,6 @@ func TestSubscription_CreateAndCancelNeverBlock(t *testing.T) {
 	defer func() { require.NoError(t, sub.Cancel(ctx)) }()
 	samples := nextDataChanges(t, ch)
 	require.Len(t, samples, 1)
-	_, isTime := samples[0].dv.Value.Value().(time.Time)
-	require.True(t, isTime, "got %T", samples[0].dv.Value.Value())
+	_, isTime := samples[0].DV.Value.Value().(time.Time)
+	require.True(t, isTime, "got %T", samples[0].DV.Value.Value())
 }

@@ -25,8 +25,8 @@ func TestChannelRenewal_ModeChangeIsRefused(t *testing.T) {
 	p := pki(t)
 	srv, err := server.New(
 		server.EndPoint("localhost", 0),
-		server.Certificate(p.serverCert),
-		server.PrivateKey(p.serverKey),
+		server.Certificate(p.ServerCert),
+		server.PrivateKey(p.ServerKey),
 		server.EnableSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSign),
 		server.EnableSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
@@ -45,9 +45,9 @@ func TestChannelRenewal_ModeChangeIsRefused(t *testing.T) {
 		cfg := &uasc.Config{
 			SecurityPolicyURI: ua.SecurityPolicyURIBasic256Sha256,
 			SecurityMode:      mode,
-			Certificate:       p.clientCert,
-			LocalKey:          p.clientKey,
-			RemoteCertificate: p.serverCert,
+			Certificate:       p.ClientCert,
+			LocalKey:          p.ClientKey,
+			RemoteCertificate: p.ServerCert,
 			Lifetime:          uint32(time.Hour / time.Millisecond),
 			RequestTimeout:    10 * time.Second,
 			Logger:            slog.New(slog.DiscardHandler),

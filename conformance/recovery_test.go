@@ -56,13 +56,13 @@ type stateRecorder struct {
 	states []opcua.ConnState
 }
 
-func (r *stateRecorder) record(s opcua.ConnState) {
+func (r *stateRecorder) Record(s opcua.ConnState) {
 	r.mu.Lock()
 	r.states = append(r.states, s)
 	r.mu.Unlock()
 }
 
-func (r *stateRecorder) seen(s opcua.ConnState) bool {
+func (r *stateRecorder) Seen(s opcua.ConnState) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, x := range r.states {
@@ -73,8 +73,8 @@ func (r *stateRecorder) seen(s opcua.ConnState) bool {
 	return false
 }
 
-// seenAfter reports whether state b was recorded after the first a.
-func (r *stateRecorder) seenAfter(a, b opcua.ConnState) bool {
+// SeenAfter reports whether state b was recorded after the first a.
+func (r *stateRecorder) SeenAfter(a, b opcua.ConnState) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	foundA := false
@@ -104,7 +104,7 @@ func TestRecovery_ServerRestart(t *testing.T) {
 	c := newClient(t, url,
 		opcua.AutoReconnect(true),
 		opcua.ReconnectInterval(50*time.Millisecond),
-		opcua.WithConnStateHandler(states.record),
+		opcua.WithConnStateHandler(states.Record),
 		opcua.WithSubscriptionRecoveryHandler(func(ev opcua.SubscriptionRecoveryEvent) {
 			evMu.Lock()
 			events = append(events, ev)
@@ -139,15 +139,15 @@ func TestRecovery_ServerRestart(t *testing.T) {
 
 	// Take the server away.
 	stop()
-	eventually(t, func() bool { return states.seen(opcua.Disconnected) }, "client notices the lost connection")
-	eventually(t, func() bool { return states.seen(opcua.Reconnecting) }, "client starts reconnecting")
+	eventually(t, func() bool { return states.Seen(opcua.Disconnected) }, "client notices the lost connection")
+	eventually(t, func() bool { return states.Seen(opcua.Reconnecting) }, "client starts reconnecting")
 	_, err = c.ReadValue(ctx, f.Int32)
 	require.Error(t, err, "requests fail while the server is gone")
 
 	// A brand-new server instance on the same address: no session, no
 	// subscriptions, fixture values back at their defaults.
 	f2, _ := startServerOn(t, port)
-	eventually(t, func() bool { return states.seenAfter(opcua.Reconnecting, opcua.Connected) }, "client reconnects")
+	eventually(t, func() bool { return states.SeenAfter(opcua.Reconnecting, opcua.Connected) }, "client reconnects")
 	eventually(t, func() bool { return c.State() == opcua.Connected }, "state Connected")
 
 	// A new session was created.
@@ -201,7 +201,7 @@ func TestRecovery_AutoReconnectDisabled(t *testing.T) {
 	ctx := context.Background()
 
 	states := &stateRecorder{}
-	c := newClient(t, url, opcua.AutoReconnect(false), opcua.WithConnStateHandler(states.record))
+	c := newClient(t, url, opcua.AutoReconnect(false), opcua.WithConnStateHandler(states.Record))
 	ch := make(chan *opcua.PublishNotificationData, 64)
 	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: fastInterval}, ch)
 	require.NoError(t, err)
@@ -210,13 +210,13 @@ func TestRecovery_AutoReconnectDisabled(t *testing.T) {
 	awaitValue(t, ch, 1, int32(42))
 
 	stop()
-	eventually(t, func() bool { return states.seen(opcua.Disconnected) }, "client notices the lost connection")
+	eventually(t, func() bool { return states.Seen(opcua.Disconnected) }, "client notices the lost connection")
 	eventually(t, func() bool { return c.State() == opcua.Closed }, "client ends up Closed")
 
 	// Even with the server back, the client does not reconnect on its own.
 	startServerOn(t, port)
 	time.Sleep(300 * time.Millisecond)
-	require.False(t, states.seen(opcua.Reconnecting))
+	require.False(t, states.Seen(opcua.Reconnecting))
 	require.Equal(t, opcua.Closed, c.State())
 	_, err = c.ReadValue(ctx, f.Int32)
 	require.Error(t, err)
