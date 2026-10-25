@@ -274,7 +274,7 @@ func (s *SessionService) validateX509UserToken(
 		return ua.StatusBadIdentityTokenInvalid
 	}
 
-	userCert, err := uapolicy.ParseCertificate(tok.CertificateData)
+	userCert, err := uapolicy.LeafCertificate(tok.CertificateData)
 	if err != nil {
 		s.srv.cfg.logger.Warn("ActivateSession X.509 user token: cannot parse certificate", "error", err)
 		return ua.StatusBadIdentityTokenInvalid

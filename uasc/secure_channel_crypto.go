@@ -31,7 +31,7 @@ func (s *SecureChannel) NewSessionSignature(cert, nonce []byte) ([]byte, string,
 		return nil, "", err
 	}
 
-	sig, err := enc.Signature(append(append([]byte(nil), cert...), nonce...))
+	sig, err := enc.Signature(legacySignedData(cert, nonce))
 	if err != nil {
 		return nil, "", err
 	}
@@ -46,21 +46,11 @@ func (s *SecureChannel) VerifySessionSignature(cert, nonce, signature []byte) er
 		return nil
 	}
 
-	remoteKey, err := uapolicy.CertificatePublicKey(cert)
+	enc, err := verifier(s.cfg.SecurityPolicyURI, cert)
 	if err != nil {
 		return err
 	}
-
-	enc, err := uapolicy.AsymmetricKeys(s.cfg.SecurityPolicyURI, nil, remoteKey)
-	if err != nil {
-		return err
-	}
-	err = enc.VerifySignature(append(append([]byte(nil), s.cfg.Certificate...), nonce...), signature)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return verifyLegacySignature(enc, s.cfg.Certificate, nonce, signature)
 }
 
 // EncryptUserPassword issues a new signature for the client to send in ActivateSessionRequest.
@@ -124,13 +114,60 @@ func (s *SecureChannel) NewUserTokenSignature(policyURI string, cert, nonce []by
 		return nil, "", err
 	}
 
-	sig, err := enc.Signature(append(append([]byte(nil), cert...), nonce...))
+	sig, err := enc.Signature(legacySignedData(cert, nonce))
 	if err != nil {
 		return nil, "", err
 	}
 	sigAlg := enc.SignatureURI()
 
 	return sig, sigAlg, nil
+}
+
+// Session signatures without SecureChannelEnhancements (Part 4 §6.1.8,
+// Table 102) are calculated over a certificate followed by a nonce:
+//
+//	ServerSignature     ClientCertificate | ClientNonce
+//	ClientSignature     ServerCertificate | ServerNonce
+//	UserTokenSignature  ServerCertificate | ServerNonce
+//
+// The certificate parameter of CreateSession may be a chain: the application
+// instance certificate followed by its issuers (Part 6 §6.2.3). Part 4
+// §6.1.8 (1.05.07) allows the legacy method to use the entire chain and
+// says that, for backward compatibility, the calculation is first done with
+// the leaf certificate. Stacks differ: open62541 and asyncua sign and verify
+// the leaf only, UA-.NETStandard verifies with the leaf and then the chain.
+// Signatures are therefore made over the leaf, which every stack accepts,
+// and verified with the leaf first and then the certificate as sent.
+
+// leafDER returns the DER encoding of the leaf certificate of cert, a single
+// certificate or a chain. A blob that does not parse is returned unchanged.
+func leafDER(cert []byte) []byte {
+	if leaf, err := uapolicy.LeafCertificate(cert); err == nil {
+		return leaf.Raw
+	}
+	return cert
+}
+
+// legacySignedData returns the data a session signature without
+// SecureChannelEnhancements is made over: the leaf of cert followed by nonce.
+func legacySignedData(cert, nonce []byte) []byte {
+	return joinBytes(leafDER(cert), nonce)
+}
+
+// verifyLegacySignature checks a session signature without
+// SecureChannelEnhancements over cert followed by nonce: first with the leaf
+// of cert, then, if cert is a chain, with the chain as sent. The error is the
+// one of the leaf.
+func verifyLegacySignature(enc *uapolicy.EncryptionAlgorithm, cert, nonce, signature []byte) error {
+	leaf := leafDER(cert)
+	err := enc.VerifySignature(joinBytes(leaf, nonce), signature)
+	if err == nil || len(leaf) == len(cert) {
+		return err
+	}
+	if enc.VerifySignature(joinBytes(cert, nonce), signature) == nil {
+		return nil
+	}
+	return err
 }
 
 // LocalCertificate returns the application instance certificate this side of

@@ -9,13 +9,13 @@ import (
 	"errors"
 )
 
-// leafCertificate parses a DER blob that may contain a certificate chain (a leaf
+// LeafCertificate parses a DER blob that may contain a certificate chain (a leaf
 // certificate followed by one or more intermediate certificates, as presented by
 // some servers such as Siemens WinCC Unified Runtime) and returns the leaf
 // certificate. A blob containing a single certificate is returned as that
 // certificate. x509.ParseCertificate rejects trailing data, so a chain must be
 // parsed with ParseCertificates.
-func leafCertificate(c []byte) (*x509.Certificate, error) {
+func LeafCertificate(c []byte) (*x509.Certificate, error) {
 	certs, err := ParseCertificates(c)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func leafCertificate(c []byte) (*x509.Certificate, error) {
 // the previous behavior.
 func Thumbprint(c []byte) []byte {
 	der := c
-	if leaf, err := leafCertificate(c); err == nil {
+	if leaf, err := LeafCertificate(c); err == nil {
 		der = leaf.Raw
 	}
 	thumbprint := sha1.Sum(der)
@@ -46,7 +46,7 @@ func Thumbprint(c []byte) []byte {
 // PublicKey returns the RSA PublicKey from the leaf of a DER-encoded certificate
 // (or certificate chain).
 func PublicKey(c []byte) (*rsa.PublicKey, error) {
-	leaf, err := leafCertificate(c)
+	leaf, err := LeafCertificate(c)
 	if err != nil {
 		return nil, err
 	}

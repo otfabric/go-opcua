@@ -25,7 +25,7 @@ import (
 // An elliptic curve key is validated while the certificate is parsed: a point
 // that is not on the named curve is rejected.
 func CertificatePublicKey(c []byte) (crypto.PublicKey, error) {
-	leaf, err := leafCertificate(c)
+	leaf, err := LeafCertificate(c)
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +83,7 @@ func CertificateHash(uri string, c []byte) ([]byte, error) {
 	if len(c) == 0 {
 		return nil, nil
 	}
-	leaf, err := leafCertificate(c)
+	leaf, err := LeafCertificate(c)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errors.ErrInvalidCertificate, err)
 	}
