@@ -1,7 +1,3 @@
-# TEMPORARY: the shared otfabric/.github go-ci.yml@v2 is inlined without its
-# concurrency group (which cancels a run when the next one starts), so that
-# every push and many dispatched runs on main run side by side while flaky
-# tests are shaken out. Revert to the shared workflow once the runs pass.
 name: CI
 run-name: "CI (${{ github.event_name }}) on ${{ github.ref_name }} by @${{ github.actor }}"
 
@@ -10,77 +6,23 @@ on:
     branches: ["**"]
   pull_request:
     branches: ["**"]
-  workflow_dispatch:
 
 permissions:
   contents: read
   id-token: write
 
-env:
-  GOPRIVATE: github.com/otfabric/*
-  COVERPKG: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
-  EXCLUDE_REGEX: "(/example(s)?($|/)|/cmd($|/)|/chaos($|/))"
-
 jobs:
-  lint-and-coverage:
-    name: Lint & Coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version-file: go.mod
-      - name: Configure private module access
-        env:
-          TOKEN: ${{ secrets.OTFABRIC_READ_TOKEN }}
-        run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-      - name: go vet
-        run: go vet ./...
-      - name: golangci-lint
-        run: |
-          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.1.6"
-          golangci-lint run --timeout=5m
-      - name: Run tests with coverage
-        run: |
-          set -euo pipefail
-          mapfile -t pkgs < <(go list ./... | grep -Ev "${EXCLUDE_REGEX}")
-          go test -count=1 -timeout=120s -coverprofile=coverage.out -covermode=set -coverpkg="${COVERPKG}" "${pkgs[@]}"
-      - name: Upload to Codecov
-        uses: codecov/codecov-action@v7
-        with:
-          use_oidc: true
-          files: coverage.out
-          flags: unittests
-          name: go-opcua
-          fail_ci_if_error: false
-
-  test-matrix:
-    name: ${{ matrix.race && 'Race' || 'Test' }} (Go ${{ matrix.go-version }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    strategy:
-      fail-fast: false
-      matrix:
-        go-version: ["1.26", "1.27"]
-        race: [false, true]
-    steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
-        with:
-          go-version: ${{ matrix.go-version }}
-      - name: Configure private module access
-        env:
-          TOKEN: ${{ secrets.OTFABRIC_READ_TOKEN }}
-        run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-      - name: Test
-        env:
-          RACE: ${{ matrix.race && '-race' || '' }}
-        run: |
-          set -euo pipefail
-          mapfile -t pkgs < <(go list ./... | grep -Ev "${EXCLUDE_REGEX}")
-          # shellcheck disable=SC2086 # RACE is empty or one flag
-          go test -count=1 -timeout=120s $RACE "${pkgs[@]}"
+  ci:
+    uses: otfabric/.github/.github/workflows/go-ci.yml@v2
+    with:
+      codecov-name: go-opcua
+      go-versions: '["1.26","1.27"]'
+      # The default exclusions plus chaos/..., which runs in the chaos job.
+      test-exclude-regex: "(/example(s)?($|/)|/cmd($|/)|/chaos($|/))"
+      # Match Makefile COVER_PKGS so Codecov uses the same merged metric as
+      # `make coverage` (conformance hits count toward core packages).
+      coverpkg: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
+    secrets: inherit
 
   # The chaos-monkey and parallelism suites (chaos/..., see chaos/doc.go)
   # run in their own job: they keep every CPU of a runner busy for a minute
@@ -106,6 +48,8 @@ jobs:
       - name: Chaos suites (race)
         run: go test -count=1 -race -timeout=10m ./chaos/...
 
+  # Every library package must reach 90% statement coverage on its own,
+  # generated code excluded (make coverage-gate, internal/cmd/coverage-gate).
   coverage-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -134,6 +78,11 @@ jobs:
             exit 1
           fi
 
+  # The Ethernet transport (pubsub/transport/eth) with real AF_PACKET raw
+  # sockets: the tests skip without CAP_NET_RAW, so build the test binary as
+  # the runner user and run it as root, on the loopback interface and on a
+  # veth pair (publisher on veth0, subscriber on veth1). GO_OPCUA_ETH_REQUIRE
+  # makes a test that would skip fail.
   pubsub-eth:
     runs-on: ubuntu-latest
     timeout-minutes: 15
