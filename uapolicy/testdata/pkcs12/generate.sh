@@ -81,3 +81,18 @@ key ca -algorithm EC -pkeyopt ec_paramgen_curve:P-256
 "$OPENSSL" x509 -req -in "$tmp/leaf.csr" -CA "$tmp/ca.crt" -CAkey "$tmp/ca.key" -days 36500 -out "$tmp/leaf.crt"
 "$OPENSSL" pkcs12 -export -inkey "$tmp/rsa.key" -in "$tmp/leaf.crt" -certfile "$tmp/ca.crt" \
 	-passout "pass:$PASS" -out rsa-chain.p12
+
+# Java keytool (made with Temurin 17): the JDK default (PBES2 AES-256,
+# HMAC-SHA256 MAC) and the legacy format of JDK 8 (keystore.pkcs12.legacy:
+# 3DES key, 40-bit RC2 certificates, SHA-1 MAC). keytool wants a password of
+# at least 6 characters: "opcuaopcua". Skipped without keytool.
+if command -v keytool >/dev/null 2>&1; then
+	KTPASS=opcuaopcua
+	rm -f keytool-rsa.p12 keytool-p256-legacy.p12
+	keytool -genkeypair -alias opcua -keyalg RSA -keysize 2048 -dname "CN=pfx-keytool-rsa,O=uapolicy" \
+		-ext san=uri:urn:pfx:keytool-rsa -validity 36500 -storetype PKCS12 \
+		-keystore keytool-rsa.p12 -storepass $KTPASS -keypass $KTPASS
+	keytool -J-Dkeystore.pkcs12.legacy -genkeypair -alias opcua -keyalg EC -groupname secp256r1 \
+		-dname "CN=pfx-keytool-p256,O=uapolicy" -ext san=uri:urn:pfx:keytool-p256 -validity 36500 \
+		-storetype PKCS12 -keystore keytool-p256-legacy.p12 -storepass $KTPASS -keypass $KTPASS
+fi
