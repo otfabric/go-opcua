@@ -622,20 +622,21 @@ func (p *PubSub) receiveActionMetaData(c *connection, gen uint64, enc encoding, 
 // deliverActionMetaData hands an ActionMetaData to the waiters of its
 // writer whose security it satisfies.
 func (p *PubSub) deliverActionMetaData(c *connection, gen uint64, waiters []*actionWaiter, m *ActionMetaData, got ua.MessageSecurityMode, keyGroup string) {
-	n := uint64(0)
+	// The sends do not block. They are made under the lock so that a
+	// waiter that reads the counters once it has the ActionMetaData sees
+	// this one counted.
+	p.lock()
+	defer p.unlock()
 	for _, w := range waiters {
 		if w.dswid != m.DataSetWriterID || !samePublisher(m.Responder, w.pub) || !securedFor(w.mode, w.groupID, got, keyGroup) {
 			continue
 		}
 		select {
 		case w.ch <- m:
-			n++
+			if c.gen == gen {
+				c.ctr.DiscoveryResponsesReceived++
+			}
 		default:
 		}
 	}
-	p.lock()
-	if c.gen == gen {
-		c.ctr.DiscoveryResponsesReceived += n
-	}
-	p.unlock()
 }

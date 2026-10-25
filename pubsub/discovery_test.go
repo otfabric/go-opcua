@@ -274,7 +274,9 @@ func TestDiscoveryAnnounceRate(t *testing.T) {
 			}, nil, []Option{WithDiscovery(DiscoveryOptions{Disabled: true})})
 			waitValue(t, rec, "text")
 			require.Zero(t, counters(t, sub).DiscoveryRequestsSent)
-			require.NotZero(t, counters(t, pub).DiscoveryResponsesSent)
+			// Counted once the send returned, which can be after the
+			// subscriber took the announcement.
+			require.Eventually(t, func() bool { return counters(t, pub).DiscoveryResponsesSent > 0 }, 5*time.Second, time.Millisecond)
 		})
 	}
 }
