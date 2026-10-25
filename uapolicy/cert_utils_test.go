@@ -51,6 +51,44 @@ func TestThumbprint_chainUsesLeafOnly(t *testing.T) {
 	require.NotEqual(t, chainThumb[:], Thumbprint(chain))
 }
 
+func TestLeafCertificate(t *testing.T) {
+	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	caTemplate := &x509.Certificate{
+		SerialNumber:          big.NewInt(1),
+		Subject:               pkix.Name{CommonName: "Test CA"},
+		NotBefore:             time.Now().Add(-time.Hour),
+		NotAfter:              time.Now().Add(24 * time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign,
+		BasicConstraintsValid: true,
+		IsCA:                  true,
+	}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	require.NoError(t, err)
+	leafTemplate := &x509.Certificate{
+		SerialNumber: big.NewInt(2),
+		Subject:      pkix.Name{CommonName: "Leaf"},
+		NotBefore:    time.Now().Add(-time.Hour),
+		NotAfter:     time.Now().Add(24 * time.Hour),
+	}
+	leafDER, err := x509.CreateCertificate(rand.Reader, leafTemplate, caTemplate, &caKey.PublicKey, caKey)
+	require.NoError(t, err)
+
+	leaf, err := LeafCertificate(append(append([]byte(nil), leafDER...), caDER...))
+	require.NoError(t, err)
+	require.Equal(t, leafDER, leaf.Raw)
+	require.Equal(t, "Leaf", leaf.Subject.CommonName)
+
+	leaf, err = LeafCertificate(caDER)
+	require.NoError(t, err)
+	require.Equal(t, caDER, leaf.Raw)
+
+	_, err = LeafCertificate(nil)
+	require.Error(t, err)
+	_, err = LeafCertificate([]byte("junk"))
+	require.Error(t, err)
+}
+
 func TestPublicKey_chainReturnsLeafKey(t *testing.T) {
 	leafKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)

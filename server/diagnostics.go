@@ -814,7 +814,7 @@ func userOf(tok ua.IdentityToken) (user, mechanism string) {
 	case *ua.UserNameIdentityToken:
 		return t.UserName, "UserName"
 	case *ua.X509IdentityToken:
-		if cert, err := uapolicy.ParseCertificate(t.CertificateData); err == nil {
+		if cert, err := uapolicy.LeafCertificate(t.CertificateData); err == nil {
 			return cert.Subject.String(), "Certificate"
 		}
 		return "", "Certificate"
