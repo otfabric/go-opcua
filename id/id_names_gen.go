@@ -6,6 +6,8 @@ package id
 
 import "strconv"
 
+// Name returns the symbolic name of a numeric identifier, or the
+// identifier in decimal if it has none.
 func Name(id uint32) string {
 	if s, ok := nameDataType[id]; ok {
 		return s
