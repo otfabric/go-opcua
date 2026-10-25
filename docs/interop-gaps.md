@@ -90,7 +90,7 @@ on the side of the application that talks to the peer.
 
 The Global Discovery Server and GDS client (Opc.Ua.Gds.*.Common 1.5.378.182, opcua-interop adapter dotnet-gds; the 2.0.1 GDS packages are unreleased):
 
-- The CRL of its ECC CA names sha256WithRSAEncryption inside the TBSCertList and ecdsa-with-SHA256 outside; crypto/x509 (and `uapolicy.ParseRevocationList`) refuse it (RFC 5280 §5.1.1.2). The RSA CA's CRL is well formed.
+- The CRL of its ECC CA names sha256WithRSAEncryption inside the TBSCertList and ecdsa-with-SHA256 outside; crypto/x509 (and `uapolicy.ParseRevocationList`) refuse it (RFC 5280 §5.1.1.2). The RSA CA's CRL is well formed. A trust list with that CRL, pushed to a go-opcua server, is refused with `Bad_CertificateInvalid`: leave the ECC CA's CRL out of the trust list (revocation by that CA is then not checked).
 - CheckRevocationStatus checks online and does not read its own CRL: a revoked certificate is `Bad_CertificateRevocationUnknown`.
 - One certificate request per application: a new request reuses the RequestId. UnregisterApplication revokes the application's certificates. FindApplications needs an authenticated user.
 - The client reads a TrustList with the MethodIds of FileType (Part 4 §5.11.2.2), which the go-opcua server resolves since v1.22.0.
