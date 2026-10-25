@@ -38,3 +38,9 @@ wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/Schem
 
 echo "Downloading Opc.Ua.PredefinedNodes.xml"
 wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/DotNet/Opc.Ua.PredefinedNodes.xml -O "${script_dir}/Opc.Ua.PredefinedNodes.xml"
+
+echo "Downloading Opc.Ua.Gds.NodeIds.csv"
+wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/GDS/Opc.Ua.Gds.NodeIds.csv -O "${script_dir}/Opc.Ua.Gds.NodeIds.csv"
+
+echo "Downloading Opc.Ua.Gds.NodeSet2.xml"
+wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/GDS/Opc.Ua.Gds.NodeSet2.xml -O "${repo_dir}/internal/schema/Opc.Ua.Gds.NodeSet2.xml"

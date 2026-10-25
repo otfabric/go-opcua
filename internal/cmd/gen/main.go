@@ -29,6 +29,12 @@ import (
 // relative to the module root. This replaces wildcard shell globs.
 var generatedFiles = []string{
 	"connstate_strings_gen.go",
+	"gds/gdsid/id_DataType_gen.go",
+	"gds/gdsid/id_Method_gen.go",
+	"gds/gdsid/id_names_gen.go",
+	"gds/gdsid/id_Object_gen.go",
+	"gds/gdsid/id_ObjectType_gen.go",
+	"gds/gdsid/id_Variable_gen.go",
 	"id/id_DataType_gen.go",
 	"id/id_Method_gen.go",
 	"id/id_names_gen.go",
@@ -52,6 +58,7 @@ var generatedFiles = []string{
 // generators lists the generators to run, in dependency order.
 var generators = [][]string{
 	{"go", "run", "./cmd/id"},
+	{"go", "run", "./cmd/id", "-in", "schema/Opc.Ua.Gds.NodeIds.csv", "-out", "gds/gdsid/id_*_gen.go", "-pkg", "gdsid"},
 	{"go", "run", "./cmd/status"},
 	{"go", "run", "./cmd/attrid"},
 	{"go", "run", "./cmd/capability"},
