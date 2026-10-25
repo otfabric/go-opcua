@@ -150,10 +150,13 @@ Go↔Go tests never earn ✅.
 | HistoryRead modified | Deferred | Deferred | Deferred | Deferred | — |
 | HistoryRead at-time | Deferred | Deferred | Deferred | Deferred | — |
 | HistoryRead processed | Deferred | Deferred | Deferred | Deferred | — |
-| HistoryRead events | Deferred | Deferred | Deferred | Deferred | — |
+| HistoryRead events: ReadEventDetails forward and reverse, the s=History.Events fixture (Part 11 §6.5.2) | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_HistoryReadEvents / coverage/history.read.events/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_HistoryReadEvents / coverage/history.read.events/milo-client-to-go-server` |
+| HistoryRead events: continuation points of ReadEventDetails, their release and reuse (Part 4 §5.10.3, Part 11 §6.5.2) | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_HistoryReadEventsContinuation / coverage/history.read.events.continuation/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_HistoryReadEventsContinuation / coverage/history.read.events.continuation/milo-client-to-go-server` |
+| HistoryRead events: the WhereClause of ReadEventDetails, OfType and Severity (Part 11 §6.5.2) | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_HistoryReadEventsFilter / coverage/history.read.events.filter/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_HistoryReadEventsFilter / coverage/history.read.events.filter/milo-client-to-go-server` |
 | HistoryUpdate data | Deferred | Deferred | Deferred | Deferred | — |
-| HistoryUpdate events | Deferred | Deferred | Deferred | Deferred | — |
+| HistoryUpdate events: UpdateEventDetails insert / replace / update (Part 11 §6.9.4) | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_HistoryUpdateEvents / coverage/history.update.events/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_HistoryUpdateEvents / coverage/history.update.events/milo-client-to-go-server` |
 | History delete | Deferred | Deferred | Deferred | Deferred | — |
+| HistoryUpdate DeleteEventDetails: delete events by EventId (Part 11 §6.9.7) | N/A | N/A | ✅ | ✅ | O→S: `TestGoServer_Open62541Client_HistoryDeleteEvents / coverage/history.delete.events/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_HistoryDeleteEvents / coverage/history.delete.events/milo-client-to-go-server` |
 
 ## information-model
 

@@ -1647,6 +1647,56 @@
       "status": "deferred"
     },
     {
+      "capability": "history.delete.events",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+    },
+    {
+      "capability": "history.delete.events",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+    },
+    {
+      "capability": "history.delete.events",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_HistoryDeleteEvents",
+      "case": "coverage/history.delete.events/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "history.delete.events",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_HistoryDeleteEvents",
+      "case": "coverage/history.delete.events/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
       "capability": "history.read.at-time",
       "direction": "go-client-to-open62541-server",
       "status": "deferred"
@@ -1718,22 +1768,152 @@
     {
       "capability": "history.read.events",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_HistoryReadEvents",
+      "case": "coverage/history.read.events/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "history.read.events",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_HistoryReadEvents",
+      "case": "coverage/history.read.events/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "history.read.events.continuation",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+    },
+    {
+      "capability": "history.read.events.continuation",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+    },
+    {
+      "capability": "history.read.events.continuation",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_HistoryReadEventsContinuation",
+      "case": "coverage/history.read.events.continuation/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "history.read.events.continuation",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_HistoryReadEventsContinuation",
+      "case": "coverage/history.read.events.continuation/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
+    },
+    {
+      "capability": "history.read.events.filter",
+      "direction": "go-client-to-open62541-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+    },
+    {
+      "capability": "history.read.events.filter",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+    },
+    {
+      "capability": "history.read.events.filter",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_HistoryReadEventsFilter",
+      "case": "coverage/history.read.events.filter/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "history.read.events.filter",
+      "direction": "milo-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_HistoryReadEventsFilter",
+      "case": "coverage/history.read.events.filter/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "history.read.modified",
@@ -1846,22 +2026,52 @@
     {
       "capability": "history.update.events",
       "direction": "go-client-to-open62541-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.update.events",
       "direction": "go-client-to-milo-server",
-      "status": "deferred"
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.update.events",
       "direction": "open62541-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_HistoryUpdateEvents",
+      "case": "coverage/history.update.events/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
     },
     {
       "capability": "history.update.events",
       "direction": "milo-client-to-go-server",
-      "status": "deferred"
+      "status": "verified",
+      "test": "TestGoServer_MiloClient_HistoryUpdateEvents",
+      "case": "coverage/history.update.events/milo-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.17.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      }
     },
     {
       "capability": "method.call",
