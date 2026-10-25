@@ -1,5 +1,61 @@
 # go-opcua Releases
 
+## v1.17.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.16.0
+
+### Summary
+
+The rest of Alarms & Conditions (Part 9 v1.05): the OutOfService, Silence and Latched states with their methods, Suppress / Unsuppress, Reset, every `*2` method variant, dialogs, condition branches, alarm groups and condition audit events.
+
+### Added
+
+- **server: alarm states and methods.**
+  - `ConditionConfig.Serviceable` adds OutOfServiceState with RemoveFromService / PlaceInService.
+  - `ConditionConfig.Silenceable` adds SilenceState with Silence; it is cleared when the alarm becomes active again.
+  - `ConditionConfig.Latching` adds LatchedState with Reset. Resetting an active alarm returns Bad_InvalidState.
+  - A `Suppressible` alarm gets Suppress / Unsuppress. SuppressedOrShelved is true when the alarm is suppressed, shelved or out of service.
+  - Every `*2` variant that takes a Comment is served: Suppress2, Unsuppress2, RemoveFromService2, PlaceInService2, Reset2, TimedShelve2, OneShotShelve2 and Unshelve2.
+  - A call for the state the alarm is already in returns Good and sends no event. A method the condition is not configured for returns Bad_MethodInvalid.
+  - New hooks: `OnSuppress`, `OnService`, `OnSilence` and `OnReset`.
+- **server: DialogConditionType.** `ConditionConfig.Dialog` (DialogConfig), Respond and Respond2, `ShowDialog`, `CloseDialog` and `OnRespond`. Calls are refused with Bad_DialogNotActive or Bad_DialogResponseInvalid.
+- **server: condition branches.**
+  - With `ConditionConfig.Branching`, an alarm that becomes active again while its previous occurrence is unacknowledged or unconfirmed gets a branch. Branches can also be managed directly: `Condition.CreateBranch`, `Branches`, `Branch`, `DeleteBranch`, and `BranchIDFromContext`.
+  - Acknowledge and Confirm accept a branch's EventId. A branch that needs no more action sends a last event with Retain false and is deleted.
+  - ConditionRefresh delivers retained branches after their condition.
+  - A condition has at most 256 branches (`ErrTooManyBranches`).
+- **server: alarm groups.**
+  - AlarmGroupType and AlarmSuppressionGroupType (`Server.AddAlarmGroup`, `AlarmGroup.SetSuppressing` / `Evaluate`).
+  - `ConditionConfig.SuppressionGroups` and GetGroupMemberships on every alarm.
+- **server: condition audit events.** AuditConditionEventType and its Enable, Comment, Respond, Acknowledge, Confirm, Shelving, Suppression, Silence, Reset and OutOfService subtypes, also for refused calls.
+  - They are off by default and turned on with `WithAuditing` / `SetAuditing`. Server/Auditing follows the setting.
+  - The new `EventAccessController` decides who receives them. `RBACAccessController` implements it with the ReceiveEvents permission.
+- **client:**
+  - New methods: `Suppress(2)`, `Unsuppress(2)`, `RemoveFromService(2)`, `PlaceInService(2)`, `Silence`, `Reset(2)`, `TimedShelve2`, `OneShotShelve2`, `Unshelve2`, `Respond(2)` and `GetGroupMemberships`.
+  - New audit helpers: `NewAuditConditionEventFilter`, `ParseAuditConditionEvent`, and `WithAuditEntryID` (sets ClientAuditEntryId).
+  - `NewConditionEventFilter` also selects SuppressedState, OutOfServiceState, SilenceState, LatchedState, DialogState, Prompt and LastResponse. These fields are nil when a server does not report them; event lists in the old layout still parse.
+  - New: `ConditionEvent.IsBranch`.
+
+### Fixed
+
+- **server: a session's last activity could move backwards.** A request that read the clock before another one but recorded the time after it took the activity back, so a session in use could time out. The activity time now only moves forward.
+
+### Not implemented
+
+- Part 9 v1.05: AudibleSound, OnDelay / OffDelay, ReAlarmTime, FirstInGroup, AlarmMetrics.
+
+### Tests
+
+- Unit, e2e, conformance and chaos tests (concurrent branch creation, acknowledgement and refresh).
+- Interop: the open62541, Eclipse Milo, UA-.NETStandard, node-opcua, asyncua and async-opcua clients against the Go server. New ledger capabilities: `alarms.alarm-state-methods`, `alarms.dialog`, `alarms.branches`, `alarms.alarm-groups` and `alarms.audit-events`.
+
+### Interop
+
+- opcua-interop v0.13.0 (unchanged).
+
+---
+
 ## v1.16.0
 
 **Date:** 2026-10-25
