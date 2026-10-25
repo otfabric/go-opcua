@@ -34,10 +34,19 @@ func wsJSONUpgrade(host string) string {
 	return strings.Replace(wsUpgrade(host), "opcua+uacp", "opcua+uajson", 1)
 }
 
+// The outcome a hostile WebSocket message must have.
+const (
+	wsCloses  = iota // the server ends the connection
+	wsAnswers        // a ServiceFault or a Close frame
+	wsAny            // either, or a wait for the rest of a frame
+)
+
 // TestChaosWSSJSONMalformedMessages sends hostile WebSocket messages over
 // opcua+uajson. A broken frame must end the connection, a message that is
 // not a request must be answered (with a ServiceFault) or end it, and the
-// server must keep serving others.
+// server must keep serving others. Random bytes may also start a valid frame
+// whose rest never comes; the server then waits for it until the idle
+// timeout, as for any idle connection.
 func TestChaosWSSJSONMalformedMessages(t *testing.T) {
 	seed := seedFor(t)
 	verifyLeaks := leakCheck(t)
@@ -49,22 +58,22 @@ func TestChaosWSSJSONMalformedMessages(t *testing.T) {
 
 	attacks := []struct {
 		name    string
-		closes  bool // the server ends the connection
+		outcome int
 		payload func() []byte
 	}{
-		{"unmasked frame", true, func() []byte { return wsFrame(true, 1, []byte(`{"UaTypeId":"i=426"}`), nil, -1) }},
-		{"invalid UTF-8", true, func() []byte { return wsFrame(true, 1, []byte{'{', 0xff, '}'}, mask, -1) }},
-		{"huge length", true, func() []byte { return wsFrame(true, 1, randBytes(rng, 16), mask, 1<<40) }},
-		{"over the size limit", true, func() []byte { return wsFrame(true, 1, randBytes(rng, 16), mask, 3<<20) }},
-		{"reserved opcode", true, func() []byte { return wsFrame(true, 3, nil, mask, -1) }},
-		{"random frame bytes", true, func() []byte { return randBytes(rng, 1+rng.Intn(256)) }},
-		{"random binary message", false, func() []byte { return wsFrame(true, 2, randBytes(rng, 1+rng.Intn(256)), mask, -1) }},
-		{"not JSON", false, func() []byte { return text("hello") }},
-		{"deep nesting", false, func() []byte { return text(strings.Repeat("[", 100000)) }},
-		{"unknown type", false, func() []byte { return text(`{"UaTypeId":"i=999999"}`) }},
-		{"response instead of request", false, func() []byte { return text(`{"UaTypeId":"i=429","ResponseHeader":{}}`) }},
-		{"wrong field types", false, func() []byte { return text(`{"UaTypeId":"i=631","NodesToRead":{"a":1}}`) }},
-		{"read without a session", false, func() []byte {
+		{"unmasked frame", wsCloses, func() []byte { return wsFrame(true, 1, []byte(`{"UaTypeId":"i=426"}`), nil, -1) }},
+		{"invalid UTF-8", wsCloses, func() []byte { return wsFrame(true, 1, []byte{'{', 0xff, '}'}, mask, -1) }},
+		{"huge length", wsCloses, func() []byte { return wsFrame(true, 1, randBytes(rng, 16), mask, 1<<40) }},
+		{"over the size limit", wsCloses, func() []byte { return wsFrame(true, 1, randBytes(rng, 16), mask, 3<<20) }},
+		{"reserved opcode", wsCloses, func() []byte { return wsFrame(true, 3, nil, mask, -1) }},
+		{"random frame bytes", wsAny, func() []byte { return randBytes(rng, 1+rng.Intn(256)) }},
+		{"random binary message", wsAnswers, func() []byte { return wsFrame(true, 2, randBytes(rng, 1+rng.Intn(256)), mask, -1) }},
+		{"not JSON", wsAnswers, func() []byte { return text("hello") }},
+		{"deep nesting", wsAnswers, func() []byte { return text(strings.Repeat("[", 100000)) }},
+		{"unknown type", wsAnswers, func() []byte { return text(`{"UaTypeId":"i=999999"}`) }},
+		{"response instead of request", wsAnswers, func() []byte { return text(`{"UaTypeId":"i=429","ResponseHeader":{}}`) }},
+		{"wrong field types", wsAnswers, func() []byte { return text(`{"UaTypeId":"i=631","NodesToRead":{"a":1}}`) }},
+		{"read without a session", wsAnswers, func() []byte {
 			return text(`{"UaTypeId":"i=631","RequestHeader":{"RequestHandle":1},"NodesToRead":[{"NodeId":"i=2258","AttributeId":13}]}`)
 		}},
 	}
@@ -85,15 +94,18 @@ func TestChaosWSSJSONMalformedMessages(t *testing.T) {
 				t.Fatalf("%s: upgrade refused: %v %v", a.name, resp, err)
 			}
 			_, _ = conn.Write(a.payload())
-			if a.closes {
+			switch a.outcome {
+			case wsCloses:
 				// Reading must end; a timeout here would be a hang.
 				_, err = io.Copy(io.Discard, br)
 				if ne, ok := err.(net.Error); ok && ne.Timeout() {
 					t.Errorf("%s: the server did not close the connection", a.name)
 				}
-			} else if _, err := br.ReadByte(); err != nil {
+			case wsAnswers:
 				// The answer: a ServiceFault, or a Close frame.
-				t.Errorf("%s: no answer: %v", a.name, err)
+				if _, err := br.ReadByte(); err != nil {
+					t.Errorf("%s: no answer: %v", a.name, err)
+				}
 			}
 			_ = conn.Close()
 		}
