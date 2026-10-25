@@ -63,7 +63,10 @@ func nodeDefFromAttrs(ctx context.Context, node *opcua.Node, path string) (*Node
 
 	switch attrs[1].Status {
 	case ua.StatusOK:
-		def.BrowseName = attrs[1].Value.String()
+		// The name without its namespace index.
+		if qn := attrs[1].Value.QualifiedName(); qn != nil {
+			def.BrowseName = qn.Name
+		}
 	default:
 		return nil, attrs[1].Status
 	}

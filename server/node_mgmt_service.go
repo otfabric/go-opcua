@@ -81,6 +81,10 @@ func (s *NodeManagementService) addNode(item *ua.AddNodesItem) *ua.AddNodesResul
 		n = NewFolderNode(nid, name)
 		n.SetNodeClass(item.NodeClass)
 	}
+	if item.BrowseName != nil {
+		// The BrowseName the client asked for, in its namespace.
+		n.attr[ua.AttributeIDBrowseName] = DataValueFromValue(&ua.QualifiedName{NamespaceIndex: item.BrowseName.NamespaceIndex, Name: item.BrowseName.Name})
+	}
 	ns.AddNode(n)
 
 	// Add reference from parent if specified.

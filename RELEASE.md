@@ -23,6 +23,7 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 ### Changed
 
 - **server: the normal close of a secure channel is logged at Info, not Warn.** A client's CloseSecureChannel, the peer closing its connection and the server shutting down are the expected end of a channel, logged at the level its opening is ("secure channel closed", "context done, closing secure channel"). Protocol, decode and send errors stay Warn / Error.
+- **server: `NewVariableNode` gives the DataType of its value and a BrowseName in its own namespace.** The DataType attribute was the VariableNode ObjectType (i=267, read back as the type of the current value) and the BrowseName was in namespace 0. The DataType is now that of the initial value (Part 3 §5.6.2): the built-in type of its Variant (`float64` → Double, `int` → Int32, `[]string` → String), the DataType of a namespace 0 structure, Structure for other structures, BaseDataType for nil; the new ValueRank attribute is Scalar (-1), the number of array dimensions (with ArrayDimensions 0) or Any (-2) for nil. A `ValueFunc` keeps a DataType derived from the value on each read, with ValueRank Any. `NewFolderNode` also puts the BrowseName in the namespace of the node, and AddNodes keeps the namespace of the requested BrowseName. Attributes set with `SetAttribute` override these as before; code that compared a BrowseName of such a node with namespace 0, or formatted it with `Variant.String()` (now `2:Name`), needs the namespace.
 
 ### Fixed
 

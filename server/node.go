@@ -93,6 +93,8 @@ func NewNode(id *ua.NodeID, attr Attributes, refs References, val ValueFunc) *No
 	return n
 }
 
+// NewFolderNode returns an Object node with the given name, without
+// references. Its BrowseName is in the namespace of nodeID.
 func NewFolderNode(nodeID *ua.NodeID, name string) *Node {
 	// A new folder starts without references; the caller links it into the
 	// address space with AddRef. It used to be created with a forward
@@ -104,7 +106,7 @@ func NewFolderNode(nodeID *ua.NodeID, name string) *Node {
 		nodeID,
 		map[ua.AttributeID]*ua.DataValue{
 			ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassObject)),
-			ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(name)),
+			ua.AttributeIDBrowseName:    DataValueFromValue(browseNameIn(nodeID, name)),
 			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
 			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
 			ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)), // EventNotifier is a Byte (Part 3 §5.5.1)
@@ -115,47 +117,56 @@ func NewFolderNode(nodeID *ua.NodeID, name string) *Node {
 	return n
 }
 
+// NewVariableNode returns a Variable node with the given name and value,
+// without references.
+//
+// value is the initial value (any type ua.NewVariant accepts, an int is an
+// Int32, a *ua.Variant or *ua.DataValue as is) or a ValueFunc / func()
+// *ua.DataValue called on every read.
+//
+// The BrowseName is in the namespace of nodeID. For a value the DataType
+// attribute is the DataType of the value (Part 3 §5.6.2): the built-in type
+// of the Variant (Double, String, ...), the DataType of a structure in
+// namespace 0, Structure for other structures and BaseDataType for nil;
+// ValueRank is Scalar (-1) for a scalar, the number of dimensions for an
+// array (with ArrayDimensions 0, any length) and Any (-2) for nil. For a
+// function the DataType is that of the value it returns, worked out on each
+// read, and the ValueRank Any. Callers that want other attributes set them
+// with SetAttribute, which overrides these.
 func NewVariableNode(nodeID *ua.NodeID, name string, value any) *Node {
-	//eoid := ua.NewNumericExpandedNodeID(nodeID.Namespace(), nodeID.IntID())
-	vf, ok := value.(func() *ua.DataValue)
-	if !ok {
-		typedef := ua.NewNumericExpandedNodeID(0, id.VariableNode)
-		n := NewNode(
-			nodeID,
-			map[ua.AttributeID]*ua.DataValue{
-				ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassVariable)),
-				ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(name)),
-				ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
-				ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
-				ua.AttributeIDDataType:      DataValueFromValue(typedef),
-				ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)), // EventNotifier is a Byte (Part 3 §5.5.1)
-			},
-			[]*ua.ReferenceDescription{},
-			func() *ua.DataValue {
-				return DataValueFromValue(value)
-			},
-		)
-		dvFunc, ok := value.(ValueFunc)
-		if ok {
-			n.val = dvFunc
-		}
-		return n
+	attr := Attributes{
+		ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassVariable)),
+		ua.AttributeIDBrowseName:    DataValueFromValue(browseNameIn(nodeID, name)),
+		ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
+		ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
+		ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)), // EventNotifier is a Byte (Part 3 §5.5.1)
 	}
-	typedef := ua.NewNumericExpandedNodeID(0, id.VariableNode)
-	n := NewNode(
-		nodeID,
-		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDNodeClass:     DataValueFromValue(uint32(ua.NodeClassVariable)),
-			ua.AttributeIDBrowseName:    DataValueFromValue(attrs.BrowseName(name)),
-			ua.AttributeIDDisplayName:   DataValueFromValue(attrs.DisplayName(name, name)),
-			ua.AttributeIDDescription:   DataValueFromValue(&ua.LocalizedText{}),
-			ua.AttributeIDDataType:      DataValueFromValue(typedef),
-			ua.AttributeIDEventNotifier: DataValueFromValue(byte(0)), // EventNotifier is a Byte (Part 3 §5.5.1)
-		},
-		[]*ua.ReferenceDescription{},
-		vf,
-	)
-	return n
+	var val ValueFunc
+	switch f := value.(type) {
+	case ValueFunc:
+		val = f
+	case func() *ua.DataValue:
+		val = f
+	}
+	switch {
+	case val != nil:
+		// The DataType of a function is that of the value it returns,
+		// worked out when it is read (see variableDataType).
+		attr[ua.AttributeIDDataType] = DataValueFromValue(ua.NewNumericExpandedNodeID(0, id.VariableNode))
+		attr[ua.AttributeIDValueRank] = DataValueFromValue(valueRankAny)
+	default:
+		val = func() *ua.DataValue {
+			return DataValueFromValue(value)
+		}
+		v := variantOf(value)
+		attr[ua.AttributeIDDataType] = DataValueFromValue(ua.NewExpandedNodeID(variantDataType(v), "", 0))
+		rank, dims := variantValueRank(v)
+		attr[ua.AttributeIDValueRank] = DataValueFromValue(rank)
+		if dims != nil {
+			attr[ua.AttributeIDArrayDimensions] = DataValueFromValue(dims)
+		}
+	}
+	return NewNode(nodeID, attr, []*ua.ReferenceDescription{}, val)
 }
 
 func (n *Node) sanitize() {
