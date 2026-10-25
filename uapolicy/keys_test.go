@@ -13,6 +13,7 @@ import (
 	"encoding/pem"
 	"testing"
 
+	"github.com/ProtonMail/go-crypto/brainpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -131,14 +132,21 @@ func TestCheckCertificate(t *testing.T) {
 		"p384":    selfSignedCert(t, newECDSAKey(t, elliptic.P384())),
 		"p521":    selfSignedCert(t, newECDSAKey(t, elliptic.P521())),
 		"ed25519": selfSignedCert(t, edKey),
+		"bp256":   selfSignedCert(t, newECDSAKey(t, brainpool.P256r1())),
+		"bp384":   selfSignedCert(t, newECDSAKey(t, brainpool.P384r1())),
+		"ed448":   selfSignedCert(t, newEd448Key(t)),
 	}
 
 	accepted := map[string][]string{
-		ua.SecurityPolicyURINone:               {"rsa", "p256", "p384", "p521", "ed25519"},
+		ua.SecurityPolicyURINone:               {"rsa", "p256", "p384", "p521", "ed25519", "bp256", "bp384", "ed448"},
 		ua.SecurityPolicyURIBasic256Sha256:     {"rsa"},
 		ua.SecurityPolicyURIAes256Sha256RsaPss: {"rsa"},
 		ua.SecurityPolicyURIECCNistP256:        {"p256", "p384"},
 		ua.SecurityPolicyURIECCNistP384:        {"p384"},
+		ua.SecurityPolicyURIECCCurve25519:      {"ed25519"},
+		ua.SecurityPolicyURIECCBrainpoolP256r1: {"bp256", "bp384"},
+		ua.SecurityPolicyURIECCBrainpoolP384r1: {"bp384"},
+		ua.SecurityPolicyURIECCCurve448:        {"ed448"},
 	}
 	for uri, ok := range accepted {
 		for name, cert := range certs {

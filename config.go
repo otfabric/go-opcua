@@ -313,10 +313,13 @@ func PrivateKey(key *rsa.PrivateKey) Option {
 // certificate. It accepts every supported key type: an *rsa.PrivateKey for
 // the RSA security policies, an ECDSA key (P-256 or P-384) for the ECC
 // security policies ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm and
-// ECC_nistP256_ChaChaPoly, and an Ed25519 key for ECC_curve25519.
+// ECC_nistP256_ChaChaPoly, an Ed25519 key for ECC_curve25519, an ECDSA key on
+// brainpoolP256r1 or brainpoolP384r1 for ECC_brainpoolP256r1 and
+// ECC_brainpoolP384r1, and an Ed448 key (github.com/cloudflare/circl/sign/
+// ed448) for ECC_curve448.
 //
-// An ECC key only has to sign, so it may be any crypto.Signer with an ECDSA
-// or Ed25519 public key, for example a key held in an HSM. An RSA key also
+// An ECC key only has to sign, so it may be any crypto.Signer with an ECDSA,
+// Ed25519 or Ed448 public key, for example a key held in an HSM. An RSA key also
 // decrypts and must be an *rsa.PrivateKey.
 func PrivateKeySigner(key crypto.Signer) Option {
 	return func(cfg *Config) error {
@@ -340,7 +343,8 @@ func setLocalKey(cfg *Config, key crypto.Signer) {
 
 // PrivateKeyFile sets the private key in the secure channel configuration
 // from a PEM or DER encoded file. The key is an RSA key (PKCS #1 or PKCS #8)
-// an ECDSA key (PKCS #8 or SEC 1 "EC PRIVATE KEY") or an Ed25519 key (PKCS #8).
+// an ECDSA key on a NIST or Brainpool curve (PKCS #8 or SEC 1 "EC PRIVATE
+// KEY") or an Ed25519 or Ed448 key (PKCS #8).
 func PrivateKeyFile(filename string) Option {
 	return func(cfg *Config) error {
 		if filename == "" {
@@ -410,7 +414,7 @@ func setCertificate(cert []byte, cfg *Config) error {
 	cfg.sechan.Certificate = cert
 
 	// Extract the application URI from the certificate.
-	x509cert, err := x509.ParseCertificate(cert)
+	x509cert, err := uapolicy.ParseCertificate(cert)
 	if err != nil {
 		return fmt.Errorf("%w: %w", errors.ErrInvalidCertificate, err)
 	}
@@ -573,9 +577,9 @@ func AuthPrivateKey(key *rsa.PrivateKey) Option {
 
 // AuthPrivateKeySigner sets the private key of the user certificate given
 // with AuthCertificate. It accepts every supported key type: an
-// *rsa.PrivateKey, or a crypto.Signer with an ECDSA or Ed25519 public key when
-// the user token is protected with an ECC security policy (Ed25519 for
-// ECC_curve25519, ECDSA for the others).
+// *rsa.PrivateKey, or a crypto.Signer with an ECDSA, Ed25519 or Ed448 public
+// key when the user token is protected with an ECC security policy (Ed25519
+// for ECC_curve25519, Ed448 for ECC_curve448, ECDSA for the others).
 func AuthPrivateKeySigner(key crypto.Signer) Option {
 	return func(cfg *Config) error {
 		cfg.sechan.UserKey, cfg.sechan.UserPrivateKey = nil, nil
@@ -746,7 +750,9 @@ func InsecureSkipVerify() Option {
 // the provided certificates are trusted.
 //
 // Use this to trust self-signed server certificates or private CAs without
-// disabling all validation via InsecureSkipVerify.
+// disabling all validation via InsecureSkipVerify. Parse certificates with
+// Brainpool or Ed448 keys, which crypto/x509 rejects, with
+// uapolicy.ParseCertificate.
 func TrustedCertificates(certs ...*x509.Certificate) Option {
 	return func(cfg *Config) error {
 		if cfg.certValidator.trustedCerts == nil {
@@ -786,8 +792,8 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 	// The server may present its certificate as a chain of leaf plus
 	// intermediate certificates (e.g. Siemens WinCC Unified Runtime). Parse all
 	// of them: x509.ParseCertificate rejects trailing data, so a chain must be
-	// parsed with x509.ParseCertificates.
-	certs, err := x509.ParseCertificates(der)
+	// parsed with ParseCertificates.
+	certs, err := uapolicy.ParseCertificates(der)
 	if err != nil {
 		return fmt.Errorf("opcua: server certificate validation failed: %w", err)
 	}
@@ -809,19 +815,10 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 	}
 
 	// Any additional certificates in the blob are intermediates used to build
-	// the trust chain up to a trusted root.
-	intermediates := x509.NewCertPool()
-	for _, ic := range certs[1:] {
-		intermediates.AddCert(ic)
-	}
-
-	opts := x509.VerifyOptions{
-		Roots:         roots,
-		Intermediates: intermediates,
-		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageAny},
-	}
-
-	if _, err := cert.Verify(opts); err != nil {
+	// the trust chain up to a trusted root. A chain with Ed448 signatures,
+	// which crypto/x509 cannot verify, is verified against the trusted
+	// certificates.
+	if err := uapolicy.VerifyCertificate(certs, roots, cfg.certValidator.trustedCertsList); err != nil {
 		return fmt.Errorf("opcua: server certificate validation failed: %w", err)
 	}
 

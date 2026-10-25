@@ -201,6 +201,8 @@ func TestECCPolicyParameters(t *testing.T) {
 	}{
 		{uri: ua.SecurityPolicyURIECCNistP256, nonce: 64, sigKey: 32, encKey: 16, hash: crypto.SHA256},
 		{uri: ua.SecurityPolicyURIECCNistP384, nonce: 96, sigKey: 48, encKey: 32, hash: crypto.SHA384},
+		{uri: ua.SecurityPolicyURIECCBrainpoolP256r1, nonce: 64, sigKey: 32, encKey: 16, hash: crypto.SHA256},
+		{uri: ua.SecurityPolicyURIECCBrainpoolP384r1, nonce: 96, sigKey: 48, encKey: 32, hash: crypto.SHA384},
 	}
 	for _, tt := range tests {
 		t.Run(tt.uri, func(t *testing.T) {
@@ -236,7 +238,7 @@ func TestECCPolicyParameters(t *testing.T) {
 		require.False(t, IsECC(uri), uri)
 		require.True(t, LegacySequenceNumbers(uri), uri)
 	}
-	require.False(t, IsECC("http://opcfoundation.org/UA/SecurityPolicy#ECC_curve448"))
+	require.False(t, IsECC("http://opcfoundation.org/UA/SecurityPolicy#ECC_brainpoolP512r1"))
 }
 
 func TestKeyExchange_AllPolicies(t *testing.T) {
@@ -322,12 +324,26 @@ func TestKeyExchange_ECC_InvalidPeerKey(t *testing.T) {
 				"other curve":   wrongCurve.Nonce(),
 				"sec1 encoding": append([]byte{4}, kx.Nonce()...),
 			}
-			if uri == ua.SecurityPolicyURIECCCurve25519 {
+			switch uri {
+			case ua.SecurityPolicyURIECCCurve25519:
 				// Every 32 byte string is an X25519 public key; the ones to
 				// refuse are the points of small order (RFC 7748 §6.1).
 				bad["order 1"] = append([]byte{1}, make([]byte, 31)...)
 				bad["order 8"] = unhex(t, "e0eb7a7c3b41b8ae1656e3faf19fc46ada098deb9c32b1fd866205165f49b800")
-			} else {
+			case ua.SecurityPolicyURIECCCurve448:
+				// The same for X448 (RFC 7748 §6.2): u = 1 and u = p - 1,
+				// and the non-canonical u = p and p + 1, which reduce to
+				// 0 and 1. Little-endian, p = 2^448 - 2^224 - 1.
+				bad["u=1"] = append([]byte{1}, make([]byte, 55)...)
+				p := bytes.Repeat([]byte{0xff}, 56)
+				p[28] = 0xfe
+				bad["u=p"] = p
+				pMinus1 := bytes.Clone(p)
+				pMinus1[0] = 0xfe
+				bad["u=p-1"] = pMinus1
+				pPlus1 := append(make([]byte, 28), bytes.Repeat([]byte{0xff}, 28)...)
+				bad["u=p+1"] = pPlus1
+			default:
 				bad["not on curve"] = bytes.Repeat([]byte{0x01}, n)
 			}
 			for name, nonce := range bad {

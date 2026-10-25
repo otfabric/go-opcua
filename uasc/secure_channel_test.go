@@ -343,17 +343,16 @@ func TestNewSecureChannel(t *testing.T) {
 		require.ErrorContains(t, err, "invalid security configuration")
 		require.ErrorContains(t, err, "requires a private key")
 	})
-	// Interop finding (open62541 offers ECC policies that are not
-	// implemented here): the policy is refused by name, before anything is
+	// Interop finding (open62541 offered ECC policies that were not
+	// implemented here): a policy is refused by name, before anything is
 	// done with a server certificate this library may not even be able to
-	// parse (brainpool, Ed448).
+	// parse.
 	t.Run("client: policy not implemented", func(t *testing.T) {
 		key, err := rsa.GenerateKey(rand.Reader, 2048)
 		require.NoError(t, err)
 		for _, uri := range []string{
-			ua.SecurityPolicyURIPrefix + "ECC_brainpoolP256r1",
-			ua.SecurityPolicyURIPrefix + "ECC_curve448",
-			ua.SecurityPolicyURIPrefix + "ECC_brainpoolP384r1",
+			ua.SecurityPolicyURIPrefix + "ECC_nistP521",
+			ua.SecurityPolicyURIPrefix + "ECC_brainpoolP512r1",
 			"urn:not-a-policy",
 		} {
 			cfg := &Config{
@@ -368,6 +367,8 @@ func TestNewSecureChannel(t *testing.T) {
 		}
 		require.True(t, uapolicy.IsSupported(ua.SecurityPolicyURINone))
 		require.True(t, uapolicy.IsSupported(ua.SecurityPolicyURIPrefix+"ECC_nistP256"))
+		require.True(t, uapolicy.IsSupported(ua.SecurityPolicyURIECCBrainpoolP256r1))
+		require.True(t, uapolicy.IsSupported(ua.SecurityPolicyURIECCCurve448))
 		require.False(t, uapolicy.IsSupported(""))
 	})
 }

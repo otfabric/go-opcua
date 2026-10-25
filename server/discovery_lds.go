@@ -4,7 +4,6 @@ package server
 
 import (
 	"context"
-	"crypto/x509"
 	"net/url"
 	"os"
 	"slices"
@@ -15,6 +14,7 @@ import (
 
 	"github.com/otfabric/go-opcua/internal/mdns"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 	"github.com/otfabric/go-opcua/uasc"
 )
 
@@ -450,7 +450,7 @@ func certificateHasURI(der []byte, uri string) bool {
 	if len(der) == 0 {
 		return false
 	}
-	cert, err := x509.ParseCertificate(der)
+	cert, err := uapolicy.ParseCertificate(der)
 	if err != nil {
 		return false
 	}

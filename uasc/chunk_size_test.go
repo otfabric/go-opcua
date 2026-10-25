@@ -123,6 +123,9 @@ func TestChunksFitTheSendBuffer(t *testing.T) {
 		ua.SecurityPolicyURIECCNistP256AesGcm,
 		ua.SecurityPolicyURIECCNistP256ChaChaPoly,
 		ua.SecurityPolicyURIECCCurve25519,
+		ua.SecurityPolicyURIECCBrainpoolP256r1,
+		ua.SecurityPolicyURIECCBrainpoolP384r1,
+		ua.SecurityPolicyURIECCCurve448,
 	}
 	sizes := []int{65535, 65536, 8192}
 	for n := 1024; n < 1024+48; n++ {

@@ -64,8 +64,9 @@ func Asymmetric(uri string, localKey *rsa.PrivateKey, remoteKey *rsa.PublicKey) 
 // may be nil when only the other direction is needed. The key types must match
 // the policy: RSA policies need an *rsa.PrivateKey and an *rsa.PublicKey, the
 // ECC policies a crypto.Signer with an *ecdsa.PublicKey on a curve the policy
-// permits and an *ecdsa.PublicKey, and ECC_curve25519 a crypto.Signer with an
-// ed25519.PublicKey and an ed25519.PublicKey.
+// permits and an *ecdsa.PublicKey, ECC_curve25519 a crypto.Signer with an
+// ed25519.PublicKey and an ed25519.PublicKey, and ECC_curve448 the same with
+// ed448.PublicKey (github.com/cloudflare/circl/sign/ed448).
 func AsymmetricKeys(uri string, localKey crypto.PrivateKey, remoteKey crypto.PublicKey) (*EncryptionAlgorithm, error) {
 	p, ok := policies[uri]
 	if !ok {
@@ -435,6 +436,13 @@ var securityLevels = map[string][4]uint8{
 	ua.SecurityPolicyURIECCNistP256AesGcm:     {00, 00, 82, 83},
 	ua.SecurityPolicyURIECCNistP256ChaChaPoly: {00, 00, 92, 93},
 	ua.SecurityPolicyURIECCCurve25519:         {00, 00, 102, 103},
+	// The Brainpool policies rank just below their NIST counterparts: the
+	// same strength, but an implementation that is not constant time (see
+	// docs/security.md). ECC_curve448 ranks above ECC_curve25519: the same
+	// construction with a 224 bit instead of a 128 bit security level.
+	ua.SecurityPolicyURIECCBrainpoolP256r1: {00, 00, 60, 61},
+	ua.SecurityPolicyURIECCBrainpoolP384r1: {00, 00, 70, 71},
+	ua.SecurityPolicyURIECCCurve448:        {00, 00, 112, 113},
 }
 
 func SecurityLevel(policy string, mode ua.MessageSecurityMode) uint8 {
