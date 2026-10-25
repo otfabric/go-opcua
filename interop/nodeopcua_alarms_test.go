@@ -5,7 +5,7 @@
 // Alarms & Conditions (Part 9) against node-opcua, both directions (shared
 // assertions: alarms_peer_test.go).
 // COVERAGE: testdata/ledger-node-opcua.json alarms.condition-refresh,
-// alarms.acknowledgeable
+// alarms.acknowledgeable, alarms.audit-events
 
 package interop
 
@@ -16,6 +16,22 @@ func TestNodeOpcuaServer_Alarms(t *testing.T) {
 	s := newPeerAlarmSession(t, startNodeOpcuaServer(t).endpoint)
 	t.Run("coverage/alarms.condition-refresh/go-client-to-node-opcua-server", s.assertRefresh)
 	t.Run("coverage/alarms.acknowledgeable/go-client-to-node-opcua-server", s.assertActions)
+}
+
+// TestNodeOpcuaServer_AlarmAudit: node-opcua 2.187.12 raises the condition
+// audit events of Acknowledge, Confirm and AddComment without an auditing
+// switch (node-opcua-address-space ua_condition_impl,
+// ua_acknowledgeable_condition_impl) and delivers them to SecurityAdmin
+// sessions only (node-opcua-server audit_event_permissions). Its events
+// leave MethodId / InputArguments null, carry the Status of Acknowledge and
+// Confirm as a StatusCode, the EventId after the call as the ConditionEventId
+// of Acknowledge, and raise the AddComment audit event on the Server object.
+func TestNodeOpcuaServer_AlarmAudit(t *testing.T) {
+	requireServerFeature(t, nodeOpcuaEnv, defaultNodeOpcuaImage, "alarms")
+	s := newPeerAuditAlarmSession(t, nodeOpcuaEnv, defaultNodeOpcuaImage, "node-opcua-server")
+	t.Run("coverage/alarms.audit-events/go-client-to-node-opcua-server", func(t *testing.T) {
+		s.assertAudit(t, auditPeer{noMethodID: true, ackEventIDAfter: true, commentOnServer: true, ackStatusCode: true})
+	})
 }
 
 func TestGoServer_NodeOpcuaClient_Alarms(t *testing.T) {

@@ -2,7 +2,8 @@
 
 // SPDX-License-Identifier: MIT
 
-// UADP over UDP multicast between go-opcua and open62541 (Part 14 §7.3.2).
+// UADP over UDP multicast between go-opcua and open62541 or UA-.NETStandard
+// (Part 14 §7.3.2; the dotnet tests are in dotnet_pubsub_peer_test.go).
 // COVERAGE.md: pubsub / pubsub.uadp.udp-multicast
 //
 // Multicast does not cross Docker Desktop's VM (macOS, Windows) or a Docker
@@ -41,7 +42,13 @@ func psMulticastURL(t *testing.T) string {
 // TestPubSubMulticast_Open62541Publishes_GoSubscribes: the open62541
 // publisher sends UADP to a multicast group, the go-opcua runtime joins it.
 func TestPubSubMulticast_Open62541Publishes_GoSubscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psMulticastPeerPublishes(t, psOpen62541)
+}
+
+// psMulticastPeerPublishes: the publisher of peer p sends UADP to a
+// multicast group, the go-opcua runtime joins it.
+func psMulticastPeerPublishes(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	requireHostNetwork(t)
 	c := psRuntimeCase{psLiveCase: psLiveCase{name: "multicast", vars: psVars}}
 	group := psMulticastURL(t)
@@ -50,7 +57,7 @@ func TestPubSubMulticast_Open62541Publishes_GoSubscribes(t *testing.T) {
 	startRuntime(t, pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(
 		pubsub.UDPConnection("InteropSubscriber", group, nil), psRuntimeReader(c, "", 0))),
 		pubsub.WithDataSetHandler(rec.handle))
-	pub := startPubSubServer(t, pubsubServerOpts{hostNetwork: true,
+	pub := startPubSubServer(t, pubsubServerOpts{peer: p, hostNetwork: true,
 		config: psPublisherConfig(c.psLiveCase, psProfileUDP, group, nil, false)})
 
 	values := psValues(c.vars, psFresh())
@@ -65,12 +72,19 @@ func TestPubSubMulticast_Open62541Publishes_GoSubscribes(t *testing.T) {
 // publishes its PubSub.* variables to a multicast group; the open62541
 // subscriber joins it and writes them into its TargetVariables.
 func TestPubSubMulticast_GoPublishes_Open62541Subscribes(t *testing.T) {
-	requirePubSubServer(t)
+	psMulticastGoPublishes(t, psOpen62541)
+}
+
+// psMulticastGoPublishes: a go-opcua server publishes its PubSub.*
+// variables to a multicast group; the subscriber of peer p joins it and
+// writes them into its TargetVariables.
+func psMulticastGoPublishes(t *testing.T, p *psPeer) {
+	p.requireServer(t)
 	requireHostNetwork(t)
 	c := psRuntimeCase{psLiveCase: psLiveCase{name: "multicast", vars: psVars}}
 	group := psMulticastURL(t)
 
-	sub := startPubSubServer(t, pubsubServerOpts{hostNetwork: true,
+	sub := startPubSubServer(t, pubsubServerOpts{peer: p, hostNetwork: true,
 		config: psSubscriberConfig(c.psLiveCase, psProfileUDP, group, nil, false)})
 	pub := startGoPubSubServer(t, goPubSubOpts{}, func(p *pubsub.PubSub, ns uint16) {
 		mustOK[pubsub.ComponentID](t)(p.AddPublishedDataSet(psRuntimeDataSet(c.vars, ns, c.maxStrLn)))

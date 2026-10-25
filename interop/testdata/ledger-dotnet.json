@@ -1359,8 +1359,8 @@
       "capability": "alarms.audit-events",
       "direction": "go-client-to-dotnet-server",
       "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AuditConditionEventType events of the condition methods; establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard 2.0.1 raises AuditConditionAcknowledge/Confirm/Comment events for the condition methods (Opc.Ua.Core.Types State/AcknowledgeableConditionState.cs) but delivers an audit event to a monitored item only when the server has auditing on and the session is SignAndEncrypt (Opc.Ua.Server MonitoredNode.cs: m_server.Auditing); the opcua-interop dotnet adapter leaves ServerConfiguration.AuditingEnabled false and has no flag for it, so a SecurityAdmin session over SignAndEncrypt receives none. Needs an adapter option (e.g. --auditing) that enables auditing, then the go-client test TestNodeOpcuaServer_AlarmAudit runs against dotnet as well",
       "fixture": "baseline"
     },
     {
@@ -2553,7 +2553,8 @@
       "direction": "go-client-to-dotnet-server",
       "status": "unverified",
       "reason": "test-missing",
-      "nextAction": "multicast does not cross Docker Desktop's VM and the --network host tests (TestPubSubMulticast_*) run only the open62541 adapter; opcua-interop's own smoke (make smoke-pubsub-dotnet, udp-multicast) covers dotnet multicast container to container",
+      "test": "TestPubSubMulticast_GoPublishes_DotnetSubscribes",
+      "nextAction": "TestPubSubMulticast_GoPublishes_DotnetSubscribes runs with --network host, which only the Linux Interop CI job has (it skips on macOS / Docker Desktop, where multicast does not cross the VM); promote to verified once it passes there",
       "fixture": "baseline"
     },
     {
@@ -2561,7 +2562,8 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "test-missing",
-      "nextAction": "multicast does not cross Docker Desktop's VM and the --network host tests (TestPubSubMulticast_*) run only the open62541 adapter; opcua-interop's own smoke (make smoke-pubsub-dotnet, udp-multicast) covers dotnet multicast container to container",
+      "test": "TestPubSubMulticast_DotnetPublishes_GoSubscribes",
+      "nextAction": "TestPubSubMulticast_DotnetPublishes_GoSubscribes runs with --network host, which only the Linux Interop CI job has (it skips on macOS / Docker Desktop, where multicast does not cross the VM); promote to verified once it passes there",
       "fixture": "baseline"
     },
     {
@@ -2875,9 +2877,8 @@
     {
       "capability": "pubsub.keepalive",
       "direction": "dotnet-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop dotnet adapter exposes no reader or writer state (no PublishSubscribe information model, contract §14.13), which the keep-alive and receive-timeout tests read",
+      "status": "verified",
+      "test": "TestPubSubRuntime_KeepAlive_DotnetPublishes",
       "fixture": "baseline"
     },
     {
@@ -2891,9 +2892,8 @@
     {
       "capability": "pubsub.receive-timeout",
       "direction": "dotnet-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the opcua-interop dotnet adapter exposes no reader or writer state (no PublishSubscribe information model, contract §14.13), which the keep-alive and receive-timeout tests read",
+      "status": "verified",
+      "test": "TestPubSubRuntime_ReceiveTimeout_DotnetPublisher",
       "fixture": "baseline"
     },
     {
