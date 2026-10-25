@@ -14,6 +14,7 @@
 package interop
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/rsa"
@@ -239,7 +240,15 @@ func TestCertMgmtPushGroups_GoClient_PeerServers(t *testing.T) {
 				if err != nil {
 					t.Fatalf("the certificate does not parse: %v", err)
 				}
-				if err := x.CheckSignatureFrom(x); err != nil {
+				// Signed with its own key, issuer = subject. Not
+				// CheckSignatureFrom: an application certificate need not
+				// be a CA (UA-.NETStandard's has cA false), which Go
+				// requires of a parent.
+				t.Logf("%s: BasicConstraints valid %v cA %v, KeyUsage %v", p.name, x.BasicConstraintsValid, x.IsCA, x.KeyUsage)
+				if !bytes.Equal(x.RawIssuer, x.RawSubject) {
+					t.Fatalf("issuer %v is not the subject %v", x.Issuer, x.Subject)
+				}
+				if err := x.CheckSignature(x.SignatureAlgorithm, x.RawTBSCertificate, x.Signature); err != nil {
 					t.Fatalf("not self-signed: %v", err)
 				}
 				// The endpoints keep their certificate: the change is
