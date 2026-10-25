@@ -75,8 +75,8 @@ func TestAsyncuaLedgerValid(t *testing.T) {
 	}](t, filepath.Join(dir, "testdata", "ledger-asyncua.json"))
 
 	// Keep in step with interopVersion (harness_test.go).
-	if ledger.InteropVersion != "v0.13.0" {
-		t.Errorf("interopVersion = %q, want v0.13.0", ledger.InteropVersion)
+	if ledger.InteropVersion != "v0.14.0" {
+		t.Errorf("interopVersion = %q, want v0.14.0", ledger.InteropVersion)
 	}
 	if ledger.Peer.Stack != "opcua-asyncio" || ledger.Peer.Version == "" {
 		t.Errorf("peer = %+v, want stack opcua-asyncio with a version", ledger.Peer)

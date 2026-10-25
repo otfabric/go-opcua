@@ -615,7 +615,7 @@ func startGoDiscoveryPublisher(t *testing.T) *goDiscoveryPublisher {
 // Each probe has a publisher and ports of its own (dotnetDiscover): with
 // one publisher for both, the second client container was answered from
 // the same socket to the same 127.0.0.1:<host port> as the first, removed
-// one, and its answers were lost (CI, opcua-interop v0.13.0 images).
+// one, and its answers were lost (CI, opcua-interop v0.14.0 images).
 func TestPubSubDiscovery_DotnetProbes_GoAnswers(t *testing.T) {
 	psDotnet.requireServer(t)
 	requireAdapterOp(t, psDotnet.env, psDotnet.image, "pubsub-discover")
