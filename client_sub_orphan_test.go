@@ -18,6 +18,7 @@ import (
 // it does not know and has it deleted. These are the rules for telling it
 // apart from the unknown subscriptions that are none of its business.
 func TestPublishLoop_UnknownSubscriptionIsDeletedOnlyAfterALostCreate(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	ctx := context.Background()
 	keepAlive := func(id uint32) *ua.PublishResponse {

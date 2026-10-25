@@ -14,6 +14,7 @@ import (
 )
 
 func TestSubscriptionParameters_setDefaults(t *testing.T) {
+	t.Parallel()
 	var p SubscriptionParameters
 	p.setDefaults()
 	assert.Equal(t, uint32(DefaultSubscriptionMaxNotificationsPerPublish), p.MaxNotificationsPerPublish)
@@ -38,6 +39,7 @@ func TestSubscriptionParameters_setDefaults(t *testing.T) {
 }
 
 func TestNewMonitoredItemCreateRequestWithDefaults(t *testing.T) {
+	t.Parallel()
 	nid := ua.NewNumericNodeID(0, 2258)
 	req := NewMonitoredItemCreateRequestWithDefaults(nid, 0, 42)
 	require.NotNil(t, req)
@@ -52,6 +54,7 @@ func TestNewMonitoredItemCreateRequestWithDefaults(t *testing.T) {
 }
 
 func TestModifyMonitoredItems_UnknownItemID(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 	sub := &Subscription{
@@ -68,6 +71,7 @@ func TestModifyMonitoredItems_UnknownItemID(t *testing.T) {
 }
 
 func TestSetMonitoringMode_UnknownItemID(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 	sub := &Subscription{
@@ -81,6 +85,7 @@ func TestSetMonitoringMode_UnknownItemID(t *testing.T) {
 }
 
 func TestSubscription_notify(t *testing.T) {
+	t.Parallel()
 	// Unbuffered: with a cancelled ctx, only <-ctx.Done is ready (send would block),
 	// so notify must return without hanging. A buffered channel would race both cases.
 	ch := make(chan *PublishNotificationData)
@@ -98,6 +103,7 @@ func TestSubscription_notify(t *testing.T) {
 }
 
 func TestSubscription_publishTimeout(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 	c.cfg.sechan = &uasc.Config{RequestTimeout: 25 * time.Millisecond}

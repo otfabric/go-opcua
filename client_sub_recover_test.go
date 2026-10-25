@@ -40,6 +40,7 @@ func drainNotifyCh(ch <-chan *opcua.PublishNotificationData, idleFor time.Durati
 // Client.Republish API (WP2A) returns the protocol response without dispatching
 // the notification to the subscription's notify channel.
 func TestPublicRepublish_DoesNotDeliverToNotifyChan(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 
@@ -97,6 +98,7 @@ func TestPublicRepublish_DoesNotDeliverToNotifyChan(t *testing.T) {
 // TestPublicTransferSubscriptions_ReturnsResponse verifies that the public
 // Client.TransferSubscriptions API (WP2A) returns a well-formed response.
 func TestPublicTransferSubscriptions_ReturnsResponse(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()

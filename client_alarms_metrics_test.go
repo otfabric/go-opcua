@@ -17,6 +17,7 @@ import (
 )
 
 func TestParseConditionEventV117(t *testing.T) {
+	t.Parallel()
 	f := make([]*ua.Variant, len(opcua.ConditionEventFields())+1)
 	f[29] = ua.MustVariant(true)
 	f[30] = ua.MustVariant(int16(4))
@@ -36,6 +37,7 @@ func TestParseConditionEventV117(t *testing.T) {
 }
 
 func TestClientAlarmMetrics(t *testing.T) {
+	t.Parallel()
 	clk := fakeclock.New(time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC))
 	srv, url := testutil.NewTestServer(t, server.WithAlarmClock(clk))
 	ns := server.NewNodeNameSpace(srv, "urn:test:client-alarm-metrics")

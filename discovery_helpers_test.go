@@ -15,6 +15,7 @@ import (
 )
 
 func TestPackageFindServers(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	servers, err := opcua.FindServers(context.Background(), url)
 	require.NoError(t, err)
@@ -22,6 +23,7 @@ func TestPackageFindServers(t *testing.T) {
 }
 
 func TestPackageGetEndpoints(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	eps, err := opcua.GetEndpoints(context.Background(), url)
 	require.NoError(t, err)
@@ -29,6 +31,7 @@ func TestPackageGetEndpoints(t *testing.T) {
 }
 
 func TestPackageFindServersOnNetwork(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	_, err := opcua.FindServersOnNetwork(context.Background(), url)
 	require.Error(t, err)
@@ -36,6 +39,7 @@ func TestPackageFindServersOnNetwork(t *testing.T) {
 }
 
 func TestDiscoveryURL(t *testing.T) {
+	t.Parallel()
 	for host, want := range map[string]string{
 		"press7":                     "opc.tcp://press7:4840",
 		"press7.factory.example":     "opc.tcp://press7.factory.example:4840",
@@ -63,6 +67,7 @@ func dialOnly(t *testing.T, url string) *opcua.Client {
 }
 
 func TestClientRegisterServer(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t,
 		server.ApplicationURI("urn:test:lds"),
 		server.WithLocalDiscoveryServer(server.LDSAllowInsecureRegistration()),
@@ -115,6 +120,7 @@ func TestClientRegisterServer(t *testing.T) {
 }
 
 func TestDiscoverServersErrors(t *testing.T) {
+	t.Parallel()
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_, err := opcua.DiscoverServers(ctx, "127.0.0.1:1", opcua.DialTimeout(2*time.Second))

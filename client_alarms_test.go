@@ -18,6 +18,7 @@ import (
 )
 
 func TestConditionEventFilter(t *testing.T) {
+	t.Parallel()
 	f := opcua.NewConditionEventFilter()
 	fields := opcua.ConditionEventFields()
 	require.Len(t, f.SelectClauses, len(fields)+1)
@@ -90,6 +91,7 @@ func FuzzParseConditionEvent(f *testing.F) {
 
 // The client helpers against the server's conditions (Part 9).
 func TestClientConditionMethods(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := server.NewNodeNameSpace(srv, "urn:test:client-alarms")
 	src := server.NewFolderNode(ua.NewStringNodeID(ns.ID(), "Tank"), "Tank")

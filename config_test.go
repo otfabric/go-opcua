@@ -924,6 +924,7 @@ func TestOptions(t *testing.T) {
 // mutating the shared uacp.DefaultClientACK (which previously broke later
 // HEL/ACK handshakes with "message too large: 57 > 5 bytes").
 func TestReceiveBufferSize_DoesNotMutateDefaultClientACK(t *testing.T) {
+	t.Parallel()
 	before := *uacp.DefaultClientACK
 	_, err := ApplyConfig(ReceiveBufferSize(5), SendBufferSize(7), MaxMessageSize(9), MaxChunkCount(11))
 	require.NoError(t, err)
@@ -931,6 +932,7 @@ func TestReceiveBufferSize_DoesNotMutateDefaultClientACK(t *testing.T) {
 }
 
 func TestValidateServerCertificate(t *testing.T) {
+	t.Parallel()
 	// Generate a self-signed CA certificate for testing.
 	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
@@ -1083,6 +1085,7 @@ func TestValidateServerCertificate(t *testing.T) {
 }
 
 func TestValidateServerCertificate_ApplicationURI(t *testing.T) {
+	t.Parallel()
 	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
@@ -1165,6 +1168,7 @@ func TestValidateServerCertificate_ApplicationURI(t *testing.T) {
 }
 
 func TestValidateServerCertificate_KeyUsage(t *testing.T) {
+	t.Parallel()
 	caKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 
@@ -1255,6 +1259,7 @@ func TestValidateServerCertificate_KeyUsage(t *testing.T) {
 }
 
 func TestConfigOptionSmoke(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840",
 		WithRetryPolicy(NoRetry()),
 		SkipNamespaceUpdate(),
@@ -1267,6 +1272,7 @@ func TestConfigOptionSmoke(t *testing.T) {
 }
 
 func TestAuthOptionBranches(t *testing.T) {
+	t.Parallel()
 	// AuthPolicyID before token creation (defer path)
 	{
 		cfg := newConfig()
@@ -1354,6 +1360,7 @@ func TestAuthOptionBranches(t *testing.T) {
 }
 
 func TestLoadPrivateKey_PKCS8NonRSA(t *testing.T) {
+	t.Parallel()
 	// An ECDSA key in PKCS#8 is the key of an ECC application instance
 	// certificate.
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -1370,6 +1377,7 @@ func TestLoadPrivateKey_PKCS8NonRSA(t *testing.T) {
 }
 
 func TestLoadPrivateKey_UnknownPEMType(t *testing.T) {
+	t.Parallel()
 	pemBlock := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: []byte("not-a-key")})
 	f := filepath.Join(t.TempDir(), "bad.pem")
 	require.NoError(t, os.WriteFile(f, pemBlock, 0o600))
@@ -1380,6 +1388,7 @@ func TestLoadPrivateKey_UnknownPEMType(t *testing.T) {
 }
 
 func TestSetCertificate_NoURI(t *testing.T) {
+	t.Parallel()
 	// Certificate with no URI SAN: setCertificate should succeed without setting ApplicationURI.
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)

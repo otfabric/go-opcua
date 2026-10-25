@@ -36,6 +36,7 @@ func stressDialer() *uacp.Dialer {
 // TestStress_ConcurrentCloseWithActiveSubscription closes the client while a
 // subscription is still publishing. Must not hang or panic under -race.
 func TestStress_ConcurrentCloseWithActiveSubscription(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	nsID := ns.ID()
@@ -86,6 +87,7 @@ func TestStress_ConcurrentCloseWithActiveSubscription(t *testing.T) {
 // TestStress_CancelSubscriptionDuringPublish cancels a subscription while the
 // notify channel is still being drained.
 func TestStress_CancelSubscriptionDuringPublish(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	ctx := context.Background()
 	c := testutil.NewTestClient(t, url)
@@ -118,6 +120,7 @@ func TestStress_CancelSubscriptionDuringPublish(t *testing.T) {
 // monitored item on one subscription. Asserts CreateMonitoredItems + a
 // subsequent data-change notification without hang/panic.
 func TestStress_EventAndDataChangeTogether(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	nsID := ns.ID()
@@ -192,6 +195,7 @@ func TestStress_EventAndDataChangeTogether(t *testing.T) {
 // closes it while a subscription is active. Ensures Close does not deadlock
 // against the reconnect/publish loops under -race.
 func TestStress_CloseWhileReconnectArmed(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	nsID := ns.ID()
@@ -231,6 +235,7 @@ func TestStress_CloseWhileReconnectArmed(t *testing.T) {
 
 // TestStress_ConcurrentSubscribeCancel races Subscribe/Cancel across clients.
 func TestStress_ConcurrentSubscribeCancel(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	const n = 8
 	var wg sync.WaitGroup

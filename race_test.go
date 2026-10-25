@@ -20,6 +20,7 @@ import (
 // from multiple goroutines concurrently. Run with -race to detect
 // data races.
 func TestConcurrentReads(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 
@@ -70,6 +71,7 @@ func TestConcurrentReads(t *testing.T) {
 // TestConcurrentSubscriptions creates and cancels subscriptions from
 // multiple goroutines. Run with -race to detect data races.
 func TestConcurrentSubscriptions(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 
 	const goroutines = 5
@@ -131,6 +133,7 @@ func TestConcurrentSubscriptions(t *testing.T) {
 // TestReconnectDuringOperation closes the server while reads are in-flight
 // and checks that the client reports an error rather than hanging or panicking.
 func TestReconnectDuringOperation(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	nsID := ns.ID()

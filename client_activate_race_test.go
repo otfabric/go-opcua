@@ -18,6 +18,7 @@ import (
 // the activations of one session take turns (each one uses the nonce the
 // previous one brought).
 func TestActivateSessionConcurrent(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()

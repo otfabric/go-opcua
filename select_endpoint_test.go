@@ -13,6 +13,7 @@ import (
 )
 
 func TestSelectEndpoint(t *testing.T) {
+	t.Parallel()
 	p, err := testpki.Get()
 	require.NoError(t, err)
 	rsaCert := p.ClientCert

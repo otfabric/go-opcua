@@ -19,6 +19,7 @@ import (
 // reports that: the client used to stay Connected with a subscription that
 // never delivered again (chaos TestChaosMonkeyNetworkFaults, STUCK).
 func TestMarkSilentSubscriptions(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	// keep-alive every 10 s: silent after 30 s
 	slow, _ := newNotifyTestSub(1)
@@ -119,6 +120,7 @@ func TestMarkSilentSubscriptions(t *testing.T) {
 // for a Publish request sent in a session the client has left since must not
 // pause the publish loop of the session the client has now.
 func TestPublish_StaleSessionError(t *testing.T) {
+	t.Parallel()
 	assert.True(t, staleSessionError(ua.StatusBadSessionClosed))
 	assert.True(t, staleSessionError(ua.StatusBadSessionIDInvalid))
 	assert.True(t, staleSessionError(ua.StatusBadSessionNotActivated))
@@ -135,6 +137,7 @@ func TestPublish_StaleSessionError(t *testing.T) {
 // recovery, was waiting for its turn; when the recovery had ended by then,
 // the consumer got the message twice, the second time after newer values.
 func TestDeliverPublishResponse_DropsARepeatedMessage(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	sub, ch := newNotifyTestSub(7)
 	sub.c = c

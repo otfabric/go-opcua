@@ -21,6 +21,7 @@ import (
 // again: nobody would resume it and all subscriptions would stay silent.
 // (Pause and resume used to be unordered signals on two channels.)
 func TestPublishLoop_StalePauseDoesNotOverrideResume(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 
 	// a client starts paused: there is nothing to publish for
@@ -47,6 +48,7 @@ func TestPublishLoop_StalePauseDoesNotOverrideResume(t *testing.T) {
 // resumes publishing, and a PublishResponse that arrives in that time is left
 // to the republish step instead of being delivered out of order.
 func TestPublishLoop_HeldDuringRecovery(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	ctx := context.Background()
 
@@ -95,6 +97,7 @@ func TestPublishLoop_HeldDuringRecovery(t *testing.T) {
 // of items it monitors, and be marked for another attempt. It used to be
 // dropped from the client for good, without a word to its consumer.
 func TestRecreateSubscription_FailureKeepsSubscription(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t) // not connected: every request fails
 	ctx := context.Background()
 
@@ -124,6 +127,7 @@ func TestRecreateSubscription_FailureKeepsSubscription(t *testing.T) {
 // gives it a new id; cancelling "the old id" used to leave the subscription
 // registered under the new one.
 func TestCancel_AfterRecreateForgetsCurrentID(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 
 	sub, _ := newNotifyTestSub(7)
@@ -159,6 +163,7 @@ func TestCancel_AfterRecreateForgetsCurrentID(t *testing.T) {
 
 // A failed Connect must not leave the client in the Connecting state.
 func TestConnect_DialFailureEndsClosed(t *testing.T) {
+	t.Parallel()
 	var states []ConnState
 	c, err := NewClient("opc.tcp://127.0.0.1:1", // nothing listens on port 1
 		DialTimeout(5*time.Second),
@@ -176,6 +181,7 @@ func TestConnect_DialFailureEndsClosed(t *testing.T) {
 
 // Connect on a client that was already closed must not come up.
 func TestConnect_AfterCloseFails(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://127.0.0.1:1", DialTimeout(5*time.Second))
 	require.NoError(t, err)
 	require.NoError(t, c.Close(context.Background()))
@@ -191,6 +197,7 @@ func TestConnect_AfterCloseFails(t *testing.T) {
 // the subscription. The client used to hand it to the consumer and carry on
 // as if nothing had happened.
 func TestSubscriptionEnded(t *testing.T) {
+	t.Parallel()
 	msg := func(v any) *ua.NotificationMessage {
 		return &ua.NotificationMessage{NotificationData: []*ua.ExtensionObject{ua.NewExtensionObject(v)}}
 	}
@@ -207,6 +214,7 @@ func TestSubscriptionEnded(t *testing.T) {
 }
 
 func TestDeliverPublishResponse_StatusChangeSchedulesRecreation(t *testing.T) {
+	t.Parallel()
 	statusChange := func(subID uint32) *ua.PublishResponse {
 		return &ua.PublishResponse{
 			SubscriptionID: subID,
@@ -265,6 +273,7 @@ func TestDeliverPublishResponse_StatusChangeSchedulesRecreation(t *testing.T) {
 }
 
 func TestMarkSubscriptionsBroken(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	assert.Zero(t, c.markSubscriptionsBroken())
 
@@ -287,6 +296,7 @@ func TestMarkSubscriptionsBroken(t *testing.T) {
 // intermittent TestClientCovActivateSessionRecreatesSubscriptions failure
 // (Disconnected, Reconnecting after a session switch).
 func TestLeftSession_SessionBeingReplaced(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	prev := &Session{resp: &ua.CreateSessionResponse{AuthenticationToken: ua.NewNumericNodeID(0, 1)}}
 	next := &Session{resp: &ua.CreateSessionResponse{AuthenticationToken: ua.NewNumericNodeID(0, 2)}}
@@ -315,6 +325,7 @@ func TestLeftSession_SessionBeingReplaced(t *testing.T) {
 // Regression (TestDiagnostics_Transfer on CI): the client whose subscription
 // another client had taken recreated it.
 func TestPublish_SubscriptionTransferred(t *testing.T) {
+	t.Parallel()
 	transferred := func(id, seq uint32) *ua.PublishResponse {
 		eo := ua.NewExtensionObject(&ua.StatusChangeNotification{Status: ua.StatusGoodSubscriptionTransferred})
 		return &ua.PublishResponse{

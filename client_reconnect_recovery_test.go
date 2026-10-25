@@ -16,6 +16,7 @@ import (
 // TestWithSubscriptionRecoveryHandler_OptionRegistered verifies that
 // WithSubscriptionRecoveryHandler stores the callback in Config correctly.
 func TestWithSubscriptionRecoveryHandler_OptionRegistered(t *testing.T) {
+	t.Parallel()
 	var received []SubscriptionRecoveryEvent
 
 	c, err := NewClient("opc.tcp://example.com:4840",
@@ -32,6 +33,7 @@ func TestWithSubscriptionRecoveryHandler_OptionRegistered(t *testing.T) {
 // TestNotifyRecovery_DeliversEvent verifies that notifyRecovery invokes the
 // registered handler with the supplied event.
 func TestNotifyRecovery_DeliversEvent(t *testing.T) {
+	t.Parallel()
 	var received []SubscriptionRecoveryEvent
 
 	c, err := NewClient("opc.tcp://example.com:4840",
@@ -56,6 +58,7 @@ func TestNotifyRecovery_DeliversEvent(t *testing.T) {
 // TestNotifyRecovery_NilHandler_NoPanic verifies that notifyRecovery is safe
 // when no handler is registered.
 func TestNotifyRecovery_NilHandler_NoPanic(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 	require.Nil(t, c.recoveryFunc)
@@ -73,6 +76,7 @@ func TestNotifyRecovery_NilHandler_NoPanic(t *testing.T) {
 // TestNotifyRecovery_AllOutcomes verifies all defined outcome constants can be
 // delivered through the handler without error.
 func TestNotifyRecovery_AllOutcomes(t *testing.T) {
+	t.Parallel()
 	outcomes := []SubscriptionRecoveryOutcome{
 		SubscriptionRecoveryTransferred,
 		SubscriptionRecoveryRepublished,
@@ -110,6 +114,7 @@ func TestNotifyRecovery_AllOutcomes(t *testing.T) {
 // mismatched availableSeq; the first iteration hits the nil-session guard and
 // returns immediately, but the gap flag is already set.
 func TestSendRepublishRequests_GapDetected(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -131,6 +136,7 @@ func TestSendRepublishRequests_GapDetected(t *testing.T) {
 // before the acknowledgement got through). The server has sent nothing
 // since: there is no gap, the recovery is not reported as data loss.
 func TestRetransmissionGap(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		available []uint32
@@ -155,6 +161,7 @@ func TestRetransmissionGap(t *testing.T) {
 // TestSendRepublishRequests_NoGap verifies that sendRepublishRequests does NOT
 // set gapDetected when nextSeq is present in availableSeq.
 func TestSendRepublishRequests_NoGap(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -171,6 +178,7 @@ func TestSendRepublishRequests_NoGap(t *testing.T) {
 // TestSendRepublishRequests_EmptyAvailable verifies that sendRepublishRequests
 // does NOT set gapDetected when availableSeq is empty (server may have no buffer).
 func TestSendRepublishRequests_EmptyAvailable(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -187,6 +195,7 @@ func TestSendRepublishRequests_EmptyAvailable(t *testing.T) {
 // handlers run synchronously on the reconnect goroutine: a slow handler
 // delays subsequent notifyRecovery calls.
 func TestNotifyRecovery_BlockingHandlerDelaysCaller(t *testing.T) {
+	t.Parallel()
 	started := make(chan struct{})
 	release := make(chan struct{})
 	var secondDone atomic.Bool
@@ -232,6 +241,7 @@ func TestNotifyRecovery_BlockingHandlerDelaysCaller(t *testing.T) {
 
 // TestNotifyRecovery_ConcurrentCalls_NoPanic races many notifyRecovery calls.
 func TestNotifyRecovery_ConcurrentCalls_NoPanic(t *testing.T) {
+	t.Parallel()
 	var n atomic.Int64
 	c, err := NewClient("opc.tcp://example.com:4840",
 		WithSubscriptionRecoveryHandler(func(SubscriptionRecoveryEvent) {
