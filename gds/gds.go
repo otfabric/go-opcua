@@ -21,8 +21,12 @@
 // WithTrustList. A private key for UpdateCertificate may be PEM or PFX
 // (uapolicy.EncodePFX).
 //
-// The pull model (a Global Discovery Server with RegisterApplication,
-// StartSigningRequest and FinishRequest) is not implemented.
+// PullClient is the client of the pull model (Part 12 §6 and §7.9): it
+// registers an application with a Global Discovery Server, asks it for a
+// certificate (StartSigningRequest, StartNewKeyPairRequest), waits for it
+// (FinishRequest), reads the trust list and checks revocation. Enroll does
+// all of it, and an Enrollment configures an opcua.Client or a
+// server.Server. Package gdsserver is the server side.
 package gds
 
 import (
