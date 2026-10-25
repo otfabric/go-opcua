@@ -428,7 +428,7 @@ func TestAcceptFailures(t *testing.T) {
 
 type failWriter struct{ memConn }
 
-func (failWriter) Write([]byte) (int, error) { return 0, errors.New("broken") }
+func (*failWriter) Write([]byte) (int, error) { return 0, errors.New("broken") }
 
 func TestAcceptWriteFails(t *testing.T) {
 	good := "GET / HTTP/1.1\r\nHost: h\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: AQIDBAUGBwgJCgsMDQ4PEA==\r\n\r\n"

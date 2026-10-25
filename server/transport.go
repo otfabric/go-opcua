@@ -201,3 +201,21 @@ func (s *Server) transportEndpoints() []struct {
 		{s.cfg.https.endpoints, ua.TransportProfileHTTPS},
 	}
 }
+
+// WebSocketAddr returns the address the opc.wss listener is bound to, nil
+// before Start or without a WebSocket endpoint.
+func (s *Server) WebSocketAddr() net.Addr {
+	if s == nil || s.wl == nil {
+		return nil
+	}
+	return s.wl.Addr()
+}
+
+// HTTPSAddr returns the address the opc.https listener is bound to, nil
+// before Start or without an HTTPS endpoint.
+func (s *Server) HTTPSAddr() net.Addr {
+	if s == nil || s.hs == nil {
+		return nil
+	}
+	return s.hs.ln.Addr()
+}
