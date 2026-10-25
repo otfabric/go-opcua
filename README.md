@@ -53,7 +53,7 @@ Requires **Go 1.26** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
 **go-opcua** gives you everything needed to interact with OPC-UA servers or build your own.
 
 - **Client and server** — Full OPC UA client and server implementations
-  using OPC UA Binary over UA-TCP.
+  using OPC UA Binary over UA-TCP, WebSockets and HTTPS.
 - **Pure Go** — No CGO or native C library dependencies. Cryptography is the
   Go standard library, plus ChaCha20-Poly1305 from `golang.org/x/crypto` for
   two of the ECC security policies.
@@ -86,9 +86,9 @@ For full API details see [API.md](API.md).
 
 | Guide | Description |
 |-------|-------------|
-| [Client Guide](docs/client-guide.md) | Connecting, reading, writing, browsing, subscriptions, methods, history |
-| [Server Guide](docs/server-guide.md) | Building servers, namespaces, custom nodes, methods, events, access control, diagnostics |
-| [Security Guide](docs/security.md) | Certificates, encryption policies, authentication, security checklist |
+| [Client Guide](docs/client-guide.md) | Connecting (`opc.tcp`, `opc.wss`, `opc.https`, reverse connect), reading, writing, browsing, subscriptions, alarms and conditions, methods, history, server diagnostics, certificate management (`gds`, push and pull) |
+| [Server Guide](docs/server-guide.md) | Building servers, transports, namespaces, custom nodes, methods, events, alarms and conditions, history, discovery, push certificate management, Global Discovery Server, access control, diagnostics |
+| [Security Guide](docs/security.md) | Certificates, RSA and ECC security policies (incl. Brainpool and Curve448), TLS for `opc.wss` / `opc.https`, push certificate management, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
 | [PubSub](docs/pubsub.md) | Publishers and subscribers over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, UADP and JSON, message security, Security Key Service, chunks, discovery, Actions, diagnostics, PublishSubscribe information model |
 | [JSON and XML Data Encodings](docs/encodings.md) | `ua.EncodeJSON` / `ua.EncodeXML`: supported forms, namespace tables, custom structures, open62541 interoperability |
@@ -325,14 +325,19 @@ Each ledger row is one capability in one direction (go-opcua client → peer
 server, or peer client → go-opcua server), checked by a test. `unsupported`
 rows record what the peer (or its adapter) lacks or where it deviates from the
 specification; the test pins that behaviour or skips with the reason.
+`unverified` rows carry the reason they are still open: mostly an adapter
+command or fixture that opcua-interop does not have yet (a push certificate
+management or GDS client, peer server conditions for the Part 9 1.05 alarm
+methods), or a peer whose support is not established (see
+[`interop/GAPS.md`](interop/GAPS.md)).
 
-| Peer | Ledger | Verified | Unsupported | Deferred | Not applicable |
-|---|---|---:|---:|---:|---:|
-| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 445 | 210 | 64 | 44 |
-| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 136 | 192 | 30 | 22 |
-| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 192 | 130 | 34 | 22 |
-| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 136 | 196 | 27 | 22 |
-| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 111 | 217 | 34 | 22 |
+| Peer | Ledger | Verified | Unverified | Unsupported | Deferred | Not applicable |
+|---|---|---:|---:|---:|---:|---:|
+| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 476 | 70 | 228 | 60 | 42 |
+| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 148 | 49 | 192 | 28 | 21 |
+| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 225 | 29 | 131 | 32 | 21 |
+| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 159 | 30 | 203 | 25 | 21 |
+| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 123 | 34 | 228 | 32 | 21 |
 
 Interop with these stacks found and fixed go-opcua defects that a Go-to-Go
 test cannot show, among them the RSA-OAEP-SHA256 block size (UA-.NETStandard),
@@ -472,11 +477,11 @@ you rely on.
 | `id` | Well-known NodeID constants (generated from OPC-UA schema) |
 | `uacp` | OPC-UA Connection Protocol over TCP and TLS WebSockets; `ParseEndpoint`, `DialWithTimeout`, `ListenWebSocket` |
 | `uasc` | OPC-UA Secure Conversation (secure channel); the HTTPS channel (`NewHTTPSChannel`) |
-| `uapolicy` | Security policy implementations (encryption, signing) |
+| `uapolicy` | Security policy implementations (encryption, signing); certificates, keys, signing requests, CRLs and PFX files for the key types `crypto/x509` lacks (Brainpool, Ed448) |
 | `pubsub` | PubSub runtime (Part 14): publishers, subscribers, configuration builders; sub-packages `message`, `uadp`, `jsonmsg`, `transport` (`udp`, `eth`, `mqtt`, `amqp`), `security`, `sks`, `remote` |
 | `internal/stats` | Expvar-based statistics collection (internal) |
 
-Test-only packages (`interop/`, `conformance/`, `tests/`) are not part of the public library surface.
+Test-only packages (`interop/`, `conformance/`, `chaos/`, `tests/`) are not part of the public library surface.
 
 
 ## Examples
@@ -495,6 +500,7 @@ The `examples/` directory contains runnable programs:
 | `history-read` | Read historical data with manual continuation points |
 | `history-read-simple` | Read historical data with the `ReadHistoryAll` iterator |
 | `crypto` | Connect with encryption and certificates |
+| `security` | Connect with each authentication mode, security policy and mode, or the best endpoint (`-sec-policy auto`) |
 | `datetime` | Read the server's current time |
 | `discovery` | Discover servers on the network |
 | `endpoints` | List available endpoints |
@@ -507,6 +513,10 @@ The `examples/` directory contains runnable programs:
 | `node-summary` | Read all common node attributes in one call with `Node.Summary` |
 | `udt` | Work with user-defined types |
 | `reconnect` | Demonstrate auto-reconnection |
+| `gds-pull` | Run a Global Discovery Server (`gds/gdsserver`) and enroll a server and a client with `gds.PullClient.Enroll` |
+| `pubsub/publisher` | Publish UADP NetworkMessages over UDP without a server |
+| `pubsub/subscriber` | Receive the DataSets of the publisher example |
+| `pubsub/server` | Run a server that publishes a variable with PubSub and subscribes to it again |
 | `server/node_server` | Run a server using the node-based namespace |
 | `server/map_server` | Run a server using a Go map-backed namespace |
 | `server/NodeSet2_server` | Run a server that imports a NodeSet2 XML information model |
@@ -530,9 +540,10 @@ go-opcua is continuously interoperability-tested in all applicable client/server
 - **Unit tests**: `make test-norace` (`go test -count=1 ./...`), `make test` (same with `-race`).
 - **Coverage**: `make coverage` writes `coverage.out` for core library packages (90% gate); CI passes the same `COVER_PKGS` list as `coverpkg` to the shared workflow so Codecov matches. `make cover` opens the report.
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
-- **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541 and Milo by default; async-opcua, UA-.NETStandard, node-opcua and asyncua with `ASYNC_OPCUA_IMAGE`, `DOTNET_IMAGE`, `NODE_OPCUA_IMAGE`, `ASYNCUA_IMAGE`). See [INTEROP.md](INTEROP.md).
-- **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values, `chaos/pubsub` PubSub over lossy UDP and in-memory networks, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0 broker faults, key rotation and the SKS, chunks, discovery, Actions and diagnostics, and many runtimes on shared brokers. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
-- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`, the WebSocket framing and handshake (`internal/websocket`), HTTPS request bodies (`server`); PubSub: the UADP, JSON, chunk, discovery and Action decoders (`pubsub/uadp`, `pubsub/jsonmsg`), the runtime receive path and connection validation (`chaos/pubsub`), the MQTT and AMQP clients (`internal/mqtt`, `internal/amqp`) and the Ethernet frame, URL and BPF parsers (`pubsub/transport/eth`).
+- **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against the digest-pinned [opcua-interop](https://github.com/otfabric/opcua-interop) v0.14.0 adapter containers of all six peers (`OPEN62541_IMAGE`, `MILO_IMAGE`, `ASYNC_OPCUA_IMAGE`, `DOTNET_IMAGE`, `NODE_OPCUA_IMAGE`, `ASYNCUA_IMAGE` override them); the UA-.NETStandard GDS adapter (`DOTNET_GDS_IMAGE`) is opt-in. `go test ./interop/` checks the ledgers without Docker. See [INTEROP.md](INTEROP.md).
+- **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values, `chaos/certmgmt` push certificate management, `chaos/gdspull` the Global Discovery Server and the pull client, `chaos/pubsub` PubSub over lossy UDP and in-memory networks, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0 broker faults, key rotation and the SKS, chunks, discovery, Actions and diagnostics, and many runtimes on shared brokers. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
+- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`, the WebSocket framing and handshake (`internal/websocket`), HTTPS request bodies (`server`), the condition state machine and condition events (`server`, `opcua`), trust list updates and encodings (`server`, `gds`), certificates, signing requests, CRLs and PFX files (`uapolicy`), mDNS messages (`internal/mdns`); PubSub: the UADP, JSON, chunk, discovery and Action decoders (`pubsub/uadp`, `pubsub/jsonmsg`), the runtime receive path and connection validation (`chaos/pubsub`), the MQTT and AMQP clients (`internal/mqtt`, `internal/amqp`) and the Ethernet frame, URL and BPF parsers (`pubsub/transport/eth`).
+- **Conformance tests** (part of `go test ./...`): the go-opcua client against an in-process go-opcua server over a loopback secure channel, in `conformance/` and its packages `addrspace`, `subscription`, `session`, `security`, `transport`, `history`, `alarms`, `certmgmt`, `discovery`, `pubsub` and `eccext` (see [`conformance/doc.go`](conformance/doc.go)); `conformance/matrix_test.go` fails when an exported client method or a client or server option is exercised by none of them.
 - **PubSub end to end**: `conformance/pubsub/pubsub_*_test.go` run server-to-server PubSub configured by OPC UA clients through the PublishSubscribe methods, over UDP (plain, secured, chunked), MQTT 5.0, AMQP 1.0 and an in-memory Ethernet link, with discovery and diagnostics read through a client.
 - **Linting**: `make lint` (staticcheck), `make lint-ci` (golangci-lint); full local gate is `make check` (fmt + lint + verify + coverage).
 
