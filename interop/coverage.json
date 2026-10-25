@@ -8814,7 +8814,7 @@
       "test": "TestCertMgmtPush_GoClient_PeerServers",
       "reason": "adapter-fixture-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -8827,7 +8827,7 @@
       "status": "unverified",
       "reason": "peer-capability-unknown",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -8840,7 +8840,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -8853,7 +8853,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -8867,7 +8867,7 @@
       "test": "TestCertMgmtPush_GoClient_PeerServers",
       "reason": "adapter-fixture-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -8880,7 +8880,7 @@
       "status": "unverified",
       "reason": "peer-capability-unknown",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -8893,7 +8893,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -8906,7 +8906,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -8920,7 +8920,7 @@
       "test": "TestCertMgmtPush_GoClient_PeerServers",
       "reason": "adapter-fixture-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -8933,7 +8933,7 @@
       "status": "unverified",
       "reason": "peer-capability-unknown",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -8946,7 +8946,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -8959,7 +8959,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -8973,7 +8973,7 @@
       "test": "TestCertMgmtPush_GoClient_PeerServers",
       "reason": "adapter-fixture-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -8986,7 +8986,7 @@
       "status": "unverified",
       "reason": "peer-capability-unknown",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
@@ -8999,7 +8999,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
@@ -9012,7 +9012,7 @@
       "status": "unverified",
       "reason": "adapter-command-missing",
       "fixture": "baseline",
-      "interopVersion": "v0.10.1",
+      "interopVersion": "v0.12.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"

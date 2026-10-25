@@ -9,20 +9,38 @@ Pinned opcua-interop version: **v0.12.0**
 - `deferred`: 60
 - `not-applicable`: 42
 - `unsupported`: 212
-- `unverified`: 5
+- `unverified`: 21
 - `verified`: 453
 
 ## Unverified by reason
 
-- `adapter-command-missing`: 5
+- `adapter-command-missing`: 13
+- `adapter-fixture-missing`: 4
+- `peer-capability-unknown`: 4
 
 ## Unverified rows
 
 | Capability | Dir | Reason | Next action |
 |---|:---:|---|---|
+| `certmgmt.push.access` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
+| `certmgmt.push.access` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
+| `certmgmt.push.certificate-update` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
+| `certmgmt.push.certificate-update` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
+| `certmgmt.push.rejected-list` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
+| `certmgmt.push.rejected-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
+| `certmgmt.push.trust-list` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
+| `certmgmt.push.trust-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `pubsub.uadp.chunk` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.chunk` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.discovery` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.discovery` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.security-header` | O→S | `adapter-command-missing` | The open62541 codec operations have no keys (contract §14.9): the →S direction of signed / encrypted messages is pubsub.security.* |
+| `certmgmt.push.access` | C→O | `adapter-fixture-missing` | open62541 v1.5.9 has no roles: its push methods serve every session on a SignAndEncrypt channel, so only the properties are checked; passes against the open62541 adapter built with UA_ENABLE_GDS_PUSHMANAGEMENT (serverFeatures push-management, opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned |
+| `certmgmt.push.certificate-update` | C→O | `adapter-fixture-missing` | passes against the open62541 adapter built with UA_ENABLE_GDS_PUSHMANAGEMENT (serverFeatures push-management, opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned |
+| `certmgmt.push.rejected-list` | C→O | `adapter-fixture-missing` | passes against the open62541 adapter built with UA_ENABLE_GDS_PUSHMANAGEMENT (serverFeatures push-management, opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned |
+| `certmgmt.push.trust-list` | C→O | `adapter-fixture-missing` | passes against the open62541 adapter built with UA_ENABLE_GDS_PUSHMANAGEMENT (serverFeatures push-management, opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned |
+| `certmgmt.push.access` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
+| `certmgmt.push.certificate-update` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
+| `certmgmt.push.rejected-list` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
+| `certmgmt.push.trust-list` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 
