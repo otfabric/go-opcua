@@ -276,12 +276,12 @@ func pkcs12KDF(h *pfxHash, password, salt []byte, id byte, iterations, size int)
 
 // pfxDecoder holds the state of one attempt to decode a PKCS #12 file.
 type pfxDecoder struct {
-	password    pfxPassword
-	work        *int // the iterations left for key derivations
-	bags        int
-	macVerified bool
-	keys        [][]byte // PKCS #8 PrivateKeyInfos
-	certs       [][]byte // DER certificates
+	password  pfxPassword
+	work      *int // the iterations left for key derivations
+	bags      int
+	decrypted bool     // some of the contents came out of a decryption
+	keys      [][]byte // PKCS #8 PrivateKeyInfos
+	certs     [][]byte // DER certificates
 }
 
 func pfxError(format string, args ...any) error {
@@ -496,10 +496,19 @@ func (d *pfxDecoder) decrypt(algorithm cryptobyte.String, data []byte) ([]byte, 
 	if !algorithm.ReadASN1ObjectIdentifier(&oid) {
 		return nil, pfxError("malformed PFX encryption algorithm")
 	}
+	var (
+		plain []byte
+		err   error
+	)
 	if oid.Equal(oidPBES2) {
-		return d.decryptPBES2(algorithm, data)
+		plain, err = d.decryptPBES2(algorithm, data)
+	} else {
+		plain, err = d.decryptPKCS12PBE(oid, algorithm, data)
 	}
-	return d.decryptPKCS12PBE(oid, algorithm, data)
+	if err == nil {
+		d.decrypted = true
+	}
+	return plain, err
 }
 
 func (d *pfxDecoder) decryptPBES2(params cryptobyte.String, data []byte) ([]byte, error) {
@@ -669,11 +678,13 @@ func (d *pfxDecoder) decodeAuthSafe(authSafe []byte) error {
 	return nil
 }
 
-// decryptedError is the error for decrypted data that does not parse:
-// without a verified MAC it is likely a wrong password that happened to give
-// valid padding.
+// decryptedError is the error for contents that do not parse when some of
+// them were decrypted: a wrong password gives valid padding now and then
+// (about 1 in 256 times). A verified MAC does not rule that out: the MAC
+// covers the ciphertext, and a PFX may encrypt with another password than
+// its MAC's (openssl pkcs12 -twopass).
 func (d *pfxDecoder) decryptedError(err error) error {
-	if d.macVerified {
+	if !d.decrypted {
 		return err
 	}
 	return fmt.Errorf("%w (%w)", ErrPFXPassword, err)
@@ -852,7 +863,6 @@ func ParsePFX(data []byte, password string) (crypto.Signer, []*x509.Certificate,
 				return nil, nil, err
 			}
 			if ok {
-				d.macVerified = true
 				return d.decode(p)
 			}
 		}

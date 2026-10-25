@@ -456,8 +456,8 @@ func TestParsePFX_Structures(t *testing.T) {
 		require.NoError(t, err)
 		return algo, ciphertext
 	}
-	shrouded := func(password string) []byte {
-		algo, ciphertext := encrypt(pkcs8, password)
+	shroudedOf := func(plain []byte, password string) []byte {
+		algo, ciphertext := encrypt(plain, password)
 		var b cryptobyte.Builder
 		b.AddASN1(cbasn1.SEQUENCE, func(b *cryptobyte.Builder) {
 			b.AddBytes(algo)
@@ -465,6 +465,7 @@ func TestParsePFX_Structures(t *testing.T) {
 		})
 		return safeBag(oidShroudedKeyBag, b.BytesOrPanic())
 	}
+	shrouded := func(password string) []byte { return shroudedOf(pkcs8, password) }
 
 	ok := func(t *testing.T, p *pfxBuilder, wantCerts int) {
 		t.Helper()
@@ -535,6 +536,12 @@ func TestParsePFX_Structures(t *testing.T) {
 	t.Run("wrong decryption password, right MAC", func(t *testing.T) {
 		// The -twopass case: the MAC verifies, decryption does not.
 		fails(t, &pfxBuilder{password: "p", contents: [][]byte{dataContent(shrouded("other"))}}, ErrPFXPassword)
+		// A wrong password gives valid padding about 1 in 256 times; the
+		// result does not parse. Encrypting bytes that are not a key gives
+		// that case every time: it is a wrong password too, MAC or not.
+		garbage := shroudedOf([]byte("not a PrivateKeyInfo"), "p")
+		fails(t, &pfxBuilder{password: "p", contents: [][]byte{dataContent(garbage)}}, ErrPFXPassword)
+		fails(t, &pfxBuilder{password: "p", contents: [][]byte{dataContent(garbage)}}, errors.ErrInvalidPrivateKey)
 	})
 	t.Run("version", func(t *testing.T) {
 		fails(t, &pfxBuilder{password: "p", version: 2, contents: [][]byte{dataContent(keyBag)}}, errors.ErrInvalidPrivateKey)
