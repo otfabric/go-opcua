@@ -253,7 +253,7 @@ func tcpPair(t *testing.T) (net.Conn, net.Conn) {
 	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
-	defer l.Close()
+	defer func() { _ = l.Close() }()
 	ch := make(chan net.Conn, 1)
 	go func() {
 		c, _ := l.Accept()

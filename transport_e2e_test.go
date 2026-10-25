@@ -51,7 +51,7 @@ func TestTransports(t *testing.T) {
 			notifs := make(chan *opcua.PublishNotificationData, 16)
 			sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 20 * time.Millisecond}, notifs)
 			require.NoError(t, err)
-			defer sub.Cancel(ctx)
+			defer func() { _ = sub.Cancel(ctx) }()
 			_, err = sub.Monitor(ctx, ua.TimestampsToReturnBoth, opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime), ua.AttributeIDValue, 1))
 			require.NoError(t, err)
 			select {

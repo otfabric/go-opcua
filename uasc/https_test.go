@@ -301,7 +301,7 @@ func TestHTTPSUnreachable(t *testing.T) {
 	errCh := make(chan error, 1)
 	sc, err := NewHTTPSChannel("opc.https://"+addr, nil, noneConfig(), errCh)
 	require.NoError(t, err)
-	defer sc.Close()
+	defer func() { _ = sc.Close() }()
 	err = sc.SendRequest(context.Background(), &ua.ReadRequest{}, nil, func(ua.Response) error { return nil })
 	require.ErrorIs(t, err, io.EOF)
 	require.NotErrorIs(t, err, syscall.ECONNREFUSED, "the monitor gives up on a refusal; a lost HTTPS connection is retried")
