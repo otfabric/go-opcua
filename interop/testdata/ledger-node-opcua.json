@@ -1,5 +1,5 @@
 {
-  "interopVersion": "v0.12.0",
+  "interopVersion": "v0.13.0",
   "peer": {
     "stack": "node-opcua",
     "version": "2.187.12"
@@ -2109,28 +2109,28 @@
       "capability": "transport.wss",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.13.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.13.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.13.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.13.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
@@ -2807,73 +2807,57 @@
     {
       "capability": "certmgmt.push.trust-list",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_GoClient_PeerServers",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "passes against the node-opcua adapter with installPushCertificateManagementOnServer and the fixture user roles (opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "certmgmt.push.trust-list",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_NodeOpcuaClient_GoServer",
-      "reason": "adapter-command-missing",
-      "nextAction": "passes with the node-opcua adapter's `client push` (ClientPushCertificateManagement, opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "certmgmt.push.certificate-update",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_GoClient_PeerServers",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "passes against the node-opcua adapter with installPushCertificateManagementOnServer and the fixture user roles (opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "certmgmt.push.certificate-update",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_NodeOpcuaClient_GoServer",
-      "reason": "adapter-command-missing",
-      "nextAction": "passes with the node-opcua adapter's `client push` (ClientPushCertificateManagement, opcua-interop feat/gds); CreateSigningRequest only: the node-opcua client has no CA to sign the request; promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_GoClient_PeerServers",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "passes against the node-opcua adapter with installPushCertificateManagementOnServer and the fixture user roles (opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_NodeOpcuaClient_GoServer",
-      "reason": "adapter-command-missing",
-      "nextAction": "passes with the node-opcua adapter's `client push` (ClientPushCertificateManagement, opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "certmgmt.push.access",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_GoClient_PeerServers",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "passes against the node-opcua adapter with installPushCertificateManagementOnServer and the fixture user roles (opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "certmgmt.push.access",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
+      "status": "verified",
       "test": "TestCertMgmtPush_NodeOpcuaClient_GoServer",
-      "reason": "adapter-command-missing",
-      "nextAction": "passes with the node-opcua adapter's `client push` (ClientPushCertificateManagement, opcua-interop feat/gds); promote to verified when the opcua-interop release with feat/gds is pinned",
       "fixture": "baseline"
     }
   ]
