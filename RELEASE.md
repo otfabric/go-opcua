@@ -1,5 +1,40 @@
 # go-opcua Releases
 
+## v1.23.1
+
+**Date:** 2026-10-25
+**Previous release:** v1.23.0
+
+### Summary
+
+Fixes found by the 25-run hardening batch of v1.23.0: subscription recovery after a reconnect, a data race between two activations of one session, and the error of a PFX whose decryption password is wrong.
+
+### Fixed
+
+- **client: a reconnect that creates a new session no longer recreates the subscriptions it has just transferred.** After the transfer, the Publish request still waiting in the old session is answered with Bad_NoSubscription. The client took that for its current session and marked the subscriptions broken; they were recreated with new ids and lost their notification history. Bad_NoSubscription for a session the client has left is now ignored, like the other errors of such a session.
+- **client: no false retransmission gap.** The recovery reported an unrecoverable gap (or a partial recovery) when the server's available sequence numbers were all below the next one the client expects: those are messages the client has received but not yet acknowledged. A gap is now reported only when the server holds later messages but not the next one (serial number comparison, so wrap-around is handled).
+- **client: the activations of a session take turns.** The reconnect logic and the application could activate the same session at the same time and both read and wrote its server nonce and ephemeral key (a data race). Each activation uses the nonce the previous one brought.
+- **server: Good_SubscriptionTransferred is queued before the subscription leaves the session** (Part 4 §5.13.7). A Publish request of the old session that came in during TransferSubscriptions could get Bad_NoSubscription instead.
+- **uapolicy: decrypted PFX contents that do not parse are `ErrPFXPassword`** ("wrong PFX password or corrupt PFX"), also with a verified MAC. A wrong decryption password gives valid padding about 1 in 256 times; the MAC covers the ciphertext, and a PFX may use another password for encryption than for its MAC (`openssl pkcs12 -twopass`). It used to report a malformed key.
+
+### Tests
+
+- Regression tests for each fix:
+  - `TestActivateSessionConcurrent`
+  - `TestPublish_NoSubscriptionOfLeftSession`
+  - `TestRetransmissionGap`
+  - `TestTransferSubscriptions_PublishDuringTheTransfer`
+  - the twopass case of `TestParsePFX_Structures`, now deterministic
+- **Test servers bind port 0 themselves:** a port chosen first could be taken by a parallel test before the server bound it.
+- **`TestRecovery_ServerRestart`:** the restarted server gets its fixture before it starts, so the fixture keeps its namespace index; the diagnostics namespace is created with the first session.
+- **Failure diagnostics:** the recovery tests report the recorded states and events when they fail.
+
+### Interop
+
+- opcua-interop v0.14.0 (unchanged).
+
+---
+
 ## v1.23.0
 
 **Date:** 2026-10-25
