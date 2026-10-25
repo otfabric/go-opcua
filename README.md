@@ -230,7 +230,7 @@ what the interop suite has actually exercised.
 | License | MIT | MPL-2.0 | EPL-2.0 | MPL-2.0 | GPL-2.0 or OPC Foundation RCL | MIT | LGPL-3.0 |
 | Client and server | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | UA-TCP, OPC UA Binary | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
-| HTTPS / WebSockets transport | — | WebSocket server (build option) | — | — | HTTPS | — | — |
+| HTTPS / WebSockets transport (`opc.https`, `opc.wss`) | ✅ client and server | — (libwebsockets provider on master only) | incubating client transports, unpublished | — | ✅ | — | — |
 | Reverse connect (ReverseHello) ¹ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — |
 | RSA security policies (Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss; Basic128Rsa15 and Basic256 for legacy peers) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ECC security policies ² | ✅ nistP256/384, brainpoolP256r1/P384r1, nistP256_AesGcm, nistP256_ChaChaPoly, curve25519, curve448 | ✅ (OpenSSL) | — | — | ✅ | — | — |
@@ -326,11 +326,11 @@ specification; the test pins that behaviour or skips with the reason.
 
 | Peer | Ledger | Verified | Unsupported | Deferred | Not applicable |
 |---|---|---:|---:|---:|---:|
-| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 407 | 148 | 64 | 44 |
-| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 136 | 140 | 30 | 22 |
-| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 148 | 128 | 34 | 22 |
-| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 136 | 144 | 27 | 22 |
-| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 111 | 165 | 34 | 22 |
+| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 411 | 176 | 64 | 44 |
+| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 136 | 158 | 30 | 22 |
+| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 192 | 96 | 34 | 22 |
+| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 136 | 162 | 27 | 22 |
+| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 111 | 183 | 34 | 22 |
 
 Interop with these stacks found and fixed go-opcua defects that a Go-to-Go
 test cannot show, among them the RSA-OAEP-SHA256 block size (UA-.NETStandard),
@@ -461,8 +461,8 @@ you rely on.
 | `monitor` | High-level `NodeMonitor` with callback and channel-based subscriptions |
 | `errors` | Sentinel errors for `errors.Is()` checking |
 | `id` | Well-known NodeID constants (generated from OPC-UA schema) |
-| `uacp` | OPC-UA Connection Protocol (TCP transport); `ParseEndpoint`, `DialWithTimeout` |
-| `uasc` | OPC-UA Secure Conversation (secure channel) |
+| `uacp` | OPC-UA Connection Protocol over TCP and TLS WebSockets; `ParseEndpoint`, `DialWithTimeout`, `ListenWebSocket` |
+| `uasc` | OPC-UA Secure Conversation (secure channel); the HTTPS channel (`NewHTTPSChannel`) |
 | `uapolicy` | Security policy implementations (encryption, signing) |
 | `pubsub` | PubSub runtime (Part 14): publishers, subscribers, configuration builders; sub-packages `message`, `uadp`, `jsonmsg`, `transport` (`udp`, `eth`, `mqtt`, `amqp`), `security`, `sks`, `remote` |
 | `internal/stats` | Expvar-based statistics collection (internal) |
@@ -523,7 +523,7 @@ go-opcua is continuously interoperability-tested in all applicable client/server
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
 - **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against [opcua-interop](https://github.com/otfabric/opcua-interop) adapter containers (open62541 and Milo by default; async-opcua, UA-.NETStandard, node-opcua and asyncua with `ASYNC_OPCUA_IMAGE`, `DOTNET_IMAGE`, `NODE_OPCUA_IMAGE`, `ASYNCUA_IMAGE`). See [INTEROP.md](INTEROP.md).
 - **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values, `chaos/pubsub` PubSub over lossy UDP and in-memory networks, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0 broker faults, key rotation and the SKS, chunks, discovery, Actions and diagnostics, and many runtimes on shared brokers. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
-- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`; PubSub: the UADP, JSON, chunk, discovery and Action decoders (`pubsub/uadp`, `pubsub/jsonmsg`), the runtime receive path and connection validation (`chaos/pubsub`), the MQTT and AMQP clients (`internal/mqtt`, `internal/amqp`) and the Ethernet frame, URL and BPF parsers (`pubsub/transport/eth`).
+- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`, the WebSocket framing and handshake (`internal/websocket`), HTTPS request bodies (`server`); PubSub: the UADP, JSON, chunk, discovery and Action decoders (`pubsub/uadp`, `pubsub/jsonmsg`), the runtime receive path and connection validation (`chaos/pubsub`), the MQTT and AMQP clients (`internal/mqtt`, `internal/amqp`) and the Ethernet frame, URL and BPF parsers (`pubsub/transport/eth`).
 - **PubSub end to end**: `conformance/pubsub_*_test.go` run server-to-server PubSub configured by OPC UA clients through the PublishSubscribe methods, over UDP (plain, secured, chunked), MQTT 5.0, AMQP 1.0 and an in-memory Ethernet link, with discovery and diagnostics read through a client.
 - **Linting**: `make lint` (staticcheck), `make lint-ci` (golangci-lint); full local gate is `make check` (fmt + lint + verify + coverage).
 
@@ -538,7 +538,9 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 | | OPC-UA XML — built-in types, structures, NodeSet2 values | Yes |
 | Transport | UA-TCP (`opc.tcp://`) | Yes |
 | | UA-TCP reverse connect (ReverseHello) | Yes (client and server) |
-| | HTTPS / WebSockets | No |
+| | WebSockets (`opc.wss://`, Part 6 §7.5, wss-uasc-uabinary, sub-protocol `opcua+uacp`) | Yes (client and server) |
+| | HTTPS (`opc.https://`, `https://`, Part 6 §7.4, https-uabinary) | Yes (client and server) |
+| | HTTPS / WebSockets with UA JSON (`https-uajson`, `wss-uajson`) | No |
 | Message security | None / Sign / SignAndEncrypt | Yes |
 | Security policy | None | Yes |
 | | Basic128Rsa15 | Yes |
