@@ -29,11 +29,18 @@ const (
 
 func pushServer(t *testing.T, pm server.PushManagement) string {
 	t.Helper()
+	_, url := pushServerWith(t, pm)
+	return url
+}
+
+// pushServerWith is pushServer with further options, returning the server.
+func pushServerWith(t *testing.T, pm server.PushManagement, extra ...server.Option) (*server.Server, string) {
+	t.Helper()
 	p := pki(t)
 	if pm.TrustList == nil {
 		pm.TrustList = &ua.TrustListDataType{TrustedCertificates: [][]byte{p.clientCert}}
 	}
-	_, url := newServer(t,
+	return newServer(t, append([]server.Option{
 		server.Certificate(p.serverCert),
 		server.PrivateKey(p.serverKey),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
@@ -52,8 +59,7 @@ func pushServer(t *testing.T, pm server.PushManagement) string {
 			return server.DefaultRoleMapper(tok)
 		}),
 		server.WithPushManagement(pm),
-	)
-	return url
+	}, extra...)...)
 }
 
 // pushDial connects over Basic256Sha256 with the application certificate,

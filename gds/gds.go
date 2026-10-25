@@ -14,6 +14,13 @@
 // node-opcua. Part 12 requires a session with the SecurityAdmin role over a
 // SignAndEncrypt channel; servers refuse the methods otherwise.
 //
+// Beyond the methods of Part 12 1.04 it calls GetCertificates,
+// CreateSelfSignedCertificate and ResetToServerDefaults (Part 12 1.05
+// §7.10) and reads the TransactionDiagnostics. The trust lists of the
+// DefaultHttpsGroup and the DefaultUserTokenGroup are reached with
+// WithTrustList. A private key for UpdateCertificate may be PEM or PFX
+// (uapolicy.EncodePFX).
+//
 // The pull model (a Global Discovery Server with RegisterApplication,
 // StartSigningRequest and FinishRequest) is not implemented.
 package gds
@@ -43,7 +50,22 @@ var (
 	// DefaultTrustList is the TrustList of the DefaultApplicationGroup
 	// (i=12642).
 	DefaultTrustList = ua.NewNumericNodeID(0, id.ServerConfigurationCertificateGroupsDefaultApplicationGroupTrustList)
+	// DefaultHTTPSGroup is the certificate group of the TLS certificate of
+	// the HTTPS endpoints (DefaultHttpsGroup, i=14088).
+	DefaultHTTPSGroup = ua.NewNumericNodeID(0, id.ServerConfigurationCertificateGroupsDefaultHTTPSGroup)
+	// HTTPSTrustList is the TrustList of the DefaultHttpsGroup (i=14089).
+	HTTPSTrustList = ua.NewNumericNodeID(0, id.ServerConfigurationCertificateGroupsDefaultHTTPSGroupTrustList)
+	// DefaultUserTokenGroup is the certificate group whose trust list
+	// validates X.509 user identity tokens (i=14122).
+	DefaultUserTokenGroup = ua.NewNumericNodeID(0, id.ServerConfigurationCertificateGroupsDefaultUserTokenGroup)
+	// UserTokenTrustList is the TrustList of the DefaultUserTokenGroup
+	// (i=14123).
+	UserTokenTrustList = ua.NewNumericNodeID(0, id.ServerConfigurationCertificateGroupsDefaultUserTokenGroupTrustList)
 )
+
+// HTTPSCertificateType is the certificate type of the DefaultHttpsGroup
+// (Part 12 §7.8.4).
+var HTTPSCertificateType = ua.NewNumericNodeID(0, id.HTTPSCertificateType)
 
 // Certificate types of application instance certificates (Part 12 §7.8.4).
 var (
@@ -73,6 +95,13 @@ type Client struct {
 // New returns a Client that uses the session of c.
 func New(c *opcua.Client) *Client {
 	return &Client{c: c, TrustList: DefaultTrustList, methods: map[string]*ua.NodeID{}}
+}
+
+// WithTrustList returns a Client over the same session whose trust list
+// methods use the TrustList object tl, for example HTTPSTrustList or
+// UserTokenTrustList.
+func (g *Client) WithTrustList(tl *ua.NodeID) *Client {
+	return &Client{c: g.c, TrustList: tl, methods: map[string]*ua.NodeID{}}
 }
 
 // Error is the Bad status a method call returned.

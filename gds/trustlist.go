@@ -45,7 +45,7 @@ func DecodeTrustList(b []byte) (*ua.TrustListDataType, error) {
 }
 
 func (g *Client) fileCall(ctx context.Context, name string, method uint32, outputs int, args ...*ua.Variant) ([]*ua.Variant, error) {
-	return g.call(ctx, g.TrustList, name, method, outputs, args...)
+	return g.call(ctx, g.TrustList, name, g.trustListFallback(name, method), outputs, args...)
 }
 
 func handleOut(name string, v *ua.Variant) (uint32, error) {
