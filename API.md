@@ -1718,7 +1718,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `HTTPSEndPoint(host string, port int)` | Add an `opc.https://host:port` endpoint (Part 6 §7.4, https-uabinary): each enabled policy without SecureChannelEnhancements, in its strongest enabled mode |
 | `ListenHTTPSOn(addr string)` | Bind address of the HTTPS listener |
 | `TLSConfig(cfg *tls.Config)` | TLS certificate (and client authentication) of the `opc.wss` / `opc.https` listeners; default: the RSA application instance certificate. TLS 1.2 minimum |
-| `WithPushManagement(pm PushManagement)` | Push certificate management (Part 12 §7): the ServerConfiguration object, the DefaultApplicationGroup trust list validates client application certificates; see [Push certificate management (server)](#push-certificate-management-server) |
+| `WithPushManagement(pm PushManagement)` | Push certificate management (Part 12 §7): the ServerConfiguration object with the DefaultApplicationGroup (client application certificates), DefaultHttpsGroup (TLS) and DefaultUserTokenGroup (X.509 user tokens), their trust lists and alarms; see [Push certificate management (server)](#push-certificate-management-server) |
 
 `Server.URLs()` lists the `opc.tcp`, then the `opc.wss` and the `opc.https` endpoint URLs; `Server.WebSocketAddr()` and `Server.HTTPSAddr()` return the bound listener addresses. Each `EndpointDescription` carries the `TransportProfileUri` of its transport.
 
@@ -2407,20 +2407,39 @@ func MethodCallerFromContext(ctx context.Context) (*MethodCaller, bool)
 
 ```go
 type PushManagement struct {
-    TrustList               *ua.TrustListDataType // initial trust list (nil: empty)
-    MaxTrustListSize        uint32                // 0: 1 MiB
-    MaxRejectedCertificates int                   // 0: 64
-    ApplyImmediately        bool                  // no transactions: changes apply when their method returns
-    Authorizer              PushAuthorizer        // nil: SecurityAdmin role (always SignAndEncrypt)
-    Store                   CertificateStore      // nil: nothing is persisted
+    TrustList                *ua.TrustListDataType // initial trust list of the DefaultApplicationGroup (nil: empty)
+    HTTPSTrustList           *ua.TrustListDataType // DefaultHttpsGroup (TLS client certificates)
+    UserTokenTrustList       *ua.TrustListDataType // DefaultUserTokenGroup (X.509 user tokens)
+    HTTPSClientCertificates  HTTPSClientAuth       // Ignore (default), VerifyIfGiven, Require
+    MaxTrustListSize         uint32                // 0: 1 MiB
+    MaxRejectedCertificates  int                   // 0: 64
+    ApplyImmediately         bool                  // no transactions: changes apply when their method returns
+    Authorizer               PushAuthorizer        // nil: SecurityAdmin role (always SignAndEncrypt)
+    Store                    CertificateStore      // nil: nothing is persisted; a CertificateGroupStore gets every group
+    PFXPassword              func(ctx context.Context, certificateGroup, certificateType *ua.NodeID) (string, error)
+    TrustListUpdateFrequency time.Duration         // UpdateFrequency; drives TrustListOutOfDate
+    Alarms                   *CertificateAlarms    // CertificateExpired and TrustListOutOfDate alarms
 }
+type HTTPSClientAuth int // HTTPSClientCertificatesIgnore, …VerifyIfGiven, …Require
+type CertificateAlarms struct {
+    ExpirationLimit time.Duration // 0: 14 days
+    CheckInterval   time.Duration // 0: 1 minute
+}
+const CertificateAlarmsNamespaceURI = "urn:otfabric:go-opcua:certificates"
 type PushAuthorizer func(ctx context.Context, caller *MethodCaller, method string) ua.StatusCode
 type CertificateStore interface {
     StoreTrustList(ctx context.Context, tl *ua.TrustListDataType) error
     StoreCertificate(ctx context.Context, certificateType *ua.NodeID, cert []byte, issuers [][]byte, key crypto.Signer) error
 }
+type CertificateGroupStore interface {
+    CertificateStore
+    StoreGroupTrustList(ctx context.Context, certificateGroup *ua.NodeID, tl *ua.TrustListDataType) error
+    StoreGroupCertificate(ctx context.Context, certificateGroup, certificateType *ua.NodeID, cert []byte, issuers [][]byte, key crypto.Signer) error
+}
 func WithPushManagement(pm PushManagement) Option
 func (s *Server) TrustList() *ua.TrustListDataType    // the trust list in effect (nil without push management)
+func (s *Server) GroupTrustList(certificateGroup *ua.NodeID) *ua.TrustListDataType
+func (s *Server) HTTPSCertificate() []byte            // the TLS certificate of opc.https / opc.wss
 func (s *Server) RejectedCertificates() [][]byte      // the most recently rejected client certificates
 ```
 
@@ -2443,6 +2462,11 @@ func (g *Client) GetRejectedList(ctx context.Context) ([][]byte, error)
 func (g *Client) ApplyChanges(ctx context.Context) error
 func (g *Client) CancelChanges(ctx context.Context) error
 func (g *Client) Properties(ctx context.Context) (*Properties, error)
+func (g *Client) WithTrustList(tl *ua.NodeID) *Client // another group's TrustList (HTTPSTrustList, UserTokenTrustList)
+func (g *Client) GetCertificates(ctx context.Context, group *ua.NodeID) ([]*ua.NodeID, [][]byte, error)
+func (g *Client) CreateSelfSignedCertificate(ctx context.Context, req *SelfSignedCertificate) ([]byte, error)
+func (g *Client) ResetToServerDefaults(ctx context.Context) error
+func (g *Client) TransactionDiagnostics(ctx context.Context) (*TransactionDiagnostics, error)
 func Thumbprint(cert []byte) string                  // upper-case hex SHA-1, for RemoveCertificate
 func EncodeTrustList(tl *ua.TrustListDataType) ([]byte, error)
 func DecodeTrustList(b []byte) (*ua.TrustListDataType, error)
@@ -2450,8 +2474,11 @@ type Error struct{ Method string; Status ua.StatusCode } // errors.Is(err, ua.St
 ```
 
 `SigningRequest{CertificateGroup, CertificateType, SubjectName, RegeneratePrivateKey, Nonce}`,
-`CertificateUpdate{CertificateGroup, CertificateType, Certificate, IssuerCertificates, PrivateKeyFormat, PrivateKey}`;
-NodeIds `ServerConfiguration`, `DefaultApplicationGroup`, `DefaultTrustList` and the
+`CertificateUpdate{CertificateGroup, CertificateType, Certificate, IssuerCertificates, PrivateKeyFormat, PrivateKey}` (`PEM` or `PFX`, see `uapolicy.EncodePFX`),
+`SelfSignedCertificate{CertificateGroup, CertificateType, SubjectName, DNSNames, IPAddresses, LifetimeInDays, KeySizeInBits}`,
+`TransactionDiagnostics{StartTime, EndTime, Result, AffectedTrustLists, AffectedCertificateGroups, Errors}`;
+NodeIds `ServerConfiguration`, `DefaultApplicationGroup`, `DefaultTrustList`, `DefaultHTTPSGroup`, `HTTPSTrustList`,
+`DefaultUserTokenGroup`, `UserTokenTrustList`, `HTTPSCertificateType` and the
 `…ApplicationCertificateType` variables. See [docs/client-guide.md](docs/client-guide.md#certificate-management-gds-push).
 
 ## Package `monitor`
@@ -2911,6 +2938,16 @@ func ParseCertificate(der []byte) (*x509.Certificate, error)
 func ParseCertificates(der []byte) ([]*x509.Certificate, error)
 func CreateCertificate(rand io.Reader, template, parent *x509.Certificate, pub crypto.PublicKey, priv crypto.Signer) ([]byte, error)
 func VerifyCertificate(certs []*x509.Certificate, roots *x509.CertPool, anchors []*x509.Certificate) error
+func CreateCertificateRequest(rand io.Reader, template *x509.CertificateRequest, priv crypto.Signer) ([]byte, error)
+func ParseCertificateRequest(der []byte) (*x509.CertificateRequest, error)
+func CheckCertificateRequestSignature(csr *x509.CertificateRequest) error
+func CreateRevocationList(rand io.Reader, template *x509.RevocationList, issuer *x509.Certificate, priv crypto.Signer) ([]byte, error)
+func ParseRevocationList(der []byte) (*x509.RevocationList, error)
+func CheckRevocationListSignature(crl *x509.RevocationList, issuer *x509.Certificate) error
+
+// PKCS #12 (PFX): PBES2 / PKCS #12 PBEs, HMAC or PBMAC1 integrity
+func ParsePFX(data []byte, password string) (crypto.Signer, []*x509.Certificate, error) // ErrPFXPassword: wrong password
+func EncodePFX(key crypto.Signer, certs [][]byte, password string) ([]byte, error)
 
 // ECC: ephemeral keys and the EccEncryptedSecret of user identity tokens
 func NewEphemeralKey(uri string) (*EphemeralKey, error)

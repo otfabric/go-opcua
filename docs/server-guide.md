@@ -918,10 +918,13 @@ component of the Server object:
 
 | Node | Content |
 |------|---------|
-| ServerConfiguration properties | ServerCapabilities, SupportedPrivateKeyFormats (`PEM`), MaxTrustListSize, MulticastDnsEnabled |
-| CertificateGroups / DefaultApplicationGroup | CertificateTypes (the types of the application identities), the TrustList |
-| DefaultApplicationGroup / TrustList | TrustListType file (Part 12 §7.8.2): Open, OpenWithMasks, Read, Write, GetPosition, SetPosition, Close, CloseAndUpdate, AddCertificate, RemoveCertificate; Size, LastUpdateTime, UpdateFrequency |
-| Methods | UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges |
+| ServerConfiguration properties | ServerCapabilities, SupportedPrivateKeyFormats (`PEM`, `PFX`), MaxTrustListSize, MulticastDnsEnabled |
+| CertificateGroups / DefaultApplicationGroup | CertificateTypes (the types of the application identities), the TrustList, the CertificateExpired and TrustListOutOfDate alarms (with `Alarms`) |
+| CertificateGroups / DefaultHttpsGroup | CertificateTypes (HttpsCertificateType: the TLS certificate of the opc.https / opc.wss endpoints), its own TrustList, CertificateExpired and TrustListOutOfDate |
+| CertificateGroups / DefaultUserTokenGroup | its own TrustList for X.509 user identity tokens, TrustListOutOfDate |
+| <group> / TrustList | TrustListType file (Part 12 §7.8.2): Open, OpenWithMasks, Read, Write, GetPosition, SetPosition, Close, CloseAndUpdate, AddCertificate, RemoveCertificate; Size, LastUpdateTime, UpdateFrequency (with `TrustListUpdateFrequency`) |
+| Methods | UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, ResetToServerDefaults |
+| TransactionDiagnostics | StartTime, EndTime, Result, AffectedTrustLists, AffectedCertificateGroups, Errors of the last or current transaction (SecurityAdmin only) |
 
 ```go
 srv, _ := server.New(
@@ -947,21 +950,25 @@ srv, _ := server.New(
 | Validation | New channels and sessions validate the client application certificate against the trust list (Part 4 §6.1.3): a chain to a trusted certificate, issuer certificates as intermediates, CRLs of the CAs (`Bad_CertificateRevoked`, `Bad_CertificateIssuerRevoked`). It replaces `WithClientCertificateTrustList` (`New` refuses both) |
 | Trust list input | CloseAndUpdate decodes the TrustListDataType exactly; every certificate and CRL must parse, a CRL must be signed by a CA of the lists; at most 1024 entries and `MaxTrustListSize` bytes (default 1 MiB; `Bad_EncodingLimitsExceeded` beyond) |
 | Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. `ApplyImmediately` applies every change when its method returns |
-| UpdateCertificate | Replaces the application instance certificate of its type (RSA, ECDSA, Ed25519, Ed448). The key is the one of the last CreateSigningRequest, the current key, or a `PEM` private key (PFX: `Bad_NotSupported`). The certificate must carry the server's ApplicationUri and be issued by one of the issuer certificates when they are given |
-| After ApplyChanges | New channels and the endpoints use the new certificate; channels already open keep theirs and keep working |
-| CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new RSA, ECDSA P-256 / P-384 or Ed25519 key (nonce of at least 32 bytes); Brainpool and Ed448: `Bad_NotSupported` |
+| UpdateCertificate | Replaces the certificate of its group and type: an application instance certificate (RSA, ECDSA on NIST and Brainpool curves, Ed25519, Ed448) or the HTTPS certificate of the DefaultHttpsGroup. The key is the one of the last CreateSigningRequest or CreateSelfSignedCertificate, the current key, or a `PEM` or `PFX` (PKCS #12, password from `PFXPassword`; a wrong one is `Bad_SecurityChecksFailed`) private key. The certificate must carry the server's ApplicationUri and be issued by one of the issuer certificates when they are given |
+| After ApplyChanges | New channels and the endpoints use the new certificate, new TLS handshakes the new HTTPS certificate; channels and connections already open keep theirs and keep working |
+| CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new key of the certificate type: RSA (2048, 3072 or 4096 bits), ECDSA P-256 / P-384, brainpoolP256r1 / brainpoolP384r1, Ed25519 or Ed448 (nonce of at least 32 bytes) |
+| CreateSelfSignedCertificate | A new key and a self-signed certificate for a group and type (subject, DNS names and IP addresses default to those of the current certificate, 365 days by default, the ApplicationUri as SAN); it takes effect at ApplyChanges |
+| GetCertificates | The certificate types and certificates of a group |
+| ResetToServerDefaults | Back to the trust lists, certificates and keys the server started with (stored through `Store`); `Bad_TransactionPending` while another session has a transaction |
+| Group trust lists | The DefaultUserTokenGroup trust list validates X.509 user tokens before a `WithX509UserValidator` is asked; the DefaultHttpsGroup trust list validates TLS client certificates when `HTTPSClientCertificates` is `HTTPSClientCertificatesVerifyIfGiven` or `HTTPSClientCertificatesRequire` |
+| Alarms | `Alarms: &server.CertificateAlarms{ExpirationLimit, CheckInterval}` adds CertificateExpired (active from `ExpirationLimit`, default 14 days, before the group certificate expires; severity 900 once expired) and TrustListOutOfDate (active when a trust list was not updated for `TrustListUpdateFrequency`) conditions in the namespace `server.CertificateAlarmsNamespaceURI`, evaluated every `CheckInterval` (default 1 minute) and on every change |
 | GetRejectedList | The most recent `MaxRejectedCertificates` (default 64) client certificates validation rejected |
 | Access | SignAndEncrypt only (`Bad_SecurityModeInsufficient`), and the SecurityAdmin role (`Bad_UserAccessDenied`), unless `Authorizer` decides otherwise |
 | Persistence | None by default: the server writes no files. A `CertificateStore` gets the trust list and the new certificate with its issuers and key at ApplyChanges, before they take effect; an error fails ApplyChanges with `Bad_InternalError` and keeps the change pending |
 
-`Server.TrustList()` and `Server.RejectedCertificates()` return the trust
-list in effect and the rejected certificates.
+`Server.TrustList()`, `Server.GroupTrustList(group)`,
+`Server.HTTPSCertificate()` and `Server.RejectedCertificates()` return the
+trust lists in effect, the HTTPS certificate and the rejected certificates.
 
-Not implemented: the DefaultHttpsGroup and DefaultUserTokenGroup (only the
-DefaultApplicationGroup is managed), GetCertificates,
-CreateSelfSignedCertificate, ResetToServerDefaults, the certificate expiration
-alarms, TransactionDiagnostics, PFX private keys, and the pull model (a Global
-Discovery Server, Part 12 §6).
+Not implemented: DeleteCertificate (Part 12 §7.10.7), certificate groups
+beyond the three default ones, and the pull model (a Global Discovery Server,
+Part 12 §6).
 
 ---
 

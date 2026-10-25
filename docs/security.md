@@ -167,6 +167,8 @@ The Brainpool policies are `ECC_nistP256` / `ECC_nistP384` on another curve, `Si
 
 - `uapolicy.ParseCertificate` / `ParseCertificates` return an `*x509.Certificate` for every key type: a Brainpool key as an `*ecdsa.PublicKey` on its curve (`PublicKeyAlgorithm` ECDSA), an Ed448 key as an `ed448.PublicKey`. Everything else comes from `crypto/x509`; `Raw` and the other raw fields are the original bytes.
 - `uapolicy.CreateCertificate` makes certificates with these keys or signed by them (other keys go to `x509.CreateCertificate`); `uapolicy.MarshalPrivateKey` writes any key as PKCS #8. `uapolicy.ParsePrivateKey` reads Brainpool keys in PKCS #8 and SEC 1 and Ed448 keys in PKCS #8, as OpenSSL writes them.
+- `uapolicy.CreateCertificateRequest` / `ParseCertificateRequest` / `CheckCertificateRequestSignature` make and check PKCS #10 requests for these keys (CreateSigningRequest of the push model), and `uapolicy.ParseRevocationList` / `CheckRevocationListSignature` read CRLs signed by such CAs (trust lists).
+- `uapolicy.ParsePFX` / `EncodePFX` read and write PKCS #12 (PFX) files with any of these keys: PBES2 (PBKDF2, AES-CBC), the PKCS #12 PBEs (3DES, RC2) and the SHA-1 / SHA-2 MAC, or PBMAC1. BER indefinite-length files, RC4 and the public-key integrity mode are refused.
 - `uapolicy.VerifyCertificate` verifies a chain. Without Ed448 signatures that is `crypto/x509`, Brainpool keys included. A chain in which a certificate is signed with Ed448 is built by the library against the trusted certificates only (`TrustedCertificates`, `WithClientCertificateTrustList`; not the system roots, which carry no Ed448 keys), with this subset of RFC 5280 §6.1: validity period; no unknown critical extension; every issuer a CA by basicConstraints, with keyCertSign if it has a key usage, and within its path length; issuer and subject names equal byte for byte; authority and subject key identifiers equal where both are present; at most 8 certificates. A CA with name constraints is refused on such a path and policy constraints are not evaluated: keep such CAs out of chains with Ed448 signatures.
 
 The parsers are fuzzed (`uapolicy/x509_fuzz_test.go`).
@@ -391,7 +393,24 @@ GetRejectedList.
   `MaxTrustListSize` bytes.
 - **Persistence** is the application's (`PushManagement.Store`): the server
   writes no files, so keys pushed with UpdateCertificate stay in memory unless
-  a store saves them.
+  a store saves them (a `CertificateGroupStore` also gets the HTTPS and
+  UserToken groups).
+- **Three groups, three trust lists.** The DefaultApplicationGroup trust list
+  validates client application certificates, the DefaultUserTokenGroup one
+  X.509 user identity tokens (before a `WithX509UserValidator` is asked), and
+  the DefaultHttpsGroup one TLS client certificates of the opc.https / opc.wss
+  endpoints when `HTTPSClientCertificates` asks for them. The HTTPS group
+  certificate is the TLS certificate; it is swapped at ApplyChanges without a
+  restart.
+- **PFX private keys** carry no password in Part 12: the server asks
+  `PushManagement.PFXPassword`. A wrong password is `Bad_SecurityChecksFailed`.
+- **TransactionDiagnostics** are readable by SecurityAdmin sessions only.
+  ResetToServerDefaults restores the trust lists and certificates the server
+  started with and is refused (`Bad_TransactionPending`) while another
+  session has a transaction.
+- **Alarms.** `PushManagement.Alarms` raises CertificateExpired before a group
+  certificate expires and TrustListOutOfDate when a trust list has not been
+  updated for `TrustListUpdateFrequency`.
 
 ---
 
