@@ -32,19 +32,21 @@ const (
 	gdsAdminPass = "gdsadmin-pw"
 )
 
-func gdsPullServer(t *testing.T, cfg gdsserver.Config) (*gdsserver.GDS, string) {
+func gdsPullServer(t *testing.T, cfg gdsserver.Config, opts ...server.Option) (*gdsserver.GDS, string) {
 	t.Helper()
 	src, err := testpki.Get()
 	require.NoError(t, err)
 	caKey, err := x509.MarshalPKCS8PrivateKey(src.CAKey)
 	require.NoError(t, err)
 	cfg.Issuers = []*gdsserver.Issuer{{Name: "RSA", Certificate: src.CACert, PrivateKey: caKey}}
-	cfg.CertificateTypes = []*ua.NodeID{gds.RsaSha256ApplicationCertificateType, gds.EccNistP256ApplicationCertificateType}
+	if cfg.CertificateTypes == nil {
+		cfg.CertificateTypes = []*ua.NodeID{gds.RsaSha256ApplicationCertificateType, gds.EccNistP256ApplicationCertificateType}
+	}
 	cfg.Logger = slog.New(slog.DiscardHandler)
 	p := pki(t)
 	parallel(t)
 	var g atomic.Pointer[gdsserver.GDS]
-	srv, err := server.New(
+	srv, err := server.New(append([]server.Option{
 		server.EndPoint("localhost", 0),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
@@ -65,7 +67,7 @@ func gdsPullServer(t *testing.T, cfg gdsserver.Config) (*gdsserver.GDS, string) 
 			}
 			return server.DefaultRoleMapper(tok)
 		}),
-	)
+	}, opts...)...)
 	require.NoError(t, err)
 	gd, err := gdsserver.Attach(srv, cfg)
 	require.NoError(t, err)
@@ -140,8 +142,10 @@ func TestGDSPull_AddressSpace(t *testing.T) {
 
 	groups, err := c.Node(ua.NewNumericNodeID(ns, gdsid.DirectoryCertificateGroups)).References(ctx, id.HierarchicalReferences, ua.BrowseDirectionForward, ua.NodeClassObject, true)
 	require.NoError(t, err)
-	require.Len(t, groups, 1)
+	require.Len(t, groups, 3)
 	require.Equal(t, "DefaultApplicationGroup", groups[0].BrowseName.Name)
+	require.Equal(t, "DefaultHttpsGroup", groups[1].BrowseName.Name)
+	require.Equal(t, "DefaultUserTokenGroup", groups[2].BrowseName.Name)
 
 	// The TrustList methods keep their browse names of namespace 0.
 	tl, err := c.Node(ua.NewNumericNodeID(ns, gdsid.DirectoryCertificateGroupsDefaultApplicationGroupTrustList)).References(ctx, id.HasComponent, ua.BrowseDirectionForward, ua.NodeClassMethod, true)
@@ -158,6 +162,27 @@ func TestGDSPull_AddressSpace(t *testing.T) {
 	types, err := c.ReadValue(ctx, ua.NewNumericNodeID(ns, gdsid.DirectoryCertificateGroupsDefaultApplicationGroupCertificateTypes))
 	require.NoError(t, err)
 	require.Equal(t, []*ua.NodeID{gds.RsaSha256ApplicationCertificateType, gds.EccNistP256ApplicationCertificateType}, types.Value.Value())
+	types, err = c.ReadValue(ctx, ua.NewNumericNodeID(ns, gdsid.DirectoryCertificateGroupsDefaultHTTPSGroupCertificateTypes))
+	require.NoError(t, err)
+	require.Equal(t, []*ua.NodeID{ua.NewNumericNodeID(0, id.HTTPSCertificateType)}, types.Value.Value())
+	types, err = c.ReadValue(ctx, ua.NewNumericNodeID(ns, gdsid.DirectoryCertificateGroupsDefaultUserTokenGroupCertificateTypes))
+	require.NoError(t, err)
+	require.Empty(t, types.Value.Value(), "the DefaultUserTokenGroup issues no certificates")
+
+	// The RolePermissions of the GDS NodeSet (Part 12 §7.2): Call on
+	// StartSigningRequest for the CertificateAuthorityAdmin.
+	rp, err := c.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{
+		NodeID: ua.NewNumericNodeID(ns, gdsid.DirectoryStartSigningRequest), AttributeID: ua.AttributeIDRolePermissions}}})
+	require.NoError(t, err)
+	require.Equal(t, ua.StatusOK, rp.Results[0].Status)
+	call := false
+	for _, eo := range rp.Results[0].Value.Value().([]*ua.ExtensionObject) {
+		p := eo.Value.(*ua.RolePermissionType)
+		if p.RoleID.Equal(g.CertificateAuthorityAdminRole()) && p.Permissions&ua.PermissionTypeCall != 0 {
+			call = true
+		}
+	}
+	require.True(t, call)
 
 	// The methods declare their arguments (Part 3 §5.7.1).
 	args, err := c.ReadValue(ctx, ua.NewNumericNodeID(ns, gdsid.DirectoryRegisterApplicationInputArguments))
