@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/go-opcua/internal/testutil/testport"
-
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/server"
@@ -19,12 +17,14 @@ import (
 	"github.com/otfabric/go-opcua/uacp"
 )
 
+// NewTestServer starts a server with a None / anonymous opc.tcp endpoint on
+// localhost and returns its URL. The server binds port 0 itself: a port
+// chosen before the server binds it can be taken in between by a test
+// running in parallel.
 func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	t.Helper()
-	port := freePort(t)
-	url := fmt.Sprintf("opc.tcp://localhost:%d", port)
 	defaults := []server.Option{
-		server.EndPoint("localhost", port),
+		server.EndPoint("localhost", 0),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}
@@ -38,7 +38,7 @@ func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string)
 		t.Fatalf("testutil: start server: %v", err)
 	}
 	t.Cleanup(func() { _ = srv.Close() })
-	return srv, url
+	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
 
 func NewTestClient(t *testing.T, url string) *opcua.Client {
@@ -93,13 +93,4 @@ func AddTestNodes(t *testing.T, srv *server.Server) *server.NodeNameSpace {
 	v3 := ns.AddNewVariableStringNode("StringVar", "hello")
 	obj.AddRef(v3, id.HasComponent, true)
 	return ns
-}
-
-// freePort returns a TCP port for a test server. Binding port 0 and closing
-// the listener takes the port from the ephemeral range, where any other
-// socket (other packages run in parallel) may take it before the server
-// binds it; testport's ports come from outside that range.
-func freePort(t *testing.T) int {
-	t.Helper()
-	return testport.TCP(t)
 }

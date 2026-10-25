@@ -12,7 +12,6 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
-	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -25,9 +24,8 @@ import (
 // the server and its endpoint URL.
 func newScriptedServer(t *testing.T, handlers map[uint16]server.Handler, opts ...server.Option) (*server.Server, string) {
 	t.Helper()
-	port := testport.TCP(t)
-	srv := startScriptedServer(t, handlers, append([]server.Option{server.EndPoint("localhost", port)}, opts...)...)
-	return srv, fmt.Sprintf("opc.tcp://localhost:%d", port)
+	srv := startScriptedServer(t, handlers, append([]server.Option{server.EndPoint("localhost", 0)}, opts...)...)
+	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
 
 // newProxiedServer is newScriptedServer for a server behind proxy: it

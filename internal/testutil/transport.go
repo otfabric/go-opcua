@@ -35,9 +35,8 @@ func TLS(t *testing.T) *testpki.TLSPKI {
 // anonymous access only.
 func NewTransportTestServer(t *testing.T, opts ...server.Option) (*server.Server, TransportURLs) {
 	t.Helper()
-	port := freePort(t)
 	defaults := []server.Option{
-		server.EndPoint("localhost", port),
+		server.EndPoint("localhost", 0),
 		server.WebSocketEndPoint("localhost", 0),
 		server.HTTPSEndPoint("localhost", 0),
 		server.TLSConfig(TLS(t).ServerConfig()),

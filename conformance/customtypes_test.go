@@ -22,8 +22,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/otfabric/go-opcua/internal/testutil/testport"
-
 	opcua "github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil/customtypes"
@@ -38,11 +36,8 @@ import (
 func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.NodeID, *ua.NodeID, context.Context) {
 	t.Helper()
 
-	port := freeCustomPort(t)
-	url := fmt.Sprintf("opc.tcp://localhost:%d", port)
-
 	srv, err := server.New(
-		server.EndPoint("localhost", port),
+		server.EndPoint("localhost", 0),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
@@ -63,7 +58,7 @@ func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.N
 	require.NoError(t, srv.Start(context.Background()))
 	t.Cleanup(func() { _ = srv.Close() })
 
-	c, err := opcua.NewClient(url,
+	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()),
 		opcua.SecurityMode(ua.MessageSecurityModeNone),
 		opcua.DialTimeout(15*time.Second),
 		opcua.RequestTimeout(15*time.Second),
@@ -74,11 +69,6 @@ func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.N
 	t.Cleanup(func() { _ = c.Close(ctx) })
 
 	return c, nodeIDs, methodObjectID, methodID, ctx
-}
-
-func freeCustomPort(t *testing.T) int {
-	t.Helper()
-	return testport.TCP(t)
 }
 
 // TestCustomTypes_FlatStruct_Read verifies that a server-side FlatStruct is
