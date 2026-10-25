@@ -16,8 +16,8 @@
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences | Fully implemented |
 | **View** | Browse, BrowseNext, TranslateBrowsePathsToNodeIDs, RegisterNodes, UnregisterNodes | Fully implemented |
 | **Attribute** | Read, Write | Fully implemented (IndexRange / NumericRange, `TimestampsToReturn`, value-only Write) |
-| | HistoryRead | Via pluggable `HistoryProvider` (`SetHistorian`); default `*Historian` supports raw, modified, at-time, and processed aggregates |
-| | HistoryUpdate | Via optional historian interfaces (`HistoryDataUpdater` / deleters); default `*Historian` supports UpdateData and raw/at-time deletes |
+| | HistoryRead | Via pluggable `HistoryProvider` (`SetHistorian`); default `*Historian` supports raw, modified, at-time, processed aggregates and events (`ReadEventDetails`) |
+| | HistoryUpdate | Via optional historian interfaces (`HistoryDataUpdater`, `EventHistoryUpdater`, deleters); default `*Historian` supports UpdateData, raw/at-time deletes, UpdateEventDetails and DeleteEventDetails |
 | **Method** | Call | Fully implemented |
 | **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow, `DataChangeFilter`, sampling interval, `IndexRange`) |
 | **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
@@ -25,11 +25,6 @@
 
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.
-
-Not implemented in the server, so plan around them:
-
-- **Historical events**: the history interfaces cover data only (see
-  [Historical Access](#historical-access-raw)).
 
 ---
 
@@ -782,8 +777,53 @@ h.RecordValue(nodeID, dv)
 Clients then call HistoryRead / HistoryUpdate against the provider. Default `*Historian`
 supports raw, modified, at-time, and processed aggregates (Average/Minimum/Maximum/Count),
 plus UpdateData and raw/at-time deletes. Continuations are session-bound (30s TTL, max 100).
-`returnBounds` is accepted but bounding/interpolation is not implemented. Historical events
-are not supported. Without `SetHistorian`, HistoryRead reports unsupported / non-historized.
+`returnBounds` is accepted but bounding/interpolation is not implemented. Without
+`SetHistorian`, HistoryRead reports unsupported / non-historized.
+
+### Historical events
+
+A notifier (an Object or View whose EventNotifier has the HistoryRead bit) is a
+HistoricalEventNode (Part 11 §5.4): the events reported on it go to the event
+history of the provider, which serves HistoryRead `ReadEventDetails` and, with the
+HistoryWrite bit, HistoryUpdate `UpdateEventDetails` / `DeleteEventDetails`:
+
+```go
+h := server.NewHistorian()
+h.EnableEvents(pumpID, 5000) // per-notifier capacity; <=0 → default 1000
+s.SetHistorian(h)
+if err := s.EnableEventHistory(pumpID, server.EventHistoryOptions{Writable: true}); err != nil {
+    log.Fatal(err)
+}
+
+// Every event reported on the notifier from now on is historized, including
+// condition events and audit events.
+_ = s.EmitBaseEvent(pumpID, &server.BaseEvent{ /* ... */ })
+```
+
+- The events reported on several notifiers (a condition's source, the Server
+  object, `ConditionConfig.Notifiers`, the notifiers of `ReportAuditEvent`) reach the
+  history of each one that is a HistoricalEventNode, as they reach its event items.
+  `EnableEventHistory(ua.NewNumericNodeID(0, id.Server), ...)` historizes everything
+  reported on the Server object.
+- `EventHistoryOptions.Filter` is the HistoricalEventFilter Property (Part 11
+  §5.4.2): its WhereClause selects the events stored, its SelectClauses the fields
+  (EventId, EventType, Time and ReceiveTime always). Clients reading a field that is
+  not stored get `Bad_NoData` for it. Without a filter whole events are stored.
+- Reads follow Part 11 §6.5.2: the time range and its direction, `NumValuesPerNode`
+  counting the events the WhereClause passes, session-bound continuation points that
+  resume after the last event returned (events added meanwhile appear in later pages,
+  none repeats), `Good_NoData`, and service results `Bad_HistoryOperationInvalid`
+  (fewer than two of NumValuesPerNode / StartTime / EndTime) and
+  `Bad_EventFilterInvalid`. Audit events go only to the sessions an
+  `EventAccessController` allows.
+- Updates match events by EventId (Part 11 §6.9.4, §6.9.7). Insert and Update need
+  EventType and Time selected, Replace EventId; the WhereClause must be empty.
+- `RecordEvent(notifier, server.NewHistoricalEvent(ev))` seeds a history directly.
+- Your own store implements `EventHistoryProvider` (and optionally
+  `EventHistoryUpdater` / `EventHistoryDeleter`) on the value given to `SetHistorian`.
+- The HistoryServerCapabilities report what the provider implements.
+- ReadEventDetails2 with ReadModified and ReadEventDetailsSorted answer
+  `Bad_HistoryOperationUnsupported`; no audit events are reported for history updates.
 
 ### Monitored-item queues and modes
 
