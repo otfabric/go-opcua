@@ -29,6 +29,7 @@ The rest of push certificate management (Part 12 v1.05 §7): DeleteCertificate a
 - Unit, e2e, conformance and chaos tests (the certificate-management churn adds deletions and application groups).
 - The server and root packages are above 90% coverage with their own tests: discovery registration and SelectEndpoint are now covered there.
 - Interop: DeleteCertificate verified against UA-.NETStandard; open62541 and node-opcua do not serve it.
+- **The conformance suite is split into packages:** addrspace, alarms, certmgmt, discovery, history, pubsub, security, session, subscription and transport, next to the root package and eccext. CI gives every package 120 s under the race detector, and the single package had reached 114 s. The packages share their helpers through `internal/testutil/conformkit`.
 
 ### Interop
 
