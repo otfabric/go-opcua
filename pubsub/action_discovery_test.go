@@ -69,9 +69,12 @@ func TestDiscoverActionDatagram(t *testing.T) {
 			require.Equal(t, ua.StatusGood, res.Status)
 			require.Equal(t, int32(5), res.Outputs[0].Value())
 
-			rc := actCounters(resp, mustID(t, resp, KindConnection, Root, "Responder"))
-			require.Positive(t, rc.DiscoveryRequestsReceived)
-			require.Positive(t, rc.DiscoveryResponsesSent)
+			// The Responder counts a response once it has been sent: the
+			// Requestor may have it first.
+			require.Eventually(t, func() bool {
+				rc := actCounters(resp, mustID(t, resp, KindConnection, Root, "Responder"))
+				return rc.DiscoveryRequestsReceived > 0 && rc.DiscoveryResponsesSent > 0
+			}, 5*time.Second, time.Millisecond)
 			qc := actCounters(req, mustID(t, req, KindConnection, Root, "Requestor"))
 			require.Positive(t, qc.DiscoveryRequestsSent)
 			require.Positive(t, qc.DiscoveryResponsesReceived)
