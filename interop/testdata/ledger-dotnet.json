@@ -2551,19 +2551,17 @@
     {
       "capability": "pubsub.uadp.udp-multicast",
       "direction": "go-client-to-dotnet-server",
-      "status": "unverified",
-      "reason": "test-missing",
+      "status": "verified",
       "test": "TestPubSubMulticast_GoPublishes_DotnetSubscribes",
-      "nextAction": "TestPubSubMulticast_GoPublishes_DotnetSubscribes runs with --network host, which only the Linux Interop CI job has (it skips on macOS / Docker Desktop, where multicast does not cross the VM); promote to verified once it passes there",
       "fixture": "baseline"
     },
     {
       "capability": "pubsub.uadp.udp-multicast",
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
-      "reason": "test-missing",
+      "reason": "adapter-unreleased",
       "test": "TestPubSubMulticast_DotnetPublishes_GoSubscribes",
-      "nextAction": "TestPubSubMulticast_DotnetPublishes_GoSubscribes runs with --network host, which only the Linux Interop CI job has (it skips on macOS / Docker Desktop, where multicast does not cross the VM); promote to verified once it passes there",
+      "nextAction": "UA-.NETStandard 2.0.1 sends multicast with IP_MULTICAST_LOOP off (UdpTransportOptions.MulticastLoopback defaults to false), so the go-opcua subscriber on the same host (--network host, Linux Interop job) receives nothing; the dotnet adapter turns it on from opcua-interop v0.15.0 (serverFeatures pubsub-multicast-loopback); promote when that image is pinned and the test has passed on the Linux Interop job",
       "fixture": "baseline"
     },
     {

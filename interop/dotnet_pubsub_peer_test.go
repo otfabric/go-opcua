@@ -174,7 +174,19 @@ func TestPubSubRuntime_DotnetPublishes_GoTargetVariables(t *testing.T) {
 // TestPubSubMulticast_DotnetPublishes_GoSubscribes: the dotnet publisher
 // sends UADP to a multicast group, the go-opcua runtime joins it. Host
 // networking (Linux only), see pubsub_multicast_peer_test.go.
+//
+// UA-.NETStandard 2.0.1 turns IP_MULTICAST_LOOP off by default
+// (UdpTransportOptions.MulticastLoopback), so its multicast does not reach a
+// subscriber on the same host; the adapter turns it on from opcua-interop
+// v0.15.0 (serverFeatures "pubsub-multicast-loopback"). Until that image is
+// pinned the test skips, also with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1.
 func TestPubSubMulticast_DotnetPublishes_GoSubscribes(t *testing.T) {
+	psDotnet.requireServer(t)
+	requireHostNetwork(t)
+	caps, image := imageCapabilities(t, psDotnet.env, psDotnet.image)
+	if !slices.Contains(caps.ServerFeatures, "pubsub-multicast-loopback") {
+		t.Skipf("adapter %s (version %s) sends multicast without IP_MULTICAST_LOOP (UA-.NETStandard UdpTransportOptions.MulticastLoopback defaults to false)", image, caps.Adapter.Version)
+	}
 	psMulticastPeerPublishes(t, psDotnet)
 }
 
