@@ -638,7 +638,14 @@ func TestChurnWithReaders(t *testing.T) {
 	slices.Sort(wantNames)
 	slices.Sort(wantDA)
 
-	// The abandoned registrations expire.
+	// The abandoned registrations expire. The tables are compared once they
+	// have settled, not at one instant: a server with a registration loop
+	// renews every 80 ms, but on a starved runner (race detector, other
+	// test processes) a renewal can come later than the registration
+	// timeout. The discovery server then rightly removes the registration
+	// (Part 4 §5.4.5) and the next renewal brings the server back, with a
+	// new ServerOnNetwork record. Every answer is still checked against
+	// the model (checkServers, checkRecords, the record ids).
 	var got table
 	if !chaoskit.Eventually(settleLimit, func() bool {
 		got = registered(sink, lds)
@@ -647,36 +654,50 @@ func TestChurnWithReaders(t *testing.T) {
 		t.Fatalf("the table of the discovery server did not converge:\n  have:%v\n  want:%v", got, want)
 	}
 
-	from := time.Now()
-	ctx, cancel := chaoskit.OpCtx()
-	resp, err := ctl.FindServers(ctx)
-	cancel()
-	if err != nil {
-		t.Fatalf("FindServers: %v", err)
-	}
-	checkServers("after the churn", from, resp.Servers, nil)
-	if got := found(sink, ldsURI, resp.Servers); !got.equal(want) {
+	var callErr error
+	if !chaoskit.Eventually(settleLimit, func() bool {
+		from := time.Now()
+		ctx, cancel := chaoskit.OpCtx()
+		resp, err := ctl.FindServers(ctx)
+		cancel()
+		if callErr = err; err != nil {
+			return true
+		}
+		checkServers("after the churn", from, resp.Servers, nil)
+		got = found(sink, ldsURI, resp.Servers)
+		return got.equal(want)
+	}) {
 		t.Errorf("FindServers after the churn:\n  have:%v\n  want:%v", got, want)
 	}
+	if callErr != nil {
+		t.Fatalf("FindServers: %v", callErr)
+	}
 
+	// settledTraversal pages through FindServersOnNetwork until it returns
+	// the wanted servers.
+	settledTraversal := func(what string, pageSize uint32, filter []string, wanted []string) {
+		t.Helper()
+		var have []string
+		if !chaoskit.Eventually(settleLimit, func() bool {
+			from := time.Now()
+			records, to, err := traverse(sink, "after the churn", ctl, ids, 0, pageSize, filter)
+			if callErr = err; err != nil {
+				return true
+			}
+			checkRecords("after the churn", from, to, records)
+			have = names(records)
+			return slices.Equal(have, wanted)
+		}) {
+			t.Errorf("FindServersOnNetwork after the churn, %s:\n  have: %v\n  want: %v", what, have, wanted)
+		}
+		if callErr != nil {
+			t.Fatalf("FindServersOnNetwork: %v", callErr)
+		}
+	}
 	for _, pageSize := range []uint32{1, 4, 0} {
-		from := time.Now()
-		records, to, err := traverse(sink, "after the churn", ctl, ids, 0, pageSize, nil)
-		if err != nil {
-			t.Fatalf("FindServersOnNetwork: %v", err)
-		}
-		checkRecords("after the churn", from, to, records)
-		if got := names(records); !slices.Equal(got, wantNames) {
-			t.Errorf("FindServersOnNetwork after the churn, page size %d:\n  have: %v\n  want: %v", pageSize, got, wantNames)
-		}
+		settledTraversal(fmt.Sprintf("page size %d", pageSize), pageSize, nil, wantNames)
 	}
-	records, _, err := traverse(sink, "after the churn", ctl, ids, 0, 2, []string{"da"})
-	if err != nil {
-		t.Fatalf("FindServersOnNetwork: %v", err)
-	}
-	if got := names(records); !slices.Equal(got, wantDA) {
-		t.Errorf("FindServersOnNetwork after the churn, filter DA:\n  have: %v\n  want: %v", got, wantDA)
-	}
+	settledTraversal("filter DA", 2, []string{"da"}, wantDA)
 
 	// What the discovery server announces with mDNS is what it has in its
 	// table: another server on the link sees the same servers.

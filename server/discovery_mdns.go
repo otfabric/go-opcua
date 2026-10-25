@@ -320,26 +320,65 @@ func (d *discoveryManager) putRecordLocked(name, owner, discoveryURL string, cap
 	d.records = append(d.records, r)
 }
 
-func (d *discoveryManager) dropRecordLocked(name, owner string) {
+// dropRecordLocked removes the row of an instance if it belongs to owner. It
+// reports whether it did.
+func (d *discoveryManager) dropRecordLocked(name, owner string) bool {
 	key := strings.ToLower(name)
 	r := d.byName[key]
 	if r == nil || r.owner != owner {
-		return
+		return false
 	}
 	delete(d.byName, key)
 	if i := slices.Index(d.records, r); i >= 0 {
 		d.records = slices.Delete(d.records, i, i+1)
 	}
+	return true
+}
+
+// heirLocked returns the registration, other than the given owner, that
+// wants the instance name but left it to the responder or registration
+// that had it, or nil.
+func (d *discoveryManager) heirLocked(name, owner string) *registration {
+	key := strings.ToLower(name)
+	for _, uri := range d.order {
+		if r := d.servers[uri]; uri != owner && r.skipped[key] {
+			return r
+		}
+	}
+	return nil
+}
+
+// handOver announces a registered server under an instance name that has
+// just become free, if one was waiting for it. Without it the server would
+// stay unannounced, and without a row in the ServerOnNetwork table, until
+// its next renewal changed something: a renewal that changes nothing is not
+// announced again. It is called with annMu held.
+func (d *discoveryManager) handOver(name, owner string) {
+	d.mu.Lock()
+	r := d.heirLocked(name, owner)
+	d.mu.Unlock()
+	if r != nil {
+		d.announce(r, r)
+	}
 }
 
 // onNetworkEvent applies what the mDNS browser found to the table.
 func (d *discoveryManager) onNetworkEvent(e mdns.Event) {
-	d.mu.Lock()
-	defer d.mu.Unlock()
 	if e.Removed {
-		d.dropRecordLocked(e.Instance.Name, "")
+		// Another responder withdrew an instance, or its records expired.
+		// A registered server that wants the name takes it over.
+		d.annMu.Lock()
+		defer d.annMu.Unlock()
+		d.mu.Lock()
+		dropped := d.dropRecordLocked(e.Instance.Name, "")
+		d.mu.Unlock()
+		if dropped {
+			d.handOver(e.Instance.Name, "")
+		}
 		return
 	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
 	discoveryURL, caps, ok := discoveredServer(e.Instance)
 	if !ok {
 		d.srv.cfg.logger.Debug("multicast discovery: ignored an announcement that is not a usable OPC UA server",
@@ -399,6 +438,7 @@ func (d *discoveryManager) announce(old, r *registration) {
 		caps = []string{"NA"}
 	}
 	announced := map[string]string{}
+	skipped := map[string]bool{}
 	for _, raw := range r.server.DiscoveryURLs {
 		host, port, path := splitDiscoveryURL(raw)
 		target, local := srvTarget(host, hostname)
@@ -423,6 +463,12 @@ func (d *discoveryManager) announce(old, r *registration) {
 		row := d.byName[strings.ToLower(instance)]
 		taken := row != nil && row.owner != uri
 		selfAnnounced := taken && row.owner == ""
+		if taken {
+			// Remembered so that the name is taken over when it becomes
+			// free (handOver). annMu keeps the row from going away
+			// before this is recorded.
+			skipped[strings.ToLower(instance)] = true
+		}
 		d.mu.Unlock()
 		if selfAnnounced {
 			// The server announces itself under this name: a second
@@ -449,6 +495,7 @@ func (d *discoveryManager) announce(old, r *registration) {
 
 	d.mu.Lock()
 	r.announced = announced
+	r.skipped = skipped
 	current := d.servers[uri] == r
 	d.mu.Unlock()
 	if old != nil {
@@ -470,6 +517,7 @@ func (d *discoveryManager) withdraw(r *registration) {
 	node := d.node
 	announced := r.announced
 	r.announced = nil
+	r.skipped = nil
 	d.mu.Unlock()
 	if node == nil {
 		return
@@ -479,11 +527,17 @@ func (d *discoveryManager) withdraw(r *registration) {
 	}
 }
 
+// withdrawInstance withdraws one instance of a registered server and hands
+// the name over to another registered server that wants it. It is called
+// with annMu held.
 func (d *discoveryManager) withdrawInstance(node *mdns.Node, instance, owner string) {
 	node.Unregister(instance, opcuaServiceType)
 	d.mu.Lock()
-	d.dropRecordLocked(instance, owner)
+	dropped := d.dropRecordLocked(instance, owner)
 	d.mu.Unlock()
+	if dropped {
+		d.handOver(instance, owner)
+	}
 }
 
 // srvTarget maps the host of a discovery URL onto the target of a SRV
