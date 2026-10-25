@@ -21,12 +21,17 @@ The ECC security policies ECC_brainpoolP256r1, ECC_brainpoolP384r1 and ECC_curve
 - Ed448 and X448 come from `github.com/cloudflare/circl`; X448 refuses low-order points.
 - ECC_curve448 derives keys as open62541 does (HKDF-SHA256, a 32-byte signing key, no SecureChannelEnhancements).
 
+### Fixed
+
+- **server: a Local Discovery Server with the multicast extension announces a registered server as soon as the mDNS instance name it was waiting for becomes free** — when the responder that announced it says goodbye or its records expire, or when another registration holding the name unregisters or expires. Before, the server stayed unannounced and missing from FindServersOnNetwork until a registration changed something; on a real link this also followed a registration that lapsed while the discovery server heard an echo of its own announcement.
+
 ### Tests
 
 - **Unit, known-answer and fuzz:** RFC 7027, 7748 and 8032 vectors, key-derivation outputs, OpenSSL-generated certificates and keys (uapolicy/testdata/openssl), and fuzz tests for the certificate parser, the private-key parser and the shared-secret step.
 - **e2e and conformance:** every policy and mode, multi-chunk messages, Calls, subscriptions, renewals, EccEncryptedSecret passwords and issued tokens, X.509 users per curve, trust lists and key mismatches.
 - **Chaos:** the three policies join chaos/secure (bit flips, replays, incomplete chunks, parallel channels).
 - **Interop:** 18 new capabilities verified against open62541 in both directions. `security.ecc.unimplemented-policy` is retired.
+- **CI:** the chaos suites run in their own job. The tests of the Brainpool policies scale their token lifetimes and key-exchange counts to the cost of math/big curves under the race detector, a renewal under traffic in the conformance tests has 2 s instead of 1 s before its token expires, and the discovery chaos test waits for a registration that expired on a slow runner to come back.
 
 ### Dependencies
 
