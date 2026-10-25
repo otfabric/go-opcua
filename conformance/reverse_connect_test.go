@@ -414,7 +414,7 @@ func TestReverseConnect_AutoReconnectAfterServerRestart(t *testing.T) {
 		opcua.ReverseConnectListener(l, opcua.ReverseServerURI(appURI)),
 		opcua.AutoReconnect(true),
 		opcua.ReconnectInterval(50*time.Millisecond),
-		opcua.WithConnStateHandler(states.record),
+		opcua.WithConnStateHandler(states.Record),
 	)
 	eps := c.Session().ServerEndpoints()
 	require.Len(t, eps, 1)
@@ -436,12 +436,12 @@ func TestReverseConnect_AutoReconnectAfterServerRestart(t *testing.T) {
 	require.NoError(t, srv1.Close())
 	require.Equal(t, server.ReverseConnectClosed, rc1.State())
 	require.Empty(t, srv1.ReverseConnects())
-	eventually(t, func() bool { return states.seen(opcua.Reconnecting) }, "client starts waiting for the server again")
+	eventually(t, func() bool { return states.Seen(opcua.Reconnecting) }, "client starts waiting for the server again")
 
 	// A new instance of the same application connects from another port.
 	_, f2, url2 := reverseServer(t, appURI, clientURL)
 	require.NotEqual(t, url1, url2)
-	eventually(t, func() bool { return states.seenAfter(opcua.Reconnecting, opcua.Connected) }, "client reconnects")
+	eventually(t, func() bool { return states.SeenAfter(opcua.Reconnecting, opcua.Connected) }, "client reconnects")
 	eventually(t, func() bool { return c.State() == opcua.Connected && c.Session() != nil }, "state Connected")
 	require.NotEqual(t, oldSession, c.Session().SessionID().String())
 	eps = c.Session().ServerEndpoints()

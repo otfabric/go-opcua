@@ -133,9 +133,9 @@ func TestMonitoredItem_QueueDeliversInOrder(t *testing.T) {
 	samples := sub.refill(f.Int32, 1, 2, 3, 4, 5)
 	require.Equal(t, []any{int32(1), int32(2), int32(3), int32(4), int32(5)}, values(samples))
 	for _, s := range samples {
-		require.Equal(t, uint32(3), s.handle)
-		require.False(t, s.dv.Status.HasOverflow())
-		require.Equal(t, ua.StatusOK, s.dv.Status)
+		require.Equal(t, uint32(3), s.Handle)
+		require.False(t, s.DV.Status.HasOverflow())
+		require.Equal(t, ua.StatusOK, s.DV.Status)
 	}
 }
 
@@ -154,10 +154,10 @@ func TestMonitoredItem_QueueOverflow(t *testing.T) {
 		samples := sub.refill(f.Int32, 1, 2, 3, 4, 5)
 		// The newest three survive; the oldest survivor carries the overflow bit.
 		require.Equal(t, []any{int32(3), int32(4), int32(5)}, values(samples))
-		require.True(t, samples[0].dv.Status.HasOverflow())
-		require.Equal(t, ua.StatusOK.WithOverflow(), samples[0].dv.Status)
-		require.False(t, samples[1].dv.Status.HasOverflow())
-		require.False(t, samples[2].dv.Status.HasOverflow())
+		require.True(t, samples[0].DV.Status.HasOverflow())
+		require.Equal(t, ua.StatusOK.WithOverflow(), samples[0].DV.Status)
+		require.False(t, samples[1].DV.Status.HasOverflow())
+		require.False(t, samples[2].DV.Status.HasOverflow())
 	})
 
 	t.Run("DiscardNewest", func(t *testing.T) {
@@ -171,9 +171,9 @@ func TestMonitoredItem_QueueOverflow(t *testing.T) {
 		// The oldest two survive; the last slot is overwritten by the newest
 		// sample, which carries the overflow bit.
 		require.Equal(t, []any{int32(1), int32(2), int32(5)}, values(samples))
-		require.False(t, samples[0].dv.Status.HasOverflow())
-		require.False(t, samples[1].dv.Status.HasOverflow())
-		require.True(t, samples[2].dv.Status.HasOverflow())
+		require.False(t, samples[0].DV.Status.HasOverflow())
+		require.False(t, samples[1].DV.Status.HasOverflow())
+		require.True(t, samples[2].DV.Status.HasOverflow())
 	})
 
 	t.Run("QueueSizeOneKeepsLatest", func(t *testing.T) {
@@ -185,7 +185,7 @@ func TestMonitoredItem_QueueOverflow(t *testing.T) {
 
 		samples := sub.refill(f.Int32, 1, 2, 3)
 		require.Equal(t, []any{int32(3)}, values(samples))
-		require.False(t, samples[0].dv.Status.HasOverflow(), "a queue of one never reports overflow")
+		require.False(t, samples[0].DV.Status.HasOverflow(), "a queue of one never reports overflow")
 	})
 
 	t.Run("NoOverflowAfterDrain", func(t *testing.T) {
@@ -194,12 +194,12 @@ func TestMonitoredItem_QueueOverflow(t *testing.T) {
 		sub := newRawSub(t, newClient(t, url), rawSubParams{})
 		sub.mustCreateItems(ua.TimestampsToReturnNeither, itemSpec{node: f.Int32, handle: 1, queue: 2, discard: true})
 		sub.nextData()
-		require.True(t, sub.refill(f.Int32, 1, 2, 3)[0].dv.Status.HasOverflow())
+		require.True(t, sub.refill(f.Int32, 1, 2, 3)[0].DV.Status.HasOverflow())
 		// The next batch fits again and must be clean.
 		samples := sub.refill(f.Int32, 10, 11)
 		require.Equal(t, []any{int32(10), int32(11)}, values(samples))
-		require.False(t, samples[0].dv.Status.HasOverflow())
-		require.False(t, samples[1].dv.Status.HasOverflow())
+		require.False(t, samples[0].DV.Status.HasOverflow())
+		require.False(t, samples[1].DV.Status.HasOverflow())
 	})
 }
 
@@ -266,8 +266,8 @@ func TestMonitoredItem_Modify(t *testing.T) {
 	sub := newRawSub(t, c, rawSubParams{})
 	id := sub.mustCreateItems(ua.TimestampsToReturnNeither, itemSpec{node: f.Int32, handle: 1, queue: 1, discard: true})[0]
 	first := sub.nextData()
-	require.Equal(t, uint32(1), first[0].handle)
-	require.True(t, first[0].dv.ServerTimestamp.IsZero())
+	require.Equal(t, uint32(1), first[0].Handle)
+	require.True(t, first[0].DV.ServerTimestamp.IsZero())
 
 	modify := func(cl *opcua.Client, ts ua.TimestampsToReturn, items ...*ua.MonitoredItemModifyRequest) []*ua.MonitoredItemModifyResult {
 		t.Helper()
@@ -291,11 +291,11 @@ func TestMonitoredItem_Modify(t *testing.T) {
 
 	samples := sub.refill(f.Int32, 1, 2, 3, 4, 5)
 	require.Equal(t, []any{int32(3), int32(4), int32(5)}, values(samples))
-	require.True(t, samples[0].dv.Status.HasOverflow())
+	require.True(t, samples[0].DV.Status.HasOverflow())
 	for _, s := range samples {
-		require.Equal(t, uint32(50), s.handle, "notifications must carry the modified client handle")
-		require.False(t, s.dv.ServerTimestamp.IsZero(), "server timestamp requested by the modify")
-		require.True(t, s.dv.SourceTimestamp.IsZero())
+		require.Equal(t, uint32(50), s.Handle, "notifications must carry the modified client handle")
+		require.False(t, s.DV.ServerTimestamp.IsZero(), "server timestamp requested by the modify")
+		require.True(t, s.DV.SourceTimestamp.IsZero())
 	}
 
 	// Switch the discard policy.
@@ -303,8 +303,8 @@ func TestMonitoredItem_Modify(t *testing.T) {
 	require.Equal(t, ua.StatusOK, res[0].StatusCode)
 	samples = sub.refill(f.Int32, 1, 2, 3, 4, 5)
 	require.Equal(t, []any{int32(1), int32(2), int32(5)}, values(samples))
-	require.True(t, samples[2].dv.Status.HasOverflow())
-	require.True(t, samples[0].dv.ServerTimestamp.IsZero())
+	require.True(t, samples[2].DV.Status.HasOverflow())
+	require.True(t, samples[0].DV.ServerTimestamp.IsZero())
 
 	// Shrinking the queue while it holds samples keeps the newest ones.
 	sub.setPublishing(false)
@@ -373,7 +373,7 @@ func TestMonitoredItem_DeleteAndTriggeringStatuses(t *testing.T) {
 		seen := map[uint32]bool{}
 		eventually(t, func() bool {
 			for _, s := range dataOf(t, publish(t, c)) {
-				seen[s.handle] = true
+				seen[s.Handle] = true
 			}
 			return len(seen) == 3
 		}, "initial values of all three items")
@@ -423,7 +423,7 @@ func TestMonitoredItem_TimestampsToReturn(t *testing.T) {
 			// f.Double is never written in this test, so the sample is the
 			// fixture's initial value with its source timestamp.
 			sub.mustCreateItems(tc.ts, itemSpec{node: f.Double, handle: 1, queue: 1, discard: true})
-			dv := sub.nextData()[0].dv
+			dv := sub.nextData()[0].DV
 			require.Equal(t, 3.14159, dv.Value.Value())
 			require.Equal(t, tc.source, !dv.SourceTimestamp.IsZero(), "source timestamp")
 			require.Equal(t, tc.server, !dv.ServerTimestamp.IsZero(), "server timestamp")
@@ -447,9 +447,9 @@ func TestMonitoredItem_NonValueAttribute(t *testing.T) {
 		itemSpec{node: f.Int32, attr: ua.AttributeIDDisplayName, handle: 11, queue: 1, discard: true})
 
 	first := sub.nextData()
-	require.Equal(t, uint32(11), first[0].handle)
-	lt, ok := first[0].dv.Value.Value().(*ua.LocalizedText)
-	require.True(t, ok, "got %T", first[0].dv.Value.Value())
+	require.Equal(t, uint32(11), first[0].Handle)
+	lt, ok := first[0].DV.Value.Value().(*ua.LocalizedText)
+	require.True(t, ok, "got %T", first[0].DV.Value.Value())
 	require.Equal(t, "Int32", lt.Text)
 
 	st, err := c.WriteAttribute(ctx, f.Int32, ua.AttributeIDDisplayName, &ua.DataValue{
@@ -460,8 +460,8 @@ func TestMonitoredItem_NonValueAttribute(t *testing.T) {
 	require.Equal(t, ua.StatusOK, st)
 
 	next := sub.nextData()
-	require.Equal(t, uint32(11), next[0].handle)
-	require.Equal(t, "Renamed", next[0].dv.Value.Value().(*ua.LocalizedText).Text)
+	require.Equal(t, uint32(11), next[0].Handle)
+	require.Equal(t, "Renamed", next[0].DV.Value.Value().(*ua.LocalizedText).Text)
 }
 
 // TestMonitoredItem_ManyItemsOneSubscription creates a large number of items
@@ -498,9 +498,9 @@ func TestMonitoredItem_ManyItemsOneSubscription(t *testing.T) {
 	got := map[uint32]int32{}
 	for len(got) < n {
 		for _, s := range nextDataChanges(t, ch) {
-			v := s.dv.Value.Value().(int32)
-			require.Equal(t, int32(s.handle-1000), v, "handle %d reported a foreign value", s.handle)
-			got[s.handle] = v
+			v := s.DV.Value.Value().(int32)
+			require.Equal(t, int32(s.Handle-1000), v, "handle %d reported a foreign value", s.Handle)
+			got[s.Handle] = v
 		}
 	}
 
@@ -508,8 +508,8 @@ func TestMonitoredItem_ManyItemsOneSubscription(t *testing.T) {
 	writeInt32(t, c, ua.NewStringNodeID(f.NSIndex, "Bulk123"), -5)
 	samples := nextDataChanges(t, ch)
 	require.Len(t, samples, 1)
-	require.Equal(t, uint32(1123), samples[0].handle)
-	require.Equal(t, int32(-5), samples[0].dv.Value.Value())
+	require.Equal(t, uint32(1123), samples[0].Handle)
+	require.Equal(t, int32(-5), samples[0].DV.Value.Value())
 
 	// Remove them all in one call.
 	del, err := sub.Unmonitor(ctx, itemIDs...)

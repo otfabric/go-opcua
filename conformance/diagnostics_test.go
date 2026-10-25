@@ -161,7 +161,7 @@ func TestDiagnostics_SessionObjects(t *testing.T) {
 	require.Equal(t, "op", sec.ClientUserIDOfSession)
 	require.Equal(t, ua.SecurityPolicyURIBasic256Sha256, sec.SecurityPolicyURI)
 	require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, sec.SecurityMode)
-	require.Equal(t, pki(t).clientCert, sec.ClientCertificate)
+	require.Equal(t, pki(t).ClientCert, sec.ClientCertificate)
 	require.Equal(t, "UserName", sec.AuthenticationMechanism)
 
 	// An administrator sees both sessions in the arrays and by browsing.

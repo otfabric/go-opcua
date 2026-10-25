@@ -395,7 +395,7 @@ func (l *logCounter) Handle(_ context.Context, r slog.Record) error {
 }
 func (l *logCounter) WithAttrs([]slog.Attr) slog.Handler { return l }
 func (l *logCounter) WithGroup(string) slog.Handler      { return l }
-func (l *logCounter) count(msg string) int {
+func (l *logCounter) Count(msg string) int {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	return l.counts[msg]
@@ -439,7 +439,7 @@ func TestChannel_RenewalUnderTraffic(t *testing.T) {
 			)...)
 			const tokenMsg = "received security token"
 			// At least: a connect slower than 3s has renewed it already.
-			require.GreaterOrEqual(t, logs.count(tokenMsg), 1)
+			require.GreaterOrEqual(t, logs.Count(tokenMsg), 1)
 
 			sub, ch, err := c.NewSubscription().Interval(fastInterval).Monitor(f.Int32).Start(ctx)
 			require.NoError(t, err)
@@ -450,8 +450,8 @@ func TestChannel_RenewalUnderTraffic(t *testing.T) {
 			// every write must be delivered through the subscription.
 			deadline := time.Now().Add(waitTimeout)
 			var n int32
-			for logs.count(tokenMsg) < 3 {
-				require.True(t, time.Now().Before(deadline), "token was renewed only %d times", logs.count(tokenMsg)-1)
+			for logs.Count(tokenMsg) < 3 {
+				require.True(t, time.Now().Before(deadline), "token was renewed only %d times", logs.Count(tokenMsg)-1)
 				n++
 				writeInt32(t, c, f.Int32, 1000+n)
 				awaitValue(t, ch, 0, 1000+n)
@@ -462,10 +462,10 @@ func TestChannel_RenewalUnderTraffic(t *testing.T) {
 			require.Equal(t, opcua.Connected, c.State())
 
 			// An explicit renewal is possible at any time as well.
-			before := logs.count(tokenMsg)
+			before := logs.Count(tokenMsg)
 			require.NoError(t, c.SecureChannel().Renew(ctx))
 			// At least: an automatic renewal may have been due at the same time.
-			require.GreaterOrEqual(t, logs.count(tokenMsg), before+1)
+			require.GreaterOrEqual(t, logs.Count(tokenMsg), before+1)
 			writeInt32(t, c, f.Int32, 7)
 			awaitValue(t, ch, 0, int32(7))
 		})

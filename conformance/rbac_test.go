@@ -213,12 +213,12 @@ func TestSecurity_CredentialsFromFiles(t *testing.T) {
 		require.NoError(t, os.WriteFile(path, pem.EncodeToMemory(&pem.Block{Type: typ, Bytes: der}), 0o600))
 		return path
 	}
-	certPEM := write("client-cert.pem", "CERTIFICATE", p.clientCert)
-	keyPEM := write("client-key.pem", "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(p.clientKey))
-	serverPEM := write("server-cert.pem", "CERTIFICATE", p.serverCert)
+	certPEM := write("client-cert.pem", "CERTIFICATE", p.ClientCert)
+	keyPEM := write("client-key.pem", "RSA PRIVATE KEY", x509.MarshalPKCS1PrivateKey(p.ClientKey))
+	serverPEM := write("server-cert.pem", "CERTIFICATE", p.ServerCert)
 	// DER files are accepted as well.
 	certDER := filepath.Join(dir, "client-cert.der")
-	require.NoError(t, os.WriteFile(certDER, p.clientCert, 0o600))
+	require.NoError(t, os.WriteFile(certDER, p.ClientCert, 0o600))
 
 	for name, certFile := range map[string]string{"PEM": certPEM, "DER": certDER} {
 		t.Run(name, func(t *testing.T) {
@@ -228,7 +228,7 @@ func TestSecurity_CredentialsFromFiles(t *testing.T) {
 				opcua.RemoteCertificateFile(serverPEM),
 				opcua.CertificateFile(certFile),
 				opcua.PrivateKeyFile(keyPEM),
-				opcua.TrustedCertificates(p.serverCertX509),
+				opcua.TrustedCertificates(p.ServerCertX509),
 			)
 			require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, c.SecurityMode())
 			dv, err := c.ReadValue(context.Background(), f.Int32)
@@ -281,7 +281,7 @@ func TestServer_LoggerOptions(t *testing.T) {
 			require.Equal(t, []string{url}, srv.URLs())
 
 			// The server logged the session being created through our logger.
-			require.Equal(t, 1, logs.count("handling CreateSession request"))
+			require.Equal(t, 1, logs.Count("handling CreateSession request"))
 		})
 	}
 }

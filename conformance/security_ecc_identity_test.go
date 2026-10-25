@@ -209,8 +209,8 @@ func TestECC_X509UserToken(t *testing.T) {
 	t.Run("RSAUserCertificateOnECCChannel", func(t *testing.T) {
 		// An RSA key cannot produce the ECDSA signature the policy asks for.
 		_, err := dialClient(t, url, append(base(),
-			opcua.AuthCertificate(p.userCert),
-			opcua.AuthPrivateKey(p.userKey),
+			opcua.AuthCertificate(p.UserCert),
+			opcua.AuthPrivateKey(p.UserKey),
 		)...)
 		require.Error(t, err)
 	})

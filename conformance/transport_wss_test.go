@@ -272,7 +272,7 @@ func TestTransportWSS_ServerStartErrors(t *testing.T) {
 	// Without TLSConfig the application instance certificate serves TLS.
 	p := pki(t)
 	srv, err = server.New(server.EndPoint("localhost", 0), server.HTTPSEndPoint("localhost", 0),
-		server.Certificate(p.serverCert), server.PrivateKey(p.serverKey),
+		server.Certificate(p.ServerCert), server.PrivateKey(p.ServerKey),
 		server.EnableSecurity("None", ua.MessageSecurityModeNone), server.EnableAuthMode(ua.UserTokenTypeAnonymous))
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
@@ -284,7 +284,7 @@ func TestTransportWSS_ServerStartErrors(t *testing.T) {
 		}
 	}
 	require.NotEmpty(t, httpsURL)
-	_, err = dialClient(t, httpsURL, opcua.TLSConfig(&tls.Config{RootCAs: certPool(p.serverCertX509)}))
+	_, err = dialClient(t, httpsURL, opcua.TLSConfig(&tls.Config{RootCAs: certPool(p.ServerCertX509)}))
 	require.NoError(t, err)
 
 	// A bind address that is in use.

@@ -50,8 +50,8 @@ func ackDialer(ack *uacp.Acknowledge) opcua.Option {
 
 // dataChange is one flattened data-change sample.
 type dataChange struct {
-	handle uint32
-	dv     *ua.DataValue
+	Handle uint32
+	DV     *ua.DataValue
 }
 
 // nextDataChanges blocks until the next publish that carries at least one
@@ -69,7 +69,7 @@ func nextDataChanges(t *testing.T, ch <-chan *opcua.PublishNotificationData) []d
 			}
 			out := make([]dataChange, len(dcn.MonitoredItems))
 			for i, it := range dcn.MonitoredItems {
-				out[i] = dataChange{handle: it.ClientHandle, dv: it.Value}
+				out[i] = dataChange{Handle: it.ClientHandle, DV: it.Value}
 			}
 			return out
 		case <-deadline:
@@ -87,20 +87,20 @@ func nextDataChanges(t *testing.T, ch <-chan *opcua.PublishNotificationData) []d
 // which the chaos suites share.
 type testPKI struct {
 	// Self-signed application instance certificates.
-	serverCert []byte
-	serverKey  *rsa.PrivateKey
-	clientCert []byte
-	clientKey  *rsa.PrivateKey
+	ServerCert []byte
+	ServerKey  *rsa.PrivateKey
+	ClientCert []byte
+	ClientKey  *rsa.PrivateKey
 
 	// A CA plus a client certificate issued by it, for trust-list tests.
-	caCert         []byte
-	issuedCert     []byte
-	issuedKey      *rsa.PrivateKey
-	userCert       []byte // self-signed X.509 user identity certificate
-	userKey        *rsa.PrivateKey
-	strangerCert   []byte // a second self-signed cert nobody trusts
-	strangerKey    *rsa.PrivateKey
-	serverCertX509 *x509.Certificate
+	CACert         []byte
+	IssuedCert     []byte
+	IssuedKey      *rsa.PrivateKey
+	UserCert       []byte // self-signed X.509 user identity certificate
+	UserKey        *rsa.PrivateKey
+	StrangerCert   []byte // a second self-signed cert nobody trusts
+	StrangerKey    *rsa.PrivateKey
+	ServerCertX509 *x509.Certificate
 
 	// ecc holds the certificates for the ECC security policies.
 	ecc *eccPKI
@@ -130,18 +130,18 @@ func buildPKI() (*testPKI, error) {
 		return nil, err
 	}
 	return &testPKI{
-		serverCert:     src.ServerCert,
-		serverKey:      src.ServerKey,
-		clientCert:     src.ClientCert,
-		clientKey:      src.ClientKey,
-		caCert:         src.CACert,
-		issuedCert:     src.IssuedCert,
-		issuedKey:      src.IssuedKey,
-		userCert:       src.UserCert,
-		userKey:        src.UserKey,
-		strangerCert:   src.StrangerCert,
-		strangerKey:    src.StrangerKey,
-		serverCertX509: src.ServerCertX509,
+		ServerCert:     src.ServerCert,
+		ServerKey:      src.ServerKey,
+		ClientCert:     src.ClientCert,
+		ClientKey:      src.ClientKey,
+		CACert:         src.CACert,
+		IssuedCert:     src.IssuedCert,
+		IssuedKey:      src.IssuedKey,
+		UserCert:       src.UserCert,
+		UserKey:        src.UserKey,
+		StrangerCert:   src.StrangerCert,
+		StrangerKey:    src.StrangerKey,
+		ServerCertX509: src.ServerCertX509,
 		ecc:            adaptECC(src.ECC),
 	}, nil
 }

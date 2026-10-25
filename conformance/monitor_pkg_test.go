@@ -337,9 +337,9 @@ func TestSubscription_BuilderOptions(t *testing.T) {
 		for len(handlesSeen) < 3 {
 			samples := nextDataChanges(t, own)
 			require.Len(t, samples, 1, "at most one notification per publish")
-			handlesSeen = append(handlesSeen, samples[0].handle)
-			require.False(t, samples[0].dv.ServerTimestamp.IsZero())
-			require.True(t, samples[0].dv.SourceTimestamp.IsZero())
+			handlesSeen = append(handlesSeen, samples[0].Handle)
+			require.False(t, samples[0].DV.ServerTimestamp.IsZero())
+			require.True(t, samples[0].DV.SourceTimestamp.IsZero())
 		}
 		require.ElementsMatch(t, []uint32{0, 1, 2}, handlesSeen)
 	})

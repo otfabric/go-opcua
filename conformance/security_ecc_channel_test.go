@@ -289,13 +289,13 @@ func TestECC_MixedServer(t *testing.T) {
 		for _, ep := range eps {
 			switch ep.SecurityPolicyURI {
 			case ua.SecurityPolicyURINone:
-				require.Equal(t, p.serverCert, ep.ServerCertificate)
+				require.Equal(t, p.ServerCert, ep.ServerCertificate)
 			case ua.SecurityPolicyURIECCNistP256:
 				require.Equal(t, ecc.server[curveP256].cert, ep.ServerCertificate)
 			case ua.SecurityPolicyURIECCNistP384:
 				require.Equal(t, ecc.server[curveP384].cert, ep.ServerCertificate)
 			default:
-				require.Equal(t, p.serverCert, ep.ServerCertificate, ep.SecurityPolicyURI)
+				require.Equal(t, p.ServerCert, ep.ServerCertificate, ep.SecurityPolicyURI)
 			}
 			require.Equal(t, serverAppURI, ep.Server.ApplicationURI)
 			require.Equal(t, uapolicy.SecurityLevel(ep.SecurityPolicyURI, ep.SecurityMode), ep.SecurityLevel)
@@ -320,7 +320,7 @@ func TestECC_MixedServer(t *testing.T) {
 			policy string
 			mode   ua.MessageSecurityMode
 		}{
-			"rsa":   {p.clientCert, ua.SecurityPolicyURIAes256Sha256RsaPss, ua.MessageSecurityModeSignAndEncrypt},
+			"rsa":   {p.ClientCert, ua.SecurityPolicyURIAes256Sha256RsaPss, ua.MessageSecurityModeSignAndEncrypt},
 			"p256":  {ecc.client[curveP256].cert, ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt},
 			"p384":  {ecc.client[curveP384].cert, ua.SecurityPolicyURIECCNistP384, ua.MessageSecurityModeSignAndEncrypt},
 			"nocrt": {nil, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone},
@@ -344,12 +344,12 @@ func TestECC_MixedServer(t *testing.T) {
 		require.ErrorIs(t, err, errors.ErrNoMatchingEndpoint)
 		_, err = opcua.SelectEndpoint(nil, "", ua.MessageSecurityModeInvalid, nil)
 		require.ErrorIs(t, err, errors.ErrNoEndpoints)
-		_, err = opcua.SelectEndpoint([]*ua.EndpointDescription{{SecurityPolicyURI: "urn:unknown"}, nil}, "", ua.MessageSecurityModeInvalid, p.clientCert)
+		_, err = opcua.SelectEndpoint([]*ua.EndpointDescription{{SecurityPolicyURI: "urn:unknown"}, nil}, "", ua.MessageSecurityModeInvalid, p.ClientCert)
 		require.ErrorIs(t, err, errors.ErrNoMatchingEndpoint)
 	})
 
 	t.Run("RSAAndECCClientsSideBySide", func(t *testing.T) {
-		rsaEP, err := opcua.SelectEndpoint(eps, "", ua.MessageSecurityModeInvalid, p.clientCert)
+		rsaEP, err := opcua.SelectEndpoint(eps, "", ua.MessageSecurityModeInvalid, p.ClientCert)
 		require.NoError(t, err)
 		rsaClient := newClient(t, url, secureClientOpts(t, rsaEP, ua.UserTokenTypeAnonymous)...)
 
@@ -382,7 +382,7 @@ func TestECC_CertificateAndPolicyMismatch(t *testing.T) {
 	p256EP := endpointFor(t, url, ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt)
 	p384EP := endpointFor(t, url, ua.SecurityPolicyURIECCNistP384, ua.MessageSecurityModeSignAndEncrypt)
 	rsaEP := endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt)
-	trust := opcua.TrustedCertificates(p.serverCertX509, ecc.server[curveP256].x509, ecc.server[curveP384].x509)
+	trust := opcua.TrustedCertificates(p.ServerCertX509, ecc.server[curveP256].x509, ecc.server[curveP384].x509)
 
 	t.Run("P256CertificateOnP384Policy", func(t *testing.T) {
 		_, err := dialClient(t, url, eccClientOpts(t, p384EP, curveP256, ua.UserTokenTypeAnonymous)...)
@@ -392,8 +392,8 @@ func TestECC_CertificateAndPolicyMismatch(t *testing.T) {
 	t.Run("RSACertificateOnECCPolicy", func(t *testing.T) {
 		_, err := dialClient(t, url,
 			opcua.SecurityFromEndpoint(p256EP, ua.UserTokenTypeAnonymous),
-			opcua.Certificate(p.clientCert),
-			opcua.PrivateKey(p.clientKey),
+			opcua.Certificate(p.ClientCert),
+			opcua.PrivateKey(p.ClientKey),
 			trust,
 		)
 		require.ErrorIs(t, err, errors.ErrInvalidSecurityConfig)
@@ -486,8 +486,8 @@ func TestECC_ServerConfiguration(t *testing.T) {
 	t.Run("ECCPolicyNeedsAnECCCertificate", func(t *testing.T) {
 		srv, err := server.New(
 			server.EndPoint("localhost", 0),
-			server.Certificate(p.serverCert),
-			server.PrivateKey(p.serverKey),
+			server.Certificate(p.ServerCert),
+			server.PrivateKey(p.ServerKey),
 			server.EnableSecurity(ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		)
@@ -554,10 +554,10 @@ func TestECC_ServerConfiguration(t *testing.T) {
 		_, err = dialClient(t, url,
 			opcua.SecurityPolicy(ua.SecurityPolicyURIBasic256Sha256),
 			opcua.SecurityMode(ua.MessageSecurityModeSignAndEncrypt),
-			opcua.RemoteCertificate(p.serverCert),
-			opcua.Certificate(p.clientCert),
-			opcua.PrivateKey(p.clientKey),
-			opcua.TrustedCertificates(p.serverCertX509),
+			opcua.RemoteCertificate(p.ServerCert),
+			opcua.Certificate(p.ClientCert),
+			opcua.PrivateKey(p.ClientKey),
+			opcua.TrustedCertificates(p.ServerCertX509),
 		)
 		require.ErrorIs(t, err, ua.StatusBadSecurityPolicyRejected)
 	})

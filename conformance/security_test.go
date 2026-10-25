@@ -40,8 +40,8 @@ func secureServerOpts(t *testing.T, extra ...server.Option) []server.Option {
 	t.Helper()
 	p := pki(t)
 	opts := []server.Option{
-		server.Certificate(p.serverCert),
-		server.PrivateKey(p.serverKey),
+		server.Certificate(p.ServerCert),
+		server.PrivateKey(p.ServerKey),
 	}
 	for _, pol := range securePolicies {
 		for _, mode := range secureModes {
@@ -66,9 +66,9 @@ func secureClientOpts(t *testing.T, ep *ua.EndpointDescription, auth ua.UserToke
 	p := pki(t)
 	return []opcua.Option{
 		opcua.SecurityFromEndpoint(ep, auth),
-		opcua.Certificate(p.clientCert),
-		opcua.PrivateKey(p.clientKey),
-		opcua.TrustedCertificates(p.serverCertX509),
+		opcua.Certificate(p.ClientCert),
+		opcua.PrivateKey(p.ClientKey),
+		opcua.TrustedCertificates(p.ServerCertX509),
 	}
 }
 
@@ -167,7 +167,7 @@ func TestSecurity_EndpointsAdvertised(t *testing.T) {
 		enc := seen[key{pol, ua.MessageSecurityModeSignAndEncrypt}]
 		require.NotNil(t, sign)
 		require.NotNil(t, enc)
-		require.Equal(t, pki(t).serverCert, sign.ServerCertificate)
+		require.Equal(t, pki(t).ServerCert, sign.ServerCertificate)
 		require.Greater(t, enc.SecurityLevel, sign.SecurityLevel,
 			"SignAndEncrypt must rank above Sign for %s", pol)
 		require.Greater(t, sign.SecurityLevel, seen[key{ua.SecurityPolicyURINone, ua.MessageSecurityModeNone}].SecurityLevel)
@@ -185,8 +185,8 @@ func TestSecurity_ServerCertificateTrust(t *testing.T) {
 	base := func() []opcua.Option {
 		return []opcua.Option{
 			opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
-			opcua.Certificate(p.clientCert),
-			opcua.PrivateKey(p.clientKey),
+			opcua.Certificate(p.ClientCert),
+			opcua.PrivateKey(p.ClientKey),
 		}
 	}
 
@@ -197,7 +197,7 @@ func TestSecurity_ServerCertificateTrust(t *testing.T) {
 	})
 
 	t.Run("WrongTrustAnchorRejected", func(t *testing.T) {
-		stranger, err := x509.ParseCertificate(p.strangerCert)
+		stranger, err := x509.ParseCertificate(p.StrangerCert)
 		require.NoError(t, err)
 		_, err = dialClient(t, url, append(base(), opcua.TrustedCertificates(stranger))...)
 		require.Error(t, err)
@@ -205,7 +205,7 @@ func TestSecurity_ServerCertificateTrust(t *testing.T) {
 	})
 
 	t.Run("TrustedCertificatesAccepted", func(t *testing.T) {
-		c := newClient(t, url, append(base(), opcua.TrustedCertificates(p.serverCertX509))...)
+		c := newClient(t, url, append(base(), opcua.TrustedCertificates(p.ServerCertX509))...)
 		dv, err := c.ReadValue(ctx, f.Int32)
 		require.NoError(t, err)
 		require.Equal(t, int32(42), dv.Value.Value())
@@ -227,9 +227,9 @@ func TestSecurity_ServerCertificateTrust(t *testing.T) {
 		forged.Server = &app
 		_, err := dialClient(t, url,
 			opcua.SecurityFromEndpoint(&forged, ua.UserTokenTypeAnonymous),
-			opcua.Certificate(p.clientCert),
-			opcua.PrivateKey(p.clientKey),
-			opcua.TrustedCertificates(p.serverCertX509),
+			opcua.Certificate(p.ClientCert),
+			opcua.PrivateKey(p.ClientKey),
+			opcua.TrustedCertificates(p.ServerCertX509),
 		)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "does not contain the server ApplicationURI")
@@ -241,10 +241,10 @@ func TestSecurity_ServerCertificateTrust(t *testing.T) {
 		c := newClient(t, url,
 			opcua.SecurityPolicy("Basic256Sha256"),
 			opcua.SecurityModeString("SignAndEncrypt"),
-			opcua.RemoteCertificate(p.serverCert),
-			opcua.Certificate(p.clientCert),
-			opcua.PrivateKey(p.clientKey),
-			opcua.TrustedCertificates(p.serverCertX509),
+			opcua.RemoteCertificate(p.ServerCert),
+			opcua.Certificate(p.ClientCert),
+			opcua.PrivateKey(p.ClientKey),
+			opcua.TrustedCertificates(p.ServerCertX509),
 		)
 		require.Equal(t, ua.SecurityPolicyURIBasic256Sha256, c.SecurityPolicy())
 		require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, c.SecurityMode())
@@ -258,16 +258,16 @@ func TestSecurity_ServerCertificateTrust(t *testing.T) {
 // the client application certificate.
 func TestSecurity_ClientCertificateTrustList(t *testing.T) {
 	p := pki(t)
-	f, url := secureServer(t, server.WithClientCertificateTrustList(p.caCert))
+	f, url := secureServer(t, server.WithClientCertificateTrustList(p.CACert))
 	ctx := context.Background()
 	ep := endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt)
 
 	t.Run("IssuedByTrustedCAAccepted", func(t *testing.T) {
 		c := newClient(t, url,
 			opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
-			opcua.Certificate(p.issuedCert),
-			opcua.PrivateKey(p.issuedKey),
-			opcua.TrustedCertificates(p.serverCertX509),
+			opcua.Certificate(p.IssuedCert),
+			opcua.PrivateKey(p.IssuedKey),
+			opcua.TrustedCertificates(p.ServerCertX509),
 		)
 		dv, err := c.ReadValue(ctx, f.Int32)
 		require.NoError(t, err)
@@ -301,15 +301,15 @@ func TestSecurity_EmptyTrustListRejectsAll(t *testing.T) {
 		cert []byte
 		key  *rsa.PrivateKey
 	}{
-		"SelfSigned": {p.clientCert, p.clientKey},
-		"CAIssued":   {p.issuedCert, p.issuedKey},
+		"SelfSigned": {p.ClientCert, p.ClientKey},
+		"CAIssued":   {p.IssuedCert, p.IssuedKey},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := dialClient(t, url,
 				opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
 				opcua.Certificate(creds.cert),
 				opcua.PrivateKey(creds.key),
-				opcua.TrustedCertificates(p.serverCertX509),
+				opcua.TrustedCertificates(p.ServerCertX509),
 			)
 			require.ErrorIs(t, err, ua.StatusBadCertificateUntrusted)
 		})
@@ -444,7 +444,7 @@ func TestSecurity_X509UserToken(t *testing.T) {
 		mu.Lock()
 		seen = append(seen, der)
 		mu.Unlock()
-		if string(der) == string(p.userCert) {
+		if string(der) == string(p.UserCert) {
 			return nil
 		}
 		return ua.StatusBadIdentityTokenRejected
@@ -459,8 +459,8 @@ func TestSecurity_X509UserToken(t *testing.T) {
 		t.Run("Accepted/"+shortPolicy(pol), func(t *testing.T) {
 			ep := endpointFor(t, url, pol, ua.MessageSecurityModeSignAndEncrypt)
 			c := newClient(t, url, append(secureClientOpts(t, ep, ua.UserTokenTypeCertificate),
-				opcua.AuthCertificate(p.userCert),
-				opcua.AuthPrivateKey(p.userKey),
+				opcua.AuthCertificate(p.UserCert),
+				opcua.AuthPrivateKey(p.UserKey),
 			)...)
 			dv, err := c.ReadValue(ctx, f.Int32)
 			require.NoError(t, err)
@@ -471,7 +471,7 @@ func TestSecurity_X509UserToken(t *testing.T) {
 	mu.Lock()
 	require.NotEmpty(t, seen, "validator must have been consulted")
 	for _, der := range seen {
-		require.Equal(t, p.userCert, der)
+		require.Equal(t, p.UserCert, der)
 	}
 	mu.Unlock()
 
@@ -479,8 +479,8 @@ func TestSecurity_X509UserToken(t *testing.T) {
 
 	t.Run("RejectedByValidator", func(t *testing.T) {
 		_, err := dialClient(t, url, append(secureClientOpts(t, ep, ua.UserTokenTypeCertificate),
-			opcua.AuthCertificate(p.strangerCert),
-			opcua.AuthPrivateKey(p.strangerKey),
+			opcua.AuthCertificate(p.StrangerCert),
+			opcua.AuthPrivateKey(p.StrangerKey),
 		)...)
 		require.ErrorIs(t, err, ua.StatusBadIdentityTokenRejected)
 	})
@@ -489,8 +489,8 @@ func TestSecurity_X509UserToken(t *testing.T) {
 		// A trusted certificate presented without its private key: the user
 		// token signature cannot verify.
 		_, err := dialClient(t, url, append(secureClientOpts(t, ep, ua.UserTokenTypeCertificate),
-			opcua.AuthCertificate(p.userCert),
-			opcua.AuthPrivateKey(p.strangerKey),
+			opcua.AuthCertificate(p.UserCert),
+			opcua.AuthPrivateKey(p.StrangerKey),
 		)...)
 		require.ErrorIs(t, err, ua.StatusBadUserSignatureInvalid)
 	})
@@ -498,7 +498,7 @@ func TestSecurity_X509UserToken(t *testing.T) {
 	t.Run("GarbageCertificate", func(t *testing.T) {
 		_, err := dialClient(t, url, append(secureClientOpts(t, ep, ua.UserTokenTypeCertificate),
 			opcua.AuthCertificate([]byte("not a certificate")),
-			opcua.AuthPrivateKey(p.userKey),
+			opcua.AuthPrivateKey(p.UserKey),
 		)...)
 		require.ErrorIs(t, err, ua.StatusBadIdentityTokenInvalid)
 	})
@@ -512,8 +512,8 @@ func TestSecurity_X509UserTokenWithoutValidator(t *testing.T) {
 	ep := endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt)
 
 	_, err := dialClient(t, url, append(secureClientOpts(t, ep, ua.UserTokenTypeCertificate),
-		opcua.AuthCertificate(p.userCert),
-		opcua.AuthPrivateKey(p.userKey),
+		opcua.AuthCertificate(p.UserCert),
+		opcua.AuthPrivateKey(p.UserKey),
 	)...)
 	require.ErrorIs(t, err, ua.StatusBadIdentityTokenRejected)
 }
@@ -688,8 +688,8 @@ func TestSecurity_OnlyEnabledSecurityAccepted(t *testing.T) {
 	// Deliberately no None endpoint: only Basic256Sha256 / SignAndEncrypt.
 	srv, err := server.New(
 		server.EndPoint("localhost", 0),
-		server.Certificate(p.serverCert),
-		server.PrivateKey(p.serverKey),
+		server.Certificate(p.ServerCert),
+		server.PrivateKey(p.ServerKey),
 		server.EnableSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
@@ -703,10 +703,10 @@ func TestSecurity_OnlyEnabledSecurityAccepted(t *testing.T) {
 		return []opcua.Option{
 			opcua.SecurityPolicy(policy),
 			opcua.SecurityMode(mode),
-			opcua.RemoteCertificate(p.serverCert),
-			opcua.Certificate(p.clientCert),
-			opcua.PrivateKey(p.clientKey),
-			opcua.TrustedCertificates(p.serverCertX509),
+			opcua.RemoteCertificate(p.ServerCert),
+			opcua.Certificate(p.ClientCert),
+			opcua.PrivateKey(p.ClientKey),
+			opcua.TrustedCertificates(p.ServerCertX509),
 		}
 	}
 
