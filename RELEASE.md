@@ -21,13 +21,14 @@ The HTTPS (`opc.https`, Part 6 §7.4) and WebSocket (`opc.wss`, Part 6 §7.5) tr
 - **uasc: a server no longer closes a channel whose token expires while it processes a renewal it has received in full.** The channel goes on with the new token, or is closed if the renewal fails; part of a multi-chunk OpenSecureChannel does not count.
 - **uasc: the client renews at 75 % of the token lifetime counted from when it sent the OpenSecureChannel request**, not from when it had processed the response (Part 4 §5.5.2.1).
 - **server: a notification message whose Publish response cannot be sent is resent with the session's next Publish request.** A Publish request read just before its connection dropped could be answered after the drop, and the client, back on a new channel, learned of the lost message only from the sequence number of a later one, possibly a keep-alive many intervals away.
+- **uasc: an `opc.https` request that is cancelled, times out or has its channel closed reports that**, also when the server's answer to the cancelled request arrives first; it used to fail decoding the empty answer with "unexpected EOF".
 
 ### Tests
 
 - Unit, e2e and conformance tests for both transports; fuzz tests for WebSocket framing, the handshake and HTTPS request bodies.
 - Chaos: many clients over opc.wss and opc.https through fault proxies (drops, stalls, latency, fragmentation, refusals), malformed WebSocket frames, slowloris and garbage HTTPS bodies.
 - Interop against UA-.NETStandard over opc.wss and opc.https in both directions (opcua-interop v0.11.0); ledger capabilities `transport.wss` and `transport.https` for every peer.
-- Deterministic regression tests for the renewal fixes and the Publish resend; the PubSub key-rotation and publisher-restart chaos tests tell late messages from lost ones.
+- Deterministic regression tests for the renewal fixes, the Publish resend and the late HTTPS answer; the PubSub key-rotation and publisher-restart chaos tests tell late messages from lost ones.
 
 ### Interop
 

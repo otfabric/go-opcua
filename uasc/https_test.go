@@ -292,6 +292,48 @@ func TestHTTPSTimeoutAndCancel(t *testing.T) {
 	require.Empty(t, errCh)
 }
 
+// lateAnswer is an http.RoundTripper that answers a request only once it is
+// cancelled, with an empty 200: the answer of a server handler that returned
+// when it saw the cancellation, winning the race with it.
+type lateAnswer struct{ started chan struct{} }
+
+func (l lateAnswer) RoundTrip(r *http.Request) (*http.Response, error) {
+	l.started <- struct{}{}
+	<-r.Context().Done()
+	return &http.Response{StatusCode: http.StatusOK, Status: "200 OK", Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+}
+
+// A response that arrives after the request was cancelled reports why it was
+// cancelled, not that it cannot be decoded.
+//
+// Regression (TestHTTPSTimeoutAndCancel on CI): closing the channel under a
+// waiting request returned "unexpected EOF" when the server's empty answer
+// won the race with the cancellation.
+func TestHTTPSLateAnswerAfterCancel(t *testing.T) {
+	started := make(chan struct{}, 1)
+	errCh := make(chan error, 1)
+	sc, err := NewHTTPSChannel("opc.https://localhost:1/ua", &http.Client{Transport: lateAnswer{started}}, noneConfig(), errCh)
+	require.NoError(t, err)
+	h := func(ua.Response) error { return nil }
+
+	err = sc.SendRequestWithTimeout(context.Background(), &ua.ReadRequest{}, nil, time.Millisecond, h)
+	require.ErrorIs(t, err, ua.StatusBadTimeout)
+	<-started
+
+	ctx, cancel := context.WithCancel(context.Background())
+	errc := make(chan error, 1)
+	go func() { errc <- sc.SendRequestWithTimeout(ctx, &ua.ReadRequest{}, nil, time.Minute, h) }()
+	<-started
+	cancel()
+	require.ErrorIs(t, <-errc, context.Canceled)
+
+	go func() { errc <- sc.SendRequestWithTimeout(context.Background(), &ua.ReadRequest{}, nil, time.Minute, h) }()
+	<-started
+	require.NoError(t, sc.Close())
+	require.ErrorIs(t, <-errc, errors.ErrSecureChannelClosed)
+	require.Empty(t, errCh, "none of these is a lost connection")
+}
+
 func TestHTTPSUnreachable(t *testing.T) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
