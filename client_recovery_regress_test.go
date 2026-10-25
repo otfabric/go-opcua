@@ -361,3 +361,53 @@ func TestPublish_SubscriptionTransferred(t *testing.T) {
 		assert.Empty(t, c.pendingAcks)
 	})
 }
+
+// Bad_NoSubscription for a Publish request sent in a session the client has
+// left: the reconnect logic transferred the subscriptions to the new session,
+// and the server answers the Publish requests still waiting in the old one
+// with Bad_NoSubscription. That says nothing about the subscriptions, which
+// live on in the new session: they must not be marked for recreation.
+//
+// Regression (Race, TestClientCovMonitorTriggers/session_invalid/republished:
+// no recovery event "republished"): the transferred subscription was marked
+// broken and recreated right after its transfer. When the mark was still
+// pending at the next reconnect, that reconnect recreated the subscription
+// instead of transferring and republishing it.
+func TestPublish_NoSubscriptionOfLeftSession(t *testing.T) {
+	c, err := NewClient("opc.tcp://example.com:4840", AutoReconnect(true))
+	require.NoError(t, err)
+	sub, _ := newNotifyTestSub(7)
+	sub.c = c
+	c.subMux.Lock()
+	require.NoError(t, c.registerSubscriptionNeedsSubMuxLock(sub))
+	c.subMux.Unlock()
+	prev := &Session{resp: &ua.CreateSessionResponse{AuthenticationToken: ua.NewNumericNodeID(0, 1)}}
+	next := &Session{resp: &ua.CreateSessionResponse{AuthenticationToken: ua.NewNumericNodeID(0, 2)}}
+
+	broken := func() bool {
+		c.subMux.RLock()
+		defer c.subMux.RUnlock()
+		return sub.needsRecreate
+	}
+
+	// sent in prev, answered after the reconnect replaced it with next
+	c.setSession(prev)
+	withPublishHook(t, func(context.Context, *Client) (*ua.PublishResponse, error) {
+		c.setSession(next)
+		return nil, ua.StatusBadNoSubscription
+	})
+	require.NoError(t, c.publish(context.Background()), "the publish loop carries on in the new session")
+	assert.False(t, broken(), "the subscription is not marked for recreation")
+	select {
+	case <-c.subRecoverCh:
+		t.Fatal("subscription recovery requested")
+	default:
+	}
+
+	// in the session the client still uses, the subscriptions are gone
+	withPublishHook(t, func(context.Context, *Client) (*ua.PublishResponse, error) {
+		return nil, ua.StatusBadNoSubscription
+	})
+	require.ErrorIs(t, c.publish(context.Background()), ua.StatusBadNoSubscription)
+	assert.True(t, broken())
+}

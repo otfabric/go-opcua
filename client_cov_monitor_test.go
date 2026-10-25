@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua"
@@ -75,10 +76,11 @@ func (r *recorder) waitRecovered(t *testing.T, c *opcua.Client) {
 }
 
 // waitEvent waits for a recovery event with the given outcome and returns it.
+// On failure it reports what was recorded instead.
 func (r *recorder) waitEvent(t *testing.T, outcome opcua.SubscriptionRecoveryOutcome) opcua.SubscriptionRecoveryEvent {
 	t.Helper()
 	var found opcua.SubscriptionRecoveryEvent
-	require.Eventually(t, func() bool {
+	ok := assert.Eventually(t, func() bool {
 		_, events := r.snapshot()
 		for _, ev := range events {
 			if ev.Outcome == outcome {
@@ -88,6 +90,10 @@ func (r *recorder) waitEvent(t *testing.T, outcome opcua.SubscriptionRecoveryOut
 		}
 		return false
 	}, recoveryTimeout, 5*time.Millisecond, "no recovery event %q", outcome)
+	if !ok {
+		states, events := r.snapshot()
+		t.Fatalf("recorded states %v, events %+v", states, events)
+	}
 	return found
 }
 
