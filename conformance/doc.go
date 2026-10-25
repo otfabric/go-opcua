@@ -27,8 +27,14 @@
 // Option constructor, must be exercised by a test in this package or in one of
 // the conformance packages below it.
 //
-// CI gives every package 120 s under the race detector, so parts of the suite
-// are packages of their own: alarms (Part 9), certmgmt (Part 12), discovery,
-// pubsub (Part 14) and eccext (the math/big ECC policies). They share their
-// helpers through internal/testutil/conformkit.
+// CI gives every package 120 s under the race detector, so most of the suite
+// is split into packages of their own: addrspace (attribute, view, method,
+// nodemgmt, query, RBAC), subscription (subscriptions, monitored items, events,
+// the monitor package, recovery), session (session and channel lifecycle,
+// reverse connect), security (RSA and ECC security policies, identities,
+// channel renewal), transport (HTTPS and WebSocket), history, alarms (Part 9),
+// certmgmt (Part 12), discovery, pubsub (Part 14) and eccext (the math/big ECC
+// policies). This package keeps the misc, diagnostics, custom type, codec,
+// adversarial and concurrency tests and the matrix tests. The packages share
+// their helpers through internal/testutil/conformkit.
 package conformance

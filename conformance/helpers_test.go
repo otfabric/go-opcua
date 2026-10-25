@@ -2,21 +2,7 @@
 
 package conformance
 
-import (
-	"crypto/rsa"
-	"crypto/x509"
-	"net"
-	"sync"
-	"testing"
-	"time"
-
-	"github.com/otfabric/go-opcua"
-	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
-	"github.com/otfabric/go-opcua/internal/testutil/testpki"
-	"github.com/otfabric/go-opcua/ua"
-	"github.com/otfabric/go-opcua/uacp"
-	"github.com/stretchr/testify/require"
-)
+import "github.com/otfabric/go-opcua/internal/testutil/conformkit"
 
 // The generic helpers are shared with the other conformance packages, see
 // conformkit.
@@ -29,119 +15,19 @@ var (
 	eventually         = conformkit.Eventually
 	parallel           = conformkit.Parallel
 	newServer          = conformkit.NewServer
+	setup              = conformkit.Setup
 	setupWith          = conformkit.SetupWith
 	newClient          = conformkit.NewClient
 	dialClient         = conformkit.DialClient
 	awaitValue         = conformkit.AwaitValue
 	expectNoDataChange = conformkit.ExpectNoDataChange
+	nextDataChanges    = conformkit.NextDataChanges
 	nextEvents         = conformkit.NextEvents
 	writeInt32         = conformkit.WriteInt32
 	endpointFor        = conformkit.EndpointFor
 	pendingValues      = conformkit.PendingValues
+
+	pki              = conformkit.PKI
+	secureServerOpts = conformkit.SecureServerOpts
+	secureClientOpts = conformkit.SecureClientOpts
 )
-
-// ackDialer returns a Dialer option that advertises the given UACP limits in
-// the client's HELLO.
-func ackDialer(ack *uacp.Acknowledge) opcua.Option {
-	return opcua.Dialer(&uacp.Dialer{Dialer: &net.Dialer{}, ClientACK: ack})
-}
-
-// --- notification helpers ---------------------------------------------------
-
-// dataChange is one flattened data-change sample.
-type dataChange struct {
-	Handle uint32
-	DV     *ua.DataValue
-}
-
-// nextDataChanges blocks until the next publish that carries at least one
-// data-change sample and returns its samples in wire order.
-func nextDataChanges(t *testing.T, ch <-chan *opcua.PublishNotificationData) []dataChange {
-	t.Helper()
-	deadline := time.After(waitTimeout)
-	for {
-		select {
-		case msg := <-ch:
-			require.NoError(t, msg.Error)
-			dcn, ok := msg.Value.(*ua.DataChangeNotification)
-			if !ok || len(dcn.MonitoredItems) == 0 {
-				continue
-			}
-			out := make([]dataChange, len(dcn.MonitoredItems))
-			for i, it := range dcn.MonitoredItems {
-				out[i] = dataChange{Handle: it.ClientHandle, DV: it.Value}
-			}
-			return out
-		case <-deadline:
-			t.Fatal("timed out waiting for a data-change notification")
-			return nil
-		}
-	}
-}
-
-// --- PKI helpers ------------------------------------------------------------
-
-// testPKI is a small in-memory PKI shared by all security tests. RSA key
-// generation is expensive (more so under the race detector), so it is built
-// once per test binary. The certificates come from internal/testutil/testpki,
-// which the chaos suites share.
-type testPKI struct {
-	// Self-signed application instance certificates.
-	ServerCert []byte
-	ServerKey  *rsa.PrivateKey
-	ClientCert []byte
-	ClientKey  *rsa.PrivateKey
-
-	// A CA plus a client certificate issued by it, for trust-list tests.
-	CACert         []byte
-	IssuedCert     []byte
-	IssuedKey      *rsa.PrivateKey
-	UserCert       []byte // self-signed X.509 user identity certificate
-	UserKey        *rsa.PrivateKey
-	StrangerCert   []byte // a second self-signed cert nobody trusts
-	StrangerKey    *rsa.PrivateKey
-	ServerCertX509 *x509.Certificate
-
-	// ecc holds the certificates for the ECC security policies.
-	ecc *eccPKI
-}
-
-const (
-	serverAppURI = testpki.ServerAppURI
-	clientAppURI = testpki.ClientAppURI
-)
-
-var (
-	pkiOnce sync.Once
-	pkiVal  *testPKI
-	pkiErr  error
-)
-
-func pki(t *testing.T) *testPKI {
-	t.Helper()
-	pkiOnce.Do(func() { pkiVal, pkiErr = buildPKI() })
-	require.NoError(t, pkiErr)
-	return pkiVal
-}
-
-func buildPKI() (*testPKI, error) {
-	src, err := testpki.Get()
-	if err != nil {
-		return nil, err
-	}
-	return &testPKI{
-		ServerCert:     src.ServerCert,
-		ServerKey:      src.ServerKey,
-		ClientCert:     src.ClientCert,
-		ClientKey:      src.ClientKey,
-		CACert:         src.CACert,
-		IssuedCert:     src.IssuedCert,
-		IssuedKey:      src.IssuedKey,
-		UserCert:       src.UserCert,
-		UserKey:        src.UserKey,
-		StrangerCert:   src.StrangerCert,
-		StrangerKey:    src.StrangerKey,
-		ServerCertX509: src.ServerCertX509,
-		ecc:            adaptECC(src.ECC),
-	}, nil
-}
