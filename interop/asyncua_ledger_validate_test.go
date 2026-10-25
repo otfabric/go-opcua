@@ -30,6 +30,7 @@ var asyncuaDirectionConst = map[string]string{
 var asyncuaUnverifiedReasons = map[string]bool{
 	"test-missing":            true,
 	"adapter-command-missing": true,
+	"adapter-unreleased":      true,
 	"adapter-fixture-missing": true,
 	"fault-harness-missing":   true,
 	"consumer-demand-missing": true,
