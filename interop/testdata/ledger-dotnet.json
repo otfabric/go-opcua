@@ -1374,9 +1374,8 @@
     {
       "capability": "alarms.alarm-timing",
       "direction": "go-client-to-dotnet-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount; establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "UA-.NETStandard 2.0.1 implements no OnDelay / OffDelay behaviour (no reference in Opc.Ua.Core.Types State/AlarmConditionState*.cs or Opc.Ua.Server/Alarms); ReAlarmTime has only the ProcessReAlarm helper, which no stack code calls",
       "fixture": "baseline"
     },
     {
@@ -1406,9 +1405,8 @@
     {
       "capability": "alarms.first-in-group",
       "direction": "go-client-to-dotnet-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without FirstInGroupFlag / FirstInGroup; establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "UA-.NETStandard 2.0.1 does not maintain FirstInGroupFlag: AlarmSuppressionEngine (Opc.Ua.Server/Alarms) only suppresses the other members when the first-in-group alarm activates",
       "fixture": "baseline"
     },
     {
@@ -1422,9 +1420,8 @@
     {
       "capability": "alarms.alarm-metrics",
       "direction": "go-client-to-dotnet-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The UA-.NETStandard alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without an AlarmMetricsType object with its counters and Reset; establish which of them the pinned UA-.NETStandard serves, then extend the fixture or mark the row unsupported",
+      "status": "unsupported",
+      "nextAction": "UA-.NETStandard 2.0.1 has no AlarmMetricsType implementation (no AlarmCount maintenance, no Reset handler); Opc.Ua.Server/Alarms/AlarmRateTracker only computes alarm rates",
       "fixture": "baseline"
     },
     {
@@ -2939,7 +2936,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -2954,7 +2951,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -2969,7 +2966,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -2984,7 +2981,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -2999,7 +2996,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3015,7 +3012,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3030,7 +3027,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3046,7 +3043,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3061,7 +3058,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3076,7 +3073,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3091,7 +3088,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3106,7 +3103,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {
@@ -3121,7 +3118,7 @@
       "direction": "dotnet-client-to-go-server",
       "status": "unverified",
       "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
       "fixture": "baseline"
     },
     {

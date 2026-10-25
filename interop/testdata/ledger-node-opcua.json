@@ -794,11 +794,10 @@
     {
       "capability": "event.queue-overflow",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
+      "status": "unsupported",
       "test": "TestNodeOpcuaServer_EventQueueOverflow",
       "case": "coverage/event.queue-overflow/go-client-to-node-opcua-server",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "node-opcua 2.187.12 revises the queue size of an event monitored item to at least 100 (minimumEventQueueSize, monitored_item.js), so a queue of 2 is never granted and the fixture's event rate (one every 2 s) cannot fill it in a test; the test skips when the revised size is not 2. Needs a fixture that bursts more than 100 events",
+      "nextAction": "node-opcua 2.187.12 generates no EventQueueOverflowEventType event: node-opcua-server monitored_item raises every event queue to at least 100 (_adjust_event_queue_size, minimumEventQueueSize) and on overflow only sets the overflow bit of DataChange notifications (_setOverflowBit, 'to do: eventQueueOverflowCount'); a burst fixture would not change that",
       "fixture": "baseline"
     },
     {
@@ -1303,9 +1302,8 @@
     {
       "capability": "alarms.alarm-state-methods",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Suppress, Silence, RemoveFromService, PlaceInService, Reset or the *2 variants; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 binds no Suppress / Suppress2 / Unsuppress / Silence / RemoveFromService / PlaceInService / Reset / Reset2 handler (node-opcua-address-space alarms_and_conditions) and only the v1.04 TimedShelve / OneShotShelve / Unshelve of the ShelvingState, no TimedShelve2; the 1.05 method nodes of its nodeset answer Bad_InternalError (UAMethod 'has not been bound'); revisit when a pinned node-opcua release serves them",
       "fixture": "baseline"
     },
     {
@@ -1319,9 +1317,8 @@
     {
       "capability": "alarms.dialog",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without Respond / Respond2 of a DialogConditionType; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no DialogConditionType implementation (no Respond / Respond2 handler in node-opcua-address-space); revisit when a pinned node-opcua release serves it",
       "fixture": "baseline"
     },
     {
@@ -1351,9 +1348,8 @@
     {
       "capability": "alarms.alarm-groups",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without alarm groups and GetGroupMemberships; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no AlarmGroupType support and no GetGroupMemberships handler (node-opcua-address-space); revisit when a pinned node-opcua release serves them",
       "fixture": "baseline"
     },
     {
@@ -1383,9 +1379,8 @@
     {
       "capability": "alarms.alarm-timing",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without OnDelay / OffDelay and ReAlarmTime / ReAlarmRepeatCount; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 implements no OnDelay / OffDelay / ReAlarmTime / ReAlarmRepeatCount behaviour (no reference in node-opcua-address-space; the Properties exist only in its 1.05 nodeset)",
       "fixture": "baseline"
     },
     {
@@ -1415,9 +1410,8 @@
     {
       "capability": "alarms.first-in-group",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without FirstInGroupFlag / FirstInGroup; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 does not maintain FirstInGroupFlag / FirstInGroup (no reference in node-opcua-address-space; nodeset declarations only)",
       "fixture": "baseline"
     },
     {
@@ -1431,9 +1425,8 @@
     {
       "capability": "alarms.alarm-metrics",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without an AlarmMetricsType object with its counters and Reset; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 has no AlarmMetricsType implementation (no AlarmCount maintenance, no Reset handler in node-opcua-address-space)",
       "fixture": "baseline"
     },
     {
@@ -3055,9 +3048,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "node-opcua 2.187.12 answers ResetToServerDefaults with Bad_InternalError in the adapter (the test skips); whether a differently configured server supports it is not established",
+      "status": "unsupported",
+      "nextAction": "node-opcua-server-configuration 2.187.12 binds only CreateSigningRequest, GetRejectedList, UpdateCertificate and ApplyChanges (push_certificate_manager_helpers); its unbound ResetToServerDefaults answers Bad_InternalError (UAMethod 'has not been bound')",
       "fixture": "baseline"
     },
     {
@@ -3150,9 +3142,8 @@
     {
       "capability": "gds.pull.directory",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {
@@ -3166,9 +3157,8 @@
     {
       "capability": "gds.pull.certificate-request",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {
@@ -3182,9 +3172,8 @@
     {
       "capability": "gds.pull.trust-list",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {
@@ -3198,9 +3187,8 @@
     {
       "capability": "gds.pull.revocation",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "peer-capability-unknown",
-      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "status": "unsupported",
+      "nextAction": "node-opcua 2.187.12 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {
