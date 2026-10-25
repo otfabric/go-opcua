@@ -73,26 +73,21 @@ type certAlarms struct {
 // buildAlarms adds the alarms to the certificate groups.
 func (m *pushManager) buildAlarms() error {
 	s := m.s
-	var ns *NodeNameSpace
-	for _, x := range s.Namespaces() {
-		if nns, ok := x.(*NodeNameSpace); ok && x.Name() == CertificateAlarmsNamespaceURI {
-			ns = nns
-		}
-	}
-	if ns == nil {
-		ns = NewNodeNameSpace(s, CertificateAlarmsNamespaceURI)
-	}
+	ns := m.certNamespace()
 	a := &certAlarms{m: m, cfg: *m.cfg.Alarms, kickc: make(chan struct{}, 1)}
 	class := ua.NewNumericNodeID(0, id.SystemConditionClassType)
 	for _, g := range m.groups {
-		if g.kind != groupUserToken {
+		if g.node == nil {
+			continue
+		}
+		if m.hasCertificates(g) {
 			x := &expiryAlarm{g: g}
 			cond, err := s.AddCondition(ConditionConfig{
 				Type:             ua.NewNumericNodeID(0, id.CertificateExpirationAlarmType),
 				Namespace:        ns,
 				Name:             "CertificateExpired",
 				Source:           g.nodeID(),
-				SourceName:       g.def.name,
+				SourceName:       g.name,
 				ConditionClassID: class,
 				Severity:         severityCertInactive,
 				Properties: []ConditionProperty{
@@ -115,7 +110,7 @@ func (m *pushManager) buildAlarms() error {
 			Namespace:        ns,
 			Name:             "TrustListOutOfDate",
 			Source:           g.nodeID(),
-			SourceName:       g.def.name,
+			SourceName:       g.name,
 			ConditionClassID: class,
 			Severity:         severityCertInactive,
 			Properties: []ConditionProperty{
@@ -235,12 +230,12 @@ func (a *certAlarms) evaluateExpiry(x *expiryAlarm, now time.Time) {
 		cert     []byte
 	)
 	for i, c := range certs {
-		pc, err := uapolicy.ParseCertificate(c.certificate)
+		pc, err := uapolicy.ParseCertificate(c.cert)
 		if err != nil {
 			continue
 		}
 		if cert == nil || pc.NotAfter.Before(date) {
-			date, certType, cert = pc.NotAfter, types[i], c.certificate
+			date, certType, cert = pc.NotAfter, types[i], c.cert
 		}
 	}
 	active := cert != nil && !now.Before(date.Add(-a.cfg.ExpirationLimit))

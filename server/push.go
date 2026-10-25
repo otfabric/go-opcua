@@ -95,6 +95,60 @@ type PushManagement struct {
 	// Alarms, if set, adds the CertificateExpired and TrustListOutOfDate
 	// alarms of the certificate groups (Part 12 §7.8.3).
 	Alarms *CertificateAlarms
+
+	// CertificateGroups are certificate groups of the application beyond
+	// the three default ones (Part 12 §7.8.3: a CertificateGroupFolder may
+	// hold more), for example a trust list for the certificates of a
+	// third-party system or the client certificate of an outgoing
+	// connection. Each is a CertificateGroupType object in the
+	// CertificateGroups folder of ServerConfiguration with its own TrustList
+	// and CertificateTypes, and takes part in the transactions,
+	// GetCertificates, CreateSigningRequest, UpdateCertificate,
+	// CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults
+	// and the alarms like the default groups. The server does not use them
+	// itself: the application reads them with Server.GroupCertificate and
+	// validates against their trust lists with Server.VerifyGroupCertificate.
+	CertificateGroups []CertificateGroup
+}
+
+// CertificateGroup is a certificate group of the application (see
+// PushManagement.CertificateGroups).
+type CertificateGroup struct {
+	// Name is the BrowseName of the group, unique and not one of the
+	// default groups. Its NodeId is the String NodeId
+	// "CertificateGroups.<Name>" in the namespace
+	// CertificateAlarmsNamespaceURI (Server.CertificateGroupID).
+	Name string
+
+	// CertificateTypes are the types of the certificates of the group
+	// (Part 12 §7.8.4): RsaMinApplicationCertificateType,
+	// RsaSha256ApplicationCertificateType, the concrete ECC application
+	// certificate types, HttpsCertificateType, UserCertificateType,
+	// TLSServerCertificateType or TLSClientCertificateType. A group without
+	// types has a trust list only, as the DefaultUserTokenGroup.
+	CertificateTypes []*ua.NodeID
+
+	// TrustList is the trust list the group starts with (nil: an empty
+	// one). SpecifiedLists is ignored: all four lists are taken.
+	TrustList *ua.TrustListDataType
+
+	// Certificates are the certificates the group starts with, at most one
+	// per type.
+	Certificates []GroupCertificate
+}
+
+// GroupCertificate is a certificate of a certificate group with its
+// issuer chain and private key.
+type GroupCertificate struct {
+	// CertificateType is one of the CertificateTypes of the group.
+	CertificateType *ua.NodeID
+	// Certificate is the DER encoded certificate.
+	Certificate []byte
+	// Issuers are the DER encoded certificates of its issuer chain.
+	Issuers [][]byte
+	// PrivateKey is its key (an *rsa.PrivateKey for the RSA application
+	// certificate types).
+	PrivateKey crypto.Signer
 }
 
 // HTTPSClientAuth selects how the opc.https and opc.wss endpoints of a
@@ -173,6 +227,17 @@ type CertificateGroupStore interface {
 	StoreGroupCertificate(ctx context.Context, certificateGroup, certificateType *ua.NodeID, cert []byte, issuers [][]byte, key crypto.Signer) error
 }
 
+// CertificateDeleteStore is a CertificateStore that also persists the
+// deletion of a certificate (DeleteCertificate of Part 12 1.05 §7.10, and
+// ResetToServerDefaults for a certificate the defaults do not have).
+// Without it a deletion is not persisted.
+type CertificateDeleteStore interface {
+	CertificateStore
+	// DeleteGroupCertificate forgets the certificate of the type of a
+	// certificate group.
+	DeleteGroupCertificate(ctx context.Context, certificateGroup, certificateType *ua.NodeID) error
+}
+
 // WithPushManagement enables certificate management by the push model of
 // Part 12 §7. See [PushManagement].
 func WithPushManagement(pm PushManagement) Option {
@@ -191,6 +256,11 @@ func WithPushManagement(pm PushManagement) Option {
 		if pm.HTTPSClientCertificates < HTTPSClientCertificatesIgnore || pm.HTTPSClientCertificates > HTTPSClientCertificatesRequire {
 			return fmt.Errorf("server: WithPushManagement: invalid HTTPSClientCertificates %d", pm.HTTPSClientCertificates)
 		}
+		groups, err := checkCertificateGroups(pm.CertificateGroups, pm.MaxTrustListSize)
+		if err != nil {
+			return fmt.Errorf("server: WithPushManagement: %w", err)
+		}
+		pm.CertificateGroups = groups
 		if pm.TrustListUpdateFrequency < 0 {
 			return fmt.Errorf("server: WithPushManagement: negative TrustListUpdateFrequency")
 		}
@@ -219,13 +289,26 @@ const (
 	groupApplication groupKind = iota
 	groupHTTPS
 	groupUserToken
-	numGroups
+	// numDefaultGroups is the number of default groups; the groups of
+	// PushManagement.CertificateGroups follow.
+	numDefaultGroups
 )
 
 // certGroup is a certificate group (Part 12 §7.8.3) with its trust list.
 type certGroup struct {
 	kind groupKind
-	def  *groupDef
+	name string
+	// node and trustList are the NodeIds of the group and its TrustList
+	// (nil for an application-defined group of a server without
+	// ServerConfiguration).
+	node, trustList *ua.NodeID
+	// def are the standard NodeIds of a default group, nil for an
+	// application-defined one.
+	def *groupDef
+	// initialTrust is the trust list the group starts with.
+	initialTrust *ua.TrustListDataType
+	// custom are the certificates of an application-defined group.
+	custom *customGroup
 
 	trust      atomic.Pointer[trustList]
 	lastUpdate atomic.Int64 // UnixNano of the last change of the trust list
@@ -238,8 +321,8 @@ type certGroup struct {
 	nodes []*ua.NodeID
 }
 
-func (g *certGroup) nodeID() *ua.NodeID      { return ua.NewNumericNodeID(0, g.def.node) }
-func (g *certGroup) trustListID() *ua.NodeID { return ua.NewNumericNodeID(0, g.def.trustList) }
+func (g *certGroup) nodeID() *ua.NodeID      { return g.node }
+func (g *certGroup) trustListID() *ua.NodeID { return g.trustList }
 
 // tlsIdentity is the certificate of the DefaultHttpsGroup: the TLS
 // certificate of the opc.https and opc.wss endpoints.
@@ -278,7 +361,13 @@ type pushManager struct {
 	s   *Server
 	cfg PushManagement
 
-	groups [numGroups]*certGroup
+	// groups are the default groups, by groupKind, and those of
+	// PushManagement.CertificateGroups.
+	groups []*certGroup
+	// appTypes are the CertificateTypes the DefaultApplicationGroup started
+	// with: a certificate of one of them that DeleteCertificate removed may
+	// be added again.
+	appTypes []uint32
 
 	// https is the certificate of the DefaultHttpsGroup (nil: none).
 	https atomic.Pointer[tlsIdentity]
@@ -324,13 +413,16 @@ type pushTx struct {
 // pendingCert is a certificate UpdateCertificate or
 // CreateSelfSignedCertificate brought.
 type pendingCert struct {
-	key      certKey
-	old      []byte // the certificate it replaces
-	cert     []byte
-	issuers  [][]byte
-	priv     crypto.Signer
-	isTLSKey bool
+	key     certKey
+	old     []byte // the certificate it replaces
+	cert    []byte
+	issuers [][]byte
+	priv    crypto.Signer
 }
+
+// deletes reports whether the change deletes the certificate
+// (DeleteCertificate).
+func (p *pendingCert) deletes() bool { return p.cert == nil }
 
 func newPushManager(cfg *PushManagement, sc *serverConfig) *pushManager {
 	m := &pushManager{
@@ -339,13 +431,16 @@ func newPushManager(cfg *PushManagement, sc *serverConfig) *pushManager {
 		now:     time.Now,
 	}
 	m.diag.result = ua.StatusOK
-	initial := [numGroups]*ua.TrustListDataType{cfg.TrustList, cfg.HTTPSTrustList, cfg.UserTokenTrustList}
-	for k := range numGroups {
-		g := &certGroup{kind: k, def: &groupDefs[k], handles: map[uint32]*trustListHandle{}}
-		tl, _ := newTrustList(initial[k], cfg.MaxTrustListSize) // checked by the option
-		g.trust.Store(tl)
-		g.lastUpdate.Store(time.Now().UnixNano())
-		m.groups[k] = g
+	initial := [numDefaultGroups]*ua.TrustListDataType{cfg.TrustList, cfg.HTTPSTrustList, cfg.UserTokenTrustList}
+	for k := range numDefaultGroups {
+		d := &groupDefs[k]
+		m.addGroup(&certGroup{
+			name: d.name, def: d, initialTrust: initial[k],
+			node: ua.NewNumericNodeID(0, d.node), trustList: ua.NewNumericNodeID(0, d.trustList),
+		})
+	}
+	for _, cg := range cfg.CertificateGroups {
+		m.addGroup(newCustomGroup(cg))
 	}
 	m.initial = identitySnapshot{
 		certificate: sc.certificate,
@@ -354,7 +449,22 @@ func newPushManager(cfg *PushManagement, sc *serverConfig) *pushManager {
 		https:       initialTLSIdentity(sc),
 	}
 	m.https.Store(m.initial.https)
+	for _, x := range m.initial.certs() {
+		if t, ok := certTypeOf(x.certificate); ok && !slices.Contains(m.appTypes, t) {
+			m.appTypes = append(m.appTypes, t)
+		}
+	}
 	return m
+}
+
+// addGroup adds a group with its initial trust list.
+func (m *pushManager) addGroup(g *certGroup) {
+	g.kind = groupKind(len(m.groups))
+	g.handles = map[uint32]*trustListHandle{}
+	tl, _ := newTrustList(g.initialTrust, m.cfg.MaxTrustListSize) // checked by the option
+	g.trust.Store(tl)
+	g.lastUpdate.Store(time.Now().UnixNano())
+	m.groups = append(m.groups, g)
 }
 
 // group returns the group of a CertificateGroupId: a null NodeId is the
@@ -363,11 +473,8 @@ func (m *pushManager) group(n *ua.NodeID) (*certGroup, bool) {
 	if isNullNodeID(n) {
 		return m.groups[groupApplication], true
 	}
-	if n.Namespace() != 0 || !isNumericNodeID(n) {
-		return nil, false
-	}
 	for _, g := range m.groups {
-		if g.def.node == n.IntID() {
+		if g.node != nil && g.node.Equal(n) {
 			return g, true
 		}
 	}
@@ -555,22 +662,22 @@ func (m *pushManager) storeLocked(ctx context.Context, trust map[groupKind]*trus
 		return ua.StatusOK
 	}
 	gs, all := st.(CertificateGroupStore)
+	ds, deletes := st.(CertificateDeleteStore)
 	fail := func(target *ua.NodeID, what string, err error) ua.StatusCode {
 		m.logger().Warn("push management: storing "+what+" failed", "error", err)
 		m.recordError(target, ua.StatusBadInternalError, "storing "+what+" failed")
 		return ua.StatusBadInternalError
 	}
-	for k := range numGroups {
-		tl := trust[k]
+	for _, g := range m.groups {
+		tl := trust[g.kind]
 		if tl == nil {
 			continue
 		}
-		g := m.groups[k]
 		var err error
 		switch {
 		case all:
 			err = gs.StoreGroupTrustList(ctx, g.nodeID(), cloneTrustListData(tl.data))
-		case k == groupApplication:
+		case g.kind == groupApplication:
 			err = st.StoreTrustList(ctx, cloneTrustListData(tl.data))
 		}
 		if err != nil {
@@ -582,6 +689,10 @@ func (m *pushManager) storeLocked(ctx context.Context, trust map[groupKind]*trus
 		typ := ua.NewNumericNodeID(0, p.key.certType)
 		var err error
 		switch {
+		case p.deletes():
+			if deletes {
+				err = ds.DeleteGroupCertificate(ctx, g.nodeID(), typ)
+			}
 		case all:
 			err = gs.StoreGroupCertificate(ctx, g.nodeID(), typ, slices.Clone(p.cert), slices.Clone(p.issuers), p.priv)
 		case p.key.group == groupApplication:
@@ -589,6 +700,38 @@ func (m *pushManager) storeLocked(ctx context.Context, trust map[groupKind]*trus
 		}
 		if err != nil {
 			return fail(g.nodeID(), "the certificate", err)
+		}
+	}
+	return ua.StatusOK
+}
+
+// checkDeletesLocked refuses the deletion of a certificate that endpoints
+// use: "Certificates that are referenced by EndpointDescriptions shall not
+// be deleted. This determination happens when ApplyChanges is called"
+// (Part 12 1.05 §7.10, DeleteCertificate). An application instance
+// certificate is in use when an endpoint advertises it or it is the
+// certificate the channels of the server start with; the certificate of
+// the DefaultHttpsGroup while the server has opc.https or opc.wss
+// endpoints.
+func (m *pushManager) checkDeletesLocked(certs []*pendingCert) ua.StatusCode {
+	for _, p := range certs {
+		if !p.deletes() || p.old == nil {
+			continue
+		}
+		inUse := false
+		switch p.key.group {
+		case groupApplication:
+			primary, _ := m.s.cfg.primaryIdentity()
+			inUse = string(primary) == string(p.old) || slices.ContainsFunc(m.s.Endpoints(), func(ep *ua.EndpointDescription) bool {
+				return string(ep.ServerCertificate) == string(p.old)
+			})
+		case groupHTTPS:
+			inUse = len(m.s.cfg.https.endpoints) > 0 || len(m.s.cfg.wss.endpoints) > 0
+		default:
+		}
+		if inUse {
+			m.recordError(m.groups[p.key.group].nodeID(), ua.StatusBadInvalidState, "the certificate to delete is in use by an endpoint")
+			return ua.StatusBadInvalidState
 		}
 	}
 	return ua.StatusOK
@@ -604,6 +747,10 @@ func (m *pushManager) applyLocked(ctx context.Context) ua.StatusCode {
 		return ua.StatusOK
 	}
 	certs := sortedCerts(tx.certs)
+	if sc := m.checkDeletesLocked(certs); sc != ua.StatusOK {
+		m.setDiagnosticsResult(sc)
+		return sc
+	}
 	if sc := m.storeLocked(ctx, tx.trust, certs); sc != ua.StatusOK {
 		m.setDiagnosticsResult(sc)
 		return sc
@@ -616,14 +763,8 @@ func (m *pushManager) applyLocked(ctx context.Context) ua.StatusCode {
 	}
 	appCerts := false
 	for _, p := range certs {
-		switch p.key.group {
-		case groupApplication:
-			m.s.cfg.replaceIdentity(p.old, p.cert, p.priv)
-			appCerts = true
-		case groupHTTPS:
-			m.https.Store(newTLSIdentity(p.cert, p.issuers, p.priv))
-		case groupUserToken, numGroups:
-		}
+		m.applyCert(p)
+		appCerts = appCerts || p.key.group == groupApplication
 		delete(m.csrKeys, p.key)
 	}
 	if appCerts {
@@ -633,6 +774,31 @@ func (m *pushManager) applyLocked(ctx context.Context) ua.StatusCode {
 	m.evaluateAlarms()
 	go m.changed()
 	return ua.StatusOK
+}
+
+// applyCert puts a new certificate of a group in place or removes a
+// deleted one.
+func (m *pushManager) applyCert(p *pendingCert) {
+	g := m.groups[p.key.group]
+	switch {
+	case p.key.group == groupApplication:
+		switch {
+		case p.deletes():
+			m.s.cfg.removeIdentity(p.old)
+		case p.old == nil:
+			m.s.cfg.addIdentity(p.cert, p.priv)
+		default:
+			m.s.cfg.replaceIdentity(p.old, p.cert, p.priv)
+		}
+	case p.key.group == groupHTTPS:
+		if p.deletes() {
+			m.https.Store(nil)
+		} else {
+			m.https.Store(newTLSIdentity(p.cert, p.issuers, p.priv))
+		}
+	case g.custom != nil:
+		g.custom.set(p)
+	}
 }
 
 func sortedCerts(certs map[certKey]*pendingCert) []*pendingCert {
@@ -679,6 +845,29 @@ func (s *serverConfig) replaceIdentity(old, cert []byte, key crypto.Signer) {
 			s.identities[i] = applicationIdentity{certificate: cert, key: key}
 		}
 	}
+}
+
+// addIdentity adds an application instance certificate with its key.
+func (s *serverConfig) addIdentity(cert []byte, key crypto.Signer) {
+	s.idMu.Lock()
+	defer s.idMu.Unlock()
+	s.identities = append(s.identities, applicationIdentity{certificate: cert, key: key})
+	if s.certificate == nil {
+		s.certificate = cert
+		if rk, ok := key.(*rsa.PrivateKey); ok {
+			s.privateKey = rk
+		}
+	}
+}
+
+// removeIdentity removes an application instance certificate, which is not
+// the Certificate / PrivateKey pair (checkDeletesLocked).
+func (s *serverConfig) removeIdentity(cert []byte) {
+	s.idMu.Lock()
+	defer s.idMu.Unlock()
+	s.identities = slices.DeleteFunc(slices.Clone(s.identities), func(x applicationIdentity) bool {
+		return string(x.certificate) == string(cert)
+	})
 }
 
 // restoreIdentities puts back the application instance certificates of a
@@ -763,7 +952,23 @@ type groupDef struct {
 	closeAndUpdate, addCertificate, removeCertificate                    uint32
 }
 
-var groupDefs = [numGroups]groupDef{
+// methodID returns the NodeId of a TrustList method of the group.
+func (d *groupDef) methodID(name string) uint32 {
+	return map[string]uint32{
+		"Open":              d.open,
+		"Close":             d.close,
+		"Read":              d.read,
+		"Write":             d.write,
+		"GetPosition":       d.getPosition,
+		"SetPosition":       d.setPosition,
+		"OpenWithMasks":     d.openWithMasks,
+		"CloseAndUpdate":    d.closeAndUpdate,
+		"AddCertificate":    d.addCertificate,
+		"RemoveCertificate": d.removeCertificate,
+	}[name]
+}
+
+var groupDefs = [numDefaultGroups]groupDef{
 	groupApplication: {
 		name:              "DefaultApplicationGroup",
 		node:              id.ServerConfigurationCertificateGroupsDefaultApplicationGroup,

@@ -45,7 +45,7 @@ func (s *Server) buildPushModel() error {
 		set(nid, v, &m.nodes)
 	}
 
-	for _, g := range m.groups {
+	for _, g := range m.groups[:numDefaultGroups] {
 		d := g.def
 		set(d.certTypes, func() *ua.DataValue { return DataValueFromValue(m.groupTypes(g)) }, &g.nodes)
 		set(d.size, func() *ua.DataValue { return DataValueFromValue(uint64(g.trust.Load().size)) }, &g.nodes)
@@ -75,35 +75,50 @@ func (s *Server) buildPushModel() error {
 	// in the standard node set's ServerConfiguration.
 	s.addPushMethod(id.ServerConfigurationGetCertificates, "GetCertificates", id.ServerConfigurationTypeGetCertificates)
 	s.addPushMethod(id.ServerConfigurationCreateSelfSignedCertificate, "CreateSelfSignedCertificate", id.ServerConfigurationTypeCreateSelfSignedCertificate)
+	s.addPushMethod(id.ServerConfigurationDeleteCertificate, "DeleteCertificate", id.ServerConfigurationTypeDeleteCertificate)
 	register(id.ServerConfiguration, []method{
 		{"UpdateCertificate", id.ServerConfigurationUpdateCertificate, m.updateCertificate},
 		{"CreateSigningRequest", id.ServerConfigurationCreateSigningRequest, m.createSigningRequest},
 		{"CreateSelfSignedCertificate", id.ServerConfigurationCreateSelfSignedCertificate, m.createSelfSignedCertificate},
+		{"DeleteCertificate", id.ServerConfigurationDeleteCertificate, m.deleteCertificate},
 		{"GetCertificates", id.ServerConfigurationGetCertificates, m.getCertificates},
 		{"GetRejectedList", id.ServerConfigurationGetRejectedList, m.getRejectedList},
 		{"ApplyChanges", id.ServerConfigurationApplyChanges, m.applyChanges},
 		{"CancelChanges", id.ServerConfigurationCancelChanges, m.cancelChanges},
 		{"ResetToServerDefaults", id.ServerConfigurationResetToServerDefaults, m.resetToServerDefaults},
 	})
+	m.buildCustomGroups()
 	for _, g := range m.groups {
-		d := g.def
 		gm := func(f func(context.Context, *MethodCaller, *certGroup, []*ua.Variant) ([]*ua.Variant, ua.StatusCode)) func(context.Context, *MethodCaller, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 			return func(ctx context.Context, c *MethodCaller, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 				return f(ctx, c, g, args)
 			}
 		}
-		register(d.trustList, []method{
-			{"Open", d.open, gm(m.fileOpen)},
-			{"OpenWithMasks", d.openWithMasks, gm(m.fileOpenWithMasks)},
-			{"Close", d.close, gm(m.fileClose)},
-			{"Read", d.read, gm(m.fileRead)},
-			{"Write", d.write, gm(m.fileWrite)},
-			{"GetPosition", d.getPosition, gm(m.fileGetPosition)},
-			{"SetPosition", d.setPosition, gm(m.fileSetPosition)},
-			{"CloseAndUpdate", d.closeAndUpdate, gm(m.fileCloseAndUpdate)},
-			{"AddCertificate", d.addCertificate, gm(m.addCertificate)},
-			{"RemoveCertificate", d.removeCertificate, gm(m.removeCertificate)},
-		})
+		handlers := map[string]func(context.Context, *MethodCaller, []*ua.Variant) ([]*ua.Variant, ua.StatusCode){
+			"Open":              gm(m.fileOpen),
+			"OpenWithMasks":     gm(m.fileOpenWithMasks),
+			"Close":             gm(m.fileClose),
+			"Read":              gm(m.fileRead),
+			"Write":             gm(m.fileWrite),
+			"GetPosition":       gm(m.fileGetPosition),
+			"SetPosition":       gm(m.fileSetPosition),
+			"CloseAndUpdate":    gm(m.fileCloseAndUpdate),
+			"AddCertificate":    gm(m.addCertificate),
+			"RemoveCertificate": gm(m.removeCertificate),
+		}
+		if g.trustList == nil {
+			continue
+		}
+		for _, x := range trustListDecls {
+			// The method of the instance of a default group, the method of
+			// CertificateGroupType that a group of the application
+			// references.
+			mid := x.method
+			if d := g.def; d != nil {
+				mid = d.methodID(x.name)
+			}
+			s.RegisterMethod(g.trustList, ua.NewNumericNodeID(0, mid), m.method(x.name, handlers[x.name]))
+		}
 	}
 	if m.cfg.Alarms != nil {
 		if err := m.buildAlarms(); err != nil {

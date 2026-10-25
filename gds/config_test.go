@@ -11,6 +11,7 @@ import (
 
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -135,4 +136,64 @@ func TestMisbehavingConfigurationServer(t *testing.T) {
 	_, err = gds.New(c).CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{})
 	require.Error(t, err)
 	require.Error(t, gds.New(c).ResetToServerDefaults(ctx))
+	require.Error(t, gds.New(c).DeleteCertificate(ctx, nil, nil))
+	_, err = gds.New(c).CertificateGroups(ctx)
+	require.Error(t, err)
+}
+
+// TestDeleteCertificateAndGroups: DeleteCertificate, and a certificate
+// group of the application found by browsing.
+func TestDeleteCertificateAndGroups(t *testing.T) {
+	p := pki(t)
+	p256 := p.ECC.Server[testpki.CurveP256]
+	tlsClient := ua.NewNumericNodeID(0, id.TLSClientCertificateType)
+	srv, url := newServer(t, server.PushManagement{CertificateGroups: []server.CertificateGroup{{
+		Name:             "Outgoing",
+		CertificateTypes: []*ua.NodeID{tlsClient},
+	}}}, server.ApplicationIdentity(p256.Cert, p256.Key))
+	g := admin(t, url)
+	ctx := context.Background()
+
+	groups, err := g.CertificateGroups(ctx)
+	require.NoError(t, err)
+	var names []string
+	for _, cg := range groups {
+		names = append(names, cg.Name)
+	}
+	require.Equal(t, []string{"DefaultApplicationGroup", "DefaultHttpsGroup", "DefaultUserTokenGroup", "Outgoing"}, names)
+	require.True(t, groups[0].TrustList.Equal(gds.DefaultTrustList))
+	out := groups[3]
+	require.True(t, out.Group.Equal(srv.CertificateGroupID("Outgoing")))
+
+	// Its trust list and certificate.
+	require.NoError(t, g.WithTrustList(out.TrustList).AddCertificate(ctx, p.CACert, true))
+	cert, err := g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{CertificateGroup: out.Group, SubjectName: "CN=outgoing"})
+	require.NoError(t, err)
+	require.NoError(t, g.ApplyChanges(ctx))
+	require.Equal(t, [][]byte{p.CACert}, srv.GroupTrustList(out.Group).TrustedCertificates)
+	types, certs, err := g.GetCertificates(ctx, out.Group)
+	require.NoError(t, err)
+	require.Equal(t, []*ua.NodeID{tlsClient}, types)
+	require.Equal(t, [][]byte{cert}, certs)
+
+	// The P-256 certificate no endpoint uses is deleted.
+	require.NoError(t, g.DeleteCertificate(ctx, nil, gds.EccNistP256ApplicationCertificateType))
+	require.ErrorIs(t, g.DeleteCertificate(ctx, nil, gds.EccNistP256ApplicationCertificateType), ua.StatusBadInvalidState)
+	require.NoError(t, g.ApplyChanges(ctx))
+	_, certs, err = g.GetCertificates(ctx, nil)
+	require.NoError(t, err)
+	require.Equal(t, [][]byte{p.ServerCert}, certs)
+	require.NoError(t, g.DeleteCertificate(ctx, out.Group, nil))
+	require.NoError(t, g.ApplyChanges(ctx))
+	cert, _, _ = srv.GroupCertificate(out.Group, nil)
+	require.Nil(t, cert)
+
+	// The one of the endpoints is not.
+	require.NoError(t, g.DeleteCertificate(ctx, nil, gds.RsaSha256ApplicationCertificateType))
+	require.ErrorIs(t, g.ApplyChanges(ctx), ua.StatusBadInvalidState)
+	require.NoError(t, g.CancelChanges(ctx))
+
+	op, err := dial(t, url, ua.MessageSecurityModeSignAndEncrypt, identity{p.ClientCert, p.ClientKey}, opUser, opPass)
+	require.NoError(t, err)
+	require.ErrorIs(t, gds.New(op).DeleteCertificate(ctx, nil, nil), ua.StatusBadUserAccessDenied)
 }
