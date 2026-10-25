@@ -43,6 +43,7 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 	ac := s.srv.cfg.accessController
 
 	for i, m := range req.MethodsToCall {
+		m = s.srv.instanceMethod(m)
 		if m.MethodID != nil {
 			if sc := ac.CheckCall(ctx, sess, m.MethodID); sc != ua.StatusOK {
 				results[i] = &ua.CallMethodResult{StatusCode: sc}
@@ -115,6 +116,74 @@ func (s *MethodService) callMethod(ctx context.Context, m *ua.CallMethodRequest)
 		InputArgumentDiagnosticInfos: []*ua.DiagnosticInfo{},
 		OutputArguments:              outputs,
 	}
+}
+
+// instanceMethod returns the call of the Method of the Object when the
+// MethodId of m is the InstanceDeclaration of that Method: a Method of the
+// ObjectType of the Object, or of one of its supertypes, with the
+// BrowseName of a Method of the Object that has a handler (Part 4
+// §5.11.2.2; UA-.NETStandard calls the FileType methods of a TrustList that
+// way). Otherwise, or when the pair has a handler itself, it returns m.
+func (s *Server) instanceMethod(m *ua.CallMethodRequest) *ua.CallMethodRequest {
+	if m == nil || m.ObjectID == nil || m.MethodID == nil {
+		return m
+	}
+	s.mu.Lock()
+	_, ok := s.methods[methodKey(m.ObjectID, m.MethodID)]
+	s.mu.Unlock()
+	if ok {
+		return m
+	}
+	obj, decl := s.Node(m.ObjectID), s.Node(m.MethodID)
+	if obj == nil || decl == nil || decl.NodeClass() != ua.NodeClassMethod {
+		return m
+	}
+	declared := false
+	seen := map[string]bool{}
+	for t := nodeTypeDefinition(obj); t != nil && !declared && !seen[t.String()]; t = s.superType(t) {
+		seen[t.String()] = true
+		declared = hasComponent(s.Node(t), m.MethodID)
+	}
+	if !declared {
+		return m
+	}
+	name := decl.BrowseName()
+	for _, r := range obj.refsSnapshot() {
+		if r == nil || !r.IsForward || r.ReferenceTypeID == nil || r.ReferenceTypeID.IntID() != id.HasComponent || r.NodeID == nil {
+			continue
+		}
+		target := s.Node(r.NodeID.NodeID)
+		if target == nil || target.NodeClass() != ua.NodeClassMethod {
+			continue
+		}
+		if bn := target.BrowseName(); bn == nil || name == nil || bn.Name != name.Name || bn.NamespaceIndex != name.NamespaceIndex {
+			continue
+		}
+		s.mu.Lock()
+		_, ok := s.methods[methodKey(m.ObjectID, target.ID())]
+		s.mu.Unlock()
+		if ok {
+			out := *m
+			out.MethodID = target.ID()
+			return &out
+		}
+	}
+	return m
+}
+
+// hasComponent reports whether n has a forward HasComponent reference to
+// target.
+func hasComponent(n *Node, target *ua.NodeID) bool {
+	if n == nil {
+		return false
+	}
+	for _, r := range n.refsSnapshot() {
+		if r != nil && r.IsForward && r.ReferenceTypeID != nil && r.ReferenceTypeID.IntID() == id.HasComponent &&
+			r.NodeID != nil && r.NodeID.NodeID.Equal(target) {
+			return true
+		}
+	}
+	return false
 }
 
 // validateMethodInputs checks argument count and built-in type compatibility
