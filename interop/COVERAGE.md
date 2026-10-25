@@ -70,7 +70,7 @@ Go↔Go tests never earn ✅.
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |
 |---|:---:|:---:|:---:|:---:|---|
-| Server diagnostics: ServerDiagnosticsSummary counts the client's sessions; the client's session in SessionDiagnosticsArray where it is exposed (go-opcua client) | ✅ | N/A | N/A | N/A | C→O: `TestOpen62541Server_Diagnostics / coverage/diagnostics.server-summary/go-client-to-open62541-server` |
+| Server diagnostics: ServerDiagnosticsSummary counts the client's sessions; the client's session in SessionDiagnosticsArray where it is exposed (C→ = go-opcua client reads the peer; →S = peer client reads EnabledFlag and the session counts of go-opcua) | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541Server_Diagnostics / coverage/diagnostics.server-summary/go-client-to-open62541-server`; O→S: `TestGoServer_Open62541Client_Diagnostics / coverage/diagnostics.server-summary/open62541-client-to-go-server`; M→S: `TestGoServer_MiloClient_Diagnostics / coverage/diagnostics.server-summary/milo-client-to-go-server` |
 | RequestHeader.ReturnDiagnostics: operation DiagnosticInfos returned for a failed Read and decoded against the string table, none without the mask (go-opcua client) | N/A | N/A | N/A | N/A | — |
 
 ## discovery

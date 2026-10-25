@@ -1216,7 +1216,9 @@
     {
       "capability": "diagnostics.server-summary",
       "direction": "dotnet-client-to-go-server",
-      "status": "not-applicable",
+      "status": "verified",
+      "test": "TestGoServer_DotnetClient_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/dotnet-client-to-go-server",
       "fixture": "baseline"
     },
     {

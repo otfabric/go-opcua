@@ -1224,7 +1224,9 @@
     {
       "capability": "diagnostics.server-summary",
       "direction": "node-opcua-client-to-go-server",
-      "status": "not-applicable",
+      "status": "verified",
+      "test": "TestGoServer_NodeOpcuaClient_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/node-opcua-client-to-go-server",
       "fixture": "baseline"
     },
     {

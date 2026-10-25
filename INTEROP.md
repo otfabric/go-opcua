@@ -67,6 +67,9 @@ opcua-interop
                                            secured messages, SetTriggering, TransferSubscriptions
                                            identity rules, Add/DeleteReferences, server diagnostics
                                            (shared assertions; the other peers in their own files)
+      diagnostics_peer_test.go             every peer client reads EnabledFlag and the session counts
+                                           of the go-opcua server's ServerDiagnosticsSummary; the
+                                           go-opcua client's diagnostics assertions in process
       ecc_peer_test.go                     ECC_nistP256 / ECC_nistP384 (open62541), user token,
                                            renewal, unimplemented ECC policies refused;
                                            AEAD policies (AesGcm, ChaChaPoly, curve25519)
@@ -302,7 +305,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | SetTriggering / RemoveLinks (linked item in Sampling) | ✓ | n/a |
 | TransferSubscriptions: anonymous → anonymous (same certificate); user → other identity refused | ✓ | n/a |
 | AddReferences / DeleteReferences | ✓ | n/a |
-| ServerDiagnosticsSummary, SessionDiagnosticsArray | ✓ | n/a |
+| ServerDiagnosticsSummary, SessionDiagnosticsArray | ✓ | ✓ |
 | ReturnDiagnostics (operation DiagnosticInfos) | ⚠ | n/a |
 | ECC_nistP256 / Sign, SignAndEncrypt | ✓ | ✓ |
 | ECC_nistP384 / Sign, SignAndEncrypt | ✓ | ✓ |
@@ -430,7 +433,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | SetTriggering / RemoveLinks (linked item in Sampling) | ✓ | n/a |
 | TransferSubscriptions: anonymous → anonymous (same certificate); user → other identity refused | ✓ | n/a |
 | AddReferences / DeleteReferences | ⚠ | n/a |
-| ServerDiagnosticsSummary, SessionDiagnosticsArray | ⚠ | n/a |
+| ServerDiagnosticsSummary, SessionDiagnosticsArray | ⚠ | ✓ |
 | ReturnDiagnostics (operation DiagnosticInfos) | ⚠ | n/a |
 | ECC security policies | ⚠ | ⚠ |
 | Reverse connect | ⚠ | ⚠ |

@@ -311,6 +311,50 @@ To test connectivity at different layers:
 
 A "ping" or connection-test command can run these steps in order and report which layer failed.
 
+### Server diagnostics
+
+Typed helpers read the diagnostics a server exposes (Part 5 §6.3.3):
+
+```go
+sum, err := c.ServerDiagnosticsSummary(ctx)        // *ua.ServerDiagnosticsSummaryDataType
+on, err := c.ServerDiagnosticsEnabled(ctx)         // EnabledFlag
+sessions, err := c.SessionDiagnostics(ctx)         // SessionDiagnosticsArray
+own, err := c.SessionDiagnosticsOf(ctx, nil)       // the diagnostics object of this session
+sec, err := c.SessionSecurityDiagnosticsOf(ctx, nil)
+subs, err := c.SubscriptionDiagnostics(ctx)        // SubscriptionDiagnosticsArray
+rates, err := c.SamplingIntervalDiagnostics(ctx)
+err = c.SetServerDiagnosticsEnabled(ctx, true)     // usually an administrator only; resets the counters
+```
+
+`SessionDiagnosticsOf` and `SessionSecurityDiagnosticsOf` take a SessionId
+(nil for the client's own session) and resolve the variable below the
+session's diagnostics object. `SessionSecurityDiagnostics` (the array) is
+usually readable by a SecurityAdmin over an encrypted channel only.
+
+### DiagnosticInfo
+
+`opcua.ReturnDiagnostics(mask)` sets the `ReturnDiagnostics` mask of every
+request, e.g. `ua.ReturnDiagnosticsAll`; a request that sets a mask in its own
+`RequestHeader` keeps it. Operation diagnostics are in the `DiagnosticInfos`
+of the response; resolve them against the string table with
+`resp.ResponseHeader.Diagnostic(resp.DiagnosticInfos[i])`, which returns a
+`*ua.Diagnostic` (SymbolicID, NamespaceURI, LocalizedText, Locale,
+AdditionalInfo, InnerStatusCode, Inner). A request the server rejects as a
+whole fails with a `*opcua.ServiceError` carrying the resolved service
+diagnostics; it unwraps to the `ua.StatusCode`, so `errors.Is(err,
+ua.StatusBadTooManyOperations)` keeps working:
+
+```go
+c, _ := opcua.NewClient(url, opcua.ReturnDiagnostics(ua.ReturnDiagnosticsAll))
+...
+if _, err := c.Read(ctx, req); err != nil {
+    var se *opcua.ServiceError
+    if errors.As(err, &se) {
+        log.Printf("%v: %s", se.StatusCode, se.Diagnostic)
+    }
+}
+```
+
 ---
 
 ## Client Options
@@ -338,6 +382,7 @@ A "ping" or connection-test command can run these steps in order and report whic
 | `DialTimeout(d)` | Time allowed to establish the connection, or to wait for a reverse connection |
 | `TLSConfig(cfg)` | TLS of `opc.wss` / `opc.https` endpoints (trusted roots, client certificate for mutual TLS) |
 | `HTTPClient(c)` | `*http.Client` of `opc.https` endpoints |
+| `ReturnDiagnostics(mask)` | Ask the server for DiagnosticInfos on every request ([DiagnosticInfo](#diagnosticinfo)) |
 
 ---
 

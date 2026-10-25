@@ -962,3 +962,12 @@ func TestAsyncuaServer_Diagnostics(t *testing.T) {
 		assertPeerReturnDiagnostics(t, h.endpoint)
 	})
 }
+
+// Server diagnostics of go-opcua read by the peer client
+// (assertGoServerDiagnosticsFromPeer, diagnostics_peer_test.go).
+func TestGoServer_AsyncuaClient_Diagnostics(t *testing.T) {
+	requireAsyncuaImage(t)
+	t.Run("coverage/diagnostics.server-summary/asyncua-client-to-go-server", func(t *testing.T) {
+		assertGoServerDiagnosticsFromPeer(t, asyncuaEnv, defaultAsyncuaImage, runAsyncuaClientResult)
+	})
+}

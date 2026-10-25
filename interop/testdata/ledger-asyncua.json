@@ -2744,7 +2744,9 @@
     {
       "capability": "diagnostics.server-summary",
       "direction": "asyncua-client-to-go-server",
-      "status": "not-applicable",
+      "status": "verified",
+      "test": "TestGoServer_AsyncuaClient_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/asyncua-client-to-go-server",
       "fixture": "baseline"
     },
     {
