@@ -1101,8 +1101,10 @@
       "capability": "query.first",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "The node-opcua adapter client has no query operation (the contract defines none)",
+      "reason": "adapter-unreleased",
+      "test": "TestGoServer_NodeOpcuaClient_Query",
+      "case": "coverage/query.first/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -1116,8 +1118,10 @@
       "capability": "query.next",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "The node-opcua adapter client has no query operation (the contract defines none)",
+      "reason": "adapter-unreleased",
+      "test": "TestGoServer_NodeOpcuaClient_Query",
+      "case": "coverage/query.next/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -1333,8 +1337,10 @@
       "capability": "alarms.branches",
       "direction": "go-client-to-node-opcua-server",
       "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without condition branches; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "reason": "adapter-unreleased",
+      "test": "TestNodeOpcuaServer_AlarmBranches",
+      "case": "coverage/alarms.branches/go-client-to-node-opcua-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -1395,8 +1401,10 @@
       "capability": "alarms.audible-sound",
       "direction": "go-client-to-node-opcua-server",
       "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AudibleEnabled / AudibleSound (AudioVariableType); node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "reason": "adapter-unreleased",
+      "test": "TestNodeOpcuaServer_AlarmAudible",
+      "case": "coverage/alarms.audible-sound/go-client-to-node-opcua-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3024,8 +3032,10 @@
       "capability": "certmgmt.push.create-self-signed",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
+      "case": "coverage/certmgmt.push.create-self-signed/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3040,8 +3050,10 @@
       "capability": "certmgmt.push.delete-certificate",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_delete_test.go",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
+      "case": "coverage/certmgmt.push.delete-certificate/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3070,8 +3082,10 @@
       "capability": "certmgmt.push.https-group",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
+      "case": "coverage/certmgmt.push.https-group/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3085,8 +3099,10 @@
       "capability": "certmgmt.push.usertoken-group",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
+      "case": "coverage/certmgmt.push.usertoken-group/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3101,8 +3117,10 @@
       "capability": "certmgmt.push.pfx",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
+      "case": "coverage/certmgmt.push.pfx/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -3117,8 +3135,10 @@
       "capability": "certmgmt.push.transaction-diagnostics",
       "direction": "node-opcua-client-to-go-server",
       "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "reason": "adapter-unreleased",
+      "test": "TestCertMgmtPushExt_NodeOpcuaClient_GoServer",
+      "case": "coverage/certmgmt.push.transaction-diagnostics/node-opcua-client-to-go-server",
+      "nextAction": "verified with the opcua-interop feat/push-ext node-opcua image; promote when v0.15.0 is pinned",
       "fixture": "baseline"
     },
     {
