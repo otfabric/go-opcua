@@ -284,11 +284,11 @@ func issue(tmpl *x509.Certificate, key crypto.Signer, issuer *x509.Certificate, 
 // certificate signing request (DER): its subject, alternative names and key,
 // signed by issuer, valid from an hour ago for a day.
 func IssueFromCSR(csrDER []byte, issuer *x509.Certificate, issuerKey crypto.Signer) ([]byte, error) {
-	csr, err := x509.ParseCertificateRequest(csrDER)
+	csr, err := uapolicy.ParseCertificateRequest(csrDER)
 	if err != nil {
 		return nil, err
 	}
-	if err := csr.CheckSignature(); err != nil {
+	if err := uapolicy.CheckCertificateRequestSignature(csr); err != nil {
 		return nil, err
 	}
 	tmpl := CertTemplate(csr.Subject.CommonName, "")
