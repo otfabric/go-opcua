@@ -89,7 +89,9 @@ func (c *Client) ReadEventHistory(ctx context.Context, nodeID *ua.NodeID, start,
 //
 // When the consumer stops early, or ctx is done, while the server holds a
 // continuation point for the read, the iterator releases it. A done ctx
-// ends the iteration with ctx.Err().
+// ends the iteration with ctx.Err(); when it cancelled a read in flight, the
+// release is sent in the background, as the server may answer it only after
+// the abandoned read.
 func (c *Client) ReadEventHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, filter *ua.EventFilter, pageSize uint32) iter.Seq2[*ua.HistoryEventFieldList, error] {
 	return c.eventHistory(ctx, nodeID, start, end, filter, pageSize, 0)
 }
@@ -189,9 +191,12 @@ func historyPages[T any](ctx context.Context, c *Client, nodeID *ua.NodeID, deta
 			}
 			resp, err := read(ctx, []*ua.HistoryReadValueID{{NodeID: nodeID, ContinuationPoint: cp}})
 			if err != nil {
-				if ctx.Err() != nil {
-					// The read may not have reached the server.
-					release()
+				if ctx.Err() != nil && len(cp) > 0 {
+					// The read may not have reached the server, so the
+					// point is released. The server may still be working
+					// on the abandoned read and answer the release after
+					// it: that is not waited for.
+					go c.releaseHistoryContinuation(ctx, details, nodeID, cp)
 				}
 				yield(zero, err)
 				return

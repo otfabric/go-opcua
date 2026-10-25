@@ -348,11 +348,14 @@ func TestClientReadEventHistoryAll(t *testing.T) {
 		cctx, cancel := context.WithCancel(ctx)
 		defer cancel()
 		entered := make(chan struct{})
+		abandoned := make(chan struct{})
 		h.mu.Lock()
 		h.hold = func() bool {
-			// the continued read is still pending when the client gives up
+			// The continued read is still pending when the client gives up;
+			// its answer only comes after the iteration ended, so it cannot
+			// race the cancellation.
 			close(entered)
-			<-cctx.Done()
+			<-abandoned
 			return false
 		}
 		h.mu.Unlock()
@@ -366,6 +369,7 @@ func TestClientReadEventHistoryAll(t *testing.T) {
 				last = err
 			}
 		}
+		close(abandoned)
 		require.ErrorIs(t, last, context.Canceled)
 		require.Eventually(t, func() bool {
 			_, released, _ := h.state()
