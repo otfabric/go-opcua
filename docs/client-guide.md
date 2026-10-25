@@ -1135,20 +1135,48 @@ if required {
 }
 rejected, _ := g.GetRejectedList(ctx)
 props, _ := g.Properties(ctx) // SupportedPrivateKeyFormats, MaxTrustListSize, CertificateTypes, …
+
+// Part 12 1.05 (§7.10): what the server uses, a self-signed certificate,
+// the diagnostics of the last transaction, back to the defaults.
+types, certs, _ := g.GetCertificates(ctx, gds.DefaultHTTPSGroup)
+tlsCert, _ := g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{
+    CertificateGroup: gds.DefaultHTTPSGroup,
+    SubjectName:      "CN=myserver/O=example",
+    DNSNames:         []string{"myserver.example.com"},
+})
+_ = g.ApplyChanges(ctx)
+diag, _ := g.TransactionDiagnostics(ctx) // Result, AffectedTrustLists, Errors, …
+_ = g.ResetToServerDefaults(ctx)
+
+// The trust lists of the DefaultUserTokenGroup and the DefaultHttpsGroup.
+_ = g.WithTrustList(gds.UserTokenTrustList).AddCertificate(ctx, userCA, true)
+_ = g.ApplyChanges(ctx)
+
+// A new key with its certificate as PKCS #12; the server knows the password.
+pfx, _ := uapolicy.EncodePFX(newKey, [][]byte{issued, myCA.Cert}, password)
+_, _ = g.UpdateCertificate(ctx, &gds.CertificateUpdate{
+    CertificateType: gds.RsaSha256ApplicationCertificateType,
+    Certificate:     issued, PrivateKeyFormat: "PFX", PrivateKey: pfx,
+})
 ```
 
 A method that fails returns a `*gds.Error` with the method name and the
 status (`errors.Is(err, ua.StatusBadUserAccessDenied)`). The methods are found
 by BrowseName under the ServerConfiguration object, so servers with other
-NodeIds work too; `Client.TrustList` selects another certificate group's
-TrustList. `EncodeTrustList` / `DecodeTrustList` are the file format.
+NodeIds work too; `Client.WithTrustList` (or the `Client.TrustList` field)
+selects another certificate group's TrustList. `EncodeTrustList` / `DecodeTrustList` are the file format.
 `Thumbprint` is the upper-case hexadecimal SHA-1 that every tested server
 accepts (UA-.NETStandard compares the case).
 
 Peers differ in details: open62541 1.5.9 serves the methods to any session on a
 SignAndEncrypt channel and answers ApplyChanges without a pending change with
 `Bad_NothingToDo` (as node-opcua), and the endpoints of UA-.NETStandard and
-node-opcua carry the issuer chain after the certificate.
+node-opcua carry the issuer chain after the certificate. Of the Part 12 1.05
+additions, UA-.NETStandard serves GetCertificates, the TransactionDiagnostics,
+the HTTPS and UserToken trust lists, PFX keys and the alarms, and refuses
+CreateSelfSignedCertificate for an occupied slot (`Bad_InvalidState`: it wants
+DeleteCertificate first, which package `gds` does not call); open62541 1.5.9
+and node-opcua serve the UserToken trust list only. See the interop ledgers.
 
 The pull model (RegisterApplication, StartSigningRequest, FinishRequest of a
 Global Discovery Server) is not implemented.
