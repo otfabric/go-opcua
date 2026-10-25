@@ -250,6 +250,19 @@ SecureChannelEnhancements bind the session signatures to a secure channel
 thumbprint that HTTPS does not have (`uasc.HTTPSPolicySupported`). A None endpoint over HTTPS
 accepts user names in plain text, protected by TLS.
 
+The UA JSON mappings (`server.EnableUAJSON`, `opcua.TransportProfile`) have no
+secure conversation either. https-uajson (Part 6 §7.4.5) works as https-uabinary:
+the same policies, named in the `OPCUA-SecurityPolicy` header, sign the session
+nonces. wss-uajson (Part 6 §7.5.2) has no way to name a policy, so it is
+offered only with None / None and TLS alone protects the messages; it appears
+only when the server enables None / None (or configures no security). Over
+both, the None endpoints accept user names, protected by TLS, without
+`AllowUsernameOnNone`. The session is identified by the AuthenticationToken in
+the RequestHeader (at least 32 random bytes, Part 6 §7.4.1); go-opcua does not
+use the HTTP `Authorization: Bearer` header. A server that offers JSON on a
+TLS listener that does not require client certificates should therefore
+require user authentication.
+
 ## Message Security Modes
 
 Each policy can operate in three modes:
@@ -850,6 +863,7 @@ from what others announce. mDNS has no authentication:
 - [ ] Validate server certificates with `TrustedCertificates()` or use `InsecureSkipVerify()` explicitly
 - [ ] On servers, configure `WithClientCertificateTrustList` (or the trust list of `WithPushManagement`, which replaces it) when accepting encrypted client connections
 - [ ] For `opc.wss` / `opc.https`, give the listeners a TLS certificate the clients trust (`server.TLSConfig`) and require TLS client certificates where the network calls for it
+- [ ] Enable `server.EnableUAJSON` only where TLS alone is acceptable protection: wss-uajson always runs at security policy None
 - [ ] For reverse connect: use a secured endpoint, pin the server certificate, set `ReverseServerURI`, and bind and firewall the client's listener
 - [ ] Implement `AccessController` for fine-grained server authorization
 - [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart

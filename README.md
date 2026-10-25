@@ -53,7 +53,8 @@ Requires **Go 1.26** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
 **go-opcua** gives you everything needed to interact with OPC-UA servers or build your own.
 
 - **Client and server** — Full OPC UA client and server implementations
-  using OPC UA Binary over UA-TCP, WebSockets and HTTPS.
+  using OPC UA Binary over UA-TCP, WebSockets and HTTPS, and UA JSON over
+  WebSockets and HTTPS.
 - **Pure Go** — No CGO or native C library dependencies. Cryptography is the
   Go standard library, plus ChaCha20-Poly1305 from `golang.org/x/crypto` for
   two of the ECC security policies.
@@ -233,6 +234,7 @@ what the interop suite has actually exercised.
 | Client and server | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | UA-TCP, OPC UA Binary | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | HTTPS / WebSockets transport (`opc.https`, `opc.wss`) | ✅ client and server | — (libwebsockets provider on master only) | incubating client transports, unpublished | — | ✅ | — | — |
+| UA JSON over HTTPS / WebSockets (`https-uajson`, `wss-uajson`) | ✅ client and server | — | — (binary codecs only) | — | ✅ (security mode None) | — | — |
 | Reverse connect (ReverseHello) ¹ | ✅ | ✅ | — | ✅ | ✅ | ✅ | — |
 | RSA security policies (Basic256Sha256, Aes128_Sha256_RsaOaep, Aes256_Sha256_RsaPss; Basic128Rsa15 and Basic256 for legacy peers) | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | ECC security policies ² | ✅ nistP256/384, brainpoolP256r1/P384r1, nistP256_AesGcm, nistP256_ChaChaPoly, curve25519, curve448 | ✅ (OpenSSL) | — | — | ✅ | — | — |
@@ -371,6 +373,7 @@ you rely on.
 | Area | Capabilities |
 |------|-------------|
 | **Connection** | Secure channel, session management, auto-reconnect, connection state callbacks, `SkipNamespaceUpdate`, configurable `DialTimeout` |
+| **Transports** | `opc.tcp`, `opc.wss` and `opc.https` with UA Binary; UA JSON over `opc.wss` (sub-protocol `opcua+uajson`) and `opc.https` (`application/json`) with `TransportProfile`, set by `SecurityFromEndpoint` for a wss-uajson or https-uajson endpoint |
 | **Reverse connect** | `ReverseConnect` / `ReverseConnectListener`: wait for the server to connect (firewall/NAT traversal), one listener for many servers, ServerUri/EndpointUrl validation, auto-reconnect and discovery over reverse connections |
 | **Reading** | Single/batch reads, all attributes, `Node.Value()`, `Node.Summary()`, `ReadMulti` (chunked batch N×attributes) |
 | **Writing** | Single/batch writes, any attribute, `WriteValue`, `WriteAttribute` |
@@ -409,6 +412,7 @@ you rely on.
 | **Access Control** | Pluggable `AccessController` interface for per-operation authorization |
 | **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML`, including variable values, data types and access levels |
 | **Reverse connect** | `WithReverseConnect` / `AddReverseConnect`: connect to listening clients, keep one idle connection available, retry with back-off, add and remove targets at run time |
+| **Transports** | `opc.tcp`, `opc.wss` (`WebSocketEndPoint`) and `opc.https` (`HTTPSEndPoint`) with UA Binary; `EnableUAJSON` adds the UA JSON mappings wss-uajson and https-uajson on the same listeners |
 | **Security** | Same encryption policies as client (server-side) |
 | **Certificate management** | `WithPushManagement`: ServerConfiguration push model of Part 12 §7 — the DefaultApplicationGroup (trust list with CRLs, issuers and size limits that validates new channels and sessions), DefaultHttpsGroup (TLS certificate of opc.https / opc.wss, swapped live; TLS client trust list) and DefaultUserTokenGroup (X.509 user token trust list) and certificate groups of the application with their own trust lists and certificate types; UpdateCertificate with PEM or PFX keys, CreateSigningRequest (RSA, NIST / Brainpool ECC, Ed25519, Ed448), CreateSelfSignedCertificate, DeleteCertificate, GetCertificates, GetRejectedList, ResetToServerDefaults, transactional ApplyChanges with TransactionDiagnostics, CertificateExpired / TrustListOutOfDate alarms; SecurityAdmin over SignAndEncrypt; optional `CertificateStore`. `gds/gdsserver`: a Global Discovery Server (pull model of Part 12 §6, §7.9) — application directory, CAs issuing certificates and CRLs for CSRs of every key type (RSA, NIST / Brainpool ECC, Ed25519, Ed448) and new key pairs (PEM or PFX), the DefaultApplicationGroup, DefaultHttpsGroup and DefaultUserTokenGroup with their TrustLists, role-based access with the RolePermissions of the GDS NodeSet, GDS audit events, `MemoryStore` or file-based `NewFileStore` |
 | **Authentication** | Anonymous, username/password, X.509, issued token identity tokens |
@@ -475,7 +479,7 @@ you rely on.
 | `errors` | Sentinel errors for `errors.Is()` checking |
 | `id` | Well-known NodeID constants (generated from OPC-UA schema) |
 | `uacp` | OPC-UA Connection Protocol over TCP and TLS WebSockets; `ParseEndpoint`, `DialWithTimeout`, `ListenWebSocket` |
-| `uasc` | OPC-UA Secure Conversation (secure channel); the HTTPS channel (`NewHTTPSChannel`) |
+| `uasc` | OPC-UA Secure Conversation (secure channel); the HTTPS channels (`NewHTTPSChannel`, `NewHTTPSJSONChannel`) and the wss-uajson channel (`NewWebSocketJSONChannel`) |
 | `uapolicy` | Security policy implementations (encryption, signing); certificates, keys, signing requests, CRLs and PFX files for the key types `crypto/x509` lacks (Brainpool, Ed448) |
 | `pubsub` | PubSub runtime (Part 14): publishers, subscribers, configuration builders; sub-packages `message`, `uadp`, `jsonmsg`, `transport` (`udp`, `eth`, `mqtt`, `amqp`), `security`, `sks`, `remote` |
 | `internal/stats` | Expvar-based statistics collection (internal) |
@@ -541,7 +545,7 @@ go-opcua is continuously interoperability-tested in all applicable client/server
 - **Integration tests** (tag-gated, not in `go test ./...`): `make integration` (Go client vs FreeOpcUa Python server; needs `make install-py-opcua`), `make selfintegration` (Go client vs in-process Go server).
 - **Interop tests** (tag-gated): `make interop` — `go test -tags=interop ./interop/...` against the digest-pinned [opcua-interop](https://github.com/otfabric/opcua-interop) v0.16.0 adapter containers of all six peers (`OPEN62541_IMAGE`, `MILO_IMAGE`, `ASYNC_OPCUA_IMAGE`, `DOTNET_IMAGE`, `NODE_OPCUA_IMAGE`, `ASYNCUA_IMAGE` override them); the UA-.NETStandard GDS adapter (`DOTNET_GDS_IMAGE`) is opt-in. `go test ./interop/` checks the ledgers without Docker. See [INTEROP.md](INTEROP.md).
 - **Chaos and parallelism tests** (Go client vs Go server in one process, no Docker; part of `go test ./...` with a short fault phase): `make chaos` runs them with a 30 s fault phase per scenario (`CHAOS_DURATION`, `CHAOS_SEED`, `CHAOS_LOG`). `chaos/` covers the unsecured state machines, `chaos/secure` the RSA, ECC and AEAD security policies (incl. bit flips, replayed, lost and reordered chunks), `chaos/datachange` DataChangeFilter and sampling, `chaos/reverse` reverse connect, `chaos/discovery` the LDS, registration and mDNS, `chaos/codec` the JSON / XML codecs and the shared NodeSet values, `chaos/certmgmt` push certificate management, `chaos/gdspull` the Global Discovery Server and the pull client, `chaos/pubsub` PubSub over lossy UDP and in-memory networks, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0 broker faults, key rotation and the SKS, chunks, discovery, Actions and diagnostics, and many runtimes on shared brokers. Every randomized scenario logs its seed and the command that replays it; see [`chaos/doc.go`](chaos/doc.go).
-- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`, the WebSocket framing and handshake (`internal/websocket`), HTTPS request bodies (`server`), the condition state machine and condition events (`server`, `opcua`), trust list updates and encodings (`server`, `gds`), certificates, signing requests, CRLs and PFX files (`uapolicy`), mDNS messages (`internal/mdns`); PubSub: the UADP, JSON, chunk, discovery and Action decoders (`pubsub/uadp`, `pubsub/jsonmsg`), the runtime receive path and connection validation (`chaos/pubsub`), the MQTT and AMQP clients (`internal/mqtt`, `internal/amqp`) and the Ethernet frame, URL and BPF parsers (`pubsub/transport/eth`).
+- **Fuzz tests**: `ua/fuzz_test.go`, `ua/codec_fuzz_test.go` (JSON and XML decoders), `uasc/fuzz_test.go`, `uacp/fuzz_test.go`, the WebSocket framing, messages and handshake (`internal/websocket`), JSON service messages (`uasc`), HTTPS request bodies, binary and JSON (`server`), the condition state machine and condition events (`server`, `opcua`), trust list updates and encodings (`server`, `gds`), certificates, signing requests, CRLs and PFX files (`uapolicy`), mDNS messages (`internal/mdns`); PubSub: the UADP, JSON, chunk, discovery and Action decoders (`pubsub/uadp`, `pubsub/jsonmsg`), the runtime receive path and connection validation (`chaos/pubsub`), the MQTT and AMQP clients (`internal/mqtt`, `internal/amqp`) and the Ethernet frame, URL and BPF parsers (`pubsub/transport/eth`).
 - **Conformance tests** (part of `go test ./...`): the go-opcua client against an in-process go-opcua server over a loopback secure channel, in `conformance/` and its packages `addrspace`, `subscription`, `session`, `security`, `transport`, `history`, `alarms`, `certmgmt`, `discovery`, `pubsub` and `eccext` (see [`conformance/doc.go`](conformance/doc.go)); `conformance/matrix_test.go` fails when an exported client method or a client or server option is exercised by none of them.
 - **PubSub end to end**: `conformance/pubsub/pubsub_*_test.go` run server-to-server PubSub configured by OPC UA clients through the PublishSubscribe methods, over UDP (plain, secured, chunked), MQTT 5.0, AMQP 1.0 and an in-memory Ethernet link, with discovery and diagnostics read through a client.
 - **Linting**: `make lint` (staticcheck), `make lint-ci` (golangci-lint); full local gate is `make check` (fmt + lint + verify + coverage).
@@ -553,13 +557,15 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development and PR workflow.
 | Layer | Protocol | Supported |
 |-------|----------|:---------:|
 | Encoding (wire) | OPC-UA Binary | Yes |
+| | OPC-UA JSON (Compact) service messages of https-uajson and wss-uajson | Yes |
 | Encoding (values only, not a transport) | OPC-UA JSON — 1.05.04 Compact and Verbose, 1.04 reversible; non-reversible encode only | Yes |
 | | OPC-UA XML — built-in types, structures, NodeSet2 values | Yes |
 | Transport | UA-TCP (`opc.tcp://`) | Yes |
 | | UA-TCP reverse connect (ReverseHello) | Yes (client and server) |
 | | WebSockets (`opc.wss://`, Part 6 §7.5, wss-uasc-uabinary, sub-protocol `opcua+uacp`) | Yes (client and server) |
 | | HTTPS (`opc.https://`, `https://`, Part 6 §7.4, https-uabinary) | Yes (client and server) |
-| | HTTPS / WebSockets with UA JSON (`https-uajson`, `wss-uajson`) | No |
+| | HTTPS with UA JSON (`opc.https://`, Part 6 §7.4.5, https-uajson, `application/json`) | Yes (client and server) |
+| | WebSockets with UA JSON (`opc.wss://`, Part 6 §7.5.2, wss-uajson, sub-protocol `opcua+uajson`, security policy None) | Yes (client and server) |
 | Message security | None / Sign / SignAndEncrypt | Yes |
 | Security policy | None | Yes |
 | | Basic128Rsa15 | Yes |

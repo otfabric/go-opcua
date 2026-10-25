@@ -1,5 +1,34 @@
 # go-opcua Releases
 
+## v1.25.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.24.0
+
+### Summary
+
+The UA JSON mappings of HTTPS and WebSockets, client and server: https-uajson (Part 6 §7.4.5) and wss-uajson (Part 6 §7.5.2). `server.EnableUAJSON` serves them on the opc.https and opc.wss listeners; the client uses them with `opcua.TransportProfile`, which `SecurityFromEndpoint` sets from a JSON endpoint.
+
+### Added
+
+- **https-uajson.** Each request is an HTTPS POST of a JSON message (Part 6 §5.4.9, the UaTypeId followed by the fields, compact form) with `Content-Type: application/json` (Part 6 §7.4.2 Table 80). The server also takes `application/opcua+uajson`, which UA-.NETStandard sends, answers with the request's content type, and inflates gzip bodies (the size limit applies after inflating). The security policies are those of https-uabinary, named in the `OPCUA-SecurityPolicy` header.
+- **wss-uajson.** A WebSocket with the sub-protocol `opcua+uajson` carries one JSON message per WebSocket message (text frames), without HEL/ACK or secure conversation. A message over the limit closes with 1009, invalid UTF-8 with 1007. Only None / None: a WebSocket cannot name a policy.
+  - The server serves up to 64 requests of a connection at the same time and answers them as they complete; the RequestHandle correlates them.
+  - The client keeps a pool of WebSockets with one request in flight each, so it also works with servers that answer one request per socket at a time (UA-.NETStandard), and checks the RequestHandle of each response.
+- **Endpoints.** The JSON endpoints are advertised next to the binary ones, at the same URLs, with the TransportProfileUris `ua.TransportProfileHTTPSJSON` and `ua.TransportProfileWSSJSON`. `SelectEndpointForTransport` selects them; `SelectEndpoint` prefers UA Binary.
+- NodeIds of other namespaces than 0 are written with their namespace URI (Part 6 §5.4.2.10). Requests in the verbose and the 1.04 forms are decoded too.
+- API: `opcua.TransportProfile`, `server.EnableUAJSON`, `ua.IsJSONTransportProfile`, `ua.TransportProfileScheme`, `uasc.NewHTTPSJSONChannel`, `uasc.NewWebSocketJSONChannel`, `uasc.EncodeServiceMessageJSON` / `DecodeServiceMessageJSON`, `uacp.MessageConn`, `Dialer.DialWebSocketJSON`, `Listener.ServeWebSocketJSON`.
+
+### Tests
+
+- End-to-end over both JSON transports (GetEndpoints, sessions, read, write, browse, call, subscriptions), conformance tests of the endpoints, policies, user names, content types and sub-protocols, chaos tests (many clients through faulty proxies, hostile WebSocket messages and HTTP bodies) and fuzz tests of the WebSocket message reader, the JSON service messages and the server's JSON bodies.
+
+### Interop
+
+- **UA-.NETStandard 2.0.1 server over wss-uajson and https-uajson** (`TestDotnetServer_Transport_WSSJSON`, `TestDotnetServer_Transport_HTTPSJSON`), on the JSON endpoints it advertises at the security mode None. UA-.NETStandard takes JSON over HTTPS only as `application/opcua+uajson`; the test sends it through `HTTPClient` ([client guide](docs/client-guide.md#ua-json-https-uajson-wss-uajson)). No other peer stack implements either mapping.
+
+---
+
 ## v1.24.0
 
 **Date:** 2026-10-25
