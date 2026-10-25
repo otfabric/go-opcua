@@ -67,6 +67,16 @@ func Parallel(t *testing.T) {
 // the same port. The server is closed on test cleanup.
 func NewServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	t.Helper()
+	return NewServerPrepared(t, nil, opts...)
+}
+
+// NewServerPrepared is NewServer with prepare, if not nil, run before the
+// server starts. A server that a client reaches as soon as it starts (reverse
+// connect, a client that reconnects to a restarted server) needs its nodes
+// in place by then: the diagnostics namespace is created with the first
+// session and would take the namespace index of nodes added later.
+func NewServerPrepared(t *testing.T, prepare func(*server.Server), opts ...server.Option) (*server.Server, string) {
+	t.Helper()
 	Parallel(t)
 	all := append([]server.Option{
 		server.EndPoint("localhost", 0),
@@ -75,6 +85,9 @@ func NewServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	}, opts...)
 	srv, err := server.New(all...)
 	require.NoError(t, err)
+	if prepare != nil {
+		prepare(srv)
+	}
 	require.NoError(t, srv.Start(context.Background()))
 	t.Cleanup(func() { _ = srv.Close() })
 	require.NotZero(t, srv.Port())

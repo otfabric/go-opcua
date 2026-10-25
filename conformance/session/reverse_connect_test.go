@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -31,8 +32,11 @@ func reverseServer(t *testing.T, appURI, clientURL string, opts ...server.Option
 		server.ApplicationURI(appURI),
 		server.WithReverseConnect(clientURL, fastReverseRetry),
 	}, opts...)
-	srv, url := newServer(t, all...)
-	return srv, testutil.AddFixture(t, srv), url
+	// The fixture before Start: the server connects to a waiting client at
+	// once, and its first session creates the diagnostics namespace.
+	var f *testutil.Fixture
+	srv, url := conformkit.NewServerPrepared(t, func(srv *server.Server) { f = testutil.AddFixture(t, srv) }, all...)
+	return srv, f, url
 }
 
 // isAddrInUse reports whether err says that a listen address is taken.
@@ -426,6 +430,7 @@ func TestReverseConnect_AutoReconnectAfterServerRestart(t *testing.T) {
 	// A new instance of the same application connects from another port.
 	_, f2, url2 := reverseServer(t, appURI, clientURL)
 	require.NotEqual(t, url1, url2)
+	require.Equal(t, f1.NSIndex, f2.NSIndex, "the recreated monitored item names the node by the first instance's index")
 	eventually(t, func() bool { return states.SeenAfter(opcua.Reconnecting, opcua.Connected) }, "client reconnects")
 	eventually(t, func() bool { return c.State() == opcua.Connected && c.Session() != nil }, "state Connected")
 	require.NotEqual(t, oldSession, c.Session().SessionID().String())
