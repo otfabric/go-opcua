@@ -7,12 +7,12 @@
 // "call flags", "event-subscribe flags") against the go-opcua server:
 //
 //   - alarms.alarm-state-methods: Suppress2, Silence, RemoveFromService2,
-//     PlaceInService, Reset2 / Reset (§5.8.2) and TimedShelve2 on the
-//     ShelvingState (§5.8.10);
+//     PlaceInService, Reset2 / Reset (§5.8) and TimedShelve2 on the
+//     ShelvingState (§5.8);
 //   - alarms.dialog: Respond2 / Respond of a DialogConditionType (§5.6);
 //   - alarms.branches: Acknowledge of a condition branch by its EventId
 //     (§5.5.2, §5.7.3), which ends the branch;
-//   - alarms.alarm-groups: GetGroupMemberships (§5.8.2);
+//   - alarms.alarm-groups: GetGroupMemberships (§5.8);
 //   - alarms.audit-events: an AuditConditionEventType subtype (§5.10)
 //     selected with an OfType filter.
 //
@@ -199,7 +199,7 @@ func (p *alarms105Peer) assertStateMethods(t *testing.T) {
 	if p.alarm.State().OutOfService {
 		t.Fatal("PlaceInService: out of service")
 	}
-	// An active alarm stays latched (Part 9 §5.8.2 Reset).
+	// An active alarm stays latched (Part 9 §5.8, Reset).
 	p.mustCall(t, ua.StatusBadInvalidState, cid, id.AlarmConditionTypeReset2, "LocalizedText:en:early")
 	if err := p.alarm.SetActive(false); err != nil {
 		t.Fatalf("SetActive: %v", err)

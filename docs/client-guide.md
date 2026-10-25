@@ -865,7 +865,10 @@ for msg := range ch {
 | `Acknowledge`, `Confirm` (conditionID, eventID, comment) | §5.7.3, §5.7.4 |
 | `AddComment` (conditionID, eventID, comment) | §5.5.6 |
 | `EnableCondition`, `DisableCondition` | §5.5.4, §5.5.5 |
-| `TimedShelve` (duration), `OneShotShelve`, `Unshelve` | §5.8.10 |
+| `TimedShelve` (duration), `OneShotShelve`, `Unshelve`; `TimedShelve2`, `OneShotShelve2`, `Unshelve2` (with a comment) | §5.8.10 |
+| `Suppress`, `Unsuppress`, `RemoveFromService`, `PlaceInService`, `Silence`, `Reset`; `Suppress2`, `Unsuppress2`, `RemoveFromService2`, `PlaceInService2`, `Reset2` (with a comment) | §5.8 |
+| `Respond` (selectedResponse), `Respond2` (selectedResponse, comment) of a dialog | §5.6.3, §5.6.4 |
+| `GetGroupMemberships` (the alarm groups of an alarm) | §5.8 |
 | `ConditionRefresh`, `ConditionRefresh2` (Client: server ids; Subscription: its own ids) | §5.5.7, §5.5.8 |
 
 A refused call returns its StatusCode as the error (`errors.Is(err,
@@ -874,6 +877,28 @@ locale (`opcua.Locales`, "en-us" by default), because open62541 ignores a
 comment without one. For your own filters, `ua.EventFilterBuilder.SelectPaths`
 selects BrowsePaths such as `AckedState/Id` and `SelectConditionID` the
 ConditionId; `ua.FieldPath` is the WhereClause operand of a BrowsePath.
+
+The filter also selects BranchId and the Part 9 v1.05 fields SuppressedState,
+OutOfServiceState, SilenceState, LatchedState, DialogState, Prompt and
+LastResponse (`ConditionEvent.Suppressed`, `OutOfService`, `Silenced`,
+`Latched`, `DialogActive`, `Prompt`, `LastResponse`; nil when the server does
+not report them). `ev.IsBranch()` tells the event of a condition branch: a
+previous occurrence the server keeps until it is acknowledged or confirmed.
+Acknowledge and Confirm it with its own EventId like the condition.
+
+Audit events: `NewAuditConditionEventFilter` selects the AuditConditionEventType
+events (who called which condition method, with which arguments and result)
+and `ParseAuditConditionEvent` reads them. The server must have auditing on
+and grant the session the ReceiveEvents permission. `WithAuditEntryID(ctx,
+id)` sets the AuditEntryId of the requests sent with that context, which the
+server reports as ClientAuditEntryId:
+
+```go
+ctx := opcua.WithAuditEntryID(ctx, "ticket-4711")
+if err := c.Suppress2(ctx, alarmID, "maintenance until 14:00"); err != nil {
+    log.Fatal(err)
+}
+```
 
 ### Monitor Package (Callback-Based)
 

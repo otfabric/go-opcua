@@ -14,7 +14,7 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 )
 
-// Alarm groups (Part 9 §5.8.18, §5.8.19).
+// Alarm groups (Part 9 §5.8, AlarmGroupType and AlarmSuppressionGroupType).
 //
 // An AlarmGroup (AlarmGroupType) groups alarms with AlarmGroupMember
 // references; GetGroupMemberships of an alarm lists the groups it belongs
@@ -333,7 +333,7 @@ func (g *AlarmGroup) SetSuppressing(on bool) error {
 }
 
 // Evaluate reads the DigitalVariables of a suppression group and makes it
-// suppress while any of them is true (Part 9 §5.8.19).
+// suppress while any of them is true (Part 9 §5.8, AlarmSuppressionGroupType).
 func (g *AlarmGroup) Evaluate() error {
 	on := false
 	for _, v := range g.digital {

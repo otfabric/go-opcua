@@ -19,7 +19,7 @@ func (c *Client) conditionCall(ctx context.Context, conditionID *ua.NodeID, meth
 	return c.callStatus(ctx, conditionID, ua.NewNumericNodeID(0, method), args...)
 }
 
-// Suppress suppresses an alarm (Part 9 §5.8.2, SuppressedState). The alarm
+// Suppress suppresses an alarm (Part 9 §5.8, SuppressedState). The alarm
 // must have the optional SuppressedState; a suppressed alarm stays
 // suppressed.
 func (c *Client) Suppress(ctx context.Context, conditionID *ua.NodeID) error {
@@ -80,7 +80,7 @@ func (c *Client) Reset2(ctx context.Context, conditionID *ua.NodeID, comment str
 }
 
 // GetGroupMemberships returns the AlarmGroups an alarm is a member of
-// (Part 9 §5.8.2).
+// (Part 9 §5.8).
 func (c *Client) GetGroupMemberships(ctx context.Context, conditionID *ua.NodeID) ([]*ua.NodeID, error) {
 	res, err := c.Call(ctx, &ua.CallMethodRequest{ObjectID: conditionID, MethodID: ua.NewNumericNodeID(0, id.AlarmConditionTypeGetGroupMemberships)})
 	if err != nil {
