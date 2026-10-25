@@ -34,15 +34,86 @@ Not implemented in the server, so plan around them:
   Suppress / Unsuppress / Silence / Reset / RemoveFromService / PlaceInService
   methods (the application sets SuppressedState), no `*2` variants (e.g.
   TimedShelve2, Suppress2). See [Alarms and Conditions](#alarms-and-conditions).
-- **Diagnostics**: no live `ServerDiagnosticsSummary` or session diagnostics
-  counters, and responses carry an empty `DiagnosticInfo` even when the
-  request sets `ReturnDiagnostics`. Use the metrics callbacks and `log/slog`
-  ([OBSERVABILITY.md](../OBSERVABILITY.md)).
 - **Historical events**: the history interfaces cover data only (see
   [Historical Access](#historical-access-raw)).
 - **Certificate management** (Part 12 GDS push and pull): certificates and
   trust lists are configured in code (`server.Certificate`, `server.PrivateKey`,
   `WithClientCertificateTrustList`).
+
+---
+
+## Server diagnostics
+
+The server maintains `Server.ServerDiagnostics` (i=2274, Part 5 §6.3.3) live:
+
+- `ServerDiagnosticsSummary` (i=2275) and its twelve component variables:
+  current and cumulated sessions and subscriptions, rejected and
+  security-rejected sessions and requests, session timeouts, publishing
+  intervals in use. Read it in process with `srv.ServerDiagnosticsSummary()`.
+- `SamplingIntervalDiagnosticsArray` (i=2289), one entry per sampling
+  interval in use, and `SubscriptionDiagnosticsArray` (i=2290), one entry per
+  subscription (publish, notification, republish, transfer, modify and
+  enable / disable counts).
+- `SessionsDiagnosticsSummary` (i=3706) with `SessionDiagnosticsArray` (i=3707)
+  and `SessionSecurityDiagnosticsArray` (i=3708), and one
+  `SessionDiagnosticsObject` per session, created with the session and removed
+  with it. Its NodeId is the SessionId (a GUID in the namespace
+  `urn:otfabric:go-opcua:diagnostics`, which the server adds when the first
+  session is created, after the namespaces of the application). It holds
+  `SessionDiagnostics` (with per-service request counters),
+  `SessionSecurityDiagnostics`, the session's `SubscriptionDiagnosticsArray`
+  and `CurrentRoleIds`.
+- `EnabledFlag` (i=2294). Diagnostics are on by default;
+  `server.WithServerDiagnostics(false)` starts the server with them off and
+  `srv.SetServerDiagnosticsEnabled` switches them at run time, as does a
+  client that writes `EnabledFlag`. While they are off the counters stand
+  still, the summary keeps its last value, the arrays are empty and the
+  session objects are gone. Switching them on resets the counters (the
+  cumulated counts start at what exists) and recreates the session objects.
+
+The counters are atomics bumped by the request dispatcher; reading the
+diagnostics builds the values on demand, so a server that nobody asks pays a
+few atomic adds per request.
+
+Access follows the role permissions of the standard node set and
+UA-.NETStandard practice, in addition to the `AccessController`:
+
+| Node | Read / browse | Write |
+|---|---|---|
+| Summary, its components, the sampling interval and subscription arrays, `SessionDiagnosticsArray`, `EnabledFlag` | everyone | `EnabledFlag`: SecurityAdmin, ConfigureAdmin |
+| `SessionSecurityDiagnosticsArray` | SecurityAdmin, over a SignAndEncrypt channel (its AccessRestrictions) | — |
+| A session's object and its variables | the session itself, SecurityAdmin, ConfigureAdmin | — |
+| A session's `SessionSecurityDiagnostics` | the session itself, SecurityAdmin | — |
+
+Browsing `SessionsDiagnosticsSummary` shows a client only the objects it may
+read. Session security diagnostics hold the user name (or the subject of the
+X.509 user certificate), the authentication mechanism, the security policy
+and mode and the client certificate; passwords and token data never appear.
+
+### DiagnosticInfo (ReturnDiagnostics)
+
+A request whose `RequestHeader.ReturnDiagnostics` asks for diagnostics gets
+them (Part 4 §7.12, §7.33): for a failed service the `ServiceDiagnostics` of
+the header, for failed operations one `DiagnosticInfo` per operation in the
+`DiagnosticInfos` of the response (an empty array when every operation
+succeeded). The strings are in the `StringTable` of the header. A
+DiagnosticInfo carries what the mask asks for: the symbolic id of the status
+in `http://opcfoundation.org/UA/`, its description (locale `en`), as
+AdditionalInfo the operation in terms of the request (NodeId and attribute,
+subscription or monitored item id, method and object), and for a failed
+method call the first failed input argument as inner status, with a
+DiagnosticInfo per failed argument in `InputArgumentDiagnosticInfos`. Nothing
+the client did not send, no internal error text, peer address or secret.
+
+### What is not tracked
+
+`SessionAbortCount` stays 0: a session outlives the loss of its secure
+channel and ends by CloseSession or timeout. In `SubscriptionDiagnostics`,
+`CurrentKeepAliveCount`, `CurrentLifetimeCount`, `LatePublishRequestCount`,
+`DiscardedMessageCount`, `MonitoringQueueOverflowCount` and
+`EventQueueOverFlowCount` are 0. The arrays have no variable per element
+(Part 5 lets a server omit them). Publish responses sent after the request
+waited (the usual case) carry no DiagnosticInfos.
 
 ---
 

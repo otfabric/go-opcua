@@ -1224,7 +1224,9 @@
     {
       "capability": "diagnostics.server-summary",
       "direction": "async-opcua-client-to-go-server",
-      "status": "not-applicable",
+      "status": "verified",
+      "test": "TestGoServer_AsyncOpcuaClient_Diagnostics",
+      "case": "coverage/diagnostics.server-summary/async-opcua-client-to-go-server",
       "fixture": "baseline"
     },
     {

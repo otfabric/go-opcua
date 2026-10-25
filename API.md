@@ -173,6 +173,36 @@ func (c *Client) SecurityMode() ua.MessageSecurityMode
 func (c *Client) ServerStatus(ctx context.Context) (*ua.ServerStatusDataType, error)
 ```
 
+#### Server diagnostics
+
+```go
+func (c *Client) ServerDiagnosticsSummary(ctx context.Context) (*ua.ServerDiagnosticsSummaryDataType, error)
+func (c *Client) ServerDiagnosticsEnabled(ctx context.Context) (bool, error)
+func (c *Client) SetServerDiagnosticsEnabled(ctx context.Context, on bool) error
+func (c *Client) SessionDiagnostics(ctx context.Context) ([]*ua.SessionDiagnosticsDataType, error)
+func (c *Client) SessionSecurityDiagnostics(ctx context.Context) ([]*ua.SessionSecurityDiagnosticsDataType, error)
+func (c *Client) SessionDiagnosticsOf(ctx context.Context, sessionID *ua.NodeID) (*ua.SessionDiagnosticsDataType, error)
+func (c *Client) SessionSecurityDiagnosticsOf(ctx context.Context, sessionID *ua.NodeID) (*ua.SessionSecurityDiagnosticsDataType, error)
+func (c *Client) SubscriptionDiagnostics(ctx context.Context) ([]*ua.SubscriptionDiagnosticsDataType, error)
+func (c *Client) SamplingIntervalDiagnostics(ctx context.Context) ([]*ua.SamplingIntervalDiagnosticsDataType, error)
+
+func ReturnDiagnostics(mask uint32) Option
+
+type ServiceError struct {
+    StatusCode ua.StatusCode
+    Diagnostic *ua.Diagnostic
+}
+func (e *ServiceError) Error() string
+func (e *ServiceError) Unwrap() error // the StatusCode
+```
+
+Typed reads of `Server.ServerDiagnostics` (Part 5 §6.3.3). The `...Of` helpers
+read below the diagnostics object of a session (nil: the client's own).
+`ReturnDiagnostics` sets the `ReturnDiagnostics` mask of every request (a
+request with a mask of its own keeps it); a request the server rejects then
+fails with a `*ServiceError` when the server returned service diagnostics.
+See the [client guide](docs/client-guide.md#server-diagnostics).
+
 #### Read
 
 ```go
@@ -1165,6 +1195,21 @@ Mask constants: `DiagnosticInfoSymbolicID`, `DiagnosticInfoNamespaceURI`,
 `DiagnosticInfoAdditionalInfo`, `DiagnosticInfoInnerStatusCode`,
 `DiagnosticInfoInnerDiagnosticInfo`.
 
+The members of a DiagnosticInfo are indexes into the `StringTable` of the
+response header. `Resolve` returns them as strings:
+
+```go
+type Diagnostic struct {
+    SymbolicID, NamespaceURI, LocalizedText, Locale, AdditionalInfo string
+    InnerStatusCode StatusCode
+    Inner           *Diagnostic
+}
+func (d *DiagnosticInfo) Resolve(table []string) *Diagnostic // nil for an empty DiagnosticInfo
+func (d *Diagnostic) String() string
+func (h *ResponseHeader) ServiceDiagnostic() *Diagnostic  // the resolved ServiceDiagnostics
+func (h *ResponseHeader) Diagnostic(d *DiagnosticInfo) *Diagnostic
+```
+
 ---
 
 ### EventFilterBuilder
@@ -1632,6 +1677,9 @@ func (s *Server) ChangeNotification(n *ua.NodeID)
 func (s *Server) Port() int
 func (s *Server) RegisteredServers() []*ua.RegisteredServer // Local Discovery Server: the registered servers
 func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discovery: the ServerOnNetwork table
+func (s *Server) ServerDiagnosticsSummary() *ua.ServerDiagnosticsSummaryDataType
+func (s *Server) ServerDiagnosticsEnabled() bool
+func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counters
 ```
 
 ---
@@ -1659,6 +1707,7 @@ func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discove
 | `SetLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithAccessController(ac AccessController)` | Access controller |
+| `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session to a `ua.UserRole`; used by the default access controller |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
 | `WithReverseConnect(clientURL string, opts ...ReverseConnectOption)` | Open reverse connections to the client listening at `clientURL`; see [Reverse connect (server)](#reverse-connect-server) |

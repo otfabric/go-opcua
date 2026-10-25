@@ -732,3 +732,12 @@ func TestDotnetServer_Diagnostics(t *testing.T) {
 		assertPeerReturnDiagnostics(t, h.endpoint)
 	})
 }
+
+// Server diagnostics of go-opcua read by the peer client
+// (assertGoServerDiagnosticsFromPeer, diagnostics_peer_test.go).
+func TestGoServer_DotnetClient_Diagnostics(t *testing.T) {
+	t.Run("coverage/diagnostics.server-summary/dotnet-client-to-go-server", func(t *testing.T) {
+		requireDotnetImage(t)
+		assertGoServerDiagnosticsFromPeer(t, dotnetEnv, defaultDotnetImage, runDotnetClientResult)
+	})
+}

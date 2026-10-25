@@ -68,7 +68,9 @@ Requires **Go 1.26** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
   methods from your server.
 - **Resilience** — Automatic reconnect, retry policies,
   and subscription recovery.
-- **Observability** — Structured logging and pluggable metrics.
+- **Observability** — Structured logging, pluggable metrics, and live
+  server diagnostics (ServerDiagnosticsSummary, session diagnostics,
+  DiagnosticInfo on request).
 - **Interoperability tested** — Tested in both directions against
   open62541 (C), Eclipse Milo (Java), async-opcua (Rust),
   UA-.NETStandard (C#), node-opcua (TypeScript) and asyncua (Python).
@@ -85,7 +87,7 @@ For full API details see [API.md](API.md).
 | Guide | Description |
 |-------|-------------|
 | [Client Guide](docs/client-guide.md) | Connecting, reading, writing, browsing, subscriptions, methods, history |
-| [Server Guide](docs/server-guide.md) | Building servers, namespaces, custom nodes, methods, events, access control |
+| [Server Guide](docs/server-guide.md) | Building servers, namespaces, custom nodes, methods, events, access control, diagnostics |
 | [Security Guide](docs/security.md) | Certificates, encryption policies, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
 | [PubSub](docs/pubsub.md) | Publishers and subscribers over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, UADP and JSON, message security, Security Key Service, chunks, discovery, Actions, diagnostics, PublishSubscribe information model |
@@ -247,7 +249,7 @@ what the interop suite has actually exercised.
 | Alarms & Conditions (Part 9) | ✅ conditions, acknowledge, confirm, shelving, limit alarms, ConditionRefresh | experimental | types only | · | ✅ | ✅ | · |
 | HistoryRead raw with a built-in store | ✅ | ✅ | delegated ⁵ | delegated | delegated | ✅ | ✅ |
 | HistoryRead modified / at-time / processed, HistoryUpdate | ✅ built-in historian, pluggable provider | raw and update; rest via backend plugin | delegated ⁵ | delegated | delegated | raw only | raw and events |
-| Server diagnostics (ServerDiagnostics, DiagnosticInfo) | — | ✅ | — | — | ✅ | ✅ | — |
+| Server diagnostics (ServerDiagnostics, DiagnosticInfo) | ✅ summary, session objects, ReturnDiagnostics | ✅ | — | — | ✅ | ✅ | — |
 | PubSub (Part 14) ⁷ | ✅ UADP and JSON over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, security, SKS | ✅ UDP, Ethernet, MQTT | — | — | ✅ UDP, MQTT | commercial add-on | experimental UADP over UDP |
 | JSON / XML data encoding of values ⁸ | ✅ JSON 1.05 Compact and Verbose, 1.04; XML | ✅ JSON; XML for built-in types | ✅ JSON Compact and Verbose; XML | JSON 1.04 form; NodeSet2 XML | ✅ JSON Compact and Verbose; XML | JSON | — NodeSet2 XML only |
 | NodeSet2 XML import at run time | ✅ | ✅ loader, plus build-time compiler | — | ✅ | ✅ | ✅ | ✅ |

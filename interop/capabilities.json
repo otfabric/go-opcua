@@ -2063,11 +2063,13 @@
     },
     {
       "id": "diagnostics.server-summary",
-      "title": "Server diagnostics: ServerDiagnosticsSummary counts the client's sessions; the client's session in SessionDiagnosticsArray where it is exposed (go-opcua client)",
+      "title": "Server diagnostics: ServerDiagnosticsSummary counts the client's sessions; the client's session in SessionDiagnosticsArray where it is exposed (C→ = go-opcua client reads the peer; →S = peer client reads EnabledFlag and the session counts of go-opcua)",
       "profile": "diagnostics",
       "applicableDirections": [
         "go-client-to-open62541-server",
-        "go-client-to-milo-server"
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
       ]
     },
     {
