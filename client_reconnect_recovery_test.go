@@ -118,11 +118,38 @@ func TestSendRepublishRequests_GapDetected(t *testing.T) {
 		nextSeq:        5,
 	}
 
-	// availableSeq does not contain nextSeq=5 → gap must be detected.
-	// The call returns immediately because there is no active session.
-	rr, _ := c.sendRepublishRequests(context.Background(), sub, []uint32{1, 2, 3})
+	// availableSeq holds messages after nextSeq=5 but not 5 → gap must be
+	// detected. The call returns immediately because there is no active
+	// session.
+	rr, _ := c.sendRepublishRequests(context.Background(), sub, []uint32{3, 6, 7})
 	assert.True(t, rr.gapDetected, "gapDetected must be set when nextSeq is absent from availableSeq")
 	assert.Equal(t, 0, rr.republishedCount, "no notifications can be republished without a session")
+}
+
+// Available sequence numbers below the subscription's next one are messages
+// the client received but has not acknowledged yet (its connection broke
+// before the acknowledgement got through). The server has sent nothing
+// since: there is no gap, the recovery is not reported as data loss.
+func TestRetransmissionGap(t *testing.T) {
+	tests := []struct {
+		name      string
+		available []uint32
+		nextSeq   uint32
+		gap       bool
+	}{
+		{"nothing retained", nil, 5, false},
+		{"next retained", []uint32{4, 5, 6}, 5, false},
+		{"only unacknowledged ones", []uint32{1, 2, 3, 4}, 5, false},
+		{"next lost", []uint32{3, 6, 7}, 5, true},
+		{"only newer ones", []uint32{6}, 5, true},
+		{"newer one after wrap-around", []uint32{1}, 0xffffffff, true},
+		{"unacknowledged one before wrap-around", []uint32{0xfffffffe}, 1, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.gap, retransmissionGap(tt.available, tt.nextSeq))
+		})
+	}
 }
 
 // TestSendRepublishRequests_NoGap verifies that sendRepublishRequests does NOT

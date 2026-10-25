@@ -332,7 +332,7 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 	// If our expected next sequence number isn't in the server's retransmission queue
 	// some notifications may have been lost. We log a warning and continue rather than
 	// failing because data loss during reconnection is expected per Part 4 §6.5.
-	if len(availableSeq) > 0 && !slices.Contains(availableSeq, sub.nextSeq) {
+	if retransmissionGap(availableSeq, sub.nextSeq) {
 		c.cfg.logger.Warn("next sequence number not in retransmission buffer", "sub_id", sub.id(), "next_seq", sub.nextSeq, "available_seq", availableSeq)
 		result.gapDetected = true
 	}
@@ -419,6 +419,26 @@ func (c *Client) sendRepublishRequests(ctx context.Context, sub *Subscription, a
 			return result, err
 		}
 	}
+}
+
+// retransmissionGap reports whether notification messages from nextSeq on
+// were lost: the server's retransmission queue (the available sequence
+// numbers of a TransferResult, Part 4 §5.13.7) holds messages sent after
+// nextSeq but not nextSeq itself. Numbers below nextSeq are messages the
+// client received but has not acknowledged yet; when the queue holds only
+// those, the server has sent nothing since and nothing is missing. Sequence
+// numbers wrap around, so they are compared as serial numbers: seq comes
+// after nextSeq when it is less than half the number space ahead.
+func retransmissionGap(availableSeq []uint32, nextSeq uint32) bool {
+	if slices.Contains(availableSeq, nextSeq) {
+		return false
+	}
+	for _, seq := range availableSeq {
+		if d := seq - nextSeq; d != 0 && d < 1<<31 {
+			return true
+		}
+	}
+	return false
 }
 
 // registerSubscriptionNeedsSubMuxLock registers a subscription.
