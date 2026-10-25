@@ -11,7 +11,7 @@
 | **Discovery** | `GetEndpoints`, `FindServers`, `FindServersWithFilter`, `FindServersOnNetwork`, `FindServersOnNetworkWithFilter`, `RegisterServer`, `RegisterServer2`, `DiscoverServers` | Fully implemented |
 | **Session** | Automatic via `Connect` / `Close` | Fully implemented |
 | **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented (`IndexRange`, `TimestampsToReturn`) |
-| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryReadEvent`, `HistoryUpdateData`, `HistoryUpdateEvents`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed and events + update/delete) |
+| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryReadEvent`, `HistoryReleaseContinuationPoints`, `HistoryUpdateData`, `HistoryUpdateEvents`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed and events + update/delete) |
 | **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
@@ -1137,7 +1137,7 @@ This is useful for failover scenarios or migrating between connections.
 High-level helpers page raw history for you:
 
 ```go
-// Single page
+// Up to 100 values, following continuation points; 0 reads the whole range
 values, err := c.ReadHistory(ctx, nodeID, start, end, 100)
 
 // All pages via Go 1.23 iterator
@@ -1154,9 +1154,39 @@ HistoryUpdate helpers accept full details and continuation points. Against go-op
 with the default `*Historian`, raw/modified/at-time/processed and data update/delete paths
 are available after `SetHistorian` + `EnableNode`.
 
-Historical events are read with `HistoryReadEvent` (an `EventFilter` selects the fields
-and filters the events) and changed with `HistoryUpdateEvents` / `HistoryDeleteEvents`;
-go-opcua servers serve them on the notifiers they historize (`EnableEventHistory`):
+Both follow continuation points: `ReadHistory` until it has `maxValues` values, and
+then releases the continuation point the server still holds; `ReadHistoryAll` as the
+loop asks for more, releasing the outstanding point when the loop breaks early or `ctx`
+is done (the iteration then ends with `ctx.Err()`). `Good_NoData` is an empty result,
+a Bad status of the node is the error (a `ua.StatusCode`).
+
+Historical events are read with `ReadEventHistory` / `ReadEventHistoryAll` or the
+low-level `HistoryReadEvent` (an `EventFilter` selects the fields and filters the
+events) and changed with `HistoryUpdateEvents` / `HistoryDeleteEvents`; go-opcua servers
+serve them on the notifiers they historize (`EnableEventHistory`). The helpers page and
+release like the value helpers; a start after the end reads newest first (Part 11
+§6.5.2), and one of the two may be zero when a maximum or page size is given:
+
+```go
+filter := ua.NewEventFilter().
+    Select("EventId", "Time", "Message", "Severity").
+    SelectPaths("2:Temperature"). // "ns:Name" segments name other namespaces
+    Build()
+
+// Up to 50 events, newest first
+events, err := c.ReadEventHistory(ctx, notifier, end, start, filter, 50)
+
+// Every event of the range, 100 per HistoryRead
+for ev, err := range c.ReadEventHistoryAll(ctx, notifier, start, end, filter, 100) {
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(ev.EventFields[1].Value(), ev.EventFields[2].Value())
+}
+```
+
+With `HistoryReadEvent` the continuation points are the caller's; release the one of a
+read it does not finish with `HistoryReleaseContinuationPoints`:
 
 ```go
 d := &ua.ReadEventDetails{
@@ -1182,6 +1212,14 @@ for {
     }
 }
 ```
+
+A loop that stops before the last page frees the point on the server (Part 4 §5.10.3):
+
+```go
+st, err := c.HistoryReleaseContinuationPoints(ctx, d, &ua.HistoryReadValueID{NodeID: notifier, ContinuationPoint: cp})
+// st[0]: Good, or Bad_ContinuationPointInvalid for a point already used, released or of another session
+```
+
 Peer-proven history is raw HistoryRead (`history.read.raw`) in both directions with all six
 peers, and its continuation points (`history.read.continuation`) in both directions with all
 of them but the asyncua server, which returns none (see [INTEROP.md](../INTEROP.md)).
