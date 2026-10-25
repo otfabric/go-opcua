@@ -214,7 +214,8 @@ func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *
 	for {
 		select {
 		case <-ctx.Done():
-			c.logger.Warn("context done, closing secure channel", "secure_channel_id", secureChannelID)
+			// The server is shutting down: an expected end of the channel.
+			c.logger.Info("context done, closing secure channel", "secure_channel_id", secureChannelID)
 			return
 		case <-w.done:
 			return
@@ -223,7 +224,11 @@ func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *
 
 		msg := sc.Receive(ctx)
 		if msg.Err == io.EOF {
-			c.logger.Warn("secure channel closed", "secure_channel_id", secureChannelID)
+			// The client sent CloseSecureChannel (Part 4 §5.5.3) or closed
+			// the connection: the normal end of a channel, logged at the
+			// level its opening is. Protocol errors, decode failures and
+			// timeouts take the paths below and stay Warn / Error.
+			c.logger.Info("secure channel closed", "secure_channel_id", secureChannelID)
 			return
 		}
 		if msg.Err != nil {
