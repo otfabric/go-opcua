@@ -37,6 +37,14 @@ type ExtensionObject struct {
 	EncodingMask uint8
 	TypeID       *ExpandedNodeID
 	Value        interface{}
+
+	// RawBody is the body of a binary ExtensionObject that Decode read but
+	// could not decode because its type is not registered: Value is nil
+	// then. It lets a user decode a type whose encoding NodeId depends on
+	// the namespace table of the peer (a type of a companion
+	// specification such as the ApplicationRecordDataType of Part 12),
+	// which cannot be registered once for every peer. Encode ignores it.
+	RawBody []byte
 }
 
 func NewExtensionObject(value interface{}) *ExtensionObject {
@@ -79,6 +87,7 @@ func (e *ExtensionObject) Decode(b []byte) (int, error) {
 	e.Value = eotypes.New(typeID)
 	if e.Value == nil {
 		slog.Default().Debug("unknown extension object", "type_id", typeID)
+		e.RawBody = append([]byte(nil), body.Bytes()...)
 		return buf.Pos(), buf.Error()
 	}
 
