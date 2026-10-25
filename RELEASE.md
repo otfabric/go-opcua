@@ -27,6 +27,8 @@ Fixes found by the 25-run hardening batch of v1.23.0: subscription recovery afte
   - the twopass case of `TestParsePFX_Structures`, now deterministic
 - **Test servers bind port 0 themselves:** a port chosen first could be taken by a parallel test before the server bound it.
 - **`TestRecovery_ServerRestart`:** the restarted server gets its fixture before it starts, so the fixture keeps its namespace index; the diagnostics namespace is created with the first session.
+- **`TestReverseConnect_AutoReconnectAfterServerRestart`:** the reverse-connect servers get their fixture before they start (`conformkit.NewServerPrepared`), for the same reason.
+- **AMQP test broker streams a delivery within the session window** (AMQP 1.0 §2.5.6). It sent a delivery only when all its frames fitted in the client's incoming window, so a message larger than the window stalled until a test timed out. `TestSessionWindowReopens` now uses a 64-frame window (an internal `SessionWindow` option of the AMQP client and the broker) and runs in milliseconds instead of transferring 17 MB.
 - **Failure diagnostics:** the recovery tests report the recorded states and events when they fail.
 
 ### Interop
