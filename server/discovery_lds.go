@@ -128,6 +128,11 @@ type registration struct {
 	// announced maps the mDNS instance names announced for the server to a
 	// signature of what was announced. It is guarded by discoveryManager.mu.
 	announced map[string]string
+	// skipped holds the canonical instance names of the server that were
+	// not announced because another responder, or another registration,
+	// had them. The discovery server takes them over when they become
+	// free. It is guarded by discoveryManager.mu.
+	skipped map[string]bool
 }
 
 // discoveryManager holds the discovery state of a server: the registered
