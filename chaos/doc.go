@@ -68,6 +68,10 @@
 //     mDNS (on an in-memory link) under faults.
 //   - chaos/codec: the JSON and XML encodings and the shared NodeSet values
 //     under concurrency.
+//   - chaos/certmgmt: push certificate management (Part 12 §7): trust
+//     list and certificate updates, ApplyChanges and dropped transactions
+//     while clients connect, each channel validated against one complete
+//     trust list.
 //   - chaos/pubsub: PubSub publishers and subscribers over UDP and MQTT
 //     under datagram faults, broker outages, attacks on the message
 //     security, key rotation storms, SKS outages, runtime and information
