@@ -396,7 +396,8 @@ func TestAttributeService_HistoryWithHistorian(t *testing.T) {
 		}
 		resp, err := svc.HistoryRead(context.Background(), nil, req, 5)
 		require.NoError(t, err)
-		assert.Equal(t, ua.StatusOK, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
+		// A continuation point the server never issued (Part 4 §5.10.3).
+		assert.Equal(t, ua.StatusBadContinuationPointInvalid, resp.(*ua.HistoryReadResponse).Results[0].StatusCode)
 	})
 
 	t.Run("update data / delete raw / delete at time", func(t *testing.T) {

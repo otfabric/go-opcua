@@ -74,21 +74,28 @@ func (r *historyCPRegistry) resolve(sessionAuth string, outer []byte) ([]byte, u
 	return append([]byte(nil), b.providerCP...), ua.StatusOK
 }
 
-func (r *historyCPRegistry) release(outer []byte) {
+// release frees the provider CP of an outer CP owned by sessionAuth. An
+// unknown or expired CP, or one of another session, is left alone and
+// reported as BadContinuationPointInvalid (Part 4 §5.10.3).
+func (r *historyCPRegistry) release(sessionAuth string, outer []byte) ua.StatusCode {
 	if r == nil || len(outer) == 0 {
-		return
+		return ua.StatusOK
 	}
 	key := hex.EncodeToString(outer)
 	r.mu.Lock()
+	r.evictLocked()
 	b, ok := r.items[key]
-	if ok {
-		delete(r.items, key)
+	if !ok || b.sessionAuth != sessionAuth {
+		r.mu.Unlock()
+		return ua.StatusBadContinuationPointInvalid
 	}
+	delete(r.items, key)
 	fn := r.onRelease
 	r.mu.Unlock()
-	if ok && fn != nil {
+	if fn != nil {
 		fn(b.providerCP)
 	}
+	return ua.StatusOK
 }
 
 func (r *historyCPRegistry) releaseSession(sessionAuth string) {

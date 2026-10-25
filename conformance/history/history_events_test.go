@@ -231,12 +231,23 @@ func TestHistoryEvents_ContinuationPoints(t *testing.T) {
 		resp := mustSendRaw[ua.HistoryReadResponse](t, c, req)
 		require.Equal(t, ua.StatusOK, resp.Results[0].StatusCode)
 		require.Equal(t, ua.StatusBadContinuationPointInvalid, readEvents(t, c, node, d, cp).StatusCode)
+		// A released continuation point is no longer valid, also for release (Part 4 §5.10.3).
+		resp = mustSendRaw[ua.HistoryReadResponse](t, c, req)
+		require.Equal(t, ua.StatusBadContinuationPointInvalid, resp.Results[0].StatusCode)
 	})
 
 	t.Run("BoundToTheSession", func(t *testing.T) {
 		cp := readEvents(t, c, node, d, nil).ContinuationPoint
 		other := newClient(t, url)
 		require.Equal(t, ua.StatusBadContinuationPointInvalid, readEvents(t, other, node, d, cp).StatusCode)
+		// Another session cannot release it either.
+		rel := mustSendRaw[ua.HistoryReadResponse](t, other, &ua.HistoryReadRequest{
+			HistoryReadDetails:        ua.NewExtensionObject(d),
+			TimestampsToReturn:        ua.TimestampsToReturnBoth,
+			ReleaseContinuationPoints: true,
+			NodesToRead:               []*ua.HistoryReadValueID{{NodeID: node, ContinuationPoint: cp}},
+		})
+		require.Equal(t, ua.StatusBadContinuationPointInvalid, rel.Results[0].StatusCode)
 		require.Equal(t, evs(4, 7), eventIDs(t, readEvents(t, c, node, d, cp)), "still valid for its own session")
 	})
 

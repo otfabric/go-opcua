@@ -17,7 +17,7 @@ func TestHistoryCPRegistry_NilAndEmpty(t *testing.T) {
 	inner, st := nilReg.resolve("s", []byte("outer"))
 	assert.Equal(t, ua.StatusOK, st)
 	assert.Equal(t, []byte("outer"), inner)
-	nilReg.release([]byte("outer"))
+	assert.Equal(t, ua.StatusOK, nilReg.release("s", []byte("outer")))
 	nilReg.releaseSession("s")
 
 	reg := newHistoryCPRegistry(nil)
@@ -26,7 +26,7 @@ func TestHistoryCPRegistry_NilAndEmpty(t *testing.T) {
 	inner, st = reg.resolve("s", nil)
 	assert.Equal(t, ua.StatusOK, st)
 	assert.Nil(t, inner)
-	reg.release(nil)
+	assert.Equal(t, ua.StatusOK, reg.release("s", nil))
 	reg.releaseSession("")
 }
 
@@ -48,10 +48,16 @@ func TestHistoryCPRegistry_ReleaseCallsOnRelease(t *testing.T) {
 	var got []byte
 	reg := newHistoryCPRegistry(func(cp []byte) { got = append([]byte(nil), cp...) })
 	outer := reg.bind("s", []byte("inner-bytes"))
-	reg.release(outer)
+	// Another session can neither release nor use it.
+	assert.Equal(t, ua.StatusBadContinuationPointInvalid, reg.release("other", outer))
+	assert.Nil(t, got)
+	assert.Equal(t, ua.StatusOK, reg.release("s", outer))
 	assert.Equal(t, []byte("inner-bytes"), got)
 	_, st := reg.resolve("s", outer)
 	assert.Equal(t, ua.StatusBadContinuationPointInvalid, st)
+	// Released twice, or never issued.
+	assert.Equal(t, ua.StatusBadContinuationPointInvalid, reg.release("s", outer))
+	assert.Equal(t, ua.StatusBadContinuationPointInvalid, reg.release("s", []byte("unknown")))
 }
 
 func TestHistoryCPRegistry_BindCopiesProvider(t *testing.T) {
