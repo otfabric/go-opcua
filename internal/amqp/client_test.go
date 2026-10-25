@@ -139,18 +139,26 @@ func TestLargeMessagesSpanFrames(t *testing.T) {
 }
 
 func TestSessionWindowReopens(t *testing.T) {
-	// More transfer frames than half the session window of either side.
-	b := startBroker(t, amqpbroker.Options{MaxFrameSize: 512})
-	pub := dial(t, amqp.Options{Server: b.URL(), MaxFrameSize: 512})
-	sub := dial(t, amqp.Options{Server: b.URL(), MaxFrameSize: 512, MaxMessageSize: 64 << 20})
+	// Many times more transfer frames than half the session window of
+	// either side: every window is opened again several times. Small
+	// windows keep the data small (about 40000 frames of 512 bytes with the
+	// default window of the client stalled a loaded CI runner in TCP).
+	const window = 64
+	b := startBroker(t, amqpbroker.Options{MaxFrameSize: 512, SessionWindow: window})
+	pub := dial(t, amqp.Options{Server: b.URL(), MaxFrameSize: 512, SessionWindow: window})
+	sub := dial(t, amqp.Options{Server: b.URL(), MaxFrameSize: 512, SessionWindow: window, MaxMessageSize: 1 << 20})
 	in, _ := subscribe(t, sub, "w", true)
-	big := bytes.Repeat([]byte{7}, 450*40000) // ~40000 frames
-	require.NoError(t, pub.Send(bg, "w", &amqp.Message{Data: [][]byte{big}}, false))
-	select {
-	case m := <-in:
-		require.Equal(t, big, m.Payload())
-	case <-time.After(30 * time.Second):
-		t.Fatal("no message")
+	big := bytes.Repeat([]byte{7}, 450*10*window) // ~10 windows of frames
+	ctx, cancel := context.WithTimeout(bg, 30*time.Second)
+	defer cancel()
+	for range 3 {
+		require.NoError(t, pub.Send(ctx, "w", &amqp.Message{Data: [][]byte{big}}, false))
+		select {
+		case m := <-in:
+			require.Equal(t, big, m.Payload())
+		case <-ctx.Done():
+			t.Fatal("no message")
+		}
 	}
 }
 

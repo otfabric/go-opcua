@@ -21,7 +21,7 @@ func fuzzClient(t *testing.T) (*Client, *conn) {
 	t.Cleanup(func() { _ = a.Close(); _ = b.Close() })
 	cs := &conn{
 		nc: a, dead: make(chan struct{}), writerDone: make(chan struct{}), wake: make(chan struct{}, 1),
-		maxFrame: 512, handleMax: 3, remoteIncomingWindow: 10, incomingWindow: sessionWindow,
+		maxFrame: 512, handleMax: 3, remoteIncomingWindow: 10, incomingWindow: DefaultSessionWindow,
 		handles: map[uint32]*link{}, remote: map[uint32]*link{}, attaching: map[string]*link{},
 		unsettled: map[uint32]*outDelivery{},
 	}
