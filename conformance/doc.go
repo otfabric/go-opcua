@@ -24,5 +24,11 @@
 // matrix_test.go keeps the suite honest as the API grows: every exported
 // method of *opcua.Client, *opcua.Node, *opcua.Subscription, the subscription
 // builder, *opcua.Session and the monitor package, and every client and server
-// Option constructor, must be exercised by a test in this package.
+// Option constructor, must be exercised by a test in this package or in one of
+// the conformance packages below it.
+//
+// CI gives every package 120 s under the race detector, so parts of the suite
+// are packages of their own: alarms (Part 9), certmgmt (Part 12), discovery,
+// pubsub (Part 14) and eccext (the math/big ECC policies). They share their
+// helpers through internal/testutil/conformkit.
 package conformance

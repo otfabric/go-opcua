@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package conformance
+package discovery
 
 import (
 	"context"
@@ -17,6 +17,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/mdns"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -27,39 +28,6 @@ import (
 // FindServersOnNetwork, RegisterServer, RegisterServer2) and Part 12 (Local
 // Discovery Server, multicast extension), Go server against Go server and Go
 // client.
-
-// registrationLog collects the events of a server's registration loop.
-type registrationLog struct {
-	mu     sync.Mutex
-	events []server.RegistrationEvent
-}
-
-func (l *registrationLog) handle(e server.RegistrationEvent) {
-	l.mu.Lock()
-	l.events = append(l.events, e)
-	l.mu.Unlock()
-}
-
-func (l *registrationLog) snapshot() []server.RegistrationEvent {
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	return slices.Clone(l.events)
-}
-
-// count returns the number of events that match.
-func (l *registrationLog) count(match func(server.RegistrationEvent) bool) int {
-	n := 0
-	for _, e := range l.snapshot() {
-		if match(e) {
-			n++
-		}
-	}
-	return n
-}
-
-func registered(e server.RegistrationEvent) bool   { return e.Online && e.Err == nil }
-func unregistered(e server.RegistrationEvent) bool { return !e.Online && e.Err == nil }
-func failed(e server.RegistrationEvent) bool       { return e.Err != nil }
 
 // discoveryOpts are the client options for talking to a discovery endpoint.
 func discoveryOpts() []opcua.Option {
@@ -123,19 +91,19 @@ func TestDiscovery_RegisterWithLDS_NoSecurity(t *testing.T) {
 		),
 	)
 
-	var log registrationLog
+	var log conformkit.RegistrationLog
 	a, aURL := newServer(t,
 		server.ApplicationURI(registrantURI),
 		server.ServerName("Registrant"),
 		server.WithDiscoveryRegistration(ldsURL,
 			server.RegisterInsecure(),
-			server.RegisterEventHandler(log.handle),
+			server.RegisterEventHandler(log.Handle),
 			server.RegisterRequestTimeout(30*time.Second),
 		),
 	)
-	eventually(t, func() bool { return log.count(registered) > 0 }, "A registers with the LDS")
+	eventually(t, func() bool { return log.Count(conformkit.Registered) > 0 }, "A registers with the LDS")
 
-	ev := log.snapshot()[0]
+	ev := log.Snapshot()[0]
 	require.Equal(t, "RegisterServer2", ev.Service)
 	require.Equal(t, ldsURL, ev.DiscoveryServerURL)
 	require.Equal(t, ua.MessageSecurityModeNone, ev.SecurityMode)
@@ -167,7 +135,7 @@ func TestDiscovery_RegisterWithLDS_NoSecurity(t *testing.T) {
 
 	// Closing A unregisters it.
 	require.NoError(t, a.Close())
-	require.Equal(t, 1, log.count(unregistered), "events: %+v", log.snapshot())
+	require.Equal(t, 1, log.Count(conformkit.Unregistered), "events: %+v", log.Snapshot())
 	require.Equal(t, []string{ldsURI}, knownServerURIs(t, ldsURL))
 	online, _ = seen.Load(registrantURI)
 	require.Equal(t, false, online)
@@ -195,12 +163,12 @@ func TestDiscovery_RegisterWithLDS_Secured(t *testing.T) {
 	}
 
 	t.Run("server registers with its certificate", func(t *testing.T) {
-		var log registrationLog
+		var log conformkit.RegistrationLog
 		var validated [][]byte
 		a, _ := newServer(t,
 			server.Certificate(p.clientCert), server.PrivateKey(p.clientKey),
 			server.WithDiscoveryRegistration(ldsURL,
-				server.RegisterEventHandler(log.handle),
+				server.RegisterEventHandler(log.Handle),
 				server.RegisterRequestTimeout(30*time.Second),
 				server.RegisterCertificateValidator(func(der []byte) error {
 					validated = append(validated, der)
@@ -208,8 +176,8 @@ func TestDiscovery_RegisterWithLDS_Secured(t *testing.T) {
 				}),
 			),
 		)
-		eventually(t, func() bool { return log.count(registered) > 0 }, "A registers with the LDS")
-		require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, log.snapshot()[0].SecurityMode,
+		eventually(t, func() bool { return log.Count(conformkit.Registered) > 0 }, "A registers with the LDS")
+		require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, log.Snapshot()[0].SecurityMode,
 			"the most secure endpoint of the LDS is used")
 		require.Equal(t, p.serverCert, validated[0])
 		uris := knownServerURIs(t, ldsURL)
@@ -223,18 +191,18 @@ func TestDiscovery_RegisterWithLDS_Secured(t *testing.T) {
 	})
 
 	t.Run("pinned policy and mode", func(t *testing.T) {
-		var log registrationLog
+		var log conformkit.RegistrationLog
 		a, _ := newServer(t,
 			server.Certificate(p.userCert), server.PrivateKey(p.userKey),
 			server.WithDiscoveryRegistration(ldsURL,
 				server.RegisterSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
-				server.RegisterEventHandler(log.handle),
+				server.RegisterEventHandler(log.Handle),
 				server.RegisterRequestTimeout(30*time.Second),
 			),
 		)
-		eventually(t, func() bool { return log.count(registered) > 0 }, "A registers with the LDS")
-		require.Equal(t, ua.MessageSecurityModeSign, log.snapshot()[0].SecurityMode)
-		require.Equal(t, ua.SecurityPolicyURIBasic256Sha256, log.snapshot()[0].SecurityPolicyURI)
+		eventually(t, func() bool { return log.Count(conformkit.Registered) > 0 }, "A registers with the LDS")
+		require.Equal(t, ua.MessageSecurityModeSign, log.Snapshot()[0].SecurityMode)
+		require.Equal(t, ua.SecurityPolicyURIBasic256Sha256, log.Snapshot()[0].SecurityPolicyURI)
 		require.Contains(t, registeredHere(), "urn:otfabric:conformance:user")
 		require.NoError(t, a.Close())
 		require.NotContains(t, registeredHere(), "urn:otfabric:conformance:user")
@@ -249,22 +217,22 @@ func TestDiscovery_RegisterWithLDS_Secured(t *testing.T) {
 
 		// A server that insists on no security does not get in either, and
 		// keeps trying.
-		var log registrationLog
+		var log conformkit.RegistrationLog
 		a, _ := newServer(t,
 			server.ApplicationURI(registrantURI),
 			server.WithDiscoveryRegistration(ldsURL,
 				server.RegisterInsecure(),
 				server.RegisterSecurity("None", ua.MessageSecurityModeNone),
 				server.RegisterBackoff(10*time.Millisecond, 50*time.Millisecond),
-				server.RegisterEventHandler(log.handle),
+				server.RegisterEventHandler(log.Handle),
 			),
 		)
-		eventually(t, func() bool { return log.count(failed) >= 3 }, "the registration is retried")
-		for _, e := range log.snapshot() {
+		eventually(t, func() bool { return log.Count(conformkit.Failed) >= 3 }, "the registration is retried")
+		for _, e := range log.Snapshot() {
 			require.ErrorIs(t, e.Err, ua.StatusBadSecurityModeInsufficient)
 		}
 		require.NoError(t, a.Close())
-		require.Zero(t, log.count(unregistered), "a server that never registered does not unregister")
+		require.Zero(t, log.Count(conformkit.Unregistered), "a server that never registered does not unregister")
 	})
 
 	t.Run("a certificate only registers its own URI", func(t *testing.T) {
@@ -400,17 +368,17 @@ func TestDiscovery_RegistrationExpires(t *testing.T) {
 		return out
 	}
 
-	var dying, living registrationLog
+	var dying, living conformkit.RegistrationLog
 	_, _ = newServer(t,
 		server.ApplicationURI("urn:otfabric:conformance:alive"),
 		server.WithDiscoveryRegistration(ldsURL,
 			server.RegisterInsecure(),
 			server.RegisterInterval(timeout/20),
 			server.RegisterRequestTimeout(30*time.Second),
-			server.RegisterEventHandler(living.handle),
+			server.RegisterEventHandler(living.Handle),
 		),
 	)
-	eventually(t, func() bool { return living.count(registered) > 0 }, "the living server registers")
+	eventually(t, func() bool { return living.Count(conformkit.Registered) > 0 }, "the living server registers")
 	livingSince := time.Now()
 
 	// The "dying" server reaches the LDS through a proxy that is cut before
@@ -423,16 +391,16 @@ func TestDiscovery_RegistrationExpires(t *testing.T) {
 			server.RegisterInsecure(),
 			server.RegisterInterval(time.Hour), // registers once
 			server.RegisterRequestTimeout(2*time.Second),
-			server.RegisterEventHandler(dying.handle),
+			server.RegisterEventHandler(dying.Handle),
 		),
 	)
-	eventually(t, func() bool { return dying.count(registered) > 0 }, "the doomed server registers")
+	eventually(t, func() bool { return dying.Count(conformkit.Registered) > 0 }, "the doomed server registers")
 
 	proxy.SetRefuse(true)
 	proxy.DropAll()
 	require.NoError(t, doomed.Close())
-	require.Equal(t, 1, dying.count(func(e server.RegistrationEvent) bool { return !e.Online && e.Err != nil }),
-		"the unregistration failed: %+v", dying.snapshot())
+	require.Equal(t, 1, dying.Count(func(e server.RegistrationEvent) bool { return !e.Online && e.Err != nil }),
+		"the unregistration failed: %+v", dying.Snapshot())
 
 	eventually(t, func() bool {
 		return !slices.Contains(registeredURIs(), "urn:otfabric:conformance:doomed")
@@ -444,9 +412,9 @@ func TestDiscovery_RegistrationExpires(t *testing.T) {
 	// time it has outlived its own timeout more than twice. Renewals that
 	// stopped, or that did not extend the registration, would have removed
 	// it after one timeout; watching it for longer shows nothing new.
-	renewals := living.count(registered)
+	renewals := living.Count(conformkit.Registered)
 	eventually(t, func() bool {
-		return living.count(registered) >= renewals+20 && time.Since(livingSince) >= 2*timeout+timeout/2
+		return living.Count(conformkit.Registered) >= renewals+20 && time.Since(livingSince) >= 2*timeout+timeout/2
 	}, "the living server keeps renewing")
 	require.Equal(t, []string{"urn:otfabric:conformance:alive"}, registeredURIs())
 	require.Equal(t, []string{ldsURI, "urn:otfabric:conformance:alive"}, knownServerURIs(t, ldsURL))
@@ -493,7 +461,7 @@ func TestDiscovery_RegisterSemaphoreFileOption(t *testing.T) {
 	semaphore := filepath.Join(t.TempDir(), "server.online")
 	require.NoError(t, os.WriteFile(semaphore, nil, 0o600))
 
-	var log registrationLog
+	var log conformkit.RegistrationLog
 	_, _ = newServer(t,
 		server.ApplicationURI(registrantURI),
 		server.WithDiscoveryRegistration(ldsURL,
@@ -502,11 +470,11 @@ func TestDiscovery_RegisterSemaphoreFileOption(t *testing.T) {
 			server.RegisterDiscoveryURLs("opc.tcp://public-name:4840/ua"),
 			server.RegisterMdnsServerName("Registrant"),
 			server.RegisterServerCapabilities("DA", "HD"),
-			server.RegisterEventHandler(log.handle),
+			server.RegisterEventHandler(log.Handle),
 			server.RegisterRequestTimeout(30*time.Second),
 		),
 	)
-	eventually(t, func() bool { return log.count(registered) > 0 }, "the server registers")
+	eventually(t, func() bool { return log.Count(conformkit.Registered) > 0 }, "the server registers")
 	reg := lds.RegisteredServers()
 	require.Len(t, reg, 1)
 	require.Equal(t, semaphore, reg[0].SemaphoreFilePath)
@@ -542,18 +510,18 @@ func TestDiscovery_FallbackToRegisterServer(t *testing.T) {
 			t.Cleanup(func() { _ = lds.Close() })
 			ldsURL := fmt.Sprintf("opc.tcp://localhost:%d", lds.Port())
 
-			var log registrationLog
+			var log conformkit.RegistrationLog
 			a, _ := newServer(t,
 				server.ApplicationURI(registrantURI),
 				server.WithDiscoveryRegistration(ldsURL,
 					server.RegisterInsecure(),
 					server.RegisterInterval(20*time.Millisecond),
-					server.RegisterEventHandler(log.handle),
+					server.RegisterEventHandler(log.Handle),
 					server.RegisterRequestTimeout(30*time.Second),
 				),
 			)
-			eventually(t, func() bool { return log.count(registered) >= 3 }, "A registers and renews")
-			for _, e := range log.snapshot() {
+			eventually(t, func() bool { return log.Count(conformkit.Registered) >= 3 }, "A registers and renews")
+			for _, e := range log.Snapshot() {
 				require.NoError(t, e.Err)
 				require.Equal(t, "RegisterServer", e.Service)
 				require.Empty(t, e.ConfigurationResults)
@@ -565,7 +533,7 @@ func TestDiscovery_FallbackToRegisterServer(t *testing.T) {
 
 			// the unregistration uses RegisterServer as well
 			require.NoError(t, a.Close())
-			require.Equal(t, 1, log.count(unregistered))
+			require.Equal(t, 1, log.Count(conformkit.Unregistered))
 			require.Equal(t, []string{ldsURI}, knownServerURIs(t, ldsURL))
 		})
 	}
@@ -580,7 +548,7 @@ func TestDiscovery_LDSDownAtStartAndStop(t *testing.T) {
 	proxy := testutil.NewChaosProxy(t, "127.0.0.1:1", 1)
 	proxy.SetRefuse(true)
 
-	var log registrationLog
+	var log conformkit.RegistrationLog
 	start := time.Now()
 	a, _ := newServer(t,
 		server.ApplicationURI(registrantURI),
@@ -588,12 +556,12 @@ func TestDiscovery_LDSDownAtStartAndStop(t *testing.T) {
 			server.RegisterInsecure(),
 			server.RegisterBackoff(10*time.Millisecond, 100*time.Millisecond),
 			server.RegisterRequestTimeout(30*time.Second),
-			server.RegisterEventHandler(log.handle),
+			server.RegisterEventHandler(log.Handle),
 		),
 	)
 	require.Less(t, time.Since(start), 20*time.Second, "Start does not wait for the discovery server")
-	eventually(t, func() bool { return log.count(failed) >= 3 }, "the registration is retried")
-	require.Zero(t, log.count(registered))
+	eventually(t, func() bool { return log.Count(conformkit.Failed) >= 3 }, "the registration is retried")
+	require.Zero(t, log.Count(conformkit.Registered))
 
 	_, ldsURL := newServer(t,
 		server.ApplicationURI(ldsURI),
@@ -601,7 +569,7 @@ func TestDiscovery_LDSDownAtStartAndStop(t *testing.T) {
 	)
 	proxy.SetBackend(ldsURL[len("opc.tcp://"):])
 	proxy.SetRefuse(false)
-	eventually(t, func() bool { return log.count(registered) > 0 }, "the registration succeeds once the LDS is up")
+	eventually(t, func() bool { return log.Count(conformkit.Registered) > 0 }, "the registration succeeds once the LDS is up")
 	require.Contains(t, knownServerURIs(t, ldsURL), registrantURI)
 
 	// The LDS goes away again: Close still returns promptly.
@@ -662,25 +630,25 @@ func TestDiscovery_SecuredRegistrationFailures(t *testing.T) {
 	)
 	fast := server.RegisterBackoff(10*time.Millisecond, 50*time.Millisecond)
 
-	var noEndpoint, untrusted, fallback registrationLog
+	var noEndpoint, untrusted, fallback conformkit.RegistrationLog
 	_, _ = newServer(t,
 		server.Certificate(p.clientCert), server.PrivateKey(p.clientKey),
-		server.WithDiscoveryRegistration(plainLDS, fast, server.RegisterEventHandler(noEndpoint.handle)),
-		server.WithDiscoveryRegistration(securedLDS, fast, server.RegisterEventHandler(untrusted.handle),
+		server.WithDiscoveryRegistration(plainLDS, fast, server.RegisterEventHandler(noEndpoint.Handle)),
+		server.WithDiscoveryRegistration(securedLDS, fast, server.RegisterEventHandler(untrusted.Handle),
 			server.RegisterCertificateValidator(func([]byte) error { return ua.StatusBadCertificateUntrusted })),
 		// With RegisterInsecure the server settles for no security where
 		// nothing better is offered.
-		server.WithDiscoveryRegistration(plainLDS, fast, server.RegisterInsecure(), server.RegisterEventHandler(fallback.handle)),
+		server.WithDiscoveryRegistration(plainLDS, fast, server.RegisterInsecure(), server.RegisterEventHandler(fallback.Handle)),
 	)
 	eventually(t, func() bool {
-		return noEndpoint.count(failed) >= 2 && untrusted.count(failed) >= 2 && fallback.count(registered) > 0
+		return noEndpoint.Count(conformkit.Failed) >= 2 && untrusted.Count(conformkit.Failed) >= 2 && fallback.Count(conformkit.Registered) > 0
 	},
 		"the outcomes of the three registrations")
-	require.ErrorIs(t, noEndpoint.snapshot()[0].Err, ua.StatusBadSecurityModeRejected)
-	require.ErrorIs(t, untrusted.snapshot()[0].Err, ua.StatusBadCertificateUntrusted)
-	require.Equal(t, ua.MessageSecurityModeNone, fallback.snapshot()[0].SecurityMode)
-	require.Zero(t, noEndpoint.count(registered))
-	require.Zero(t, untrusted.count(registered))
+	require.ErrorIs(t, noEndpoint.Snapshot()[0].Err, ua.StatusBadSecurityModeRejected)
+	require.ErrorIs(t, untrusted.Snapshot()[0].Err, ua.StatusBadCertificateUntrusted)
+	require.Equal(t, ua.MessageSecurityModeNone, fallback.Snapshot()[0].SecurityMode)
+	require.Zero(t, noEndpoint.Count(conformkit.Registered))
+	require.Zero(t, untrusted.Count(conformkit.Registered))
 }
 
 // --- multicast extension --------------------------------------------------------
@@ -833,7 +801,7 @@ func TestDiscovery_LDSAnnouncesRegisteredServers(t *testing.T) {
 		"the discovery servers see each other")
 
 	// A server without mDNS of its own registers with the first LDS.
-	var log registrationLog
+	var log conformkit.RegistrationLog
 	a, _ := newServer(t,
 		server.ApplicationURI(registrantURI),
 		server.ServerName("Registrant"),
@@ -843,12 +811,12 @@ func TestDiscovery_LDSAnnouncesRegisteredServers(t *testing.T) {
 			server.RegisterMdnsServerName("Line 3.Press"),
 			server.RegisterServerCapabilities("DA", "HD"),
 			server.RegisterInterval(50*time.Millisecond),
-			server.RegisterEventHandler(log.handle),
+			server.RegisterEventHandler(log.Handle),
 			server.RegisterRequestTimeout(30*time.Second),
 		),
 	)
-	eventually(t, func() bool { return log.count(registered) > 0 }, "A registers")
-	require.Equal(t, []ua.StatusCode{ua.StatusOK}, log.snapshot()[0].ConfigurationResults,
+	eventually(t, func() bool { return log.Count(conformkit.Registered) > 0 }, "A registers")
+	require.Equal(t, []ua.StatusCode{ua.StatusOK}, log.Snapshot()[0].ConfigurationResults,
 		"an LDS with the multicast extension accepts the mDNS configuration")
 
 	find := func(records []*ua.ServerOnNetwork, name string) *ua.ServerOnNetwork {
@@ -883,8 +851,8 @@ func TestDiscovery_LDSAnnouncesRegisteredServers(t *testing.T) {
 
 	// Renewals do not create new records.
 	id := rec.RecordID
-	renewals := log.count(registered)
-	eventually(t, func() bool { return log.count(registered) >= renewals+5 }, "A renews its registration")
+	renewals := log.Count(conformkit.Registered)
+	eventually(t, func() bool { return log.Count(conformkit.Registered) >= renewals+5 }, "A renews its registration")
 	require.Equal(t, id, find(other.ServersOnNetwork(), instance).RecordID)
 	require.Len(t, lds.ServersOnNetwork(), 3)
 

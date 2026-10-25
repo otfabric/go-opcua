@@ -16,7 +16,7 @@ import (
 // the MQTT profile, ...) was accepted, by Validate and by AddConnection
 // (also through the AddConnection method of the information model), and
 // ran the transport of the URL under the profile of the configuration.
-// Found by conformance/pubsub_brokers_test.go.
+// Found by conformance/pubsub/pubsub_brokers_test.go.
 func TestRegressionProfileSchemeMismatch(t *testing.T) {
 	t.Parallel()
 	for _, c := range []struct {
