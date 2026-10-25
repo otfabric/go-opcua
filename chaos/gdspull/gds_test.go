@@ -31,10 +31,9 @@ const (
 
 // gdsEnv is a GDS that restarts on the same Store.
 type gdsEnv struct {
-	t     *testing.T
-	p     *testpki.PKI
-	store *gdsserver.MemoryStore
-	cfg   gdsserver.Config
+	t   *testing.T
+	p   *testpki.PKI
+	cfg gdsserver.Config
 
 	// mu is held for reading by who uses the current GDS (ApproveRequest)
 	// and for writing by a restart.
@@ -45,7 +44,7 @@ type gdsEnv struct {
 	gen int // incremented by every restart
 }
 
-func newGDSEnv(t *testing.T) *gdsEnv {
+func newGDSEnv(t *testing.T, store gdsserver.Store) *gdsEnv {
 	t.Helper()
 	p, err := testpki.Get()
 	if err != nil {
@@ -55,9 +54,9 @@ func newGDSEnv(t *testing.T) *gdsEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e := &gdsEnv{t: t, p: p, store: gdsserver.NewMemoryStore()}
+	e := &gdsEnv{t: t, p: p}
 	e.cfg = gdsserver.Config{
-		Store:            e.store,
+		Store:            store,
 		CertificateTypes: []*ua.NodeID{gds.EccNistP256ApplicationCertificateType, gds.RsaSha256ApplicationCertificateType},
 		Issuers:          []*gdsserver.Issuer{{Name: "RSA", Certificate: p.CACert, PrivateKey: caKey}},
 		Logger:           slog.New(slog.DiscardHandler),
@@ -207,11 +206,23 @@ func checkCert(errs *chaoskit.ErrSink, cas [][]byte, uri string, der []byte) {
 }
 
 // TestGDSRestartMidRequest: requests in every state survive a restart of
-// the GDS, also one whose FinishRequest was in flight.
+// the GDS, also one whose FinishRequest was in flight, on a MemoryStore
+// and on a FileStore.
 func TestGDSRestartMidRequest(t *testing.T) {
+	t.Run("memory", func(t *testing.T) { testGDSRestartMidRequest(t, gdsserver.NewMemoryStore()) })
+	t.Run("file", func(t *testing.T) {
+		store, err := gdsserver.NewFileStore(t.TempDir())
+		if err != nil {
+			t.Fatal(err)
+		}
+		testGDSRestartMidRequest(t, store)
+	})
+}
+
+func testGDSRestartMidRequest(t *testing.T, store gdsserver.Store) {
 	wd := chaoskit.NewWatchdog(t)
 	verifyLeaks := chaoskit.LeakCheck(t)
-	e := newGDSEnv(t)
+	e := newGDSEnv(t, store)
 	ctx := context.Background()
 	c, pc, err := e.dial()
 	if err != nil {
@@ -353,7 +364,7 @@ func TestGDSChurn(t *testing.T) {
 	dur := chaoskit.Duration(t, 3*time.Second)
 	wd := chaoskit.NewWatchdog(t)
 	verifyLeaks := chaoskit.LeakCheck(t)
-	e := newGDSEnv(t)
+	e := newGDSEnv(t, gdsserver.NewMemoryStore())
 	led := newLedger()
 	var errs chaoskit.ErrSink
 	var tally chaoskit.ErrorTally
