@@ -25,6 +25,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/otfabric/go-opcua"
@@ -312,10 +313,13 @@ func (g *Client) Properties(ctx context.Context) (*Properties, error) {
 }
 
 // Thumbprint returns the thumbprint of a DER certificate as
-// RemoveCertificate takes it: the hexadecimal SHA-1 of the certificate.
+// RemoveCertificate takes it: the SHA-1 of the certificate in upper-case
+// hexadecimal. Part 12 §7.8.2.6 does not fix the case; UA-.NETStandard
+// compares it case-sensitively with upper-case thumbprints, the go-opcua,
+// open62541 and node-opcua servers accept either.
 func Thumbprint(cert []byte) string {
 	sum := sha1.Sum(cert) //nolint:gosec // the thumbprint of Part 6 §6.2.3 is SHA-1
-	return hex.EncodeToString(sum[:])
+	return strings.ToUpper(hex.EncodeToString(sum[:]))
 }
 
 // errNoTrustList reports a TrustList file that does not hold a trust list.
