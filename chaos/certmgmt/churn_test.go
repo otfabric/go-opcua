@@ -32,6 +32,8 @@ const (
 	adminPass = "admin-pw"
 )
 
+var tlsClientType = ua.NewNumericNodeID(0, id.TLSClientCertificateType)
+
 // fixture is the PKI of the scenario.
 type fixture struct {
 	p *testpki.PKI
@@ -47,6 +49,11 @@ type fixture struct {
 	// PEM keys.
 	certs [][]byte
 	keys  [][]byte
+
+	// partners and partnersTL are the certificate group of the application
+	// "Partners" (a TLS client certificate and a trust list) and its
+	// TrustList.
+	partners, partnersTL *ua.NodeID
 }
 
 func newFixture(t *testing.T) *fixture {
@@ -134,6 +141,11 @@ func startServer(t *testing.T, f *fixture, wd *chaoskit.Watchdog) (*server.Serve
 		}),
 		server.WithPushManagement(server.PushManagement{
 			TrustList: f.listB,
+			CertificateGroups: []server.CertificateGroup{{
+				Name:             "Partners",
+				CertificateTypes: []*ua.NodeID{tlsClientType},
+				TrustList:        f.listB,
+			}},
 			// The alarms are evaluated all the time, during the changes.
 			Alarms: &server.CertificateAlarms{ExpirationLimit: 48 * time.Hour, CheckInterval: 2 * time.Millisecond},
 		}),
@@ -145,6 +157,8 @@ func startServer(t *testing.T, f *fixture, wd *chaoskit.Watchdog) (*server.Serve
 	if err := wd.Do("Start", func() error { return srv.Start(context.Background()) }); err != nil {
 		t.Fatal(err)
 	}
+	f.partners = srv.CertificateGroupID("Partners")
+	f.partnersTL = ua.NewStringNodeID(f.partners.Namespace(), f.partners.StringID()+".TrustList")
 	return srv, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())
 }
 
@@ -406,6 +420,24 @@ func TestPushChurn(t *testing.T) {
 	if !containsCert(srv.TrustList().TrustedCertificates, p.CACert) {
 		t.Error("the trust list applied last is not the server's")
 	}
+	// The group of the application: its trust list and certificate take
+	// effect too.
+	if _, err := g.WithTrustList(f.partnersTL).WriteTrustList(ctx, f.listC); err != nil {
+		t.Fatalf("WriteTrustList of the group: %v", err)
+	}
+	partnerCert, err := g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{CertificateGroup: f.partners, SubjectName: "CN=partners"})
+	if err != nil {
+		t.Fatalf("CreateSelfSignedCertificate of the group: %v", err)
+	}
+	if err := g.ApplyChanges(ctx); err != nil {
+		t.Fatalf("ApplyChanges: %v", err)
+	}
+	if err := srv.VerifyGroupCertificate(f.partners, p.IssuedCert); err != nil {
+		t.Errorf("the trust list of the group applied last does not trust the issued client: %v", err)
+	}
+	if got, _, _ := srv.GroupCertificate(f.partners, nil); !bytes.Equal(got, partnerCert) {
+		t.Error("the certificate of the group is not the one applied last")
+	}
 	_ = c.Close(ctx)
 	_ = wd.Do("Close", srv.Close)
 	errs.Report(t)
@@ -427,7 +459,7 @@ func adminOp(rng *rand.Rand, g *gds.Client, f *fixture) error {
 	defer cancel()
 	p := f.p
 	var err error
-	switch rng.Intn(16) {
+	switch rng.Intn(22) {
 	case 0:
 		_, err = g.WriteTrustList(ctx, f.listA)
 	case 1:
@@ -483,6 +515,35 @@ func adminOp(rng *rand.Rand, g *gds.Client, f *fixture) error {
 		err = g.WithTrustList(gds.UserTokenTrustList).AddCertificate(ctx, p.UserCert, true)
 	case 15:
 		_, err = g.WithTrustList(gds.HTTPSTrustList).WriteTrustList(ctx, f.listA)
+	case 16:
+		// The HTTPS certificate goes (Bad_InvalidState once it is gone).
+		err = g.DeleteCertificate(ctx, gds.DefaultHTTPSGroup, nil)
+	case 17:
+		// The group of the application: a new TLS client certificate, its
+		// deletion, its trust list.
+		_, err = g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{CertificateGroup: f.partners, SubjectName: "CN=partners", LifetimeInDays: 1})
+	case 18:
+		err = g.DeleteCertificate(ctx, f.partners, tlsClientType)
+	case 19:
+		_, err = g.WithTrustList(f.partnersTL).WriteTrustList(ctx, f.listA)
+	case 20:
+		var types []*ua.NodeID
+		if types, _, err = g.GetCertificates(ctx, f.partners); err == nil && (len(types) > 1 || len(types) == 1 && !types[0].Equal(tlsClientType)) {
+			err = fmt.Errorf("GetCertificates of the group of the application returns the types %v", types)
+		}
+	case 21:
+		// The certificate the endpoints advertise is never deleted:
+		// ApplyChanges refuses it, and the admin cancels.
+		if err = g.DeleteCertificate(ctx, nil, gds.RsaSha256ApplicationCertificateType); err != nil {
+			return err
+		}
+		if err = g.ApplyChanges(ctx); err == nil {
+			return errors.New("ApplyChanges deleted the certificate of the endpoints")
+		}
+		if !errors.Is(err, ua.StatusBadInvalidState) {
+			return err
+		}
+		return g.CancelChanges(ctx)
 	}
 	if err != nil {
 		return err
