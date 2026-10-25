@@ -33,9 +33,6 @@ Not implemented in the server, so plan around them:
   See [Alarms and Conditions](#alarms-and-conditions).
 - **Historical events**: the history interfaces cover data only (see
   [Historical Access](#historical-access-raw)).
-- **Certificate management by the pull model** (Part 12 §6, a Global
-  Discovery Server): the push model is supported
-  ([Certificate Management](#certificate-management-push-model)).
 
 ---
 
@@ -966,9 +963,57 @@ srv, _ := server.New(
 `Server.HTTPSCertificate()` and `Server.RejectedCertificates()` return the
 trust lists in effect, the HTTPS certificate and the rejected certificates.
 
-Not implemented: DeleteCertificate (Part 12 §7.10.7), certificate groups
-beyond the three default ones, and the pull model (a Global Discovery Server,
-Part 12 §6).
+Not implemented: DeleteCertificate (Part 12 §7.10.7) and certificate groups
+beyond the three default ones. A Global Discovery Server (the pull model) is
+the subject of the next section.
+
+## Global Discovery Server (Pull Model)
+
+Package `gds/gdsserver` adds a Global Discovery Server (Part 12 §6 and §7.9)
+to a server: the `Directory` object (CertificateDirectoryType) in the GDS
+namespace `http://opcfoundation.org/UA/GDS/` with its DefaultApplicationGroup
+and TrustList, an application directory, and a CA per key type that issues
+certificates and CRLs. Call `Attach` before `Start`:
+
+```go
+var g atomic.Pointer[gdsserver.GDS]
+srv, _ := server.New(
+    server.ApplicationIdentity(cert, key),
+    server.EnableSecurity(ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt),
+    server.EnableAuthMode(ua.UserTokenTypeUserName),
+    server.WithUsernameValidator(checkUser),
+    server.WithRoleMapper(func(tok ua.IdentityToken) []*ua.NodeID {
+        if isAdmin(tok) {
+            return []*ua.NodeID{ua.RoleAuthenticatedUser.NodeID(),
+                g.Load().DiscoveryAdminRole(), g.Load().CertificateAuthorityAdminRole()}
+        }
+        return server.DefaultRoleMapper(tok)
+    }),
+)
+gd, err := gdsserver.Attach(srv, gdsserver.Config{
+    Store:            myStore,  // nil: a MemoryStore
+    CertificateTypes: []*ua.NodeID{gds.RsaSha256ApplicationCertificateType, gds.EccNistP256ApplicationCertificateType},
+})
+g.Store(gd)
+srv.Start(ctx)
+defer gd.Close() // before srv.Close; makes later calls fail with Bad_Shutdown
+```
+
+| Topic | Behaviour |
+|-------|-----------|
+| Directory | FindApplications, RegisterApplication, UpdateApplication, UnregisterApplication (revokes the application's certificates), GetApplication, QueryApplications, QueryServers; records are validated (URIs, names, at most 32 discovery URLs and capabilities) |
+| Certificate requests | StartSigningRequest (a CSR whose URI must be the application's), StartNewKeyPairRequest (the GDS generates the key; PEM), FinishRequest; a request waits for `GDS.ApproveRequest` (`GDS.Requests` lists them) unless `Config.AutoApprove`; at most `MaxRequests` open requests per application |
+| CA | One issuer per key type (RSA, NistP256, NistP384, Curve25519, Curve448), generated or given in `Config.Issuers`; DNS names and IP addresses from the discovery URLs or DomainNames; the CRL is re-signed on every revocation and before its NextUpdate |
+| Trust list | GetCertificateGroups, GetCertificates, GetTrustList and the TrustList object of the DefaultApplicationGroup (the CA certificates and their CRLs; SecurityAdmin may add certificates), GetCertificateStatus, RevokeCertificate, CheckRevocationStatus |
+| Authorization | Directory queries are open; register / update / unregister need DiscoveryAdmin; certificate requests, revocation and the trust list need CertificateAuthorityAdmin over SignAndEncrypt, or the application itself (a certificate the GDS issued to it, or one `Config.SelfAdmin` accepts); the TrustList object needs SecurityAdmin to write |
+| Persistence | `Config.Store` (`gdsserver.Store`): applications, requests, issuers with their keys and CRLs; `NewMemoryStore` keeps them in memory. A GDS attached again to the same Store continues with its state |
+
+Not implemented: CSRs with Brainpool or Ed448 keys (Bad_NotSupported;
+StartNewKeyPairRequest serves these types), PFX private keys, the
+DefaultHttpsGroup and DefaultUserTokenGroup of the directory, audit events,
+the RolePermissions of the GDS NodeSet, and a file-based Store.
+[examples/gds-pull](../examples/gds-pull/main.go) runs a GDS and enrolls a
+server and a client.
 
 ---
 

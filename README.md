@@ -254,7 +254,7 @@ what the interop suite has actually exercised.
 | JSON / XML data encoding of values ⁸ | ✅ JSON 1.05 Compact and Verbose, 1.04; XML | ✅ JSON; XML for built-in types | ✅ JSON Compact and Verbose; XML | JSON 1.04 form; NodeSet2 XML | ✅ JSON Compact and Verbose; XML | JSON | — NodeSet2 XML only |
 | NodeSet2 XML import at run time | ✅ | ✅ loader, plus build-time compiler | — | ✅ | ✅ | ✅ | ✅ |
 | Custom structured DataTypes | registered Go types | generated or runtime descriptions | decoded dynamically | generated | decoded dynamically | decoded dynamically | decoded dynamically |
-| GDS / certificate management (Part 12) | push: server and client (`gds`) | push (build option) | · | — | ✅ push and pull | push | — |
+| GDS / certificate management (Part 12) | push: server and client (`gds`); pull: GDS and client (`gds/gdsserver`, `gds.PullClient`) | push (build option) | · | — | ✅ push and pull | push | — |
 | Automatic reconnect with subscription recovery | ✅ | reconnect; application re-creates subscriptions | ✅ | ✅ | ✅ | ✅ | application reconnects |
 | Cancellation and deadlines per call | ✅ `context.Context` | timeouts | futures, timeouts | async, timeouts | `CancellationToken` | promises, timeouts | asyncio, timeouts |
 | Native dependencies | none (pure Go, no cgo) | mbedTLS or OpenSSL for encryption | JVM; Netty, Bouncy Castle | none (pure Rust, RustCrypto) | .NET runtime | Node.js (OpenSSL) | CPython, `cryptography` (OpenSSL) |
@@ -355,7 +355,7 @@ and server SDKs with strong support for dynamically decoded custom data
 types.
 
 **Choose UA-.NETStandard if** you build on .NET and need the OPC Foundation
-reference implementation or the GDS pull model (a GDS that issues certificates).
+reference implementation.
 
 **Choose async-opcua, node-opcua or asyncua if** you work in Rust,
 JavaScript / TypeScript or Python; check the footnotes and
@@ -382,7 +382,7 @@ you rely on.
 | **Discovery** | `FindServers`, `FindServersOnNetwork` (filters, paging), `GetEndpoints`, `ua.SelectEndpoint`, `opcua.SelectEndpoint` (aware of the client certificate's key type), `DiscoverServers` (well-known LDS port 4840), `RegisterServer` / `RegisterServer2`. Server: Local Discovery Server, registration with an LDS, mDNS (LDS-ME) without dependencies |
 | **Security** | None, Basic128Rsa15, Basic256, Basic256Sha256, Aes128Sha256RsaOaep, Aes256Sha256RsaPss, ECC_nistP256, ECC_nistP384, ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519 (RSA, ECDSA and Ed25519 application certificates) |
 | **Authentication** | Anonymous, username/password, X.509 certificate, issued token |
-| **Certificate management** | `gds` package: push model of Part 12 §7 against a server's ServerConfiguration — TrustList read / write of every certificate group (`WithTrustList`), AddCertificate / RemoveCertificate, CreateSigningRequest, UpdateCertificate (PEM or PFX keys), GetRejectedList, ApplyChanges / CancelChanges, GetCertificates, CreateSelfSignedCertificate, ResetToServerDefaults, TransactionDiagnostics |
+| **Certificate management** | `gds` package: push model of Part 12 §7 against a server's ServerConfiguration — TrustList read / write of every certificate group (`WithTrustList`), AddCertificate / RemoveCertificate, CreateSigningRequest, UpdateCertificate (PEM or PFX keys), GetRejectedList, ApplyChanges / CancelChanges, GetCertificates, CreateSelfSignedCertificate, ResetToServerDefaults, TransactionDiagnostics; pull model of Part 12 §6–§7.9 against a Global Discovery Server — `gds.PullClient` with the Directory and CertificateDirectory methods, `Enroll` (register, request, wait, read the trust list) and the result as client or server options |
 | **Retry** | Pluggable `RetryPolicy`, exponential backoff with jitter |
 | **Metrics** | Pluggable `ClientMetrics` interface for request/response/error/timeout tracking |
 
@@ -406,7 +406,7 @@ you rely on.
 | **NodeSet2 Import** | Load standard or custom NodeSet2 XML via `ImportNodeSetXML`, including variable values, data types and access levels |
 | **Reverse connect** | `WithReverseConnect` / `AddReverseConnect`: connect to listening clients, keep one idle connection available, retry with back-off, add and remove targets at run time |
 | **Security** | Same encryption policies as client (server-side) |
-| **Certificate management** | `WithPushManagement`: ServerConfiguration push model of Part 12 §7 — the DefaultApplicationGroup (trust list with CRLs, issuers and size limits that validates new channels and sessions), DefaultHttpsGroup (TLS certificate of opc.https / opc.wss, swapped live; TLS client trust list) and DefaultUserTokenGroup (X.509 user token trust list); UpdateCertificate with PEM or PFX keys, CreateSigningRequest (RSA, NIST / Brainpool ECC, Ed25519, Ed448), CreateSelfSignedCertificate, GetCertificates, GetRejectedList, ResetToServerDefaults, transactional ApplyChanges with TransactionDiagnostics, CertificateExpired / TrustListOutOfDate alarms; SecurityAdmin over SignAndEncrypt; optional `CertificateStore` |
+| **Certificate management** | `WithPushManagement`: ServerConfiguration push model of Part 12 §7 — the DefaultApplicationGroup (trust list with CRLs, issuers and size limits that validates new channels and sessions), DefaultHttpsGroup (TLS certificate of opc.https / opc.wss, swapped live; TLS client trust list) and DefaultUserTokenGroup (X.509 user token trust list); UpdateCertificate with PEM or PFX keys, CreateSigningRequest (RSA, NIST / Brainpool ECC, Ed25519, Ed448), CreateSelfSignedCertificate, GetCertificates, GetRejectedList, ResetToServerDefaults, transactional ApplyChanges with TransactionDiagnostics, CertificateExpired / TrustListOutOfDate alarms; SecurityAdmin over SignAndEncrypt; optional `CertificateStore`. `gds/gdsserver`: a Global Discovery Server (pull model of Part 12 §6, §7.9) — application directory, CA issuing certificates and CRLs, TrustList, role-based access, pluggable `Store` |
 | **Authentication** | Anonymous, username/password, X.509, issued token identity tokens |
 
 ## Service Support Matrix
@@ -465,7 +465,9 @@ you rely on.
 | `server/attrs` | Attribute helper constructors for building nodes |
 | `server/refs` | Reference helper constructors for address-space links |
 | `monitor` | High-level `NodeMonitor` with callback and channel-based subscriptions |
-| `gds` | Push certificate management client (Part 12 §7): trust lists of every group, signing requests, certificate updates (PEM, PFX), self-signed certificates, transaction diagnostics |
+| `gds` | Certificate management clients of Part 12: push (`Client`: trust lists of every group, signing requests, certificate updates (PEM, PFX), self-signed certificates, transaction diagnostics) and pull (`PullClient`: application directory, certificate requests, `Enroll`) |
+| `gds/gdsserver` | Global Discovery Server (Part 12 pull model): application directory, CA issuing certificates and CRLs, TrustList, pluggable `Store`, DiscoveryAdmin / CertificateAuthorityAdmin / SecurityAdmin roles |
+| `gds/gdsid` | NodeIds of the GDS information model (namespace `http://opcfoundation.org/UA/GDS/`) |
 | `errors` | Sentinel errors for `errors.Is()` checking |
 | `id` | Well-known NodeID constants (generated from OPC-UA schema) |
 | `uacp` | OPC-UA Connection Protocol over TCP and TLS WebSockets; `ParseEndpoint`, `DialWithTimeout`, `ListenWebSocket` |

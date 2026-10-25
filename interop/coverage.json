@@ -9660,6 +9660,214 @@
         "version": "1.1.8"
       },
       "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "go-client-to-open62541-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "go-client-to-milo-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "open62541-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      },
+      "nextAction": "open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15)"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "milo-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "fixture": "baseline",
+      "interopVersion": "v0.13.0",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)"
     }
   ],
   "interopVersion": "v0.13.0"

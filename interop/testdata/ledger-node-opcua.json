@@ -3066,6 +3066,70 @@
       "reason": "adapter-command-missing",
       "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
       "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "node-opcua 2.187 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "node-opcua 2.187 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "node-opcua 2.187 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "node-opcua 2.187 ships no Global Discovery Server (node-opcua-server-configuration is the push model of Part 12 §7); nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "node-opcua 2.187 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
     }
   ]
 }

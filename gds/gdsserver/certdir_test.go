@@ -282,7 +282,7 @@ func TestCertificates_AllTypes(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, issuer.RawSubject, cert.RawIssuer)
 		e.gds.mu.Lock()
-		ok := slices_any(e.gds.cas, func(c *ca) bool { return c.issues(cert) })
+		ok := anyCA(e.gds.cas, func(c *ca) bool { return c.issues(cert) })
 		e.gds.mu.Unlock()
 		require.True(t, ok, typ)
 		status, _, err := self.CheckRevocationStatus(ctx, res.Certificate)
@@ -311,7 +311,7 @@ func TestCertificates_AllTypes(t *testing.T) {
 	require.False(t, update, "a fresh certificate of every type")
 }
 
-func slices_any(m map[string]*ca, f func(*ca) bool) bool { //nolint:revive // test helper
+func anyCA(m map[string]*ca, f func(*ca) bool) bool {
 	for _, c := range m {
 		if f(c) {
 			return true
