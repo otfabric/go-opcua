@@ -22,6 +22,7 @@
 package interop
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -66,7 +67,12 @@ type peerAlarmSession struct {
 
 func newPeerAlarmSession(t *testing.T, endpoint string) *peerAlarmSession {
 	t.Helper()
-	c := dialClient(t, endpoint)
+	return newPeerAlarmSessionOn(t, dialClient(t, endpoint))
+}
+
+// newPeerAlarmSessionOn is newPeerAlarmSession on a connected client.
+func newPeerAlarmSessionOn(t *testing.T, c *opcua.Client) *peerAlarmSession {
+	t.Helper()
 	ctx, nsIdx := findNS(t, c)
 	s := &peerAlarmSession{
 		c:      c,
@@ -252,6 +258,191 @@ func (s *peerAlarmSession) assertActions(t *testing.T) {
 	if err := s.c.EnableCondition(s.ctx, condID); !errors.Is(err, ua.StatusBadConditionAlreadyEnabled) {
 		t.Errorf("repeated Enable = %v, want Bad_ConditionAlreadyEnabled", err)
 	}
+}
+
+// auditMethod is a condition method of assertAudit and the audit event type
+// the server raises for it (Part 9 §5.10).
+type auditMethod struct {
+	name      string
+	method    uint32
+	eventType uint32
+	comment   string
+	// source is the expected SourceNode (the ConditionId per Part 9
+	// §5.10.2; nil skips the check), sourceName the expected SourceName
+	// ("" skips it).
+	source     *ua.NodeID
+	sourceName string
+	// statusBool: Status is a Boolean (Part 5 §6.4.3), checked to be true.
+	statusBool bool
+}
+
+// auditPeer is what a peer server fills in its condition audit events where
+// it departs from Part 9 §5.10, as observed.
+type auditPeer struct {
+	// noMethodID: MethodId (AuditUpdateMethodEventType) is null, not the
+	// called method.
+	noMethodID bool
+	// ackEventIDAfter: the ConditionEventId of the Acknowledge audit event
+	// is the EventId of the condition after the call (the acknowledged
+	// event), not the EventId the client acknowledged.
+	ackEventIDAfter bool
+	// commentOnServer: the AuditConditionCommentEventType of AddComment is
+	// raised on the Server object with SourceName "Method/AddComment", not
+	// on the condition.
+	commentOnServer bool
+	// ackStatusCode: the Status of the Acknowledge and Confirm audit events
+	// is a StatusCode, not the Boolean of AuditEventType.
+	ackStatusCode bool
+}
+
+// newPeerAuditAlarmSession starts the peer server with the baseline fixture
+// plus a SecurityAdmin user (pushFixtureDir) and opens the alarm session as
+// that user over Basic256Sha256 SignAndEncrypt: the peers deliver Audit
+// Events only to sessions holding ReceiveEvents on the audit event types,
+// which Opc.Ua.NodeSet2.xml grants to SecurityAdmin alone (Part 2 §4.14,
+// Part 3 §5.2.10).
+func newPeerAuditAlarmSession(t *testing.T, env, image, pki string) *peerAlarmSession {
+	t.Helper()
+	h := startSecureAdapterServerIn(t, env, image, pki, pushFixtureDir(t))
+	return newPeerAlarmSessionOn(t, pushClient(t, h.endpoint, true))
+}
+
+// assertAudit monitors the audit events of condition methods on the Server
+// object (opcua.NewAuditConditionEventFilter, OfType AuditConditionEventType)
+// with a second subscription, acknowledges, confirms and comments the
+// refreshed InteropAlarm and asserts the AuditConditionAcknowledgeEventType,
+// AuditConditionConfirmEventType and AuditConditionCommentEventType event of
+// each call: its ConditionEventId, Comment, SourceNode, SourceName and, as
+// the peer fills them (p), MethodId and Status.
+func (s *peerAlarmSession) assertAudit(t *testing.T, p auditPeer) {
+	sub, ch, err := s.c.NewSubscription().Interval(100 * time.Millisecond).Start(s.ctx)
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	res, err := sub.Monitor(s.ctx, ua.TimestampsToReturnBoth, &ua.MonitoredItemCreateRequest{
+		ItemToMonitor:  &ua.ReadValueID{NodeID: ua.NewNumericNodeID(0, id.Server), AttributeID: ua.AttributeIDEventNotifier},
+		MonitoringMode: ua.MonitoringModeReporting,
+		RequestedParameters: &ua.MonitoringParameters{
+			ClientHandle: 2,
+			Filter:       ua.NewExtensionObject(opcua.NewAuditConditionEventFilter()),
+			QueueSize:    1000,
+		},
+	})
+	if err != nil {
+		t.Fatalf("CreateMonitoredItems: %v", err)
+	}
+	if len(res.Results) != 1 || res.Results[0].StatusCode != ua.StatusOK {
+		t.Fatalf("audit event monitored item: %+v", res.Results)
+	}
+
+	cond := s.refresh(t)
+	if cond == nil {
+		t.Fatalf("ConditionRefresh did not report %s", interopAlarmName)
+	}
+	condID, eventID := cond.ConditionID, cond.EventID
+	isCond := func(ev *opcua.ConditionEvent) bool { return ev.ConditionID != nil && ev.ConditionID.Equal(condID) }
+
+	var pending []*opcua.AuditConditionEvent
+	nextAudit := func(m auditMethod) *opcua.AuditConditionEvent {
+		t.Helper()
+		deadline := time.After(20 * time.Second)
+		for {
+			for len(pending) > 0 {
+				ev := pending[0]
+				pending = pending[1:]
+				// node-opcua raises an AuditConditionCommentEventType for
+				// Confirm too (SourceName Method/Confirm): sourceName tells
+				// them apart.
+				if ev.EventType != nil && ev.EventType.Namespace() == 0 && ev.EventType.IntID() == m.eventType &&
+					(m.sourceName == "" || ev.SourceName == m.sourceName) {
+					return ev
+				}
+				t.Logf("audit event %v skipped: %+v", ev.EventType, ev)
+			}
+			select {
+			case msg := <-ch:
+				if msg.Error != nil {
+					t.Fatalf("notification error: %v", msg.Error)
+				}
+				enl, ok := msg.Value.(*ua.EventNotificationList)
+				if !ok {
+					continue
+				}
+				for _, f := range enl.Events {
+					ev, err := opcua.ParseAuditConditionEvent(f)
+					if err != nil {
+						t.Fatalf("ParseAuditConditionEvent: %v", err)
+					}
+					pending = append(pending, ev)
+				}
+			case <-deadline:
+				t.Fatalf("timed out waiting for the %s audit event (i=%d)", m.name, m.eventType)
+				return nil
+			}
+		}
+	}
+	check := func(m auditMethod, condEventID []byte) {
+		t.Helper()
+		ev := nextAudit(m)
+		t.Logf("%s audit event: %+v", m.name, ev)
+		if !p.noMethodID && (ev.MethodID == nil || ev.MethodID.Namespace() != 0 || ev.MethodID.IntID() != m.method) {
+			t.Errorf("%s: MethodId = %v, want i=%d", m.name, ev.MethodID, m.method)
+		}
+		if m.source != nil && (ev.SourceNode == nil || !ev.SourceNode.Equal(m.source)) {
+			t.Errorf("%s: SourceNode = %v, want %v", m.name, ev.SourceNode, m.source)
+		}
+		if m.sourceName != "" && ev.SourceName != m.sourceName {
+			t.Errorf("%s: SourceName = %q, want %q", m.name, ev.SourceName, m.sourceName)
+		}
+		if !bytes.Equal(ev.ConditionEventID, condEventID) {
+			t.Errorf("%s: ConditionEventId = %x, want %x", m.name, ev.ConditionEventID, condEventID)
+		}
+		if ev.Comment == nil || ev.Comment.Text != m.comment {
+			t.Errorf("%s: Comment = %v, want %s", m.name, ev.Comment, m.comment)
+		}
+		if m.statusBool && !ev.Status {
+			t.Errorf("%s: Status = false, want true", m.name)
+		}
+		if len(ev.EventID) == 0 || ev.Time.IsZero() {
+			t.Errorf("%s: EventId %x Time %v", m.name, ev.EventID, ev.Time)
+		}
+	}
+
+	if err := s.c.Acknowledge(s.ctx, condID, eventID, "go-audit-ack"); err != nil {
+		t.Fatalf("Acknowledge: %v", err)
+	}
+	acked := s.next(t, "the acknowledged event", func(ev *opcua.ConditionEvent) bool {
+		return isCond(ev) && ev.Acked != nil && *ev.Acked
+	})
+	ackEventID := eventID
+	if p.ackEventIDAfter {
+		ackEventID = acked.EventID
+	}
+	check(auditMethod{name: "Acknowledge", method: id.AcknowledgeableConditionTypeAcknowledge,
+		eventType: id.AuditConditionAcknowledgeEventType, comment: "go-audit-ack",
+		source: condID, statusBool: !p.ackStatusCode}, ackEventID)
+
+	if err := s.c.Confirm(s.ctx, condID, acked.EventID, "go-audit-confirm"); err != nil {
+		t.Fatalf("Confirm: %v", err)
+	}
+	confirmed := s.next(t, "the confirmed event", func(ev *opcua.ConditionEvent) bool {
+		return isCond(ev) && ev.Confirmed != nil && *ev.Confirmed
+	})
+	check(auditMethod{name: "Confirm", method: id.AcknowledgeableConditionTypeConfirm,
+		eventType: id.AuditConditionConfirmEventType, comment: "go-audit-confirm",
+		source: condID, statusBool: !p.ackStatusCode}, acked.EventID)
+
+	if err := s.c.AddComment(s.ctx, condID, confirmed.EventID, "go-audit-comment"); err != nil {
+		t.Fatalf("AddComment: %v", err)
+	}
+	comment := auditMethod{name: "AddComment", method: id.ConditionTypeAddComment,
+		eventType: id.AuditConditionCommentEventType, comment: "go-audit-comment",
+		source: condID, statusBool: true}
+	if p.commentOnServer {
+		comment.source, comment.sourceName = ua.NewNumericNodeID(0, id.Server), "Method/AddComment"
+	}
+	check(comment, confirmed.EventID)
 }
 
 // ---------------------------------------------------------------------------

@@ -171,6 +171,133 @@ func TestPubSubRuntime_DotnetPublishes_GoTargetVariables(t *testing.T) {
 	psRuntimePeerPublishesTargetVariables(t, psDotnet)
 }
 
+// TestPubSubMulticast_DotnetPublishes_GoSubscribes: the dotnet publisher
+// sends UADP to a multicast group, the go-opcua runtime joins it. Host
+// networking (Linux only), see pubsub_multicast_peer_test.go.
+func TestPubSubMulticast_DotnetPublishes_GoSubscribes(t *testing.T) {
+	psMulticastPeerPublishes(t, psDotnet)
+}
+
+// TestPubSubMulticast_GoPublishes_DotnetSubscribes: a go-opcua server
+// publishes to a multicast group; the dotnet subscriber joins it and writes
+// its TargetVariables. Host networking (Linux only).
+func TestPubSubMulticast_GoPublishes_DotnetSubscribes(t *testing.T) {
+	psMulticastGoPublishes(t, psDotnet)
+}
+
+// ---------------------------------------------------------------------------
+// Keep-alive and MessageReceiveTimeout
+// ---------------------------------------------------------------------------
+
+// psDotnetRuntimeReader starts a go-opcua runtime whose reader of the dotnet
+// writer has MessageReceiveTimeout 1 s and the dotnet publisher of cfg (a
+// psUDPPublisherConfig to the runtime's port, adjusted by edit), and returns
+// the publisher, the runtime and its reader.
+func psDotnetRuntimeReader(t *testing.T, edit func(cfg jobj)) (*pubsubServer, *pubsub.PubSub, pubsub.ComponentID) {
+	t.Helper()
+	psDotnet.requireServer(t)
+	c := psRuntimeCase{psLiveCase: psLiveCase{name: "runtime-reader", vars: psVars}}
+	var p *pubsub.PubSub
+	port := psBindRuntimeUDP(t, psRuntimeSubscriber(t, func(url string) *ua.PubSubConfigurationDataType {
+		return pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(psRuntimeSubConnection(c, url), psRuntimeReader(c, "", time.Second)))
+	}, &p))
+	cfg := psUDPPublisherConfig(c.psLiveCase, port)
+	edit(cfg)
+	pub := startPubSubServer(t, pubsubServerOpts{peer: psDotnet, config: cfg})
+	conn, _ := p.Lookup(pubsub.KindConnection, pubsub.Root, "InteropSubscriber")
+	rg, _ := p.Lookup(pubsub.KindReaderGroup, conn, "InteropReaderGroup")
+	reader, ok := p.Lookup(pubsub.KindDataSetReader, rg, "InteropReader")
+	if !ok {
+		t.Fatal("no reader")
+	}
+	return pub, p, reader
+}
+
+// TestPubSubRuntime_KeepAlive_DotnetPublishes: the dotnet WriterGroup
+// (PublishingInterval 100 ms, KeepAliveTime 300 ms) has a writer with
+// DeltaFrames ("deltaFrames": true, KeyFrameCount 1000, contract §14.13)
+// over the unchanging PubSub.* variables: after its first KeyFrame
+// Opc.Ua.PubSub builds no DataSetMessage (an empty delta) and sends a
+// KeepAlive DataSetMessage once nothing was sent for KeepAliveTime
+// (Groups/WriterGroup.cs). The go-opcua reader (MessageReceiveTimeout 1 s)
+// counts them, receives no data meanwhile and stays Operational: the
+// keep-alive messages refresh its MessageReceiveTimeout.
+func TestPubSubRuntime_KeepAlive_DotnetPublishes(t *testing.T) {
+	_, p, reader := psDotnetRuntimeReader(t, func(cfg jobj) {
+		cfg["deltaFrames"] = true
+		wg := psWriterGroupJSON(cfg)
+		wg["KeepAliveTime"] = 300
+		wg["DataSetWriters"].([]jobj)[0]["KeyFrameCount"] = 1000
+	})
+	status := func() pubsub.Status { return mustOK[pubsub.Status](t)(p.Status(reader)) }
+	state := func() ua.PubSubState { return mustOK[ua.PubSubState](t)(p.State(reader)) }
+
+	// The first KeyFrame, then keep-alive messages only.
+	deadline := time.Now().Add(psReceiveTimeout)
+	for st := status(); st.Counters.DataSetMessagesReceived == 0 || st.Counters.KeepAlivesReceived == 0; st = status() {
+		if time.Now().After(deadline) {
+			t.Fatalf("no KeyFrame followed by keep-alive messages within %v: %+v", psReceiveTimeout, st.Counters)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	waitState(t, "go-opcua reader receiving keep-alive messages", ua.PubSubStateOperational, 5*time.Second, state)
+	before := status().Counters
+
+	// Eight keep-alive periods (2.4 s, more than twice the
+	// MessageReceiveTimeout) with keep-alive messages only.
+	deadline = time.Now().Add(15 * time.Second)
+	for status().Counters.KeepAlivesReceived < before.KeepAlivesReceived+8 {
+		if time.Now().After(deadline) {
+			t.Fatalf("keep-alive messages stopped: %+v, before %+v", status().Counters, before)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	after := status().Counters
+	if after.DataSetMessagesReceived != before.DataSetMessagesReceived {
+		t.Errorf("%d data DataSetMessages between the keep-alive messages, want none", after.DataSetMessagesReceived-before.DataSetMessagesReceived)
+	}
+	// (A timeout before the publisher started is not one of them.)
+	if after.Timeouts != before.Timeouts {
+		t.Errorf("the reader timed out %d times while keep-alive messages arrived", after.Timeouts-before.Timeouts)
+	}
+	if got := state(); got != ua.PubSubStateOperational {
+		t.Errorf("go-opcua reader on keep-alive messages: %v, want Operational", got)
+	}
+}
+
+// TestPubSubRuntime_ReceiveTimeout_DotnetPublisher: the go-opcua reader
+// (MessageReceiveTimeout 1 s) is Operational while the dotnet publisher
+// sends KeyFrames every 100 ms, goes to Error when the publisher's container
+// is paused (docker pause: the dotnet adapter has no PublishSubscribe
+// information model to disable its WriterGroup through, contract §14.13) and
+// recovers when it is unpaused.
+func TestPubSubRuntime_ReceiveTimeout_DotnetPublisher(t *testing.T) {
+	pub, p, reader := psDotnetRuntimeReader(t, func(jobj) {})
+	state := func() ua.PubSubState { return mustOK[ua.PubSubState](t)(p.State(reader)) }
+	waitState(t, "go-opcua reader while data arrives", ua.PubSubStateOperational, psReceiveTimeout, state)
+
+	if out, err := exec.Command("docker", "pause", pub.name).CombinedOutput(); err != nil {
+		t.Fatalf("docker pause: %v: %s", err, out)
+	}
+	paused := true
+	unpause := func() {
+		if paused {
+			paused = false
+			if out, err := exec.Command("docker", "unpause", pub.name).CombinedOutput(); err != nil {
+				t.Errorf("docker unpause: %v: %s", err, out)
+			}
+		}
+	}
+	t.Cleanup(unpause)
+	waitState(t, "go-opcua reader after the publisher stopped", ua.PubSubStateError, 10*time.Second, state)
+	if st, err := p.Status(reader); err != nil || st.Counters.Timeouts == 0 {
+		t.Errorf("reader status %+v (%v): no timeout counted", st, err)
+	}
+
+	unpause()
+	waitState(t, "go-opcua reader after the publisher resumed", ua.PubSubStateOperational, 10*time.Second, state)
+}
+
 // ---------------------------------------------------------------------------
 // Chunked NetworkMessages (Part 14 §7.2.4.4.4)
 // ---------------------------------------------------------------------------

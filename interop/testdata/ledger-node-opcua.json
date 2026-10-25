@@ -1363,9 +1363,9 @@
     {
       "capability": "alarms.audit-events",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
-      "nextAction": "The node-opcua alarm fixture (opcua-interop fixtures/baseline \"Alarms\") is an AlarmConditionType without AuditConditionEventType events of the condition methods; node-opcua 2.187.12 implements part of Part 9 v1.05 (branches, condition audit events), so extend the fixture or mark the unserved features unsupported",
+      "status": "verified",
+      "test": "TestNodeOpcuaServer_AlarmAudit",
+      "case": "coverage/alarms.audit-events/go-client-to-node-opcua-server",
       "fixture": "baseline"
     },
     {
