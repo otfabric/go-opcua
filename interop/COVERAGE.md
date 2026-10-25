@@ -59,6 +59,15 @@ Go↔Go tests never earn ✅.
 | Browse ResultMask | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_BrowseResultMask`; C→M: `TestMiloServer_BrowseResultMask`; O→S: `TestGoServer_Open62541Client_BrowseResultMask`; M→S: `TestGoServer_MiloClient_BrowseResultMask` |
 | Browse NodeClassMask / IncludeSubtypes | ✅ | ✅ | ✅ | ✅ | C→O: `TestOpen62541Server_BrowseFiltering`; C→M: `TestMiloServer_BrowseFiltering`; O→S: `TestGoServer_Open62541Client_BrowseFiltering`; M→S: `TestGoServer_MiloClient_BrowseFiltering` |
 
+## certificate-management
+
+| Capability | C→O | C→M | O→S | M→S | Evidence |
+|---|:---:|:---:|:---:|:---:|---|
+| Push model TrustList of the DefaultApplicationGroup: OpenWithMasks / Read / Close, Open / Write / CloseAndUpdate, AddCertificate / RemoveCertificate, ApplyChanges (Part 12 §7.8.2, §7.10.6) (C→ = go-opcua package gds pushes to the peer server; →S = the peer's push client pushes to server.WithPushManagement) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| Push model CreateSigningRequest / UpdateCertificate / ApplyChanges of the application instance certificate (Part 12 §7.10.4, §7.10.6, §7.10.8) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| Push model GetRejectedList (Part 12 §7.10.9) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| Push model access: ServerConfiguration properties, the methods need the SecurityAdmin role on a SignAndEncrypt channel (Part 12 §7.2) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+
 ## custom-types
 
 | Capability | C→O | C→M | O→S | M→S | Evidence |

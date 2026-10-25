@@ -2803,6 +2803,70 @@
       "test": "TestPubSub_AsyncOpcuaHasNoPubSub",
       "nextAction": "async-opcua 0.19 has no PubSub (Part 14): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_AsyncOpcuaHasNoPubSub)",
       "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.trust-list",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.trust-list",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.certificate-update",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.certificate-update",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.rejected-list",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.rejected-list",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.access",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "the opcua-interop async-opcua adapter does not serve push certificate management; whether async-opcua 0.19 implements the ServerConfiguration methods is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.access",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
+      "fixture": "baseline"
     }
   ]
 }
