@@ -15,8 +15,8 @@ The suite uses a dual layout that mirrors [`interop/COVERAGE.md`](interop/COVERA
 opcua-interop
   open62541 adapter image   (C, native OPC UA stack)
   milo adapter image        (Java/JVM OPC UA stack)
-  dotnet adapter image      (C#, OPC Foundation UA-.NETStandard; opcua-interop v0.11.0)
-  asyncua adapter image     (Python, FreeOpcUa opcua-asyncio; opcua-interop v0.11.0)
+  dotnet adapter image      (C#, OPC Foundation UA-.NETStandard; opcua-interop v0.12.0)
+  asyncua adapter image     (Python, FreeOpcUa opcua-asyncio; opcua-interop v0.12.0)
          |
     go-opcua/interop/
       # Infrastructure
@@ -104,7 +104,7 @@ MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev \
 make interop
 
 # The security, ECC and secured reverse connect tests need the test PKI of
-# opcua-interop v0.11.0 (RSA identities of all six adapters plus ecc-<curve>/ certificates):
+# opcua-interop v0.12.0 (RSA identities of all six adapters plus ecc-<curve>/ certificates):
 (cd ../opcua-interop && certs/generate.sh)        # or: certs/generate.sh --add-ecc on an existing PKI
 export OPCUA_INTEROP_PKI_DIR=$PWD/../opcua-interop/certs/test-pki
 
@@ -118,12 +118,12 @@ OPCUA_INTEROP_REQUIRE_CAPABILITIES=1 make interop
 make interop-shard SHARD=2 SHARDS=10
 
 # CI — digest pinned (update interop.yml after each release)
-OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:6ded754889d6145b36f54bd28c2b2986388ce5aed71c5989be544aa1f33315dd \
-MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:1c315cde7da2a5c27948dbd49978003ca566190d3d0493bb595fc36e10ababe4 \
-ASYNC_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-async-opcua@sha256:c63ad5a042edec54ad69e384abd4ffc166b970b05fd90487595b9457bdbf1d8f \
-DOTNET_IMAGE=ghcr.io/otfabric/opcua-interop-dotnet@sha256:bffb4681b37432da4a61e66782a94834df61b73d2844685c1d1555b63478bf1a \
-NODE_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-node-opcua@sha256:62f2fb08fbcda6f23e4183ed2271b0cfd9d8bfa9ee163728019e8dc6bc43a061 \
-ASYNCUA_IMAGE=ghcr.io/otfabric/opcua-interop-asyncua@sha256:f4dc0222135d53b88042dbbb8b15f644b4943885e9c76e723e325b0a127a4d4d \
+OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541@sha256:56b1fdd0227b5d473177a3d2dd4f95dac8607fe8716d3cd42a0eea8a1e59ecce \
+MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo@sha256:e143bc75a34fad71b928e7d6a4913d2d92a400a9bc1b73a8e37e34e0c0e90010 \
+ASYNC_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-async-opcua@sha256:eb55342824f654ab50b0d6b4c687bc1ad9d4fc9e803e4731c525d155ebf259fe \
+DOTNET_IMAGE=ghcr.io/otfabric/opcua-interop-dotnet@sha256:bff6caac2f3aa2666e7fde002cb5c836b887790157e9c0d212d5c7d13590f1c8 \
+NODE_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-node-opcua@sha256:81ea5695f60c5f4e62eb2eb208404d7672e030262d19c2d1ea3d1bee534af81b \
+ASYNCUA_IMAGE=ghcr.io/otfabric/opcua-interop-asyncua@sha256:3e1596233b3355b2ee96909400c519d43819781c3a6cc0c3d38fe31db8e1f2b8 \
 make interop
 ```
 
@@ -151,10 +151,10 @@ go test -tags=interop -v ./interop/...
 |----------|-------------|---------|
 | `OPEN62541_IMAGE` | open62541 adapter image | digest pin in `harness_test.go` (see [Current status](#current-status)) |
 | `MILO_IMAGE` | Milo (Java) adapter image | digest pin in `harness_test.go` |
-| `ASYNC_OPCUA_IMAGE` | async-opcua (Rust) adapter image (see [go-opcua ↔ async-opcua](#go-opcua--async-opcua)) | the v0.11.0 digest `ghcr.io/otfabric/opcua-interop-async-opcua@sha256:c63ad5a0…bdbf1d8f` |
-| `DOTNET_IMAGE` | UA-.NETStandard (C#) adapter image (see [go-opcua ↔ UA-.NETStandard](#go-opcua--ua-netstandard)) | the v0.11.0 digest `ghcr.io/otfabric/opcua-interop-dotnet@sha256:bffb4681…3478bf1a` |
-| `NODE_OPCUA_IMAGE` | node-opcua (TypeScript / Node.js) adapter image (see [go-opcua ↔ node-opcua](#go-opcua--node-opcua)) | the v0.11.0 digest `ghcr.io/otfabric/opcua-interop-node-opcua@sha256:62f2fb08…bc43a061` |
-| `ASYNCUA_IMAGE` | opcua-asyncio (Python, `asyncua`) adapter image (see [go-opcua ↔ opcua-asyncio](#go-opcua--opcua-asyncio)) | the v0.11.0 digest `ghcr.io/otfabric/opcua-interop-asyncua@sha256:f4dc0222…127a4d4d` |
+| `ASYNC_OPCUA_IMAGE` | async-opcua (Rust) adapter image (see [go-opcua ↔ async-opcua](#go-opcua--async-opcua)) | the v0.12.0 digest `ghcr.io/otfabric/opcua-interop-async-opcua@sha256:eb553428…ebf259fe` |
+| `DOTNET_IMAGE` | UA-.NETStandard (C#) adapter image (see [go-opcua ↔ UA-.NETStandard](#go-opcua--ua-netstandard)) | the v0.12.0 digest `ghcr.io/otfabric/opcua-interop-dotnet@sha256:bff6caac…3590f1c8` |
+| `NODE_OPCUA_IMAGE` | node-opcua (TypeScript / Node.js) adapter image (see [go-opcua ↔ node-opcua](#go-opcua--node-opcua)) | the v0.12.0 digest `ghcr.io/otfabric/opcua-interop-node-opcua@sha256:81ea5695…534af81b` |
+| `ASYNCUA_IMAGE` | opcua-asyncio (Python, `asyncua`) adapter image (see [go-opcua ↔ opcua-asyncio](#go-opcua--opcua-asyncio)) | the v0.12.0 digest `ghcr.io/otfabric/opcua-interop-asyncua@sha256:3e159623…b8e1f2b8` |
 | `OPCUA_INTEROP_FIXTURE_DIR` | Path to fixture directory containing `baseline.json` | `testdata/` |
 | `OPCUA_INTEROP_PKI_DIR` | Root of the test PKI tree generated by `opcua-interop/certs/generate.sh` (v0.8.0 or later; since v0.7.0 the ECC tests need `<identity>/ecc-<curve>/cert.crt\|cert.key`) | `../../opcua-interop/certs/test-pki` |
 | `OPCUA_INTEROP_REQUIRE_CAPABILITIES` | `1`: fail instead of skip when an image lacks a client operation, a client/server feature or a security profile the suite has evidence for, or when the test PKI is missing | unset (skip) |
@@ -480,7 +480,7 @@ What async-opcua 0.19 does not provide is `unsupported` in the ledger, declared 
 - No `EventQueueOverflowEventType` event when an event queue overflows (`event.queue-overflow` C→ is `unsupported`).
 - Under trigger `StatusValueTimestamp` a SourceTimestamp change is reported inside a deadband, and a percent-deadband change of exactly the deadband is reported (floating point); both are logged, not asserted, by `TestAsyncOpcuaServer_DataChangeFilter`.
 - A Write with a SourceTimestamp is accepted (as Milo does), logged by `TestAsyncOpcuaServer_WriteEncodingMask`.
-- Certificates are trusted by exact match only (no CA chains): the v0.11.0 test PKI lists the go-opcua consumer certificate in the async-opcua server's trust list.
+- Certificates are trusted by exact match only (no CA chains): the v0.12.0 test PKI lists the go-opcua consumer certificate in the async-opcua server's trust list.
 - `MaxByteStringLength` is 65535, so `TestAsyncOpcuaServer_ChunkedSecureMessages` writes and reads three ByteStrings of that size in one request (the messages are still split into four chunks).
 
 ### go-opcua ↔ node-opcua
@@ -593,18 +593,18 @@ Every `unverified` row must carry a controlled `reason`:
 
 `test-missing` · `adapter-command-missing` · `adapter-fixture-missing` · `fault-harness-missing` · `consumer-demand-missing` · `peer-capability-unknown`
 
-Adapter images are pinned to [opcua-interop v0.11.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.11.0) (digest-pinned below), the release the suite and the ledgers are written against (`interopVersion` in `harness_test.go`, `coverage.json`, `testdata/ledger-*.json`, `render-interop-coverage`). The peer versions are open62541 **1.5.9**, Eclipse Milo **1.1.8**, async-opcua **0.19.0**, UA-.NETStandard **2.0.1**, node-opcua **2.187.12** and opcua-asyncio **2.1.0**. CI sets `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` so that missing operations, features, security profiles or a missing test PKI fail rather than skip.
+Adapter images are pinned to [opcua-interop v0.12.0](https://github.com/otfabric/opcua-interop/releases/tag/v0.12.0) (digest-pinned below), the release the suite and the ledgers are written against (`interopVersion` in `harness_test.go`, `coverage.json`, `testdata/ledger-*.json`, `render-interop-coverage`). The peer versions are open62541 **1.5.9**, Eclipse Milo **1.1.8**, async-opcua **0.19.0**, UA-.NETStandard **2.0.1**, node-opcua **2.187.12** and opcua-asyncio **2.1.0**. CI sets `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1` so that missing operations, features, security profiles or a missing test PKI fail rather than skip.
 
 | Image | Tag |
 |-------|-----|
-| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.11.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.11.0) / `@sha256:6ded7548…f33315dd` |
-| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.11.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.11.0) / `@sha256:1c315cde…10ababe4` |
-| `ghcr.io/otfabric/opcua-interop-async-opcua` | [`v0.11.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.11.0) / `@sha256:c63ad5a0…bdbf1d8f` |
-| `ghcr.io/otfabric/opcua-interop-dotnet` | [`v0.11.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.11.0) / `@sha256:bffb4681…3478bf1a` |
-| `ghcr.io/otfabric/opcua-interop-node-opcua` | [`v0.11.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.11.0) / `@sha256:62f2fb08…bc43a061` |
-| `ghcr.io/otfabric/opcua-interop-asyncua` | [`v0.11.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.11.0) / `@sha256:f4dc0222…127a4d4d` |
+| `ghcr.io/otfabric/opcua-interop-open62541` | [`v0.12.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.12.0) / `@sha256:56b1fdd0…1e59ecce` |
+| `ghcr.io/otfabric/opcua-interop-milo` | [`v0.12.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.12.0) / `@sha256:e143bc75…c0e90010` |
+| `ghcr.io/otfabric/opcua-interop-async-opcua` | [`v0.12.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.12.0) / `@sha256:eb553428…ebf259fe` |
+| `ghcr.io/otfabric/opcua-interop-dotnet` | [`v0.12.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.12.0) / `@sha256:bff6caac…3590f1c8` |
+| `ghcr.io/otfabric/opcua-interop-node-opcua` | [`v0.12.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.12.0) / `@sha256:81ea5695…534af81b` |
+| `ghcr.io/otfabric/opcua-interop-asyncua` | [`v0.12.0`](https://github.com/otfabric/opcua-interop/releases/tag/v0.12.0) / `@sha256:3e159623…b8e1f2b8` |
 
-> **Pins.** The default images in `harness_test.go` and `.github/workflows/interop.yml` are the multi-arch digests of the [v0.11.0 release run](https://github.com/otfabric/opcua-interop/actions/runs/40104370084) (the four newer peers' defaults are in their `*_harness_test.go` files). opcua-interop tags are immutable: on a new release update `interopVersion`, the digests, this table, `coverage.json` and `render-interop-coverage` in lockstep. A capability-gated test fails — it does not skip — when a default image is not the release named by `interopVersion`.
+> **Pins.** The default images in `harness_test.go` and `.github/workflows/interop.yml` are the multi-arch digests of the [v0.12.0 release run](https://github.com/otfabric/opcua-interop/actions/runs/40104370084) (the four newer peers' defaults are in their `*_harness_test.go` files). opcua-interop tags are immutable: on a new release update `interopVersion`, the digests, this table, `coverage.json` and `render-interop-coverage` in lockstep. A capability-gated test fails — it does not skip — when a default image is not the release named by `interopVersion`.
 
 > **Local dev images:** Override `OPEN62541_IMAGE`, `MILO_IMAGE`, `ASYNC_OPCUA_IMAGE`, `DOTNET_IMAGE`, `NODE_OPCUA_IMAGE` or `ASYNCUA_IMAGE` when testing unreleased adapter builds.
 
@@ -687,7 +687,7 @@ open62541 limits found by these tests (recorded in opcua-interop's contract): it
 
 | Capability | Directions |
 |---|---|
-| `security.ecc-brainpoolp256r1.*`, `security.ecc-brainpoolp384r1.*`, `security.ecc-curve448.*` (sign-encrypt, write, subscription, username.valid / invalid, renewal; ×5 for curve448) | C→O, O→S against open62541 1.5.9 (OpenSSL); the opcua-interop v0.11.0 adapter offers these policies in SignAndEncrypt only. Milo, asyncua, async-opcua, node-opcua and UA-.NETStandard (adapter) `unsupported` |
+| `security.ecc-brainpoolp256r1.*`, `security.ecc-brainpoolp384r1.*`, `security.ecc-curve448.*` (sign-encrypt, write, subscription, username.valid / invalid, renewal; ×5 for curve448) | C→O, O→S against open62541 1.5.9 (OpenSSL); the opcua-interop v0.12.0 adapter offers these policies in SignAndEncrypt only. Milo, asyncua, async-opcua, node-opcua and UA-.NETStandard (adapter) `unsupported` |
 
 The capability `security.ecc.unimplemented-policy` (the three policies refused cleanly) is retired with these rows.
 

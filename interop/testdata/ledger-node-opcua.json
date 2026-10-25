@@ -1,5 +1,5 @@
 {
-  "interopVersion": "v0.11.0",
+  "interopVersion": "v0.12.0",
   "peer": {
     "stack": "node-opcua",
     "version": "2.187.12"
@@ -1269,41 +1269,33 @@
     {
       "capability": "alarms.condition-refresh",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
+      "status": "verified",
       "test": "TestNodeOpcuaServer_Alarms",
       "case": "coverage/alarms.condition-refresh/go-client-to-node-opcua-server",
-      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no alarm fixture; TestNodeOpcuaServer_Alarms passes against the opcua-interop 0.11.0 image (serverFeatures \"alarms\"; node-opcua sends RefreshStart / RefreshEnd only to items on the Server object, which the test uses): promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "alarms.condition-refresh",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
       "test": "TestGoServer_NodeOpcuaClient_Alarms",
       "case": "coverage/alarms.condition-refresh/node-opcua-client-to-go-server",
-      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no client alarms operation; TestGoServer_NodeOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "go-client-to-node-opcua-server",
-      "status": "unverified",
-      "reason": "adapter-fixture-missing",
+      "status": "verified",
       "test": "TestNodeOpcuaServer_Alarms",
       "case": "coverage/alarms.acknowledgeable/go-client-to-node-opcua-server",
-      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no alarm fixture; TestNodeOpcuaServer_Alarms (Acknowledge, stale-EventId Acknowledge = Bad_EventIdUnknown, Confirm, AddComment, Disable / Enable) passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
       "capability": "alarms.acknowledgeable",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
       "test": "TestGoServer_NodeOpcuaClient_Alarms",
       "case": "coverage/alarms.acknowledgeable/node-opcua-client-to-go-server",
-      "nextAction": "the pinned opcua-interop v0.10.1 node-opcua image has no client alarms operation; TestGoServer_NodeOpcuaClient_Alarms passes against the opcua-interop 0.11.0 image: promote to verified when v0.11.0 is pinned",
       "fixture": "baseline"
     },
     {
@@ -2115,28 +2107,28 @@
       "capability": "transport.wss",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.11.0 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.12 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.12.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
