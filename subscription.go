@@ -67,6 +67,12 @@ type Subscription struct {
 	// to start counting anew. See Client.markSilentSubscriptions.
 	lastActivity atomic.Int64
 
+	// session is the session the client last put the subscription in: the
+	// one it was created in, or the one the client transferred it to. A
+	// Good_SubscriptionTransferred from another session is not news: the
+	// client moved the subscription itself.
+	session atomic.Pointer[Session]
+
 	// cancelled is closed by Cancel. It releases a notification that is
 	// being handed to Notifs: the consumer of a cancelled subscription
 	// usually stops reading, and the client's single publish loop must not

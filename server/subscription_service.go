@@ -556,6 +556,7 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 		}
 		if owner != requester {
 			left = append(left, moved{sub: sub, from: owner, channel: ownerChannel})
+			requester.dropStatusChanges(sub.ID)
 		}
 
 		// Reassign the subscription to the requesting session and channel.

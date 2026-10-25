@@ -17,7 +17,8 @@ Certificate management by the Part 12 push model (§7), on the server and in a n
 ### Fixed
 
 - **server: the session a subscription is transferred from gets a StatusChangeNotification with Good_SubscriptionTransferred** (Part 4 §5.13.7), with its queued Publish request or its next one; its other queued Publish requests are answered with Bad_NoSubscription when it has no subscription left. It used to get a keep-alive.
-- **client: a subscription that another session took over is forgotten** when Good_SubscriptionTransferred arrives; the client used to see Bad_NoSubscription next and recreate it, so the subscription existed twice. A transfer the client made itself (its reconnect, or a new session of the application) changes nothing.
+- **client: a subscription that another session took over is forgotten** when Good_SubscriptionTransferred arrives from the session the client had put it in; the client used to see Bad_NoSubscription next and recreate it, so the subscription existed twice. The notification from a session the client moved the subscription out of itself (its reconnect, or the application) changes nothing, also when that session is used again later.
+- **server: a subscription that is transferred back to a session before that session's next Publish request is not announced to it as transferred.**
 - **RELEASE.md v1.13.0** said that `opc.https` supports the non-ECC policies: it supports SecurityPolicy None and every policy without SecureChannelEnhancements, including ECC_nistP256, ECC_nistP384, ECC_curve25519, ECC_curve448 and the two Brainpool policies (`uasc.HTTPSPolicySupported`).
 
 ### Not implemented

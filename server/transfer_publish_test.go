@@ -168,3 +168,80 @@ func TestTransferSubscriptions_AnnouncesTheTransferToTheOldSession(t *testing.T)
 	_, err = publish()
 	require.ErrorIs(t, err, ua.StatusBadNoSubscription)
 }
+
+// TestTransferSubscriptions_BackDropsTheStaleAnnouncement: a subscription
+// that leaves a session while no Publish request is queued there, and comes
+// back before one arrives, is not announced as transferred to that session:
+// the client would take the notification for the loss of the subscription it
+// has again.
+//
+// Regression (chaos TestRegressionReactivatedSessionKeepsSubscriptions): the
+// client replaced a detached session and took its subscription along, the
+// application re-activated the old session and the subscription came back;
+// the first Publish request of the old session got the notification of the
+// first transfer, and the client forgot the subscription.
+func TestTransferSubscriptions_BackDropsTheStaleAnnouncement(t *testing.T) {
+	srv, err := New(
+		EndPoint("localhost", 0),
+		EnableSecurity("None", ua.MessageSecurityModeNone),
+		EnableAuthMode(ua.UserTokenTypeAnonymous),
+	)
+	require.NoError(t, err)
+	require.NoError(t, srv.Start(context.Background()))
+	defer func() { _ = srv.Close() }()
+
+	sessions := &SessionService{srv: srv}
+	newSession := func() *ua.RequestHeader {
+		resp, err := sessions.CreateSession(context.Background(), scNone(), &ua.CreateSessionRequest{
+			RequestHeader:           reqHeader(),
+			EndpointURL:             "opc.tcp://localhost:4840",
+			RequestedSessionTimeout: 60000,
+			ClientNonce:             make([]byte, 32),
+		}, 1)
+		require.NoError(t, err)
+		h := reqHeader()
+		h.AuthenticationToken = resp.(*ua.CreateSessionResponse).AuthenticationToken
+		return h
+	}
+	aHeader, bHeader := newSession(), newSession()
+	a := srv.sb.peek(aHeader.AuthenticationToken)
+	require.NotNil(t, a)
+	a.activated.Store(true)
+
+	subs := srv.SubscriptionService
+	const id = 79
+	sub := NewSubscription()
+	sub.srv = subs
+	sub.ID = id
+	sub.Session = a
+	subs.Mu.Lock()
+	subs.Subs[id] = sub
+	subs.Mu.Unlock()
+	defer func() {
+		subs.Mu.Lock()
+		delete(subs.Subs, id)
+		subs.Mu.Unlock()
+	}()
+
+	transfer := func(to *ua.RequestHeader) {
+		t.Helper()
+		resp, err := subs.TransferSubscriptions(context.Background(), scNone(), &ua.TransferSubscriptionsRequest{
+			RequestHeader:   to,
+			SubscriptionIDs: []uint32{id},
+		}, 4)
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusOK, resp.(*ua.TransferSubscriptionsResponse).Results[0].StatusCode)
+	}
+	transfer(bHeader)
+	transfer(aHeader)
+
+	// The subscription is a's again: the Publish request waits for it.
+	r, err := subs.Publish(context.Background(), scNone(), &ua.PublishRequest{
+		RequestHeader:                aHeader,
+		SubscriptionAcknowledgements: []*ua.SubscriptionAcknowledgement{},
+	}, 5)
+	require.NoError(t, err)
+	require.Nil(t, r, "queued, not answered with the first transfer's notification")
+	require.Len(t, a.PublishRequests, 1)
+	<-a.PublishRequests
+}
