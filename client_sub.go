@@ -93,6 +93,7 @@ func (c *Client) Subscribe(ctx context.Context, params *SubscriptionParameters, 
 
 	c.subs[sub.id()] = sub
 	c.subGen++
+	sub.session.Store(c.Session())
 	c.updatePublishTimeoutNeedsSubMuxLock()
 
 	// Start the publish loop if it isn't already running. This is done while
@@ -254,7 +255,21 @@ func (c *Client) TransferSubscriptions(ctx context.Context, subscriptionIDs []ui
 		SubscriptionIDs:   subscriptionIDs,
 		SendInitialValues: sendInitialValues,
 	}
-	return send[ua.TransferSubscriptionsResponse](ctx, c, req)
+	session := c.Session()
+	res, err := send[ua.TransferSubscriptionsResponse](ctx, c, req)
+	if err == nil && res != nil {
+		// The subscriptions of this client that moved now live in session.
+		c.subMux.RLock()
+		for i, r := range res.Results {
+			if i < len(subscriptionIDs) && r != nil && r.StatusCode == ua.StatusOK {
+				if sub := c.subs[subscriptionIDs[i]]; sub != nil {
+					sub.session.Store(session)
+				}
+			}
+		}
+		c.subMux.RUnlock()
+	}
+	return res, err
 }
 
 // transferSubscriptions is used by reconnect to transfer subscriptions of the
@@ -418,6 +433,7 @@ func (c *Client) registerSubscriptionNeedsSubMuxLock(sub *Subscription) error {
 
 	c.subs[sub.id()] = sub
 	c.subGen++
+	sub.session.Store(c.Session())
 	sub.lastActivity.Store(time.Now().UnixNano())
 	return nil
 }
@@ -800,7 +816,7 @@ func (c *Client) publish(ctx context.Context) error {
 		return err
 
 	default:
-		if orphan := c.deliverPublishResponseOf(ctx, res, left); orphan != 0 {
+		if orphan := c.deliverPublishResponseOf(ctx, res, session); orphan != 0 {
 			c.deleteOrphanSubscription(ctx, orphan)
 		}
 	}
@@ -824,12 +840,12 @@ func staleSessionError(err error) bool {
 // failed CreateSubscription request left behind on the server, which the
 // caller is to delete, and 0 otherwise.
 func (c *Client) deliverPublishResponse(ctx context.Context, res *ua.PublishResponse) (orphan uint32) {
-	return c.deliverPublishResponseOf(ctx, res, false)
+	return c.deliverPublishResponseOf(ctx, res, c.Session())
 }
 
 // deliverPublishResponseOf is deliverPublishResponse for a response to a
-// request sent in a session the client has left (left) or not.
-func (c *Client) deliverPublishResponseOf(ctx context.Context, res *ua.PublishResponse, left bool) (orphan uint32) {
+// request sent in session sentIn.
+func (c *Client) deliverPublishResponseOf(ctx context.Context, res *ua.PublishResponse, sentIn *Session) (orphan uint32) {
 	// For markSilentSubscriptions: a response arrived, and it was for this
 	// subscription.
 	now := time.Now().UnixNano()
@@ -873,15 +889,16 @@ func (c *Client) deliverPublishResponseOf(ctx context.Context, res *ua.PublishRe
 	}
 
 	// Good_SubscriptionTransferred (Part 4 §5.13.7): the subscription has
-	// moved to another session. When it left the session the client uses,
-	// another session (of this application or another) took it: it is no
-	// longer this client's, and recreating it would duplicate it. When it
-	// left a session the client has left as well, it moved with the client
-	// (its reconnect, or the application, transferred it): nothing changes,
-	// and the message, which carries the subscription's next sequence
-	// number, must not be taken for a notification of it.
+	// left the session the request was sent in. When the client had put it
+	// there, another session (of this application or another) took it: it
+	// is no longer this client's, and recreating it would duplicate it.
+	// Otherwise the client moved it away itself (its reconnect, or the
+	// application, transferred it), possibly long before the session was
+	// used again: nothing changes, and the message, which carries the
+	// subscription's next sequence number, must not be taken for a
+	// notification of it.
 	if subscriptionTransferred(res.NotificationMessage) {
-		if left {
+		if sub.session.Load() != sentIn {
 			c.subMux.Unlock()
 			c.cfg.logger.Debug("publish: subscription transferred from a session the client has left", "sub_id", res.SubscriptionID)
 			return 0

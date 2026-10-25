@@ -88,6 +88,22 @@ func (s *session) addStatusChange(c pendingStatusChange) {
 	s.statusMu.Unlock()
 }
 
+// dropStatusChanges removes the queued StatusChangeNotifications of the
+// subscription subID: it has come back to the session (a transfer back), so
+// the news that it left is obsolete, and the client would take it for the
+// loss of the subscription it has.
+func (s *session) dropStatusChanges(subID uint32) {
+	s.statusMu.Lock()
+	defer s.statusMu.Unlock()
+	kept := s.statusChanges[:0]
+	for _, c := range s.statusChanges {
+		if c.subID != subID {
+			kept = append(kept, c)
+		}
+	}
+	s.statusChanges = kept
+}
+
 // takeStatusChange returns the oldest queued StatusChangeNotification.
 func (s *session) takeStatusChange() (pendingStatusChange, bool) {
 	s.statusMu.Lock()
