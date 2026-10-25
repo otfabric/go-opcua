@@ -146,14 +146,15 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 	if req.ReleaseContinuationPoints && historian != nil {
 		results := make([]*ua.HistoryReadResult, len(req.NodesToRead))
 		for i, n := range req.NodesToRead {
+			st := ua.StatusOK
 			if len(n.ContinuationPoint) > 0 {
 				if cps != nil {
-					cps.release(n.ContinuationPoint)
+					st = cps.release(sessionAuth, n.ContinuationPoint)
 				} else {
 					historian.ReleaseContinuation(n.ContinuationPoint)
 				}
 			}
-			results[i] = &ua.HistoryReadResult{StatusCode: ua.StatusOK}
+			results[i] = &ua.HistoryReadResult{StatusCode: st}
 		}
 		return &ua.HistoryReadResponse{
 			ResponseHeader:  responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),

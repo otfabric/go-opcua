@@ -257,7 +257,7 @@ func TestHistoryCPRegistry_ConcurrentSessionClose(t *testing.T) {
 		}()
 		go func() {
 			defer wg.Done()
-			reg.release(reg.bind(session, []byte("drop")))
+			_ = reg.release(session, reg.bind(session, []byte("drop")))
 		}()
 	}
 	wg.Wait()

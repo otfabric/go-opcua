@@ -30,6 +30,7 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 
 - **server: `SetHistorian` while the server runs is race free.** The provider was read by the History services without synchronisation.
 - **server: a condition keeps the history bits of its source.** `AddCondition` set the EventNotifier of the source to SubscribeToEvents, dropping HistoryRead and HistoryWrite.
+- **server: releasing a history continuation point checks it.** HistoryRead with ReleaseContinuationPoints answered `Good` for any continuation point and released one of another session. A point that is unknown, already used or released, expired, or of another session is now `Bad_ContinuationPointInvalid` (Part 4 §5.10.3) and is left alone.
 - **server: `EndPoint` brackets IPv6 literals.** `EndPoint("::1", 4840)` advertised `opc.tcp://::1:4840`, which is not a valid URL (RFC 3986 §3.2.2) for other stacks; with port 0 the bound port was written as `opc.tcp://[::1:0]:<port>`, and a zoned address (`fe80::1%eth0`) did not parse at all. `EndPoint`, `WebSocketEndPoint` and `HTTPSEndPoint` now write `opc.tcp://[::1]:4840`, accept a host given with brackets and escape a zone as `%25` (`fe80::1%eth0` → `[fe80::1%25eth0]`, RFC 6874); the server binds to that zone.
 
 ### Tests
