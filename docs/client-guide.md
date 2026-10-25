@@ -1161,6 +1161,23 @@ tlsCert, _ := g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{
 })
 _ = g.ApplyChanges(ctx)
 diag, _ := g.TransactionDiagnostics(ctx) // Result, AffectedTrustLists, Errors, …
+
+// Delete a certificate (it goes at ApplyChanges; a server refuses to delete
+// the one its endpoints use) and fill the slot again in the same transaction.
+_ = g.DeleteCertificate(ctx, gds.DefaultApplicationGroup, gds.EccNistP256ApplicationCertificateType)
+_, _ = g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{
+    CertificateType: gds.EccNistP256ApplicationCertificateType,
+    SubjectName:     "CN=myserver/O=example",
+})
+_ = g.ApplyChanges(ctx)
+
+// The certificate groups of the server, the defaults and its own, with
+// their TrustLists.
+groups, _ := g.CertificateGroups(ctx)
+for _, cg := range groups {
+    tl, _ := g.WithTrustList(cg.TrustList).ReadTrustList(ctx, ua.TrustListMasksAll)
+    _ = tl
+}
 _ = g.ResetToServerDefaults(ctx)
 
 // The trust lists of the DefaultUserTokenGroup and the DefaultHttpsGroup.
@@ -1190,8 +1207,10 @@ node-opcua carry the issuer chain after the certificate. Of the Part 12 1.05
 additions, UA-.NETStandard serves GetCertificates, the TransactionDiagnostics,
 the HTTPS and UserToken trust lists, PFX keys and the alarms, and refuses
 CreateSelfSignedCertificate for an occupied slot (`Bad_InvalidState`: it wants
-DeleteCertificate first, which package `gds` does not call); open62541 1.5.9
-and node-opcua serve the UserToken trust list only. See the interop ledgers.
+DeleteCertificate first). It serves DeleteCertificate but refuses to delete
+its only application certificate, at once, with `Bad_InvalidState`; this
+library's server accepts the deletion and refuses it at ApplyChanges.
+open62541 1.5.9 and node-opcua serve the UserToken trust list only. See the interop ledgers.
 
 The pull model is described in the next section.
 

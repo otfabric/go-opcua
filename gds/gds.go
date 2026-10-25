@@ -15,9 +15,11 @@
 // SignAndEncrypt channel; servers refuse the methods otherwise.
 //
 // Beyond the methods of Part 12 1.04 it calls GetCertificates,
-// CreateSelfSignedCertificate and ResetToServerDefaults (Part 12 1.05
-// §7.10) and reads the TransactionDiagnostics. The trust lists of the
-// DefaultHttpsGroup and the DefaultUserTokenGroup are reached with
+// CreateSelfSignedCertificate, DeleteCertificate and ResetToServerDefaults
+// (Part 12 1.05 §7.10) and reads the TransactionDiagnostics.
+// CertificateGroups lists the certificate groups of a server, the default
+// ones and those of the application; their trust lists, like those of the
+// DefaultHttpsGroup and the DefaultUserTokenGroup, are reached with
 // WithTrustList. A private key for UpdateCertificate may be PEM or PFX
 // (uapolicy.EncodePFX).
 //

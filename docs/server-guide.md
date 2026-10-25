@@ -963,8 +963,9 @@ component of the Server object:
 | CertificateGroups / DefaultApplicationGroup | CertificateTypes (the types of the application identities), the TrustList, the CertificateExpired and TrustListOutOfDate alarms (with `Alarms`) |
 | CertificateGroups / DefaultHttpsGroup | CertificateTypes (HttpsCertificateType: the TLS certificate of the opc.https / opc.wss endpoints), its own TrustList, CertificateExpired and TrustListOutOfDate |
 | CertificateGroups / DefaultUserTokenGroup | its own TrustList for X.509 user identity tokens, TrustListOutOfDate |
+| CertificateGroups / <name> | a certificate group of the application (`PushManagement.CertificateGroups`): its CertificateTypes, TrustList, CertificateExpired and TrustListOutOfDate, in the namespace `server.CertificateAlarmsNamespaceURI` |
 | <group> / TrustList | TrustListType file (Part 12 §7.8.2): Open, OpenWithMasks, Read, Write, GetPosition, SetPosition, Close, CloseAndUpdate, AddCertificate, RemoveCertificate; Size, LastUpdateTime, UpdateFrequency (with `TrustListUpdateFrequency`) |
-| Methods | UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, ResetToServerDefaults |
+| Methods | UpdateCertificate, CreateSigningRequest, GetRejectedList, ApplyChanges, CancelChanges, GetCertificates, CreateSelfSignedCertificate, DeleteCertificate, ResetToServerDefaults (the nodeset of the library lacks a DeleteCertificate instance; the server adds it) |
 | TransactionDiagnostics | StartTime, EndTime, Result, AffectedTrustLists, AffectedCertificateGroups, Errors of the last or current transaction (SecurityAdmin only) |
 
 ```go
@@ -995,8 +996,9 @@ srv, _ := server.New(
 | After ApplyChanges | New channels and the endpoints use the new certificate, new TLS handshakes the new HTTPS certificate; channels and connections already open keep theirs and keep working |
 | CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new key of the certificate type: RSA (2048, 3072 or 4096 bits), ECDSA P-256 / P-384, brainpoolP256r1 / brainpoolP384r1, Ed25519 or Ed448 (nonce of at least 32 bytes) |
 | CreateSelfSignedCertificate | A new key and a self-signed certificate for a group and type (subject, DNS names and IP addresses default to those of the current certificate, 365 days by default, the ApplicationUri as SAN); it takes effect at ApplyChanges |
+| DeleteCertificate | Removes the certificate of a group and type at ApplyChanges (Part 12 1.05 §7.10); `Bad_InvalidState` if there is none, counting the transaction. ApplyChanges refuses (`Bad_InvalidState`, in the TransactionDiagnostics) to delete the certificate the endpoints advertise, or the HTTPS certificate while there are opc.https / opc.wss endpoints. A deleted type stays in CertificateTypes: CreateSigningRequest with a new key, UpdateCertificate or CreateSelfSignedCertificate fill it again, also in the same transaction. A `CertificateDeleteStore` persists deletions |
 | GetCertificates | The certificate types and certificates of a group |
-| ResetToServerDefaults | Back to the trust lists, certificates and keys the server started with (stored through `Store`); `Bad_TransactionPending` while another session has a transaction |
+| ResetToServerDefaults | Back to the trust lists, certificates and keys the server started with (stored through `Store`), the groups of the application included; certificates the server did not start with are deleted. `Bad_TransactionPending` while another session has a transaction |
 | Group trust lists | The DefaultUserTokenGroup trust list validates X.509 user tokens before a `WithX509UserValidator` is asked; the DefaultHttpsGroup trust list validates TLS client certificates when `HTTPSClientCertificates` is `HTTPSClientCertificatesVerifyIfGiven` or `HTTPSClientCertificatesRequire` |
 | Alarms | `Alarms: &server.CertificateAlarms{ExpirationLimit, CheckInterval}` adds CertificateExpired (active from `ExpirationLimit`, default 14 days, before the group certificate expires; severity 900 once expired) and TrustListOutOfDate (active when a trust list was not updated for `TrustListUpdateFrequency`) conditions in the namespace `server.CertificateAlarmsNamespaceURI`, evaluated every `CheckInterval` (default 1 minute) and on every change |
 | GetRejectedList | The most recent `MaxRejectedCertificates` (default 64) client certificates validation rejected |
@@ -1007,9 +1009,48 @@ srv, _ := server.New(
 `Server.HTTPSCertificate()` and `Server.RejectedCertificates()` return the
 trust lists in effect, the HTTPS certificate and the rejected certificates.
 
-Not implemented: DeleteCertificate (Part 12 §7.10.7) and certificate groups
-beyond the three default ones. A Global Discovery Server (the pull model) is
-the subject of the next section.
+### Certificate groups of the application
+
+`PushManagement.CertificateGroups` adds certificate groups next to the three
+default ones (Part 12 §7.5), for certificates and trust lists the
+application uses itself: the client certificate and CA list of an MQTT or
+HTTPS connection to a broker, say. Each has a name (its BrowseName), the
+certificate types it holds (application certificate types, HttpsCertificateType,
+UserCertificateType, TlsServerCertificateType, TlsClientCertificateType), a
+trust list and optionally its first certificates with their keys. A
+certificate manager handles them like the default groups: the TrustList,
+UpdateCertificate, CreateSigningRequest, CreateSelfSignedCertificate,
+DeleteCertificate, GetCertificates, ResetToServerDefaults, the transactions
+and the alarms.
+
+```go
+server.WithPushManagement(server.PushManagement{
+    TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{caDER}},
+    CertificateGroups: []server.CertificateGroup{{
+        Name:             "Broker",
+        CertificateTypes: []*ua.NodeID{ua.NewNumericNodeID(0, id.TLSClientCertificateType)},
+        TrustList:        &ua.TrustListDataType{TrustedCertificates: [][]byte{brokerCA}},
+        Certificates: []server.GroupCertificate{{
+            CertificateType: ua.NewNumericNodeID(0, id.TLSClientCertificateType),
+            Certificate:     clientDER,
+            PrivateKey:      clientKey,
+        }},
+    }},
+})
+
+group := srv.CertificateGroupID("Broker")
+cert, issuers, key := srv.GroupCertificate(group, nil) // what ApplyChanges installed last
+err := srv.VerifyGroupCertificate(group, brokerChain)  // against the group's trust list
+```
+
+The groups are String NodeIds (`CertificateGroups.<Name>` and
+`CertificateGroups.<Name>.TrustList`) in the namespace
+`server.CertificateAlarmsNamespaceURI`; `gds.Client.CertificateGroups` finds
+them. The server itself does not use them. A `CertificateStore` gets their
+changes through `StoreGroupTrustList` and `StoreGroupCertificate` (a
+`CertificateGroupStore`).
+
+A Global Discovery Server (the pull model) is the subject of the next section.
 
 ## Global Discovery Server (Pull Model)
 

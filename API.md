@@ -1718,7 +1718,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `HTTPSEndPoint(host string, port int)` | Add an `opc.https://host:port` endpoint (Part 6 §7.4, https-uabinary): each enabled policy without SecureChannelEnhancements, in its strongest enabled mode |
 | `ListenHTTPSOn(addr string)` | Bind address of the HTTPS listener |
 | `TLSConfig(cfg *tls.Config)` | TLS certificate (and client authentication) of the `opc.wss` / `opc.https` listeners; default: the RSA application instance certificate. TLS 1.2 minimum |
-| `WithPushManagement(pm PushManagement)` | Push certificate management (Part 12 §7): the ServerConfiguration object with the DefaultApplicationGroup (client application certificates), DefaultHttpsGroup (TLS) and DefaultUserTokenGroup (X.509 user tokens), their trust lists and alarms; see [Push certificate management (server)](#push-certificate-management-server) |
+| `WithPushManagement(pm PushManagement)` | Push certificate management (Part 12 §7): the ServerConfiguration object with the DefaultApplicationGroup (client application certificates), DefaultHttpsGroup (TLS), DefaultUserTokenGroup (X.509 user tokens) and the certificate groups of the application, their trust lists and alarms; see [Push certificate management (server)](#push-certificate-management-server) |
 
 `Server.URLs()` lists the `opc.tcp`, then the `opc.wss` and the `opc.https` endpoint URLs; `Server.WebSocketAddr()` and `Server.HTTPSAddr()` return the bound listener addresses. Each `EndpointDescription` carries the `TransportProfileUri` of its transport.
 
@@ -2476,6 +2476,19 @@ type PushManagement struct {
     PFXPassword              func(ctx context.Context, certificateGroup, certificateType *ua.NodeID) (string, error)
     TrustListUpdateFrequency time.Duration         // UpdateFrequency; drives TrustListOutOfDate
     Alarms                   *CertificateAlarms    // CertificateExpired and TrustListOutOfDate alarms
+    CertificateGroups        []CertificateGroup    // certificate groups of the application
+}
+type CertificateGroup struct {
+    Name             string                // BrowseName; NodeId "CertificateGroups.<Name>" in CertificateAlarmsNamespaceURI
+    CertificateTypes []*ua.NodeID          // application types, HttpsCertificateType, UserCertificateType, TlsServer/TlsClientCertificateType
+    TrustList        *ua.TrustListDataType // nil: empty
+    Certificates     []GroupCertificate    // at most one per type
+}
+type GroupCertificate struct {
+    CertificateType *ua.NodeID
+    Certificate     []byte
+    Issuers         [][]byte
+    PrivateKey      crypto.Signer
 }
 type HTTPSClientAuth int // HTTPSClientCertificatesIgnore, …VerifyIfGiven, …Require
 type CertificateAlarms struct {
@@ -2493,11 +2506,18 @@ type CertificateGroupStore interface {
     StoreGroupTrustList(ctx context.Context, certificateGroup *ua.NodeID, tl *ua.TrustListDataType) error
     StoreGroupCertificate(ctx context.Context, certificateGroup, certificateType *ua.NodeID, cert []byte, issuers [][]byte, key crypto.Signer) error
 }
+type CertificateDeleteStore interface {
+    CertificateStore
+    DeleteGroupCertificate(ctx context.Context, certificateGroup, certificateType *ua.NodeID) error // DeleteCertificate, ResetToServerDefaults
+}
 func WithPushManagement(pm PushManagement) Option
 func (s *Server) TrustList() *ua.TrustListDataType    // the trust list in effect (nil without push management)
 func (s *Server) GroupTrustList(certificateGroup *ua.NodeID) *ua.TrustListDataType
 func (s *Server) HTTPSCertificate() []byte            // the TLS certificate of opc.https / opc.wss
 func (s *Server) RejectedCertificates() [][]byte      // the most recently rejected client certificates
+func (s *Server) CertificateGroupID(name string) *ua.NodeID
+func (s *Server) GroupCertificate(certificateGroup, certificateType *ua.NodeID) ([]byte, [][]byte, crypto.Signer)
+func (s *Server) VerifyGroupCertificate(certificateGroup *ua.NodeID, chain []byte) error // against the group's trust list
 ```
 
 See [docs/server-guide.md](docs/server-guide.md#certificate-management-push-model).
@@ -2523,6 +2543,8 @@ func (g *Client) Properties(ctx context.Context) (*Properties, error)
 func (g *Client) WithTrustList(tl *ua.NodeID) *Client // another group's TrustList (HTTPSTrustList, UserTokenTrustList)
 func (g *Client) GetCertificates(ctx context.Context, group *ua.NodeID) ([]*ua.NodeID, [][]byte, error)
 func (g *Client) CreateSelfSignedCertificate(ctx context.Context, req *SelfSignedCertificate) ([]byte, error)
+func (g *Client) DeleteCertificate(ctx context.Context, group, certType *ua.NodeID) error
+func (g *Client) CertificateGroups(ctx context.Context) ([]CertificateGroup, error) // CertificateGroup{Name, Group, TrustList}
 func (g *Client) ResetToServerDefaults(ctx context.Context) error
 func (g *Client) TransactionDiagnostics(ctx context.Context) (*TransactionDiagnostics, error)
 func Thumbprint(cert []byte) string                  // upper-case hex SHA-1, for RemoveCertificate
