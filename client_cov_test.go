@@ -35,6 +35,7 @@ func closedPortURL(t *testing.T) string {
 }
 
 func TestClientCovDiscoveryHelpers(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := testutil.NewTestServer(t)
 
@@ -73,6 +74,7 @@ func TestClientCovDiscoveryHelpers(t *testing.T) {
 }
 
 func TestClientCovDiscoveryHelperServiceErrors(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := newScriptedServer(t, map[uint16]server.Handler{
 		id.GetEndpointsRequestEncodingDefaultBinary: fault(ua.StatusBadTooManyOperations),
@@ -103,6 +105,7 @@ func TestClientCovDiscoveryHelperServiceErrors(t *testing.T) {
 }
 
 func TestClientCovConnectTwice(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := testutil.NewTestServer(t)
 	c := connectCovClient(t, url)
@@ -115,6 +118,7 @@ func TestClientCovConnectTwice(t *testing.T) {
 // A Connect that fails at any step leaves the client Closed and without a
 // secure channel or session.
 func TestClientCovConnectFailures(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name     string
 		handlers map[uint16]server.Handler
@@ -159,6 +163,7 @@ func TestClientCovConnectFailures(t *testing.T) {
 }
 
 func TestClientCovSessionWithoutChannel(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	c := newCovClient(t, closedPortURL(t))
 
@@ -172,6 +177,7 @@ func TestClientCovSessionWithoutChannel(t *testing.T) {
 // A session created next to the client's own one and activated replaces it;
 // DetachSession hands it out without closing it.
 func TestClientCovSessionLifecycle(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := testutil.NewTestServer(t)
 	c := connectCovClient(t, url)
@@ -212,6 +218,7 @@ func TestClientCovSessionLifecycle(t *testing.T) {
 }
 
 func TestClientCovSessionAccessorsWithoutResponse(t *testing.T) {
+	t.Parallel()
 	var s opcua.Session
 	require.Nil(t, s.SessionID())
 	require.Nil(t, s.ServerEndpoints())
@@ -237,6 +244,7 @@ func flakyRead(n int32, status ua.StatusCode, calls *atomic.Int32) server.Handle
 }
 
 func TestClientCovRetryPolicy(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	node := ua.NewStringNodeID(1, "flaky")
 
@@ -312,6 +320,7 @@ func (m *recordingMetrics) OnTimeout(s string, _ time.Duration) {
 }
 
 func TestClientCovMetrics(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := newScriptedServer(t, map[uint16]server.Handler{
 		id.WriteRequestEncodingDefaultBinary: fault(ua.StatusBadTimeout),

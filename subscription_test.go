@@ -16,6 +16,7 @@ import (
 // connection close (EOF), the error wraps io.EOF and includes a hint that the
 // server may not support event or alarm subscriptions.
 func TestMonitor_EOFErrorFormat(t *testing.T) {
+	t.Parallel()
 	err := fmt.Errorf("connection closed while creating monitored items (server may not support event or alarm subscriptions): %w", io.EOF)
 	require.True(t, errors.Is(err, io.EOF), "error should wrap io.EOF for callers that check")
 	require.Contains(t, err.Error(), "server may not support event or alarm", "error message should suggest server limitation")

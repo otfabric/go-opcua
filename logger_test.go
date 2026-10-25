@@ -9,6 +9,7 @@ import (
 )
 
 func TestDefaultLoggerIsSilent(t *testing.T) {
+	t.Parallel()
 	cfg, err := ApplyConfig()
 	if err != nil {
 		t.Fatal(err)
@@ -25,6 +26,7 @@ func TestDefaultLoggerIsSilent(t *testing.T) {
 }
 
 func TestWithLoggerNilRestoresSilent(t *testing.T) {
+	t.Parallel()
 	cfg, err := ApplyConfig(WithLogger(slog.Default()), WithLogger(nil))
 	if err != nil {
 		t.Fatal(err)
@@ -35,6 +37,7 @@ func TestWithLoggerNilRestoresSilent(t *testing.T) {
 }
 
 func TestDiscardHandlerMethods(t *testing.T) {
+	t.Parallel()
 	h := discardHandler{}
 	ctx := context.Background()
 	if h.Enabled(ctx, slog.LevelInfo) {

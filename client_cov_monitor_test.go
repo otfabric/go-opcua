@@ -245,6 +245,7 @@ func trigger(t *testing.T, c *opcua.Client, code string) {
 // The connection monitor reacts on the status codes that mean the secure
 // channel, the session or the subscriptions are gone, and recovers them.
 func TestClientCovMonitorTriggers(t *testing.T) {
+	t.Parallel()
 	ts := newTriggerServer(t)
 	rec := &recorder{}
 	c := connectCovClient(t, ts.url, rec.options()...)
@@ -379,6 +380,7 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 // Activating a new session moves the client's subscriptions into it: they are
 // recreated there.
 func TestClientCovActivateSessionRecreatesSubscriptions(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	rec := &recorder{}
 	c := connectCovClient(t, url, rec.options()...)
@@ -413,6 +415,7 @@ func failingServer(t *testing.T, proxy *testutil.ChaosProxy, typeID uint16, stat
 // The connection is lost and the server is replaced by others that fail the
 // recovery in each of its steps, until a working one comes up.
 func TestClientCovMonitorServerReplaced(t *testing.T) {
+	t.Parallel()
 	proxy := testutil.NewChaosProxy(t, "", 1)
 	first := newProxiedServer(t, proxy, nil)
 	var createFails, activateFails, namespaceFails atomic.Int32
@@ -464,6 +467,7 @@ func TestClientCovMonitorServerReplaced(t *testing.T) {
 // A connection that breaks without the server going away is recovered with
 // the same session.
 func TestClientCovMonitorConnectionDropped(t *testing.T) {
+	t.Parallel()
 	proxy := testutil.NewChaosProxy(t, "", 1)
 	proxy.SetBackend(newProxiedServer(t, proxy, nil))
 	rec := &recorder{}
@@ -498,6 +502,7 @@ func TestClientCovMonitorConnectionDropped(t *testing.T) {
 
 // Without auto reconnect a lost connection ends the client.
 func TestClientCovMonitorNoAutoReconnect(t *testing.T) {
+	t.Parallel()
 	proxy := testutil.NewChaosProxy(t, "", 1)
 	proxy.SetBackend(newProxiedServer(t, proxy, nil))
 	rec := &recorder{}

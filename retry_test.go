@@ -14,6 +14,7 @@ import (
 )
 
 func TestNoRetry(t *testing.T) {
+	t.Parallel()
 	p := NoRetry()
 	ok, d := p.ShouldRetry(0, errors.New("fail"))
 	require.False(t, ok)
@@ -21,6 +22,7 @@ func TestNoRetry(t *testing.T) {
 }
 
 func TestExponentialBackoff(t *testing.T) {
+	t.Parallel()
 	p := ExponentialBackoff(100*time.Millisecond, time.Second, 3)
 
 	ok, d := p.ShouldRetry(0, ua.StatusBad)
@@ -36,12 +38,14 @@ func TestExponentialBackoff(t *testing.T) {
 }
 
 func TestExponentialBackoff_NoTimeoutRetry(t *testing.T) {
+	t.Parallel()
 	p := NewExponentialBackoff(ExponentialBackoffConfig{BaseDelay: 50 * time.Millisecond})
 	ok, _ := p.ShouldRetry(0, ua.StatusBadTimeout)
 	require.False(t, ok)
 }
 
 func TestExponentialBackoff_RetryOnTimeout(t *testing.T) {
+	t.Parallel()
 	p := NewExponentialBackoff(ExponentialBackoffConfig{
 		BaseDelay:      50 * time.Millisecond,
 		RetryOnTimeout: true,
@@ -52,6 +56,7 @@ func TestExponentialBackoff_RetryOnTimeout(t *testing.T) {
 }
 
 func TestExponentialBackoff_Defaults(t *testing.T) {
+	t.Parallel()
 	p := NewExponentialBackoff(ExponentialBackoffConfig{})
 	ok, d := p.ShouldRetry(0, ua.StatusBad)
 	require.True(t, ok)
@@ -59,6 +64,7 @@ func TestExponentialBackoff_Defaults(t *testing.T) {
 }
 
 func TestWithRetryPolicy(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840", WithRetryPolicy(ExponentialBackoff(time.Second, time.Minute, 1)))
 	require.NoError(t, err)
 	_ = c.Close(context.Background())
@@ -66,6 +72,7 @@ func TestWithRetryPolicy(t *testing.T) {
 
 // A timeout is recognised when it is wrapped, too.
 func TestExponentialBackoffWrappedTimeout(t *testing.T) {
+	t.Parallel()
 	p := NewExponentialBackoff(ExponentialBackoffConfig{})
 	retry, _ := p.ShouldRetry(0, fmt.Errorf("read: %w", ua.StatusBadTimeout))
 	require.False(t, retry)

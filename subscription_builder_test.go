@@ -11,6 +11,7 @@ import (
 )
 
 func TestSubscriptionBuilder_Chaining(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -36,6 +37,7 @@ func TestSubscriptionBuilder_Chaining(t *testing.T) {
 }
 
 func TestSubscriptionBuilder_MonitorEventsBuildsRequests(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -52,6 +54,7 @@ func TestSubscriptionBuilder_MonitorEventsBuildsRequests(t *testing.T) {
 }
 
 func TestSubscriptionBuilder_NotifyChannel(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 

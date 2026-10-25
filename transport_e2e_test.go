@@ -17,6 +17,7 @@ import (
 // TestTransports runs the same session over opc.tcp, opc.wss and opc.https:
 // read, write, browse and a subscription whose data changes arrive.
 func TestTransports(t *testing.T) {
+	t.Parallel()
 	srv, urls := testutil.NewTransportTestServer(t)
 	f := testutil.AddFixture(t, srv)
 

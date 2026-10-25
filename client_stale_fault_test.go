@@ -24,6 +24,7 @@ const staleFaultQuiet = 500 * time.Millisecond
 // does not make the client reconnect; the same fault for the session it uses
 // does.
 func TestStaleSessionFaultIgnored(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	rec := &recorder{}
 	c := connectCovClient(t, url, rec.options()...)
@@ -47,6 +48,7 @@ func TestStaleSessionFaultIgnored(t *testing.T) {
 // request was sent: a recreation that completed while the request was under
 // way is not what the server answered about.
 func TestStaleNoSubscriptionIgnored(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := connectCovClient(t, url)
 	subscribe(t, c)

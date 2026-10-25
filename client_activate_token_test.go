@@ -25,6 +25,7 @@ import (
 // client share. Two activations at once raced on it, and one could send the
 // password as it was protected for the other session.
 func TestActivateSession_DoesNotChangeTheConfiguredToken(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t,
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
 		server.AllowUsernameOnNone(),

@@ -35,6 +35,7 @@ func newNotifyTestSub(id uint32) (*Subscription, <-chan *PublishNotificationData
 }
 
 func TestRegisterSubscriptionNeedsSubMuxLock(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	c.subMux.Lock()
 	defer c.subMux.Unlock()
@@ -51,18 +52,21 @@ func TestRegisterSubscriptionNeedsSubMuxLock(t *testing.T) {
 }
 
 func TestRepublishSubscription_UnknownID(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	_, err := c.republishSubscription(context.Background(), 404, nil)
 	require.ErrorIs(t, err, errors.ErrInvalidSubscriptionID)
 }
 
 func TestRecreateSubscription_UnknownID(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	err := c.recreateSubscription(context.Background(), 404)
 	require.ErrorIs(t, err, ua.StatusBadSubscriptionIDInvalid)
 }
 
 func TestUpdatePublishTimeout_UsesMinSubTimeout(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	c.cfg.sechan.RequestTimeout = 100 * time.Millisecond
 
@@ -86,6 +90,7 @@ func TestUpdatePublishTimeout_UsesMinSubTimeout(t *testing.T) {
 }
 
 func TestNotifySubscription_NilAndInvalid(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	sub, ch := newNotifyTestSub(11)
 
@@ -109,6 +114,7 @@ func TestNotifySubscription_NilAndInvalid(t *testing.T) {
 }
 
 func TestNotifySubscription_DataChange(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	sub, ch := newNotifyTestSub(12)
 	dcn := &ua.DataChangeNotification{}
@@ -123,6 +129,7 @@ func TestNotifySubscription_DataChange(t *testing.T) {
 }
 
 func TestNotifySubscriptionOfError_KnownAndUnknown(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	sub, ch := newNotifyTestSub(3)
 	c.subMux.Lock()
@@ -140,6 +147,7 @@ func TestNotifySubscriptionOfError_KnownAndUnknown(t *testing.T) {
 }
 
 func TestNotifyAllSubscriptionsOfError(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	a, ach := newNotifyTestSub(1)
 	b, bch := newNotifyTestSub(2)
@@ -160,6 +168,7 @@ func TestNotifyAllSubscriptionsOfError(t *testing.T) {
 }
 
 func TestHandleAcksNeedsSubMuxLock(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	c.cfg.logger = slog.Default()
 	ackOK := &ua.SubscriptionAcknowledgement{SubscriptionID: 1, SequenceNumber: 1}
@@ -185,6 +194,7 @@ func TestHandleAcksNeedsSubMuxLock(t *testing.T) {
 }
 
 func TestHandleNotificationNeedsSubMuxLock(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	sub, _ := newNotifyTestSub(5)
 	sub.nextSeq = 10
@@ -218,6 +228,7 @@ func TestHandleNotificationNeedsSubMuxLock(t *testing.T) {
 }
 
 func TestResumeSubscriptions_Signals(t *testing.T) {
+	t.Parallel()
 	c := newNotifyTestClient(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

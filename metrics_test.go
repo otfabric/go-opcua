@@ -13,17 +13,20 @@ import (
 )
 
 func TestClientServiceName(t *testing.T) {
+	t.Parallel()
 	require.Equal(t, "Read", serviceName(&ua.ReadRequest{}))
 	require.Equal(t, "CreateSubscription", serviceName(&ua.CreateSubscriptionRequest{}))
 }
 
 func TestInvalidResponseTypeError(t *testing.T) {
+	t.Parallel()
 	err := &InvalidResponseTypeError{Got: "*ua.ReadResponse", Want: "*ua.WriteResponse"}
 	require.Contains(t, err.Error(), "ReadResponse")
 	require.True(t, errors.Is(err, errors.ErrInvalidResponseType))
 }
 
 func TestNopMetricsDoesNotPanic(t *testing.T) {
+	t.Parallel()
 	var m nopMetrics
 	m.OnRequest("Read")
 	m.OnResponse("Read", time.Millisecond)

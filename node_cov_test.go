@@ -16,6 +16,7 @@ import (
 )
 
 func TestNodeCovAttributeAccessors(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	n := c.Node(f.Writable)
@@ -72,6 +73,7 @@ func TestNodeCovAttributeAccessors(t *testing.T) {
 // Every attribute accessor reports the per-node status of the server as its
 // error, here for a node that does not exist.
 func TestNodeCovAccessorErrors(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 	n := c.Node(ua.NewStringNodeID(f.NSIndex, "does-not-exist"))
 
@@ -97,6 +99,7 @@ func TestNodeCovAccessorErrors(t *testing.T) {
 // A closed client fails every node operation with BadServerNotConnected
 // instead of hanging or panicking.
 func TestNodeCovClosedClient(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 	require.NoError(t, c.Close(ctx))
 	n := c.Node(f.Plant)
@@ -125,6 +128,7 @@ func TestNodeCovClosedClient(t *testing.T) {
 }
 
 func TestNodeCovSummaryVariable(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	s, err := c.Node(f.Writable).Summary(ctx)
@@ -150,6 +154,7 @@ func TestNodeCovSummaryVariable(t *testing.T) {
 }
 
 func TestNodeCovChildrenAndReferencedNodes(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	// refs 0 means hierarchical references
@@ -190,6 +195,7 @@ func nodeIDStrings(nodes []*opcua.Node) []string {
 // Line2 is reachable from Plant directly and through Line1: Walk yields it
 // twice, WalkLimitDedup once.
 func TestNodeCovWalkDedup(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 	n := c.Node(f.Plant)
 
@@ -227,6 +233,7 @@ func TestNodeCovWalkDedup(t *testing.T) {
 }
 
 func TestNodeCovBrowseWithDepth(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 	n := c.Node(f.Plant)
 
@@ -324,6 +331,7 @@ func browseNextFault() server.Handler {
 }
 
 func TestNodeCovContinuationPoints(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	root := ua.NewStringNodeID(1, "root")
 
@@ -403,6 +411,7 @@ func TestNodeCovContinuationPoints(t *testing.T) {
 }
 
 func TestNodeCovBrowseWithoutResults(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := newScriptedServer(t, map[uint16]server.Handler{
 		id.BrowseRequestEncodingDefaultBinary: respond(func(r ua.Request) ua.Response {
@@ -427,6 +436,7 @@ func TestNodeCovBrowseWithoutResults(t *testing.T) {
 
 // A Browse that fails below the start node fails the whole recursive browse.
 func TestNodeCovBrowseWithDepthChildError(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := newScriptedServer(t, map[uint16]server.Handler{
 		id.BrowseRequestEncodingDefaultBinary: func(_ context.Context, _ *uasc.SecureChannel, r ua.Request, _ uint32) (ua.Response, error) {
@@ -449,6 +459,7 @@ func TestNodeCovBrowseWithDepthChildError(t *testing.T) {
 }
 
 func TestNodeCovAttributeWithoutResults(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := newScriptedServer(t, map[uint16]server.Handler{
 		id.ReadRequestEncodingDefaultBinary: respond(func(r ua.Request) ua.Response {
@@ -468,6 +479,7 @@ func TestNodeCovAttributeWithoutResults(t *testing.T) {
 // A server that returns attribute values of the wrong type gets an error,
 // not a panic.
 func TestNodeCovAttributeWrongType(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	_, url := newScriptedServer(t, map[uint16]server.Handler{
 		id.ReadRequestEncodingDefaultBinary: readHandler(func(*ua.ReadValueID) *ua.DataValue {
@@ -500,6 +512,7 @@ func TestNodeCovAttributeWrongType(t *testing.T) {
 }
 
 func TestNodeCovTranslateBrowsePaths(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	// resolves from a custom start node, one namespace for all segments (the
@@ -515,6 +528,7 @@ func TestNodeCovTranslateBrowsePaths(t *testing.T) {
 }
 
 func TestNodeCovTranslateBrowsePathsMalformed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	translate := func(fn func(r ua.Request) ua.Response) map[uint16]server.Handler {
 		return map[uint16]server.Handler{id.TranslateBrowsePathsToNodeIDsRequestEncodingDefaultBinary: respond(fn)}

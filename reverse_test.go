@@ -21,6 +21,7 @@ import (
 )
 
 func TestSameEndpointURL(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		a, b string
 		same bool
@@ -44,6 +45,7 @@ func TestSameEndpointURL(t *testing.T) {
 }
 
 func TestMatchReverseHello(t *testing.T) {
+	t.Parallel()
 	l, err := uacp.ListenReverse(context.Background(), "127.0.0.1:0", nil)
 	require.NoError(t, err)
 	defer func() { _ = l.Close() }()
@@ -89,6 +91,7 @@ func testCertificate(t *testing.T, appURI string) []byte {
 }
 
 func TestCheckReverseServerCertificate(t *testing.T) {
+	t.Parallel()
 	cert := testCertificate(t, "urn:server")
 	rhe := &uacp.ReverseHello{ServerURI: "urn:server"}
 	other := &uacp.ReverseHello{ServerURI: "urn:impostor"}
@@ -131,6 +134,7 @@ func TestCheckReverseServerCertificate(t *testing.T) {
 }
 
 func TestReverseOptions(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 
 	// A client that connects the usual way has none.
@@ -163,6 +167,7 @@ func TestReverseOptions(t *testing.T) {
 }
 
 func TestReverseOwnListener(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	c, err := NewClient("", ReverseConnect("127.0.0.1:0"))
 	require.NoError(t, err)

@@ -19,6 +19,7 @@ import (
 // server certificate was replaced) must do it the way it connects: over a
 // reverse connection, since it cannot reach the server otherwise.
 func TestReverseConnectRefetchEndpoints(t *testing.T) {
+	t.Parallel()
 	const appURI = "urn:otfabric:test:reverse"
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()

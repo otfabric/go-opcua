@@ -62,6 +62,7 @@ func secureCovOpts(p *testpki.PKI, ep *ua.EndpointDescription, auth ua.UserToken
 }
 
 func TestClientCovSecureUserTokens(t *testing.T) {
+	t.Parallel()
 	p, ep, url := secureCovServer(t)
 	ctx := context.Background()
 
@@ -109,6 +110,7 @@ func TestClientCovSecureUserTokens(t *testing.T) {
 }
 
 func TestClientCovSecureChannelFailures(t *testing.T) {
+	t.Parallel()
 	p, ep, url := secureCovServer(t)
 	ctx := context.Background()
 

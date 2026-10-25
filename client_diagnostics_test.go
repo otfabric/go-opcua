@@ -13,12 +13,14 @@ import (
 )
 
 func TestReturnDiagnostics_Option(t *testing.T) {
+	t.Parallel()
 	cfg := &Config{}
 	require.NoError(t, ReturnDiagnostics(0xFFFFFFFF)(cfg))
 	require.Equal(t, uint32(ua.ReturnDiagnosticsAll), cfg.returnDiagnostics)
 }
 
 func TestPrepareDiagnostics(t *testing.T) {
+	t.Parallel()
 	c := &Client{cfg: &Config{returnDiagnostics: ua.ServiceLevelSymbolicID}}
 
 	// A request without header gets one.
@@ -54,6 +56,7 @@ func TestPrepareDiagnostics(t *testing.T) {
 }
 
 func TestServiceError(t *testing.T) {
+	t.Parallel()
 	rh := &ua.ResponseHeader{
 		ServiceResult:      ua.StatusBadTimeout,
 		StringTable:        []string{"BadTimeout"},
@@ -78,6 +81,7 @@ func TestServiceError(t *testing.T) {
 }
 
 func TestDiagnosticsHelpers_NotConnected(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://localhost:1")
 	require.NoError(t, err)
 	ctx := context.Background()

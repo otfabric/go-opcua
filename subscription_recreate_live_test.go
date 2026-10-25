@@ -32,6 +32,7 @@ func waitDataChange(t *testing.T, notify <-chan *opcua.PublishNotificationData, 
 }
 
 func TestClient_recreateSubscription_Live(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -87,6 +88,7 @@ written:
 }
 
 func TestClient_recreateSubscription_InvalidID(t *testing.T) {
+	t.Parallel()
 	c, err := opcua.NewClient("opc.tcp://127.0.0.1:1")
 	require.NoError(t, err)
 	err = c.TestingRecreateSubscription(context.Background(), 999)
@@ -94,6 +96,7 @@ func TestClient_recreateSubscription_InvalidID(t *testing.T) {
 }
 
 func TestClient_recreateSubscription_MonitoredItemFails(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)

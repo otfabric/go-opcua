@@ -41,6 +41,7 @@ func eccTestCert(t *testing.T, curve elliptic.Curve, usage x509.KeyUsage) (*ecds
 }
 
 func TestPrivateKeySigner(t *testing.T) {
+	t.Parallel()
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
 	eccKey, _ := eccTestCert(t, elliptic.P256(), x509.KeyUsageDigitalSignature)
@@ -100,6 +101,7 @@ func TestPrivateKeySigner(t *testing.T) {
 }
 
 func TestPrivateKeyFile_ECC(t *testing.T) {
+	t.Parallel()
 	key, _ := eccTestCert(t, elliptic.P384(), x509.KeyUsageDigitalSignature)
 	pkcs8, err := x509.MarshalPKCS8PrivateKey(key)
 	require.NoError(t, err)
@@ -139,6 +141,7 @@ func TestPrivateKeyFile_ECC(t *testing.T) {
 // An ECC certificate has no keyEncipherment usage: nothing is ever encrypted
 // with its key. That must not disqualify it for SignAndEncrypt.
 func TestValidateServerCertificate_ECCKeyUsage(t *testing.T) {
+	t.Parallel()
 	trust := func(der []byte) *Config {
 		cert, err := x509.ParseCertificate(der)
 		require.NoError(t, err)
@@ -162,6 +165,7 @@ func TestValidateServerCertificate_ECCKeyUsage(t *testing.T) {
 }
 
 func TestECDHPolicyFor(t *testing.T) {
+	t.Parallel()
 	channel := func(uri string) *uasc.SecureChannel {
 		return uasc.NewCryptoChannel(&uasc.Config{SecurityPolicyURI: uri})
 	}
@@ -191,6 +195,7 @@ func TestECDHPolicyFor(t *testing.T) {
 }
 
 func TestServerEphemeralKey(t *testing.T) {
+	t.Parallel()
 	const uri = ua.SecurityPolicyURIECCNistP256
 	serverKey, serverCert := eccTestCert(t, elliptic.P256(), x509.KeyUsageDigitalSignature)
 	server := uasc.NewCryptoChannel(&uasc.Config{SecurityPolicyURI: uri, LocalPrivateKey: serverKey, Certificate: serverCert})

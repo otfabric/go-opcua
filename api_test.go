@@ -14,6 +14,7 @@ import (
 )
 
 func TestReadValue(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -26,6 +27,7 @@ func TestReadValue(t *testing.T) {
 }
 
 func TestReadValues(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -44,6 +46,7 @@ func TestReadValues(t *testing.T) {
 }
 
 func TestReadMulti(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -66,6 +69,7 @@ func TestReadMulti(t *testing.T) {
 }
 
 func TestReadMultiChunking(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -86,6 +90,7 @@ func TestReadMultiChunking(t *testing.T) {
 }
 
 func TestReadMultiEmptyItems(t *testing.T) {
+	t.Parallel()
 	c, _ := opcua.NewClient("opc.tcp://localhost:4840")
 	ctx := context.Background()
 	results, err := c.ReadMulti(ctx, nil)
@@ -97,6 +102,7 @@ func TestReadMultiEmptyItems(t *testing.T) {
 }
 
 func TestReadMultiMixedAttributes(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -120,6 +126,7 @@ func TestReadMultiMixedAttributes(t *testing.T) {
 }
 
 func TestWriteValue(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -141,6 +148,7 @@ func TestWriteValue(t *testing.T) {
 }
 
 func TestWriteValues(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -171,6 +179,7 @@ func TestWriteValues(t *testing.T) {
 }
 
 func TestBrowseAll(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -182,6 +191,7 @@ func TestBrowseAll(t *testing.T) {
 }
 
 func TestWithConnStateHandler(t *testing.T) {
+	t.Parallel()
 	var got []opcua.ConnState
 	_, err := opcua.NewClient("opc.tcp://example.com:4840",
 		opcua.WithConnStateHandler(func(s opcua.ConnState) {
@@ -195,6 +205,7 @@ func TestWithConnStateHandler(t *testing.T) {
 }
 
 func TestSubscriptionBuilder(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -232,6 +243,7 @@ func TestSubscriptionBuilder(t *testing.T) {
 }
 
 func TestSubscriptionBuilder_NoMonitor(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -246,6 +258,7 @@ func TestSubscriptionBuilder_NoMonitor(t *testing.T) {
 }
 
 func TestNodeSummary(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -260,6 +273,7 @@ func TestNodeSummary(t *testing.T) {
 }
 
 func TestNodeTypeDefinition(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -272,6 +286,7 @@ func TestNodeTypeDefinition(t *testing.T) {
 }
 
 func TestNodeDataType(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -284,6 +299,7 @@ func TestNodeDataType(t *testing.T) {
 }
 
 func TestNodeWalk(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -303,6 +319,7 @@ func TestNodeWalk(t *testing.T) {
 }
 
 func TestNodeWalkLimit(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -328,6 +345,7 @@ func TestNodeWalkLimit(t *testing.T) {
 }
 
 func TestNodeWalkLimitDedup(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -353,6 +371,7 @@ func TestNodeWalkLimitDedup(t *testing.T) {
 }
 
 func TestNodeBrowseWithDepth(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -372,6 +391,7 @@ func TestNodeBrowseWithDepth(t *testing.T) {
 }
 
 func TestNodeBrowseWithDepthMaxDepthZero(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -389,6 +409,7 @@ func TestNodeBrowseWithDepthMaxDepthZero(t *testing.T) {
 }
 
 func TestNodeBrowseWithDepthInverse(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -410,6 +431,7 @@ func TestNodeBrowseWithDepthInverse(t *testing.T) {
 }
 
 func TestClientServerStatus(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -421,6 +443,7 @@ func TestClientServerStatus(t *testing.T) {
 }
 
 func TestClientSecurityAccessors(t *testing.T) {
+	t.Parallel()
 	c, err := opcua.NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
@@ -430,6 +453,7 @@ func TestClientSecurityAccessors(t *testing.T) {
 }
 
 func TestClientWriteAttribute(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -450,6 +474,7 @@ func TestClientWriteAttribute(t *testing.T) {
 }
 
 func TestClientWriteNodeValue(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	c := testutil.NewTestClient(t, url)
@@ -467,6 +492,7 @@ func TestClientWriteNodeValue(t *testing.T) {
 }
 
 func TestClientNamespaceURI(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -482,6 +508,7 @@ func TestClientNamespaceURI(t *testing.T) {
 }
 
 func TestNodeFromPath(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -494,6 +521,7 @@ func TestNodeFromPath(t *testing.T) {
 }
 
 func TestNodeFromPathInNamespace(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := testutil.AddTestNodes(t, srv)
 	require.NotNil(t, ns)
@@ -511,6 +539,7 @@ func TestNodeFromPathInNamespace(t *testing.T) {
 }
 
 func TestNodeFromQualifiedPath(t *testing.T) {
+	t.Parallel()
 	t.Run("invalid path no namespace prefix", func(t *testing.T) {
 		_, url := testutil.NewTestServer(t)
 		c := testutil.NewTestClient(t, url)

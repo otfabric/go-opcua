@@ -13,6 +13,7 @@ import (
 )
 
 func TestClient_Send_DoesNotPanicWhenDisconnected(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err, "NewClient failed")
 
@@ -23,6 +24,7 @@ func TestClient_Send_DoesNotPanicWhenDisconnected(t *testing.T) {
 }
 
 func TestCloneReadRequest(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		req, want *ua.ReadRequest
@@ -110,6 +112,7 @@ func TestCloneReadRequest(t *testing.T) {
 // fill in defaults; the clone must keep the caller's RequestHeader, or a
 // ReturnDiagnostics mask never reaches the server.
 func TestCloneRequest_KeepsRequestHeader(t *testing.T) {
+	t.Parallel()
 	hdr := &ua.RequestHeader{ReturnDiagnostics: ua.ReturnDiagnosticsAll, AuditEntryID: "audit-1"}
 	read := cloneReadRequest(&ua.ReadRequest{RequestHeader: hdr})
 	require.Same(t, hdr, read.RequestHeader)
@@ -118,6 +121,7 @@ func TestCloneRequest_KeepsRequestHeader(t *testing.T) {
 }
 
 func TestCloneBrowseRequest(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		req, want *ua.BrowseRequest
@@ -199,6 +203,7 @@ func TestCloneBrowseRequest(t *testing.T) {
 }
 
 func TestClient_SetState(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name      string
 		state     ConnState
@@ -277,6 +282,7 @@ func TestClient_SetState(t *testing.T) {
 }
 
 func TestClient_LoadNil(t *testing.T) {
+	t.Parallel()
 	t.Run("normal client init", func(t *testing.T) {
 		c, err := NewClient("opc.tcp://dummy")
 		require.NoError(t, err)
@@ -293,6 +299,7 @@ func TestClient_LoadNil(t *testing.T) {
 }
 
 func TestClient_SetPublishingMode(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -301,6 +308,7 @@ func TestClient_SetPublishingMode(t *testing.T) {
 }
 
 func TestClient_AddNodes(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -319,6 +327,7 @@ func TestClient_AddNodes(t *testing.T) {
 }
 
 func TestClient_DeleteNodes(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -331,6 +340,7 @@ func TestClient_DeleteNodes(t *testing.T) {
 }
 
 func TestClient_AddReferences(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -348,6 +358,7 @@ func TestClient_AddReferences(t *testing.T) {
 }
 
 func TestClient_DeleteReferences(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -365,6 +376,7 @@ func TestClient_DeleteReferences(t *testing.T) {
 }
 
 func TestClient_HistoryUpdateData(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -376,6 +388,7 @@ func TestClient_HistoryUpdateData(t *testing.T) {
 }
 
 func TestClient_HistoryUpdateEvents(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -387,6 +400,7 @@ func TestClient_HistoryUpdateEvents(t *testing.T) {
 }
 
 func TestClient_HistoryDeleteRawModified(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -397,6 +411,7 @@ func TestClient_HistoryDeleteRawModified(t *testing.T) {
 }
 
 func TestClient_HistoryDeleteAtTime(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 
@@ -407,6 +422,7 @@ func TestClient_HistoryDeleteAtTime(t *testing.T) {
 }
 
 func TestClient_HistoryDeleteEvents(t *testing.T) {
+	t.Parallel()
 	c, err := NewClient("opc.tcp://example.com:4840")
 	require.NoError(t, err)
 

@@ -20,6 +20,7 @@ import (
 var extCurves = []string{testpki.CurveBrainpoolP256r1, testpki.CurveBrainpoolP384r1, testpki.CurveEd448}
 
 func TestCertificate_ExtendedKeys(t *testing.T) {
+	t.Parallel()
 	for _, curve := range extCurves {
 		t.Run(curve, func(t *testing.T) {
 			id, err := testpki.NewIdentity(curve, "client "+curve, "urn:otfabric:client:"+curve, nil, nil)
@@ -50,6 +51,7 @@ func TestCertificate_ExtendedKeys(t *testing.T) {
 // with Brainpool and Ed448 keys: self-signed and trusted, issued by a trusted
 // CA on the same curve, untrusted.
 func TestValidateServerCertificate_ExtendedKeys(t *testing.T) {
+	t.Parallel()
 	pki, err := testpki.Get()
 	require.NoError(t, err)
 	trust := func(certs ...*x509.Certificate) *Config {

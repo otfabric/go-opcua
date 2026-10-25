@@ -23,6 +23,7 @@ func setupFixture(t *testing.T) (*opcua.Client, *testutil.Fixture, context.Conte
 }
 
 func TestGetEndpoints(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -33,6 +34,7 @@ func TestGetEndpoints(t *testing.T) {
 }
 
 func TestFindServers(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -43,6 +45,7 @@ func TestFindServers(t *testing.T) {
 }
 
 func TestFindServersOnNetwork(t *testing.T) {
+	t.Parallel()
 	_, url := testutil.NewTestServer(t)
 	c := testutil.NewTestClient(t, url)
 	ctx := context.Background()
@@ -53,6 +56,7 @@ func TestFindServersOnNetwork(t *testing.T) {
 }
 
 func TestNamespaceArray(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	namespaces, err := c.NamespaceArray(ctx)
@@ -65,6 +69,7 @@ func TestNamespaceArray(t *testing.T) {
 }
 
 func TestSessionNegotiatedFields(t *testing.T) {
+	t.Parallel()
 	c, _, ctx := setupFixture(t)
 	_ = ctx
 
@@ -77,6 +82,7 @@ func TestSessionNegotiatedFields(t *testing.T) {
 }
 
 func TestDetachSession(t *testing.T) {
+	t.Parallel()
 	c, _, ctx := setupFixture(t)
 
 	sess, err := c.DetachSession(ctx)
@@ -88,6 +94,7 @@ func TestDetachSession(t *testing.T) {
 }
 
 func TestSetPublishingMode(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	sub, _, err := c.NewSubscription().Interval(100 * time.Millisecond).Start(ctx)
@@ -101,6 +108,7 @@ func TestSetPublishingMode(t *testing.T) {
 }
 
 func TestFixtureScalarReads(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	dvs, err := c.ReadValues(ctx,
@@ -116,6 +124,7 @@ func TestFixtureScalarReads(t *testing.T) {
 }
 
 func TestFindNamespace(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	idx, err := c.FindNamespace(ctx, "http://otfabric.com/conformance")
@@ -127,6 +136,7 @@ func TestFindNamespace(t *testing.T) {
 }
 
 func TestRegisterUnregisterNodes(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	resp, err := c.RegisterNodes(ctx, &ua.RegisterNodesRequest{
@@ -143,6 +153,7 @@ func TestRegisterUnregisterNodes(t *testing.T) {
 }
 
 func TestBrowseNext(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	resp, err := c.Browse(ctx, &ua.BrowseRequest{
@@ -174,6 +185,7 @@ func TestBrowseNext(t *testing.T) {
 }
 
 func TestQueryFirstAndNext(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	resp, err := c.QueryFirst(ctx, &ua.QueryFirstRequest{
@@ -198,6 +210,7 @@ func TestQueryFirstAndNext(t *testing.T) {
 }
 
 func TestCallMethodAndArguments(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	result, err := c.CallMethod(ctx, f.MethodObject, f.SquareMethod, int32(7))
@@ -214,6 +227,7 @@ func TestCallMethodAndArguments(t *testing.T) {
 }
 
 func TestSubscriptionBuilderMonitorEvents(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	filter := ua.NewEventFilter().
@@ -253,6 +267,7 @@ func TestSubscriptionBuilderMonitorEvents(t *testing.T) {
 }
 
 func TestWithMetrics(t *testing.T) {
+	t.Parallel()
 	m := &captureMetrics{}
 	c, err := opcua.NewClient("opc.tcp://example.com:4840", opcua.WithMetrics(m))
 	require.NoError(t, err)
@@ -267,6 +282,7 @@ func (c *captureMetrics) OnError(service string, d time.Duration, err error) {}
 func (c *captureMetrics) OnTimeout(service string, d time.Duration)          {}
 
 func TestNodeString(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 	node := c.Node(f.Int32)
 	require.Equal(t, f.Int32.String(), node.String())
@@ -277,6 +293,7 @@ func TestNodeString(t *testing.T) {
 }
 
 func TestSubscriptionStats(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	sub, _, err := c.NewSubscription().Interval(100 * time.Millisecond).Monitor(f.Int32).Start(ctx)

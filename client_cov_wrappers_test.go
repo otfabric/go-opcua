@@ -22,6 +22,7 @@ import (
 // Every convenience wrapper of a closed client fails with
 // BadServerNotConnected.
 func TestClientCovWrappersClosed(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 	require.NoError(t, c.Close(ctx))
 	n := f.Int32
@@ -74,6 +75,7 @@ func TestClientCovWrappersClosed(t *testing.T) {
 }
 
 func TestClientCovWrappers(t *testing.T) {
+	t.Parallel()
 	c, f, ctx := setupFixture(t)
 
 	// NamespaceURI and FindNamespace
@@ -156,6 +158,7 @@ func TestClientCovWrappers(t *testing.T) {
 // The history read wrappers send the right details to the server: the
 // built-in historian answers raw reads; the other kinds are rejected per node.
 func TestClientCovHistory(t *testing.T) {
+	t.Parallel()
 	h := server.NewHistorian()
 	srv, url := testutil.NewTestServer(t)
 	f := testutil.AddFixture(t, srv)
@@ -321,6 +324,7 @@ func argsValue(args ...any) *ua.DataValue {
 }
 
 func TestClientCovMalformedResponses(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	m := newMalformedServer(t)
 	c := connectCovClient(t, m.url, opcua.SkipNamespaceUpdate())
@@ -386,6 +390,7 @@ func TestClientCovMalformedResponses(t *testing.T) {
 }
 
 func TestClientCovMethodArguments(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	m := newMalformedServer(t)
 	c := connectCovClient(t, m.url, opcua.SkipNamespaceUpdate())
@@ -426,6 +431,7 @@ func TestClientCovMethodArguments(t *testing.T) {
 }
 
 func TestClientCovHistoryMalformed(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	m := newMalformedServer(t)
 	c := connectCovClient(t, m.url, opcua.SkipNamespaceUpdate())

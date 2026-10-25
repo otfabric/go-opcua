@@ -19,6 +19,7 @@ import (
 // items by new ids. Before, an id obtained before a reconnect could address a
 // different item afterwards: Unmonitor removed the wrong one.
 func TestMonitoredItemIDsSurviveRecreation(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t)
 	ns := server.NewNodeNameSpace(srv, "StableIDs")
 	nodes := make([]*ua.NodeID, 4)

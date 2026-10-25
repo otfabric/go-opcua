@@ -17,6 +17,7 @@ import (
 )
 
 func TestParseConditionEvent105(t *testing.T) {
+	t.Parallel()
 	n := len(opcua.ConditionEventFields()) + 1
 	f := make([]*ua.Variant, n)
 	f[10] = ua.MustVariant(ua.NewGUIDNodeID(1, "72962B91-FA75-4AE6-8D28-B404DC7DAF63"))
@@ -52,6 +53,7 @@ func TestParseConditionEvent105(t *testing.T) {
 }
 
 func TestParseAuditConditionEvent(t *testing.T) {
+	t.Parallel()
 	f := opcua.NewAuditConditionEventFilter()
 	require.Len(t, f.SelectClauses, 17)
 	require.Len(t, f.WhereClause.Elements, 1)
@@ -71,6 +73,7 @@ func TestParseAuditConditionEvent(t *testing.T) {
 }
 
 func TestClientConditionMethods105(t *testing.T) {
+	t.Parallel()
 	srv, url := testutil.NewTestServer(t, server.WithAuditing(true))
 	ns := server.NewNodeNameSpace(srv, "urn:test:client-alarms105")
 	src := server.NewFolderNode(ua.NewStringNodeID(ns.ID(), "Tank"), "Tank")
