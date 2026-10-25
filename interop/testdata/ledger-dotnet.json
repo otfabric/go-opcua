@@ -2922,6 +2922,128 @@
       "reason": "adapter-command-missing",
       "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
       "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "test-missing",
+      "nextAction": "UA-.NETStandard refuses CreateSelfSignedCertificate for an occupied certificate slot with Bad_InvalidState (the test skips): DeleteCertificate (Part 12 §7.10.7) must empty it first, and package gds has no DeleteCertificate",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "the UA-.NETStandard server of the adapter has no ResetToServerDefaults method (Bad_MethodInvalid; the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "go-client-to-dotnet-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
+      "fixture": "baseline"
     }
   ]
 }

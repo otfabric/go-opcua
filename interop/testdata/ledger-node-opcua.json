@@ -2939,6 +2939,133 @@
       "status": "verified",
       "test": "TestCertMgmtPush_NodeOpcuaClient_GoServer",
       "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "node-opcua 2.187.12 has no GetCertificates method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.get-certificates",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "node-opcua 2.187.12 has no CreateSelfSignedCertificate method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.create-self-signed",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "node-opcua 2.187.12 answers ResetToServerDefaults with Bad_InternalError in the adapter (the test skips); whether a differently configured server supports it is not established",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.reset-to-defaults",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "node-opcua 2.187.12 serves the TrustList of the DefaultHttpsGroup as an empty file, no TrustListDataType (the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.https-group",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "verified",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.usertoken-group",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "node-opcua 2.187.12 publishes SupportedPrivateKeyFormats [PEM], no PFX (the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.pfx",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "node-opcua 2.187.12 cannot encode a variable of its TransactionDiagnostics (Bad_DataTypeIdUnknown; the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.transaction-diagnostics",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "node-opcua 2.187.12 has no CertificateExpired / TrustListOutOfDate alarms under its certificate groups (Bad_NoMatch; the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.alarms",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_groups_test.go",
+      "fixture": "baseline"
     }
   ]
 }
