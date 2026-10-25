@@ -26,6 +26,11 @@ type MethodCaller struct {
 	// AuditEntryID is the AuditEntryId of the request header (Part 4
 	// §7.33), which audit events report as ClientAuditEntryId.
 	AuditEntryID string
+	// ClientCertificate is the application instance certificate (DER, the
+	// leaf first if the client sent a chain) the client opened the secure
+	// channel with; nil on a channel without security. The channel
+	// handshake proved that the client holds its key.
+	ClientCertificate []byte
 }
 
 type methodCallerKey struct{}
@@ -44,6 +49,7 @@ func withMethodCaller(ctx context.Context, sess *session, sc *uasc.SecureChannel
 	if sc != nil {
 		c.SecurityMode = sc.SecurityMode()
 		c.SecurityPolicyURI = sc.SecurityPolicyURI()
+		c.ClientCertificate = sc.RemoteCertificate()
 	}
 	if sess != nil {
 		c.SessionID = sess.ID
