@@ -9344,28 +9344,26 @@
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_Open62541ClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
-      },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "milo-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_MiloClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
-      },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.access",
@@ -9394,28 +9392,26 @@
     {
       "capability": "certmgmt.push.access",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_Open62541ClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
-      },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.access",
       "direction": "milo-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_MiloClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
-      },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.get-certificates",
@@ -9445,28 +9441,26 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_Open62541ClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
-      },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "milo-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_MiloClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
-      },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.create-self-signed",
@@ -9597,28 +9591,26 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_Open62541ClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
-      },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "milo-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_MiloClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
-      },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.https-group",
@@ -9851,28 +9843,26 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "open62541-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_Open62541ClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "open62541",
         "version": "1.5.9"
-      },
-      "nextAction": "open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15)"
+      }
     },
     {
       "capability": "certmgmt.push.alarms",
       "direction": "milo-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
+      "status": "verified",
+      "test": "TestCertMgmtPush_MiloClientCall_GoServer",
       "fixture": "baseline",
       "interopVersion": "v0.14.0",
       "peer": {
         "stack": "eclipse-milo",
         "version": "1.1.8"
-      },
-      "nextAction": "the opcua-interop Milo adapter has no `client push` (contract §15)"
+      }
     },
     {
       "capability": "gds.pull.directory",

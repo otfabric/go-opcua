@@ -2964,9 +2964,8 @@
     {
       "capability": "certmgmt.push.rejected-list",
       "direction": "dotnet-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_DotnetClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -2979,9 +2978,8 @@
     {
       "capability": "certmgmt.push.access",
       "direction": "dotnet-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_DotnetClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -2994,9 +2992,8 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "dotnet-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_DotnetClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3041,9 +3038,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "dotnet-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_DotnetClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3116,9 +3112,8 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "dotnet-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "UA-.NETStandard 2.0.1 ships ServerPushConfigurationClient as NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client 2.0.1 (renamed from Gds.Client.Common); the dotnet adapter needs a `client push` on it (contract §15)",
+      "status": "verified",
+      "test": "TestCertMgmtPush_DotnetClientCall_GoServer",
       "fixture": "baseline"
     },
     {

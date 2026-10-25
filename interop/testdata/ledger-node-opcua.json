@@ -3008,9 +3008,8 @@
     {
       "capability": "certmgmt.push.get-certificates",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "status": "verified",
+      "test": "TestCertMgmtPush_NodeOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3055,9 +3054,8 @@
     {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "status": "verified",
+      "test": "TestCertMgmtPush_NodeOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {
@@ -3134,9 +3132,8 @@
     {
       "capability": "certmgmt.push.alarms",
       "direction": "node-opcua-client-to-go-server",
-      "status": "unverified",
-      "reason": "adapter-command-missing",
-      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/certmgmt/gds_push_groups_test.go",
+      "status": "verified",
+      "test": "TestCertMgmtPush_NodeOpcuaClientCall_GoServer",
       "fixture": "baseline"
     },
     {

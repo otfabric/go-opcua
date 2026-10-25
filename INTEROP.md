@@ -86,6 +86,7 @@ opcua-interop v0.14.0
       alarms105_timing_peer_test.go        OnDelay / OffDelay, ReAlarm, AudibleSound,
                                            FirstInGroup, AlarmMetrics
       certmgmt_peer_test.go                push certificate management (Part 12 §7)
+      certmgmt_call_peer_test.go           push management methods through each peer's `client call`
       certmgmt_groups_peer_test.go         push management: the 1.05 groups and methods
       pubsub_*_test.go                     PubSub (Part 14) against open62541 and through brokers
 
@@ -714,9 +715,21 @@ Profile `alarms-conditions`. `alarms.condition-refresh` and `alarms.acknowledgea
 
 ### Push certificate management (Part 12 §7)
 
-Profile `certificate-management`: `certmgmt.push.trust-list`, `.certificate-update`, `.rejected-list`, `.access`. `TestCertMgmtPush_GoClient_PeerServers` drives package `gds` against open62541 1.5.9 (UA_ENABLE_GDS_PUSHMANAGEMENT), UA-.NETStandard 2.0.1 and node-opcua 2.187.12; `TestCertMgmtPush_NodeOpcuaClient_GoServer` drives node-opcua's ClientPushCertificateManagement (adapter `client push`) against `server.WithPushManagement`. All these rows are verified. They need opcua-interop v0.13.0 or later (serverFeatures `push-management`, client operation `push`, contract §15): on older images they skip, or fail with `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1`. The UA-.NETStandard push client has no 2.0.1 package and open62541 has no push client API (D→S, O→S `adapter-command-missing`); Milo, async-opcua and asyncua are not wired (`peer-capability-unknown` for their servers).
+Profile `certificate-management`: `certmgmt.push.trust-list`, `.certificate-update`, `.rejected-list`, `.access`. `TestCertMgmtPush_GoClient_PeerServers` drives package `gds` against open62541 1.5.9 (UA_ENABLE_GDS_PUSHMANAGEMENT), UA-.NETStandard 2.0.1 and node-opcua 2.187.12; `TestCertMgmtPush_NodeOpcuaClient_GoServer` drives node-opcua's ClientPushCertificateManagement (adapter `client push`) against `server.WithPushManagement`. They need opcua-interop v0.13.0 or later (serverFeatures `push-management`, client operation `push`, contract §15): on older images they skip, or fail with `OPCUA_INTEROP_REQUIRE_CAPABILITIES=1`. The Milo 1.1.8, async-opcua 0.19.0 and asyncua 2.1.0 servers have no push management (`unsupported`).
 
-The Part 12 1.05 additions have rows of their own: `certmgmt.push.get-certificates`, `.create-self-signed`, `.delete-certificate`, `.reset-to-defaults`, `.https-group`, `.usertoken-group`, `.pfx`, `.transaction-diagnostics` and `.alarms` (CertificateExpired / TrustListOutOfDate). `TestCertMgmtPushGroups_GoClient_PeerServers` verifies all of them against UA-.NETStandard 2.0.1 but CreateSelfSignedCertificate (`adapter-fixture-missing`) and ResetToServerDefaults (`unsupported`), and the DefaultUserTokenGroup against open62541 and node-opcua; the others are `unsupported` where the peer server lacks the method or object, and ResetToServerDefaults on open62541 and node-opcua is `peer-capability-unknown`. No peer client calls these methods (→S `adapter-command-missing`); the go-opcua server side is covered by `conformance/certmgmt` and `chaos/certmgmt`.
+The Part 12 1.05 additions have rows of their own: `certmgmt.push.get-certificates`, `.create-self-signed`, `.delete-certificate`, `.reset-to-defaults`, `.https-group`, `.usertoken-group`, `.pfx`, `.transaction-diagnostics` and `.alarms` (CertificateExpired / TrustListOutOfDate). `TestCertMgmtPushGroups_GoClient_PeerServers` verifies all of them against UA-.NETStandard 2.0.1 but CreateSelfSignedCertificate (`adapter-fixture-missing`) and ResetToServerDefaults (`unsupported`), and the DefaultUserTokenGroup against open62541 and node-opcua; the others are `unsupported` where the peer server lacks the method or object, and ResetToServerDefaults on node-opcua is `peer-capability-unknown`.
+
+Peer client → go-opcua server, the methods that are a single call are verified with every peer's generic `client call` (and `client translate` / `client read` for the alarms; `certmgmt_call_peer_test.go`, one test per peer, `TestCertMgmtPush_<Peer>ClientCall_GoServer`), as the SecurityAdmin user over Basic256Sha256 SignAndEncrypt:
+
+| Capability | What the peer client checks | Peers |
+|---|---|---|
+| `.rejected-list` | GetRejectedList returns the self-signed certificate of a client the server refused just before | open62541, Milo, asyncua, async-opcua, UA-.NETStandard (node-opcua: `client push`) |
+| `.access` | GetRejectedList answers Bad_UserAccessDenied to an anonymous session and Bad_SecurityModeInsufficient on a Sign-only channel | open62541, Milo, asyncua, async-opcua, UA-.NETStandard (node-opcua: `client push`) |
+| `.get-certificates` | GetCertificates (NodeId input) of the DefaultApplicationGroup returns RsaSha256ApplicationCertificateType and the server's certificate | all six |
+| `.reset-to-defaults` | ResetToServerDefaults drops a certificate the go-opcua `gds` client added; the trust list is the configured one again | all six |
+| `.alarms` | CertificateExpired of the DefaultApplicationGroup is active (an ExpirationLimit longer than the certificate's life) and reports the certificate; TrustListOutOfDate is inactive (UpdateFrequency one hour) | all six |
+
+The Milo adapter prints the elements of a ByteString array as the Java object `{"bytes": <Base64>, …}` instead of a Base64 string (contract §7); the test accepts both. The UA-.NETStandard adapter cannot load the key of the test PKI's `untrusted` identity (a CA certificate), so the rejected client uses a self-signed application certificate made by the test. The methods with structured inputs or several steps — the trust list file methods, CreateSigningRequest / UpdateCertificate, CreateSelfSignedCertificate, DeleteCertificate, the HTTPS and user token groups, PFX and the transaction diagnostics — still wait for a push client (→S `adapter-command-missing`: UA-.NETStandard's push client has no 2.0.1 package, open62541 has no push client API, the Milo, asyncua and async-opcua adapters have no `client push`, and node-opcua's does not cover them); the go-opcua server side is covered by `conformance/certmgmt` and `chaos/certmgmt`.
 
 ### GDS pull model (Part 12 §6, §7.9)
 
