@@ -307,6 +307,13 @@ func (s *SecureChannel) postHTTPS(ctx context.Context, reqID uint32, body []byte
 	if err != nil {
 		return nil, s.httpsError(ctx, &expired, err)
 	}
+	// A server may answer a request it saw cancelled (an empty 200 from a
+	// handler that returned), and that answer can win the race with the
+	// cancellation. Its failure is then the end of ctx, the timeout or the
+	// closed channel.
+	if err := s.httpsEnded(ctx, &expired); err != nil {
+		return nil, err
+	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%w: HTTP status %s", ua.StatusBadCommunicationError, resp.Status)
 	}
@@ -329,10 +336,9 @@ func (s *SecureChannel) postHTTPS(ctx context.Context, reqID uint32, body []byte
 	return msg, nil
 }
 
-// httpsError maps the failure of an HTTP request: the end of ctx, the
-// timeout of the request, a closed channel, or a server that could not be
-// reached, which is reported to the monitor as a lost connection.
-func (s *SecureChannel) httpsError(ctx context.Context, expired *atomic.Bool, err error) error {
+// httpsEnded returns why a request must stop, or nil: the end of ctx, the
+// closed channel or the timeout of the request.
+func (s *SecureChannel) httpsEnded(ctx context.Context, expired *atomic.Bool) error {
 	switch {
 	case ctx.Err() != nil:
 		return ctx.Err()
@@ -340,6 +346,16 @@ func (s *SecureChannel) httpsError(ctx context.Context, expired *atomic.Bool, er
 		return errors.ErrSecureChannelClosed
 	case expired.Load():
 		return ua.StatusBadTimeout
+	}
+	return nil
+}
+
+// httpsError maps the failure of an HTTP request: the end of ctx, the
+// timeout of the request, a closed channel, or a server that could not be
+// reached, which is reported to the monitor as a lost connection.
+func (s *SecureChannel) httpsError(ctx context.Context, expired *atomic.Bool, err error) error {
+	if err := s.httpsEnded(ctx, expired); err != nil {
+		return err
 	}
 	// The connection to the server is gone. The monitor recovers it the
 	// way it recovers a closed TCP connection. The cause is kept as text
