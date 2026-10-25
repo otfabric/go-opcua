@@ -1137,6 +1137,12 @@ func (c *Client) setSession(s *Session) {
 type Session struct {
 	cfg *uasc.SessionConfig
 
+	// activateMu serializes the ActivateSession calls of the session: the
+	// reconnect logic and the application can activate it at the same time,
+	// and each activation uses the nonce and the ephemeral key the previous
+	// one brought.
+	activateMu sync.Mutex
+
 	// resp is the response to the CreateSession request which contains all
 	// necessary parameters to activate the session.
 	resp *ua.CreateSessionResponse
@@ -1398,6 +1404,8 @@ func (c *Client) activateSession(ctx context.Context, s *Session) (replaced bool
 }
 
 func (c *Client) doActivateSession(ctx context.Context, s *Session, replaced *bool) error {
+	s.activateMu.Lock()
+	defer s.activateMu.Unlock()
 	sc := c.SecureChannel()
 	if sc == nil {
 		return ua.StatusBadServerNotConnected
