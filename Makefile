@@ -57,7 +57,7 @@ selfintegration: ## Run integration tests (Go client vs in-process Go server)
 	@go test -count=1 -race -v -tags=integration ./tests/go...
 
 interop: ## Run interop tests against opcua-interop adapter images (-tags=interop)
-	@echo "Running interop tests (open62541 + Milo adapter images)"
+	@echo "Running interop tests (the adapter images of the six pinned peers)"
 	# Suite is ~10m locally / slower on CI GHA runners; keep headroom under the
 	# workflow job timeout-minutes (45). Do not use 600s — it flakes at the edge.
 	@go test -count=1 -tags=interop -timeout 45m ./interop/...
@@ -75,7 +75,7 @@ interop-shard: ## Run shard SHARD of SHARDS of the interop tests (e.g. SHARD=2 S
 	go test -v -count=1 -tags=interop -timeout 45m -run "^($$tests)$$" ./interop/
 
 # Chaos-monkey and parallelism suites: chaos/ and its sub-packages secure,
-# datachange, reverse, discovery, codec, pubsub and certmgmt (see chaos/doc.go). They also run, with a
+# datachange, reverse, discovery, codec, pubsub, certmgmt and gdspull (see chaos/doc.go). They also run, with a
 # short fault-injection phase, as part of `make test`. Override the knobs on
 # the command line, e.g. `make chaos CHAOS_DURATION=10m CHAOS_SEED=42`.
 CHAOS_DURATION ?= 30s
