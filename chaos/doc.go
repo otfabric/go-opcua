@@ -41,6 +41,12 @@
 // the server is restarted. Servers, targets, clients and listeners are also
 // closed in every order to check that nothing is left running.
 //
+// Event history (history_events_test.go) pages through the event history
+// of a notifier with continuation points while the server reports events on
+// it, clients delete events, abandon or release their reads and close their
+// sessions in the middle of one, and the proxy drops the connections; every
+// page continues the previous one in time order without repeating an event.
+//
 // Regression tests (regression_test.go) pin down every product bug the
 // suite found with a small deterministic test.
 //
