@@ -81,6 +81,23 @@ func TestSelectEndpoint(t *testing.T) {
 	_, err = opcua.SelectEndpointForTransport(endpoints, ua.TransportProfileHTTPS, "", ua.MessageSecurityModeInvalid, rsaCert)
 	require.ErrorIs(t, err, errors.ErrNoMatchingEndpoint)
 
+	// Without opc.tcp the UA Binary mappings come before the UA JSON ones,
+	// whatever their security level; JSON is selected explicitly.
+	https := "opc.https://host:443"
+	mixed := []*ua.EndpointDescription{
+		ep(https, ua.TransportProfileHTTPSJSON, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSign, 90),
+		ep(https, ua.TransportProfileHTTPS, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone, 0),
+	}
+	got, err = opcua.SelectEndpoint(mixed, "", ua.MessageSecurityModeInvalid, rsaCert)
+	require.NoError(t, err)
+	require.Equal(t, mixed[1], got)
+	got, err = opcua.SelectEndpoint(mixed[:1], "", ua.MessageSecurityModeInvalid, rsaCert)
+	require.NoError(t, err)
+	require.Equal(t, mixed[0], got, "only JSON: JSON")
+	got, err = opcua.SelectEndpointForTransport(mixed, ua.TransportProfileHTTPSJSON, "", ua.MessageSecurityModeInvalid, rsaCert)
+	require.NoError(t, err)
+	require.Equal(t, mixed[0], got)
+
 	// Equal security levels: the ranking of the library decides.
 	same := []*ua.EndpointDescription{
 		ep(tcp, "", ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSign, 1),

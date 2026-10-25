@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"iter"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync"
@@ -802,6 +803,8 @@ func (c *Client) Dial(ctx context.Context) error {
 	case c.cfg.reverse != nil:
 		// reverse connect: wait for the server to connect to us
 		conn, endpoint, err = c.acceptReverse(ctx)
+	case ua.IsJSONTransportProfile(c.cfg.transportProfile):
+		return c.dialJSON()
 	case uasc.IsHTTPSEndpoint(c.endpointURL):
 		return c.dialHTTPS()
 	default:
@@ -856,15 +859,60 @@ func (c *Client) Dial(ctx context.Context) error {
 // Nothing goes over the network: HTTPS has no connection or secure
 // conversation to establish, each request is posted on its own.
 func (c *Client) dialHTTPS() error {
-	hc := c.cfg.httpClient
-	if hc == nil {
-		hc = uasc.NewHTTPSClient(c.cfg.tlsConfig)
-	}
 	errCh := make(chan error, 1)
-	sc, err := uasc.NewHTTPSChannel(c.endpointURL, hc, c.cfg.sechan, errCh)
+	sc, err := uasc.NewHTTPSChannel(c.endpointURL, c.httpsClient(), c.cfg.sechan, errCh)
 	if err != nil {
 		return err
 	}
+	return c.useDirectChannel(sc, errCh)
+}
+
+// httpsClient returns the HTTP client of opc.https endpoints.
+func (c *Client) httpsClient() *http.Client {
+	if c.cfg.httpClient != nil {
+		return c.cfg.httpClient
+	}
+	return uasc.NewHTTPSClient(c.cfg.tlsConfig)
+}
+
+// dialJSON sets up the channel to an endpoint with the transport profile
+// https-uajson (Part 6 §7.4.5) or wss-uajson (Part 6 §7.5.2). As for HTTPS
+// nothing goes over the network yet: the WebSockets of wss-uajson are
+// opened by the requests that need them.
+func (c *Client) dialJSON() error {
+	profile := c.cfg.transportProfile
+	scheme, _, _ := strings.Cut(c.endpointURL, "://")
+	if want := ua.TransportProfileScheme(profile); !strings.EqualFold(scheme, want) && !(want == uasc.SchemeHTTPS && strings.EqualFold(scheme, "https")) {
+		return fmt.Errorf("%w: transport profile %s needs an %s endpoint, not %s", errors.ErrInvalidEndpoint, profile, want, c.endpointURL)
+	}
+	errCh := make(chan error, 1)
+	var (
+		sc  *uasc.SecureChannel
+		err error
+	)
+	if profile == ua.TransportProfileHTTPSJSON {
+		sc, err = uasc.NewHTTPSJSONChannel(c.endpointURL, c.httpsClient(), c.cfg.sechan, errCh)
+	} else {
+		d := c.cfg.dialer
+		if d.TLSConfig == nil && c.cfg.tlsConfig != nil {
+			withTLS := *d
+			withTLS.TLSConfig = c.cfg.tlsConfig
+			d = &withTLS
+		}
+		sc, err = uasc.NewWebSocketJSONChannel(c.endpointURL, d, c.cfg.sechan, errCh)
+	}
+	if err != nil {
+		return err
+	}
+	// The NamespaceArray read on an earlier connection, until the session
+	// reads it again.
+	sc.SetNamespaces(c.Namespaces())
+	return c.useDirectChannel(sc, errCh)
+}
+
+// useDirectChannel makes sc, a channel without UACP connection and secure
+// conversation, the channel of the client.
+func (c *Client) useDirectChannel(sc *uasc.SecureChannel, errCh chan error) error {
 	if err := c.cfg.validateServerCertificate(c.cfg.sechan.RemoteCertificate, c.cfg.sechan.SecurityMode); err != nil {
 		_ = sc.Close()
 		return err
@@ -1075,6 +1123,10 @@ func (c *Client) Namespaces() []string {
 
 func (c *Client) setNamespaces(ns []string) {
 	c.atomicNamespaces.Store(ns)
+	// The JSON encoding writes NodeIds with their namespace URI.
+	if sc := c.SecureChannel(); sc != nil {
+		sc.SetNamespaces(ns)
+	}
 }
 
 func (c *Client) publishTimeout() time.Duration {

@@ -39,7 +39,7 @@ type transportEnv struct {
 	tls    *tls.Config // client TLS configuration
 }
 
-func newTransportEnv(t *testing.T, seed int64) *transportEnv {
+func newTransportEnv(t *testing.T, seed int64, opts ...server.Option) *transportEnv {
 	t.Helper()
 	pki := testutil.TLS(t)
 	e := &transportEnv{
@@ -51,7 +51,7 @@ func newTransportEnv(t *testing.T, seed int64) *transportEnv {
 	// advertise their ports; the backends are set once the server listens.
 	wss := testutil.NewChaosProxy(t, "", seed)
 	https := testutil.NewChaosProxy(t, "", seed+1)
-	srv, err := server.New(
+	srv, err := server.New(append([]server.Option{
 		server.EndPoint("localhost", 0),
 		server.ListenOn("localhost:0"),
 		server.WebSocketEndPoint("localhost", wss.Port()),
@@ -62,7 +62,7 @@ func newTransportEnv(t *testing.T, seed int64) *transportEnv {
 		server.EnableSecurity("None", ua.MessageSecurityModeNone),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(debugLogger()),
-	)
+	}, opts...)...)
 	if err != nil {
 		t.Fatalf("chaos: new server: %v", err)
 	}
@@ -117,8 +117,8 @@ func (e *transportEnv) dial(url string, extra ...opcua.Option) (*opcua.Client, e
 
 // healthy reports whether a fresh client can read from the server over the
 // transport of scheme, bypassing the proxy.
-func (e *transportEnv) healthy(scheme string) error {
-	c, err := e.dial(e.directURL(scheme), opcua.AutoReconnect(false))
+func (e *transportEnv) healthy(scheme string, opts ...opcua.Option) error {
+	c, err := e.dial(e.directURL(scheme), append([]opcua.Option{opcua.AutoReconnect(false)}, opts...)...)
 	if err != nil {
 		return err
 	}
@@ -144,9 +144,21 @@ func readCurrentTime(c *opcua.Client) error {
 // TestChaosTransportsManyClients runs many clients over opc.wss and opc.https
 // while the connections are dropped, stalled, delayed and refused.
 func TestChaosTransportsManyClients(t *testing.T) {
+	transportsManyClients(t, false)
+}
+
+// transportsManyClients is TestChaosTransportsManyClients, over the UA JSON
+// mappings of the transports (wss-uajson, https-uajson) with json.
+func transportsManyClients(t *testing.T, json bool) {
 	seed := seedFor(t)
 	verifyLeaks := leakCheck(t)
-	e := newTransportEnv(t, seed)
+	var opts []server.Option
+	profiles := map[string]string{}
+	if json {
+		opts = append(opts, server.EnableUAJSON())
+		profiles = map[string]string{"opc.wss": ua.TransportProfileWSSJSON, "opc.https": ua.TransportProfileHTTPSJSON}
+	}
+	e := newTransportEnv(t, seed, opts...)
 	w := newWatchdog(t)
 	rng := rand.New(rand.NewSource(seed))
 
@@ -154,7 +166,7 @@ func TestChaosTransportsManyClients(t *testing.T) {
 	var clients []*opcua.Client
 	for _, scheme := range []string{"opc.wss", "opc.https"} {
 		for i := 0; i < perTransport; i++ {
-			c, err := e.dial(e.url(scheme))
+			c, err := e.dial(e.url(scheme), opcua.TransportProfile(profiles[scheme]))
 			if err != nil {
 				t.Fatalf("chaos: connect %s: %v", scheme, err)
 			}
@@ -237,7 +249,7 @@ func TestChaosTransportsManyClients(t *testing.T) {
 		}
 	}
 	for _, scheme := range []string{"opc.wss", "opc.https"} {
-		if err := e.healthy(scheme); err != nil {
+		if err := e.healthy(scheme, opcua.TransportProfile(profiles[scheme])); err != nil {
 			t.Errorf("%s: server not healthy: %v", scheme, err)
 		}
 	}

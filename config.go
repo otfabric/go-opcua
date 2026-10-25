@@ -90,6 +90,11 @@ type Config struct {
 	// one is made from tlsConfig).
 	tlsConfig  *tls.Config
 	httpClient *http.Client
+
+	// transportProfile is the TransportProfileUri of the endpoint
+	// (TransportProfile option, SecurityFromEndpoint); a JSON profile makes
+	// an opc.https or opc.wss endpoint use the UA JSON mapping.
+	transportProfile string
 }
 
 func DefaultDialer() *uacp.Dialer {
@@ -444,6 +449,7 @@ func setCertificate(cert []byte, cfg *Config) error {
 // a chosen endpoint (received from GetEndpoints()).
 func SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType) Option {
 	return func(cfg *Config) error {
+		cfg.transportProfile = ep.TransportProfileURI
 		cfg.sechan.SecurityPolicyURI = ep.SecurityPolicyURI
 		cfg.sechan.SecurityMode = ep.SecurityMode
 		cfg.sechan.RemoteCertificate = ep.ServerCertificate
@@ -677,6 +683,23 @@ func TLSConfig(c *tls.Config) Option {
 func HTTPClient(c *http.Client) Option {
 	return func(cfg *Config) error {
 		cfg.httpClient = c
+		return nil
+	}
+}
+
+// TransportProfile selects the transport mapping of the endpoint by its
+// TransportProfileUri (Part 7). The URL scheme selects the transport, and
+// by default its UA Binary mapping; ua.TransportProfileHTTPSJSON (an
+// opc.https endpoint, Part 6 §7.4.5) and ua.TransportProfileWSSJSON (an
+// opc.wss endpoint, Part 6 §7.5.2) select its UA JSON mapping instead,
+// where every service message is a JSON message without secure
+// conversation. A JSON profile whose scheme is not that of the endpoint
+// URL fails Dial with errors.ErrInvalidEndpoint. SecurityFromEndpoint sets
+// the profile of the endpoint it is given, so that selecting a wss-uajson
+// or https-uajson endpoint with SelectEndpointForTransport is enough.
+func TransportProfile(uri string) Option {
+	return func(cfg *Config) error {
+		cfg.transportProfile = uri
 		return nil
 	}
 }
