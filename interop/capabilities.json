@@ -2247,6 +2247,17 @@
       ]
     },
     {
+      "id": "certmgmt.push.delete-certificate",
+      "title": "Push model DeleteCertificate: a certificate of a group removed in the transaction, never the one the endpoints use (Part 12 §7.10.7, 1.05)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
       "id": "certmgmt.push.reset-to-defaults",
       "title": "Push model ResetToServerDefaults: trust lists and certificates back to the server's defaults (Part 12 §7.10.13, 1.05)",
       "profile": "certificate-management",

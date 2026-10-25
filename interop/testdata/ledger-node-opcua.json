@@ -3037,6 +3037,22 @@
       "fixture": "baseline"
     },
     {
+      "capability": "certmgmt.push.delete-certificate",
+      "direction": "go-client-to-node-opcua-server",
+      "status": "unsupported",
+      "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
+      "nextAction": "node-opcua 2.187.12 has no DeleteCertificate method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "certmgmt.push.delete-certificate",
+      "direction": "node-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "the node-opcua `client push` of the adapter (ClientPushCertificateManagement) does not exercise this; the go server side is covered by conformance/gds_push_delete_test.go",
+      "fixture": "baseline"
+    },
+    {
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-node-opcua-server",
       "status": "unverified",

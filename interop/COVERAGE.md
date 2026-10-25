@@ -78,6 +78,7 @@ Go↔Go tests never earn ✅.
 | Push model access: ServerConfiguration properties, the methods need the SecurityAdmin role on a SignAndEncrypt channel (Part 12 §7.2) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPush_GoClient_PeerServers` |
 | Push model GetCertificates of a certificate group: the certificate types and certificates the server uses (Part 12 §7.10.8, 1.05) | N/A | ⬜ | ⬜ | ⬜ | — |
 | Push model CreateSelfSignedCertificate: the server creates a key and a self-signed certificate for a group (Part 12 §7.10.6, 1.05) | N/A | ⬜ | ⬜ | ⬜ | — |
+| Push model DeleteCertificate: a certificate of a group removed in the transaction, never the one the endpoints use (Part 12 §7.10.7, 1.05) | N/A | ⬜ | ⬜ | ⬜ | — |
 | Push model ResetToServerDefaults: trust lists and certificates back to the server's defaults (Part 12 §7.10.13, 1.05) | ⬜ | ⬜ | ⬜ | ⬜ | — |
 | Push model DefaultHttpsGroup: its own TrustList read and changed with AddCertificate + ApplyChanges, apart from the application trust list (Part 12 §7.8.3) | N/A | ⬜ | ⬜ | ⬜ | — |
 | Push model DefaultUserTokenGroup: its own TrustList read and changed with AddCertificate + ApplyChanges, apart from the application trust list (Part 12 §7.8.3) | ✅ | ⬜ | ⬜ | ⬜ | C→O: `TestCertMgmtPushGroups_GoClient_PeerServers` |

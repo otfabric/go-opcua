@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/gds"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/ua"
@@ -40,6 +41,48 @@ func peerRefuses(t *testing.T, what string, err error) {
 			t.Skipf("the peer does not implement %s: %v", what, err)
 		}
 	}
+}
+
+// refusal reports whether err is the refusal of a method the peer does not
+// implement (see peerRefuses).
+func refusal(err error) bool {
+	for _, sc := range []ua.StatusCode{ua.StatusBadMethodInvalid, ua.StatusBadNodeIDUnknown, ua.StatusBadNotImplemented,
+		ua.StatusBadNotSupported, ua.StatusBadServiceUnsupported} {
+		if errors.Is(err, sc) {
+			return true
+		}
+	}
+	return false
+}
+
+// emptySlot returns a certificate group and type of the peer without a
+// certificate: a type of the CertificateTypes of the
+// DefaultApplicationGroup or the DefaultHttpsGroup that GetCertificates
+// does not return. It returns nils if there is none.
+func emptySlot(t *testing.T, ctx context.Context, c *opcua.Client, g *gds.Client) (*ua.NodeID, *ua.NodeID) {
+	t.Helper()
+	for _, group := range []*ua.NodeID{gds.DefaultApplicationGroup, gds.DefaultHTTPSGroup} {
+		nid, err := c.Node(group).TranslateBrowsePathsToNodeIDs(ctx, []*ua.QualifiedName{{Name: "CertificateTypes"}})
+		if err != nil {
+			continue
+		}
+		dv, err := c.ReadValue(ctx, nid)
+		if err != nil || dv.Value == nil {
+			continue
+		}
+		types, _ := dv.Value.Value().([]*ua.NodeID)
+		used, _, err := g.GetCertificates(ctx, group)
+		if err != nil {
+			continue
+		}
+		t.Logf("%v: CertificateTypes %v, GetCertificates %v", group, types, used)
+		for _, typ := range types {
+			if !slices.ContainsFunc(used, typ.Equal) {
+				return group, typ
+			}
+		}
+	}
+	return nil, nil
 }
 
 // endpointCertificate returns the leaf certificate a new Basic256Sha256
@@ -152,25 +195,46 @@ func TestCertMgmtPushGroups_GoClient_PeerServers(t *testing.T) {
 				for i, ip := range cur.IPAddresses {
 					ips[i] = ip.String()
 				}
-				g := gds.New(pushClient(t, h.endpoint, true))
-				cert, err := g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{
-					CertificateGroup: gds.DefaultApplicationGroup,
-					CertificateType:  gds.RsaSha256ApplicationCertificateType,
-					SubjectName:      "CN=" + cur.Subject.CommonName,
-					DNSNames:         cur.DNSNames,
-					IPAddresses:      ips,
-					LifetimeInDays:   2,
-					KeySizeInBits:    2048,
-				})
+				c := pushClient(t, h.endpoint, true)
+				g := gds.New(c)
+				create := func(group, typ *ua.NodeID) ([]byte, error) {
+					return g.CreateSelfSignedCertificate(ctx, &gds.SelfSignedCertificate{
+						CertificateGroup: group,
+						CertificateType:  typ,
+						SubjectName:      "CN=" + cur.Subject.CommonName,
+						DNSNames:         cur.DNSNames,
+						IPAddresses:      ips,
+						LifetimeInDays:   2,
+						KeySizeInBits:    2048,
+					})
+				}
+				group, typ := gds.DefaultApplicationGroup, gds.RsaSha256ApplicationCertificateType
+				cert, err := create(group, typ)
 				peerRefuses(t, "CreateSelfSignedCertificate", err)
 				if errors.Is(err, ua.StatusBadInvalidState) {
-					// UA-.NETStandard: a certificate slot that holds one must
-					// be emptied by DeleteCertificate (Part 12 §7.10.7) first.
-					t.Skipf("the peer refuses a self-signed certificate for an occupied slot: %v", err)
+					// UA-.NETStandard creates a certificate for an empty
+					// slot only (Part 12 1.05 §7.10): DeleteCertificate
+					// empties it first, in the same transaction. It does
+					// not empty the slot of the only application
+					// certificate either; then the test takes a slot of a
+					// group that is empty.
+					derr := g.DeleteCertificate(ctx, group, typ)
+					t.Logf("%s: CreateSelfSignedCertificate for an occupied slot: %v; DeleteCertificate: %v", p.name, err, derr)
+					switch {
+					case derr == nil:
+					case errors.Is(derr, ua.StatusBadInvalidState):
+						if group, typ = emptySlot(t, ctx, c, g); group == nil {
+							t.Skip("the peer refuses to delete its certificate and has no empty certificate slot")
+						}
+					default:
+						t.Fatalf("DeleteCertificate: %v", derr)
+					}
+					cert, err = create(group, typ)
 				}
 				if err != nil {
-					t.Fatalf("CreateSelfSignedCertificate: %v", err)
+					t.Fatalf("CreateSelfSignedCertificate %v %v: %v", group, typ, err)
 				}
+				t.Logf("%s: self-signed certificate for %v %v", p.name, group, typ)
 				x, err := x509.ParseCertificate(cert)
 				if err != nil {
 					t.Fatalf("the certificate does not parse: %v", err)
@@ -254,6 +318,33 @@ func TestCertMgmtPushGroups_GoClient_PeerServers(t *testing.T) {
 						t.Fatal("the channels do not present the certificate installed with the PFX key")
 					}
 					time.Sleep(250 * time.Millisecond)
+				}
+			})
+
+			t.Run("coverage/certmgmt.push.delete-certificate/"+p.direction, func(t *testing.T) {
+				// The certificate the endpoints advertise "shall not be
+				// deleted. This determination happens when ApplyChanges is
+				// called" (Part 12 1.05 §7.10): the deletion is accepted,
+				// ApplyChanges refuses it with Bad_InvalidState and the
+				// endpoints keep their certificate.
+				// UA-.NETStandard refuses the deletion of the only
+				// application certificate at once, with the same status.
+				cur := endpointCertificate(t, h.endpoint)
+				g := gds.New(pushClient(t, h.endpoint, true))
+				err := g.DeleteCertificate(ctx, gds.DefaultApplicationGroup, gds.RsaSha256ApplicationCertificateType)
+				peerRefuses(t, "DeleteCertificate", err)
+				if err == nil {
+					err = g.ApplyChanges(ctx)
+					if cerr := g.CancelChanges(ctx); cerr != nil {
+						t.Logf("%s: CancelChanges: %v", p.name, cerr)
+					}
+				}
+				t.Logf("%s: deleting the certificate of the endpoints: %v", p.name, err)
+				if !errors.Is(err, ua.StatusBadInvalidState) {
+					t.Fatalf("the deletion of the certificate of the endpoints: %v, want Bad_InvalidState", err)
+				}
+				if !endpointCertificate(t, h.endpoint).Equal(cur) {
+					t.Fatal("the endpoints changed their certificate")
 				}
 			})
 

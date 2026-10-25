@@ -8,15 +8,15 @@ Pinned opcua-interop version: **v0.13.0**
 
 - `deferred`: 60
 - `not-applicable`: 42
-- `unsupported`: 227
-- `unverified`: 67
+- `unsupported`: 228
+- `unverified`: 70
 - `verified`: 476
 
 ## Unverified by reason
 
-- `adapter-command-missing`: 37
+- `adapter-command-missing`: 39
 - `adapter-fixture-missing`: 9
-- `peer-capability-unknown`: 21
+- `peer-capability-unknown`: 22
 
 ## Unverified rows
 
@@ -30,6 +30,8 @@ Pinned opcua-interop version: **v0.13.0**
 | `certmgmt.push.certificate-update` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.create-self-signed` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.create-self-signed` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
+| `certmgmt.push.delete-certificate` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
+| `certmgmt.push.delete-certificate` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.get-certificates` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.get-certificates` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.https-group` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
@@ -72,6 +74,7 @@ Pinned opcua-interop version: **v0.13.0**
 | `certmgmt.push.alarms` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.certificate-update` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.create-self-signed` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
+| `certmgmt.push.delete-certificate` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.get-certificates` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.https-group` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.pfx` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
