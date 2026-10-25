@@ -96,11 +96,18 @@ type Server struct {
 	// (WithAuditing, SetAuditing).
 	auditing atomic.Bool
 
+	// histMu guards historian and historyCPs, which SetHistorian replaces
+	// while services and event reports use them.
+	histMu sync.RWMutex
 	// historian provides optional HistoryRead support (nil = unsupported).
 	historian HistoryProvider
 
 	// historyCPs binds opaque HistoryRead continuation points to sessions.
 	historyCPs *historyCPRegistry
+
+	// histEventsAll marks the notifiers whose event history stores whole
+	// events (EnableEventHistory without a filter), keyed by NodeID.String().
+	histEventsAll sync.Map
 
 	// rcMu guards the reverse connect targets. rcCtx is the context of the
 	// running server (nil before Start) and rcClosed is set by Close.
@@ -377,6 +384,7 @@ func New(opts ...Option) (*Server, error) {
 		return nil, err
 	}
 	s.bindAuditing()
+	s.bindHistoryCapabilities()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
@@ -766,8 +774,8 @@ func (s *Server) reapSessions(ctx context.Context) {
 		case now := <-t.C:
 			for _, sess := range s.sb.reapExpired(now) {
 				s.cfg.logger.Info("session timed out", "session_id", sess.ID)
-				if s.historyCPs != nil && sess.AuthTokenID != nil {
-					s.historyCPs.releaseSession(sess.AuthTokenID.String())
+				if _, cps := s.history(); cps != nil && sess.AuthTokenID != nil {
+					cps.releaseSession(sess.AuthTokenID.String())
 				}
 			}
 		}

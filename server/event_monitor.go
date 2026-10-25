@@ -324,11 +324,26 @@ func resolveBaseEventField(event *BaseEvent, name string) *ua.Variant {
 	}
 }
 
-// evalEventFilter evaluates the WhereClause of an EventFilter against a BaseEvent.
+// eventView is what the WhereClause evaluator reads of an event: a live
+// *BaseEvent or a *HistoricalEvent of the event history.
+type eventView interface {
+	// eventField resolves a SimpleAttributeOperand against the event.
+	eventField(clause *ua.SimpleAttributeOperand) *ua.Variant
+	// eventTypeID is the EventType of the event (nil if unknown).
+	eventTypeID() *ua.NodeID
+}
+
+func (event *BaseEvent) eventField(clause *ua.SimpleAttributeOperand) *ua.Variant {
+	return resolveEventClause(event, clause)
+}
+
+func (event *BaseEvent) eventTypeID() *ua.NodeID { return event.EventType }
+
+// evalEventFilter evaluates the WhereClause of an EventFilter against an event.
 // Returns true when the event passes the filter (should be delivered).
 // A NULL result (undefined / unsupported operator) is treated as pass-through
 // so that clients using operators not yet modelled here still receive events.
-func (s *Server) evalEventFilter(event *BaseEvent, clause *ua.ContentFilter) bool {
+func (s *Server) evalEventFilter(event eventView, clause *ua.ContentFilter) bool {
 	if clause == nil || len(clause.Elements) == 0 {
 		return true
 	}
@@ -337,7 +352,7 @@ func (s *Server) evalEventFilter(event *BaseEvent, clause *ua.ContentFilter) boo
 	return result != tvlFalse
 }
 
-func (s *Server) evalEventElement(event *BaseEvent, elements []*ua.ContentFilterElement, idx int, visiting []bool) tvl {
+func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterElement, idx int, visiting []bool) tvl {
 	if idx < 0 || idx >= len(elements) {
 		return tvlNull
 	}
@@ -355,10 +370,11 @@ func (s *Server) evalEventElement(event *BaseEvent, elements []*ua.ContentFilter
 			return tvlNull
 		}
 		typeNodeID := extractNodeIDFromOperand(el.FilterOperands[0])
-		if typeNodeID == nil || event.EventType == nil {
+		eventType := event.eventTypeID()
+		if typeNodeID == nil || eventType == nil {
 			return tvlNull
 		}
-		return boolTVL(s.eventTypeMatches(event.EventType, typeNodeID))
+		return boolTVL(s.eventTypeMatches(eventType, typeNodeID))
 
 	case ua.FilterOperatorEquals:
 		a := s.resolveEventOperand(event, elements, el, 0, visiting)
@@ -426,8 +442,8 @@ func (s *Server) evalEventElement(event *BaseEvent, elements []*ua.ContentFilter
 }
 
 // resolveEventOperand resolves operand j of a filter element to a *ua.Variant.
-// SimpleAttributeOperand BrowsePath names are resolved against the BaseEvent fields.
-func (s *Server) resolveEventOperand(event *BaseEvent, elements []*ua.ContentFilterElement, el *ua.ContentFilterElement, j int, visiting []bool) *ua.Variant {
+// SimpleAttributeOperand BrowsePath names are resolved against the event fields.
+func (s *Server) resolveEventOperand(event eventView, elements []*ua.ContentFilterElement, el *ua.ContentFilterElement, j int, visiting []bool) *ua.Variant {
 	if j >= len(el.FilterOperands) {
 		return nil
 	}
@@ -439,7 +455,7 @@ func (s *Server) resolveEventOperand(event *BaseEvent, elements []*ua.ContentFil
 	case *ua.LiteralOperand:
 		return v.Value
 	case *ua.SimpleAttributeOperand:
-		return resolveEventClause(event, v)
+		return event.eventField(v)
 	case *ua.ElementOperand:
 		vv := s.evalEventElement(event, elements, int(v.Index), visiting)
 		return tvlVariant(vv)
@@ -486,6 +502,8 @@ const eventDeliveryWait = 5 * time.Second
 func (s *Server) emitEvent(nodeID *ua.NodeID, event *BaseEvent, wait bool) {
 	// PublishedEvents of the PubSub runtime see the event too.
 	s.forwardPubSubEvent(nodeID, event)
+	// So does the event history of a HistoricalEventNode (Part 11 §5.4).
+	s.recordEventHistory(nodeID, event)
 
 	if s.MonitoredItemService == nil || s.eventItems == nil {
 		return

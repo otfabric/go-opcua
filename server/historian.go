@@ -15,7 +15,8 @@ import (
 // Historian is the default in-memory HistoryProvider.
 //
 // Retention is bounded: each EnableNode call sets a per-node ring buffer
-// (default 1000 samples). Storage is not durable across process restarts.
+// (default 1000 samples), each EnableEvents call one of events per notifier
+// (default 1000 events). Storage is not durable across process restarts.
 // Continuation points expire after 30s and are capped at 100 active tokens.
 type Historian struct {
 	mu     sync.Mutex
@@ -26,6 +27,13 @@ type Historian struct {
 
 	// modifications records HistoryUpdate changes for ReadModified.
 	modifications map[string][]historyModification
+
+	// events holds the event history per notifier (EnableEvents), keyed by
+	// NodeID.String(); eventCPs the continuation points of event reads.
+	events   map[string]*eventHistory
+	eventCPs map[string]*eventContinuation
+	// eventSeq orders the stored events of the same Time.
+	eventSeq uint64
 }
 
 // Compile-time check that *Historian implements HistoryProvider.
@@ -57,6 +65,8 @@ func NewHistorian() *Historian {
 	return &Historian{
 		stores:        make(map[string]*nodeHistory),
 		continuations: make(map[string]*historyContinuation),
+		events:        make(map[string]*eventHistory),
+		eventCPs:      make(map[string]*eventContinuation),
 	}
 }
 
@@ -228,6 +238,7 @@ func (h *Historian) ReleaseContinuation(continuationPoint []byte) {
 	defer h.mu.Unlock()
 	cpKey := hex.EncodeToString(continuationPoint)
 	delete(h.continuations, cpKey)
+	delete(h.eventCPs, cpKey)
 }
 
 func (h *Historian) cleanExpiredContinuations() {
@@ -251,6 +262,22 @@ func (h *Historian) cleanExpiredContinuations() {
 			delete(h.continuations, oldest)
 		}
 	}
+	for k, v := range h.eventCPs {
+		if now.Sub(v.created) > historyContinuationTTL {
+			delete(h.eventCPs, k)
+		}
+	}
+	for len(h.eventCPs) > maxHistoryContinuationPoints {
+		var oldest string
+		var oldestTime time.Time
+		for k, v := range h.eventCPs {
+			if oldest == "" || v.created.Before(oldestTime) {
+				oldest = k
+				oldestTime = v.created
+			}
+		}
+		delete(h.eventCPs, oldest)
+	}
 }
 
 func generateContinuationPoint() []byte {
@@ -261,12 +288,26 @@ func generateContinuationPoint() []byte {
 
 // SetHistorian attaches a HistoryProvider for HistoryRead support.
 // Pass nil to disable historical access (HistoryRead returns
-// BadHistoryOperationUnsupported).
+// BadHistoryOperationUnsupported). A provider that also implements
+// [EventHistoryProvider] keeps the event history of the HistoricalEventNodes
+// ([Server.EnableEventHistory]). The HistoryServerCapabilities report what
+// the provider supports.
 func (s *Server) SetHistorian(h HistoryProvider) {
+	s.histMu.Lock()
 	s.historian = h
 	if h == nil {
 		s.historyCPs = newHistoryCPRegistry(nil)
-		return
+	} else {
+		s.historyCPs = newHistoryCPRegistry(h.ReleaseContinuation)
 	}
-	s.historyCPs = newHistoryCPRegistry(h.ReleaseContinuation)
+	s.histMu.Unlock()
+	s.notifyHistoryCapabilities()
+}
+
+// history returns the history provider of the server and its continuation
+// point registry.
+func (s *Server) history() (HistoryProvider, *historyCPRegistry) {
+	s.histMu.RLock()
+	defer s.histMu.RUnlock()
+	return s.historian, s.historyCPs
 }

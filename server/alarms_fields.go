@@ -364,7 +364,8 @@ func (c *Condition) build(src *Node) {
 	srvID := ua.NewNumericNodeID(0, id.Server)
 	var srvNode *Node
 	if !src.ID().Equal(srvID) {
-		_ = src.SetAttribute(ua.AttributeIDEventNotifier, DataValueFromValue(byte(ua.EventNotifierTypeSubscribeToEvents)))
+		// Keep the history bits of a HistoricalEventNode (Part 11 §5.4.4).
+		_ = src.SetAttribute(ua.AttributeIDEventNotifier, DataValueFromValue(eventNotifierOf(src)|byte(ua.EventNotifierTypeSubscribeToEvents)))
 		if !hasForwardRef(srvNode0(s), src.ID(), id.HasNotifier) && !hasInverseNotifier(src) {
 			srvNode = s.ownNode(id.Server)
 			if srvNode != nil {
