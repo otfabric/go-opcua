@@ -207,6 +207,8 @@ func TestClientUserID(t *testing.T) {
 	require.Equal(t, "Anonymous", clientUserID(callerCtx(&ua.AnonymousIdentityToken{})))
 	require.Equal(t, "bob", clientUserID(callerCtx(&ua.UserNameIdentityToken{UserName: "bob"})))
 	require.Equal(t, "CN=operator", clientUserID(callerCtx(&ua.X509IdentityToken{CertificateData: der})))
+	// A certificate chain (leaf | issuer) names the subject of its leaf.
+	require.Equal(t, "CN=operator", clientUserID(callerCtx(&ua.X509IdentityToken{CertificateData: append(append([]byte(nil), der...), der...)})))
 	require.Equal(t, "X509", clientUserID(callerCtx(&ua.X509IdentityToken{CertificateData: []byte{1}})))
 	require.Equal(t, "IssuedToken", clientUserID(callerCtx(&ua.IssuedIdentityToken{})))
 }
