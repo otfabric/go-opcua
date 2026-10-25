@@ -1,5 +1,58 @@
 # go-opcua Releases
 
+## v1.18.0
+
+**Date:** 2026-10-25
+**Previous release:** v1.17.0
+
+### Summary
+
+The rest of push certificate management (Part 12 v1.05 §7): the HTTPS and UserToken certificate groups, GetCertificates, CreateSelfSignedCertificate, ResetToServerDefaults, TransactionDiagnostics, certificate alarms and PFX private keys. Also signing requests and CRLs for Brainpool and Ed448 keys.
+
+### Added
+
+- **server: DefaultHttpsGroup and DefaultUserTokenGroup** under `WithPushManagement`, each with its own TrustList and CertificateTypes and part of the same transaction.
+  - The HTTPS group's certificate is the TLS certificate of opc.https and opc.wss, swapped at ApplyChanges.
+  - `HTTPSClientCertificates` (Ignore, VerifyIfGiven, Require) checks TLS client certificates against the HTTPS trust list.
+  - The UserToken trust list checks X.509 user tokens before any `WithX509UserValidator`; rejected tokens go to GetRejectedList.
+  - New API: `Server.GroupTrustList`, `Server.HTTPSCertificate`, `CertificateGroupStore`.
+- **server: GetCertificates, CreateSelfSignedCertificate and ResetToServerDefaults** (Part 12 v1.05 §7.10).
+  - A self-signed certificate carries the ApplicationUri and takes effect at ApplyChanges.
+  - The reset restores the starting trust lists and certificates. It returns Bad_TransactionPending while another session has a transaction.
+- **server: TransactionDiagnostics:** start and end time, result, affected trust lists and groups, and errors. Only SecurityAdmin may read them.
+- **server: CertificateExpired and TrustListOutOfDate alarms** of the certificate groups. They are configured with `PushManagement.Alarms` (expiration limit, check interval) and `TrustListUpdateFrequency`.
+- **server: UpdateCertificate takes PFX (PKCS #12) private keys.** The password comes from `PushManagement.PFXPassword`; a wrong one is refused with Bad_SecurityChecksFailed.
+- **server: CreateSigningRequest for Brainpool, Ed25519 and Ed448 keys.**
+- **gds:** `GetCertificates`, `CreateSelfSignedCertificate`, `ResetToServerDefaults`, `TransactionDiagnostics`, `WithTrustList`, and the NodeIds of the HTTPS and UserToken groups and trust lists.
+- **uapolicy:** for Brainpool and Ed448 keys:
+  - certificate requests: `CreateCertificateRequest`, `ParseCertificateRequest`, `CheckCertificateRequestSignature`;
+  - CRLs: `CreateRevocationList`, `ParseRevocationList`, `CheckRevocationListSignature`.
+
+  New PFX encoding and decoding: `ParsePFX` and `EncodePFX` (PBES2 and the PKCS #12 PBEs, HMAC or PBMAC1 integrity).
+
+### Fixed
+
+- **server: trust lists accept CRLs issued by Brainpool and Ed448 CAs.** They used to be rejected because Go's x509 cannot verify their signatures.
+
+### Not implemented
+
+- DeleteCertificate, application-defined certificate groups, and the GDS pull model (Part 12 §6).
+- PFX files with BER indefinite lengths.
+
+### Tests
+
+- Unit, e2e, conformance and chaos tests. The chaos churn adds resets, self-signed HTTPS certificates, writes to the HTTPS and UserToken trust lists, and alarm evaluation.
+- Interop with the Go client against the peer servers:
+  - UA-.NETStandard: GetCertificates, TransactionDiagnostics, the HTTPS and UserToken groups, PFX and the alarms.
+  - open62541 and node-opcua: the UserToken trust list.
+- New ledger capabilities `certmgmt.push.*`.
+
+### Interop
+
+- opcua-interop v0.13.0 (unchanged).
+
+---
+
 ## v1.17.0
 
 **Date:** 2026-10-25
