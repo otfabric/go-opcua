@@ -79,6 +79,7 @@ func (b *EventFilterBuilder) Build() *EventFilter {
 type FieldOperand struct {
 	name   string
 	typeID *NodeID
+	path   bool // name is a "/"-separated BrowsePath (FieldPath)
 }
 
 // Field creates a FieldOperand for building WhereClause filter elements.
@@ -97,6 +98,10 @@ func (f *FieldOperand) TypeDefinition(typeID *NodeID) *FieldOperand {
 }
 
 func (f *FieldOperand) toExtensionObject() *ExtensionObject {
+	bp := []*QualifiedName{{NamespaceIndex: 0, Name: f.name}}
+	if f.path {
+		bp = browsePath(f.name)
+	}
 	return &ExtensionObject{
 		EncodingMask: ExtensionObjectBinary,
 		TypeID: &ExpandedNodeID{
@@ -104,7 +109,7 @@ func (f *FieldOperand) toExtensionObject() *ExtensionObject {
 		},
 		Value: SimpleAttributeOperand{
 			TypeDefinitionID: f.typeID,
-			BrowsePath:       []*QualifiedName{{NamespaceIndex: 0, Name: f.name}},
+			BrowsePath:       bp,
 			AttributeID:      AttributeIDValue,
 		},
 	}

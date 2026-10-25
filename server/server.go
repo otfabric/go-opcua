@@ -85,6 +85,9 @@ type Server struct {
 	// eventItems tracks event-monitored-item filter state.
 	eventItems *eventItemRegistry
 
+	// alarms holds the conditions (Part 9).
+	alarms *alarmManager
+
 	// historian provides optional HistoryRead support (nil = unsupported).
 	historian HistoryProvider
 
@@ -256,6 +259,7 @@ func New(opts ...Option) (*Server, error) {
 		handlers:   make(map[uint16]Handler),
 		methods:    make(map[string]MethodHandler),
 		eventItems: newEventItemRegistry(),
+		alarms:     newAlarmManager(),
 		historyCPs: newHistoryCPRegistry(nil),
 		namespaces: []NameSpace{
 			NewNameSpace("http://opcfoundation.org/UA/"), // ns:0
@@ -278,6 +282,7 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	s.disc = newDiscoveryManager(s)
+	s.registerAlarmMethods()
 
 	builtinNodeSetOnce.Do(func() {
 		builtinNodeSetErr = xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet)
@@ -364,6 +369,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 		handlers:   make(map[uint16]Handler),
 		methods:    make(map[string]MethodHandler),
 		eventItems: newEventItemRegistry(),
+		alarms:     newAlarmManager(),
 		historyCPs: newHistoryCPRegistry(nil),
 		namespaces: nil, // caller fills this in
 		status: &ua.ServerStatusDataType{
@@ -374,6 +380,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 		},
 	}
 	s.disc = newDiscoveryManager(s)
+	s.registerAlarmMethods()
 	return s, nil
 }
 
@@ -636,6 +643,7 @@ func (s *Server) Close() error {
 
 	// Stop publishing and subscribing before the address space goes away.
 	s.closePubSub()
+	s.alarms.close()
 
 	if s.cancelMonitor != nil {
 		s.cancelMonitor()

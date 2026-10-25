@@ -90,6 +90,8 @@ var nodeCoverage = map[string]string{
 // subscriptionCoverage does the same for *opcua.Subscription.
 var subscriptionCoverage = map[string]string{
 	"Cancel":               "TestSubscription_HighLevelItemLifecycle",
+	"ConditionRefresh":     "TestAlarms_ConditionRefresh",
+	"ConditionRefresh2":    "TestAlarms_ConditionRefreshErrors",
 	"ModifySubscription":   "TestSubscription_ParameterRevision",
 	"Monitor":              "TestSubscription_HighLevelItemLifecycle",
 	"Unmonitor":            "TestSubscription_HighLevelItemLifecycle",
