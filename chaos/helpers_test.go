@@ -27,6 +27,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -192,17 +193,13 @@ func newEnv(t *testing.T, seed int64, serverOpts ...server.Option) *env {
 
 // newDirectEnv creates an environment without a proxy. The server listens on
 // a fixed port, so that a restarted instance is reachable at the very same
-// address.
+// address. The port is outside the ephemeral range, where no outgoing socket
+// of a parallel package takes it, and the server listens and the client dials
+// on 127.0.0.1: "localhost" may resolve to ::1 first, where another process
+// can listen on the same port.
 func newDirectEnv(t *testing.T, seed int64) *env {
 	t.Helper()
-	ln, err := net.Listen("tcp", "localhost:0")
-	if err != nil {
-		t.Fatalf("chaos: pick port: %v", err)
-	}
-	port := ln.Addr().(*net.TCPAddr).Port
-	_ = ln.Close()
-
-	e := &env{t: t, seed: seed, directPort: port}
+	e := &env{t: t, seed: seed, directPort: testport.TCP(t)}
 	e.startServer()
 	t.Cleanup(func() { e.stopServer() })
 	return e
@@ -212,7 +209,7 @@ func newDirectEnv(t *testing.T, seed int64) *env {
 // a direct environment.
 func (e *env) url() string {
 	if e.proxy == nil {
-		return fmt.Sprintf("opc.tcp://localhost:%d", e.directPort)
+		return fmt.Sprintf("opc.tcp://127.0.0.1:%d", e.directPort)
 	}
 	return e.proxy.EndpointURL()
 }
@@ -251,7 +248,7 @@ func (e *env) startServer() {
 	if e.proxy != nil {
 		opts = append(opts, server.EndPoint("localhost", e.proxy.Port()), server.ListenOn("localhost:0"))
 	} else {
-		opts = append(opts, server.EndPoint("localhost", e.directPort))
+		opts = append(opts, server.EndPoint("127.0.0.1", e.directPort))
 	}
 	srv, err := server.New(opts...)
 	if err != nil {
