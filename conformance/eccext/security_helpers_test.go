@@ -12,8 +12,8 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 )
 
-// Copies of the helpers of the conformance package that the tests here use
-// (security_test.go, security_ecc_test.go): see doc.go for why these tests
+// Copies of the helpers of the conformance packages that the tests here use
+// (conformkit, conformance/security/security_ecc_test.go): see doc.go for why these tests
 // are a package of their own.
 
 // securePolicies lists every non-None security policy the library supports.
