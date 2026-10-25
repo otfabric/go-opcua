@@ -23,9 +23,18 @@ import (
 // Tests using it are deliberately not parallel: they need "their" port to stay
 // free between the two instances, which only holds while no other test is
 // starting servers.
+//
+// The fixture is added before the server starts: the server creates its
+// diagnostics namespace with the first session, so a client that reconnects
+// to a started server before the fixture is added takes namespace 1, and the
+// fixture's nodes end up in namespace 2, where the node ids the client
+// remembers from the previous instance do not find them.
 func startServerOn(t *testing.T, port int) (*testutil.Fixture, func()) {
 	t.Helper()
-	var srv *server.Server
+	var (
+		srv *server.Server
+		f   *testutil.Fixture
+	)
 	// The previous instance may need a moment to release the port.
 	eventually(t, func() bool {
 		s, err := server.New(
@@ -36,14 +45,14 @@ func startServerOn(t *testing.T, port int) (*testutil.Fixture, func()) {
 		if err != nil {
 			return false
 		}
+		fixture := testutil.AddFixture(t, s)
 		if err := s.Start(context.Background()); err != nil {
 			_ = s.Close()
 			return false
 		}
-		srv = s
+		srv, f = s, fixture
 		return true
 	}, "server start")
-	f := testutil.AddFixture(t, srv)
 	var once sync.Once
 	stop := func() { once.Do(func() { _ = srv.Close() }) }
 	t.Cleanup(stop)
@@ -74,6 +83,13 @@ func TestRecovery_ServerRestart(t *testing.T) {
 		}),
 	)
 	oldSession := c.Session().SessionID().String()
+	t.Cleanup(func() {
+		if t.Failed() {
+			evMu.Lock()
+			defer evMu.Unlock()
+			t.Logf("recorded states %v, events %+v", states.States(), events)
+		}
+	})
 
 	// Two subscriptions; the second also carries an item that failed to create.
 	ch1 := make(chan *opcua.PublishNotificationData, 256)
@@ -109,6 +125,7 @@ func TestRecovery_ServerRestart(t *testing.T) {
 	// A brand-new server instance on the same address: no session, no
 	// subscriptions, fixture values back at their defaults.
 	f2, _ := startServerOn(t, port)
+	require.Equal(t, f.NSIndex, f2.NSIndex, "the fixture keeps its namespace index")
 	eventually(t, func() bool { return states.SeenAfter(opcua.Reconnecting, opcua.Connected) }, "client reconnects")
 	eventually(t, func() bool { return c.State() == opcua.Connected }, "state Connected")
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"log/slog"
 	"net"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -135,6 +136,13 @@ func (r *StateRecorder) Record(s opcua.ConnState) {
 	r.mu.Lock()
 	r.states = append(r.states, s)
 	r.mu.Unlock()
+}
+
+// States returns the states recorded so far.
+func (r *StateRecorder) States() []opcua.ConnState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.states)
 }
 
 // Seen reports whether s was recorded.
