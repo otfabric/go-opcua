@@ -152,16 +152,6 @@ func TestTransportUAJSON_Subscription(t *testing.T) {
 	}
 }
 
-// legacyContentType makes an HTTP client send the Content-Type
-// application/opcua+uajson, as UA-.NETStandard does.
-type legacyContentType struct{ next http.RoundTripper }
-
-func (l legacyContentType) RoundTrip(r *http.Request) (*http.Response, error) {
-	r = r.Clone(r.Context())
-	r.Header.Set("Content-Type", uasc.HTTPSJSONContentTypeLegacy)
-	return l.next.RoundTrip(r)
-}
-
 // TestTransportUAJSON_Protocol checks the HTTP mapping of Part 6 §7.4.5:
 // the JSON content types, the content type of the response and the faults
 // for requests that cannot be served.
@@ -185,9 +175,7 @@ func TestTransportUAJSON_Protocol(t *testing.T) {
 		}
 	})
 	t.Run("legacy client", func(t *testing.T) {
-		hc := uasc.NewHTTPSClient(testutil.TLS(t).ClientConfig())
-		hc.Transport = legacyContentType{hc.Transport}
-		c := jsonClient(t, addr, ua.TransportProfileHTTPSJSON, opcua.HTTPClient(hc))
+		c := jsonClient(t, addr, ua.TransportProfileHTTPSJSON, opcua.HTTPSJSONContentType(uasc.HTTPSJSONContentTypeLegacy))
 		exerciseSession(t, c, f, "legacy")
 	})
 	fault := func(t *testing.T, policy, body string, want ua.StatusCode) {
