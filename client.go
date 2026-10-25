@@ -2600,31 +2600,14 @@ func extractArguments(v *ua.Variant) ([]*ua.Argument, error) {
 
 // ReadHistory reads raw historical values for a single node within a time range.
 // It returns up to maxValues results. Use maxValues=0 for all values in the range.
+//
+// ReadHistory follows continuation points until it has maxValues values or
+// the history is exhausted, and releases the continuation point a server
+// still holds for a truncated read. A node with Good_NoData returns no
+// values and no error; a Bad status of the node is returned as the error (a
+// [ua.StatusCode]).
 func (c *Client) ReadHistory(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, maxValues uint32) ([]*ua.DataValue, error) {
-	nodes := []*ua.HistoryReadValueID{{NodeID: nodeID}}
-	details := &ua.ReadRawModifiedDetails{
-		StartTime:        start,
-		EndTime:          end,
-		NumValuesPerNode: maxValues,
-		IsReadModified:   false,
-		ReturnBounds:     false,
-	}
-	resp, err := c.HistoryReadRawModified(ctx, nodes, details)
-	if err != nil {
-		return nil, err
-	}
-	if len(resp.Results) == 0 {
-		return nil, ua.StatusBadUnexpectedError
-	}
-	result := resp.Results[0]
-	if result.StatusCode != ua.StatusOK && result.StatusCode != ua.StatusGood {
-		return nil, result.StatusCode
-	}
-	hd, ok := result.HistoryData.Value.(*ua.HistoryData)
-	if !ok {
-		return nil, fmt.Errorf("opcua: history read: expected *HistoryData, got %T", result.HistoryData.Value)
-	}
-	return hd.DataValues, nil
+	return collectHistory(c.dataHistory(ctx, nodeID, start, end, maxValues, maxValues))
 }
 
 // SecurityPolicy returns the security policy URI of the active secure channel.
@@ -2672,48 +2655,12 @@ func (c *Client) WriteAttribute(ctx context.Context, nodeID *ua.NodeID, attrID u
 
 // ReadHistoryAll returns an iterator that reads all historical data values for a node
 // within the given time range, automatically following continuation points.
+//
+// When the consumer stops early, or ctx is done, while the server holds a
+// continuation point for the read, the iterator releases it. A done ctx
+// ends the iteration with ctx.Err().
 func (c *Client) ReadHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time) iter.Seq2[*ua.DataValue, error] {
-	return func(yield func(*ua.DataValue, error) bool) {
-		details := &ua.ReadRawModifiedDetails{
-			StartTime:      start,
-			EndTime:        end,
-			IsReadModified: false,
-			ReturnBounds:   false,
-		}
-
-		var cp []byte
-		for {
-			nodes := []*ua.HistoryReadValueID{{NodeID: nodeID, ContinuationPoint: cp}}
-			resp, err := c.HistoryReadRawModified(ctx, nodes, details)
-			if err != nil {
-				yield(nil, err)
-				return
-			}
-			if len(resp.Results) == 0 {
-				yield(nil, ua.StatusBadUnexpectedError)
-				return
-			}
-			result := resp.Results[0]
-			if result.StatusCode != ua.StatusOK && result.StatusCode != ua.StatusGood {
-				yield(nil, result.StatusCode)
-				return
-			}
-			hd, ok := result.HistoryData.Value.(*ua.HistoryData)
-			if !ok {
-				yield(nil, fmt.Errorf("opcua: history read: expected *HistoryData, got %T", result.HistoryData.Value))
-				return
-			}
-			for _, dv := range hd.DataValues {
-				if !yield(dv, nil) {
-					return
-				}
-			}
-			cp = result.ContinuationPoint
-			if len(cp) == 0 {
-				return
-			}
-		}
-	}
+	return c.dataHistory(ctx, nodeID, start, end, 0, 0)
 }
 
 // WriteNodeValue writes a Go value to the Value attribute of a node.

@@ -51,6 +51,21 @@ func TestClientCovWrappersClosed(t *testing.T) {
 			}
 			return last
 		},
+		"ReadEventHistory": func() error {
+			_, err := c.ReadEventHistory(ctx, n, now.Add(-time.Hour), now, ua.NewEventFilter().Select("EventId").Build(), 0)
+			return err
+		},
+		"ReadEventHistoryAll": func() error {
+			var last error
+			for _, err := range c.ReadEventHistoryAll(ctx, n, now.Add(-time.Hour), now, ua.NewEventFilter().Select("EventId").Build(), 0) {
+				last = err
+			}
+			return last
+		},
+		"HistoryReleaseContinuationPoints": func() error {
+			_, err := c.HistoryReleaseContinuationPoints(ctx, &ua.ReadEventDetails{}, &ua.HistoryReadValueID{NodeID: n, ContinuationPoint: []byte("x")})
+			return err
+		},
 		"NodeFromPath":            func() error { _, err := c.NodeFromPath(ctx, "Server"); return err },
 		"NodeFromPathInNamespace": func() error { _, err := c.NodeFromPathInNamespace(ctx, 0, "Server"); return err },
 		"NodeFromQualifiedPath":   func() error { _, err := c.NodeFromQualifiedPath(ctx, "0:Server"); return err },
@@ -472,7 +487,7 @@ func TestClientCovHistoryMalformed(t *testing.T) {
 	})
 	dvs, err := c.ReadHistory(ctx, paged, start, now, 0)
 	require.NoError(t, err)
-	require.Len(t, dvs, 2, "ReadHistory returns the first page")
+	require.Len(t, dvs, 3, "ReadHistory follows the continuation point")
 	got, err := readAll(paged, 0)
 	require.NoError(t, err)
 	require.Equal(t, []float64{1, 2, 3}, got)

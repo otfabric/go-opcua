@@ -7,7 +7,7 @@
 
 ### Summary
 
-Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a notifier made a HistoricalEventNode with `Server.EnableEventHistory` keeps the events reported on it in the history provider, the default `*Historian` included, and serves HistoryRead `ReadEventDetails` and HistoryUpdate `UpdateEventDetails` / `DeleteEventDetails`. The client's `HistoryReadEvent`, `HistoryUpdateEvents` and `HistoryDeleteEvents` work against it unchanged.
+Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a notifier made a HistoricalEventNode with `Server.EnableEventHistory` keeps the events reported on it in the history provider, the default `*Historian` included, and serves HistoryRead `ReadEventDetails` and HistoryUpdate `UpdateEventDetails` / `DeleteEventDetails`. The client's `HistoryReadEvent`, `HistoryUpdateEvents` and `HistoryDeleteEvents` work against it unchanged. New client helpers page through event history (`ReadEventHistory`, `ReadEventHistoryAll`) and release continuation points (`HistoryReleaseContinuationPoints`); the value helpers `ReadHistory` / `ReadHistoryAll` now page and release the same way.
 
 ### Added
 
@@ -19,6 +19,8 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 - **HistoryServerCapabilities** report what the provider of `SetHistorian` implements: AccessHistoryEventsCapability, Insert/Replace/Update/DeleteEventCapability, and the data capabilities, which were all false before.
 - `MaxNodesPerHistoryReadEvents` and `MaxNodesPerHistoryUpdateEvents` are enforced (`Bad_TooManyOperations`).
 - **`Node.SetMethodArguments(in, out []*ua.Argument)`** gives a Method node its InputArguments and OutputArguments Properties (Part 3 §5.7: PropertyType, DataType Argument, ValueRank 1, HasProperty) in the namespace of the method, which callers built by hand with `NewNode`. `Client.MethodArguments` reads them and the Call service checks the input arguments against them. The method_server example uses it.
+- **client: event history helpers.** `Client.ReadEventHistory(ctx, nodeID, start, end, filter, maxEvents)` returns the field lists of the events of a HistoricalEventNode, following continuation points up to `maxEvents` (0: the whole range); `Client.ReadEventHistoryAll(ctx, nodeID, start, end, filter, pageSize)` is its `iter.Seq2`, with `pageSize` as the NumValuesPerNode of each call. A start after the end reads newest first (Part 11 §6.5.2); `Good_NoData` is an empty result, a Bad status of the node the error (a `ua.StatusCode`). A continuation point the server still holds when a read is truncated, the consumer stops early or `ctx` is done is released (the iteration then ends with `ctx.Err()`).
+- **client: `Client.HistoryReleaseContinuationPoints(ctx, details, nodes...)`** releases the continuation points of HistoryRead calls the caller does not continue (`releaseContinuationPoints`, Part 4 §5.10.3) and returns the status of each node, `Bad_ContinuationPointInvalid` for one that is unknown, used, released or of another session. Callers no longer build the `HistoryReadRequest` by hand.
 - **ua: `EventFilterBuilder.SelectPaths` and `FieldPath` take `ns:Name` segments**, e.g. `2:Temperature` or `AckedState/2:Note`, as BrowseNames of that namespace, as QualifiedNames are written elsewhere; plain segments stay namespace 0 (`0:Name` for a namespace 0 name that itself starts with digits and a colon).
 - API: `server.EventHistoryProvider`, `EventHistoryUpdater`, `EventHistoryDeleter`, `HistoricalEvent`, `NewHistoricalEvent`, `EventHistoryOptions`, `Server.EnableEventHistory`, `Historian.EnableEvents` / `EventsEnabled` / `RecordEvent` / `ReadEvents` / `UpdateEvents` / `DeleteEvents`.
 
@@ -29,6 +31,8 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 
 ### Fixed
 
+- **client: `ReadHistory` and `ReadHistoryAll` handle paging and `Good_NoData` as documented.** `ReadHistory` returned only the first page of a server that pages (its documentation promises up to `maxValues` values, all of them for 0) and left the continuation point open on the server; it now follows continuation points and releases the one of a truncated read. `ReadHistoryAll` left the continuation point open when the loop broke early; it now releases it, also when `ctx` is done between pages. Both returned `Good_NoData` (an empty range on some servers) and a Good result without history as errors; they are now an empty result. Only a Bad status of the node is an error.
+
 - **server: `SetHistorian` while the server runs is race free.** The provider was read by the History services without synchronisation.
 - **server: a condition keeps the history bits of its source.** `AddCondition` set the EventNotifier of the source to SubscribeToEvents, dropping HistoryRead and HistoryWrite.
 - **server: releasing a history continuation point checks it.** HistoryRead with ReleaseContinuationPoints answered `Good` for any continuation point and released one of another session. A point that is unknown, already used or released, expired, or of another session is now `Bad_ContinuationPointInvalid` (Part 4 §5.10.3) and is left alone.
@@ -37,6 +41,7 @@ Historical events in the server (Part 11 §5.4, §6.5.2, §6.9.4, §6.9.7): a no
 ### Tests
 
 - Unit tests of the store (ranges, direction, paging, paging while the history changes, bounds, continuation point expiry, concurrency) and of the services (details checks, per-node results, filters, audit events, capabilities), conformance tests end to end with the go-opcua client, a chaos test paging through the history while events are reported and deleted, reads are abandoned or released, sessions closed and connections dropped, and fuzz tests of the event details and of the store.
+- The client event history helpers against a scripted server (paging, truncation, early stop, cancellation before and during a read, malformed results) and end to end against the go-opcua historian, which records the continuation points it hands out and the ones released, so early stop, cancellation and truncation are verified on the server side (a released point no longer continues a read); forward and reverse reads, `Good_NoData`, Bad node statuses, and `SelectPaths` with an `ns:Name` field.
 
 ### Interop
 

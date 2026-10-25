@@ -385,7 +385,7 @@ you rely on.
 | **Alarms & Conditions** | `NewConditionEventFilter` / `ParseConditionEvent`, `Acknowledge`, `Confirm`, `AddComment`, `EnableCondition` / `DisableCondition`, `TimedShelve` / `OneShotShelve` / `Unshelve`, `ConditionRefresh` / `ConditionRefresh2`; v1.05 `Suppress` / `Unsuppress`, `RemoveFromService` / `PlaceInService`, `Silence`, `Reset`, `Respond`, `GetGroupMemberships` and every `*2` variant; `ReadAlarmMetrics` / `ResetAlarmMetrics`; `NewAuditConditionEventFilter` / `ParseAuditConditionEvent`, `WithAuditEntryID` (Part 9) |
 | **Monitoring** | `monitor` package: callback/channel subscriptions; batch add with per-item `ItemError`; zero-value `MonitoringMode` defaults to Reporting |
 | **Methods** | `Call`, `CallMethod` (auto-wrap args), `MethodArguments` introspection |
-| **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events |
+| **History** | Read: raw/modified, events, processed, at-time. Update: data, events. Delete: raw/modified, at-time, events. Paging helpers `ReadHistory` / `ReadHistoryAll` (values) and `ReadEventHistory` / `ReadEventHistoryAll` (events) follow continuation points and release the one left on early stop; `HistoryReleaseContinuationPoints` |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` |
 | **Query** | `QueryFirst`, `QueryNext` |
 | **Discovery** | `FindServers`, `FindServersOnNetwork` (filters, paging), `GetEndpoints`, `ua.SelectEndpoint`, `opcua.SelectEndpoint` (aware of the client certificate's key type), `DiscoverServers` (well-known LDS port 4840), `RegisterServer` / `RegisterServer2`. Server: Local Discovery Server, registration with an LDS, mDNS (LDS-ME) without dependencies |
@@ -503,7 +503,7 @@ The `examples/` directory contains runnable programs:
 | `monitor` | High-level monitoring with `NodeMonitor` |
 | `method` | Call a server method (high-level `CallMethod`/`MethodArguments` and low-level `Call`) |
 | `history-read` | Read historical data with manual continuation points |
-| `history-read-simple` | Read historical data with the `ReadHistoryAll` iterator |
+| `history-read-simple` | Read historical data with the `ReadHistoryAll` iterator, or historical events with `ReadEventHistoryAll` (`-events`) |
 | `crypto` | Connect with encryption and certificates |
 | `security` | Connect with each authentication mode, security policy and mode, or the best endpoint (`-sec-policy auto`) |
 | `datetime` | Read the server's current time |

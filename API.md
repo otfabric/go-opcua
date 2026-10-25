@@ -286,10 +286,33 @@ func (c *Client) HistoryReadProcessed(ctx context.Context, nodes []*ua.HistoryRe
 func (c *Client) HistoryReadAtTime(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAtTimeDetails) (*ua.HistoryReadResponse, error)
 func (c *Client) ReadHistory(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, maxValues uint32) ([]*ua.DataValue, error)
 func (c *Client) ReadHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time) iter.Seq2[*ua.DataValue, error]
+func (c *Client) ReadEventHistory(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, filter *ua.EventFilter, maxEvents uint32) ([]*ua.HistoryEventFieldList, error)
+func (c *Client) ReadEventHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, filter *ua.EventFilter, pageSize uint32) iter.Seq2[*ua.HistoryEventFieldList, error]
+func (c *Client) HistoryReleaseContinuationPoints(ctx context.Context, details any, nodes ...*ua.HistoryReadValueID) ([]ua.StatusCode, error)
 ```
 
 `ReadHistoryAll` returns a Go 1.23 iterator that pages through all historical
 values automatically.
+
+`ReadHistory` and `ReadEventHistory` follow continuation points until they
+have `maxValues` / `maxEvents` items (0: the whole range) and release the
+continuation point a server still holds for a truncated read.
+`ReadEventHistory` reads a HistoricalEventNode: the fields `filter` selects of
+the events its WhereClause passes, oldest first, or newest first when `start`
+is after `end` (Part 11 §6.5.2); one of `start` / `end` may be zero when
+`maxEvents` is set. `ReadEventHistoryAll` is its iterator, with `pageSize` as
+the NumValuesPerNode of each call. Both iterators release the outstanding
+continuation point when the consumer stops early or `ctx` is done (the
+iteration then ends with `ctx.Err()`). For all four, `Good_NoData` is an empty
+result and a Bad status of the node is the error (a `ua.StatusCode`).
+
+`HistoryReleaseContinuationPoints` sends a HistoryRead with
+`releaseContinuationPoints` set (Part 4 §5.10.3) for continuation points from
+the low-level `HistoryRead*` calls; `details` is a pointer to the
+HistoryReadDetails the points came from (`*ua.ReadRawModifiedDetails`,
+`*ua.ReadEventDetails`, ...). It returns the status of each node:
+`Bad_ContinuationPointInvalid` for a point that is unknown, already used or
+released, or of another session.
 
 #### History update
 
