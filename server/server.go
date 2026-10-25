@@ -191,6 +191,8 @@ type serverConfig struct {
 	diagnosticsOff bool
 	// auditing turns the audit events on (WithAuditing).
 	auditing bool
+	// alarmClock is the clock of the alarm timers (WithAlarmClock).
+	alarmClock Clock
 	// push is the configuration of WithPushManagement (nil: none).
 	push *PushManagement
 }

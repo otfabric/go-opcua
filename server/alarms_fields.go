@@ -164,7 +164,7 @@ func (c *Condition) fields() []condField {
 				if st.unshelveAt.IsZero() {
 					return float64(0)
 				}
-				return float64(max(time.Until(st.unshelveAt), 0)) / float64(time.Millisecond)
+				return float64(max(st.unshelveAt.Sub(c.srv.now()), 0)) / float64(time.Millisecond)
 			}),
 		)
 		if c.cfg.MaxTimeShelved > 0 {
@@ -173,6 +173,7 @@ func (c *Condition) fields() []condField {
 			}))
 		}
 	}
+	fs = c.fields105(fs)
 	if c.isOffNormal {
 		// OffNormalAlarmType (Part 9 §5.8.23)
 		fs = append(fs, prop("NormalState", id.NodeID, true, func(c *Condition, st *conditionState) any { return nullNodeID(c.cfg.NormalState) }))
@@ -342,8 +343,11 @@ func (c *Condition) build(src *Node) {
 		linkChild(parent, n, f.refType)
 		byPath[f.path] = n
 		c.nodes = append(c.nodes, nid)
-		if f.path == "ShelvingState" {
+		switch f.path {
+		case "ShelvingState":
 			c.shelvingID = nid
+		case "FirstInGroup":
+			c.firstInGroupID = nid
 		}
 	}
 

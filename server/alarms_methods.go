@@ -200,14 +200,14 @@ func (c *Condition) actionMethod(a conditionAction) MethodHandler {
 			c.mu.Unlock()
 			return nil, sc
 		}
-		now := time.Now()
+		now := c.srv.now()
 		if a == actionAddComment || comment.Text != "" || comment.Locale != "" {
 			st.comment, st.commentTime = comment, now
 		}
 		st.clientUserID = user
 		switch a {
 		case actionAcknowledge:
-			st.acked, st.ackedTime = true, now
+			c.setAckedLocked(st, true, now)
 		case actionConfirm:
 			st.confirmed, st.confirmedTime = true, now
 		case actionAddComment:
@@ -311,7 +311,7 @@ func (c *Condition) shelveMethod(to ShelvingState, withComment bool) MethodHandl
 			c.mu.Unlock()
 			return nil, sc
 		}
-		now := time.Now()
+		now := c.srv.now()
 		c.st.clientUserID = clientUserID(ctx)
 		c.applyCommentLocked(comment, now)
 		c.setShelvingLocked(to, d, now)

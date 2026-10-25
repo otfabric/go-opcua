@@ -62,6 +62,9 @@ func (c *Condition) checkConfig() error {
 			*r.out = *r.in
 		}
 	}
+	if err := c.checkConfig105(); err != nil {
+		return err
+	}
 	for _, g := range cfg.SuppressionGroups {
 		if ag, ok := c.srv.AlarmGroup(g); !ok || !ag.suppression {
 			return fmt.Errorf("server: AddCondition: %v is not an AlarmSuppressionGroup", g)

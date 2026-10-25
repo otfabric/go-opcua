@@ -34,10 +34,11 @@ import (
 // and the *2 variants that take a Comment), dialogs (DialogConditionType
 // with Respond and Respond2), condition branches ([Condition.CreateBranch],
 // [ConditionConfig.Branching]), alarm groups ([Server.AddAlarmGroup]) and
-// the audit events of the methods ([WithAuditing]).
-//
-// Not implemented: the AudibleSound, OnDelay / OffDelay, ReAlarm and
-// FirstInGroup components of AlarmConditionType, and AlarmMetrics.
+// the audit events of the methods ([WithAuditing]), and the optional
+// AlarmConditionType components AudibleEnabled / AudibleSound, OnDelay /
+// OffDelay, ReAlarmTime / ReAlarmRepeatCount and FirstInGroupFlag /
+// FirstInGroup. [Server.AddAlarmMetrics] adds AlarmMetricsType objects.
+// The timers run on the clock of [WithAlarmClock].
 
 // AcknowledgeableConditionTypeNodeID is the well-known ObjectType NodeId for
 // AcknowledgeableConditionType (Part 9 §5.7.2).
@@ -248,6 +249,34 @@ type ConditionConfig struct {
 	// [Server.AddAlarmGroup]) whose suppression suppresses the alarm; it
 	// needs Suppressible.
 	SuppressionGroups []*ua.NodeID
+	// AudibleSound adds the AudibleEnabled Property and the AudibleSound
+	// variable (AudioVariableType) of an alarm (Part 9 §5.8.2): the sound
+	// a console plays for it. AudibleEnabled starts true;
+	// ConditionUpdate.AudibleEnabled changes it.
+	AudibleSound *AudibleSound
+	// OnDelay adds the OnDelay Property of an alarm: an activation is
+	// reported only when the alarm stays active for OnDelay; one that ends
+	// earlier is never reported. OffDelay adds the OffDelay Property: the
+	// alarm stays active for OffDelay after it returns to normal, and an
+	// activation within that time continues the alarm without a new
+	// occurrence (Part 9 §5.8.2). The delays apply to the changes of
+	// ActiveState (Active, Limit and NonExclusiveLimits of an update);
+	// the other changes of the update take effect at once.
+	OnDelay, OffDelay time.Duration
+	// ReAlarmTime adds the ReAlarmTime Property and the ReAlarmRepeatCount
+	// variable of an alarm: an alarm that is still active ReAlarmTime after
+	// its activation (or its last re-alarm) is reported again as if it had
+	// just become active (unacknowledged, unconfirmed, not silenced), and
+	// ReAlarmRepeatCount counts the re-alarms of the activation.
+	ReAlarmTime time.Duration
+	// FirstInGroup is an alarm group (see [Server.AddAlarmGroup]) whose
+	// first-out alarm the alarm can be: it adds the FirstInGroupFlag
+	// variable and the FirstInGroup object (AlarmGroupType, listing the
+	// alarms with the same FirstInGroup) and makes the alarm a member of
+	// the group. FirstInGroupFlag is true for the alarm that became active
+	// first while none of these alarms was active, until all of them are
+	// inactive again.
+	FirstInGroup *ua.NodeID
 	// InputNode is the InputNode Property of an alarm.
 	InputNode *ua.NodeID
 	// NormalState is the NormalState Property of an OffNormalAlarmType.
@@ -291,6 +320,16 @@ type DialogConfig struct {
 	DefaultResponse, OkResponse, CancelResponse *int32
 	// Active creates the dialog active (shown to the operator).
 	Active bool
+}
+
+// AudibleSound is the AudibleSound of an alarm (AudioVariableType, Part 9
+// §5.8.2, Part 3 AudioDataType).
+type AudibleSound struct {
+	// Sound is the audio data (AudioDataType, a ByteString).
+	Sound []byte
+	// ListID, AgencyID and VersionID identify the sound in a sound list;
+	// each adds its optional Property when set.
+	ListID, AgencyID, VersionID string
 }
 
 // dialogInfo are the static Properties of a dialog.
@@ -340,6 +379,15 @@ type ConditionState struct {
 	DialogActive bool
 	Prompt       *ua.LocalizedText
 	LastResponse int32
+	// AudibleEnabled is the AudibleEnabled of an alarm with AudibleSound.
+	AudibleEnabled bool
+	// ReAlarmRepeatCount counts the re-alarms of the current activation.
+	ReAlarmRepeatCount int16
+	// FirstInGroup is the FirstInGroupFlag of an alarm with FirstInGroup.
+	FirstInGroup bool
+	// PendingActive / PendingInactive tell that an activation waits for
+	// OnDelay, or a return to normal for OffDelay.
+	PendingActive, PendingInactive bool
 }
 
 // ConditionUpdate is a change of the state of a condition made by the
@@ -379,6 +427,8 @@ type ConditionUpdate struct {
 	// its Prompt.
 	DialogActive *bool
 	Prompt       *string
+	// AudibleEnabled sets the AudibleEnabled of an alarm with AudibleSound.
+	AudibleEnabled *bool
 }
 
 // Errors of the Condition API.
@@ -425,7 +475,7 @@ type conditionState struct {
 	shelvingFrom   ShelvingState // previous state, for LastTransition
 	shelvingTime   time.Time     // time of the last shelving transition
 	unshelveAt     time.Time
-	shelveTimer    *time.Timer
+	shelveTimer    timerStop
 	shelveTimerGen uint64
 
 	limit        LimitState
@@ -453,6 +503,22 @@ type conditionState struct {
 	// deleted marks a branch being deleted: its last event has Retain
 	// false.
 	deleted bool
+
+	audibleEnabled bool
+	// reAlarmCount is ReAlarmRepeatCount; reAlarmTimer re-alarms the
+	// active alarm.
+	reAlarmCount int16
+	reAlarmTimer timerStop
+	reAlarmGen   uint64
+	// delayed is the activation change (Active, Limit, NonExclusiveLimits)
+	// that waits for OnDelay (delayOn) or OffDelay.
+	delayed    *ConditionUpdate
+	delayOn    bool
+	delayTimer timerStop
+	delayGen   uint64
+	// firstInGroup is the FirstInGroupFlag of a branch (the condition
+	// reads it from its group).
+	firstInGroup bool
 }
 
 // suppressedOrShelved is the SuppressedOrShelved of an alarm (Part 9
@@ -489,8 +555,12 @@ type Condition struct {
 	nodes      []*ua.NodeID
 	vars       []*ua.NodeID
 	shelvingID *ua.NodeID
-	methods    [][2]*ua.NodeID
-	sourceRefs func() // removes the references of the source
+	// firstGroup is the FirstInGroup group; firstInGroupID the NodeId of
+	// the FirstInGroup object.
+	firstGroup     *AlarmGroup
+	firstInGroupID *ua.NodeID
+	methods        [][2]*ua.NodeID
+	sourceRefs     func() // removes the references of the source
 
 	// emitMu serializes the changes and the events of the condition, so
 	// that every notifier sees them in order. It is never taken with mu
@@ -500,6 +570,9 @@ type Condition struct {
 	st     conditionState
 	// branches are the branches of the condition, oldest first (mu).
 	branches []*conditionState
+	// metricsTouched are the AlarmMetrics a change counted in, to notify
+	// after the change (mu).
+	metricsTouched []*AlarmMetrics
 }
 
 // alarmManager holds the conditions of a server.
@@ -510,11 +583,12 @@ type alarmManager struct {
 	refreshing map[uint32]bool       // subscriptions with a ConditionRefresh running
 	closed     bool
 	groups     groupState
+	metrics    metricsState
 }
 
 func newAlarmManager() *alarmManager {
 	return &alarmManager{conds: map[string]*Condition{}, shelving: map[string]*Condition{}, refreshing: map[uint32]bool{},
-		groups: groupState{groups: map[string]*AlarmGroup{}}}
+		groups: groupState{groups: map[string]*AlarmGroup{}}, metrics: metricsState{byID: map[string]*AlarmMetrics{}}}
 }
 
 func (m *alarmManager) list() []*Condition {
@@ -547,7 +621,7 @@ func (m *alarmManager) close() {
 	m.mu.Unlock()
 	for _, c := range conds {
 		c.mu.Lock()
-		c.stopShelveTimerLocked()
+		c.stopTimersLocked()
 		c.mu.Unlock()
 	}
 }
@@ -656,7 +730,7 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error) {
 		}
 	}
 
-	now := time.Now()
+	now := s.now()
 	sev := cfg.Severity
 	if sev == 0 {
 		sev = 500
@@ -666,6 +740,7 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error) {
 		severity: sev, lastSeverity: sev, lastSeverityTime: now,
 		message: ua.NewLocalizedText(cfg.Message), quality: ua.StatusOK, qualityTime: now,
 		comment: &ua.LocalizedText{}, acked: true, confirmed: true, lastResponse: -1,
+		audibleEnabled: cfg.AudibleSound != nil,
 	}
 	if c.isDialog {
 		c.st.prompt = ua.NewLocalizedText(cfg.Dialog.Prompt)
@@ -688,6 +763,7 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error) {
 	}
 	c.registerMethods()
 	s.joinSuppressionGroups(c)
+	c.joinFirstInGroup()
 
 	c.emitMu.Lock()
 	c.mu.Lock()
@@ -711,11 +787,12 @@ func (s *Server) RemoveCondition(conditionID *ua.NodeID) error {
 	// The condition leaves its alarm groups after emitMu is released: a
 	// group change holds the groups' lock while it updates conditions.
 	defer s.leaveAlarmGroups(c)
+	defer c.leaveFirstInGroup()
 	c.emitMu.Lock()
 	defer c.emitMu.Unlock()
 	c.mu.Lock()
 	c.st.removed = true
-	c.stopShelveTimerLocked()
+	c.stopTimersLocked()
 	c.branches = nil
 	c.mu.Unlock()
 
@@ -766,6 +843,8 @@ func (c *Condition) snapshotLocked(st *conditionState) ConditionState {
 		Limit: st.limit, NonExclusiveLimits: st.nonExclusive,
 		OutOfService: st.outOfService, Silenced: st.silenced, Latched: st.latched,
 		DialogActive: st.dialogActive, Prompt: st.prompt, LastResponse: st.lastResponse,
+		AudibleEnabled: st.audibleEnabled, ReAlarmRepeatCount: st.reAlarmCount, FirstInGroup: c.firstInGroupOfLocked(st),
+		PendingActive: st.delayed != nil && st.delayOn, PendingInactive: st.delayed != nil && !st.delayOn,
 	}
 }
 
@@ -809,8 +888,22 @@ func (c *Condition) Update(u ConditionUpdate) error {
 		c.mu.Unlock()
 		return err
 	}
-	now := time.Now()
-	evs := c.applyLocked(u, now)
+	now := c.srv.now()
+	u, delayedOnly := c.delayLocked(u)
+	if delayedOnly {
+		// Only an activation change that waits for its delay: nothing
+		// to report yet.
+		c.mu.Unlock()
+		return nil
+	}
+	c.commitLocked(u, now)
+	return nil
+}
+
+// commitLocked applies u, reports the change in an event and unlocks mu.
+// emitMu and mu must be held.
+func (c *Condition) commitLocked(u ConditionUpdate, now time.Time) {
+	evs, others := c.applyLocked(u, now)
 	evs = append(evs, c.newEventLocked())
 	enabled := c.st.enabled
 	c.mu.Unlock()
@@ -820,7 +913,9 @@ func (c *Condition) Update(u ConditionUpdate) error {
 		}
 	}
 	c.notifyChanges()
-	return nil
+	for _, o := range others {
+		o.notifyChanges()
+	}
 }
 
 func (c *Condition) checkUpdateLocked(u ConditionUpdate) error {
@@ -851,13 +946,18 @@ func (c *Condition) checkUpdateLocked(u ConditionUpdate) error {
 	if (u.DialogActive != nil || u.Prompt != nil) && !c.isDialog {
 		return ErrConditionUnsupport
 	}
+	if u.AudibleEnabled != nil && c.cfg.AudibleSound == nil {
+		return ErrConditionUnsupport
+	}
 	return nil
 }
 
 // applyLocked applies u to the state of the condition and returns the
-// event of a branch it creates (Branching).
-func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) []*BaseEvent {
+// event of a branch it creates (Branching) and the other conditions whose
+// FirstInGroupFlag changed.
+func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) ([]*BaseEvent, []*Condition) {
 	var evs []*BaseEvent
+	var others []*Condition
 	st := &c.st
 	active := u.Active
 	if u.Limit != nil {
@@ -880,35 +980,24 @@ func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) []*BaseEvent {
 		st.nonExclusive = *u.NonExclusiveLimits
 	}
 	if active != nil && *active != st.active {
+		since := st.activeTime
 		st.active, st.activeTime = *active, now
+		if c.firstGroup != nil {
+			others = c.firstGroup.noteActive(c, st.active)
+		}
 		if st.active {
-			// The previous occurrence, if it still waits for an
-			// acknowledgement or confirmation, moves to a branch.
-			if c.cfg.Branching && c.isAck && st.enabled && (!st.acked || (c.cfg.Confirmable && !st.confirmed)) &&
-				len(c.branches) < maxConditionBranches {
-				prev := *st
-				prev.active = false
-				evs = append(evs, c.newEventOfLocked(c.newBranchLocked(&prev)))
+			evs = c.annunciateLocked(evs, now)
+			st.reAlarmCount = 0
+			c.startReAlarmLocked()
+			c.metricsLocked(func(m *AlarmMetrics) { m.activated(now) })
+		} else {
+			c.stopReAlarmLocked()
+			c.metricsLocked(func(m *AlarmMetrics) { m.deactivated(now.Sub(since)) })
+			if st.shelving == OneShotShelved {
+				// A OneShotShelved alarm unshelves when it becomes
+				// inactive (Part 9 §5.8.10.1).
+				c.setShelvingLocked(Unshelved, 0, now)
 			}
-			// A new activation needs a new acknowledgement (and
-			// confirmation): Part 9 §5.7.2, §5.8.2; it ends a silence and
-			// latches a latching alarm.
-			if c.cfg.Silenceable && st.silenced {
-				st.silenced, st.silenceTime = false, now
-			}
-			if c.cfg.Latching && !st.latched {
-				st.latched, st.latchedTime = true, now
-			}
-			if c.isAck {
-				st.acked, st.ackedTime = false, now
-				if c.cfg.Confirmable {
-					st.confirmed, st.confirmedTime = false, now
-				}
-			}
-		} else if st.shelving == OneShotShelved {
-			// A OneShotShelved alarm unshelves when it becomes inactive
-			// (Part 9 §5.8.10.1).
-			c.setShelvingLocked(Unshelved, 0, now)
 		}
 	}
 	if u.Severity != nil && *u.Severity != st.severity {
@@ -925,7 +1014,7 @@ func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) []*BaseEvent {
 		st.retain = *u.Retain
 	}
 	if u.Acked != nil && *u.Acked != st.acked {
-		st.acked, st.ackedTime = *u.Acked, now
+		c.setAckedLocked(st, *u.Acked, now)
 	}
 	if u.Confirmed != nil && *u.Confirmed != st.confirmed {
 		st.confirmed, st.confirmedTime = *u.Confirmed, now
@@ -948,7 +1037,54 @@ func (c *Condition) applyLocked(u ConditionUpdate, now time.Time) []*BaseEvent {
 	if u.DialogActive != nil && *u.DialogActive != st.dialogActive {
 		st.dialogActive, st.dialogTime = *u.DialogActive, now
 	}
+	if u.AudibleEnabled != nil {
+		st.audibleEnabled = *u.AudibleEnabled
+	}
+	return evs, others
+}
+
+// annunciateLocked makes the alarm a new occurrence, as on its activation
+// (and on a re-alarm): the previous occurrence, if it still waits for an
+// acknowledgement or confirmation, moves to a branch (Branching); the alarm
+// needs a new acknowledgement and confirmation (Part 9 §5.7.2, §5.8.2), its
+// silence ends and a latching alarm latches. mu must be held.
+func (c *Condition) annunciateLocked(evs []*BaseEvent, now time.Time) []*BaseEvent {
+	st := &c.st
+	fresh := false // the previous occurrence moved to a branch
+	if c.cfg.Branching && c.isAck && st.enabled && (!st.acked || (c.cfg.Confirmable && !st.confirmed)) &&
+		len(c.branches) < maxConditionBranches {
+		prev := *st
+		prev.active = false
+		prev.firstInGroup = c.firstInGroupOfLocked(st)
+		evs = append(evs, c.newEventOfLocked(c.newBranchLocked(&prev)))
+		fresh = true
+	}
+	if c.cfg.Silenceable && st.silenced {
+		st.silenced, st.silenceTime = false, now
+	}
+	if c.cfg.Latching && !st.latched {
+		st.latched, st.latchedTime = true, now
+	}
+	// An alarm that is still unacknowledged (or unconfirmed) stays so since
+	// its first annunciation, unless that occurrence moved to a branch: the
+	// transition time and MaximumUnAck count from there.
+	if c.isAck && (st.acked || fresh) {
+		st.acked, st.ackedTime = false, now
+	}
+	if c.isAck && c.cfg.Confirmable && (st.confirmed || fresh) {
+		st.confirmed, st.confirmedTime = false, now
+	}
 	return evs
+}
+
+// setAckedLocked sets the AckedState of st; an acknowledgement reports the
+// time the alarm was unacknowledged to the alarm metrics.
+func (c *Condition) setAckedLocked(st *conditionState, acked bool, now time.Time) {
+	if acked && !st.acked && c.isAlarm {
+		unacked := now.Sub(st.ackedTime)
+		c.metricsLocked(func(m *AlarmMetrics) { m.acknowledged(unacked) })
+	}
+	st.acked, st.ackedTime = acked, now
 }
 
 // Report reports the current state in a new event.
@@ -1037,7 +1173,7 @@ func (c *Condition) setEnabled(enable bool) ua.StatusCode {
 		c.mu.Unlock()
 		return sc
 	}
-	c.st.enabled, c.st.enabledTime = enable, time.Now()
+	c.st.enabled, c.st.enabledTime = enable, c.srv.now()
 	// Disabling ends the branches: each reports a last event with Retain
 	// false. The event of the transition to Disabled reports Retain false
 	// and the state as Bad_ConditionDisabled (Part 9 §5.5.2); the enabled
@@ -1085,7 +1221,7 @@ func (c *Condition) newEventLocked() *BaseEvent { return c.newEventOfLocked(&c.s
 // newEventOfLocked gives st (the condition's state or a branch) a new
 // EventId and Time and returns its event. mu must be held.
 func (c *Condition) newEventOfLocked(st *conditionState) *BaseEvent {
-	now := time.Now()
+	now := c.srv.now()
 	if !now.After(st.time) {
 		// Time never goes back between the events of a condition.
 		now = st.time.Add(time.Microsecond)
@@ -1137,6 +1273,13 @@ func (c *Condition) notifyChanges() {
 	for _, v := range c.vars {
 		c.srv.ChangeNotification(v)
 	}
+	c.mu.Lock()
+	touched := c.metricsTouched
+	c.metricsTouched = nil
+	c.mu.Unlock()
+	for _, m := range touched {
+		m.notify()
+	}
 }
 
 // --- shelving ---------------------------------------------------------------
@@ -1155,13 +1298,13 @@ func (c *Condition) setShelvingLocked(state ShelvingState, d time.Duration, now 
 		st.unshelveAt = now.Add(d)
 		st.shelveTimerGen++
 		gen := st.shelveTimerGen
-		st.shelveTimer = time.AfterFunc(d, func() { c.shelveExpired(gen) })
+		st.shelveTimer = c.srv.alarmClock().AfterFunc(d, func() { c.shelveExpired(gen) })
 	}
 }
 
 func (c *Condition) stopShelveTimerLocked() {
 	if c.st.shelveTimer != nil {
-		c.st.shelveTimer.Stop()
+		c.st.shelveTimer()
 		c.st.shelveTimer = nil
 	}
 	c.st.shelveTimerGen++
@@ -1178,7 +1321,7 @@ func (c *Condition) shelveExpired(gen uint64) {
 		return
 	}
 	c.st.shelveTimer = nil
-	c.setShelvingLocked(Unshelved, 0, time.Now())
+	c.setShelvingLocked(Unshelved, 0, c.srv.now())
 	ev := c.newEventLocked()
 	enabled := c.st.enabled
 	c.mu.Unlock()

@@ -145,7 +145,7 @@ func (c *Condition) alarmMethod(op alarmOp, withComment bool) MethodHandler {
 			c.mu.Unlock()
 			return nil, sc
 		}
-		now := time.Now()
+		now := c.srv.now()
 		st := &c.st
 		switch op {
 		case opSuppress, opUnsuppress:
@@ -225,7 +225,7 @@ func (c *Condition) respondMethod(withComment bool) MethodHandler {
 			c.mu.Unlock()
 			return nil, sc
 		}
-		now := time.Now()
+		now := c.srv.now()
 		st := &c.st
 		st.lastResponse = selected
 		st.dialogActive, st.dialogTime = false, now
