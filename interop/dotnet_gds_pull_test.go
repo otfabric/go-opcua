@@ -46,7 +46,7 @@ import (
 const (
 	dotnetGDSEnv = "DOTNET_GDS_IMAGE"
 	// defaultDotnetGDSImage is the dotnet-gds adapter of opcua-interop
-	// v0.14.0 (to be pinned by digest with the move to the pinned peers).
+	// v0.14.0, by digest; an opt-in peer until it moves to the pinned peers.
 	defaultDotnetGDSImage = "ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:7c2fc3d697a1bc1c6e5a385d8febdb73fbce67e6b87fd7f2886bb50a0c4de77a"
 
 	// The GDS administrator of the fixture (opcua-interop

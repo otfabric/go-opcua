@@ -4,8 +4,8 @@
 
 package interop
 
-// Opt-in peers: adapters of opcua-interop releases newer than interopVersion
-// whose images are not pinned by digest yet. optionalPeerImageEnv lists their
+// Opt-in peers: adapters that are not among the pinned peers (yet), such as
+// dotnet-gds of opcua-interop v0.14.0. optionalPeerImageEnv lists their
 // image env variables (see imageCapabilities: with the variable unset the
 // peer runs only when its default image is present locally, and skips
 // otherwise); peerInteropVersion the release each of them is written against
