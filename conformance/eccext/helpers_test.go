@@ -169,8 +169,6 @@ type testPKI struct {
 	ecc *eccPKI
 }
 
-const ()
-
 var (
 	pkiOnce sync.Once
 	pkiVal  *testPKI
