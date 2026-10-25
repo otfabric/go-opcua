@@ -1716,7 +1716,9 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `ManufacturerName(s string)` | Manufacturer name |
 | `ProductName(s string)` | Product name |
 | `SoftwareVersion(s string)` | Software version string |
-| `SetLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
+| `SetLogger(l *slog.Logger)`, `WithSlogLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
+| `WithResponseWriteTimeout(d time.Duration)` | Close the connection of a client that has not read a response for `d` (default 15 s) |
+| `WithMaxPendingResponses(n int)` | Stop reading a client's requests while `n` of its responses are unwritten (default 256; waiting Publish requests do not count) |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithAccessController(ac AccessController)` | Access controller |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
@@ -2158,6 +2160,10 @@ type AlarmGroupConfig struct {
 func (s *Server) AddAlarmGroup(cfg AlarmGroupConfig) (*AlarmGroup, error)
 func (s *Server) AlarmGroup(groupID *ua.NodeID) (*AlarmGroup, bool)
 func (s *Server) RemoveAlarmGroup(groupID *ua.NodeID) error
+func (g *AlarmGroup) NodeID() *ua.NodeID
+func (g *AlarmGroup) Name() string
+func (g *AlarmGroup) IsSuppressionGroup() bool
+func (g *AlarmGroup) Suppressing() bool
 func (g *AlarmGroup) AddMember(c *Condition) error
 func (g *AlarmGroup) RemoveMember(c *Condition) error
 func (g *AlarmGroup) Members() []*ua.NodeID
@@ -2168,6 +2174,9 @@ func (g *AlarmGroup) Evaluate() error              // from the DigitalVariables
 func WithAuditing(enabled bool) Option
 func (s *Server) SetAuditing(enabled bool)
 func (s *Server) Auditing() bool
+// an audit event of the application (Part 5 §6.4.3), to the sessions an
+// EventAccessController allows
+func (s *Server) ReportAuditEvent(ctx context.Context, ev *BaseEvent, notifiers ...*ua.NodeID) bool
 type EventAccessController interface { // RBACAccessController: ReceiveEvents
     CheckReceiveEvents(ctx context.Context, session *session, eventType *ua.NodeID) ua.StatusCode
 }
