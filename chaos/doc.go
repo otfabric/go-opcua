@@ -52,8 +52,10 @@
 // share (knobs, watchdog, leak check, ConnState validation).
 //
 //   - chaos/secure: the monkey and the parallelism tests over secured
-//     channels (Basic256Sha256, ECC_nistP256, ECC_nistP384 and the AEAD
-//     policies ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519)
+//     channels (Basic256Sha256, ECC_nistP256, ECC_nistP384,
+//     ECC_brainpoolP256r1, ECC_brainpoolP384r1 and the AEAD policies
+//     ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly, ECC_curve25519,
+//     ECC_curve448)
 //     with token renewals and attacks on the protected messages: bit flips,
 //     replayed, lost, reordered and misdirected chunks. Every value is
 //     verified, also while messages are altered.

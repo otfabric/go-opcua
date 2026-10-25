@@ -2,9 +2,10 @@
 
 // Package secure is the chaos-monkey and parallelism suite for secured
 // channels: what package chaos does with SecurityPolicy None, done over one
-// RSA policy (Basic256Sha256), the ECC policies ECC_nistP256 and
-// ECC_nistP384, and the ECC policies with authenticated encryption
-// ECC_nistP256_AesGcm, ECC_nistP256_ChaChaPoly and ECC_curve25519, all in
+// RSA policy (Basic256Sha256), the ECC policies ECC_nistP256,
+// ECC_nistP384, ECC_brainpoolP256r1 and ECC_brainpoolP384r1, and the ECC
+// policies with authenticated encryption ECC_nistP256_AesGcm,
+// ECC_nistP256_ChaChaPoly, ECC_curve25519 and ECC_curve448, all in
 // SignAndEncrypt mode with a username identity (encrypted with the server
 // certificate on RSA, an EccEncryptedSecret on ECC).
 //

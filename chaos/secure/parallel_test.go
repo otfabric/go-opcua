@@ -193,7 +193,7 @@ func TestSecureParallelOneClient(t *testing.T) {
 	t.Cleanup(e.feed())
 	d := parallelDuration(t, 1500*time.Millisecond)
 
-	for _, pol := range []policy{polAesGcm, polChaChaPoly, polCurve25519, polP256} {
+	for _, pol := range []policy{polAesGcm, polChaChaPoly, polCurve25519, polCurve448, polP256, polBrainpool256} {
 		t.Run(pol.name, func(t *testing.T) {
 			t.Parallel()
 			var sink chaoskit.ErrSink
@@ -228,7 +228,7 @@ func TestSecureParallelOneClient(t *testing.T) {
 
 // TestSecureParallelMixedPolicies runs clients of every policy, in both
 // secure modes and with both identities, against one server with RSA, ECDSA
-// and Ed25519 certificates at once. The server picks keys, certificate and
+// (NIST and Brainpool), Ed25519 and Ed448 certificates at once. The server picks keys, certificate and
 // message protection per channel; nothing of one channel may leak into
 // another.
 func TestSecureParallelMixedPolicies(t *testing.T) {

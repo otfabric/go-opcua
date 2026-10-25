@@ -1772,14 +1772,252 @@
       "fixture": "baseline"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
       "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
       "fixture": "baseline"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unsupported",
+      "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
       "direction": "async-opcua-client-to-go-server",
       "status": "unsupported",
       "nextAction": "async-opcua 0.19 has no ECC SecurityPolicy (async-opcua-crypto implements the RSA policies only); print-capabilities declares no ECC profile, the adapter ignores --ecc-dir and refuses an ECC_* client policy as an input error",

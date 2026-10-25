@@ -5350,11 +5350,11 @@
       "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "go-client-to-open62541-server",
       "status": "verified",
-      "test": "TestOpen62541Server_ECC_UnimplementedPolicies",
-      "case": "coverage/security.ecc.unimplemented-policy/go-client-to-open62541-server",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-brainpoolp256r1.sign-encrypt/go-client-to-open62541-server",
       "fixture": "baseline",
       "interopVersion": "v0.10.1",
       "peer": {
@@ -5363,7 +5363,7 @@
       }
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "go-client-to-milo-server",
       "status": "unsupported",
       "fixture": "baseline",
@@ -5375,11 +5375,11 @@
       "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "open62541-client-to-go-server",
       "status": "verified",
-      "test": "TestGoServer_Open62541Client_ECC_UnimplementedPolicies",
-      "case": "coverage/security.ecc.unimplemented-policy/open62541-client-to-go-server",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-brainpoolp256r1.sign-encrypt/open62541-client-to-go-server",
       "fixture": "baseline",
       "interopVersion": "v0.10.1",
       "peer": {
@@ -5388,7 +5388,857 @@
       }
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Write",
+      "case": "coverage/security.ecc-brainpoolp256r1.write/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Write",
+      "case": "coverage/security.ecc-brainpoolp256r1.write/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-brainpoolp256r1.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-brainpoolp256r1.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp256r1.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp256r1.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp256r1.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp256r1.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-brainpoolp256r1.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-brainpoolp256r1.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-brainpoolp384r1.sign-encrypt/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-brainpoolp384r1.sign-encrypt/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Write",
+      "case": "coverage/security.ecc-brainpoolp384r1.write/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Write",
+      "case": "coverage/security.ecc-brainpoolp384r1.write/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-brainpoolp384r1.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-brainpoolp384r1.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp384r1.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp384r1.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp384r1.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-brainpoolp384r1.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-brainpoolp384r1.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-brainpoolp384r1.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Read",
+      "case": "coverage/security.ecc-curve448.sign-encrypt/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Read",
+      "case": "coverage/security.ecc-curve448.sign-encrypt/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Write",
+      "case": "coverage/security.ecc-curve448.write/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Write",
+      "case": "coverage/security.ecc-curve448.write/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Subscription",
+      "case": "coverage/security.ecc-curve448.subscription/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Subscription",
+      "case": "coverage/security.ecc-curve448.subscription/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-curve448.username.valid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-curve448.username.valid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Username",
+      "case": "coverage/security.ecc-curve448.username.invalid/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Username",
+      "case": "coverage/security.ecc-curve448.username.invalid/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "milo-client-to-go-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
+      "direction": "go-client-to-open62541-server",
+      "status": "verified",
+      "test": "TestOpen62541Server_ECC_Renewal",
+      "case": "coverage/security.ecc-curve448.renewal/go-client-to-open62541-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
+      "direction": "go-client-to-milo-server",
+      "status": "unsupported",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "eclipse-milo",
+        "version": "1.1.8"
+      },
+      "nextAction": "Eclipse Milo 1.1.8 implements no ECC SecurityPolicy (its SecurityPolicy enum ends at Aes256_Sha256_RsaPss); the Milo adapter advertises no ecc-security feature"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
+      "direction": "open62541-client-to-go-server",
+      "status": "verified",
+      "test": "TestGoServer_Open62541Client_ECC_Renewal",
+      "case": "coverage/security.ecc-curve448.renewal/open62541-client-to-go-server",
+      "fixture": "baseline",
+      "interopVersion": "v0.10.1",
+      "peer": {
+        "stack": "open62541",
+        "version": "1.5.9"
+      }
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
       "direction": "milo-client-to-go-server",
       "status": "unsupported",
       "fixture": "baseline",

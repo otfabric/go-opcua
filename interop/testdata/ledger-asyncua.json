@@ -1700,14 +1700,252 @@
       "fixture": "baseline"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "go-client-to-asyncua-server",
       "status": "unsupported",
       "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
       "fixture": "baseline"
     },
     {
-      "capability": "security.ecc.unimplemented-policy",
+      "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.write",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp256r1.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.write",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-brainpoolp384r1.renewal",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.sign-encrypt",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.write",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.subscription",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.valid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.username.invalid",
+      "direction": "asyncua-client-to-go-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
+      "direction": "go-client-to-asyncua-server",
+      "status": "unsupported",
+      "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "security.ecc-curve448.renewal",
       "direction": "asyncua-client-to-go-server",
       "status": "unsupported",
       "nextAction": "asyncua 2.1.0 implements only RSA security policies (asyncua/crypto/security_policies.py has no ECC_nistP256 / nistP384 / brainpoolP256r1 / brainpoolP384r1 / curve25519 / curve448 policy), so opcua-interop asyncua v0.10.1 offers only RSA securityProfiles; re-check when the pin moves",

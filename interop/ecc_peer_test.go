@@ -21,7 +21,6 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -34,7 +33,6 @@ import (
 	"time"
 
 	opcua "github.com/otfabric/go-opcua"
-	opcuaerrors "github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -50,6 +48,10 @@ type eccProfile struct {
 	// aead marks the policies of OPC UA 1.05.07 with authenticated
 	// encryption. The adapter offers them in SignAndEncrypt mode only.
 	aead bool
+
+	// encryptOnly marks the other policies the adapter offers in
+	// SignAndEncrypt mode only (the Brainpool ones).
+	encryptOnly bool
 }
 
 var eccProfiles = []eccProfile{
@@ -58,6 +60,9 @@ var eccProfiles = []eccProfile{
 	{policy: "ECC_nistP256_AesGcm", curve: "ecc-nistp256", ledger: "security.ecc-nistp256-aesgcm", aead: true},
 	{policy: "ECC_nistP256_ChaChaPoly", curve: "ecc-nistp256", ledger: "security.ecc-nistp256-chachapoly", aead: true},
 	{policy: "ECC_curve25519", curve: "ecc-curve25519", ledger: "security.ecc-curve25519", aead: true},
+	{policy: "ECC_brainpoolP256r1", curve: "ecc-brainpoolp256r1", ledger: "security.ecc-brainpoolp256r1", encryptOnly: true},
+	{policy: "ECC_brainpoolP384r1", curve: "ecc-brainpoolp384r1", ledger: "security.ecc-brainpoolp384r1", encryptOnly: true},
+	{policy: "ECC_curve448", curve: "ecc-curve448", ledger: "security.ecc-curve448", aead: true},
 }
 
 // eccMode is a message security mode with its name in the ledger.
@@ -68,10 +73,16 @@ type eccMode struct {
 
 // modes returns the message security modes the profile is tested in.
 func (p eccProfile) modes() []eccMode {
-	if p.aead {
+	if p.signAndEncryptOnly() {
 		return []eccMode{{"SignAndEncrypt", "sign-encrypt"}}
 	}
 	return eccModes
+}
+
+// signAndEncryptOnly reports whether the adapter offers the profile in
+// SignAndEncrypt mode only. These profiles also get a write test.
+func (p eccProfile) signAndEncryptOnly() bool {
+	return p.aead || p.encryptOnly
 }
 
 // renewals returns how many SecurityToken renewals a renewal test of the
@@ -440,11 +451,11 @@ func TestOpen62541Server_ECC_Renewal(t *testing.T) {
 	}
 }
 
-// TestOpen62541Server_ECC_Write writes a value over the policies with
-// authenticated encryption and reads it back.
+// TestOpen62541Server_ECC_Write writes a value over the policies the adapter
+// offers in SignAndEncrypt mode only and reads it back.
 func TestOpen62541Server_ECC_Write(t *testing.T) {
 	for _, p := range eccProfiles {
-		if !p.aead {
+		if !p.signAndEncryptOnly() {
 			continue
 		}
 		t.Run("coverage/"+p.ledger+".write/go-client-to-open62541-server", func(t *testing.T) {
@@ -474,10 +485,11 @@ func TestOpen62541Server_ECC_Write(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestGoServer_Open62541Client_ECC_Write has the open62541 client write a
-// value over the policies with authenticated encryption and read it back.
+// value over the policies the adapter offers in SignAndEncrypt mode only and
+// read it back.
 func TestGoServer_Open62541Client_ECC_Write(t *testing.T) {
 	for _, p := range eccProfiles {
-		if !p.aead {
+		if !p.signAndEncryptOnly() {
 			continue
 		}
 		t.Run("coverage/"+p.ledger+".write/open62541-client-to-go-server", func(t *testing.T) {
@@ -784,176 +796,6 @@ func TestGoServer_Open62541Client_ECC_Renewal(t *testing.T) {
 			}
 		})
 	}
-}
-
-// ---------------------------------------------------------------------------
-// ECC policies go-opcua does not implement
-// ---------------------------------------------------------------------------
-
-// eccUnimplemented are the ECC policies open62541 1.5.9 offers and go-opcua
-// does not implement, with the directory of the certificate they use.
-var eccUnimplemented = []eccProfile{
-	{policy: "ECC_brainpoolP256r1", curve: "ecc-brainpoolp256r1"},
-	{policy: "ECC_brainpoolP384r1", curve: "ecc-brainpoolp384r1"},
-	{policy: "ECC_curve448", curve: "ecc-curve448"},
-}
-
-// uncleanFailure bounds how long a refusal may take: it is decided locally
-// or at the first message, nothing waits for a timeout.
-const uncleanFailure = 8 * time.Second
-
-// TestOpen62541Server_ECC_UnimplementedPolicies: the open62541 server offers
-// three ECC policies go-opcua does not implement. The go-opcua client must read
-// its endpoint list, never select such an endpoint on its own, and refuse it
-// at once with ErrUnsupportedSecurityPolicy when it is told to use it; the
-// implemented policies stay usable next to them.
-func TestOpen62541Server_ECC_UnimplementedPolicies(t *testing.T) {
-	t.Run("coverage/security.ecc.unimplemented-policy/go-client-to-open62541-server", func(t *testing.T) {
-		for _, p := range eccUnimplemented {
-			requireECCProfile(t, p.policy, "SignAndEncrypt")
-			eccPKIFile(t, "open62541-server", p.curve, "cert.crt")
-		}
-		h := startOpen62541ECCServer(t)
-
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-		defer cancel()
-		eps, err := opcua.GetEndpoints(ctx, h.endpoint)
-		if err != nil {
-			t.Fatalf("GetEndpoints: %v", err)
-		}
-		p256 := eccProfiles[0]
-		certDER := pemCertDER(t, mustReadFile(t, eccPKIFile(t, "consumer", p256.curve, "cert.crt")))
-		ca := loadCACert(t, filepath.Join(pkiDir(t), "ca", "ca.crt"))
-
-		for _, p := range eccUnimplemented {
-			uri := ua.FormatSecurityPolicyURI(p.policy)
-			var ep *ua.EndpointDescription
-			for _, e := range eps {
-				if e.SecurityPolicyURI == uri {
-					ep = e
-				}
-			}
-			if ep == nil {
-				t.Errorf("%s: the server does not offer the policy, nothing is proven", p.policy)
-				continue
-			}
-			// Not selectable.
-			if got, err := opcua.SelectEndpoint(eps, p.policy, ua.MessageSecurityModeInvalid, certDER); !errors.Is(err, opcuaerrors.ErrNoMatchingEndpoint) {
-				t.Errorf("%s: SelectEndpoint = %v, %v; want ErrNoMatchingEndpoint", p.policy, got, err)
-			}
-			// Refused at once when forced.
-			start := time.Now()
-			ep.EndpointURL = h.endpoint
-			c, err := opcua.NewClient(h.endpoint,
-				opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
-				opcua.Certificate(certDER),
-				opcua.PrivateKeyFile(eccPKIFile(t, "consumer", p256.curve, "cert.key")),
-				opcua.TrustedCertificates(ca),
-				opcua.AuthAnonymous(),
-				opcua.AutoReconnect(false),
-			)
-			if err == nil {
-				cctx, ccancel := context.WithTimeout(ctx, uncleanFailure)
-				err = c.Connect(cctx)
-				ccancel()
-				if err == nil {
-					_ = c.Close(ctx)
-				}
-			}
-			elapsed := time.Since(start)
-			t.Logf("%s: %v (%s)", p.policy, err, elapsed.Round(time.Millisecond))
-			if !errors.Is(err, opcuaerrors.ErrUnsupportedSecurityPolicy) {
-				t.Errorf("%s: got %v, want ErrUnsupportedSecurityPolicy", p.policy, err)
-			}
-			if elapsed > uncleanFailure/2 {
-				t.Errorf("%s: the refusal took %s", p.policy, elapsed)
-			}
-		}
-
-		// Left to itself the client takes the best endpoint it implements,
-		// and the server still serves it.
-		best, err := opcua.SelectEndpoint(eps, "", ua.MessageSecurityModeInvalid, certDER)
-		if err != nil {
-			t.Fatalf("SelectEndpoint: %v", err)
-		}
-		// open62541 gives its ECC endpoints one security level, so the
-		// ranking of go-opcua decides between the policies a P-256
-		// certificate can be used with: ECC_nistP256_ChaChaPoly.
-		t.Logf("SelectEndpoint with a P-256 certificate: %s (level %d)", best.SecurityPolicyURI, best.SecurityLevel)
-		for _, e := range eps {
-			if uapolicy.IsSupported(e.SecurityPolicyURI) && uapolicy.CheckCertificate(e.SecurityPolicyURI, certDER) == nil && e.SecurityLevel > best.SecurityLevel {
-				t.Errorf("SelectEndpoint chose %s (level %d) over %s (level %d)", best.SecurityPolicyURI, best.SecurityLevel, e.SecurityPolicyURI, e.SecurityLevel)
-			}
-		}
-		if best.SecurityPolicyURI != ua.SecurityPolicyURIECCNistP256ChaChaPoly {
-			t.Errorf("SelectEndpoint with a P-256 certificate chose %s", best.SecurityPolicyURI)
-		}
-		c := dialECCClient(t, h.endpoint, p256, "SignAndEncrypt")
-		rctx, nsIdx := findNS(t, c)
-		if _, err := c.Node(ua.NewStringNodeID(nsIdx, "Scalar.Int32")).Value(rctx); err != nil {
-			t.Fatalf("read over %s after the refusals: %v", p256.policy, err)
-		}
-	})
-}
-
-// TestGoServer_Open62541Client_ECC_UnimplementedPolicies: the open62541
-// client asks the go-opcua server for an ECC policy go-opcua does not
-// implement. The server does not offer such an endpoint, so the client must
-// find none to select (client contract §9: exit 3, error category
-// "transport") instead of hanging, and the server keeps serving.
-func TestGoServer_Open62541Client_ECC_UnimplementedPolicies(t *testing.T) {
-	t.Run("coverage/security.ecc.unimplemented-policy/open62541-client-to-go-server", func(t *testing.T) {
-		for _, p := range eccUnimplemented {
-			requireECCProfile(t, p.policy, "SignAndEncrypt")
-		}
-		endpoint, _ := startECCGoServer(t)
-
-		// The server does not advertise what it does not implement.
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		eps, err := opcua.GetEndpoints(ctx, endpoint)
-		if err != nil {
-			t.Fatalf("GetEndpoints: %v", err)
-		}
-		for _, ep := range eps {
-			for _, p := range eccUnimplemented {
-				if ep.SecurityPolicyURI == ua.FormatSecurityPolicyURI(p.policy) {
-					t.Errorf("the go-opcua server advertises %s", p.policy)
-				}
-			}
-		}
-
-		for _, p := range eccUnimplemented {
-			start := time.Now()
-			result := runECCAdapterClient(t, endpoint, p, "SignAndEncrypt", "read",
-				"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32")
-			elapsed := time.Since(start)
-			t.Logf("%s: success=%v serviceResult=%s error=%s (%s)", p.policy, result.Success, result.ServiceResult, result.Error, elapsed.Round(time.Millisecond))
-			if result.Operation == "" {
-				t.Errorf("%s: the adapter produced no result: the refusal cannot be told from a crash or a hang", p.policy)
-				continue
-			}
-			if result.Success {
-				t.Errorf("%s: the read succeeded over a policy go-opcua does not implement", p.policy)
-			}
-			var e struct {
-				Category string `json:"category"`
-			}
-			if err := json.Unmarshal(result.Error, &e); err != nil || e.Category != "transport" {
-				t.Errorf("%s: error %s, want category \"transport\" (no matching endpoint)", p.policy, result.Error)
-			}
-			if elapsed > uncleanFailure {
-				t.Errorf("%s: the refusal took %s", p.policy, elapsed)
-			}
-		}
-
-		// The implemented policy still works on the same server.
-		result := runECCAdapterClient(t, endpoint, eccProfiles[0], "SignAndEncrypt", "read",
-			"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32")
-		if !result.Success {
-			t.Fatalf("read over %s after the refusals: %s error=%s", eccProfiles[0].policy, result.ServiceResult, result.Error)
-		}
-	})
 }
 
 func mustReadFile(t *testing.T, path string) []byte {

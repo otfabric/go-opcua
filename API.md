@@ -806,13 +806,13 @@ All option functions return `Option` and are passed to `NewClient`:
 | `Certificate(cert []byte)` | Client application certificate (DER) |
 | `CertificateFile(filename string)` | Load client application certificate from file |
 | `PrivateKey(key *rsa.PrivateKey)` | RSA private key for the client certificate |
-| `PrivateKeySigner(key crypto.Signer)` | Private key for the client certificate of any supported type: `*rsa.PrivateKey`, or an ECDSA or Ed25519 key (any `crypto.Signer`, e.g. an HSM) for the ECC policies |
-| `PrivateKeyFile(filename string)` | Load an RSA, ECDSA or Ed25519 private key from a PEM or DER file (PKCS #1, PKCS #8, SEC 1) |
+| `PrivateKeySigner(key crypto.Signer)` | Private key for the client certificate of any supported type: `*rsa.PrivateKey`, or an ECDSA (NIST or Brainpool), Ed25519 or Ed448 key (any `crypto.Signer`, e.g. an HSM) for the ECC policies |
+| `PrivateKeyFile(filename string)` | Load an RSA, ECDSA (NIST or Brainpool), Ed25519 or Ed448 private key from a PEM or DER file (PKCS #1, PKCS #8, SEC 1) |
 | `AuthAnonymous()` | Use anonymous identity token (default) |
 | `AuthUsername(user, pass string)` | Username/password identity token |
 | `AuthCertificate(cert []byte)` | X.509 user certificate identity token (DER) |
 | `AuthPrivateKey(key *rsa.PrivateKey)` | Private key for the X.509 user certificate |
-| `AuthPrivateKeySigner(key crypto.Signer)` | Private key for the X.509 user certificate of any supported type (RSA or ECDSA) |
+| `AuthPrivateKeySigner(key crypto.Signer)` | Private key for the X.509 user certificate of any supported type (RSA, ECDSA, Ed25519 or Ed448) |
 | `AuthIssuedToken(tokenData []byte)` | Issued (e.g. JWT/SAML) identity token |
 | `AuthPolicyID(policy string)` | Override the UserTokenPolicy ID used during ActivateSession |
 | `DialTimeout(d time.Duration)` | TCP + HEL/ACK handshake timeout (default `DefaultDialTimeout`); with reverse connect, how long to wait for the server |
@@ -1631,7 +1631,7 @@ func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discove
 | `ListenOn(addr string)` | Override the TCP bind address (e.g. `"0.0.0.0:4840"`) |
 | `Certificate(cert []byte)` | Server certificate (DER) |
 | `PrivateKey(key *rsa.PrivateKey)` | Server private key (RSA) |
-| `ApplicationIdentity(cert []byte, key crypto.Signer)` | Add an application instance certificate with its key; repeat per key type (RSA, ECDSA P-256, ECDSA P-384). The server uses, and each endpoint advertises, the certificate that fits the security policy |
+| `ApplicationIdentity(cert []byte, key crypto.Signer)` | Add an application instance certificate with its key; repeat per key type (RSA, ECDSA P-256 / P-384 / brainpoolP256r1 / brainpoolP384r1, Ed25519, Ed448). The server uses, and each endpoint advertises, the certificate that fits the security policy |
 | `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate). An ECC policy needs a matching `ApplicationIdentity` |
 | `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate). `UserName`, `Certificate` and `IssuedToken` also need their validator: without it every token of that type is rejected and `New` logs a warning |
 | `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only |
@@ -2544,14 +2544,17 @@ Returns all supported security policy URIs:
 - `http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_AesGcm`
 - `http://opcfoundation.org/UA/SecurityPolicy#ECC_nistP256_ChaChaPoly`
 - `http://opcfoundation.org/UA/SecurityPolicy#ECC_curve25519`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_brainpoolP256r1`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_brainpoolP384r1`
+- `http://opcfoundation.org/UA/SecurityPolicy#ECC_curve448`
 
-The `ua` package has a constant for each (`ua.SecurityPolicyURIECCNistP256AesGcm`, `ua.SecurityPolicyURIECCNistP256ChaChaPoly`, `ua.SecurityPolicyURIECCCurve25519`, ...) and the short names `ECCNistP256AesGcm`, `ECCNistP256ChaChaPoly` and `ECCCurve25519` in `ua.SecurityPolicyURIs`; the spelling of the specification (`ECC_nistP256_AesGcm`, ...) works everywhere a policy is named.
+The `ua` package has a constant for each (`ua.SecurityPolicyURIECCNistP256AesGcm`, `ua.SecurityPolicyURIECCNistP256ChaChaPoly`, `ua.SecurityPolicyURIECCCurve25519`, `ua.SecurityPolicyURIECCBrainpoolP256r1`, `ua.SecurityPolicyURIECCBrainpoolP384r1`, `ua.SecurityPolicyURIECCCurve448`, ...) and the short names `ECCNistP256AesGcm`, `ECCNistP256ChaChaPoly`, `ECCCurve25519`, `ECCBrainpoolP256r1`, `ECCBrainpoolP384r1` and `ECCCurve448` in `ua.SecurityPolicyURIs`; the spelling of the specification (`ECC_nistP256_AesGcm`, ...) works everywhere a policy is named.
 
 ```go
 func SecurityLevel(policy string, mode ua.MessageSecurityMode) uint8
 func IsSupported(uri string) bool // the policy is implemented (one of SupportedPolicies)
 func IsECC(uri string) bool
-func IsAEAD(uri string) bool                    // authenticated encryption: the three policies of OPC UA 1.05.07
+func IsAEAD(uri string) bool                    // authenticated encryption: the four policies of OPC UA 1.05.07
 func SecureChannelEnhancements(uri string) bool // ChannelThumbprint, key chaining, channel bound signatures
 func LegacySequenceNumbers(uri string) bool
 
@@ -2581,7 +2584,14 @@ func CheckCertificate(uri string, cert []byte) error
 func CheckPublicKey(uri string, key crypto.PublicKey) error
 func CertificateHash(uri string, cert []byte) ([]byte, error) // in channel bound signatures
 func KeyMatchesCertificate(key crypto.Signer, cert []byte) bool
-func ParsePrivateKey(data []byte) (crypto.Signer, error)
+func ParsePrivateKey(data []byte) (crypto.Signer, error) // RSA, ECDSA (NIST, Brainpool), Ed25519, Ed448
+func MarshalPrivateKey(key crypto.Signer) ([]byte, error) // PKCS #8, every key type
+
+// Certificates crypto/x509 cannot handle: Brainpool keys, Ed448 keys and signatures
+func ParseCertificate(der []byte) (*x509.Certificate, error)
+func ParseCertificates(der []byte) ([]*x509.Certificate, error)
+func CreateCertificate(rand io.Reader, template, parent *x509.Certificate, pub crypto.PublicKey, priv crypto.Signer) ([]byte, error)
+func VerifyCertificate(certs []*x509.Certificate, roots *x509.CertPool, anchors []*x509.Certificate) error
 
 // ECC: ephemeral keys and the EccEncryptedSecret of user identity tokens
 func NewEphemeralKey(uri string) (*EphemeralKey, error)
@@ -2591,7 +2601,9 @@ func (k *EphemeralKey) DecryptSecret(data []byte, signerKey func(certificate []b
 func EncryptSecret(uri string, signingKey crypto.PrivateKey, signingCertificate, receiverPublicKey, nonce, secret []byte, signingTime time.Time) ([]byte, error)
 ```
 
-`AsymmetricKeys` is the key-type independent form of `Asymmetric`: RSA policies take `*rsa.PrivateKey` / `*rsa.PublicKey`, the ECC policies a `crypto.Signer` with an ECDSA public key and an `*ecdsa.PublicKey`, and `ECC_curve25519` a `crypto.Signer` with an `ed25519.PublicKey` and an `ed25519.PublicKey`. The asymmetric algorithm of an ECC policy is `SignOnly`: OpenSecureChannel messages are signed, not encrypted. `ECDSA` and `EdDSA` are the signature algorithms themselves.
+`AsymmetricKeys` is the key-type independent form of `Asymmetric`: RSA policies take `*rsa.PrivateKey` / `*rsa.PublicKey`, the ECC policies a `crypto.Signer` with an ECDSA public key and an `*ecdsa.PublicKey`, `ECC_curve25519` a `crypto.Signer` with an `ed25519.PublicKey` and an `ed25519.PublicKey`, and `ECC_curve448` the same with `ed448.PublicKey` (`github.com/cloudflare/circl/sign/ed448`). The asymmetric algorithm of an ECC policy is `SignOnly`: OpenSecureChannel messages are signed, not encrypted. `ECDSA`, `EdDSA` and `Ed448` are the signature algorithms themselves.
+
+`ParseCertificate` is `x509.ParseCertificate` that also takes certificates with a Brainpool key (returned as an `*ecdsa.PublicKey` on its curve) or an Ed448 key (an `ed448.PublicKey`); `ParseCertificates` likewise for a concatenation. `CreateCertificate` is `x509.CreateCertificate` for such keys, as subject or issuer key (the signature algorithm follows the issuer key; `template.SignatureAlgorithm` must be unset). `VerifyCertificate` verifies `certs[0]` with `certs[1:]` as intermediates: with `crypto/x509` against `roots`, or, when a certificate is signed with Ed448, with the library's own chain builder against `anchors` (see [Security](docs/security.md#brainpool-and-curve448) for the rules). The client and the server use these wherever they read a certificate.
 
 A `KeyExchange` creates the nonce a side sends in OpenSecureChannel and, given the peer's nonce, the symmetric algorithm of the new SecurityToken. For RSA policies the nonce is random and the keys come from P_SHA; for ECC policies the nonce is an ephemeral public key and the keys come from HKDF over the ECDH shared secret. `Symmetric` alone cannot serve the ECC policies and returns an error for them.
 
@@ -2599,7 +2611,7 @@ The symmetric algorithm of `ECC_nistP256_AesGcm`, `ECC_nistP256_ChaChaPoly` and 
 
 `SymmetricChained` is `Symmetric` for a channel with `SecureChannelEnhancements`: it takes the value the previous exchange on the channel returned (nil for the first one) and returns the one for the next renewal. The value is key material and must stay secret. For all other policies it is ignored and nil.
 
-`CheckCertificate` reports whether a certificate's key can be used with a policy (RSA for the RSA policies; P-256 or P-384 for `ECC_nistP256`, `ECC_nistP256_AesGcm` and `ECC_nistP256_ChaChaPoly`; P-384 for `ECC_nistP384`; Ed25519 for `ECC_curve25519`).
+`CheckCertificate` reports whether a certificate's key can be used with a policy (RSA for the RSA policies; P-256 or P-384 for `ECC_nistP256`, `ECC_nistP256_AesGcm` and `ECC_nistP256_ChaChaPoly`; P-384 for `ECC_nistP384`; brainpoolP256r1 or brainpoolP384r1 for `ECC_brainpoolP256r1`; brainpoolP384r1 for `ECC_brainpoolP384r1`; Ed25519 for `ECC_curve25519`; Ed448 for `ECC_curve448`).
 
 ---
 
