@@ -3044,6 +3044,70 @@
       "reason": "adapter-command-missing",
       "nextAction": "UA-.NETStandard's push client (ServerPushConfigurationClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client push`; add it when the package is released",
       "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's Global Discovery Server (NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Server.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `server gds`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's GDS client (GlobalDiscoveryServerClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client gds-pull`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's Global Discovery Server (NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Server.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `server gds`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's GDS client (GlobalDiscoveryServerClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client gds-pull`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's Global Discovery Server (NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Server.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `server gds`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's GDS client (GlobalDiscoveryServerClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client gds-pull`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "go-client-to-dotnet-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's Global Discovery Server (NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Server.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `server gds`; add it when the package is released",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "dotnet-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "UA-.NETStandard's GDS client (GlobalDiscoveryServerClient, NuGet OPCFoundation.NetStandard.Opc.Ua.Gds.Client.Common) has no 2.0.1 release (2.0.0-preview.4 is the newest), so the dotnet adapter has no `client gds-pull`; add it when the package is released",
+      "fixture": "baseline"
     }
   ]
 }

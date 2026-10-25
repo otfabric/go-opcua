@@ -9,14 +9,14 @@ Pinned opcua-interop version: **v0.13.0**
 - `deferred`: 60
 - `not-applicable`: 42
 - `unsupported`: 223
-- `unverified`: 47
+- `unverified`: 63
 - `verified`: 468
 
 ## Unverified by reason
 
-- `adapter-command-missing`: 29
+- `adapter-command-missing`: 37
 - `adapter-fixture-missing`: 5
-- `peer-capability-unknown`: 13
+- `peer-capability-unknown`: 21
 
 ## Unverified rows
 
@@ -46,6 +46,14 @@ Pinned opcua-interop version: **v0.13.0**
 | `certmgmt.push.trust-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
 | `certmgmt.push.usertoken-group` | M→S | `adapter-command-missing` | the opcua-interop Milo adapter has no `client push` (contract §15) |
 | `certmgmt.push.usertoken-group` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no push management client API; the adapter would need a `client push` built on UA_Client_call (contract §15) |
+| `gds.pull.certificate-request` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
+| `gds.pull.certificate-request` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
+| `gds.pull.directory` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
+| `gds.pull.directory` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
+| `gds.pull.revocation` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
+| `gds.pull.revocation` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
+| `gds.pull.trust-list` | M→S | `adapter-command-missing` | Eclipse Milo 1.1.8 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15) |
+| `gds.pull.trust-list` | O→S | `adapter-command-missing` | open62541 v1.5.9 has no GDS pull client API; the adapter would need a `client gds-pull` built on UA_Client_call (contract §15) |
 | `pubsub.uadp.chunk` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.chunk` | O→S | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.chunking (contract §14.11) and its configurations set no MaxNetworkMessageSize; go-opcua's chunking is verified against UA-.NETStandard (testdata/ledger-dotnet.json) |
 | `pubsub.uadp.discovery` | C→O | `adapter-command-missing` | the opcua-interop open62541 adapter declares no pubsub.discovery (contract §14.11) and has no pubsub-discover operation; go-opcua's discovery is verified against UA-.NETStandard in its layout (testdata/ledger-dotnet.json) |
@@ -69,4 +77,12 @@ Pinned opcua-interop version: **v0.13.0**
 | `certmgmt.push.transaction-diagnostics` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.trust-list` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
 | `certmgmt.push.usertoken-group` | C→M | `peer-capability-unknown` | the opcua-interop Milo adapter does not wire a push certificate manager; whether Eclipse Milo 1.1.8 serves the ServerConfiguration methods is not established |
+| `gds.pull.certificate-request` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
+| `gds.pull.certificate-request` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
+| `gds.pull.directory` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
+| `gds.pull.directory` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
+| `gds.pull.revocation` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
+| `gds.pull.revocation` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
+| `gds.pull.trust-list` | C→M | `peer-capability-unknown` | Eclipse Milo 1.1.8 has no Global Discovery Server; nothing to test against until it has one |
+| `gds.pull.trust-list` | C→O | `peer-capability-unknown` | open62541 v1.5.9 has no Global Discovery Server (UA_ENABLE_GDS_PUSHMANAGEMENT covers the push model of Part 12 §7 only); nothing to test against until it has one |
 

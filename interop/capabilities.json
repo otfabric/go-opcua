@@ -2267,6 +2267,50 @@
         "open62541-client-to-go-server",
         "milo-client-to-go-server"
       ]
+    },
+    {
+      "id": "gds.pull.directory",
+      "title": "GDS pull model Directory: RegisterApplication / UpdateApplication / UnregisterApplication / FindApplications / GetApplication / QueryApplications / QueryServers with the ApplicationRecordDataType (Part 12 §6.6) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver)",
+      "profile": "discovery",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "gds.pull.certificate-request",
+      "title": "GDS pull model certificate requests: StartSigningRequest / StartNewKeyPairRequest / FinishRequest, approval and the issued certificate (Part 12 §7.9.4–§7.9.6) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "gds.pull.trust-list",
+      "title": "GDS pull model trust list: GetCertificateGroups / GetCertificates / GetTrustList and reading the TrustList of the DefaultApplicationGroup, GetCertificateStatus (Part 12 §7.9.10–§7.9.13) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
+    },
+    {
+      "id": "gds.pull.revocation",
+      "title": "GDS pull model revocation: RevokeCertificate, the CRLs of the trust list, CheckRevocationStatus (Part 12 §7.9.9, §7.9.14) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver)",
+      "profile": "certificate-management",
+      "applicableDirections": [
+        "go-client-to-open62541-server",
+        "go-client-to-milo-server",
+        "open62541-client-to-go-server",
+        "milo-client-to-go-server"
+      ]
     }
   ]
 }

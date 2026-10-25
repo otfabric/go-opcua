@@ -1178,8 +1178,34 @@ CreateSelfSignedCertificate for an occupied slot (`Bad_InvalidState`: it wants
 DeleteCertificate first, which package `gds` does not call); open62541 1.5.9
 and node-opcua serve the UserToken trust list only. See the interop ledgers.
 
-The pull model (RegisterApplication, StartSigningRequest, FinishRequest of a
-Global Discovery Server) is not implemented.
+The pull model is described in the next section.
+
+## Certificate Management (GDS Pull)
+
+`gds.PullClient` talks to a Global Discovery Server by the pull model of
+Part 12 (§6, §7.9) — a go-opcua `gds/gdsserver` or any other GDS. It
+finds the GDS namespace itself and wraps every Directory and
+CertificateDirectory method (RegisterApplication, QueryServers,
+StartSigningRequest, StartNewKeyPairRequest, FinishRequest,
+RevokeCertificate, GetTrustList, CheckRevocationStatus, ...). `Enroll` does
+the whole exchange: it finds or registers the application, asks for a
+certificate, waits until the GDS issues it and reads the trust list:
+
+```go
+pc := gds.NewPullClient(c) // a session over SignAndEncrypt
+e, err := pc.Enroll(ctx, &gds.EnrollRequest{
+    Record:          &gds.ApplicationRecord{ApplicationURI: uri, ApplicationType: ua.ApplicationTypeClient, ApplicationNames: names, ProductURI: product},
+    CertificateType: gds.EccNistP256ApplicationCertificateType,
+    Key:             key, // nil: the GDS generates the key
+})
+opts, err := e.ClientOptions()   // certificate, key and trusted CAs for opcua.NewClient
+sopts := e.ServerOptions()       // ApplicationIdentity and push management with the trust list
+```
+
+Registering needs the DiscoveryAdmin role and a certificate request the
+CertificateAuthorityAdmin role, or a session of the application itself.
+`WaitForCertificate` polls FinishRequest (`DefaultPollInterval`) while the
+request waits for approval. See [examples/gds-pull](../examples/gds-pull/main.go).
 
 ---
 

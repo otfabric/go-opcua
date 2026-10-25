@@ -2447,8 +2447,9 @@ See [docs/server-guide.md](docs/server-guide.md#certificate-management-push-mode
 
 ## Package `gds`
 
-Push certificate management client (Part 12 §7) against any server's
-ServerConfiguration object.
+Certificate management clients of Part 12: the push model (§7.10) against
+any server's ServerConfiguration object and the pull model (§6, §7.9)
+against a Global Discovery Server.
 
 ```go
 func New(c *opcua.Client) *Client                     // Client.TrustList: the TrustList object (default DefaultTrustList)
@@ -2480,6 +2481,54 @@ type Error struct{ Method string; Status ua.StatusCode } // errors.Is(err, ua.St
 NodeIds `ServerConfiguration`, `DefaultApplicationGroup`, `DefaultTrustList`, `DefaultHTTPSGroup`, `HTTPSTrustList`,
 `DefaultUserTokenGroup`, `UserTokenTrustList`, `HTTPSCertificateType` and the
 `…ApplicationCertificateType` variables. See [docs/client-guide.md](docs/client-guide.md#certificate-management-gds-push).
+
+Pull model:
+
+```go
+func NewPullClient(c *opcua.Client) *PullClient
+func (p *PullClient) Namespace(ctx) (uint16, error)              // the GDS namespace index
+func (p *PullClient) DefaultApplicationGroup(ctx) (*ua.NodeID, error)
+func (p *PullClient) FindApplications(ctx, applicationURI string) ([]*ApplicationRecord, error)
+func (p *PullClient) RegisterApplication(ctx, r *ApplicationRecord) (*ua.NodeID, error)
+func (p *PullClient) UpdateApplication(ctx, r *ApplicationRecord) error
+func (p *PullClient) UnregisterApplication(ctx, applicationID *ua.NodeID) error
+func (p *PullClient) GetApplication(ctx, applicationID *ua.NodeID) (*ApplicationRecord, error)
+func (p *PullClient) QueryApplications(ctx, q *ApplicationQuery) (*ApplicationQueryResult, error)
+func (p *PullClient) QueryServers(ctx, q *ServerQuery) (*ServerQueryResult, error)
+func (p *PullClient) StartSigningRequest(ctx, applicationID, group, certificateType *ua.NodeID, csr []byte) (*ua.NodeID, error)
+func (p *PullClient) StartNewKeyPairRequest(ctx, applicationID *ua.NodeID, r *NewKeyPairRequest) (*ua.NodeID, error)
+func (p *PullClient) FinishRequest(ctx, applicationID, requestID *ua.NodeID) (*IssuedCertificate, error) // Bad_NothingToDo while pending
+func (p *PullClient) WaitForCertificate(ctx, applicationID, requestID *ua.NodeID, interval time.Duration) (*IssuedCertificate, error)
+func (p *PullClient) RevokeCertificate(ctx, applicationID *ua.NodeID, cert []byte) error
+func (p *PullClient) GetCertificateGroups / GetCertificates / GetTrustList / ReadTrustList / GetCertificateStatus / CheckRevocationStatus
+func (p *PullClient) Enroll(ctx, r *EnrollRequest) (*Enrollment, error)
+func (e *Enrollment) ClientOptions() ([]opcua.Option, error)
+func (e *Enrollment) ServerOptions() []server.Option
+func NewCertificateRequest(key crypto.Signer, applicationURI, subject string, hosts []string) ([]byte, error)
+```
+
+See [docs/client-guide.md](docs/client-guide.md#certificate-management-gds-pull).
+
+## Package `gds/gdsserver`
+
+Global Discovery Server of the pull model (Part 12 §6, §7.9).
+
+```go
+func Attach(srv *server.Server, cfg Config) (*GDS, error)       // before srv.Start
+func (g *GDS) Close()                                           // later calls: Bad_Shutdown
+func (g *GDS) Namespace() uint16
+func (g *GDS) DiscoveryAdminRole() / CertificateAuthorityAdminRole() *ua.NodeID
+func (g *GDS) DefaultApplicationGroup() *ua.NodeID
+func (g *GDS) Requests() []*PendingRequest
+func (g *GDS) ApproveRequest(ctx context.Context, requestID string, approve bool) error // ErrUnknownRequest, ErrClosed
+func (g *GDS) RequestID(n *ua.NodeID) string
+func (g *GDS) IssuerCertificates() [][]byte
+func (g *GDS) TrustList() *ua.TrustListDataType
+type Store interface{ ... }                                      // NewMemoryStore
+```
+
+`Config{Store, CertificateTypes, Issuers, CAName, CALifetime, CertificateLifetime, CRLLifetime, RSAKeySize, AutoApprove, RequestLifetime, MaxRequests, MaxApplications, SelfAdmin, Now, Logger}`.
+See [docs/server-guide.md](docs/server-guide.md#global-discovery-server-pull-model).
 
 ## Package `monitor`
 

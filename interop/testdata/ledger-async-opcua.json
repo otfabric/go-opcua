@@ -3075,6 +3075,70 @@
       "reason": "adapter-command-missing",
       "nextAction": "the opcua-interop async-opcua adapter has no `client push` (contract §15)",
       "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.directory",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "async-opcua 0.19 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.certificate-request",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "async-opcua 0.19 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.trust-list",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "async-opcua 0.19 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "go-client-to-async-opcua-server",
+      "status": "unverified",
+      "reason": "peer-capability-unknown",
+      "nextAction": "async-opcua 0.19 has no Global Discovery Server; nothing to test against until it has one",
+      "fixture": "baseline"
+    },
+    {
+      "capability": "gds.pull.revocation",
+      "direction": "async-opcua-client-to-go-server",
+      "status": "unverified",
+      "reason": "adapter-command-missing",
+      "nextAction": "async-opcua 0.19 has no GDS pull client; the adapter would need a `client gds-pull` built on its method calls (contract §15)",
+      "fixture": "baseline"
     }
   ]
 }

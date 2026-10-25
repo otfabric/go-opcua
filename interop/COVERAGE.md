@@ -80,6 +80,9 @@ Go↔Go tests never earn ✅.
 | Push model UpdateCertificate with a new key as a PKCS #12 (PFX) PrivateKey; the endpoints present the new certificate (Part 12 §7.10.4) | N/A | ⬜ | ⬜ | ⬜ | — |
 | Push model TransactionDiagnostics of ServerConfiguration after an applied transaction (Part 12 §7.10.11, 1.05) | N/A | ⬜ | ⬜ | ⬜ | — |
 | Push model certificate group alarms: CertificateExpired (CertificateExpirationAlarmType) and TrustListOutOfDate (TrustListOutOfDateAlarmType) of the DefaultApplicationGroup and their ActiveState (Part 12 §7.8.3) | N/A | ⬜ | ⬜ | ⬜ | — |
+| GDS pull model certificate requests: StartSigningRequest / StartNewKeyPairRequest / FinishRequest, approval and the issued certificate (Part 12 §7.9.4–§7.9.6) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| GDS pull model trust list: GetCertificateGroups / GetCertificates / GetTrustList and reading the TrustList of the DefaultApplicationGroup, GetCertificateStatus (Part 12 §7.9.10–§7.9.13) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver) | ⬜ | ⬜ | ⬜ | ⬜ | — |
+| GDS pull model revocation: RevokeCertificate, the CRLs of the trust list, CheckRevocationStatus (Part 12 §7.9.9, §7.9.14) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver) | ⬜ | ⬜ | ⬜ | ⬜ | — |
 
 ## custom-types
 
@@ -106,6 +109,7 @@ Go↔Go tests never earn ✅.
 | RegisterServer / RegisterServer2 services of the go-opcua LDS driven by the peer client (register, unregister, unknown server, configuration results) | N/A | N/A | ✅ | ✅ | O→S: `TestGoLDS_Open62541Client_RegisterServer / coverage/discovery.register-server/open62541-client-to-go-lds`; M→S: `TestGoLDS_MiloClient_RegisterServer / coverage/discovery.register-server/milo-client-to-go-lds` |
 | RegisterServer2 MdnsDiscoveryConfiguration: the registered server appears in FindServersOnNetwork (C→ = go-opcua server → peer LDS; →S = peer client → go-opcua LDS) | ✅ | N/A | ✅ | ✅ | C→O: `TestOpen62541LDS_GoServerRegisters / coverage/discovery.lds-registration/go-server-to-open62541-lds`; O→S: `TestMulticast_GoAndPeers / coverage/discovery.register-server2.mdns/open62541-client-to-go-lds`; M→S: `TestMulticast_GoAndPeers / coverage/discovery.register-server2.mdns/milo-client-to-go-lds` |
 | Multicast extension (mDNS announce / browse). C→ = go-opcua discovers the peer; →S = the peer discovers go-opcua | ✅ | N/A | ✅ | N/A | C→O: `TestMulticast_GoAndPeers / coverage/discovery.multicast/go-lds-discovers-open62541`; O→S: `TestMulticast_GoAndPeers / coverage/discovery.multicast/open62541-lds-discovers-go` |
+| GDS pull model Directory: RegisterApplication / UpdateApplication / UnregisterApplication / FindApplications / GetApplication / QueryApplications / QueryServers with the ApplicationRecordDataType (Part 12 §6.6) (C→ = go-opcua gds.PullClient against the peer's Global Discovery Server; →S = the peer's GDS client against gdsserver) | ⬜ | ⬜ | ⬜ | ⬜ | — |
 
 ## encoding
 
