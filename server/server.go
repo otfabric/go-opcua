@@ -91,6 +91,9 @@ type Server struct {
 
 	// alarms holds the conditions (Part 9).
 	alarms *alarmManager
+	// auditing tells whether the server reports audit events
+	// (WithAuditing, SetAuditing).
+	auditing atomic.Bool
 
 	// historian provides optional HistoryRead support (nil = unsupported).
 	historian HistoryProvider
@@ -186,6 +189,8 @@ type serverConfig struct {
 	// diagnosticsOff starts the server with EnabledFlag false
 	// (WithServerDiagnostics).
 	diagnosticsOff bool
+	// auditing turns the audit events on (WithAuditing).
+	auditing bool
 	// push is the configuration of WithPushManagement (nil: none).
 	push *PushManagement
 }
@@ -362,6 +367,7 @@ func New(opts ...Option) (*Server, error) {
 		s.namespaces[0].AddNode(n)
 	}
 	s.buildPushModel()
+	s.bindAuditing()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
@@ -419,6 +425,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 	}
 	s.disc = newDiscoveryManager(s)
 	s.registerAlarmMethods()
+	s.auditing.Store(cfg.auditing)
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.sb.removed = s.diag.sessionRemoved
 	return s, nil
