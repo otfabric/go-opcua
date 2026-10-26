@@ -53,7 +53,7 @@ func (n *Node) SetMethodArguments(in, out []*ua.Argument) error {
 // setArgumentsProperty adds, replaces or removes the Property name of the
 // method node n.
 func (n *Node) setArgumentsProperty(ns NameSpace, name string, args []*ua.Argument) error {
-	propID := ua.NewStringNodeID(n.ID().Namespace(), argumentsPropertyIdentifier(n.ID())+"."+name)
+	propID := childPropertyID(n.ID(), name)
 	if ns.Node(propID) != nil {
 		n.RemoveRef(ua.NewExpandedNodeID(propID, "", 0), ua.NewNumericNodeID(0, id.HasProperty), true)
 		_ = ns.DeleteNode(propID) // it was just found
@@ -99,15 +99,26 @@ func (n *Node) setArgumentsProperty(ns NameSpace, name string, args []*ua.Argume
 	return nil
 }
 
-// argumentsPropertyIdentifier returns the identifier the NodeIds of the
-// argument Properties of the method methodID start with.
-func argumentsPropertyIdentifier(methodID *ua.NodeID) string {
-	if methodID.Type() == ua.NodeIDTypeString {
-		return methodID.StringID()
+// childIdentifier returns the identifier the string NodeIds of the
+// Properties the server generates for parent start with, in the namespace of
+// parent: "<identifier>.<BrowseName>". It is the identifier of a string
+// NodeId and the NodeId without its namespace otherwise (e.g. "i=7001",
+// "g=...", "b=..."), so the NodeId of the parent is never nested in the
+// identifier (Part 3 §8.2: the namespace index belongs to the NodeId, not
+// to its identifier).
+func childIdentifier(parent *ua.NodeID) string {
+	if parent.Type() == ua.NodeIDTypeString {
+		return parent.StringID()
 	}
-	s := methodID.String()
+	s := parent.String()
 	if i := strings.IndexByte(s, ';'); i >= 0 && strings.HasPrefix(s, "ns=") {
 		s = s[i+1:]
 	}
 	return s
+}
+
+// childPropertyID returns the NodeId of the Property name the server
+// generates for parent (see childIdentifier).
+func childPropertyID(parent *ua.NodeID, name string) *ua.NodeID {
+	return ua.NewStringNodeID(parent.Namespace(), childIdentifier(parent)+"."+name)
 }

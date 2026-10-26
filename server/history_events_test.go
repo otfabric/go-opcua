@@ -101,6 +101,11 @@ func TestEnableEventHistory(t *testing.T) {
 	p := s.historicalEventFilterNode(src)
 	require.NotNil(t, p, "HistoricalEventFilter Property (Part 11 §5.4.2)")
 	require.Equal(t, historicalEventFilterName, p.BrowseName().Name)
+	// "<id>.HistoricalEventFilter" in the namespace of the notifier, not the
+	// whole NodeId of the notifier as the identifier.
+	require.Equal(t, childPropertyID(src.ID(), historicalEventFilterName).String(), p.ID().String())
+	require.Equal(t, src.ID().Namespace(), p.ID().Namespace())
+	require.NotContains(t, p.ID().StringID(), "ns=")
 	require.Nil(t, s.storageFilter(src.ID(), src), "no filter: whole events")
 	guide := p.Value().Value.Value().(*ua.ExtensionObject).Value.(*ua.EventFilter)
 	require.Len(t, guide.SelectClauses, len(baseEventFields)+1)
@@ -123,6 +128,16 @@ func TestEnableEventHistory(t *testing.T) {
 	srvID := ua.NewNumericNodeID(0, id.Server)
 	require.NoError(t, s.EnableEventHistory(srvID, EventHistoryOptions{}))
 	require.NotZero(t, eventNotifierOf(s.Node(srvID))&byte(ua.EventNotifierTypeHistoryRead))
+	require.Equal(t, "s=i=2253.HistoricalEventFilter", s.historicalEventFilterNode(s.Node(srvID)).ID().String())
+
+	// A string NodeId notifier, as opcuactl's ns=1;s=Demo.
+	demo := NewFolderNode(ua.NewStringNodeID(ns.ID(), "Demo"), "Demo")
+	ns.AddNode(demo)
+	require.NoError(t, s.EnableEventHistory(demo.ID(), EventHistoryOptions{Filter: f}))
+	pd := s.historicalEventFilterNode(demo)
+	require.NotNil(t, pd)
+	require.Equal(t, ua.NewStringNodeID(ns.ID(), "Demo.HistoricalEventFilter").String(), pd.ID().String())
+	require.Same(t, pd, s.Node(ua.NewStringNodeID(ns.ID(), "Demo.HistoricalEventFilter")))
 }
 
 func TestEventNotifierOf(t *testing.T) {

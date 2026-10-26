@@ -30,8 +30,12 @@ func TestSetMethodArguments_Errors(t *testing.T) {
 	require.Nil(t, ns.Node(ua.NewStringNodeID(ns.ID(), "m.OutputArguments")))
 }
 
-func TestArgumentsPropertyIdentifier(t *testing.T) {
-	require.Equal(t, "square", argumentsPropertyIdentifier(ua.NewStringNodeID(2, "square")))
-	require.Equal(t, "i=7", argumentsPropertyIdentifier(ua.NewNumericNodeID(2, 7)))
-	require.Equal(t, "i=7", argumentsPropertyIdentifier(ua.NewNumericNodeID(0, 7)))
+func TestChildIdentifier(t *testing.T) {
+	require.Equal(t, "square", childIdentifier(ua.NewStringNodeID(2, "square")))
+	require.Equal(t, "i=7", childIdentifier(ua.NewNumericNodeID(2, 7)))
+	require.Equal(t, "i=7", childIdentifier(ua.NewNumericNodeID(0, 7)))
+	require.Equal(t, "ns=1;s=x", childIdentifier(ua.NewStringNodeID(3, "ns=1;s=x")), "a string identifier is kept as it is")
+
+	require.Equal(t, "ns=1;s=Demo.HistoricalEventFilter", childPropertyID(ua.NewStringNodeID(1, "Demo"), "HistoricalEventFilter").String())
+	require.Equal(t, "ns=2;s=i=7001.HistoricalEventFilter", childPropertyID(ua.NewNumericNodeID(2, 7001), "HistoricalEventFilter").String())
 }
