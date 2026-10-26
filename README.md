@@ -336,11 +336,11 @@ in the UA-.NETStandard adapter client; see
 
 | Peer | Ledger | Verified | Unverified | Unsupported | Deferred | Not applicable |
 |---|---|---:|---:|---:|---:|---:|
-| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 511 | 0 | 271 | 60 | 42 |
-| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 167 | 0 | 226 | 28 | 21 |
-| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 251 | 4 | 134 | 32 | 21 |
-| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 173 | 4 | 219 | 25 | 21 |
-| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 140 | 0 | 249 | 32 | 21 |
+| open62541 and Eclipse Milo | [`interop/coverage.json`](interop/COVERAGE.md) | 521 | 0 | 281 | 52 | 42 |
+| async-opcua | [`ledger-async-opcua.json`](interop/testdata/ledger-async-opcua.json) | 172 | 0 | 231 | 24 | 21 |
+| UA-.NETStandard | [`ledger-dotnet.json`](interop/testdata/ledger-dotnet.json) | 261 | 4 | 134 | 28 | 21 |
+| node-opcua | [`ledger-node-opcua.json`](interop/testdata/ledger-node-opcua.json) | 178 | 4 | 223 | 22 | 21 |
+| asyncua | [`ledger-asyncua.json`](interop/testdata/ledger-asyncua.json) | 148 | 0 | 251 | 28 | 21 |
 
 Interop with these stacks found and fixed go-opcua defects that a Go-to-Go
 test cannot show, among them the RSA-OAEP-SHA256 block size (UA-.NETStandard),

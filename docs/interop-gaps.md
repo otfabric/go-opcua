@@ -7,7 +7,7 @@ peer entry comes from the interop suite ([INTEROP.md](../INTEROP.md)): the
 test that found it skips with the reason or pins the behaviour, and the
 ledger row says `unsupported` with the same reason.
 
-Versions: go-opcua v1.23.0; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
+Versions: go-opcua v1.26.0; open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
 0.19.0, UA-.NETStandard 2.0.1, node-opcua 2.187.12 and opcua-asyncio
 (`asyncua`) 2.1.0, as packaged by opcua-interop v0.17.0.
 
@@ -79,6 +79,7 @@ on the side of the application that talks to the peer.
 
 - The client refuses to send a UserName token over SecurityPolicy None: offer username on a secured endpoint or with a token policy that has its own SecurityPolicyUri.
 - The end time of a raw HistoryRead is exclusive, and releasing a continuation point answers with a null HistoryData.
+- Historical events: DeleteEventDetails answers an unknown EventId with `Bad_NoEntryExists` (go-opcua: `Bad_NoData`, Part 11 §6.9.7.2), a deleted one with `Good`; when every operation of a HistoryUpdate fails, the node status is that Bad status. The WhereClause is applied after a page was cut at NumValuesPerNode, so a filtered page can hold fewer events and still carry a continuation point; an `And` element after its operands is `Bad_EventFilterInvalid` (put the `And` first, as Part 4 §7.7.1 does). Insert and update need EventType and Time among the SelectClauses, replace needs EventId (`Bad_ArgumentsMissing`).
 - The XmlDecoder reads namespace-qualified elements only: do not use `ua.WithoutXMLNamespace` with .NET peers.
 - ECC application certificates issued by an RSA CA are refused; ECC between go-opcua and .NET is untested.
 - The OPC Foundation LDS is a separate product; there is no multicast discovery.
@@ -106,6 +107,7 @@ The Global Discovery Server and GDS client (Opc.Ua.Gds.Server / .Gds.Client 2.0.
 - Push management: of the Part 12 1.05 additions only the DefaultUserTokenGroup trust list; the DefaultHttpsGroup TrustList is an empty file, a TransactionDiagnostics variable fails to encode (`Bad_DataTypeIdUnknown`), ResetToServerDefaults answers `Bad_InternalError`, PEM keys only, no GetCertificates, CreateSelfSignedCertificate or certificate alarms.
 - The server registers only with a discovery server that has a certificate, and reports success when the registration failed: give the go-opcua LDS a secured endpoint (the default) and check `Server.RegisteredServers()`.
 - The server answers AddNodes, DeleteNodes, AddReferences, DeleteReferences, HistoryUpdate and Query with `BadServiceUnsupported`; no ECC, no open-source PubSub, no Part 6 XML codec.
+- The server historizes variables only: a HistoryRead with ReadEventDetails is answered with the service fault `BadHistoryOperationInvalid`.
 
 ### opcua-asyncio (asyncua) 2.1.0
 
@@ -114,6 +116,7 @@ The Global Discovery Server and GDS client (Opc.Ua.Gds.Server / .Gds.Client 2.0.
 - **Republish** of a sequence number the server does not hold answers `Good` with an empty message (want `BadMessageNotAvailable`).
 - **TransferSubscriptions** checks no identity: a user's subscription moves to an anonymous session.
 - **HistoryRead** with NumValuesPerNode truncates without a continuation point.
+- **Historical events** (the opcua-interop fixture, which adds paging and the WhereClause to the stack's storage): both ends of the time range are inclusive, a range without events answers `Good` (want `Good_NoData`), continuation points are stateless (a released one still continues the read), OfType matches the exact event type only (Part 4 §7.7.3 includes subtypes), and HistoryUpdate is refused with `BadUserAccessDenied`. Filter on the concrete event types you need; treat `Good` without events as no data.
 - **Discovery:** RegisterServer with IsOnline=false keeps the server listed; no mDNS.
 - **Sessions:** MaxRequestMessageSize is revised to 65536; there are no server diagnostics.
 - **Strings:** go-opcua encodes an empty Go string as a null String, which asyncua reads as `None`.
