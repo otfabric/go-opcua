@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -229,9 +230,9 @@ func TestRegistration_Failures(t *testing.T) {
 	require.ErrorIs(t, ev.Err, ua.StatusBadServiceUnsupported)
 
 	// Nothing listens: the attempt fails, and Close does not unregister.
-	gone := startedServer(t, EnableSecurity("None", ua.MessageSecurityModeNone))
-	goneURL := fmt.Sprintf("opc.tcp://localhost:%d", gone.Port())
-	require.NoError(t, gone.Close())
+	// The port is out of the ephemeral range: the port of a closed server
+	// can be bound again by a server of a parallel test.
+	goneURL := fmt.Sprintf("opc.tcp://localhost:%d", testport.TCP(t))
 	s, events := registrant(t, goneURL, "urn:test:register:gone", []RegistrationOption{backoff, RegisterInsecure()},
 		EnableSecurity("None", ua.MessageSecurityModeNone))
 	ev = nextEvent(t, events)
