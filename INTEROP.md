@@ -49,6 +49,9 @@ opcua-interop v0.17.0
       events_test.go / events_peer_test.go / events_c2peer_test.go
       history_test.go / history_peer_test.go / history_c2peer_test.go
       history_continuation_peer_test.go
+      history_events_test.go               event history: the go fixture s=History.Events and the
+                                           shared assertions; history_events_peer_test.go (open62541,
+                                           Milo) and <peer>_history_events_test.go for the others
       subscription_lifecycle_test.go / subscription_lifecycle_peer_test.go
       subscription_recovery_test.go / subscription_recovery_peer_test.go
       subscription_reconnect_peer_test.go / tcp_disruptor_test.go
@@ -306,6 +309,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Invalid NodeId service results | ✓ | ✓ |
 | SecureChannel renewal under subscription | ✓ | ✓ |
 | HistoryRead continuation points | ✓ | ✓ |
+| Historical events: read, continuation, filter, update, delete | n/a (no event store) | ✓ |
 | RegisterNodes / UnregisterNodes | ✓ | ✓ |
 | AddNodes / DeleteNodes | ✓ | ✓ |
 | ModifySubscription | ✓ | n/a |
@@ -434,6 +438,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 | Invalid NodeId service results | ✓ | ✓ |
 | SecureChannel renewal under subscription | ✓ | ✓ |
 | HistoryRead continuation points | ✓† | ✓ |
+| Historical events: read, continuation, filter, update, delete | n/a (no event history server) | ✓ |
 | RegisterNodes / UnregisterNodes | ✓ | ✓ |
 | AddNodes / DeleteNodes | ⚠ | ✓ |
 | ModifySubscription | ✓ | n/a |
@@ -632,7 +637,7 @@ Adapter images are pinned to [opcua-interop v0.17.0](https://github.com/otfabric
 
 ### Evidence objective
 
-Optimise for accurate evidence, not a zero-unverified quota. Current ledger (`coverage.json`, 884 rows): **511 verified, 0 unverified**, 271 unsupported, 60 deferred, 42 not applicable. Since opcua-interop v0.15.0 the open62541 and Milo adapters have `client push` and `client gds-pull`, so their push management and GDS pull client rows are verified; what the two peers lack (a GDS, push management on the Milo server, the Part 9 1.05 conditions on the open62541 server) is recorded as `unsupported` with the reason; see [`GAPS.md`](interop/GAPS.md) and [`BUCKET_B.md`](interop/BUCKET_B.md). The other peers' ledgers are summarised in the [README](README.md#interop-evidence): 8 rows remain unverified there (a node-opcua GDS pull client, PubSub reader state of the UA-.NETStandard adapter, the UA JSON transport profiles in the UA-.NETStandard adapter client).
+Optimise for accurate evidence, not a zero-unverified quota. Current ledger (`coverage.json`, 896 rows): **521 verified, 0 unverified**, 281 unsupported, 52 deferred, 42 not applicable. Since opcua-interop v0.15.0 the open62541 and Milo adapters have `client push` and `client gds-pull`, so their push management and GDS pull client rows are verified; what the two peers lack (a GDS, push management on the Milo server, the Part 9 1.05 conditions on the open62541 server) is recorded as `unsupported` with the reason; see [`GAPS.md`](interop/GAPS.md) and [`BUCKET_B.md`](interop/BUCKET_B.md). The other peers' ledgers are summarised in the [README](README.md#interop-evidence): 8 rows remain unverified there (a node-opcua GDS pull client, PubSub reader state of the UA-.NETStandard adapter, the UA JSON transport profiles in the UA-.NETStandard adapter client).
 
 ### Recently promoted peer rows (core evidence)
 
@@ -709,6 +714,21 @@ open62541 limits found by these tests (recorded in opcua-interop's contract): it
 
 The capability `security.ecc.unimplemented-policy` (the three policies refused cleanly) is retired with these rows.
 
+### Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7)
+
+Profile `history`: `history.read.events` (ReadEventDetails forward and reverse, an empty range), `history.read.events.continuation` (NumValuesPerNode paging, release and reuse of a continuation point), `history.read.events.filter` (WhereClause OfType, Severity and both), `history.update.events` (UpdateEventDetails insert / replace / update) and `history.delete.events` (DeleteEventDetails). Since opcua-interop v0.17.0 every adapter has the client operations `history-read-events` and `history-update-events`, and the UA-.NETStandard (`history-events`, `history-events-update`) and asyncua (`history-events`) servers have the fixture `s=History.Events`: five seeded events `hist-evt-0` … `hist-evt-4` from 2026-07-24T10:00:00Z in steps of 5 s, Severity 100 … 500, `hist-evt-3` a SystemEventType (CLIENT_CONTRACT §17). The go-opcua interop server serves the same fixture (`startGoServerWithEventHistory`, `interop/history_events_test.go`): a writable HistoricalEventNode of the built-in `*Historian` (`EnableEventHistory`, `EnableEvents`, the seed recorded with `RecordEvent`) and the method `s=History.ResetEvents`.
+
+| Direction | read | continuation | filter | update | delete |
+|---|---|---|---|---|---|
+| open62541, Milo, UA-.NETStandard, node-opcua, asyncua, async-opcua client → go-opcua server | ✅ | ✅ | ✅ | ✅ | ✅ |
+| go-opcua client → UA-.NETStandard 2.0.1 server | ✅ | ✅ | ✅ | ✅ | ✅ |
+| go-opcua client → asyncua 2.1.0 server | ✅ ¹ | ✅ ¹ | ✅ ¹ | N/A ² | N/A ² |
+| go-opcua client → open62541, Milo, async-opcua, node-opcua servers | N/A ³ | N/A ³ | N/A ³ | N/A ³ | N/A ³ |
+
+The peer clients (`TestGoServer_<Peer>Client_HistoryReadEvents`, `…Continuation`, `…Filter`, `…HistoryUpdateEvents`, `…HistoryDeleteEvents`) read forward and in reverse (the reverse range ends at 09:59:00: go-opcua excludes EndTime in both directions), page with `--scenario continue` (pages 2, 2, 1; the release and the reuse of the continuation point the third request consumed are `Bad_ContinuationPointInvalid`), filter (`OfType i=2130`; `Severity >= 300`; both, OfType matching subtypes), and insert, replace, update and delete with the operation results of §17.1; the go-opcua server answers an unknown EventId to delete with `Bad_NoData` (Part 11 §6.9.7.2), UA-.NETStandard with `Bad_NoEntryExists`. Milo's status names have an underscore, so the tests compare codes. The go-opcua client (`TestDotnetServer_History*Events*`, `TestAsyncuaServer_History*Events*`) uses `ReadEventHistory`, `ReadEventHistoryAll`, `HistoryReleaseContinuationPoints`, `HistoryUpdateEvents` and `HistoryDeleteEvents`, and calls `s=History.ResetEvents` around the updates.
+
+¹ asyncua 2.1.0 deviations (§17.4), asserted as such: both range ends inclusive, an empty range answers `Good` instead of `Good_NoData`, continuation points are stateless (a released point still continues the read), OfType compares the event type exactly (`OfType BaseEventType` does not match `hist-evt-3`). ² asyncua refuses HistoryUpdate with `Bad_UserAccessDenied` (no handler); `TestAsyncuaServer_HistoryUpdateEvents` pins the refusal. ³ open62541 1.5.9, Milo 1.1.8 and async-opcua 0.19.0 have no event history server (§17.5); node-opcua 2.187.12 historizes variables only and answers ReadEventDetails with the service fault `Bad_HistoryOperationInvalid`, HistoryUpdate with `Bad_ServiceUnsupported` (§17.3).
+
 ### Alarms & Conditions (Part 9)
 
 Profile `alarms-conditions`. `alarms.condition-refresh` and `alarms.acknowledgeable` (ConditionRefresh, Acknowledge / Confirm / AddComment against the alarm fixture) are verified in both directions with open62541, UA-.NETStandard and node-opcua, and peer client → go-opcua server with Milo, async-opcua and asyncua (the Milo and asyncua servers have no conditions: `unsupported`; async-opcua's is `peer-capability-unknown`). The Part 9 1.05 rows — `alarms.alarm-state-methods`, `.dialog`, `.branches`, `.alarm-groups`, `.audit-events` (`alarms105_peer_test.go`) and `.alarm-timing`, `.audible-sound`, `.first-in-group`, `.alarm-metrics` (`alarms105_timing_peer_test.go`) — are verified peer client → go-opcua server with all six peers, through their generic `client call`, `client event-subscribe` and `client read` operations. No peer server fixture has these features, so the go-opcua client direction is `unverified` (`adapter-fixture-missing` for open62541, UA-.NETStandard and node-opcua) and covered in process by `conformance/alarms`. The exception is `alarms.audit-events` go-opcua client → node-opcua server, verified by `TestNodeOpcuaServer_AlarmAudit`: node-opcua 2.187.12 raises the AuditConditionAcknowledge / Confirm / Comment events of the fixture alarm without an auditing switch and delivers them only to SecurityAdmin sessions, so the test adds a SecurityAdmin user to the fixture and subscribes over SignAndEncrypt with `opcua.NewAuditConditionEventFilter`. node-opcua leaves MethodId / InputArguments null, sends the Status of Acknowledge and Confirm as a StatusCode instead of a Boolean, reports the EventId after the call as the ConditionEventId of Acknowledge, raises the AddComment audit event on the Server object (SourceName `Method/AddComment`) and raises one for Confirm as well (`Method/Confirm`). Against UA-.NETStandard the row stays `unverified` (`adapter-command-missing`): 2.0.1 raises the events but delivers audit events only when the server has auditing enabled, which the dotnet adapter does not set.
@@ -747,7 +767,7 @@ The go side is also covered by `conformance/certmgmt/gds_pull_test.go` and `gds_
 - **Unsupported (behavioural):** `write.encoding-mask` C→M — Milo soft-accepts; claim requires `BadWriteNotSupported`. `nodemgmt.add-nodes` / `nodemgmt.delete-nodes` C→M — the Milo reference server has no NodeManagement service set.
 - **Unsupported (peer stack lacks the feature):** all `security.ecc-*` and `transport.reverse-connect*` rows for Milo (no ECC policy, no ReverseHello); Milo as a discovery server (`discovery.lds-registration`, `discovery.register-server2.mdns`, `discovery.find-servers-on-network` C→M) and `discovery.multicast` C→M / M→S (no mDNS); `encoding.xml.datavalue` C→O / O→S (open62541 has no XML DataValue); `encoding.json.datavalue` C→M (Milo decodes only its nested DataValue form).
 - **Known representation limits** (asserted, not claimed away): go-opcua has no null String (`""` is the null String in binary and `""` in JSON / XML); open62541 cannot decode XmlElement from XML nor encode a matrix to XML; Milo's XML decoder keeps a DateTime to the millisecond.
-- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query against Milo, IssuedIdentityToken, dynamic EO decode, custom event emission, general WhereClause surface and event queue overflow for O→S / M→S, HistoryRead modified/at-time/processed/events, HistoryUpdate, HistoryDelete, certificate chains / CRL, secured LDS registration against a peer LDS, the JSON / XML encodings as a transport (only the DataEncoding of values is verified).
+- **Deferred** (outside current core parity): NodeSet2 import, advanced HA, cross-stack custom DataTypes, Query against Milo, IssuedIdentityToken, dynamic EO decode, custom event emission, general WhereClause surface and event queue overflow for O→S / M→S, HistoryRead modified/at-time/processed, HistoryUpdate and HistoryDelete of data, certificate chains / CRL, secured LDS registration against a peer LDS, the JSON / XML encodings as a transport (only the DataEncoding of values is verified).
 
 ### Server defects found by peer evidence
 
