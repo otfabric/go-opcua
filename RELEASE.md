@@ -1,5 +1,24 @@
 # go-opcua Releases
 
+## v1.27.0
+
+**Date:** 2026-10-26
+**Previous release:** v1.26.1
+
+### Summary
+
+`PubSub.Ready` waits until the transports of a started PubSub runtime are open and subscribed, so that an application knows when a message sent to it is received.
+
+### Added
+
+- **pubsub: `PubSub.Ready(ctx)`.** `Start` opens the transports of the connections in the background, so a reader could miss a message sent right after `Start` returned: a one-shot publish, a chunked message, a discovery probe or answer (as `opcuactl` tests on Linux showed, 1 in about 30 runs). `Ready` waits until every running connection has opened its transport and made its first subscriptions (its readers, its discovery listener, its Action requests and responses). A subscription that failed is retried in the background and shows in the connection's Status; an unreachable broker keeps `Ready` waiting until its context ends. It returns `ErrClosed` on a closed runtime and the new `ErrNotRunning` on one that is not started or stops while waiting.
+
+### Fixed
+
+- **interop: a one-shot adapter client that stalls without output is retried once**, as the stdin adapter commands already were; the run error is reported with the output (test harness only).
+
+---
+
 ## v1.26.1
 
 **Date:** 2026-10-26
