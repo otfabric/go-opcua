@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -354,6 +355,12 @@ func TestHistoryEvents_ReadOnlyNotifier(t *testing.T) {
 	// The HistoricalEventFilter Property (Part 11 §5.4.2) is browsable.
 	res, err := c.Node(f.EventObject).TranslateBrowsePathInNamespaceToNodeID(context.Background(), 0, "HistoricalEventFilter")
 	require.NoError(t, err)
+	// Its NodeId is in the namespace of the notifier, the identifier of the
+	// notifier without that namespace nested in it.
+	require.Equal(t, f.EventObject.Namespace(), res.Namespace())
+	require.Equal(t, ua.NodeIDTypeString, res.Type())
+	require.NotContains(t, res.StringID(), "ns=")
+	require.True(t, strings.HasSuffix(res.StringID(), ".HistoricalEventFilter"), res.String())
 	fv, err := c.Node(res).Value(context.Background())
 	require.NoError(t, err)
 	eo, ok := fv.Value().(*ua.ExtensionObject)

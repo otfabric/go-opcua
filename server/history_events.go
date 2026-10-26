@@ -203,7 +203,9 @@ func (s *Server) setHistoricalEventFilter(n *Node, filter *ua.EventFilter) error
 	if err != nil {
 		return err
 	}
-	pid := ua.NewStringNodeID(n.ID().Namespace(), n.ID().String()+"/"+historicalEventFilterName)
+	// "<id>.HistoricalEventFilter" in the namespace of the notifier, as the
+	// other Properties the server generates (childPropertyID).
+	pid := childPropertyID(n.ID(), historicalEventFilterName)
 	p := NewNode(pid, Attributes{
 		ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
 		ua.AttributeIDBrowseName:      DataValueFromValue(&ua.QualifiedName{Name: historicalEventFilterName}),

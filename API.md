@@ -2524,7 +2524,8 @@ func (h *Historian) DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.His
 
 - `EnableEventHistory` sets SubscribeToEvents | HistoryRead (| HistoryWrite) on
   the EventNotifier and adds the HistoricalEventFilter Property (Part 11
-  §5.4.2). With a `Filter`, its WhereClause selects the events stored and its
+  §5.4.2), the string NodeId `<id>.HistoricalEventFilter` in the namespace of
+  the notifier (`<id>` as for `SetMethodArguments`). With a `Filter`, its WhereClause selects the events stored and its
   SelectClauses the fields (EventId, EventType, Time and ReceiveTime are always
   stored); a read of a field not stored gets `Bad_NoData`. Without one, whole
   events are stored and the Property lists the BaseEventType fields as a guide.
