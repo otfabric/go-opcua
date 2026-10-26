@@ -14,6 +14,8 @@ import (
 	"crypto/x509"
 	"encoding/asn1"
 	"encoding/pem"
+	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -202,4 +204,14 @@ func mustMarshal(t *testing.T, v any) []byte {
 	b, err := asn1.Marshal(v)
 	require.NoError(t, err)
 	return b
+}
+
+// A Bad Browse result status makes method fall back to the standard method;
+// other errors are returned.
+func TestBadStatus(t *testing.T) {
+	require.True(t, badStatus(ua.StatusBadNodeIDUnknown))
+	require.True(t, badStatus(fmt.Errorf("browse: %w", ua.StatusBadUserAccessDenied)))
+	require.False(t, badStatus(nil))
+	require.False(t, badStatus(ua.StatusUncertain))
+	require.False(t, badStatus(errors.New("transport")))
 }

@@ -85,7 +85,7 @@ func TestViewService_Browse(t *testing.T) {
 		assert.Equal(t, ua.StatusBadNodeIDUnknown, browseResp.Results[0].StatusCode)
 	})
 
-	t.Run("browse unknown namespace returns bad status", func(t *testing.T) {
+	t.Run("browse unknown namespace returns Bad_NodeIdUnknown", func(t *testing.T) {
 		req := &ua.BrowseRequest{
 			RequestHeader: reqHeader(),
 			NodesToBrowse: []*ua.BrowseDescription{
@@ -103,7 +103,7 @@ func TestViewService_Browse(t *testing.T) {
 
 		browseResp := resp.(*ua.BrowseResponse)
 		require.Len(t, browseResp.Results, 1)
-		assert.Equal(t, ua.StatusBad, browseResp.Results[0].StatusCode)
+		assert.Equal(t, ua.StatusBadNodeIDUnknown, browseResp.Results[0].StatusCode)
 	})
 
 	t.Run("browse multiple nodes", func(t *testing.T) {

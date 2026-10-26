@@ -1,5 +1,21 @@
 # go-opcua Releases
 
+## v1.26.1
+
+**Date:** 2026-10-26
+**Previous release:** v1.26.0
+
+### Summary
+
+Fixes found by the opcuactl test coverage pass: the client browse helpers report a Bad browse status instead of an empty result, and two address space fixes in the server.
+
+### Fixed
+
+- **client: the browse helpers return a Bad BrowseResult StatusCode as the error (behaviour change).** `Node.References`, `Node.Children`, `Node.ReferencedNodes`, `Node.BrowseAll`, `Client.BrowseAll`, `Node.TypeDefinition`, `Node.Walk` / `WalkLimit` / `WalkLimitDedup`, `Node.BrowseWithDepth` and `Client.MethodArguments` ignored the StatusCode of the Browse and BrowseNext results, so browsing an unknown node returned an empty list and a nil error. A Bad result status (Part 4 §5.8.2.2, §5.8.3.2: `Bad_NodeIdUnknown`, `Bad_ViewIdUnknown`, `Bad_ReferenceTypeIdInvalid`, `Bad_BrowseDirectionInvalid`, `Bad_ContinuationPointInvalid`, ...) is now the error, a `ua.StatusCode` as the other helpers return it: **callers that browsed an unknown node and got `(nil, nil)` now get `ua.StatusBadNodeIDUnknown`**, `TypeDefinition` of an unknown node included (a known node without a type definition is still `(nil, nil)`). Good and Uncertain results return their references as before. The recursive helpers yield references to nodes of other servers (ServerIndex != 0) without descending into them. The GDS client still falls back to the standard method NodeId when the object cannot be browsed.
+- **server: Browse of a node in an unknown namespace is `Bad_NodeIdUnknown`** (Part 4 §5.8.2.2), not the bare `Bad` status.
+
+---
+
 ## v1.26.0
 
 **Date:** 2026-10-25

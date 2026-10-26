@@ -608,6 +608,8 @@ for ref, err := range node.BrowseAll(ctx,
 }
 ```
 
+The browse helpers return a Bad StatusCode of the BrowseResult as the error (a `ua.StatusCode`): browsing an unknown node gives `ua.StatusBadNodeIDUnknown`, not an empty result.
+
 ### Low-Level Browse
 
 ```go

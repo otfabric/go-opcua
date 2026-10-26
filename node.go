@@ -44,6 +44,11 @@ type WalkResult struct {
 // hierarchical references, yielding each discovered reference along with
 // its depth. The walk uses BrowseAll to automatically follow continuation
 // points. For a depth limit, use WalkLimit.
+//
+// A Bad StatusCode of a Browse or BrowseNext result, of the start node or of a
+// node the walk descends into, is yielded as the error (a [ua.StatusCode]) and
+// ends the walk. Targets on other servers (ServerIndex != 0) are yielded but
+// not descended into.
 func (n *Node) Walk(ctx context.Context) iter.Seq2[WalkResult, error] {
 	return n.WalkLimit(ctx, -1)
 }
@@ -98,6 +103,8 @@ type BrowseWithDepthResult struct {
 // It returns a flat slice of references with their depth. Standard OPC UA Browse
 // is single-level; this method implements recursion by issuing multiple Browse
 // calls (same as [Node.WalkLimit] but returns a slice instead of an iterator).
+// A Bad StatusCode of a Browse or BrowseNext result is returned as the error
+// with the references collected so far.
 func (n *Node) BrowseWithDepth(ctx context.Context, opts BrowseWithDepthOptions) ([]BrowseWithDepthResult, error) {
 	refType := opts.RefType
 	if refType == 0 {
@@ -129,7 +136,7 @@ func (n *Node) browseWithDepthRec(ctx context.Context, depth, maxDepth int, refT
 			return err
 		}
 		*out = append(*out, BrowseWithDepthResult{Ref: ref, Depth: depth})
-		if maxDepth >= 0 && depth+1 > maxDepth {
+		if maxDepth >= 0 && depth+1 > maxDepth || remoteRef(ref) {
 			continue
 		}
 		child := n.c.NodeFromExpandedNodeID(ref.NodeID)
@@ -138,6 +145,14 @@ func (n *Node) browseWithDepthRec(ctx context.Context, depth, maxDepth int, refT
 		}
 	}
 	return nil
+}
+
+// remoteRef reports whether a reference targets a node of another server
+// (ExpandedNodeId ServerIndex != 0, Part 6 §5.2.2.10). Such a node cannot be
+// browsed on this session, so the recursive helpers yield it without
+// descending: browsing it here would fail with Bad_NodeIdUnknown.
+func remoteRef(ref *ua.ReferenceDescription) bool {
+	return ref.NodeID != nil && ref.NodeID.ServerIndex != 0
 }
 
 func (n *Node) walkRecursive(ctx context.Context, depth int, maxDepth int, visited map[string]struct{}, yield func(WalkResult, error) bool) bool {
@@ -157,7 +172,7 @@ func (n *Node) walkRecursive(ctx context.Context, depth int, maxDepth int, visit
 		if !yield(WalkResult{Depth: depth, Ref: ref}, nil) {
 			return false
 		}
-		if maxDepth >= 0 && depth+1 > maxDepth {
+		if maxDepth >= 0 && depth+1 > maxDepth || remoteRef(ref) {
 			continue
 		}
 		child := n.c.NodeFromExpandedNodeID(ref.NodeID)
@@ -270,7 +285,9 @@ func (n *Node) Value(ctx context.Context) (*ua.Variant, error) {
 }
 
 // TypeDefinition returns the NodeID of the type definition for this node
-// by following the HasTypeDefinition reference.
+// by following the HasTypeDefinition reference. A node without one gives
+// (nil, nil); an unknown node gives the Bad StatusCode of the Browse result
+// (Bad_NodeIdUnknown).
 func (n *Node) TypeDefinition(ctx context.Context) (*ua.NodeID, error) {
 	refs, err := n.References(ctx, id.HasTypeDefinition, ua.BrowseDirectionForward, ua.NodeClassAll, false)
 	if err != nil {
@@ -419,6 +436,10 @@ func (n *Node) Attributes(ctx context.Context, attrID ...ua.AttributeID) ([]*ua.
 }
 
 // Children returns the child nodes which match the node class mask.
+//
+// A Bad StatusCode of the BrowseResult or of a BrowseNext result (e.g.
+// Bad_NodeIdUnknown for an unknown node, Part 4 §5.8.2.2) is returned as the
+// error, a [ua.StatusCode].
 func (n *Node) Children(ctx context.Context, refs uint32, mask ua.NodeClass) ([]*Node, error) {
 	if refs == 0 {
 		refs = id.HierarchicalReferences
@@ -427,6 +448,10 @@ func (n *Node) Children(ctx context.Context, refs uint32, mask ua.NodeClass) ([]
 }
 
 // ReferencedNodes returns the nodes referenced by this node.
+//
+// A Bad StatusCode of the BrowseResult or of a BrowseNext result (e.g.
+// Bad_NodeIdUnknown for an unknown node, Part 4 §5.8.2.2) is returned as the
+// error, a [ua.StatusCode].
 func (n *Node) ReferencedNodes(ctx context.Context, refs uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) ([]*Node, error) {
 	if refs == 0 {
 		refs = id.References
@@ -444,6 +469,10 @@ func (n *Node) ReferencedNodes(ctx context.Context, refs uint32, dir ua.BrowseDi
 
 // References returns all references for the node, automatically
 // following continuation points for large result sets.
+//
+// A Bad StatusCode of the BrowseResult or of a BrowseNext result (e.g.
+// Bad_NodeIdUnknown for an unknown node, Part 4 §5.8.2.2) is returned as the
+// error, a [ua.StatusCode].
 func (n *Node) References(ctx context.Context, refType uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) ([]*ua.ReferenceDescription, error) {
 	if refType == 0 {
 		refType = id.References
@@ -482,6 +511,9 @@ func (n *Node) browseNext(ctx context.Context, results []*ua.BrowseResult) ([]*u
 	if len(results) != 1 || results[0] == nil {
 		return nil, ua.StatusBadUnknownResponse
 	}
+	if err := browseResultError(results[0]); err != nil {
+		return nil, err
+	}
 	refs := results[0].References
 	for len(results[0].ContinuationPoint) > 0 {
 		req := &ua.BrowseNextRequest{
@@ -496,14 +528,35 @@ func (n *Node) browseNext(ctx context.Context, results []*ua.BrowseResult) ([]*u
 		if len(results) != 1 || results[0] == nil {
 			return nil, ua.StatusBadUnknownResponse
 		}
+		if err := browseResultError(results[0]); err != nil {
+			return nil, err
+		}
 		refs = append(refs, results[0].References...)
 	}
 	return refs, nil
 }
 
+// browseResultError returns the StatusCode of a Browse or BrowseNext result
+// as the error when it is Bad. Part 4 §5.8.2.2 / §5.8.3.2: a Bad result
+// StatusCode (Bad_NodeIdUnknown, Bad_ViewIdUnknown,
+// Bad_ReferenceTypeIdInvalid, Bad_BrowseDirectionInvalid,
+// Bad_ContinuationPointInvalid, ...) means the operation for that node
+// failed, so its (empty) reference list is not an answer. Good and Uncertain
+// results are kept.
+func browseResultError(r *ua.BrowseResult) error {
+	if r.StatusCode&ua.StatusBad != 0 {
+		return r.StatusCode
+	}
+	return nil
+}
+
 // BrowseAll returns an iterator over all references for the node,
 // automatically following continuation points. Results are streamed
 // without accumulating in memory.
+//
+// A Bad StatusCode of the BrowseResult or of a BrowseNext result (e.g.
+// Bad_NodeIdUnknown for an unknown node, Part 4 §5.8.2.2) is returned as the
+// error, a [ua.StatusCode].
 func (n *Node) BrowseAll(ctx context.Context, refType uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) iter.Seq2[*ua.ReferenceDescription, error] {
 	return func(yield func(*ua.ReferenceDescription, error) bool) {
 		if refType == 0 {
@@ -541,6 +594,10 @@ func (n *Node) BrowseAll(ctx context.Context, refType uint32, dir ua.BrowseDirec
 			return
 		}
 		result := resp.Results[0]
+		if err := browseResultError(result); err != nil {
+			yield(nil, err)
+			return
+		}
 		for _, ref := range result.References {
 			if !yield(ref, nil) {
 				return
@@ -562,6 +619,10 @@ func (n *Node) BrowseAll(ctx context.Context, refType uint32, dir ua.BrowseDirec
 				return
 			}
 			result = nextResp.Results[0]
+			if err := browseResultError(result); err != nil {
+				yield(nil, err)
+				return
+			}
 			for _, ref := range result.References {
 				if !yield(ref, nil) {
 					return

@@ -470,6 +470,8 @@ func (n *Node) References(ctx context.Context, refs uint32, dir ua.BrowseDirecti
 func (n *Node) BrowseAll(ctx context.Context, refs uint32, dir ua.BrowseDirection, mask ua.NodeClass, includeSubtypes bool) iter.Seq2[*ua.ReferenceDescription, error]
 ```
 
+These helpers (and `Client.BrowseAll`, `Node.TypeDefinition`, `Node.Walk*`, `Node.BrowseWithDepth`, `Client.MethodArguments`) return a Bad StatusCode of a Browse or BrowseNext result as the error, a `ua.StatusCode` (Part 4 §5.8.2.2): an unknown node is `Bad_NodeIdUnknown`, not an empty list. Good and Uncertain results return their references. The recursive helpers do not descend into targets on other servers (ServerIndex != 0).
+
 #### Browse path translation
 
 Resolve a path of browse names to a NodeID (TranslateBrowsePathsToNodeIDs service):

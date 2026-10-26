@@ -72,7 +72,9 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 
 		ns, err := s.srv.Namespace(int(br.NodeID.Namespace()))
 		if err != nil {
-			resp.Results[i] = &ua.BrowseResult{StatusCode: ua.StatusBad}
+			// A node of a namespace the server does not have is unknown
+			// (Part 4 §5.8.2.2: Bad_NodeIdUnknown).
+			resp.Results[i] = &ua.BrowseResult{StatusCode: ua.StatusBadNodeIDUnknown}
 			continue
 		}
 

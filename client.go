@@ -2545,7 +2545,8 @@ func (c *Client) QueryNext(ctx context.Context, req *ua.QueryNextRequest) (*ua.Q
 }
 
 // MethodArguments reads the InputArguments and OutputArguments properties
-// of a method node. Returns nil slices for methods without declared arguments.
+// of a method node. Returns nil slices for methods without declared arguments
+// and the Bad StatusCode of the Browse (Bad_NodeIdUnknown) for an unknown method.
 func (c *Client) MethodArguments(ctx context.Context, objectID, methodID *ua.NodeID) (inputs, outputs []*ua.Argument, err error) {
 	methodNode := c.Node(methodID)
 	refs, err := methodNode.References(ctx, id.HasProperty, ua.BrowseDirectionForward, ua.NodeClassVariable, true)

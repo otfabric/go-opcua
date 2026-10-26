@@ -178,10 +178,13 @@ func TestNodeCovChildrenAndReferencedNodes(t *testing.T) {
 	require.Contains(t, names, "SerialNumber")
 
 	// a node without HasTypeDefinition reference has no type definition
-	n := c.Node(ua.NewStringNodeID(f.NSIndex, "does-not-exist"))
-	td, err := n.TypeDefinition(ctx)
+	td, err := c.Node(f.MotorSpeed).TypeDefinition(ctx)
 	require.NoError(t, err)
 	require.Nil(t, td)
+
+	// an unknown node is Bad_NodeIdUnknown, not a node without one
+	_, err = c.Node(ua.NewStringNodeID(f.NSIndex, "does-not-exist")).TypeDefinition(ctx)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
 }
 
 func nodeIDStrings(nodes []*opcua.Node) []string {
@@ -559,4 +562,120 @@ func TestNodeCovTranslateBrowsePathsMalformed(t *testing.T) {
 			require.Nil(t, nid)
 		})
 	}
+}
+
+// A Bad StatusCode of a BrowseResult is the error of every browse helper
+// (Part 4 §5.8.2.2), not an empty reference list.
+func TestNodeCovBrowseBadResultStatus(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	_, url := newScriptedServer(t, map[uint16]server.Handler{
+		id.BrowseRequestEncodingDefaultBinary: browseHandler(func(*ua.BrowseDescription) *ua.BrowseResult {
+			return &ua.BrowseResult{StatusCode: ua.StatusBadNodeIDUnknown}
+		}),
+	})
+	c := connectCovClient(t, url)
+	n := c.Node(ua.NewStringNodeID(1, "missing"))
+
+	refs, err := n.References(ctx, 0, ua.BrowseDirectionForward, 0, true)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	require.Nil(t, refs)
+
+	nodes, err := n.Children(ctx, 0, ua.NodeClassAll)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	require.Nil(t, nodes)
+
+	_, err = n.ReferencedNodes(ctx, 0, ua.BrowseDirectionInverse, 0, true)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+
+	_, err = n.TypeDefinition(ctx)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+
+	count := 0
+	var last error
+	for _, err := range n.BrowseAll(ctx, 0, ua.BrowseDirectionForward, 0, true) {
+		count++
+		last = err
+	}
+	require.Equal(t, 1, count)
+	require.ErrorIs(t, last, ua.StatusBadNodeIDUnknown)
+
+	_, err = c.BrowseAll(ctx, n.ID)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+
+	_, err = n.BrowseWithDepth(ctx, opcua.BrowseWithDepthOptions{MaxDepth: -1})
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+
+	for _, err := range n.Walk(ctx) {
+		require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	}
+}
+
+// A Bad StatusCode of a BrowseNext result (here Bad_ContinuationPointInvalid
+// with a Good service result, Part 4 §5.8.3.2) is the error too.
+func TestNodeCovBrowseNextBadResultStatus(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	next := respond(func(r ua.Request) ua.Response {
+		return &ua.BrowseNextResponse{
+			ResponseHeader: okHeader(r),
+			Results:        []*ua.BrowseResult{{StatusCode: ua.StatusBadContinuationPointInvalid}},
+		}
+	})
+	_, url := newScriptedServer(t, pagingHandlers(next))
+	c := connectCovClient(t, url)
+	n := c.Node(ua.NewStringNodeID(1, "root"))
+
+	_, err := n.References(ctx, 0, ua.BrowseDirectionForward, 0, true)
+	require.ErrorIs(t, err, ua.StatusBadContinuationPointInvalid)
+
+	var got []string
+	var last error
+	for ref, err := range n.BrowseAll(ctx, 0, ua.BrowseDirectionForward, 0, true) {
+		if err != nil {
+			last = err
+			continue
+		}
+		got = append(got, ref.BrowseName.Name)
+	}
+	require.Equal(t, []string{"a"}, got)
+	require.ErrorIs(t, last, ua.StatusBadContinuationPointInvalid)
+}
+
+// Uncertain and Good results keep their references, and the recursive
+// helpers do not descend into targets on other servers (ServerIndex != 0).
+func TestNodeCovBrowseUncertainAndRemote(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	remote := refTo("remote")
+	remote.NodeID = ua.NewExpandedNodeID(ua.NewStringNodeID(1, "remote"), "", 1)
+	_, url := newScriptedServer(t, map[uint16]server.Handler{
+		id.BrowseRequestEncodingDefaultBinary: browseHandler(func(d *ua.BrowseDescription) *ua.BrowseResult {
+			switch d.NodeID.StringID() {
+			case "root":
+				return &ua.BrowseResult{StatusCode: ua.StatusUncertain, References: []*ua.ReferenceDescription{refTo("a"), remote}}
+			case "a":
+				return &ua.BrowseResult{StatusCode: ua.StatusOK}
+			default:
+				return &ua.BrowseResult{StatusCode: ua.StatusBadNodeIDUnknown}
+			}
+		}),
+	})
+	c := connectCovClient(t, url)
+	n := c.Node(ua.NewStringNodeID(1, "root"))
+
+	refs, err := n.References(ctx, 0, ua.BrowseDirectionForward, 0, true)
+	require.NoError(t, err)
+	require.Equal(t, []string{"a", "remote"}, refNames(refs))
+
+	res, err := n.BrowseWithDepth(ctx, opcua.BrowseWithDepthOptions{MaxDepth: -1})
+	require.NoError(t, err)
+	require.Len(t, res, 2)
+
+	var walked []string
+	for wr, err := range n.Walk(ctx) {
+		require.NoError(t, err)
+		walked = append(walked, wr.Ref.BrowseName.Name)
+	}
+	require.Equal(t, []string{"a", "remote"}, walked)
 }

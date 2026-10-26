@@ -468,12 +468,14 @@ func TestNode_WalkVariants(t *testing.T) {
 	}
 	require.Equal(t, 3, seen)
 
-	// A walk from an unknown node reports the browse status once and stops.
+	// A walk from an unknown node reports the browse status once and stops
+	// (Part 4 §5.8.2.2).
 	var errs []error
 	for _, err := range c.Node(ua.NewStringNodeID(f.NSIndex, "Nope")).Walk(ctx) {
 		errs = append(errs, err)
 	}
-	require.Empty(t, errs, "an unknown node has no references to yield")
+	require.Len(t, errs, 1)
+	require.ErrorIs(t, errs[0], ua.StatusBadNodeIDUnknown)
 }
 
 func TestNode_BrowseWithDepth(t *testing.T) {
@@ -523,7 +525,7 @@ func TestNode_BrowseWithDepth(t *testing.T) {
 	require.Equal(t, []walkStep{s(0, f.Motor), s(1, f.Line1)}, flat(res))
 
 	_, err = c.Node(ua.NewNumericNodeID(77, 1)).BrowseWithDepth(ctx, opcua.BrowseWithDepthOptions{IncludeSubtypes: true})
-	require.NoError(t, err, "a browse error status of the start node is not a transport error")
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown, "the Bad browse status of a start node in an unknown namespace is the error")
 }
 
 func TestNode_ReferenceHelpers(t *testing.T) {
@@ -781,4 +783,42 @@ func TestView_MapNamespace(t *testing.T) {
 		mns.SetValue("Text", "changed by the application")
 		awaitValue(t, ch, 0, "changed by the application")
 	})
+}
+
+// TestNode_BrowseHelpersUnknownNode: the result StatusCode of Browse for an
+// unknown node is Bad_NodeIdUnknown (Part 4 §5.8.2.2), and the client helpers
+// built on Browse return it as the error instead of an empty reference list.
+func TestNode_BrowseHelpersUnknownNode(t *testing.T) {
+	c, f, ctx := setup(t)
+	missing := ua.NewStringNodeID(f.NSIndex, "does-not-exist")
+	n := c.Node(missing)
+
+	res := browseOne(t, c, &ua.BrowseDescription{NodeID: missing, BrowseDirection: ua.BrowseDirectionForward, ReferenceTypeID: refType(id.References), IncludeSubtypes: true}, 0)
+	require.Equal(t, ua.StatusBadNodeIDUnknown, res.StatusCode)
+
+	_, err := n.References(ctx, 0, ua.BrowseDirectionBoth, 0, true)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	_, err = n.Children(ctx, 0, ua.NodeClassAll)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	_, err = n.ReferencedNodes(ctx, 0, ua.BrowseDirectionInverse, 0, true)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	_, err = n.TypeDefinition(ctx)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	_, err = c.BrowseAll(ctx, missing)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	_, err = n.BrowseWithDepth(ctx, opcua.BrowseWithDepthOptions{MaxDepth: -1})
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	for _, err := range n.BrowseAll(ctx, 0, ua.BrowseDirectionForward, 0, true) {
+		require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	}
+	for _, err := range n.WalkLimitDedup(ctx, -1) {
+		require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+	}
+	_, _, err = c.MethodArguments(ctx, f.Motor, missing)
+	require.ErrorIs(t, err, ua.StatusBadNodeIDUnknown)
+
+	// A known node without references is still an empty, error-free result.
+	refs, err := c.Node(f.MotorSpeed).References(ctx, id.HasTypeDefinition, ua.BrowseDirectionForward, 0, false)
+	require.NoError(t, err)
+	require.Empty(t, refs)
 }
