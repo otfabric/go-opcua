@@ -1971,6 +1971,13 @@ func (n *Node) SetMethodArguments(in, out []*ua.Argument) error
 func (n *Node) Access(flag ua.AccessLevelType) bool
 ```
 
+`AddRef(o, rt, forward)` records the reference on both nodes: `n` gets the
+reference to `o` and `o` the opposite direction to `n`, so Browse with
+BrowseDirection Inverse or Both finds it from either end (Part 3 §7.1, Part 4
+§5.8.2). Adding a reference again, also from the other end, does not
+duplicate it. `RemoveRef` removes one end only; `NodeNameSpace.DeleteNode`
+also removes the inverse ends of the deleted node's forward references.
+
 ```go
 type AttrValue struct {
     Value           *ua.DataValue

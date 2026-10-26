@@ -345,7 +345,15 @@ func (n *Node) DataType() *ua.ExpandedNodeID {
 		}
 		return ua.NewTwoByteExpandedNodeID(0)
 	}
-	return v.Value.Value().(*ua.ExpandedNodeID)
+	switch dt := v.Value.Value().(type) {
+	case *ua.ExpandedNodeID:
+		return dt
+	case *ua.NodeID:
+		// The DataType attribute is a NodeId (Part 3 §5.6.2).
+		return ua.NewExpandedNodeID(dt, "", 0)
+	default:
+		return ua.NewTwoByteExpandedNodeID(0)
+	}
 }
 
 // typeDefinition returns the target of the node's first forward
@@ -368,6 +376,9 @@ func (n *Node) typeDefinition() *ua.ExpandedNodeID {
 	}
 	n.typeDef = nil
 	for _, r := range n.refs {
+		if r == nil {
+			continue
+		}
 		if r.ReferenceTypeID == nil {
 			slog.Default().Warn("reference type ID is nil")
 			continue
@@ -461,24 +472,109 @@ const (
 	RefTypeIDOrganizes    = id.Organizes
 )
 
+// AddRef adds a reference of type rt between n and o: n -rt-> o when forward,
+// o -rt-> n otherwise. A Reference has a forward and an inverse direction
+// and Browse returns either (Part 3 §7.1, Part 4 §5.8.2), so both ends
+// record it: n gets the reference to o and o the opposite direction to n.
+// Adding a reference both ends already hold (also from the other end, as
+// parent.AddRef(child, rt, true) followed by child.AddRef(parent, rt, false))
+// does not add it again.
 func (n *Node) AddRef(o *Node, rt RefType, forward bool) {
-	//eoid := ua.NewNumericExpandedNodeID(o.ns.ID(), o.)
-	eoid := ua.NewExpandedNodeID(o.ID(), "", 0)
+	typ := ua.NewNumericNodeID(0, uint32(rt))
+	if n.holdsRef(o, typ, forward) {
+		return
+	}
+	// The references are built before taking the locks: o may be n itself.
+	ref, inv := refTo(o, typ, forward), refTo(n, typ, !forward)
+	n.appendRef(ref)
+	// A reference of n to itself has both directions on n.
+	o.appendRef(inv)
+}
 
-	ref := ua.ReferenceDescription{
-		ReferenceTypeID: ua.NewNumericNodeID(0, uint32(rt)), //o.refs[0].ReferenceTypeID,
+// refTo returns the ReferenceDescription of a reference of type typ to o.
+func refTo(o *Node, typ *ua.NodeID, forward bool) *ua.ReferenceDescription {
+	return &ua.ReferenceDescription{
+		ReferenceTypeID: typ,
 		IsForward:       forward,
-		NodeID:          eoid,
+		NodeID:          ua.NewExpandedNodeID(o.ID(), "", 0),
 		BrowseName:      o.BrowseName(),
 		DisplayName:     o.DisplayName(),
 		NodeClass:       o.NodeClass(),
-		TypeDefinition:  o.DataType(),
+		// Browse reports the type definition of the target when it answers
+		// (browseTypeDefinition); this one only keeps the field non-nil.
+		TypeDefinition: browseTypeDefinition(o),
 	}
-	// The reference is built before taking the lock: o may be n itself.
+}
+
+// addRefOneSided adds the reference to o to n only, for the NodeSet
+// importer, which adds both directions itself (and none for a symmetric
+// ReferenceType).
+func (n *Node) addRefOneSided(o *Node, rt RefType, forward bool) {
+	n.appendRef(refTo(o, ua.NewNumericNodeID(0, uint32(rt)), forward))
+}
+
+// appendRef appends ref to the references of n.
+func (n *Node) appendRef(ref *ua.ReferenceDescription) {
 	n.mu.Lock()
-	n.refs = append(n.refs, &ref)
-	n.noteRefAppended(&ref)
+	n.refs = append(n.refs, ref)
+	n.noteRefAppended(ref)
 	n.mu.Unlock()
+}
+
+// holdsRef reports whether the reference n -typ-> o (forward) or o -typ-> n
+// (inverse) is recorded already. As AddRef records a reference on both ends,
+// it looks on the end with fewer references: a Folder or a type node may hold
+// many, its children few.
+func (n *Node) holdsRef(o *Node, typ *ua.NodeID, forward bool) bool {
+	if o != n && o.refCount() < n.refCount() {
+		return o.hasRefTo(n.ID(), typ, !forward)
+	}
+	return n.hasRefTo(o.ID(), typ, forward)
+}
+
+func (n *Node) refCount() int {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return len(n.refs)
+}
+
+// hasRefTo reports whether n has a reference of type typ in the given
+// direction to target.
+func (n *Node) hasRefTo(target, typ *ua.NodeID, forward bool) bool {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	for _, r := range n.refs {
+		if r == nil || r.IsForward != forward || r.NodeID == nil || !sameNodeID(r.ReferenceTypeID, typ) || !sameNodeID(r.NodeID.NodeID, target) {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// sameNodeID reports whether a and b are the same NodeId, without the
+// allocations of NodeID.Equal for the numeric NodeIds of the comparisons on
+// the hot path.
+func sameNodeID(a, b *ua.NodeID) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.Namespace() != b.Namespace() {
+		return false
+	}
+	if numericNodeID(a) && numericNodeID(b) {
+		return a.IntID() == b.IntID()
+	}
+	return a.String() == b.String()
+}
+
+func numericNodeID(n *ua.NodeID) bool {
+	switch n.Type() {
+	case ua.NodeIDTypeTwoByte, ua.NodeIDTypeFourByte, ua.NodeIDTypeNumeric:
+		return true
+	default:
+		return false
+	}
 }
 
 // refsSnapshot returns a copy of the node's references. The address space
@@ -491,7 +587,8 @@ func (n *Node) refsSnapshot() References {
 }
 
 // RemoveRef removes a reference from the node matching the given target, reference type, and direction.
-// Returns true if a matching reference was found and removed.
+// Returns true if a matching reference was found and removed. It removes this
+// end only; the target keeps its end until RemoveRef is called on it too.
 func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forward bool) bool {
 	n.mu.Lock()
 	defer n.mu.Unlock()
@@ -505,7 +602,7 @@ func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forw
 		if ref.NodeID == nil || targetID == nil {
 			continue
 		}
-		if ref.NodeID.NodeID.String() != targetID.NodeID.String() {
+		if !sameNodeID(ref.NodeID.NodeID, targetID.NodeID) {
 			continue
 		}
 		// Remove by swapping with last element.

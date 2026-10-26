@@ -68,13 +68,18 @@ func TestView_BrowseDirection(t *testing.T) {
 	require.Equal(t, "Line1", fwd.References[0].BrowseName.Name)
 	require.Equal(t, "Line1", fwd.References[0].DisplayName.Text)
 
+	// Plant is organized by the fixture's Objects folder and by the standard
+	// Objects folder (i=85, a single AddRef): both are inverse references.
+	objects := ua.NewNumericNodeID(0, id.ObjectsFolder)
 	inv := browseOne(t, c, &ua.BrowseDescription{NodeID: f.Plant, BrowseDirection: ua.BrowseDirectionInverse, ReferenceTypeID: refType(id.References), IncludeSubtypes: true}, 0)
-	require.Equal(t, ids(f.MethodObject), targets(inv.References))
-	require.False(t, inv.References[0].IsForward)
-	require.Equal(t, uint32(id.Organizes), inv.References[0].ReferenceTypeID.IntID())
+	require.ElementsMatch(t, ids(f.MethodObject, objects), targets(inv.References))
+	for _, r := range inv.References {
+		require.False(t, r.IsForward)
+		require.Equal(t, uint32(id.Organizes), r.ReferenceTypeID.IntID())
+	}
 
 	both := browseOne(t, c, &ua.BrowseDescription{NodeID: f.Plant, BrowseDirection: ua.BrowseDirectionBoth, ReferenceTypeID: refType(id.References), IncludeSubtypes: true}, 0)
-	require.ElementsMatch(t, ids(f.MethodObject, f.Line1, f.Line2), targets(both.References))
+	require.ElementsMatch(t, ids(f.MethodObject, objects, f.Line1, f.Line2), targets(both.References))
 }
 
 func TestView_BrowseReferenceTypeAndSubtypes(t *testing.T) {
@@ -821,4 +826,63 @@ func TestNode_BrowseHelpersUnknownNode(t *testing.T) {
 	refs, err := c.Node(f.MotorSpeed).References(ctx, id.HasTypeDefinition, ua.BrowseDirectionForward, 0, false)
 	require.NoError(t, err)
 	require.Empty(t, refs)
+}
+
+// TestView_BrowseInverseOfAddRef: an Object linked into the address space
+// with a single Node.AddRef (here Objects -Organizes-> Demo, as opcuactl
+// serve does) is browsable from both ends. A Reference has a forward and an
+// inverse direction (Part 3 §7.1) and Browse returns the references
+// of the requested direction (Part 4 §5.8.2.2): Demo's Inverse and Both
+// browses list the Organizes reference from Objects, and its components
+// list their parent.
+func TestView_BrowseInverseOfAddRef(t *testing.T) {
+	var demo, demoVar *ua.NodeID
+	c, _, _, _ := setupWith(t, func(srv *server.Server, _ *testutil.Fixture) {
+		ns := server.NewNodeNameSpace(srv, "urn:test:inverse")
+		root, err := srv.Namespace(0)
+		require.NoError(t, err)
+		folder := server.NewFolderNode(ua.NewStringNodeID(ns.ID(), "Demo"), "Demo")
+		ns.AddNode(folder)
+		root.Objects().AddRef(folder, id.Organizes, true)
+		v := server.NewVariableNode(ua.NewStringNodeID(ns.ID(), "Demo.Int32"), "Int32", int32(42))
+		ns.AddNode(v)
+		folder.AddRef(v, id.HasComponent, true)
+		// Adding the reference again from the other end does not duplicate it.
+		v.AddRef(folder, id.HasComponent, false)
+		demo, demoVar = folder.ID(), v.ID()
+	})
+	objects := ua.NewNumericNodeID(0, id.ObjectsFolder)
+
+	inv := browseOne(t, c, &ua.BrowseDescription{NodeID: demo, BrowseDirection: ua.BrowseDirectionInverse, ReferenceTypeID: refType(id.References), IncludeSubtypes: true}, 0)
+	require.Equal(t, ua.StatusOK, inv.StatusCode)
+	require.Len(t, inv.References, 1)
+	require.False(t, inv.References[0].IsForward)
+	require.Equal(t, uint32(id.Organizes), inv.References[0].ReferenceTypeID.IntID())
+	require.Equal(t, objects.String(), inv.References[0].NodeID.NodeID.String())
+	require.Equal(t, "Objects", inv.References[0].BrowseName.Name)
+
+	both := browseOne(t, c, &ua.BrowseDescription{NodeID: demo, BrowseDirection: ua.BrowseDirectionBoth, ReferenceTypeID: refType(id.HierarchicalReferences), IncludeSubtypes: true}, 0)
+	require.Equal(t, ua.StatusOK, both.StatusCode)
+	require.ElementsMatch(t, []string{objects.String(), demoVar.String()}, targets(both.References))
+
+	// The Objects folder still lists Demo once, forward.
+	fwd := browseOne(t, c, &ua.BrowseDescription{NodeID: objects, BrowseDirection: ua.BrowseDirectionForward, ReferenceTypeID: refType(id.Organizes)}, 0)
+	n := 0
+	for _, r := range fwd.References {
+		if r.NodeID.NodeID.String() == demo.String() {
+			require.True(t, r.IsForward)
+			n++
+		}
+	}
+	require.Equal(t, 1, n)
+
+	// The client helpers see the parent of a component.
+	parents, err := c.Node(demoVar).ReferencedNodes(context.Background(), id.HierarchicalReferences, ua.BrowseDirectionInverse, ua.NodeClassAll, true)
+	require.NoError(t, err)
+	require.Len(t, parents, 1, "one inverse HasComponent, not duplicated")
+	require.Equal(t, demo.String(), parents[0].ID.String())
+	parents, err = c.Node(demo).ReferencedNodes(context.Background(), id.Organizes, ua.BrowseDirectionInverse, ua.NodeClassAll, false)
+	require.NoError(t, err)
+	require.Len(t, parents, 1)
+	require.Equal(t, objects.String(), parents[0].ID.String())
 }

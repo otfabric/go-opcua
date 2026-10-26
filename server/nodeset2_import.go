@@ -67,7 +67,7 @@ func (ri refImporter) add(n, o *Node, rt RefType, forward bool) {
 		return
 	}
 	ri[key] = struct{}{}
-	n.AddRef(o, rt, forward)
+	n.addRefOneSided(o, rt, forward)
 }
 
 func (s *Server) importNodeSet(nodes *schema.UANodeSet) error {

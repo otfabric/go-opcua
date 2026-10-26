@@ -266,7 +266,9 @@ func declaredInputArguments(srv *Server, methodID *ua.NodeID) []*ua.Argument {
 		if ref == nil || ref.BrowseName == nil || ref.NodeID == nil || ref.NodeID.NodeID == nil {
 			continue
 		}
-		if ref.ReferenceTypeID == nil || ref.ReferenceTypeID.IntID() != id.HasProperty {
+		// The forward HasProperty of the method; the inverse one leads to
+		// the parent of a Property.
+		if !ref.IsForward || ref.ReferenceTypeID == nil || ref.ReferenceTypeID.IntID() != id.HasProperty {
 			continue
 		}
 		if ref.BrowseName.Name != "InputArguments" {
