@@ -121,6 +121,12 @@ func (e *Error) Error() string { return fmt.Sprintf("gds: %s: %v", e.Method, e.S
 // Unwrap returns the status, so errors.Is(err, ua.StatusBadXxx) holds.
 func (e *Error) Unwrap() error { return e.Status }
 
+// badStatus reports whether err is a Bad ua.StatusCode.
+func badStatus(err error) bool {
+	var sc ua.StatusCode
+	return errors.As(err, &sc) && sc&ua.StatusBad != 0
+}
+
 // method finds the method name of an object: a forward HasComponent
 // reference to a Method with that BrowseName, or the fallback.
 func (g *Client) method(ctx context.Context, obj *ua.NodeID, name string, fallback uint32) (*ua.NodeID, error) {
@@ -132,6 +138,13 @@ func (g *Client) method(ctx context.Context, obj *ua.NodeID, name string, fallba
 		return m, nil
 	}
 	refs, err := g.c.Node(obj).References(ctx, id.HasComponent, ua.BrowseDirectionForward, ua.NodeClassMethod, true)
+	if badStatus(err) {
+		// The object cannot be browsed (e.g. Bad_NodeIdUnknown or
+		// Bad_UserAccessDenied as the Browse result, Part 4 §5.8.2.2): call
+		// the standard method and let the Call service report the status.
+		// Not cached, the next call browses again.
+		return ua.NewNumericNodeID(0, fallback), nil
+	}
 	if err != nil {
 		return nil, err
 	}
