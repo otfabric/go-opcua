@@ -367,7 +367,14 @@ folder.AddRef(tempNode, id.HasComponent, true)
 
 `AddRef` records both ends of the reference: browsing `tempNode` with
 BrowseDirection Inverse finds `folder`. There is no need to add the inverse
-reference by hand (doing so does not duplicate it).
+reference by hand (doing so does not duplicate it). `RemoveRef` removes both
+ends again, from whichever end it is called. The NodeSet importer and the
+AddReferences service record both ends the same way, also for a ReferenceType
+of another namespace; AddReferences answers `Bad_DuplicateReferenceNotAllowed`
+for a reference that exists (from either end). DeleteReferences removes the
+target's end only with `DeleteBidirectional`, and DeleteNodes removes the
+references of which the node is the target only with `DeleteTargetReferences`
+(Part 4 §5.7).
 
 **Best for:** Industrial automation, device models, complex type definitions, methods, events.
 

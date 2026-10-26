@@ -480,15 +480,21 @@ const (
 // parent.AddRef(child, rt, true) followed by child.AddRef(parent, rt, false))
 // does not add it again.
 func (n *Node) AddRef(o *Node, rt RefType, forward bool) {
-	typ := ua.NewNumericNodeID(0, uint32(rt))
+	n.addRef(o, ua.NewNumericNodeID(0, uint32(rt)), forward)
+}
+
+// addRef is AddRef for a ReferenceType of any namespace. It reports whether
+// it added the reference (false if both ends held it already).
+func (n *Node) addRef(o *Node, typ *ua.NodeID, forward bool) bool {
 	if n.holdsRef(o, typ, forward) {
-		return
+		return false
 	}
 	// The references are built before taking the locks: o may be n itself.
 	ref, inv := refTo(o, typ, forward), refTo(n, typ, !forward)
 	n.appendRef(ref)
 	// A reference of n to itself has both directions on n.
 	o.appendRef(inv)
+	return true
 }
 
 // refTo returns the ReferenceDescription of a reference of type typ to o.
@@ -504,13 +510,6 @@ func refTo(o *Node, typ *ua.NodeID, forward bool) *ua.ReferenceDescription {
 		// (browseTypeDefinition); this one only keeps the field non-nil.
 		TypeDefinition: browseTypeDefinition(o),
 	}
-}
-
-// addRefOneSided adds the reference to o to n only, for the NodeSet
-// importer, which adds both directions itself (and none for a symmetric
-// ReferenceType).
-func (n *Node) addRefOneSided(o *Node, rt RefType, forward bool) {
-	n.appendRef(refTo(o, ua.NewNumericNodeID(0, uint32(rt)), forward))
 }
 
 // appendRef appends ref to the references of n.
@@ -586,23 +585,44 @@ func (n *Node) refsSnapshot() References {
 	return slices.Clone(n.refs)
 }
 
-// RemoveRef removes a reference from the node matching the given target, reference type, and direction.
-// Returns true if a matching reference was found and removed. It removes this
-// end only; the target keeps its end until RemoveRef is called on it too.
+// RemoveRef removes the reference of type refTypeID between n and the node
+// targetID (n -> target when forward, target -> n otherwise) from both ends,
+// as AddRef records it on both. It reports whether either end held it. The
+// other end is found through the server of n's namespace; a node that was
+// not added to a namespace, or a target on another server, loses this end
+// only.
 func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forward bool) bool {
+	removed := n.removeRefEnd(targetID, refTypeID, forward)
+	if targetID == nil || targetID.NodeID == nil || targetID.ServerIndex != 0 {
+		return removed
+	}
+	t := n
+	if !sameNodeID(targetID.NodeID, n.ID()) {
+		if t = n.lookup(targetID.NodeID); t == nil {
+			return removed
+		}
+	}
+	// A reference of n to itself has both directions on n.
+	if t.removeRefEnd(ua.NewExpandedNodeID(n.ID(), "", 0), refTypeID, !forward) {
+		removed = true
+	}
+	return removed
+}
+
+// removeRefEnd removes the reference of type refTypeID to targetID in the
+// given direction from n only, as the DeleteReferences service does without
+// deleteBidirectional (Part 4 §5.7.5). It reports whether n held it.
+func (n *Node) removeRefEnd(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forward bool) bool {
+	if targetID == nil || targetID.NodeID == nil || refTypeID == nil {
+		return false
+	}
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	for i, ref := range n.refs {
-		if ref.IsForward != forward {
+		if ref == nil || ref.IsForward != forward || ref.NodeID == nil || ref.NodeID.ServerIndex != targetID.ServerIndex {
 			continue
 		}
-		if ref.ReferenceTypeID.IntID() != refTypeID.IntID() {
-			continue
-		}
-		if ref.NodeID == nil || targetID == nil {
-			continue
-		}
-		if !sameNodeID(ref.NodeID.NodeID, targetID.NodeID) {
+		if !sameNodeID(ref.ReferenceTypeID, refTypeID) || !sameNodeID(ref.NodeID.NodeID, targetID.NodeID) {
 			continue
 		}
 		// Remove by swapping with last element.
@@ -612,6 +632,16 @@ func (n *Node) RemoveRef(targetID *ua.ExpandedNodeID, refTypeID *ua.NodeID, forw
 		return true
 	}
 	return false
+}
+
+// lookup returns the node id of the server of n's namespace, nil if n is
+// in no namespace of a server or the node does not exist.
+func (n *Node) lookup(id *ua.NodeID) *Node {
+	ns, ok := n.ns.(*NodeNameSpace)
+	if !ok || ns.srv == nil {
+		return nil
+	}
+	return ns.srv.Node(id)
 }
 
 // Access returns true if the node has the access level requested.

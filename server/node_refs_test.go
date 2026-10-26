@@ -159,3 +159,65 @@ func TestAddRefConcurrent(t *testing.T) {
 		require.Equal(t, 1, countRefs(a, n.ID(), id.HasComponent, true))
 	}
 }
+
+// RemoveRef removes what AddRef added: both ends, whichever end removes it.
+func TestRemoveRefRemovesBothEnds(t *testing.T) {
+	srv := newTestServer()
+	ns := NewNodeNameSpace(srv, "urn:test:removeref")
+	nsi := ns.ID()
+	parent := NewFolderNode(ua.NewStringNodeID(nsi, "Parent"), "Parent")
+	child := NewFolderNode(ua.NewStringNodeID(nsi, "Child"), "Child")
+	ns.AddNode(parent)
+	ns.AddNode(child)
+	organizes := ua.NewNumericNodeID(0, id.Organizes)
+	exp := func(n *Node) *ua.ExpandedNodeID { return ua.NewExpandedNodeID(n.ID(), "", 0) }
+
+	parent.AddRef(child, id.Organizes, true)
+	require.True(t, parent.RemoveRef(exp(child), organizes, true))
+	require.Zero(t, countRefs(parent, child.ID(), id.Organizes, true))
+	require.Zero(t, countRefs(child, parent.ID(), id.Organizes, false))
+	require.False(t, parent.RemoveRef(exp(child), organizes, true), "already removed")
+
+	// From the other end.
+	parent.AddRef(child, id.Organizes, true)
+	require.True(t, child.RemoveRef(exp(parent), organizes, false))
+	require.Zero(t, countRefs(parent, child.ID(), id.Organizes, true))
+	require.Zero(t, countRefs(child, parent.ID(), id.Organizes, false))
+
+	// Only the other end holds it (a NodeSet or a one-sided
+	// DeleteReferences left it so): it is removed there.
+	parent.AddRef(child, id.Organizes, true)
+	require.True(t, parent.removeRefEnd(exp(child), organizes, true))
+	require.True(t, parent.RemoveRef(exp(child), organizes, true))
+	require.Zero(t, countRefs(child, parent.ID(), id.Organizes, false))
+
+	// Other references between the same nodes stay.
+	parent.AddRef(child, id.Organizes, true)
+	parent.AddRef(child, id.HasComponent, true)
+	require.True(t, parent.RemoveRef(exp(child), ua.NewNumericNodeID(0, id.HasComponent), true))
+	require.Equal(t, 1, countRefs(child, parent.ID(), id.Organizes, false))
+
+	// A reference of a node to itself loses both directions.
+	parent.AddRef(parent, id.HasNotifier, true)
+	require.True(t, parent.RemoveRef(exp(parent), ua.NewNumericNodeID(0, id.HasNotifier), true))
+	require.Zero(t, countRefs(parent, parent.ID(), id.HasNotifier, true))
+	require.Zero(t, countRefs(parent, parent.ID(), id.HasNotifier, false))
+
+	// A reference type of another namespace is matched with its namespace.
+	custom := ua.NewNumericNodeID(nsi, id.Organizes)
+	require.True(t, parent.addRef(child, custom, true))
+	require.False(t, parent.RemoveRef(exp(child), ua.NewNumericNodeID(0, 4711), true))
+	require.True(t, parent.RemoveRef(exp(child), custom, true))
+	require.Equal(t, 1, countRefs(child, parent.ID(), id.Organizes, false), "the ns=0 Organizes stays")
+
+	// A node in no namespace of a server has no way to the other end.
+	loose := NewFolderNode(ua.NewStringNodeID(nsi, "Loose"), "Loose")
+	loose.AddRef(child, id.HasComponent, true)
+	require.True(t, loose.RemoveRef(exp(child), ua.NewNumericNodeID(0, id.HasComponent), true))
+	require.Equal(t, 1, countRefs(child, loose.ID(), id.HasComponent, false))
+	// Nor does a target on another server.
+	remote := ua.NewExpandedNodeID(child.ID(), "", 1)
+	require.False(t, parent.RemoveRef(remote, organizes, true))
+	require.False(t, parent.RemoveRef(nil, organizes, true))
+	require.False(t, parent.RemoveRef(exp(child), nil, true))
+}

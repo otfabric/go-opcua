@@ -148,7 +148,7 @@ func (as *NodeNameSpace) unlinkTargets(n *Node) {
 			continue
 		}
 		if t := as.srv.Node(r.NodeID.NodeID); t != nil && t != n {
-			t.RemoveRef(self, r.ReferenceTypeID, false)
+			t.removeRefEnd(self, r.ReferenceTypeID, false)
 		}
 	}
 }

@@ -135,8 +135,10 @@ func TestNodeMgmt_ReferencesAndDeletion(t *testing.T) {
 			{SourceNodeID: f.Line2, ReferenceTypeID: refType(id.Organizes), IsForward: true, TargetNodeID: exp(ua.NewStringNodeID(f.NSIndex, "Nope"))},
 		}})
 		require.NoError(t, err)
+		// The second item is the first reference seen from its other end,
+		// which the first added already (Part 3 §7.1, Part 4 §5.7.3).
 		require.Equal(t, []ua.StatusCode{
-			ua.StatusOK, ua.StatusOK, ua.StatusBadSourceNodeIDInvalid, ua.StatusBadTargetNodeIDInvalid,
+			ua.StatusOK, ua.StatusBadDuplicateReferenceNotAllowed, ua.StatusBadSourceNodeIDInvalid, ua.StatusBadTargetNodeIDInvalid,
 		}, resp.Results)
 
 		require.Equal(t, ids(f.Motor), forward(f.Line2, id.Organizes))

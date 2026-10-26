@@ -202,6 +202,46 @@ func TestImportNodeSetXML_Aliases(t *testing.T) {
 		require.NotNil(t, src)
 		require.NotNil(t, dst)
 		assert.True(t, hasRef(src, ua.NewNumericNodeID(1, 5301), 5310, true))
-		assert.Empty(t, dst.refsSnapshot(), "a symmetric reference type derives no inverse reference")
+		// The other end holds it too, of the declared type in namespace 1.
+		refs := dst.refsSnapshot()
+		require.Len(t, refs, 1)
+		assert.False(t, refs[0].IsForward)
+		assert.Equal(t, "ns=1;i=5310", refs[0].ReferenceTypeID.String())
+		assert.Equal(t, "ns=1;i=5300", refs[0].NodeID.NodeID.String())
 	})
+}
+
+// A reference is stored once per end: declared on both ends, imported
+// again, or symmetric and declared forward on both ends.
+func TestImportNodeSetXML_ReferencesOnce(t *testing.T) {
+	doc := []byte(`<?xml version="1.0" encoding="utf-8"?>
+<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+  <NamespaceUris><Uri>urn:test:once</Uri></NamespaceUris>
+  <Aliases><Alias Alias="HasComponent">i=47</Alias></Aliases>
+` + nodeSetElem("UAReferenceType", `IsAbstract="false" Symmetric="true"`, "ns=1;i=5410", "Peer", "") + "\n" +
+		nodeSetElem("UAObject", "", "ns=1;i=5400", "A", `    <References>
+      <Reference ReferenceType="HasComponent">ns=1;i=5401</Reference>
+      <Reference ReferenceType="ns=1;i=5410">ns=1;i=5401</Reference>
+    </References>`) + "\n" +
+		nodeSetElem("UAVariable", `DataType="i=6"`, "ns=1;i=5401", "B", `    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=5400</Reference>
+      <Reference ReferenceType="ns=1;i=5410">ns=1;i=5400</Reference>
+    </References>`) + `
+</UANodeSet>`)
+	srv := newTestServer()
+	require.NoError(t, srv.ImportNodeSetXML(doc))
+	require.NoError(t, srv.ImportNodeSetXML(doc))
+	a, b := srv.Node(ua.NewNumericNodeID(1, 5400)), srv.Node(ua.NewNumericNodeID(1, 5401))
+	require.NotNil(t, a)
+	require.NotNil(t, b)
+	require.Equal(t, 1, countRefs(a, b.ID(), id.HasComponent, true))
+	require.Equal(t, 1, countRefs(b, a.ID(), id.HasComponent, false))
+	// Peer: one reference, recorded on both ends, whichever declaration
+	// the importer read first; the other one is the same reference.
+	fwdA, fwdB := countRefs(a, b.ID(), 5410, true), countRefs(b, a.ID(), 5410, true)
+	require.Equal(t, 1, fwdA+fwdB)
+	require.Equal(t, fwdA, countRefs(b, a.ID(), 5410, false))
+	require.Equal(t, fwdB, countRefs(a, b.ID(), 5410, false))
+	require.Len(t, a.refsSnapshot(), 2)
+	require.Len(t, b.refsSnapshot(), 2)
 }

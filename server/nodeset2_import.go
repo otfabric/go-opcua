@@ -47,27 +47,18 @@ func importBrowseName(nid *ua.NodeID, attr string) *ua.QualifiedName {
 	return &ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: attr}
 }
 
-// importedRef identifies one reference added by a nodeset import.
-type importedRef struct {
-	from, to *Node
-	refType  RefType
-	forward  bool
-}
-
-// refImporter adds the references of one nodeset import, each of them once.
-// NodeSet2 files commonly declare a reference on both of its ends (forward on
-// the parent and inverse on the child), and the importer derives the opposite
-// direction for each declaration. Adding blindly would store every such
-// reference twice and return duplicates from Browse.
-type refImporter map[importedRef]struct{}
-
-func (ri refImporter) add(n, o *Node, rt RefType, forward bool) {
-	key := importedRef{from: n, to: o, refType: rt, forward: forward}
-	if _, done := ri[key]; done {
+// importRef adds a reference a nodeset declares on node: node -typ-> target
+// when forward. As with AddRef, both ends record it, once: NodeSet2 files
+// commonly declare a reference on both of its ends (forward on the parent
+// and inverse on the child), and the address space may hold it already
+// (from an earlier import or from AddRef). A symmetric ReferenceType means
+// the same in both directions (Part 3 §5.3.3.2), so a reference the other
+// end declared forward as well is the same reference.
+func importRef(node, target *Node, typ *ua.NodeID, forward, symmetric bool) {
+	if symmetric && node.holdsRef(target, typ, !forward) {
 		return
 	}
-	ri[key] = struct{}{}
-	n.addRefOneSided(o, rt, forward)
+	node.addRef(target, typ, forward)
 }
 
 func (s *Server) importNodeSet(nodes *schema.UANodeSet) error {
@@ -476,7 +467,6 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 	s.cfg.logger.Debug("new node set", "last_modified", nodes.LastModifiedAttr)
 
 	failures := 0
-	added := refImporter{}
 	reftypes := make(map[string]*schema.UAReferenceType)
 	for i := range nodes.UAReferenceType {
 		rt := nodes.UAReferenceType[i]
@@ -567,10 +557,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: reference type %q: parse reference type id %q: %w", rt.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			added.add(node, n, RefType(reftypeid.IntID()), fwd)
-			if !refTypeEntry.SymmetricAttr {
-				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
-			}
+			importRef(node, n, reftypeid, fwd, refTypeEntry.SymmetricAttr)
 		}
 
 	}
@@ -617,10 +604,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: data type %q: parse reference type id %q: %w", dt.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			added.add(node, n, RefType(reftypeid.IntID()), fwd)
-			if !refTypeEntry.SymmetricAttr {
-				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
-			}
+			importRef(node, n, reftypeid, fwd, refTypeEntry.SymmetricAttr)
 
 		}
 
@@ -663,10 +647,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: object type %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			added.add(node, n, RefType(reftypeid.IntID()), fwd)
-			if !refTypeEntry.SymmetricAttr {
-				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
-			}
+			importRef(node, n, reftypeid, fwd, refTypeEntry.SymmetricAttr)
 		}
 	}
 
@@ -707,10 +688,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: variable type %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			added.add(node, n, RefType(reftypeid.IntID()), fwd)
-			if !refTypeEntry.SymmetricAttr {
-				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
-			}
+			importRef(node, n, reftypeid, fwd, refTypeEntry.SymmetricAttr)
 
 		}
 
@@ -753,10 +731,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: variable %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			added.add(node, n, RefType(reftypeid.IntID()), fwd)
-			if !refTypeEntry.SymmetricAttr {
-				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
-			}
+			importRef(node, n, reftypeid, fwd, refTypeEntry.SymmetricAttr)
 
 		}
 
@@ -799,10 +774,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: method %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			added.add(node, n, RefType(reftypeid.IntID()), fwd)
-			if !refTypeEntry.SymmetricAttr {
-				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
-			}
+			importRef(node, n, reftypeid, fwd, refTypeEntry.SymmetricAttr)
 		}
 
 	}
@@ -847,10 +819,7 @@ func (s *Server) refsImportNodeSet(nodes *schema.UANodeSet) error {
 			if err != nil {
 				return fmt.Errorf("nodeset import: object %q: parse reference type id %q: %w", ot.NodeIDAttr, refTypeEntry.NodeIDAttr, err)
 			}
-			added.add(node, n, RefType(reftypeid.IntID()), fwd)
-			if !refTypeEntry.SymmetricAttr {
-				added.add(n, node, RefType(reftypeid.IntID()), !fwd)
-			}
+			importRef(node, n, reftypeid, fwd, refTypeEntry.SymmetricAttr)
 
 		}
 
