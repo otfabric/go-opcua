@@ -465,6 +465,28 @@ func (e *env) resources() testhook.ServerResources {
 	return testhook.ServerResourcesOf(srv)
 }
 
+// settleRequests waits until the server has handled every request that the
+// clients of the storm sent. A worker that returned may have left a request
+// behind: the proxy dropped its connection, or its RequestTimeout passed,
+// after the server had read the request, and the server still handles what
+// it read before a channel ended (a Call to Acknowledge or to Reset, say),
+// possibly well after the worker gave up on it. A check of the server's
+// state right after the storm would then race with that request.
+//
+// Once no channel is left, every request read has been handed to the
+// server's request handler, which handles the requests of all channels one
+// at a time in the order it takes them. The session that a new client then
+// creates is handled after them, so when Connect returns they are done. The
+// clients of the storm must all be closed.
+func (e *env) settleRequests() {
+	e.t.Helper()
+	if !eventually(settleLimit, func() bool { return e.resources().Channels == 0 }) {
+		e.t.Fatalf("server still holds %d channel(s) after the storm", e.resources().Channels)
+	}
+	c := e.connect(nil, opcua.AutoReconnect(false))
+	closeClient(c, nil)
+}
+
 // requireServerDrained waits until the current server holds no channels,
 // sessions, subscriptions or monitored items.
 func (e *env) requireServerDrained(limit time.Duration) {

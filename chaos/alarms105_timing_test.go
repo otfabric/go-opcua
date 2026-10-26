@@ -142,7 +142,10 @@ func TestChaosAlarmTimers(t *testing.T) {
 		return
 	}
 
-	// Quiet: every alarm returns to normal once the delays are over.
+	// Quiet: every alarm returns to normal once the delays are over. A
+	// Reset of the metrics that a dropped worker left behind must not
+	// clear the activations below.
+	e.settleRequests()
 	for _, c := range conds {
 		if err := c.SetActive(false); err != nil {
 			t.Fatal(err)
