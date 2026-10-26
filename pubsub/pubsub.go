@@ -207,6 +207,9 @@ func (p *PubSub) newID() ComponentID {
 // publish and readers subscribe. Cancelling ctx stops the runtime again (all
 // components become Paused) until the next Start. Start on a running runtime
 // does nothing; Start after Close returns [ErrClosed].
+//
+// The transports open in the background: Start returns before the readers
+// can receive. [PubSub.Ready] waits for that.
 func (p *PubSub) Start(ctx context.Context) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -241,6 +244,49 @@ func (p *PubSub) Start(ctx context.Context) error {
 		}
 	}()
 	p.reconcileLocked()
+	return nil
+}
+
+// Ready waits until every running connection has opened its transport and
+// made its first subscriptions: those of its readers, its discovery
+// listener and its Action requests and responses. A datagram or broker
+// message sent to the runtime after Ready reaches it; one sent before may be
+// lost. A subscription that failed is retried in the background and shows in
+// the Status of the connection; Ready does not wait for the retry.
+//
+// Ready waits as long as a transport does not open (a broker that is not
+// reachable): bound it with ctx. It returns an error if the runtime is not
+// running or stops while waiting, or ctx ends.
+func (p *PubSub) Ready(ctx context.Context) error {
+	p.lock()
+	if p.closed {
+		p.unlock()
+		return ErrClosed
+	}
+	if !p.running {
+		p.unlock()
+		return ErrNotRunning
+	}
+	run := p.ctx
+	var ready []chan struct{}
+	for _, c := range p.conns {
+		if c.cancel != nil && c.ready != nil {
+			ready = append(ready, c.ready)
+		}
+	}
+	p.unlock()
+	for _, ch := range ready {
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-run.Done():
+			if p.isClosed() {
+				return ErrClosed
+			}
+			return ErrNotRunning
+		}
+	}
 	return nil
 }
 

@@ -342,3 +342,7 @@ func StatusCodeOf(err error) ua.StatusCode {
 	}
 	return ua.StatusBadInternalError
 }
+
+// ErrNotRunning is returned by [PubSub.Ready] on a runtime that is not
+// started, or that stopped while waiting.
+var ErrNotRunning = errors.New("pubsub: runtime not running")

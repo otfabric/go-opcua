@@ -104,6 +104,19 @@ lists the ones the message carried) and drops messages with a different
 MajorVersion. With the JSON mapping the field names travel in the message and
 the metadata can also arrive as a `ua-metadata` message on the broker.
 
+`Start` opens the transports in the background. `Ready` waits until every
+running connection has opened its transport and made its first
+subscriptions (readers, discovery listener, Action requests and responses):
+a message sent before may be lost, which matters for a one-shot message or a
+discovery probe. It waits as long as a broker is unreachable, so bound it:
+
+```go
+if err := ps.Start(ctx); err != nil { ... }
+rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+defer cancel()
+if err := ps.Ready(rctx); err != nil { ... }
+```
+
 ## MQTT and JSON
 
 ```go
