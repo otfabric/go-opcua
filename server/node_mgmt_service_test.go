@@ -161,24 +161,36 @@ func TestNodeManagementService_AddReferences(t *testing.T) {
 	t.Run("add reference between existing nodes", func(t *testing.T) {
 		sourceID := obj.ID()
 		targetID := ua.NewStringNodeID(ns.ID(), "rw_int32")
-		req := &ua.AddReferencesRequest{
-			RequestHeader: reqHeader(),
-			ReferencesToAdd: []*ua.AddReferencesItem{
-				{
-					SourceNodeID:    sourceID,
-					ReferenceTypeID: ua.NewNumericNodeID(0, id.HasComponent),
-					IsForward:       true,
-					TargetNodeID:    ua.NewExpandedNodeID(targetID, "", 0),
-					TargetNodeClass: ua.NodeClassVariable,
+		add := func(typ *ua.NodeID) ua.StatusCode {
+			req := &ua.AddReferencesRequest{
+				RequestHeader: reqHeader(),
+				ReferencesToAdd: []*ua.AddReferencesItem{
+					{
+						SourceNodeID:    sourceID,
+						ReferenceTypeID: typ,
+						IsForward:       true,
+						TargetNodeID:    ua.NewExpandedNodeID(targetID, "", 0),
+						TargetNodeClass: ua.NodeClassVariable,
+					},
 				},
-			},
+			}
+			resp, err := svc.AddReferences(context.Background(), nil, req, 1)
+			require.NoError(t, err)
+			addResp := resp.(*ua.AddReferencesResponse)
+			require.Len(t, addResp.Results, 1)
+			return addResp.Results[0]
 		}
-		resp, err := svc.AddReferences(context.Background(), nil, req, 1)
-		require.NoError(t, err)
-
-		addResp := resp.(*ua.AddReferencesResponse)
-		require.Len(t, addResp.Results, 1)
-		assert.Equal(t, ua.StatusOK, addResp.Results[0])
+		assert.Equal(t, ua.StatusOK, add(ua.NewNumericNodeID(0, id.Organizes)))
+		// Both ends hold it (Part 3 §7.1).
+		target := srv.Node(targetID)
+		assert.True(t, hasRef(target, sourceID, id.Organizes, false))
+		// Part 4 §5.7.3: an existing reference is not added again, the
+		// HasComponent of the test namespace included.
+		assert.Equal(t, ua.StatusBadDuplicateReferenceNotAllowed, add(ua.NewNumericNodeID(0, id.Organizes)))
+		assert.Equal(t, ua.StatusBadDuplicateReferenceNotAllowed, add(ua.NewNumericNodeID(0, id.HasComponent)))
+		// The ReferenceType must be a ReferenceType node.
+		assert.Equal(t, ua.StatusBadReferenceTypeIDInvalid, add(ua.NewNumericNodeID(0, id.BaseDataVariableType)))
+		assert.Equal(t, ua.StatusBadReferenceTypeIDInvalid, add(ua.NewNumericNodeID(5, 47)))
 	})
 
 	t.Run("add reference with nil source", func(t *testing.T) {

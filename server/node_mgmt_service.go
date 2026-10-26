@@ -187,7 +187,16 @@ func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.Secu
 			continue
 		}
 
-		sourceNode.AddRef(targetNode, RefType(item.ReferenceTypeID.IntID()), item.IsForward)
+		// A ReferenceType of any namespace, which must exist as a
+		// ReferenceType node (Part 4 §5.7.3).
+		if rt := s.srv.Node(item.ReferenceTypeID); rt == nil || rt.NodeClass() != ua.NodeClassReferenceType {
+			results[i] = ua.StatusBadReferenceTypeIDInvalid
+			continue
+		}
+		if !sourceNode.addRef(targetNode, item.ReferenceTypeID, item.IsForward) {
+			results[i] = ua.StatusBadDuplicateReferenceNotAllowed
+			continue
+		}
 		results[i] = ua.StatusOK
 	}
 
@@ -226,7 +235,25 @@ func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.Secure
 			results[i] = ua.StatusBadNodeIDUnknown
 			continue
 		}
+		// deleteTargetReferences: the references of which the node is the
+		// target go from their source nodes too (Part 4 §5.7.4). Those of
+		// which it is the source always go, with DeleteNode.
+		var sources []*ua.ReferenceDescription
+		if n := s.srv.Node(item.NodeID); n != nil && item.DeleteTargetReferences {
+			sources = n.refsSnapshot()
+		}
 		results[i] = ns.DeleteNode(item.NodeID)
+		if results[i] == ua.StatusGood {
+			self := ua.NewExpandedNodeID(item.NodeID, "", 0)
+			for _, r := range sources {
+				if r == nil || r.IsForward || r.NodeID == nil || r.NodeID.NodeID == nil {
+					continue
+				}
+				if src := s.srv.Node(r.NodeID.NodeID); src != nil {
+					src.removeRefEnd(self, r.ReferenceTypeID, true)
+				}
+			}
+		}
 	}
 
 	return &ua.DeleteNodesResponse{
@@ -274,18 +301,16 @@ func (s *NodeManagementService) DeleteReferences(ctx context.Context, sc *uasc.S
 			continue
 		}
 
-		removed := sourceNode.RemoveRef(item.TargetNodeID, item.ReferenceTypeID, item.IsForward)
+		// The source end only, unless deleteBidirectional (Part 4 §5.7.5).
+		removed := sourceNode.removeRefEnd(item.TargetNodeID, item.ReferenceTypeID, item.IsForward)
 		if !removed {
 			results[i] = ua.StatusBadNotFound
 			continue
 		}
-
-		// If DeleteBidirectional, also remove the inverse ref from the target.
 		if item.DeleteBidirectional {
-			targetNode := s.srv.Node(item.TargetNodeID.NodeID)
-			if targetNode != nil {
+			if targetNode := s.srv.Node(item.TargetNodeID.NodeID); targetNode != nil {
 				inverseTarget := ua.NewExpandedNodeID(item.SourceNodeID, "", 0)
-				targetNode.RemoveRef(inverseTarget, item.ReferenceTypeID, !item.IsForward)
+				targetNode.removeRefEnd(inverseTarget, item.ReferenceTypeID, !item.IsForward)
 			}
 		}
 

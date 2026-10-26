@@ -317,11 +317,10 @@ func (g *AlarmGroup) unlink(c *Condition) {
 	}
 	ct := ua.NewExpandedNodeID(c.id, "", 0)
 	gt := ua.NewExpandedNodeID(g.id, "", 0)
+	// RemoveRef removes both ends.
 	g.node.RemoveRef(ct, ua.NewNumericNodeID(0, g.memberRef()), true)
-	cn.RemoveRef(gt, ua.NewNumericNodeID(0, g.memberRef()), false)
 	if g.suppression {
 		cn.RemoveRef(gt, ua.NewNumericNodeID(0, id.HasAlarmSuppressionGroup), true)
-		g.node.RemoveRef(ct, ua.NewNumericNodeID(0, id.HasAlarmSuppressionGroup), false)
 	}
 }
 

@@ -1,5 +1,23 @@
 # go-opcua Releases
 
+## v1.28.0
+
+**Date:** 2026-10-26
+**Previous release:** v1.27.0
+
+### Summary
+
+References are removed as they are added, on both ends, and the NodeSet importer and the node management services keep both ends, ReferenceTypes of every namespace and Part 4 §5.7 to the letter.
+
+### Fixed
+
+- **server: `Node.RemoveRef` removes both ends of a reference (behaviour change).** v1.26.1 made `AddRef` record a reference on both ends, but `RemoveRef` removed the end it was called on only, so the target kept an inverse reference to a node that no longer had the forward one. It now removes both, whichever end it is called on, and reports whether either end held it; a reference of a node to itself loses both directions. The other end is found through the server of the node's namespace: a node that was not added to a namespace, or a target on another server (ServerIndex != 0), loses the called end only. Code that removed the inverse by hand keeps working (the second call reports false). The matching now compares the ReferenceType NodeId with its namespace, and the ServerIndex of the target.
+- **server: the NodeSet importer records references like `AddRef`.** A reference already in the address space (from an earlier import of the same or another nodeset, or from `AddRef`) is no longer added a second time. A symmetric ReferenceType (Part 3 §5.3.3.2) now has its other end too: the target of a symmetric reference declared on one node did not see it in any browse direction; one declared forward on both nodes is one reference. A ReferenceType of a namespace other than 0 keeps its namespace: `ns=2;i=5001` was stored as `i=5001`.
+- **server: AddReferences (Part 4 §5.7.3)** keeps the namespace of the ReferenceType (it was truncated to namespace 0 as in the importer), answers `Bad_ReferenceTypeIdInvalid` for a ReferenceTypeId that is not a ReferenceType node and `Bad_DuplicateReferenceNotAllowed` for a reference that exists, also when the request names it from its other end (it answered Good and added nothing).
+- **server: DeleteNodes honours `DeleteTargetReferences` (Part 4 §5.7.4)**: the references of which the deleted node is the target are removed from their source nodes too; without it they stay, as before. DeleteReferences removes the target's end only with `DeleteBidirectional`, as before.
+
+---
+
 ## v1.27.0
 
 **Date:** 2026-10-26
