@@ -108,24 +108,49 @@ func (as *NodeNameSpace) AddNode(n *Node) *Node {
 	return n
 }
 
+// DeleteNode removes the node nid and the references it is the source of,
+// also from the targets that hold their inverse direction (Part 4 §5.7.4:
+// deleting a Node deletes its References; AddRef records both ends). The
+// references of which it is the target stay with their source nodes.
 func (as *NodeNameSpace) DeleteNode(nid *ua.NodeID) ua.StatusCode {
 	as.mu.Lock()
-	defer as.mu.Unlock()
-
 	k := nid.String()
-	if _, ok := as.m[k]; !ok {
+	n, ok := as.m[k]
+	if !ok {
+		as.mu.Unlock()
 		return ua.StatusBadNodeIDUnknown
 	}
 	delete(as.m, k)
 
 	// Remove from slice.
-	for i, n := range as.nodes {
-		if n.ID().String() == k {
+	for i, node := range as.nodes {
+		if node == n {
 			as.nodes = append(as.nodes[:i], as.nodes[i+1:]...)
 			break
 		}
 	}
+	as.mu.Unlock()
+
+	// Without as.mu: the targets may be nodes of this namespace.
+	as.unlinkTargets(n)
 	return ua.StatusGood
+}
+
+// unlinkTargets removes the inverse direction of the forward references of
+// the deleted node n from their targets.
+func (as *NodeNameSpace) unlinkTargets(n *Node) {
+	if as.srv == nil {
+		return
+	}
+	self := ua.NewExpandedNodeID(n.ID(), "", 0)
+	for _, r := range n.refsSnapshot() {
+		if r == nil || !r.IsForward || r.NodeID == nil || r.NodeID.NodeID == nil || r.ReferenceTypeID == nil {
+			continue
+		}
+		if t := as.srv.Node(r.NodeID.NodeID); t != nil && t != n {
+			t.RemoveRef(self, r.ReferenceTypeID, false)
+		}
+	}
 }
 
 func (as *NodeNameSpace) AddNewVariableNode(name string, value any) *Node {

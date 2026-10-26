@@ -365,6 +365,10 @@ ns.AddNode(tempNode)
 folder.AddRef(tempNode, id.HasComponent, true)
 ```
 
+`AddRef` records both ends of the reference: browsing `tempNode` with
+BrowseDirection Inverse finds `folder`. There is no need to add the inverse
+reference by hand (doing so does not duplicate it).
+
 **Best for:** Industrial automation, device models, complex type definitions, methods, events.
 
 ### MapNamespace — Simple Key-Value Mapping
