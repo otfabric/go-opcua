@@ -88,7 +88,7 @@ func (s *PythonServer) Run() error {
 				time.Sleep(100 * time.Millisecond)
 				continue
 			}
-			c.Close()
+			_ = c.Close()
 			errch <- nil
 		}
 		errch <- fmt.Errorf("timeout waiting for python server")
@@ -106,6 +106,6 @@ func (s *PythonServer) Close() error {
 	if s.cmd == nil {
 		return fmt.Errorf("not running")
 	}
-	go func() { s.cmd.Process.Kill() }()
+	go func() { _ = s.cmd.Process.Kill() }()
 	return <-s.waitch
 }

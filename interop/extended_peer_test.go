@@ -90,7 +90,7 @@ func dialSecureClientWith(t *testing.T, endpoint, policy, mode string, extra ...
 	t.Cleanup(func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
-		c.Close(ctx2)
+		_ = c.Close(ctx2)
 	})
 	return c
 }
@@ -175,7 +175,7 @@ func assertClientChannelRenewal(t *testing.T, endpoint string) {
 	if err != nil {
 		t.Fatalf("subscribe: %v", err)
 	}
-	defer sub.Cancel(ctx)
+	defer func() { _ = sub.Cancel(ctx) }()
 
 	start := time.Now()
 	last := awaitCounterAdvance(t, notifyCh, -1, 15*time.Second, "before renewal")
@@ -308,7 +308,7 @@ func startRenewalGoServer(t *testing.T) (string, *atomic.Int64) {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
 		cancel()
-		s.Close()
+		_ = s.Close()
 	})
 	if err := s.Start(ctx); err != nil {
 		t.Fatalf("server.Start: %v", err)
@@ -336,7 +336,7 @@ func startRenewalGoServer(t *testing.T) (string, *atomic.Int64) {
 	deadline := time.Now().Add(serverReadyTimeout)
 	for time.Now().Before(deadline) {
 		if conn, err := net.Dial("tcp", addr); err == nil {
-			conn.Close()
+			_ = conn.Close()
 			break
 		}
 		time.Sleep(100 * time.Millisecond)

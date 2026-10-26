@@ -34,7 +34,7 @@ func TestWrite(t *testing.T) {
 	ctx := context.Background()
 
 	srv := startServer()
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	time.Sleep(2 * time.Second)
 
@@ -43,13 +43,13 @@ func TestWrite(t *testing.T) {
 
 	err = c.Connect(ctx)
 	require.NoError(t, err, "Connect failed")
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	for _, tt := range tests {
 		t.Run(tt.id.String(), func(t *testing.T) {
 			testWrite(t, ctx, c, tt.status, &ua.WriteRequest{
 				NodesToWrite: []*ua.WriteValue{
-					&ua.WriteValue{
+					{
 						NodeID:      tt.id,
 						AttributeID: ua.AttributeIDValue,
 						Value: &ua.DataValue{

@@ -20,14 +20,14 @@ func TestReadUnknowNodeID(t *testing.T) {
 	ctx := context.Background()
 
 	srv := NewPythonServer("read_unknow_node_id_server.py")
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	c, err := opcua.NewClient(srv.Endpoint, srv.Opts...)
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)
 	require.NoError(t, err, "Connect failed")
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	// read node with unknown extension object
 	// This should be OK

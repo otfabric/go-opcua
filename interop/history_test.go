@@ -86,7 +86,7 @@ func startGoServerWithHistory(t *testing.T) (string, *server.Server, *server.His
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	port := s.Port()
 	if port == 0 {
 		t.Fatal("server.Start: bound port is 0")

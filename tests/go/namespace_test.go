@@ -20,14 +20,14 @@ func TestNamespace(t *testing.T) {
 	ctx := context.Background()
 
 	srv := startServer()
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.SecurityMode(ua.MessageSecurityModeNone))
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)
 	require.NoError(t, err, "Connect failed")
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	time.Sleep(2 * time.Second)
 

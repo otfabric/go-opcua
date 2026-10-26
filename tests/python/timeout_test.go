@@ -17,7 +17,7 @@ import (
 
 const (
 	// this _must_ be a "host" that will silently eat SYNs (no RSTs)
-	// 203.0.113.0/24 is IETF TEST-NET-3
+	// 203.0.113.0/24 is IETF TEST-NET-3.
 	tcpNoRstTestServer   = "opc.tcp://203.0.113.0:4840"
 	forceTimeoutDuration = time.Second * 5
 )

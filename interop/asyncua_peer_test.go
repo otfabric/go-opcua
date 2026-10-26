@@ -637,7 +637,7 @@ func TestAsyncuaServer_ClientTransferSubscriptions(t *testing.T) {
 			t.Fatalf("TransferSubscriptions: %v", err)
 		}
 		if len(resp.Results) != 1 || resp.Results[0].StatusCode != ua.StatusOK {
-			var sc ua.StatusCode = ua.StatusBad
+			sc := ua.StatusBad
 			if len(resp.Results) == 1 {
 				sc = resp.Results[0].StatusCode
 			}
