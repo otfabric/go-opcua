@@ -245,7 +245,10 @@ func TestChaosAlarmBranches(t *testing.T) {
 		return
 	}
 
-	// Quiet: a refresh reports the retained conditions and branches.
+	// Quiet: a refresh reports the retained conditions and branches, once
+	// the requests that the dropped workers left behind (an Acknowledge,
+	// say) have changed them.
+	e.settleRequests()
 	c := e.connect(nil, opcua.AutoReconnect(false))
 	ctx, cancel := opCtx()
 	defer cancel()

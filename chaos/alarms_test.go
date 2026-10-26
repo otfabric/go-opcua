@@ -223,7 +223,9 @@ func TestChaosAlarms(t *testing.T) {
 	}
 
 	// Quiet: a refresh of a new client reports the retained conditions with
-	// their current state.
+	// their current state, once the requests that the dropped workers left
+	// behind have changed it.
+	e.settleRequests()
 	c := e.connect(nil, opcua.AutoReconnect(false))
 	ctx, cancel := opCtx()
 	defer cancel()
