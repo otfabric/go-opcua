@@ -543,11 +543,11 @@ func runAdapterClientResult(t *testing.T, imageEnvVar, defaultImage, endpoint, s
 	cmdArgs = append(cmdArgs, args...)
 
 	// The output is returned even on non-zero exit; capture it regardless.
-	raw, _ := runClientContainer(t, cmdArgs)
+	raw, runErr := runClientContainer(t, cmdArgs)
 
 	result, err := parseAdapterOutput(raw)
 	if err != nil {
-		t.Fatalf("parse adapter client output (no JSON found): %v\nraw: %s", err, raw)
+		t.Fatalf("parse adapter client output (no JSON found): %v (run: %v)\nraw: %s", err, runErr, raw)
 	}
 	return result
 }
@@ -563,7 +563,10 @@ var clientContainers atomic.Int64
 // if it has one: a subscription that collects notifications for 20 s must
 // not be killed at 30 s while a loaded runner starts its container. The
 // container is named, so that it is stopped when the bound is hit: killing
-// the docker CLI leaves it running.
+// the docker CLI leaves it running. As in runStdinContainer, a run that hit
+// the bound without any output is a stalled runner, not an adapter result
+// (each adapter command bounds its own requests and reports a timeout): it
+// is retried once.
 func runClientContainer(t *testing.T, cmdArgs []string) ([]byte, error) {
 	t.Helper()
 	timeout := clientTimeout
@@ -574,19 +577,25 @@ func runClientContainer(t *testing.T, cmdArgs []string) ([]byte, error) {
 			}
 		}
 	}
-	name := fmt.Sprintf("%s-client-%d", dockerContainerName(t), clientContainers.Add(1))
-	args := append([]string{cmdArgs[0], cmdArgs[1], "--name", name}, cmdArgs[2:]...)
+	for attempt := 1; ; attempt++ {
+		name := fmt.Sprintf("%s-client-%d", dockerContainerName(t), clientContainers.Add(1))
+		args := append([]string{cmdArgs[0], cmdArgs[1], "--name", name}, cmdArgs[2:]...)
 
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-	cmd := exec.CommandContext(ctx, "docker", args...)
-	cmd.Stderr = os.Stderr
-	raw, err := cmd.Output()
-	if ctx.Err() != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		cmd := exec.CommandContext(ctx, "docker", args...)
+		cmd.Stderr = os.Stderr
+		raw, err := cmd.Output()
+		timedOut := ctx.Err() != nil
+		cancel()
+		if !timedOut {
+			return raw, err
+		}
 		dockerStop(name)
-		return raw, fmt.Errorf("adapter client killed after %v: %w", timeout, err)
+		if len(bytes.TrimSpace(raw)) > 0 || attempt == 2 {
+			return raw, fmt.Errorf("adapter client killed after %v: %w", timeout, err)
+		}
+		t.Logf("docker %v: no output within %v, retrying once", cmdArgs[2:], timeout)
 	}
-	return raw, err
 }
 
 // runOpen62541Client runs the open62541 adapter in client mode.
