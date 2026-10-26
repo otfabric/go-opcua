@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
+	"github.com/otfabric/go-opcua/internal/testutil/testport"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -171,10 +173,9 @@ func TestDialer_LogsAndErrors(t *testing.T) {
 	require.Contains(t, logged(), "connecting")
 
 	// Nothing listens: the zero Dialer uses the default net.Dialer.
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-	closedEP := "opc.tcp://" + ln.Addr().String()
-	require.NoError(t, ln.Close())
+	// The port is out of the ephemeral range: a closed port 0 listener's
+	// port can be bound again by a parallel test.
+	closedEP := fmt.Sprintf("opc.tcp://127.0.0.1:%d", testport.TCP(t))
 	_, err = (&Dialer{}).Dial(context.Background(), closedEP)
 	var opErr *net.OpError
 	require.ErrorAs(t, err, &opErr)
