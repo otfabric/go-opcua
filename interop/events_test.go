@@ -70,7 +70,7 @@ func startGoServerWithEvents(t *testing.T) (string, *server.Server) {
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	port := s.Port()
 	if port == 0 {
 		t.Fatal("server.Start: bound port is 0")
@@ -451,7 +451,7 @@ func startGoServerWithCustomEventType(t *testing.T) (string, *server.Server, *ua
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	port := s.Port()
 	if port == 0 {
 		t.Fatal("server.Start: bound port is 0")

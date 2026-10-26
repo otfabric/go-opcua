@@ -32,20 +32,20 @@ func TestWrite(t *testing.T) {
 	ctx := context.Background()
 
 	srv := NewPythonServer("rw_server.py")
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	c, err := opcua.NewClient(srv.Endpoint, srv.Opts...)
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)
 	require.NoError(t, err, "Connect failed")
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	for _, tt := range tests {
 		t.Run(tt.id.String(), func(t *testing.T) {
 			testWrite(t, ctx, c, tt.status, &ua.WriteRequest{
 				NodesToWrite: []*ua.WriteValue{
-					&ua.WriteValue{
+					{
 						NodeID:      tt.id,
 						AttributeID: ua.AttributeIDValue,
 						Value: &ua.DataValue{

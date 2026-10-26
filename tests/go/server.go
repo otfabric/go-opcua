@@ -56,29 +56,33 @@ func startServer() *server.Server {
 		log.Fatalf("Error creating server: %s", err)
 	}
 
-	root_ns, _ := s.Namespace(0)
-	obj_node := root_ns.Objects()
+	rootNS, _ := s.Namespace(0)
+	objNode := rootNS.Objects()
 
 	// Create a new node namespace.  You can add namespaces before or after starting the server.
 	nodeNS := server.NewNodeNameSpace(s, "NodeNamespace")
 	// add it to the server.
 	s.AddNamespace(nodeNS)
-	nns_obj := nodeNS.Objects()
+	nnsObj := nodeNS.Objects()
 	// add the reference for this namespace's root object folder to the server's root object folder
-	obj_node.AddRef(nns_obj, id.HasComponent, true)
+	objNode.AddRef(nnsObj, id.HasComponent, true)
 
 	// Create some nodes for it.
 	n := nodeNS.AddNewVariableStringNode("ro_bool", true)
-	n.SetAttribute(ua.AttributeIDUserAccessLevel, &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(byte(ua.AccessLevelTypeCurrentRead))})
-	nns_obj.AddRef(n, id.HasComponent, true)
+	if err := n.SetAttribute(ua.AttributeIDUserAccessLevel, &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(byte(ua.AccessLevelTypeCurrentRead))}); err != nil {
+		log.Fatalf("Error setting UserAccessLevel: %s", err)
+	}
+	nnsObj.AddRef(n, id.HasComponent, true)
 	n = nodeNS.AddNewVariableStringNode("rw_bool", true)
-	nns_obj.AddRef(n, id.HasComponent, true)
+	nnsObj.AddRef(n, id.HasComponent, true)
 
 	n = nodeNS.AddNewVariableStringNode("ro_int32", int32(5))
-	n.SetAttribute(ua.AttributeIDUserAccessLevel, &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(byte(ua.AccessLevelTypeCurrentRead))})
-	nns_obj.AddRef(n, id.HasComponent, true)
+	if err := n.SetAttribute(ua.AttributeIDUserAccessLevel, &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(byte(ua.AccessLevelTypeCurrentRead))}); err != nil {
+		log.Fatalf("Error setting UserAccessLevel: %s", err)
+	}
+	nnsObj.AddRef(n, id.HasComponent, true)
 	n = nodeNS.AddNewVariableStringNode("rw_int32", int32(5))
-	nns_obj.AddRef(n, id.HasComponent, true)
+	nnsObj.AddRef(n, id.HasComponent, true)
 
 	var3 := server.NewNode(
 		ua.NewStringNodeID(nodeNS.ID(), "NoPermVariable"), // you can use whatever node id you want here, whether it's numeric, string, guid, etc...
@@ -90,7 +94,7 @@ func startServer() *server.Server {
 		func() *ua.DataValue { return server.DataValueFromValue(int32(742)) },
 	)
 	nodeNS.AddNode(var3)
-	nns_obj.AddRef(var3, id.HasComponent, true)
+	nnsObj.AddRef(var3, id.HasComponent, true)
 
 	var4 := server.NewNode(
 		ua.NewStringNodeID(nodeNS.ID(), "ReadWriteVariable"), // you can use whatever node id you want here, whether it's numeric, string, guid, etc...
@@ -104,7 +108,7 @@ func startServer() *server.Server {
 		func() *ua.DataValue { return server.DataValueFromValue(12.34) },
 	)
 	nodeNS.AddNode(var4)
-	nns_obj.AddRef(var4, id.HasComponent, true)
+	nnsObj.AddRef(var4, id.HasComponent, true)
 
 	var5 := server.NewNode(
 		ua.NewStringNodeID(nodeNS.ID(), "ReadOnlyVariable"), // you can use whatever node id you want here, whether it's numeric, string, guid, etc...
@@ -118,7 +122,7 @@ func startServer() *server.Server {
 		func() *ua.DataValue { return server.DataValueFromValue(9.87) },
 	)
 	nodeNS.AddNode(var5)
-	nns_obj.AddRef(var5, id.HasComponent, true)
+	nnsObj.AddRef(var5, id.HasComponent, true)
 
 	var6 := server.NewNode(
 		ua.NewStringNodeID(nodeNS.ID(), "NoAccessVariable"), // you can use whatever node id you want here, whether it's numeric, string, guid, etc...
@@ -132,15 +136,15 @@ func startServer() *server.Server {
 		func() *ua.DataValue { return server.DataValueFromValue(55.43) },
 	)
 	nodeNS.AddNode(var6)
-	nns_obj.AddRef(var6, id.HasComponent, true)
+	nnsObj.AddRef(var6, id.HasComponent, true)
 
 	// Create a new node namespace.  You can add namespaces before or after starting the server.
 	otfabricNS := server.NewNodeNameSpace(s, "http://otfabric.com/")
 	// add it to the server.
 	s.AddNamespace(otfabricNS)
-	nns_obj = otfabricNS.Objects()
+	nnsObj = otfabricNS.Objects()
 	// add the reference for this namespace's root object folder to the server's root object folder
-	obj_node.AddRef(nns_obj, id.HasComponent, true)
+	objNode.AddRef(nnsObj, id.HasComponent, true)
 
 	// Create a new node namespace.  You can add namespaces before or after starting the server.
 	// Start the server

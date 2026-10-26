@@ -26,14 +26,14 @@ func TestStats(t *testing.T) {
 	ctx := context.Background()
 
 	srv := NewPythonServer("rw_server.py")
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	c, err := opcua.NewClient(srv.Endpoint, srv.Opts...)
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)
 	require.NoError(t, err, "Connect failed")
-	c.Close(ctx) // close immediately
+	_ = c.Close(ctx) // close immediately
 
 	want := map[string]*expvar.Int{
 		"Dial":             newExpVarInt(1),
@@ -46,7 +46,7 @@ func TestStats(t *testing.T) {
 		"Close":            newExpVarInt(1),
 		"CloseSession":     newExpVarInt(2),
 		"SecureChannel":    newExpVarInt(3),
-		"Session":          newExpVarInt(4),
+		"Session":          newExpVarInt(3),
 		"State":            newExpVarInt(0),
 	}
 

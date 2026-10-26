@@ -5,8 +5,6 @@ package uasc
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/x509"
-	"encoding/pem"
 	"fmt"
 	"io"
 	"math"
@@ -15,7 +13,6 @@ import (
 
 	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/id"
-	uatest "github.com/otfabric/go-opcua/tests/python"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/otfabric/go-opcua/uapolicy"
@@ -159,19 +156,11 @@ func TestSignAndEncryptVerifyAndDecrypt(t *testing.T) {
 	buildSecPolicy := func(bits int, uri string) *uapolicy.EncryptionAlgorithm {
 		t.Helper()
 
-		certPEM, keyPEM, err := uatest.GenerateCert("localhost", bits, 24*time.Hour)
+		// The local and the remote side share one key pair.
+		pk, err := rsa.GenerateKey(rand.Reader, bits)
 		require.NoError(t, err)
 
-		block, _ := pem.Decode(keyPEM)
-		pk, err := x509.ParsePKCS1PrivateKey(block.Bytes)
-		require.NoError(t, err)
-
-		certblock, _ := pem.Decode(certPEM)
-		remoteX509Cert, err := x509.ParseCertificate(certblock.Bytes)
-		require.NoError(t, err)
-
-		remoteKey := remoteX509Cert.PublicKey.(*rsa.PublicKey)
-		alg, _ := uapolicy.Asymmetric(uri, pk, remoteKey)
+		alg, _ := uapolicy.Asymmetric(uri, pk, &pk.PublicKey)
 		return alg
 	}
 

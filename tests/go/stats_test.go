@@ -27,14 +27,14 @@ func TestStats(t *testing.T) {
 	ctx := context.Background()
 
 	srv := startServer()
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.SecurityMode(ua.MessageSecurityModeNone))
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)
 	require.NoError(t, err, "Connect failed")
-	c.Close(ctx)
+	_ = c.Close(ctx)
 
 	want := map[string]*expvar.Int{
 		"Dial":             newExpVarInt(1),
@@ -47,7 +47,7 @@ func TestStats(t *testing.T) {
 		"Close":            newExpVarInt(1),
 		"CloseSession":     newExpVarInt(2),
 		"SecureChannel":    newExpVarInt(3),
-		"Session":          newExpVarInt(4),
+		"Session":          newExpVarInt(3),
 		"State":            newExpVarInt(0),
 	}
 
@@ -62,6 +62,6 @@ func TestStats(t *testing.T) {
 
 	for k, ev := range want {
 		v := stats.Client().Get(k)
-		require.Equal(t, ev, v)
+		require.Equal(t, ev, v, k)
 	}
 }

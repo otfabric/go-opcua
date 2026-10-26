@@ -34,3 +34,8 @@ issues:
 
 run:
   timeout: 5m
+  # Lint the code behind build tags too: the interop suite (Docker peers)
+  # and the integration tests (tests/go, tests/python) only build with them.
+  build-tags:
+    - interop
+    - integration

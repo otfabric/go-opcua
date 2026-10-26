@@ -27,14 +27,14 @@ func TestAutoReconnection(t *testing.T) {
 	ctx := context.Background()
 
 	srv := NewPythonServer("reconnection_server.py")
-	defer srv.Close()
+	defer func() { _ = srv.Close() }()
 
 	c, err := opcua.NewClient(srv.Endpoint, srv.Opts...)
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)
 	require.NoError(t, err, "Connect failed")
-	defer c.Close(ctx)
+	defer func() { _ = c.Close(ctx) }()
 
 	m, err := monitor.NewNodeMonitor(c)
 	require.NoError(t, err, "NewNodeMonitor failed")
@@ -91,7 +91,7 @@ func TestAutoReconnection(t *testing.T) {
 		currentTimeNodeID,
 	)
 	require.NoError(t, err, "ChanSubscribe failed")
-	defer sub.Unsubscribe(ctx)
+	defer func() { _ = sub.Unsubscribe(ctx) }()
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -101,9 +101,10 @@ func TestAutoReconnection(t *testing.T) {
 
 			downC := make(chan struct{}, 1)
 			dTimeout := time.NewTimer(disconnectTimeout)
-			go c.Call(ctx, tt.req)
+			go func() { _, _ = c.Call(ctx, tt.req) }()
 
 			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 			go func() {
 				// make sure the connection is down
 				for {
@@ -116,7 +117,7 @@ func TestAutoReconnection(t *testing.T) {
 							return
 						}
 						// HACK: scanning the state of client to determine if the connection has failed
-						// is not good pratice, as with powerful machine the reconnection could be faster
+						// is not good practice, as with powerful machine the reconnection could be faster
 						// then 1 ms and it will not detect the change, a solution could be a state event
 						// or a reconnection counter
 						time.Sleep(1 * time.Millisecond)

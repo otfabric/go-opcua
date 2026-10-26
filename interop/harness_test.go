@@ -1010,7 +1010,7 @@ func startGoServerWithOptions(t *testing.T, extra ...server.Option) (string, *se
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("server.Start: %v", err)
 	}
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	port := s.Port()
 	if port == 0 {
 		t.Fatal("server.Start: bound port is 0")
@@ -1171,7 +1171,7 @@ func dialClient(t *testing.T, endpoint string) *opcua.Client {
 	t.Cleanup(func() {
 		ctx2, cancel2 := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel2()
-		c.Close(ctx2)
+		_ = c.Close(ctx2)
 	})
 
 	return c
@@ -1727,7 +1727,7 @@ func startSecureGoServer(t *testing.T) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
 		cancel()
-		s.Close()
+		_ = s.Close()
 	})
 
 	if err := s.Start(ctx); err != nil {
@@ -1743,7 +1743,7 @@ func startSecureGoServer(t *testing.T) string {
 	deadline := time.Now().Add(serverReadyTimeout)
 	for time.Now().Before(deadline) {
 		if conn, err := net.Dial("tcp", addr); err == nil {
-			conn.Close()
+			_ = conn.Close()
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
@@ -1909,7 +1909,7 @@ func startTrustGoServer(t *testing.T) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(func() {
 		cancel()
-		s.Close()
+		_ = s.Close()
 	})
 
 	if err := s.Start(ctx); err != nil {
@@ -1925,7 +1925,7 @@ func startTrustGoServer(t *testing.T) string {
 	deadline := time.Now().Add(serverReadyTimeout)
 	for time.Now().Before(deadline) {
 		if conn, err := net.Dial("tcp", addr); err == nil {
-			conn.Close()
+			_ = conn.Close()
 			break
 		}
 		time.Sleep(100 * time.Millisecond)

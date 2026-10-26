@@ -209,5 +209,5 @@ func tsMeaningful(ts *string) bool {
 		return false
 	}
 	s := *ts
-	return !(len(s) >= 10 && s[:10] == "1601-01-01")
+	return len(s) < 10 || s[:10] != "1601-01-01"
 }
