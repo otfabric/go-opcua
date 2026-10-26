@@ -44,9 +44,10 @@ func warmNS0Cache() {
 // and cached; subsequent calls copy the cached node references into a fresh
 // NodeNameSpace, making each call roughly 100× faster than a cold New().
 //
-// Tests MUST NOT mutate ns-0 nodes (the OPC UA base nodeset); they should
-// add their own namespace via addTestNamespace.  Write-service tests that
-// go through the server handler already do this.
+// Each server gets its own copies of the ns-0 nodes: adding a reference to
+// a node also records its inverse on the target (Node.AddRef), which is
+// often a ns-0 type or folder, so shared nodes would carry the references
+// of every other test.
 func newTestServer() *Server {
 	warmNS0Cache()
 
@@ -66,9 +67,17 @@ func newTestServer() *Server {
 		m:              make(map[string]*Node, len(ns0CacheMap)),
 		nodeidSequence: ns0CacheSeq,
 	}
-	copy(ns0.nodes, ns0CacheNodes)
+	clones := make(map[*Node]*Node, len(ns0CacheNodes))
+	for i, n := range ns0CacheNodes {
+		clones[n] = cloneTestNode(n, ns0)
+		ns0.nodes[i] = clones[n]
+	}
 	for k, v := range ns0CacheMap {
-		ns0.m[k] = v
+		c, ok := clones[v]
+		if !ok {
+			c = cloneTestNode(v, ns0)
+		}
+		ns0.m[k] = c
 	}
 	s.namespaces = []NameSpace{ns0}
 	s.publishNamespaces()
@@ -131,4 +140,25 @@ func addTestNamespace(s *Server) (*NodeNameSpace, *Node) {
 
 func reqHeader() *ua.RequestHeader {
 	return &ua.RequestHeader{RequestHandle: 1}
+}
+
+// cloneTestNode copies n for the namespace ns: its own attribute map and
+// reference slice, sharing the immutable DataValues and ReferenceDescriptions.
+func cloneTestNode(n *Node, ns NameSpace) *Node {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	attr := make(Attributes, len(n.attr))
+	for k, v := range n.attr {
+		attr[k] = v
+	}
+	return &Node{
+		id:              n.id,
+		attr:            attr,
+		refs:            append(References(nil), n.refs...),
+		val:             n.val,
+		typeDef:         n.typeDef,
+		typeDefKnown:    n.typeDefKnown,
+		rolePermissions: n.rolePermissions,
+		ns:              ns,
+	}
 }
