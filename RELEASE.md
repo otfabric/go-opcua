@@ -7,7 +7,7 @@
 
 ### Summary
 
-Secure client defaults. A client runs without message security only when asked to by name, and trusts only the certificates it is given. **This release breaks callers that relied on the old defaults.** It is a minor version by the maintainer's decision: the project has no external users yet, and a major version would change the import path to `/v2` (otfabric/engineering ADR-0010).
+Secure client defaults. A client runs without message security only when asked to by name, and trusts only the certificates it is given. **This release breaks callers that relied on the old defaults.** Go modules in this organisation stay on v0 or v1, so it ships as a minor version (otfabric/engineering ADR-0010).
 
 ### Breaking
 
