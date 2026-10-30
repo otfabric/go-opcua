@@ -964,7 +964,7 @@ func TestOpen62541Server_UntrustedCert_Rejected(t *testing.T) {
 	// fallback path which is now a hard failure.
 	_ = serverCert
 
-	c, err := opcua.NewClient(h.endpoint,
+	c, err := opcua.NewClient(h.endpoint, opcua.InsecureNoSecurity(),
 		opcua.SecurityFromEndpoint(chosen, ua.UserTokenTypeAnonymous),
 		opcua.CertificateFile(untrustedCert),
 		opcua.PrivateKeyFile(untrustedKey),
