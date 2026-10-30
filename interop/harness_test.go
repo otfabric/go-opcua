@@ -1229,7 +1229,7 @@ func dialUsernameClient(t *testing.T, endpoint, user, pass string) (*opcua.Clien
 	}
 	chosen.EndpointURL = endpoint
 
-	c, err := opcua.NewClient(endpoint,
+	c, err := opcua.NewClient(endpoint, opcua.InsecureNoSecurity(),
 		opcua.SecurityFromEndpoint(chosen, ua.UserTokenTypeUserName),
 		opcua.AuthUsername(user, pass),
 	)
