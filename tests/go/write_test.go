@@ -38,7 +38,7 @@ func TestWrite(t *testing.T) {
 
 	time.Sleep(2 * time.Second)
 
-	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.SecurityMode(ua.MessageSecurityModeNone))
+	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.InsecureNoSecurity())
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)

@@ -50,7 +50,7 @@ func TestMatchReverseHello(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = l.Close() }()
 
-	c, err := NewClient("opc.tcp://server:4840", ReverseConnectListener(l, ReverseServerURI("urn:server"), nil))
+	c, err := NewClient("opc.tcp://server:4840", InsecureNoSecurity(), ReverseConnectListener(l, ReverseServerURI("urn:server"), nil))
 	require.NoError(t, err)
 	require.NoError(t, c.matchReverseHello(&uacp.ReverseHello{ServerURI: "urn:server", EndpointURL: "opc.tcp://SERVER:4840/"}))
 	// A server that announces no endpoint is accepted: the client uses its own.
@@ -64,7 +64,7 @@ func TestMatchReverseHello(t *testing.T) {
 	require.ErrorIs(t, err, ua.StatusBadTCPEndpointURLInvalid)
 
 	// Without expectations anything goes.
-	c, err = NewClient("", ReverseConnectListener(l))
+	c, err = NewClient("", InsecureNoSecurity(), ReverseConnectListener(l))
 	require.NoError(t, err)
 	require.NoError(t, c.matchReverseHello(&uacp.ReverseHello{ServerURI: "urn:any", EndpointURL: "opc.tcp://any:1"}))
 	require.Empty(t, c.endpoint())
@@ -97,7 +97,7 @@ func TestCheckReverseServerCertificate(t *testing.T) {
 	other := &uacp.ReverseHello{ServerURI: "urn:impostor"}
 
 	newClient := func(mode ua.MessageSecurityMode, der []byte, opts ...Option) *Client {
-		c, err := NewClient("", append([]Option{ReverseConnect("127.0.0.1:0")}, opts...)...)
+		c, err := NewClient("", append([]Option{InsecureNoSecurity()}, append([]Option{ReverseConnect("127.0.0.1:0")}, opts...)...)...)
 		require.NoError(t, err)
 		c.cfg.sechan.SecurityMode = mode
 		c.cfg.sechan.RemoteCertificate = der
@@ -107,7 +107,7 @@ func TestCheckReverseServerCertificate(t *testing.T) {
 	// Without security there is no certificate to compare with.
 	require.NoError(t, newClient(ua.MessageSecurityModeNone, cert).checkReverseServerCertificate(other))
 	require.NoError(t, newClient(ua.MessageSecurityModeInvalid, cert).checkReverseServerCertificate(other))
-	require.NoError(t, newClient(ua.MessageSecurityModeSign, nil).checkReverseServerCertificate(other))
+	require.ErrorIs(t, newClient(ua.MessageSecurityModeSign, nil).checkReverseServerCertificate(other), errors.ErrNoCertificate)
 
 	for _, mode := range []ua.MessageSecurityMode{ua.MessageSecurityModeSign, ua.MessageSecurityModeSignAndEncrypt} {
 		c := newClient(mode, cert)
@@ -138,7 +138,7 @@ func TestReverseOptions(t *testing.T) {
 	ctx := context.Background()
 
 	// A client that connects the usual way has none.
-	c, err := NewClient("opc.tcp://server:4840")
+	c, err := NewClient("opc.tcp://server:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	opts, err := c.reverseOptions(ctx)
 	require.NoError(t, err)
@@ -148,7 +148,7 @@ func TestReverseOptions(t *testing.T) {
 	l, err := uacp.ListenReverse(ctx, "127.0.0.1:0", nil)
 	require.NoError(t, err)
 	defer func() { _ = l.Close() }()
-	c, err = NewClient("opc.tcp://server:4840", ReverseConnectListener(l, ReverseServerURI("urn:server")), DialTimeout(7*time.Second))
+	c, err = NewClient("opc.tcp://server:4840", InsecureNoSecurity(), ReverseConnectListener(l, ReverseServerURI("urn:server")), DialTimeout(7*time.Second))
 	require.NoError(t, err)
 	opts, err = c.reverseOptions(ctx)
 	require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestReverseOptions(t *testing.T) {
 	require.Equal(t, 7*time.Second, cfg.dialer.Dialer.Timeout)
 
 	// A custom dialer without a net.Dialer has no timeout to pass on.
-	c, err = NewClient("", ReverseConnectListener(l), Dialer(&uacp.Dialer{}))
+	c, err = NewClient("", InsecureNoSecurity(), ReverseConnectListener(l), Dialer(&uacp.Dialer{}))
 	require.NoError(t, err)
 	opts, err = c.reverseOptions(ctx)
 	require.NoError(t, err)
@@ -169,7 +169,7 @@ func TestReverseOptions(t *testing.T) {
 func TestReverseOwnListener(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c, err := NewClient("", ReverseConnect("127.0.0.1:0"))
+	c, err := NewClient("", InsecureNoSecurity(), ReverseConnect("127.0.0.1:0"))
 	require.NoError(t, err)
 
 	// The listener is opened on first use and then kept.
@@ -188,7 +188,7 @@ func TestReverseOwnListener(t *testing.T) {
 	require.Same(t, l, cfg.reverse.listener)
 
 	// A server the client does not expect is turned away at the listener.
-	strict, err := NewClient("", ReverseConnect("127.0.0.1:0", ReverseServerURI("urn:expected")))
+	strict, err := NewClient("", InsecureNoSecurity(), ReverseConnect("127.0.0.1:0", ReverseServerURI("urn:expected")))
 	require.NoError(t, err)
 	sl, err := strict.reverseListener(ctx)
 	require.NoError(t, err)
@@ -223,7 +223,7 @@ func TestReverseOwnListener(t *testing.T) {
 	busy, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	defer func() { _ = busy.Close() }()
-	c, err = NewClient("", ReverseConnect(busy.Addr().String()))
+	c, err = NewClient("", InsecureNoSecurity(), ReverseConnect(busy.Addr().String()))
 	require.NoError(t, err)
 	require.ErrorContains(t, c.Dial(ctx), "reverse connect")
 }

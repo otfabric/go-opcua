@@ -401,7 +401,7 @@ func (e *env) namespace() *server.NodeNameSpace {
 // clientOptions returns the options for a client that talks through the proxy.
 func (e *env) clientOptions(rec *stateRecorder, extra ...opcua.Option) []opcua.Option {
 	opts := []opcua.Option{
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(10 * time.Second),
 		// Fault-free tests must never fail because the machine is slow, so
 		// the default request timeout only guards against a hang. Scenarios
@@ -431,7 +431,7 @@ func (e *env) connect(rec *stateRecorder, extra ...opcua.Option) *opcua.Client {
 }
 
 func (e *env) dial(rec *stateRecorder, extra ...opcua.Option) (*opcua.Client, error) {
-	c, err := opcua.NewClient(e.url(), e.clientOptions(rec, extra...)...)
+	c, err := opcua.NewClient(e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, e.clientOptions(rec, extra...)...)...)
 	if err != nil {
 		return nil, err
 	}

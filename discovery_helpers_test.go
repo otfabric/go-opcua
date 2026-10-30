@@ -59,7 +59,7 @@ func TestDiscoveryURL(t *testing.T) {
 // discovery services need.
 func dialOnly(t *testing.T, url string) *opcua.Client {
 	t.Helper()
-	c, err := opcua.NewClient(url, opcua.AutoReconnect(false), opcua.DialTimeout(30*time.Second), opcua.RequestTimeout(30*time.Second))
+	c, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.AutoReconnect(false), opcua.DialTimeout(30*time.Second), opcua.RequestTimeout(30*time.Second))
 	require.NoError(t, err)
 	require.NoError(t, c.Dial(context.Background()))
 	t.Cleanup(func() { _ = c.Close(context.Background()) })

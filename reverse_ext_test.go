@@ -10,7 +10,6 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
-	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 	"github.com/stretchr/testify/require"
 )
@@ -37,7 +36,7 @@ func TestReverseConnectRefetchEndpoints(t *testing.T) {
 	// The client knows no address of the server at all.
 	c, err := opcua.NewClient("",
 		opcua.ReverseConnectListener(l, opcua.ReverseServerURI(appURI)),
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30*time.Second),
 		opcua.AutoReconnect(false),
 	)

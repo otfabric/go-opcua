@@ -118,7 +118,9 @@ import (
 func main() {
     ctx := context.Background()
 
-    c, err := opcua.NewClient("opc.tcp://localhost:4840")
+    c, err := opcua.NewClient("opc.tcp://localhost:4840",
+        opcua.InsecureNoSecurity(), // a local test server; see docs/security.md
+    )
     if err != nil {
         log.Fatal(err)
     }

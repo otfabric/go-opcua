@@ -862,7 +862,7 @@ func TestNodeOpcuaServer_ReverseConnect(t *testing.T) {
 
 		ctx, cancel := context.WithTimeout(context.Background(), 2*reverseDialTimeout)
 		defer cancel()
-		c, err := opcua.NewClient("",
+		c, err := opcua.NewClient("", opcua.InsecureNoSecurity(),
 			opcua.SecurityModeString("None"),
 			opcua.AuthAnonymous(),
 			opcua.DialTimeout(reverseDialTimeout),
@@ -1009,13 +1009,13 @@ func TestNodeOpcuaServer_ReverseConnect_Secure(t *testing.T) {
 			t.Fatalf("the server does not offer Basic256Sha256/SignAndEncrypt over the reverse connection (%d endpoints)", len(eps))
 		}
 		pki := pkiDir(t)
-		c, err := opcua.NewClient("", append([]opcua.Option{
+		c, err := opcua.NewClient("", append([]opcua.Option{opcua.InsecureNoSecurity()}, append([]opcua.Option{
 			opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
 			opcua.CertificateFile(filepath.Join(pki, "consumer", "cert.crt")),
 			opcua.PrivateKeyFile(filepath.Join(pki, "consumer", "cert.key")),
 			opcua.TrustedCertificates(loadCACert(t, filepath.Join(pki, "ca", "ca.crt"))),
 			opcua.AuthAnonymous(),
-		}, base...)...)
+		}, base...)...)...)
 		if err != nil {
 			t.Fatalf("NewClient: %v", err)
 		}

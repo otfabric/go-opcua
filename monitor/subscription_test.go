@@ -13,7 +13,7 @@ import (
 )
 
 func TestNewNodeMonitor(t *testing.T) {
-	c, err := opcua.NewClient("opc.tcp://example.com:4840")
+	c, err := opcua.NewClient("opc.tcp://example.com:4840", opcua.InsecureNoSecurity())
 	require.NoError(t, err)
 
 	m, err := NewNodeMonitor(c)
@@ -22,7 +22,7 @@ func TestNewNodeMonitor(t *testing.T) {
 }
 
 func TestNodeMonitor_SetErrorHandler(t *testing.T) {
-	c, err := opcua.NewClient("opc.tcp://example.com:4840")
+	c, err := opcua.NewClient("opc.tcp://example.com:4840", opcua.InsecureNoSecurity())
 	require.NoError(t, err)
 
 	m, err := NewNodeMonitor(c)

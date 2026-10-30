@@ -14,6 +14,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -37,6 +38,10 @@ const (
 
 // DefaultClientConfig returns the default configuration for a client
 // to establish a secure channel.
+//
+// It names no security policy, which [NewClient] refuses: a client chooses
+// its security with [SecurityFromEndpoint], or with [SecurityPolicy] and
+// [SecurityMode], or opts out of it with [InsecureNoSecurity].
 func DefaultClientConfig() *uasc.Config {
 	return &uasc.Config{
 		SecurityPolicyURI: ua.SecurityPolicyURINone,
@@ -70,6 +75,7 @@ type Config struct {
 	sechan              *uasc.Config
 	session             *uasc.SessionConfig
 	logger              *slog.Logger
+	allowNoSecurity     bool
 	stateCh             chan<- ConnState
 	stateFunc           func(ConnState)
 	recoveryFunc        func(SubscriptionRecoveryEvent)
@@ -815,10 +821,56 @@ func InsecureSkipVerify() Option {
 	}
 }
 
-// TrustedCertificates adds CA or self-signed certificates to the trust pool
-// used to validate the server certificate. The provided certificates are
-// merged with the system CA pool. If the system pool is unavailable, only
-// the provided certificates are trusted.
+// InsecureNoSecurity connects without message security: security policy None
+// and security mode None. Messages are neither signed nor encrypted and the
+// server is not authenticated, so anyone on the network path can read and
+// change them, and any password sent is exposed.
+//
+// A client refuses to run this way unless this option is given
+// (errors.ErrInsecureNotAllowed), also when policy None comes from
+// [SecurityPolicy], [SecurityMode] or an endpoint given to
+// [SecurityFromEndpoint]. Not needed for the discovery services
+// [GetEndpoints], [FindServers] and [FindServersOnNetwork], which the
+// specification defines without security, or for transports secured by TLS
+// (opc.https, opc.wss).
+func InsecureNoSecurity() Option {
+	return func(cfg *Config) error {
+		cfg.sechan.SecurityPolicyURI = ua.SecurityPolicyURINone
+		cfg.sechan.SecurityMode = ua.MessageSecurityModeNone
+		cfg.allowNoSecurity = true
+		return nil
+	}
+}
+
+// discoveryNoSecurity permits a channel without security for a discovery
+// service, without changing the configured security.
+func discoveryNoSecurity() Option {
+	return func(cfg *Config) error {
+		cfg.allowNoSecurity = true
+		return nil
+	}
+}
+
+// checkMessageSecurity refuses a connection without message security unless
+// it was asked for. TLS transports secure the connection themselves and use
+// security policy None by definition (Part 6 §7.4, §7.5).
+func (cfg *Config) checkMessageSecurity(endpoint string) error {
+	if cfg.allowNoSecurity || cfg.sechan.SecurityPolicyURI != ua.SecurityPolicyURINone ||
+		cfg.sechan.SecurityMode != ua.MessageSecurityModeNone {
+		return nil
+	}
+	for _, scheme := range []string{"opc.https://", "https://", "opc.wss://", "wss://"} {
+		if len(endpoint) >= len(scheme) && strings.EqualFold(endpoint[:len(scheme)], scheme) {
+			return nil
+		}
+	}
+	return errors.ErrInsecureNotAllowed
+}
+
+// TrustedCertificates adds the CA or self-signed certificates a server
+// certificate is validated against: the application trust list (Part 4
+// §6.1.3). Nothing else is trusted, the system CA pool included, so a client
+// using message security needs this option or [InsecureSkipVerify].
 //
 // Use this to trust self-signed server certificates or private CAs without
 // disabling all validation via InsecureSkipVerify. Parse certificates with
@@ -839,7 +891,7 @@ func TrustedCertificates(certs ...*x509.Certificate) Option {
 
 // validateServerCertificate validates a DER-encoded server certificate
 // against the configured trust settings. It checks:
-//   - Trust chain (system CA pool + user-supplied trusted certificates)
+//   - Trust chain (the certificates given to TrustedCertificates)
 //   - Expiration / not-yet-valid
 //   - Key usage (DigitalSignature; KeyEncipherment also for SignAndEncrypt)
 //   - ApplicationURI binding: the certificate's URI SAN must match the
@@ -857,7 +909,7 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 	}
 
 	if len(der) == 0 {
-		return nil
+		return fmt.Errorf("%w: the server presented no certificate", errors.ErrNoCertificate)
 	}
 
 	// The server may present its certificate as a chain of leaf plus
@@ -869,18 +921,16 @@ func (cfg *Config) validateServerCertificate(der []byte, securityMode ua.Message
 		return fmt.Errorf("opcua: server certificate validation failed: %w", err)
 	}
 	if len(certs) == 0 {
-		return nil
+		return fmt.Errorf("%w: the server presented no certificate", errors.ErrNoCertificate)
 	}
 	cert := certs[0]
 
-	// Build verification options.
-	roots, err := x509.SystemCertPool()
-	if err != nil {
-		// System pool unavailable (e.g. some stripped containers).
-		roots = x509.NewCertPool()
+	// The roots are the trust list only: the system CA pool serves web PKI
+	// names, not OPC UA application instance certificates.
+	if len(cfg.certValidator.trustedCertsList) == 0 {
+		return fmt.Errorf("opcua: server certificate validation failed: %w: no trusted certificates configured, see TrustedCertificates", errors.ErrInvalidCertificate)
 	}
-	// Merge user-supplied trusted certs into root pool so self-signed
-	// server certificates and private CAs are accepted.
+	roots := x509.NewCertPool()
 	for _, c := range cfg.certValidator.trustedCertsList {
 		roots.AddCert(c)
 	}

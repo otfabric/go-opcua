@@ -9,7 +9,12 @@
 //
 // Create a client and connect:
 //
-//	c, err := opcua.NewClient("opc.tcp://localhost:4840")
+//	c, err := opcua.NewClient("opc.tcp://localhost:4840",
+//	    opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
+//	    opcua.CertificateFile("client-cert.pem"),
+//	    opcua.PrivateKeyFile("client-key.pem"),
+//	    opcua.TrustedCertificates(serverCA),
+//	)
 //	if err != nil {
 //	    log.Fatal(err)
 //	}

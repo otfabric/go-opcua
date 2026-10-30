@@ -32,7 +32,7 @@ type waitingClient struct {
 func startWaiting(t *testing.T, name, endpoint string, opts ...opcua.Option) *waitingClient {
 	t.Helper()
 	w := &waitingClient{name: name, rec: chaoskit.NewStateRecorder(name, false), err: make(chan error, 1)}
-	c, err := opcua.NewClient(endpoint, append(opts, opcua.AutoReconnect(false), opcua.WithConnStateHandler(w.rec.Handle))...)
+	c, err := opcua.NewClient(endpoint, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(opts, opcua.AutoReconnect(false), opcua.WithConnStateHandler(w.rec.Handle))...)...)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -126,7 +126,7 @@ func TestReverseListenerClosedWhileWaiting(t *testing.T) {
 		startWaiting(t, "waits for stuck-b", stuckB.url(),
 			stuckB.clientOptions(nil, stuckB.reverseOption(l), opcua.DialTimeout(60*time.Second))...),
 		startWaiting(t, "waits for nobody", "",
-			opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.DialTimeout(0),
+			opcua.InsecureNoSecurity(), opcua.DialTimeout(0),
 			opcua.ReverseConnectListener(l, opcua.ReverseServerURI("urn:otfabric:chaos:reverse:nobody"))),
 	}
 
@@ -180,7 +180,7 @@ func TestReverseListenerClosedWhileWaiting(t *testing.T) {
 	}
 	// So does a Connect that starts now.
 	late := startWaiting(t, "comes late", "",
-		opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.DialTimeout(0), opcua.ReverseConnectListener(l))
+		opcua.InsecureNoSecurity(), opcua.DialTimeout(0), opcua.ReverseConnectListener(l))
 	select {
 	case err := <-late.err:
 		if !errors.Is(err, net.ErrClosed) {
@@ -317,9 +317,9 @@ func TestChaosReverseListenerCloseRace(t *testing.T) {
 			go func() {
 				defer clients.Done()
 				for {
-					c, err := opcua.NewClient("", n.clientOptions(nil, n.reverseOption(l),
+					c, err := opcua.NewClient("", append([]opcua.Option{opcua.InsecureNoSecurity()}, n.clientOptions(nil, n.reverseOption(l),
 						opcua.AutoReconnect(false), opcua.DialTimeout(time.Second), opcua.RequestTimeout(3*time.Second),
-						opcua.SessionTimeout(2*time.Second))...)
+						opcua.SessionTimeout(2*time.Second))...)...)
 					if err != nil {
 						sink.Addf("%s: %v", n.name, err)
 						return

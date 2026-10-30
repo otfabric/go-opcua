@@ -273,7 +273,7 @@ func (c *Client) checkReverseServerCertificate(rhe *uacp.ReverseHello) error {
 	if sc.SecurityMode == ua.MessageSecurityModeNone || sc.SecurityMode == ua.MessageSecurityModeInvalid {
 		return nil
 	}
-	if c.cfg.certValidator.insecureSkipVerify || len(sc.RemoteCertificate) == 0 {
+	if c.cfg.certValidator.insecureSkipVerify {
 		return nil
 	}
 	certs, err := uapolicy.ParseCertificates(sc.RemoteCertificate)
@@ -281,7 +281,7 @@ func (c *Client) checkReverseServerCertificate(rhe *uacp.ReverseHello) error {
 		return fmt.Errorf("opcua: reverse connect: server certificate: %w", err)
 	}
 	if len(certs) == 0 {
-		return nil
+		return fmt.Errorf("%w: reverse connect: the server certificate is unknown", errors.ErrNoCertificate)
 	}
 	for _, u := range certs[0].URIs {
 		if u.String() == rhe.ServerURI {

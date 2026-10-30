@@ -86,7 +86,7 @@ func TestConcurrentSubscriptions(t *testing.T) {
 			ctx := context.Background()
 
 			c, err := opcua.NewClient(url,
-				opcua.SecurityMode(ua.MessageSecurityModeNone),
+				opcua.InsecureNoSecurity(),
 				opcua.Dialer(&uacp.Dialer{
 					Dialer: &net.Dialer{},
 					ClientACK: &uacp.Acknowledge{

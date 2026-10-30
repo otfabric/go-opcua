@@ -525,13 +525,13 @@ func TestSecurity_IdentityReachesRoleMapper(t *testing.T) {
 	})
 
 	t.Run("UserNameRejected", func(t *testing.T) {
-		c, err := opcua.NewClient(url, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName), opcua.AuthUsername("bob", "wrong"), opcua.AutoReconnect(false))
+		c, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName), opcua.AuthUsername("bob", "wrong"), opcua.AutoReconnect(false))
 		require.NoError(t, err)
 		require.ErrorIs(t, c.Connect(context.Background()), ua.StatusBadUserAccessDenied)
 	})
 
 	t.Run("IssuedTokenRejected", func(t *testing.T) {
-		c, err := opcua.NewClient(url, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeIssuedToken), opcua.AuthIssuedToken([]byte("forged")), opcua.AutoReconnect(false))
+		c, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeIssuedToken), opcua.AuthIssuedToken([]byte("forged")), opcua.AutoReconnect(false))
 		require.NoError(t, err)
 		require.ErrorIs(t, c.Connect(context.Background()), ua.StatusBadIdentityTokenRejected)
 	})
@@ -713,7 +713,7 @@ func TestSecurity_NoValidatorRejects(t *testing.T) {
 		{"IssuedToken", []opcua.Option{opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeIssuedToken), opcua.AuthIssuedToken([]byte("any-token"))}, ua.StatusBadIdentityTokenRejected},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			c, err := opcua.NewClient(url, append(tc.opts, opcua.AutoReconnect(false))...)
+			c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(tc.opts, opcua.AutoReconnect(false))...)...)
 			require.NoError(t, err)
 			require.ErrorIs(t, c.Connect(context.Background()), tc.want)
 		})

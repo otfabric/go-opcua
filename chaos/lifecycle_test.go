@@ -32,7 +32,7 @@ func TestParallelConnectClose(t *testing.T) {
 		// A session whose activation is cut short by Close cannot be closed
 		// by the client any more (its channel is gone). The server reclaims
 		// it when its timeout expires, so keep that short.
-		c, err := opcua.NewClient(e.url(), e.clientOptions(rec, opcua.SessionTimeout(2*time.Second))...)
+		c, err := opcua.NewClient(e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, e.clientOptions(rec, opcua.SessionTimeout(2*time.Second))...)...)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -31,13 +31,13 @@ func TestUnsetUserIdentityTokenConnect(t *testing.T) {
 	}
 
 	opts := []opcua.Option{
-		opcua.SecurityPolicy("None"),
+		opcua.InsecureNoSecurity(),
 		opcua.SecurityModeString("None"),
 		opcua.AuthUsername("user", "pass"),
 		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName),
 	}
 
-	c, err := opcua.NewClient(ep.EndpointURL, opts...)
+	c, err := opcua.NewClient(ep.EndpointURL, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		t.Fatal(err)
 	}

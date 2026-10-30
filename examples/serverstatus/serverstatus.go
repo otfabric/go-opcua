@@ -19,7 +19,6 @@ import (
 	"os"
 
 	"github.com/otfabric/go-opcua"
-	"github.com/otfabric/go-opcua/ua"
 )
 
 func main() {
@@ -38,7 +37,7 @@ func main() {
 
 	ctx := context.Background()
 
-	c, err := opcua.NewClient(*endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+	c, err := opcua.NewClient(*endpoint, opcua.InsecureNoSecurity())
 	if err != nil {
 		log.Fatal(err)
 	}

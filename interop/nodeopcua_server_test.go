@@ -933,7 +933,7 @@ func TestNodeOpcuaServer_UntrustedCert_Rejected(t *testing.T) {
 	}
 	chosen.EndpointURL = h.endpoint
 
-	c, err := opcua.NewClient(h.endpoint,
+	c, err := opcua.NewClient(h.endpoint, opcua.InsecureNoSecurity(),
 		opcua.SecurityFromEndpoint(chosen, ua.UserTokenTypeAnonymous),
 		opcua.CertificateFile(untrustedCert),
 		opcua.PrivateKeyFile(untrustedKey),

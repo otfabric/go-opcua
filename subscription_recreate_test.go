@@ -12,7 +12,7 @@ import (
 
 func TestSubscription_recreateDelete_ContinuesOnError(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://127.0.0.1:1")
+	c, err := NewClient("opc.tcp://127.0.0.1:1", InsecureNoSecurity())
 	require.NoError(t, err)
 	sub := &Subscription{
 		SubscriptionID: 1,
@@ -26,7 +26,7 @@ func TestSubscription_recreateDelete_ContinuesOnError(t *testing.T) {
 
 func TestSubscription_recreateCreate_ErrorWithoutSession(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://127.0.0.1:1")
+	c, err := NewClient("opc.tcp://127.0.0.1:1", InsecureNoSecurity())
 	require.NoError(t, err)
 	sub := &Subscription{
 		SubscriptionID: 1,

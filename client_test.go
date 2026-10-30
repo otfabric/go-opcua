@@ -14,7 +14,7 @@ import (
 
 func TestClient_Send_DoesNotPanicWhenDisconnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Send(context.Background(), &ua.ReadRequest{}, func(i ua.Response) error {
@@ -250,7 +250,7 @@ func TestClient_SetState(t *testing.T) {
 				}))
 			}
 
-			c, err := NewClient("opc.tcp://example.com:4840", opts...)
+			c, err := NewClient("opc.tcp://example.com:4840", append([]Option{InsecureNoSecurity()}, opts...)...)
 			require.NoError(t, err)
 
 			if tt.ctxCancel {
@@ -284,7 +284,7 @@ func TestClient_SetState(t *testing.T) {
 func TestClient_LoadNil(t *testing.T) {
 	t.Parallel()
 	t.Run("normal client init", func(t *testing.T) {
-		c, err := NewClient("opc.tcp://dummy")
+		c, err := NewClient("opc.tcp://dummy", InsecureNoSecurity())
 		require.NoError(t, err)
 		assert.NoError(t, c.Close(context.TODO()))
 		assert.Nil(t, c.SecureChannel())
@@ -300,7 +300,7 @@ func TestClient_LoadNil(t *testing.T) {
 
 func TestClient_SetPublishingMode(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.SetPublishingMode(context.Background(), true, 1, 2)
@@ -309,7 +309,7 @@ func TestClient_SetPublishingMode(t *testing.T) {
 
 func TestClient_AddNodes(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.AddNodes(context.Background(), &ua.AddNodesRequest{
@@ -328,7 +328,7 @@ func TestClient_AddNodes(t *testing.T) {
 
 func TestClient_DeleteNodes(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.DeleteNodes(context.Background(), &ua.DeleteNodesRequest{
@@ -341,7 +341,7 @@ func TestClient_DeleteNodes(t *testing.T) {
 
 func TestClient_AddReferences(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.AddReferences(context.Background(), &ua.AddReferencesRequest{
@@ -359,7 +359,7 @@ func TestClient_AddReferences(t *testing.T) {
 
 func TestClient_DeleteReferences(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.DeleteReferences(context.Background(), &ua.DeleteReferencesRequest{
@@ -377,7 +377,7 @@ func TestClient_DeleteReferences(t *testing.T) {
 
 func TestClient_HistoryUpdateData(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.HistoryUpdateData(context.Background(), &ua.UpdateDataDetails{
@@ -389,7 +389,7 @@ func TestClient_HistoryUpdateData(t *testing.T) {
 
 func TestClient_HistoryUpdateEvents(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.HistoryUpdateEvents(context.Background(), &ua.UpdateEventDetails{
@@ -401,7 +401,7 @@ func TestClient_HistoryUpdateEvents(t *testing.T) {
 
 func TestClient_HistoryDeleteRawModified(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.HistoryDeleteRawModified(context.Background(), &ua.DeleteRawModifiedDetails{
@@ -412,7 +412,7 @@ func TestClient_HistoryDeleteRawModified(t *testing.T) {
 
 func TestClient_HistoryDeleteAtTime(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.HistoryDeleteAtTime(context.Background(), &ua.DeleteAtTimeDetails{
@@ -423,7 +423,7 @@ func TestClient_HistoryDeleteAtTime(t *testing.T) {
 
 func TestClient_HistoryDeleteEvents(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	_, err = c.HistoryDeleteEvents(context.Background(), &ua.DeleteEventDetails{

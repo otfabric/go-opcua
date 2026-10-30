@@ -92,7 +92,7 @@ func (e *transportEnv) directURL(scheme string) string {
 
 func (e *transportEnv) dial(url string, extra ...opcua.Option) (*opcua.Client, error) {
 	opts := []opcua.Option{
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.TLSConfig(e.tls),
 		opcua.DialTimeout(5 * time.Second),
 		opcua.RequestTimeout(5 * time.Second),
@@ -102,7 +102,7 @@ func (e *transportEnv) dial(url string, extra ...opcua.Option) (*opcua.Client, e
 	if l := debugLogger(); l != nil {
 		opts = append(opts, opcua.WithLogger(l.With("side", "client")))
 	}
-	c, err := opcua.NewClient(url, append(opts, extra...)...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(opts, extra...)...)...)
 	if err != nil {
 		return nil, err
 	}

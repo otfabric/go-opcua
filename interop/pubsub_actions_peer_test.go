@@ -56,7 +56,7 @@ func TestPubSubMQTT_Actions(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = srv.Close() })
 	ctx := context.Background()
-	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://127.0.0.1:%d", port), opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.AutoReconnect(false))
+	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://127.0.0.1:%d", port), opcua.InsecureNoSecurity(), opcua.AutoReconnect(false))
 	if err != nil {
 		t.Fatal(err)
 	}

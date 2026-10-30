@@ -255,6 +255,7 @@ func TestReverseConnect_MismatchRejected(t *testing.T) {
 			var rc *server.ReverseConnect
 			err := withListenPort(t, func(addr string) error {
 				c, err := opcua.NewClient(tc.endpoint,
+					opcua.InsecureNoSecurity(),
 					opcua.ReverseConnect(addr, tc.opts...),
 					opcua.DialTimeout(0), // wait until the context is done
 					opcua.AutoReconnect(false),
@@ -323,7 +324,7 @@ func TestReverseConnect_OwnListener(t *testing.T) {
 
 		// The helper has released the port again: the next client can
 		// listen on it.
-		c, err := opcua.NewClient(url, reverse,
+		c, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), reverse,
 			opcua.DialTimeout(30*time.Second), opcua.RequestTimeout(30*time.Second), opcua.AutoReconnect(false))
 		require.NoError(t, err)
 		defer func() { _ = c.Close(ctx) }()
@@ -349,10 +350,10 @@ func TestReverseConnect_OwnListener(t *testing.T) {
 
 	// Invalid listen addresses are rejected when the client is created.
 	for _, addr := range []string{"", "no-port", "http://127.0.0.1:4841"} {
-		_, err := opcua.NewClient(url, opcua.ReverseConnect(addr))
+		_, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.ReverseConnect(addr))
 		require.Error(t, err, addr)
 	}
-	_, err = opcua.NewClient(url, opcua.ReverseConnectListener(nil))
+	_, err = opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.ReverseConnectListener(nil))
 	require.Error(t, err)
 }
 
@@ -498,7 +499,7 @@ func TestReverseConnect_SeveralServersOneListener(t *testing.T) {
 
 	// A client asking for a server that never connects gives up when its
 	// time is over and says which servers are there instead.
-	stranger, err := opcua.NewClient("",
+	stranger, err := opcua.NewClient("", opcua.InsecureNoSecurity(),
 		opcua.ReverseConnectListener(l, opcua.ReverseServerURI("urn:otfabric:conformance:reverse:multi:nobody")),
 		opcua.DialTimeout(200*time.Millisecond))
 	require.NoError(t, err)
@@ -544,7 +545,7 @@ func TestReverseConnect_RuntimeTargets(t *testing.T) {
 
 	// The limit is reached, so the server does not offer a second
 	// connection: another client waits in vain...
-	c2, err := opcua.NewClient("", reverse, opcua.DialTimeout(300*time.Millisecond), opcua.AutoReconnect(false))
+	c2, err := opcua.NewClient("", opcua.InsecureNoSecurity(), reverse, opcua.DialTimeout(300*time.Millisecond), opcua.AutoReconnect(false))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = c2.Close(ctx) })
 	require.ErrorIs(t, c2.Connect(ctx), context.DeadlineExceeded)

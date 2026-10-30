@@ -48,7 +48,7 @@ func main() {
 	// Create a client with auto-reconnect enabled.
 	// The WithConnStateHandler option lets us monitor state transitions.
 	c, err := opcua.NewClient(*endpoint,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.AutoReconnect(true),
 		opcua.ReconnectInterval(*interval),
 		opcua.WithConnStateHandler(func(state opcua.ConnState) {

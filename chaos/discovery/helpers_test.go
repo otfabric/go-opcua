@@ -107,7 +107,7 @@ func serverURL(srv *server.Server) string {
 // services need.
 func dial(endpoint string, opts ...opcua.Option) (*opcua.Client, error) {
 	opts = append(opts, opcua.AutoReconnect(false))
-	c, err := opcua.NewClient(endpoint, opts...)
+	c, err := opcua.NewClient(endpoint, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		return nil, err
 	}

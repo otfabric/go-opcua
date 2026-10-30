@@ -77,7 +77,7 @@ func dialSecureClientWith(t *testing.T, endpoint, policy, mode string, extra ...
 		opcua.AuthAnonymous(),
 	}
 	opts = append(opts, extra...)
-	c, err := opcua.NewClient(endpoint, opts...)
+	c, err := opcua.NewClient(endpoint, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		t.Fatalf("NewClient (secure): %v", err)
 	}

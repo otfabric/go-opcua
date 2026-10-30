@@ -23,13 +23,13 @@ const (
 )
 
 func TestClientTimeoutViaOptions(t *testing.T) {
-	c, err := opcua.NewClient(tcpNoRstTestServer, opcua.DialTimeout(forceTimeoutDuration))
+	c, err := opcua.NewClient(tcpNoRstTestServer, opcua.InsecureNoSecurity(), opcua.DialTimeout(forceTimeoutDuration))
 	require.NoError(t, err, "NewClient failed")
 	connectAndValidate(t, c, context.Background(), forceTimeoutDuration)
 }
 
 func TestClientTimeoutViaContext(t *testing.T) {
-	c, err := opcua.NewClient(tcpNoRstTestServer)
+	c, err := opcua.NewClient(tcpNoRstTestServer, opcua.InsecureNoSecurity())
 	require.NoError(t, err, "NewClient failed")
 
 	ctx, cancel := context.WithTimeout(context.Background(), forceTimeoutDuration)

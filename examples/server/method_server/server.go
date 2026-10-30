@@ -159,7 +159,7 @@ func newServer(host string, port int) *server.Server {
 func runClient(endpoint string) {
 	ctx := context.Background()
 
-	c, err := opcua.NewClient(endpoint, opcua.SecurityMode(ua.MessageSecurityModeNone))
+	c, err := opcua.NewClient(endpoint, opcua.InsecureNoSecurity())
 	if err != nil {
 		log.Fatalf("create client: %v", err)
 	}

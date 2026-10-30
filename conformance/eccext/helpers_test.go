@@ -76,7 +76,7 @@ func newClient(t *testing.T, url string, opts ...opcua.Option) *opcua.Client {
 func dialClient(t *testing.T, url string, opts ...opcua.Option) (*opcua.Client, error) {
 	t.Helper()
 	all := append([]opcua.Option{
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30 * time.Second),
 		opcua.RequestTimeout(30 * time.Second),
 		// The client treats certain service faults (BadSessionIdInvalid,
@@ -87,7 +87,7 @@ func dialClient(t *testing.T, url string, opts ...opcua.Option) (*opcua.Client, 
 		// so recovery is off unless a test asks for it.
 		opcua.AutoReconnect(false),
 	}, opts...)
-	c, err := opcua.NewClient(url, all...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, all...)...)
 	if err != nil {
 		return nil, err
 	}

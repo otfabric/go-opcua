@@ -897,6 +897,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `WithMetrics(m ClientMetrics)` | Metrics handler |
 | `WithRetryPolicy(p RetryPolicy)` | Retry policy |
 | `WithLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
+| `InsecureNoSecurity()` | Connect without message security; required for policy None over opc.tcp (INSECURE) |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE) |
 | `TrustedCertificates(certs ...*x509.Certificate)` | Add CA/self-signed certs to the trust pool |
 | `TLSConfig(c *tls.Config)` | TLS of `opc.wss` and `opc.https` endpoints: `RootCAs` for the server's TLS certificate (system roots when nil), `Certificates` for mutual TLS. TLS 1.2 is the minimum. Separate from the application instance certificate |
@@ -2932,6 +2933,7 @@ var (
 var (
     ErrInvalidEndpoint    = errors.New("opcua: invalid endpoint")
     ErrNoCertificate      = errors.New("opcua: no certificate")
+    ErrInsecureNotAllowed = errors.New("opcua: connection without message security needs the InsecureNoSecurity option")
     ErrInvalidPrivateKey  = errors.New("opcua: invalid private key")
     ErrInvalidCertificate = errors.New("opcua: invalid certificate")
     ErrNoMatchingEndpoint = errors.New("opcua: no matching endpoint")

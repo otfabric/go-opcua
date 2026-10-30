@@ -155,9 +155,9 @@ func TestChaosSharedReverseListener(t *testing.T) {
 				// A client that loses its connection between creating and
 				// activating its session cannot close the session: the
 				// server keeps it until it times out.
-				c, err := opcua.NewClient(url, n.clientOptions(nil, n.reverseOption(l),
+				c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, n.clientOptions(nil, n.reverseOption(l),
 					opcua.AutoReconnect(false), opcua.DialTimeout(time.Second), opcua.RequestTimeout(3*time.Second),
-					opcua.SessionTimeout(2*time.Second))...)
+					opcua.SessionTimeout(2*time.Second))...)...)
 				if err != nil {
 					sink.Addf("%s: %v", name, err)
 					return

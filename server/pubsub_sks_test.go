@@ -110,7 +110,7 @@ func connect(t *testing.T, url, policy string, mode ua.MessageSecurityMode, user
 	if policy != ua.SecurityPolicyURINone {
 		opts = append(opts, opcua.Certificate(p.ClientCert), opcua.PrivateKey(p.ClientKey), opcua.TrustedCertificates(p.ServerCertX509))
 	}
-	c, err := opcua.NewClient(url, opts...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))
 	t.Cleanup(func() { _ = c.Close(context.Background()) })
