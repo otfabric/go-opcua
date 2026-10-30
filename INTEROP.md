@@ -114,7 +114,7 @@ No pre-running containers. No manual steps. Tests are gated behind `-tags=intero
 
 ```bash
 # Build adapter images locally (in opcua-interop)
-cd ../opcua-interop && make image-open62541 image-milo
+make -C ../opcua-interop image-open62541 image-milo
 
 # Run against local dev images
 OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:dev \
@@ -154,10 +154,10 @@ While iterating between `go-opcua` and `opcua-interop` before a stable release, 
 cat go.work          # go-opcua should be listed
 
 # Build images locally
-cd opcua-interop && make image-open62541 image-milo
+make -C opcua-interop image-open62541 image-milo
 
 # Run interop tests against the local images
-cd ../go-opcua
+cd go-opcua
 OPEN62541_IMAGE=ghcr.io/otfabric/opcua-interop-open62541:dev \
 MILO_IMAGE=ghcr.io/otfabric/opcua-interop-milo:dev \
 go test -tags=interop -v ./interop/...
@@ -484,7 +484,7 @@ Key: ✓ covered · — not yet tested · n/a not applicable · ⚠ known limita
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
-make image-async-opcua
+make -C ../opcua-interop image-async-opcua
 certs/generate.sh                     # or: certs/generate.sh --add-async-opcua
 # in go-opcua
 ASYNC_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-async-opcua:dev \
@@ -512,7 +512,7 @@ What async-opcua 0.19 does not provide is `unsupported` in the ledger, declared 
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
-make image-node-opcua
+make -C ../opcua-interop image-node-opcua
 certs/generate.sh                     # or: certs/generate.sh --add-node-opcua
 # in go-opcua
 NODE_OPCUA_IMAGE=ghcr.io/otfabric/opcua-interop-node-opcua:dev \
@@ -537,7 +537,7 @@ What node-opcua does not provide is `unsupported` in the ledger, declared by the
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
-make image-asyncua
+make -C ../opcua-interop image-asyncua
 certs/generate.sh                     # or: certs/generate.sh --add-asyncua
 # in go-opcua
 ASYNCUA_IMAGE=ghcr.io/otfabric/opcua-interop-asyncua:dev \
@@ -575,7 +575,7 @@ The OPC Foundation [UA-.NETStandard](https://github.com/OPCFoundation/UA-.NETSta
 
 ```sh
 # in opcua-interop: build the adapter, generate (or extend) the test PKI
-make image-dotnet
+make -C ../opcua-interop image-dotnet
 certs/generate.sh                     # or: certs/generate.sh --add-dotnet
 # in go-opcua
 DOTNET_IMAGE=ghcr.io/otfabric/opcua-interop-dotnet:dev \
