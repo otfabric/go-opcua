@@ -22,7 +22,7 @@ import (
 func TestClose_RequestInFlightLeavesNothing(t *testing.T) {
 	srv, err := New(
 		EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)

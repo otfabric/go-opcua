@@ -259,7 +259,7 @@ func TestPubSubDataFlowAndEvents(t *testing.T) {
 	url := pubsubUDPURL(t)
 	var mu sync.Mutex
 	var got []*pubsub.ReceivedDataSet
-	srv, err := server.New(server.EndPoint("localhost", 0), server.EnableSecurity("None", ua.MessageSecurityModeNone),
+	srv, err := server.New(server.EndPoint("localhost", 0), server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous), server.WithPubSub(nil, pubsub.WithDataSetHandler(func(d *pubsub.ReceivedDataSet) {
 			mu.Lock()
 			got = append(got, d)
@@ -342,9 +342,9 @@ func TestPubSubDataFlowAndEvents(t *testing.T) {
 
 func TestPubSubServerOptions(t *testing.T) {
 	t.Parallel()
-	_, err := server.New(server.WithPubSub(&ua.PubSubConfigurationDataType{Connections: []*ua.PubSubConnectionDataType{{}}}))
+	_, err := server.New(server.InsecureNoSecurity(), server.WithPubSub(&ua.PubSubConfigurationDataType{Connections: []*ua.PubSubConnectionDataType{{}}}))
 	require.ErrorIs(t, err, ua.StatusBadConfigurationError)
-	srv, err := server.New(server.EndPoint("localhost", 0))
+	srv, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0))
 	require.NoError(t, err)
 	require.Nil(t, srv.PubSub())
 	_, ok := srv.PubSubNodeID(pubsub.Root)
@@ -448,7 +448,7 @@ func TestPubSubRemoveMethods(t *testing.T) {
 
 func TestPubSubTargetErrors(t *testing.T) {
 	t.Parallel()
-	srv, err := server.New(server.EndPoint("localhost", 0), server.WithPubSub(nil))
+	srv, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0), server.WithPubSub(nil))
 	require.NoError(t, err)
 	ns := server.NewNodeNameSpace(srv, "test")
 	ro := ns.AddNewVariableStringNode("ro", int32(1))

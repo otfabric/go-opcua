@@ -823,7 +823,7 @@ func TestMulticast_StartErrors(t *testing.T) {
 	require.ErrorContains(t, noPort.disc.start(context.Background()), "announce")
 
 	// Start reports the failure and does not leave the listener open.
-	srv, err := New(EndPoint("localhost", 0), EnableSecurity("None", ua.MessageSecurityModeNone),
+	srv, err := New(EndPoint("localhost", 0), InsecureNoSecurity(),
 		WithMulticastDiscovery(MulticastHostname("h")), failing)
 	require.NoError(t, err)
 	require.ErrorContains(t, srv.Start(context.Background()), "no network")

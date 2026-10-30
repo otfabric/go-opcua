@@ -54,7 +54,7 @@ func TestServer_NormalCloseNotWarned(t *testing.T) {
 	h := &recordHandler{}
 	srv, err := server.New(
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(slog.New(h)),
 	)

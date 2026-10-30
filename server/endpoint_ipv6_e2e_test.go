@@ -28,7 +28,7 @@ func TestEndPoint_IPv6Loopback(t *testing.T) {
 
 	srv, err := server.New(
 		server.EndPoint("::1", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)

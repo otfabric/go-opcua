@@ -38,7 +38,7 @@ func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.N
 
 	srv, err := server.New(
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)

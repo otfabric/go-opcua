@@ -92,7 +92,7 @@ var (
 
 func newServer(host string, port int) *server.Server {
 	s, err := server.New(
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EndPoint(host, port),
 		server.SetLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelWarn}))),

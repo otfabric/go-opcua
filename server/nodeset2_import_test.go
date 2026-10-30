@@ -12,7 +12,7 @@ import (
 )
 
 func TestImportNodeSet_DefaultNodeSet(t *testing.T) {
-	// The default server already imports Opc.Ua.NodeSet2.xml via New().
+	// The default server already imports Opc.Ua.NodeSet2.xml via New(InsecureNoSecurity()).
 	// Verify that well-known nodes exist in namespace 0.
 	srv := newTestServer()
 

@@ -691,7 +691,7 @@ func TestAEAD_CertificatesAndPolicies(t *testing.T) {
 				server.EnableSecurity(ua.SecurityPolicyURIECCNistP256ChaChaPoly, ua.MessageSecurityModeSign),
 			},
 		} {
-			srv, err := server.New(append([]server.Option{server.EndPoint("localhost", 0), server.EnableAuthMode(ua.UserTokenTypeAnonymous)}, opts...)...)
+			srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, append([]server.Option{server.EndPoint("localhost", 0), server.EnableAuthMode(ua.UserTokenTypeAnonymous)}, opts...)...)...)
 			require.NoError(t, err, name)
 			err = srv.Start(ctx)
 			require.Error(t, err, name)

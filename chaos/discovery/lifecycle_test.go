@@ -44,10 +44,10 @@ func TestDiscoveryLifecycle(t *testing.T) {
 		t.Helper()
 		all := append([]server.Option{
 			server.EndPoint("localhost", 0),
-			server.EnableSecurity("None", ua.MessageSecurityModeNone),
+			server.InsecureNoSecurity(),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		}, opts...)
-		srv, err := server.New(all...)
+		srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 		if err != nil {
 			t.Fatalf("chaos: new server: %v", err)
 		}

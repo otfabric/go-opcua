@@ -34,7 +34,7 @@ func rcServer(t *testing.T, opts ...Option) *Server {
 	t.Helper()
 	s, err := newServerNoNS(append([]Option{
 		EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 		ApplicationURI("urn:otfabric:test:reverse"),
 	}, opts...)...)

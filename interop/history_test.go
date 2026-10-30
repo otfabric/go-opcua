@@ -25,7 +25,7 @@ func startGoServerWithHistory(t *testing.T) (string, *server.Server, *server.His
 	s, err := server.New(
 		server.ListenOn("0.0.0.0:0"),
 		server.EndPoint("host.docker.internal", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	if err != nil {

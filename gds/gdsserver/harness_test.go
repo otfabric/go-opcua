@@ -81,7 +81,7 @@ func (e *env) start() {
 	srv, err := server.New(append([]server.Option{
 		server.EndPoint("localhost", 0),
 		server.ApplicationIdentity(ecc.Server[testpki.CurveP256].Cert, ecc.Server[testpki.CurveP256].Key),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity(ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSign),
 		server.EnableSecurity(ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),

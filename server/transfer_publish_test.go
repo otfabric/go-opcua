@@ -23,7 +23,7 @@ import (
 func TestTransferSubscriptions_AnswersThePublishRequestOfTheOldSession(t *testing.T) {
 	srv, err := New(
 		EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestTransferSubscriptions_AnswersThePublishRequestOfTheOldSession(t *testin
 func TestTransferSubscriptions_AnnouncesTheTransferToTheOldSession(t *testing.T) {
 	srv, err := New(
 		EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)
@@ -184,7 +184,7 @@ func TestTransferSubscriptions_AnnouncesTheTransferToTheOldSession(t *testing.T)
 func TestTransferSubscriptions_BackDropsTheStaleAnnouncement(t *testing.T) {
 	srv, err := New(
 		EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)
@@ -259,7 +259,7 @@ func TestTransferSubscriptions_BackDropsTheStaleAnnouncement(t *testing.T) {
 func TestTransferSubscriptions_PublishDuringTheTransfer(t *testing.T) {
 	srv, err := New(
 		EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)

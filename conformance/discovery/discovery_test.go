@@ -489,7 +489,7 @@ func TestDiscovery_FallbackToRegisterServer(t *testing.T) {
 			parallel(t)
 			lds, err := server.New(
 				server.EndPoint("localhost", 0),
-				server.EnableSecurity("None", ua.MessageSecurityModeNone),
+				server.InsecureNoSecurity(),
 				server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 				server.ApplicationURI(ldsURI),
 				server.WithLocalDiscoveryServer(server.LDSAllowInsecureRegistration()),
@@ -586,11 +586,11 @@ func TestDiscovery_RegistrationNeedsSecurityOrOptIn(t *testing.T) {
 	p := pki(t)
 	base := []server.Option{
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}
 	startErr := func(opts ...server.Option) error {
-		srv, err := server.New(append(slices.Clone(base), opts...)...)
+		srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, append(slices.Clone(base), opts...)...)...)
 		if err != nil {
 			return err
 		}

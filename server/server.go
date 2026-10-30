@@ -155,8 +155,11 @@ type serverConfig struct {
 	productName      string
 	softwareVersion  string
 
-	enabledSec  []security
-	enabledAuth []authMode
+	enabledSec []security
+	// allowNoSecurity records InsecureNoSecurity: without it Start refuses
+	// a server that offers security policy None.
+	allowNoSecurity bool
+	enabledAuth     []authMode
 
 	cap ServerCapabilities
 
@@ -615,6 +618,9 @@ func (s *Server) Start(ctx context.Context) error {
 
 	if len(s.cfg.endpoints) == 0 {
 		return fmt.Errorf("opcua: cannot start server: no endpoints defined")
+	}
+	if err := s.cfg.checkMessageSecurity(); err != nil {
+		return err
 	}
 	if err := s.checkRegistrations(); err != nil {
 		return err

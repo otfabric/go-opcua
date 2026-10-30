@@ -42,7 +42,7 @@ func (s *tlStore) update(_ context.Context, _ *MethodCaller, tl *ua.TrustListDat
 // object of a server without push management with ServeTrustList.
 func newTrustListServer(t *testing.T, cfg TrustListConfig) (*Server, *TrustListObject) {
 	t.Helper()
-	s, err := New(EndPoint("localhost", 0))
+	s, err := New(InsecureNoSecurity(), EndPoint("localhost", 0))
 	require.NoError(t, err)
 	s.initEndpoints()
 	obj, err := s.ServeTrustList(ua.NewNumericNodeID(0, tlObj), cfg)
@@ -51,7 +51,7 @@ func newTrustListServer(t *testing.T, cfg TrustListConfig) (*Server, *TrustListO
 }
 
 func TestServeTrustList_Errors(t *testing.T) {
-	s, err := New(EndPoint("localhost", 0))
+	s, err := New(InsecureNoSecurity(), EndPoint("localhost", 0))
 	require.NoError(t, err)
 	load := func() *ua.TrustListDataType { return nil }
 	_, err = s.ServeTrustList(ua.NewNumericNodeID(0, 1), TrustListConfig{Load: load})

@@ -139,7 +139,7 @@ func TestAccessControl_DefaultAllows(t *testing.T) {
 }
 
 func TestAccessControl_WithAccessControllerOption(t *testing.T) {
-	srv, err := New(EndPoint("localhost", 4840), WithAccessController(denyAllController{}))
+	srv, err := New(InsecureNoSecurity(), EndPoint("localhost", 4840), WithAccessController(denyAllController{}))
 	require.NoError(t, err)
 	assert.IsType(t, denyAllController{}, srv.cfg.accessController)
 }

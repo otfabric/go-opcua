@@ -123,7 +123,7 @@ func startServer(t *testing.T, f *fixture, wd *chaoskit.Watchdog) (*server.Serve
 		server.EndPoint("localhost", 0),
 		server.Certificate(f.p.ServerCert),
 		server.PrivateKey(f.p.ServerKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),

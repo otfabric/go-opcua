@@ -99,7 +99,7 @@ func TestPushCustomGroupOptions(t *testing.T) {
 		}}},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := New(WithPushManagement(PushManagement{CertificateGroups: g}))
+			_, err := New(InsecureNoSecurity(), WithPushManagement(PushManagement{CertificateGroups: g}))
 			require.Error(t, err)
 		})
 	}

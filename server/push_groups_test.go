@@ -813,13 +813,13 @@ func TestPushCertificateAlarms(t *testing.T) {
 }
 
 func TestPushCertificateAlarmsOptions(t *testing.T) {
-	_, err := New(WithPushManagement(PushManagement{Alarms: &CertificateAlarms{ExpirationLimit: -1}}))
+	_, err := New(InsecureNoSecurity(), WithPushManagement(PushManagement{Alarms: &CertificateAlarms{ExpirationLimit: -1}}))
 	require.Error(t, err)
-	_, err = New(WithPushManagement(PushManagement{TrustListUpdateFrequency: -1}))
+	_, err = New(InsecureNoSecurity(), WithPushManagement(PushManagement{TrustListUpdateFrequency: -1}))
 	require.Error(t, err)
-	_, err = New(WithPushManagement(PushManagement{HTTPSClientCertificates: 7}))
+	_, err = New(InsecureNoSecurity(), WithPushManagement(PushManagement{HTTPSClientCertificates: 7}))
 	require.Error(t, err)
-	_, err = New(WithPushManagement(PushManagement{HTTPSTrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{{1}}}}))
+	_, err = New(InsecureNoSecurity(), WithPushManagement(PushManagement{HTTPSTrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{{1}}}}))
 	require.Error(t, err)
 
 	// Without UpdateFrequency the trust list alarms stay inactive and the
@@ -834,7 +834,7 @@ func TestPushCertificateAlarmsOptions(t *testing.T) {
 	require.Equal(t, float64(60000), n.Value().Value.Value())
 
 	// The alarms go to an existing namespace of that URI.
-	s3, err := New(EndPoint("localhost", 0), WithPushManagement(PushManagement{}))
+	s3, err := New(InsecureNoSecurity(), EndPoint("localhost", 0), WithPushManagement(PushManagement{}))
 	require.NoError(t, err)
 	NewNodeNameSpace(s3, CertificateAlarmsNamespaceURI)
 	s3.push.cfg.Alarms = &CertificateAlarms{ExpirationLimit: time.Hour, CheckInterval: time.Hour}

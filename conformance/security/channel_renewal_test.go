@@ -149,7 +149,7 @@ func testChannelRenewalServerRotatesSecurityToken(t *testing.T) {
 	srv, err := server.New(
 		server.EndPoint("localhost", sniffer.port()),
 		server.ListenOn("localhost:0"),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)

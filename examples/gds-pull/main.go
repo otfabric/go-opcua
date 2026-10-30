@@ -128,7 +128,7 @@ func startGDS(ctx context.Context) (string, func()) {
 	srv, err := server.New(
 		server.EndPoint("localhost", 4850),
 		server.ApplicationIdentity(cert, key),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity(ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),

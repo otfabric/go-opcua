@@ -68,7 +68,7 @@ func startGoPubSubServer(t *testing.T, o goPubSubOpts, configure func(p *pubsub.
 	opts := []server.Option{
 		server.ListenOn("0.0.0.0:0"),
 		server.EndPoint("host.docker.internal", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.WithPubSub(nil, o.pubsubOpts...),
 	}
@@ -87,7 +87,7 @@ func startGoPubSubServer(t *testing.T, o goPubSubOpts, configure func(p *pubsub.
 			}),
 			server.WithClientCertificateTrustList(loadCACertDER(t)))
 	}
-	s, err := server.New(opts...)
+	s, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}

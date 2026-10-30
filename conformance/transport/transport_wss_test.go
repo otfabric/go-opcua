@@ -29,7 +29,7 @@ func transportServer(t *testing.T, opts ...server.Option) (*testutil.Fixture, *s
 		server.WebSocketEndPoint("localhost", 0),
 		server.HTTPSEndPoint("localhost", 0),
 		server.TLSConfig(testutil.TLS(t).ServerConfig()),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}, opts...)...)
 	require.NoError(t, err)
@@ -265,7 +265,7 @@ func awaitState(t *testing.T, states <-chan opcua.ConnState, want opcua.ConnStat
 func TestTransportWSS_ServerStartErrors(t *testing.T) {
 	parallel(t)
 	// No TLS certificate and no application instance certificate.
-	srv, err := server.New(server.EndPoint("localhost", 0), server.WebSocketEndPoint("localhost", 0))
+	srv, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0), server.WebSocketEndPoint("localhost", 0))
 	require.NoError(t, err)
 	require.Error(t, srv.Start(context.Background()))
 
@@ -273,7 +273,7 @@ func TestTransportWSS_ServerStartErrors(t *testing.T) {
 	p := pki(t)
 	srv, err = server.New(server.EndPoint("localhost", 0), server.HTTPSEndPoint("localhost", 0),
 		server.Certificate(p.ServerCert), server.PrivateKey(p.ServerKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone), server.EnableAuthMode(ua.UserTokenTypeAnonymous))
+		server.InsecureNoSecurity(), server.EnableAuthMode(ua.UserTokenTypeAnonymous))
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
 	t.Cleanup(func() { _ = srv.Close() })
@@ -288,11 +288,11 @@ func TestTransportWSS_ServerStartErrors(t *testing.T) {
 	require.NoError(t, err)
 
 	// A bind address that is in use.
-	busy, err := server.New(server.EndPoint("localhost", 0), server.ListenWebSocketOn(hostPort(t, httpsURL)),
+	busy, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0), server.ListenWebSocketOn(hostPort(t, httpsURL)),
 		server.WebSocketEndPoint("localhost", 1), server.TLSConfig(testutil.TLS(t).ServerConfig()))
 	require.NoError(t, err)
 	require.Error(t, busy.Start(context.Background()))
-	busy, err = server.New(server.EndPoint("localhost", 0), server.ListenHTTPSOn(hostPort(t, httpsURL)),
+	busy, err = server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0), server.ListenHTTPSOn(hostPort(t, httpsURL)),
 		server.HTTPSEndPoint("localhost", 1), server.TLSConfig(testutil.TLS(t).ServerConfig()))
 	require.NoError(t, err)
 	require.Error(t, busy.Start(context.Background()))

@@ -65,7 +65,7 @@ func main() {
 	opts := []server.Option{
 		server.ListenOn(fmt.Sprintf("0.0.0.0:%d", *port)),
 		server.EndPoint(*host, *port),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI(*uri),
 		server.ServerName(*name),
@@ -122,7 +122,7 @@ func main() {
 		opts = append(opts, server.WithDiscoveryRegistration(*registerWith, ro...))
 	}
 
-	srv, err := server.New(opts...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		fatal(err)
 	}

@@ -75,7 +75,7 @@ func decodeJSONResponse(t *testing.T, b []byte) ua.Response {
 }
 
 func TestHTTPSJSON(t *testing.T) {
-	_, url, c, _ := startUAJSONServer(t, EnableSecurity("None", ua.MessageSecurityModeNone))
+	_, url, c, _ := startUAJSONServer(t, InsecureNoSecurity())
 	getEndpoints := []byte(`{"UaTypeId":"i=426","RequestHeader":{"RequestHandle":9}}`)
 
 	for _, ct := range []string{uasc.HTTPSJSONContentType, uasc.HTTPSJSONContentTypeLegacy, "application/json; charset=utf-8"} {
@@ -153,7 +153,7 @@ func TestJSONRequestHandle(t *testing.T) {
 }
 
 func TestEncodeDirectResponseFallback(t *testing.T) {
-	s, _, _, _ := startUAJSONServer(t)
+	s, _, _, _ := startUAJSONServer(t, InsecureNoSecurity())
 	// A Variant of an unsupported Go type cannot be encoded: a fault with
 	// BadEncodingError goes out instead.
 	resp := &ua.ReadResponse{ResponseHeader: &ua.ResponseHeader{RequestHandle: 2}, Results: []*ua.DataValue{{EncodingMask: ua.DataValueValue, Value: &ua.Variant{}}}}
@@ -175,14 +175,13 @@ func TestUAJSONEndpoints(t *testing.T) {
 		wssJSON   bool
 		httpsJSON int // number of https-uajson endpoints
 	}{
-		{"none", []Option{EnableSecurity("None", ua.MessageSecurityModeNone)}, true, 1},
-		{"no security configured", nil, true, 0},
+		{"none", []Option{InsecureNoSecurity()}, true, 1},
 		{"signed only", []Option{
 			EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
 			PrivateKey(pki.ServerKey), Certificate(pki.ServerCert),
 		}, false, 1},
 		{"both", []Option{
-			EnableSecurity("None", ua.MessageSecurityModeNone),
+			InsecureNoSecurity(),
 			EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 			PrivateKey(pki.ServerKey), Certificate(pki.ServerCert),
 		}, true, 2},
@@ -216,7 +215,7 @@ func TestUAJSONEndpoints(t *testing.T) {
 func TestUAJSONUserTokenOnNone(t *testing.T) {
 	// TLS protects the user token on the JSON endpoints, as on HTTPS.
 	s, _, _, _ := startUAJSONServer(t,
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeUserName))
 	for _, ep := range s.Endpoints() {
 		var hasUser bool
@@ -248,7 +247,7 @@ func roundTrip(t *testing.T, c uacp.MessageConn, req string) ua.Response {
 }
 
 func TestWSSJSON(t *testing.T) {
-	_, _, _, url := startUAJSONServer(t, EnableSecurity("None", ua.MessageSecurityModeNone))
+	_, _, _, url := startUAJSONServer(t, InsecureNoSecurity())
 	c := wssJSONClient(t, url)
 
 	r := roundTrip(t, c, `{"UaTypeId":"i=426","RequestHeader":{"RequestHandle":11}}`)
@@ -265,7 +264,7 @@ func TestWSSJSON(t *testing.T) {
 }
 
 func TestWSSJSONConcurrentRequests(t *testing.T) {
-	_, _, _, url := startUAJSONServer(t, EnableSecurity("None", ua.MessageSecurityModeNone))
+	_, _, _, url := startUAJSONServer(t, InsecureNoSecurity())
 	c := wssJSONClient(t, url)
 
 	// Several requests in flight at once on one connection are all
@@ -286,7 +285,7 @@ func TestWSSJSONConcurrentRequests(t *testing.T) {
 }
 
 func TestWSSJSONTooLarge(t *testing.T) {
-	_, _, _, url := startUAJSONServer(t, EnableSecurity("None", ua.MessageSecurityModeNone))
+	_, _, _, url := startUAJSONServer(t, InsecureNoSecurity())
 	c := wssJSONClient(t, url)
 	// The server ends the connection (with status 1009, Part 6 §7.5.2) as
 	// soon as it sees the length of the message, so the write may fail.
@@ -296,7 +295,7 @@ func TestWSSJSONTooLarge(t *testing.T) {
 }
 
 func TestWSSJSONClose(t *testing.T) {
-	s, _, _, url := startUAJSONServer(t, EnableSecurity("None", ua.MessageSecurityModeNone))
+	s, _, _, url := startUAJSONServer(t, InsecureNoSecurity())
 	c := wssJSONClient(t, url)
 	_ = roundTrip(t, c, `{"UaTypeId":"i=426"}`)
 
@@ -362,7 +361,7 @@ func (c *deadlineConn) last() time.Time {
 // FuzzHTTPSJSONBody posts arbitrary JSON request bodies. The server must
 // answer each with an HTTP response and stay healthy.
 func FuzzHTTPSJSONBody(f *testing.F) {
-	_, url, c, _ := startUAJSONServer(f, EnableSecurity("None", ua.MessageSecurityModeNone))
+	_, url, c, _ := startUAJSONServer(f, InsecureNoSecurity())
 	for _, req := range []any{
 		&ua.ReadRequest{RequestHeader: &ua.RequestHeader{}, NodesToRead: []*ua.ReadValueID{{NodeID: ua.NewStringNodeID(1, "x")}}},
 		&ua.GetEndpointsRequest{RequestHeader: &ua.RequestHeader{}},

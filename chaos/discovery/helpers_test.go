@@ -46,7 +46,7 @@ func TestMain(m *testing.M) { chaoskit.Main(m) }
 func serverOpts(extra ...server.Option) []server.Option {
 	opts := []server.Option{
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}
 	if l := chaoskit.Logger(); l != nil {
@@ -59,7 +59,7 @@ func serverOpts(extra ...server.Option) []server.Option {
 // and must not take longer than startBound. It may be called from any
 // goroutine.
 func startServer(wd *chaoskit.Watchdog, opts ...server.Option) (*server.Server, error) {
-	srv, err := server.New(opts...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		return nil, fmt.Errorf("new server: %w", err)
 	}

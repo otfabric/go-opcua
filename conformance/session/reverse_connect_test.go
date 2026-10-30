@@ -522,7 +522,7 @@ func TestReverseConnect_RuntimeTargets(t *testing.T) {
 
 	_, err := srv.AddReverseConnect("http://not-opc-tcp:1")
 	require.Error(t, err)
-	_, err = server.New(server.WithReverseConnect("127.0.0.1:4840"))
+	_, err = server.New(server.InsecureNoSecurity(), server.WithReverseConnect("127.0.0.1:4840"))
 	require.Error(t, err, "the client URL must be an opc.tcp URL")
 
 	// The server announces another spelling of its endpoint; a client

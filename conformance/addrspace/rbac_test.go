@@ -260,7 +260,7 @@ func TestServer_LoggerOptions(t *testing.T) {
 			logs := &logCounter{}
 			srv, err := server.New(
 				server.EndPoint("localhost", 0),
-				server.EnableSecurity("None", ua.MessageSecurityModeNone),
+				server.InsecureNoSecurity(),
 				server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 				logOpt(slog.New(logs)),
 			)

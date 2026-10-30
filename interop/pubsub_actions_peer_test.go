@@ -44,7 +44,7 @@ func TestPubSubMQTT_Actions(t *testing.T) {
 	port := freePort(t)
 	srv, err := server.New(
 		server.EndPoint("127.0.0.1", port),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.WithPubSub(nil),
 	)

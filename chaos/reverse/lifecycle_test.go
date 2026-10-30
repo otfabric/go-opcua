@@ -83,7 +83,7 @@ func lifecycleRound(t *testing.T, wd *chaoskit.Watchdog, l *uacp.ReverseListener
 	marker := fmt.Sprintf("marker-of-round-%d", round)
 
 	srv, err := server.New(
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(chaoskit.Logger()),
 		server.EndPoint("localhost", 0),
