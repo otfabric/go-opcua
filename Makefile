@@ -8,7 +8,7 @@ TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ 
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/internal/websocket,github.com/otfabric/go-opcua/pubsub,github.com/otfabric/go-opcua/pubsub/message,github.com/otfabric/go-opcua/pubsub/uadp,github.com/otfabric/go-opcua/pubsub/jsonmsg,github.com/otfabric/go-opcua/pubsub/transport,github.com/otfabric/go-opcua/pubsub/transport/udp,github.com/otfabric/go-opcua/pubsub/transport/eth,github.com/otfabric/go-opcua/pubsub/transport/mqtt,github.com/otfabric/go-opcua/pubsub/transport/amqp,github.com/otfabric/go-opcua/pubsub/security,github.com/otfabric/go-opcua/pubsub/sks,github.com/otfabric/go-opcua/pubsub/remote,github.com/otfabric/go-opcua/gds,github.com/otfabric/go-opcua/gds/gdsserver,github.com/otfabric/go-opcua/internal/mqtt,github.com/otfabric/go-opcua/internal/amqp
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/...
 
-.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-gate
+.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-gate cross fuzz bench e2e
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -136,5 +136,28 @@ check-gen: gen ## Verify generated files are up to date
 		git diff --stat; \
 		exit 1; \
 	fi
+
+CROSS_PLATFORMS := linux/amd64 linux/arm64 linux/arm darwin/arm64 windows/amd64
+
+cross: ## Cross-compile without cgo for the supported platforms
+	@for p in $(CROSS_PLATFORMS); do \
+		echo "Building for $$p"; \
+		CGO_ENABLED=0 GOOS=$${p%/*} GOARCH=$${p#*/} go build ./... || exit 1; \
+	done
+
+FUZZTIME ?= 10s
+
+fuzz: ## Run every Fuzz target for FUZZTIME (targets discovered, never listed)
+	@for pkg in $$(go list ./... | grep -Ev '/(cmd|examples)(/|$$)'); do \
+		for t in $$(go test -list '^Fuzz' $$pkg | grep '^Fuzz'); do \
+			echo "fuzz $$pkg $$t"; \
+			go test -run '^$$' -fuzz "^$$t$$" -fuzztime $(FUZZTIME) $$pkg || exit 1; \
+		done; \
+	done
+
+bench: ## Benchmarks
+	@go test -count=1 -run '^$$' -bench . -benchmem . ./ua ./server ./pubsub/uadp
+
+e2e: selfintegration ## Alias of selfintegration: Go client against the in-process Go server
 
 check: fmt lint lint-ci vuln verify coverage ## Run lint + vet + vuln + unit/race/interop + coverage
