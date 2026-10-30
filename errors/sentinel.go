@@ -22,6 +22,9 @@ var (
 	ErrInvalidCertificate = errors.New("opcua: invalid certificate")
 	ErrNoMatchingEndpoint = errors.New("opcua: no matching endpoint")
 	ErrNoEndpoints        = errors.New("opcua: no endpoints available")
+	// ErrInsecureNotAllowed is returned for a client configured without
+	// message security and without the InsecureNoSecurity option.
+	ErrInsecureNotAllowed = errors.New("opcua: connection without message security needs the InsecureNoSecurity option")
 )
 
 // Subscription errors.

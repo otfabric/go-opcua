@@ -1052,10 +1052,11 @@ func TestValidateServerCertificate(t *testing.T) {
 			wantErr:      "opcua: server certificate validation failed:",
 		},
 		{
-			name:         "empty DER returns nil",
+			name:         "empty DER is refused",
 			der:          nil,
 			securityMode: ua.MessageSecurityModeSign,
 			cfg:          newConfig(),
+			wantErr:      "no certificate",
 		},
 		{
 			name:         "leaf plus intermediate chain validates with trusted CA",
@@ -1260,7 +1261,7 @@ func TestValidateServerCertificate_KeyUsage(t *testing.T) {
 
 func TestConfigOptionSmoke(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithRetryPolicy(NoRetry()),
 		SkipNamespaceUpdate(),
 		ApplicationName("app"),
