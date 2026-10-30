@@ -12,7 +12,6 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/server"
-	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
 
@@ -22,7 +21,7 @@ func TestNamespace(t *testing.T) {
 	srv := startServer()
 	defer func() { _ = srv.Close() }()
 
-	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.SecurityMode(ua.MessageSecurityModeNone))
+	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.InsecureNoSecurity())
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)

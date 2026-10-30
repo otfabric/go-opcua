@@ -58,7 +58,7 @@ func NewTestClientWithACK(t *testing.T, url string, ack *uacp.Acknowledge) *opcu
 	t.Helper()
 	ctx := context.Background()
 	c, err := opcua.NewClient(url,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30*time.Second),    // allow time for server to accept under load (e.g. race detector)
 		opcua.RequestTimeout(30*time.Second), // allow handshake to complete under load
 		opcua.Dialer(&uacp.Dialer{

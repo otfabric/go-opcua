@@ -141,7 +141,7 @@ func TestSession_RequiresActivation(t *testing.T) {
 	ctx := context.Background()
 
 	c, err := opcua.NewClient(url,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30*time.Second),
 		opcua.RequestTimeout(30*time.Second),
 		opcua.AutoReconnect(false),
@@ -204,7 +204,7 @@ func TestSession_ReactivateOnNewChannel(t *testing.T) {
 
 	// Second client: open a channel only, then adopt the detached session.
 	c2, err := opcua.NewClient(url,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30*time.Second),
 		opcua.RequestTimeout(30*time.Second),
 	)
@@ -316,7 +316,7 @@ func TestClient_ConnectErrors(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("NotConnected", func(t *testing.T) {
-		c, err := opcua.NewClient(url)
+		c, err := opcua.NewClient(url, opcua.InsecureNoSecurity())
 		require.NoError(t, err)
 		require.Equal(t, opcua.Closed, c.State())
 		_, err = c.ReadValue(ctx, f.Int32)
@@ -352,7 +352,7 @@ func TestClient_ConnectErrors(t *testing.T) {
 		// Port 1 is reserved and never has a listener.
 		dead := "opc.tcp://localhost:1"
 		states := make(chan opcua.ConnState, 16)
-		c, err := opcua.NewClient(dead, opcua.DialTimeout(5*time.Second), opcua.WithConnStateChan(states))
+		c, err := opcua.NewClient(dead, opcua.InsecureNoSecurity(), opcua.DialTimeout(5*time.Second), opcua.WithConnStateChan(states))
 		require.NoError(t, err)
 		require.Error(t, c.Connect(ctx))
 		require.Nil(t, c.SecureChannel())
@@ -371,7 +371,7 @@ func TestClient_ConnectErrors(t *testing.T) {
 	t.Run("WrongHost", func(t *testing.T) {
 		// Same listener, but the HELLO names a host the server does not serve.
 		other := strings.Replace(url, "localhost", "127.0.0.1", 1)
-		c, err := opcua.NewClient(other, opcua.DialTimeout(10*time.Second))
+		c, err := opcua.NewClient(other, opcua.InsecureNoSecurity(), opcua.DialTimeout(10*time.Second))
 		require.NoError(t, err)
 		require.ErrorIs(t, c.Connect(ctx), ua.StatusBadTCPEndpointURLInvalid)
 	})
@@ -668,7 +668,7 @@ func TestClient_ConnStateNotifications(t *testing.T) {
 	var viaFunc []opcua.ConnState
 	viaChan := make(chan opcua.ConnState, 64)
 
-	c, err := opcua.NewClient(url,
+	c, err := opcua.NewClient(url, opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30*time.Second),
 		opcua.RequestTimeout(30*time.Second),
 		opcua.WithConnStateHandler(func(s opcua.ConnState) {

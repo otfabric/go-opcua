@@ -117,7 +117,7 @@ func TestTransportsJSON(t *testing.T) {
 func TestTransportsJSONProfileMismatch(t *testing.T) {
 	t.Parallel()
 	_, urls := testutil.NewTransportTestServer(t, server.EnableUAJSON())
-	c, err := opcua.NewClient(urls.HTTPS, opcua.TransportProfile(ua.TransportProfileWSSJSON), opcua.SecurityMode(ua.MessageSecurityModeNone))
+	c, err := opcua.NewClient(urls.HTTPS, opcua.TransportProfile(ua.TransportProfileWSSJSON), opcua.InsecureNoSecurity())
 	require.NoError(t, err)
 	require.ErrorIs(t, c.Connect(context.Background()), errors.ErrInvalidEndpoint)
 }
@@ -137,7 +137,7 @@ func TestTransportsJSONNotEnabled(t *testing.T) {
 		{urls.HTTPS, ua.TransportProfileHTTPSJSON},
 		{urls.WSS, ua.TransportProfileWSSJSON},
 	} {
-		c, err := opcua.NewClient(tc.url, opcua.TransportProfile(tc.profile), opcua.SecurityMode(ua.MessageSecurityModeNone),
+		c, err := opcua.NewClient(tc.url, opcua.TransportProfile(tc.profile), opcua.InsecureNoSecurity(),
 			opcua.TLSConfig(testutil.TLS(t).ClientConfig()), opcua.AutoReconnect(false), opcua.RequestTimeout(5*time.Second))
 		require.NoError(t, err)
 		require.Error(t, c.Connect(ctx), tc.profile)
@@ -153,7 +153,7 @@ func TestTransportsJSONLegacyContentType(t *testing.T) {
 	c := testutil.NewTransportTestClient(t, urls.HTTPS,
 		opcua.TransportProfile(ua.TransportProfileHTTPSJSON),
 		opcua.HTTPSJSONContentType(uasc.HTTPSJSONContentTypeLegacy),
-		opcua.SecurityMode(ua.MessageSecurityModeNone))
+		opcua.InsecureNoSecurity())
 	require.True(t, c.SecureChannel().IsJSON())
 	v, err := c.Node(ua.NewNumericNodeID(0, id.ServerServerStatusState)).Value(context.Background())
 	require.NoError(t, err)

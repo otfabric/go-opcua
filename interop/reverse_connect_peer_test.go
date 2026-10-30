@@ -211,7 +211,7 @@ func TestOpen62541Server_ReverseConnect(t *testing.T) {
 		opcua.DialTimeout(reverseDialTimeout),
 		opcua.AutoReconnect(false),
 	}
-	c, err := opcua.NewClient("", append(base, opcua.ReverseConnectListener(l))...)
+	c, err := opcua.NewClient("", append([]opcua.Option{opcua.InsecureNoSecurity()}, append(base, opcua.ReverseConnectListener(l))...)...)
 	if err != nil {
 		t.Fatalf("NewClient: %v", err)
 	}
@@ -486,13 +486,13 @@ func TestOpen62541Server_ReverseConnect_Secure(t *testing.T) {
 				t.Fatalf("the server does not offer %s/%s over the reverse connection (%d endpoints)", rc.policy, rc.mode, len(eps))
 			}
 
-			c, err := opcua.NewClient("", append([]opcua.Option{
+			c, err := opcua.NewClient("", append([]opcua.Option{opcua.InsecureNoSecurity()}, append([]opcua.Option{
 				opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
 				opcua.CertificateFile(rc.identityFile(t, "consumer", "cert.crt")),
 				opcua.PrivateKeyFile(rc.identityFile(t, "consumer", "cert.key")),
 				opcua.TrustedCertificates(ca),
 				opcua.AuthAnonymous(),
-			}, base...)...)
+			}, base...)...)...)
 			if err != nil {
 				t.Fatalf("NewClient: %v", err)
 			}

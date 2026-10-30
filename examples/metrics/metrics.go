@@ -59,7 +59,7 @@ func main() {
 	// WithMetrics attaches instrumentation; WithRetryPolicy retries failed
 	// requests with exponential back-off (base 100ms, cap 10s, up to 5 attempts).
 	c, err := opcua.NewClient(*endpoint,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.WithMetrics(logMetrics{}),
 		opcua.WithRetryPolicy(opcua.ExponentialBackoff(100*time.Millisecond, 10*time.Second, 5)),
 	)

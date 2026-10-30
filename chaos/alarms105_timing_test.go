@@ -183,7 +183,7 @@ func TestChaosAlarmTimers(t *testing.T) {
 func timerRound(e *env, rng *rand.Rand, conds []*server.Condition, m *server.AlarmMetrics, calls *atomic.Int64) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c, err := opcua.NewClient(e.url(), e.clientOptions(nil, opcua.AutoReconnect(false), opcua.RequestTimeout(5*time.Second))...)
+	c, err := opcua.NewClient(e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, e.clientOptions(nil, opcua.AutoReconnect(false), opcua.RequestTimeout(5*time.Second))...)...)
 	if err != nil {
 		return err
 	}

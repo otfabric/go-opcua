@@ -270,7 +270,7 @@ func newECCClient(t *testing.T, endpoint string, p eccProfile, mode string, auth
 		opcua.PrivateKeyFile(eccPKIFile(t, "consumer", p.curve, "cert.key")),
 		opcua.TrustedCertificates(loadCACert(t, filepath.Join(pkiDir(t), "ca", "ca.crt"))),
 	}
-	c, err := opcua.NewClient(endpoint, append(opts, extra...)...)
+	c, err := opcua.NewClient(endpoint, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(opts, extra...)...)...)
 	if err != nil {
 		t.Fatalf("NewClient (%s/%s): %v", p.policy, mode, err)
 	}

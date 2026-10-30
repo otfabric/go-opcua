@@ -65,7 +65,7 @@ func TestExponentialBackoff_Defaults(t *testing.T) {
 
 func TestWithRetryPolicy(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840", WithRetryPolicy(ExponentialBackoff(time.Second, time.Minute, 1)))
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(), WithRetryPolicy(ExponentialBackoff(time.Second, time.Minute, 1)))
 	require.NoError(t, err)
 	_ = c.Close(context.Background())
 }

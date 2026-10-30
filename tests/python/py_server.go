@@ -15,7 +15,6 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/errors"
-	"github.com/otfabric/go-opcua/ua"
 )
 
 // Server is the test server interface used by integration tests.
@@ -72,7 +71,7 @@ func (s *PythonServer) Run() error {
 	s.cmd.Stdout = os.Stdout
 	s.cmd.Stderr = os.Stderr
 	s.Endpoint = "opc.tcp://127.0.0.1:4840"
-	s.Opts = []opcua.Option{opcua.SecurityMode(ua.MessageSecurityModeNone)}
+	s.Opts = []opcua.Option{opcua.InsecureNoSecurity()}
 	if err := s.cmd.Start(); err != nil {
 		return err
 	}

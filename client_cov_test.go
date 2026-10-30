@@ -60,7 +60,7 @@ func TestClientCovDiscoveryHelpers(t *testing.T) {
 	require.Error(t, err)
 	_, err = opcua.FindServersOnNetwork(ctx, url, badOpt)
 	require.Error(t, err)
-	_, err = opcua.NewClient(url, badOpt)
+	_, err = opcua.NewClient(url, opcua.InsecureNoSecurity(), badOpt)
 	require.Error(t, err)
 
 	// nobody listening

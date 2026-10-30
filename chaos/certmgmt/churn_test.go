@@ -196,7 +196,7 @@ func dial(url string, cert []byte, key *rsa.PrivateKey, admin bool) (*opcua.Clie
 	if admin {
 		opts = append(opts, opcua.AuthUsername(adminUser, adminPass))
 	}
-	c, err := opcua.NewClient(url, opts...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		return nil, ep.ServerCertificate, err
 	}

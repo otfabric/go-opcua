@@ -51,6 +51,7 @@ func TestActivateSession_DoesNotChangeTheConfiguredToken(t *testing.T) {
 
 	connect := func() *opcua.Client {
 		c, err := opcua.NewClient(url,
+			opcua.InsecureNoSecurity(),
 			opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeUserName),
 			opcua.AuthUsername("alice", "wonderland"),
 			opcua.AutoReconnect(false),

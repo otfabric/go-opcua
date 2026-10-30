@@ -121,7 +121,7 @@ func dial(t *testing.T, url string, mode ua.MessageSecurityMode, id identity, us
 	if user != "" {
 		opts = append(opts, opcua.AuthUsername(user, pass))
 	}
-	c, err := opcua.NewClient(url, opts...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		return nil, err
 	}

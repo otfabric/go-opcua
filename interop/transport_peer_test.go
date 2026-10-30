@@ -171,9 +171,9 @@ func dialTransportClient(t *testing.T, url string, user bool) *opcua.Client {
 	} else {
 		opts = append(opts, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous), opcua.AuthAnonymous())
 	}
-	c, err := opcua.NewClient(url, opts...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
-		t.Fatalf("NewClient(%s): %v", url, err)
+		t.Fatalf("NewClient(%s, opcua.InsecureNoSecurity()): %v", url, err)
 	}
 	ctx2, cancel2 := context.WithTimeout(context.Background(), dialTimeout)
 	defer cancel2()

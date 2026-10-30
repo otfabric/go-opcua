@@ -14,7 +14,7 @@ import (
 
 func TestClient_StateTransitions(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	assert.Equal(t, Closed, c.State())
 
@@ -25,7 +25,7 @@ func TestClient_StateTransitions(t *testing.T) {
 
 func TestClient_ConnectToBadAddress(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://192.0.2.1:4840")
+	c, err := NewClient("opc.tcp://192.0.2.1:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
@@ -37,7 +37,7 @@ func TestClient_ConnectToBadAddress(t *testing.T) {
 
 func TestClient_CloseIdempotent(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	// Closing a client that was never connected should not panic
@@ -52,7 +52,7 @@ func TestClient_CloseIdempotent(t *testing.T) {
 func TestClient_StateCallback(t *testing.T) {
 	t.Parallel()
 	var states []ConnState
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithConnStateHandler(func(s ConnState) {
 			states = append(states, s)
 		}),
@@ -92,7 +92,7 @@ func TestClient_StateTransitions_Full(t *testing.T) {
 	stateCh := make(chan ConnState, len(transitions))
 	var funcStates []ConnState
 
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithConnStateChan(stateCh),
 		WithConnStateHandler(func(s ConnState) {
 			funcStates = append(funcStates, s)
@@ -119,7 +119,7 @@ func TestClient_StateTransitions_Full(t *testing.T) {
 // TestClient_SubscriptionIDs_Empty verifies empty client has no subscriptions.
 func TestClient_SubscriptionIDs_Empty(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 
@@ -131,7 +131,7 @@ func TestClient_SubscriptionIDs_Empty(t *testing.T) {
 // when client is not connected.
 func TestClient_Read_Disconnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 
@@ -143,7 +143,7 @@ func TestClient_Read_Disconnected(t *testing.T) {
 // when client is not connected.
 func TestClient_Write_Disconnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 
@@ -155,7 +155,7 @@ func TestClient_Write_Disconnected(t *testing.T) {
 // when client is not connected.
 func TestClient_Browse_Disconnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 
@@ -167,7 +167,7 @@ func TestClient_Browse_Disconnected(t *testing.T) {
 // when client is not connected.
 func TestClient_Call_Disconnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 
@@ -179,7 +179,7 @@ func TestClient_Call_Disconnected(t *testing.T) {
 // when client is not connected.
 func TestClient_Subscribe_Disconnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 
@@ -191,7 +191,7 @@ func TestClient_Subscribe_Disconnected(t *testing.T) {
 // TestClient_HistoryRead_Disconnected verifies HistoryRead fails when disconnected.
 func TestClient_HistoryRead_Disconnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 
@@ -202,7 +202,7 @@ func TestClient_HistoryRead_Disconnected(t *testing.T) {
 // TestClient_AutoReconnect_DefaultEnabled verifies auto-reconnect is on by default.
 func TestClient_AutoReconnect_DefaultEnabled(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 	assert.True(t, c.cfg.sechan.AutoReconnect)
@@ -211,7 +211,7 @@ func TestClient_AutoReconnect_DefaultEnabled(t *testing.T) {
 // TestClient_AutoReconnect_Disabled verifies auto-reconnect can be disabled.
 func TestClient_AutoReconnect_Disabled(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840", AutoReconnect(false))
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(), AutoReconnect(false))
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 	assert.False(t, c.cfg.sechan.AutoReconnect)
@@ -220,7 +220,7 @@ func TestClient_AutoReconnect_Disabled(t *testing.T) {
 // TestClient_ReconnectInterval_Custom verifies the reconnect interval option.
 func TestClient_ReconnectInterval_Custom(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840", ReconnectInterval(5*time.Second))
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(), ReconnectInterval(5*time.Second))
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 	assert.Equal(t, 5*time.Second, c.cfg.sechan.ReconnectInterval)
@@ -229,7 +229,7 @@ func TestClient_ReconnectInterval_Custom(t *testing.T) {
 // TestClient_Namespaces_Default verifies default namespace list exists.
 func TestClient_Namespaces_Default(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 

@@ -55,7 +55,7 @@ func TestNewMonitoredItemCreateRequestWithDefaults(t *testing.T) {
 
 func TestModifyMonitoredItems_UnknownItemID(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	sub := &Subscription{
 		SubscriptionID: 1,
@@ -72,7 +72,7 @@ func TestModifyMonitoredItems_UnknownItemID(t *testing.T) {
 
 func TestSetMonitoringMode_UnknownItemID(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	sub := &Subscription{
 		SubscriptionID: 1,
@@ -104,7 +104,7 @@ func TestSubscription_notify(t *testing.T) {
 
 func TestSubscription_publishTimeout(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	c.cfg.sechan = &uasc.Config{RequestTimeout: 25 * time.Millisecond}
 

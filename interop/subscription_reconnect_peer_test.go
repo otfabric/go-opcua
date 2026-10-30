@@ -51,7 +51,7 @@ func runReconnectRecovery(t *testing.T, peerEndpoint string) opcua.SubscriptionR
 	defer cancel()
 
 	c, err := opcua.NewClient(proxyEP,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.AutoReconnect(true),
 		opcua.ReconnectInterval(500*time.Millisecond),
 		opcua.WithSubscriptionRecoveryHandler(func(ev opcua.SubscriptionRecoveryEvent) {

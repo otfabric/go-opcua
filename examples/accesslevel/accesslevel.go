@@ -29,7 +29,7 @@ func main() {
 
 	ctx := context.Background()
 
-	c, err := opcua.NewClient(*endpoint)
+	c, err := opcua.NewClient(*endpoint, opcua.InsecureNoSecurity())
 	if err != nil {
 		log.Fatal(err)
 	}

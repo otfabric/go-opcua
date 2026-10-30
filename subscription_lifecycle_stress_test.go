@@ -43,7 +43,7 @@ func TestStress_ConcurrentCloseWithActiveSubscription(t *testing.T) {
 
 	ctx := context.Background()
 	c, err := opcua.NewClient(url,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30*time.Second),
 		opcua.RequestTimeout(30*time.Second),
 		opcua.Dialer(stressDialer()),
@@ -202,7 +202,7 @@ func TestStress_CloseWhileReconnectArmed(t *testing.T) {
 
 	ctx := context.Background()
 	c, err := opcua.NewClient(url,
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.AutoReconnect(true),
 		opcua.ReconnectInterval(100*time.Millisecond),
 		opcua.DialTimeout(30*time.Second),
@@ -246,7 +246,7 @@ func TestStress_ConcurrentSubscribeCancel(t *testing.T) {
 			defer wg.Done()
 			ctx := context.Background()
 			c, err := opcua.NewClient(url,
-				opcua.SecurityMode(ua.MessageSecurityModeNone),
+				opcua.InsecureNoSecurity(),
 				opcua.DialTimeout(30*time.Second),
 				opcua.RequestTimeout(30*time.Second),
 				opcua.Dialer(stressDialer()),

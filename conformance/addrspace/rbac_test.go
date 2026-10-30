@@ -243,7 +243,7 @@ func TestSecurity_CredentialsFromFiles(t *testing.T) {
 			opcua.PrivateKeyFile(filepath.Join(dir, "nope.pem")),
 			opcua.RemoteCertificateFile(filepath.Join(dir, "nope.pem")),
 		} {
-			_, err := opcua.NewClient(url, opt)
+			_, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opt)
 			require.Error(t, err)
 		}
 	})

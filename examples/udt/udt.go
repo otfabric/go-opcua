@@ -59,6 +59,9 @@ func main() {
 		opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous),
 	}
 
+	if ep.SecurityMode == ua.MessageSecurityModeNone {
+		opts = append(opts, opcua.InsecureNoSecurity())
+	}
 	c, err := opcua.NewClient(ep.EndpointURL, opts...)
 	if err != nil {
 		log.Fatal(err)

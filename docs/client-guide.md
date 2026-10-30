@@ -45,7 +45,9 @@ import (
 func main() {
     ctx := context.Background()
 
-    c, err := opcua.NewClient("opc.tcp://localhost:4840")
+    c, err := opcua.NewClient("opc.tcp://localhost:4840",
+        opcua.InsecureNoSecurity(), // a local test server; see docs/security.md
+    )
     if err != nil {
         log.Fatal(err)
     }
@@ -309,7 +311,7 @@ The services with all their parameters are client methods. They need a
 SecureChannel but no session, so `Dial` is enough:
 
 ```go
-c, _ := opcua.NewClient(opcua.DiscoveryURL("plant-gateway"))
+c, _ := opcua.NewClient(opcua.DiscoveryURL("plant-gateway"), opcua.InsecureNoSecurity())
 if err := c.Dial(ctx); err != nil {
     log.Fatal(err)
 }
@@ -431,6 +433,7 @@ if _, err := c.Read(ctx, req); err != nil {
 | `ApplicationName(name)` | Application name |
 | `WithConnStateHandler(fn)` | Connection state change callback |
 | `SecurityFromEndpoint(ep, auth)` | Auto-configure from discovered endpoint |
+| `InsecureNoSecurity()` | Connect without message security; required for policy None over opc.tcp (INSECURE) |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE, dev only) |
 | `TrustedCertificates(certs...)` | Add CA/self-signed certs to trust pool |
 | `ReverseConnect(listenAddr, opts...)` | Wait for the server to connect instead of dialling it ([reverse connect](#reverse-connect)) |
@@ -1456,6 +1459,7 @@ func main() {
     ctx := context.Background()
 
     c, err := opcua.NewClient("opc.tcp://localhost:4840",
+        opcua.InsecureNoSecurity(), // a local test server; see docs/security.md
         opcua.AutoReconnect(true),
         opcua.ReconnectInterval(5 * time.Second),
         opcua.WithConnStateHandler(func(s opcua.ConnState) {
