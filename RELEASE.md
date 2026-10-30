@@ -1,5 +1,30 @@
 # go-opcua Releases
 
+## v1.29.0
+
+**Date:** 2026-10-30
+**Previous release:** v1.28.0
+
+### Summary
+
+Secure client defaults. A client runs without message security only when asked to by name, and trusts only the certificates it is given. **This release breaks callers that relied on the old defaults.** It is a minor version by the maintainer's decision: the project has no external users yet, and a major version would change the import path to `/v2` (otfabric/engineering ADR-0010).
+
+### Breaking
+
+- **`NewClient` refuses a client without message security** over opc.tcp (`errors.ErrInsecureNotAllowed`), however policy None was reached: no options, `SecurityPolicy("None")`, or a None endpoint given to `SecurityFromEndpoint`. Add `opcua.InsecureNoSecurity()` to opt in.
+- **A server that presents no certificate is refused** under Sign and SignAndEncrypt (`errors.ErrNoCertificate`), also on reverse connect. It was accepted.
+- **Server certificates are validated against `TrustedCertificates` only.** The system CA pool is no longer used (Part 4 §6.1.3). A client using message security needs `TrustedCertificates`, or `InsecureSkipVerify` for development.
+
+### Unchanged
+
+Policy None stays supported. `GetEndpoints`, `FindServers`, `FindServersOnNetwork` and `DiscoverServers` need no opt-in, and neither do `opc.https` and `opc.wss`, which TLS secures.
+
+### Added
+
+- `opcua.InsecureNoSecurity()`, `errors.ErrInsecureNotAllowed`.
+
+---
+
 ## v1.28.0
 
 **Date:** 2026-10-26
