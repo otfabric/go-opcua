@@ -41,7 +41,7 @@ func main() {
 
 	// Set your security options.
 	opts = append(opts,
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		/*
 				These security modes are not implemented yet.
@@ -135,7 +135,7 @@ func main() {
 	// Now that all the options are set, create the server.
 	// When the server is created, it will automatically create namespace 0 and populate it with
 	// the core opc ua nodes.
-	s, err := server.New(opts...)
+	s, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		log.Fatalf("Error creating server: %s", err)
 	}

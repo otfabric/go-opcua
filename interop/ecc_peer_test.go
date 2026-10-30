@@ -524,7 +524,7 @@ func startECCGoServer(t *testing.T) (string, *atomic.Int64) {
 		server.EndPoint("host.docker.internal", 0),
 		server.Certificate(loadGoServerCert(t)),
 		server.PrivateKey(loadGoServerKey(t)),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
@@ -538,7 +538,7 @@ func startECCGoServer(t *testing.T) (string, *atomic.Int64) {
 	}
 	opts = append(opts, goServerECCOptions(t)...)
 
-	s, err := server.New(opts...)
+	s, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}

@@ -32,7 +32,7 @@ func startGoServerWithEvents(t *testing.T) (string, *server.Server) {
 	s, err := server.New(
 		server.ListenOn("0.0.0.0:0"),
 		server.EndPoint("host.docker.internal", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	if err != nil {
@@ -404,7 +404,7 @@ func startGoServerWithCustomEventType(t *testing.T) (string, *server.Server, *ua
 	s, err := server.New(
 		server.ListenOn("0.0.0.0:0"),
 		server.EndPoint("host.docker.internal", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	if err != nil {

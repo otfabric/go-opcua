@@ -1752,6 +1752,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `ApplicationIdentity(cert []byte, key crypto.Signer)` | Add an application instance certificate with its key; repeat per key type (RSA, ECDSA P-256 / P-384 / brainpoolP256r1 / brainpoolP384r1, Ed25519, Ed448). The server uses, and each endpoint advertises, the certificate that fits the security policy |
 | `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate). An ECC policy needs a matching `ApplicationIdentity` |
 | `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate). `UserName`, `Certificate` and `IssuedToken` also need their validator: without it every token of that type is rejected and `New` logs a warning |
+| `InsecureNoSecurity()` | Offer security policy None; `Start` refuses None without it (INSECURE) |
 | `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only |
 | `WithUsernameValidator(v UsernameValidator)` | Callback `func(username, password string) error` called during `ActivateSession` for `UserNameIdentityToken`; without one, username tokens are rejected with `BadUserAccessDenied` |
 | `WithX509UserValidator(v X509UserValidator)` | Callback `func(certDER []byte) error` called during `ActivateSession` for `X509IdentityToken`; must also call `EnableAuthMode(ua.UserTokenTypeCertificate)`; without one, X.509 user tokens are rejected |

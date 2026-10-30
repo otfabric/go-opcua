@@ -22,7 +22,7 @@ func startFuzzServer(f *testing.F) string {
 	s, err := New(
 		EndPoint("localhost", 0),
 		ListenOn("127.0.0.1:0"),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	if err != nil {

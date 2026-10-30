@@ -74,7 +74,7 @@ func discoveryTestServer(t *testing.T) *Server {
 	t.Helper()
 	srv, err := New(
 		EndPoint("localhost", 4840),
-		EnableSecurity(ua.SecurityPolicyURINone, ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)

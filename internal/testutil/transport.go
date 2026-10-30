@@ -48,10 +48,10 @@ func NewTransportTestServer(t *testing.T, opts ...server.Option) (*server.Server
 		server.WebSocketEndPoint("localhost", 0),
 		server.HTTPSEndPoint("localhost", 0),
 		server.TLSConfig(TLS(t).ServerConfig()),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}
-	srv, err := server.New(append(defaults, opts...)...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, append(defaults, opts...)...)...)
 	if err != nil {
 		t.Fatalf("testutil: new server: %v", err)
 	}

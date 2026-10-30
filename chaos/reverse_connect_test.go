@@ -290,7 +290,7 @@ func TestReverseConnectShutdownLeavesNoGoroutines(t *testing.T) {
 		t.Helper()
 		srv, err := server.New(
 			server.EndPoint("localhost", 0),
-			server.EnableSecurity("None", ua.MessageSecurityModeNone),
+			server.InsecureNoSecurity(),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 			server.ApplicationURI(reverseAppURI),
 			server.WithReverseConnect(clientURL, server.ReverseConnectRetryInterval(10*time.Millisecond, 100*time.Millisecond)),

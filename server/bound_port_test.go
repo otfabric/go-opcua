@@ -23,7 +23,7 @@ func TestServer_ListenPortZero_AssignsConcretePort(t *testing.T) {
 	s, err := New(
 		ListenOn("127.0.0.1:0"),
 		EndPoint("127.0.0.1", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)

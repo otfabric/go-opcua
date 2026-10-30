@@ -64,7 +64,7 @@ func newServer(t *testing.T, pm server.PushManagement, extra ...server.Option) (
 		server.EndPoint("localhost", 0),
 		server.Certificate(p.ServerCert),
 		server.PrivateKey(p.ServerKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
@@ -73,7 +73,7 @@ func newServer(t *testing.T, pm server.PushManagement, extra ...server.Option) (
 		server.WithRoleMapper(roles),
 		server.WithPushManagement(pm),
 	}, extra...)
-	srv, err := server.New(opts...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
 	t.Cleanup(func() { _ = srv.Close() })

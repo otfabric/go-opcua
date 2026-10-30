@@ -50,7 +50,7 @@ func newPushServer(t *testing.T, pm PushManagement, opts ...Option) *Server {
 		PrivateKey(p.ServerKey),
 		WithPushManagement(pm),
 	}, opts...)
-	s, err := New(all...)
+	s, err := New(append([]Option{InsecureNoSecurity()}, all...)...)
 	require.NoError(t, err)
 	s.initEndpoints()
 	return s
@@ -139,9 +139,9 @@ func encodeTL(t *testing.T, d *ua.TrustListDataType) []byte {
 
 func TestPushOptionErrors(t *testing.T) {
 	p := pushPKI(t)
-	_, err := New(WithPushManagement(PushManagement{TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{{1, 2, 3}}}}))
+	_, err := New(InsecureNoSecurity(), WithPushManagement(PushManagement{TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{{1, 2, 3}}}}))
 	require.ErrorContains(t, err, "invalid trust list")
-	_, err = New(WithClientCertificateTrustList(p.CACert), WithPushManagement(PushManagement{}))
+	_, err = New(InsecureNoSecurity(), WithClientCertificateTrustList(p.CACert), WithPushManagement(PushManagement{}))
 	require.ErrorContains(t, err, "WithClientCertificateTrustList")
 
 	// Without push management there is nothing to report.

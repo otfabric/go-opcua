@@ -39,7 +39,7 @@ func startServerOn(t *testing.T, port int) (*testutil.Fixture, func()) {
 	eventually(t, func() bool {
 		s, err := server.New(
 			server.EndPoint("localhost", port),
-			server.EnableSecurity("None", ua.MessageSecurityModeNone),
+			server.InsecureNoSecurity(),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		)
 		if err != nil {

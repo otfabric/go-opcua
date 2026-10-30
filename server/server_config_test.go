@@ -12,14 +12,12 @@ import (
 
 func TestServerConfigOptions(t *testing.T) {
 	logger := slog.Default()
-	srv, err := New(
-		ServerName("TestServer"),
+	srv, err := New(InsecureNoSecurity(), ServerName("TestServer"),
 		ManufacturerName("OTFabric"),
 		ProductName("go-opcua"),
 		SoftwareVersion("1.0"),
 		SetLogger(logger),
-		WithSlogLogger(logger),
-	)
+		WithSlogLogger(logger))
 	require.NoError(t, err)
 	require.Equal(t, "TestServer", srv.cfg.applicationName)
 	require.Equal(t, "OTFabric", srv.cfg.manufacturerName)
@@ -30,7 +28,7 @@ func TestServerConfigOptions(t *testing.T) {
 
 func TestServerConfigEnableSecurityAndAuth(t *testing.T) {
 	_, err := New(
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(t, err)
@@ -53,7 +51,7 @@ func TestServerStatus(t *testing.T) {
 }
 
 func TestServerURLs(t *testing.T) {
-	srv, err := New(EndPoint("localhost", 4840))
+	srv, err := New(InsecureNoSecurity(), EndPoint("localhost", 4840))
 	require.NoError(t, err)
 	urls := srv.URLs()
 	// May be empty before Start() but should not panic.
@@ -63,8 +61,8 @@ func TestServerURLs(t *testing.T) {
 // TestChangeNotification_BeforeStart verifies that calling ChangeNotification
 // before Start() does not panic (MonitoredItemService is nil until Start).
 func TestChangeNotification_BeforeStart(t *testing.T) {
-	// New() does not call Start, so MonitoredItemService is nil here.
-	srv, err := New(EndPoint("localhost", 0))
+	// New(InsecureNoSecurity()) does not call Start, so MonitoredItemService is nil here.
+	srv, err := New(InsecureNoSecurity(), EndPoint("localhost", 0))
 	require.NoError(t, err)
 	nid := ua.NewNumericNodeID(0, 1)
 	require.NotPanics(t, func() {

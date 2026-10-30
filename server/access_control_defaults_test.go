@@ -23,7 +23,7 @@ func TestDefaultAccessController_AllowsAll(t *testing.T) {
 
 func TestWithAccessController(t *testing.T) {
 	deny := DefaultAccessController{}
-	srv, err := New(WithAccessController(deny))
+	srv, err := New(InsecureNoSecurity(), WithAccessController(deny))
 	require.NoError(t, err)
 	require.NotNil(t, srv)
 }

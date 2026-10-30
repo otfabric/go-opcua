@@ -291,7 +291,7 @@ func (n *node) scratchID() *ua.NodeID         { return n.nodeID("Scratch") }
 func (n *node) start() {
 	n.t.Helper()
 	opts := []server.Option{
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(chaoskit.Logger()),
 		server.EndPoint("localhost", n.fwd.Port()),
@@ -301,7 +301,7 @@ func (n *node) start() {
 	if n.clientURL != "" {
 		opts = append(opts, server.WithReverseConnect(n.clientURL, fastRetry()))
 	}
-	srv, err := server.New(opts...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		n.t.Fatalf("chaos: %s: new server: %v", n.name, err)
 	}

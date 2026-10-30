@@ -23,7 +23,7 @@ import (
 // whose request was queued behind a blocked handler stayed idle.
 func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 	srv, err := New(EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous))
 	require.NoError(t, err)
 	ns, obj := addTestNamespace(srv)

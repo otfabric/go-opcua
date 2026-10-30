@@ -52,7 +52,7 @@ func startSKS(t *testing.T, ks *pubsubsec.KeyService, pushOpts ...server.SKSOpti
 		server.EndPoint("localhost", 0),
 		server.Certificate(p.ServerCert),
 		server.PrivateKey(p.ServerKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity(basic256Sha256, ua.MessageSecurityModeSign),
 		server.EnableSecurity(basic256Sha256, signAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
@@ -413,7 +413,7 @@ func TestSKS_SetSecurityKeys(t *testing.T) {
 }
 
 func TestSKS_EnableErrors(t *testing.T) {
-	srv, err := server.New(server.EndPoint("localhost", 0))
+	srv, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0))
 	require.NoError(t, err)
 	_, err = srv.EnableSecurityKeyService(nil)
 	require.Error(t, err)

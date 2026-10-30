@@ -226,7 +226,7 @@ func TestPubSubCov_EventSource(t *testing.T) {
 func TestPubSubCov_StartFailures(t *testing.T) {
 	// Without the PublishSubscribe object in namespace 0 the information
 	// model cannot be built: Start fails and the server reports Failed.
-	s, err := newServerNoNS(EndPoint("localhost", 0), EnableSecurity("None", ua.MessageSecurityModeNone),
+	s, err := newServerNoNS(EndPoint("localhost", 0), InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous), WithPubSub(nil))
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = s.Close() })

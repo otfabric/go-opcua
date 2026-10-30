@@ -20,7 +20,7 @@ func diagServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	t.Helper()
 	srv, err := server.New(append([]server.Option{
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}, opts...)...)
 	require.NoError(t, err)
@@ -248,7 +248,7 @@ func BenchmarkDiagnostics_Read(b *testing.B) {
 	}{{"enabled", true, 0}, {"disabled", false, 0}, {"returnDiagnostics", true, ua.ReturnDiagnosticsAll}} {
 		b.Run(tc.name, func(b *testing.B) {
 			srv, err := server.New(server.EndPoint("localhost", 0),
-				server.EnableSecurity("None", ua.MessageSecurityModeNone),
+				server.InsecureNoSecurity(),
 				server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 				server.WithServerDiagnostics(tc.on))
 			if err != nil {

@@ -25,11 +25,11 @@ func NewTestServer(t *testing.T, opts ...server.Option) (*server.Server, string)
 	t.Helper()
 	defaults := []server.Option{
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}
 	all := append(defaults, opts...)
-	srv, err := server.New(all...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	if err != nil {
 		t.Fatalf("testutil: new server: %v", err)
 	}

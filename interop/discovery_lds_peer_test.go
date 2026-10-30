@@ -137,12 +137,12 @@ func startGoLDS(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	all := append([]server.Option{
 		server.ListenOn("0.0.0.0:0"),
 		server.EndPoint("host.docker.internal", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI("urn:otfabric:go-opcua:interop:lds"),
 		server.ServerName("go-opcua LDS"),
 	}, opts...)
-	s, err := server.New(all...)
+	s, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestOpen62541LDS_GoServerRegisters(t *testing.T) {
 		srv, err := server.New(
 			server.ListenOn("0.0.0.0:0"),
 			server.EndPoint("host.docker.internal", 0),
-			server.EnableSecurity("None", ua.MessageSecurityModeNone),
+			server.InsecureNoSecurity(),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 			server.ApplicationURI(uri),
 			server.ServerName("go-opcua registrant"),
@@ -561,7 +561,7 @@ func TestMiloServer_DiscoveryServerUnsupported(t *testing.T) {
 	srv, err := server.New(
 		server.ListenOn("127.0.0.1:0"),
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI("urn:otfabric:go-opcua:interop:registrant"),
 		server.WithDiscoveryRegistration(h.endpoint,

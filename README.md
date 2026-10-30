@@ -189,7 +189,7 @@ import (
 func main() {
     srv, err := server.New(
         server.EndPoint("localhost", 4840),
-        server.EnableSecurity("None", ua.MessageSecurityModeNone),
+        server.InsecureNoSecurity(),
         server.EnableAuthMode(ua.UserTokenTypeAnonymous),
     )
     if err != nil {

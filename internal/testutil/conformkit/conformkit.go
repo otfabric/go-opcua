@@ -80,10 +80,10 @@ func NewServerPrepared(t *testing.T, prepare func(*server.Server), opts ...serve
 	Parallel(t)
 	all := append([]server.Option{
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}, opts...)
-	srv, err := server.New(all...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	require.NoError(t, err)
 	if prepare != nil {
 		prepare(srv)

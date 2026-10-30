@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
 	"github.com/otfabric/go-opcua/uasc"
@@ -248,8 +249,46 @@ func ApplicationURI(uri string) Option {
 	}
 }
 
+// InsecureNoSecurity offers endpoints without message security: security
+// policy None and security mode None. Messages are neither signed nor
+// encrypted and clients are not authenticated by a certificate.
+//
+// [Server.Start] refuses a server that offers None without this option,
+// and a server with no security configured at all
+// (errors.ErrInsecureNotAllowed). A secure-only server still answers the
+// discovery services, which the specification defines without security.
+func InsecureNoSecurity() Option {
+	return func(s *serverConfig) error {
+		s.allowNoSecurity = true
+		for _, sec := range s.enabledSec {
+			if sec.secPolicy == ua.SecurityPolicyURINone {
+				return nil // already enabled: the option is idempotent
+			}
+		}
+		return EnableSecurity(ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)(s)
+	}
+}
+
+// checkMessageSecurity refuses to offer security policy None unless it was
+// asked for, and refuses a server without any security configured.
+func (s *serverConfig) checkMessageSecurity() error {
+	if s.allowNoSecurity {
+		return nil
+	}
+	if len(s.enabledSec) == 0 {
+		return fmt.Errorf("%w: no security configured, see EnableSecurity", errors.ErrInsecureNotAllowed)
+	}
+	for _, sec := range s.enabledSec {
+		if sec.secPolicy == ua.SecurityPolicyURINone {
+			return fmt.Errorf("%w: EnableSecurity offers policy None", errors.ErrInsecureNotAllowed)
+		}
+	}
+	return nil
+}
+
 // EnableSecurity registers a new endpoint security mode to the server.
 // This will also register the security policy against each enabled auth mode.
+// Policy None also needs [InsecureNoSecurity].
 func EnableSecurity(secPolicy string, secMode ua.MessageSecurityMode) Option {
 	return func(s *serverConfig) error {
 		if !strings.HasPrefix(secPolicy, "http://opcfoundation.org/UA/SecurityPolicy#") {

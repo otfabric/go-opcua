@@ -22,7 +22,7 @@ var (
 
 func warmNS0Cache() {
 	ns0CacheOnce.Do(func() {
-		s, err := New(EndPoint("localhost", 4840))
+		s, err := New(InsecureNoSecurity(), EndPoint("localhost", 4840))
 		if err != nil {
 			panic("server: warmNS0Cache: " + err.Error())
 		}
@@ -42,7 +42,7 @@ func warmNS0Cache() {
 // newTestServer creates a Server suitable for unit tests, without starting
 // a network listener.  On the first call the OPC UA base nodeset is imported
 // and cached; subsequent calls copy the cached node references into a fresh
-// NodeNameSpace, making each call roughly 100× faster than a cold New().
+// NodeNameSpace, making each call roughly 100× faster than a cold New(InsecureNoSecurity()).
 //
 // Each server gets its own copies of the ns-0 nodes: adding a reference to
 // a node also records its inverse on the target (Node.AddRef), which is

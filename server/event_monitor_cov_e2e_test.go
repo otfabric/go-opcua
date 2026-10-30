@@ -22,7 +22,7 @@ import (
 func TestEventMonitorCovOfTypeOverTheWire(t *testing.T) {
 	t.Parallel()
 	srv, err := server.New(server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous))
 	require.NoError(t, err)
 	ns := server.NewNodeNameSpace(srv, "urn:cov:events")

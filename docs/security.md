@@ -20,6 +20,7 @@ The library handles this automatically. You configure certificates, policies, an
 A client refuses to run without message security unless asked to, and trusts only what it is told to trust:
 
 - **No security is a deliberate opt-in.** `NewClient` returns `errors.ErrInsecureNotAllowed` when the resulting configuration is policy None and mode None, however it was reached (no options, `SecurityPolicy("None")`, or a None endpoint given to `SecurityFromEndpoint`). `opcua.InsecureNoSecurity()` opts in. Policy None stays fully supported, as the specification defines it.
+- **A server offers no security only when asked to.** `Server.Start` returns `errors.ErrInsecureNotAllowed` for a server with no security configured, or with `EnableSecurity("None", …)`; `server.InsecureNoSecurity()` opts in. A secure-only server still answers the discovery services.
 - **Exceptions defined by the specification:** the discovery helpers `GetEndpoints`, `FindServers`, `FindServersOnNetwork` and `DiscoverServers` need no opt-in, and neither do `opc.https` and `opc.wss`, which TLS secures.
 - **A missing server certificate is an error.** With Sign or SignAndEncrypt, a server that presents no certificate is refused (`errors.ErrNoCertificate`).
 - **Trust comes from your trust list only.** Server certificates are validated against `TrustedCertificates`. The system CA pool is not used, because it serves web PKI names, not OPC UA application instance certificates (Part 4 §6.1.3). TLS for `opc.https` and `opc.wss` keeps its own roots (`TLSConfig`).
@@ -531,7 +532,7 @@ c, _ := opcua.NewClient("opc.tcp://localhost:4840",
 // Server
 s, err := server.New(
     server.EndPoint("localhost", 4840),
-    server.EnableSecurity("None", ua.MessageSecurityModeNone),
+    server.InsecureNoSecurity(),
     server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 )
 ```

@@ -40,10 +40,10 @@ func newProxiedServer(t *testing.T, proxy *testutil.ChaosProxy, handlers map[uin
 func startScriptedServer(t *testing.T, handlers map[uint16]server.Handler, opts ...server.Option) *server.Server {
 	t.Helper()
 	all := append([]server.Option{
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}, opts...)
-	srv, err := server.New(all...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}

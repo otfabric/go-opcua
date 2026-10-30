@@ -610,7 +610,7 @@ func (e *env) server() *server.Server {
 func (e *env) startServer() {
 	e.t.Helper()
 	srv, err := server.New(
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(chaoskit.Logger()),
 		server.EndPoint("localhost", e.proxy.Port()),

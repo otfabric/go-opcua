@@ -650,7 +650,7 @@ func startGoServerWithOptions(t *testing.T, extra ...server.Option) (string, *se
 		// + reconnect pick a routable URL (not 0.0.0.0).
 		server.ListenOn("0.0.0.0:0"),
 		server.EndPoint("host.docker.internal", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}, extra...)...)
 	if err != nil {
@@ -1704,7 +1704,7 @@ func startSecureGoServer(t *testing.T) string {
 		server.EndPoint("host.docker.internal", 0),
 		server.Certificate(certDER),
 		server.PrivateKey(privateKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableSecurity("Aes128_Sha256_RsaOaep", ua.MessageSecurityModeSignAndEncrypt),
@@ -1896,7 +1896,7 @@ func startTrustGoServer(t *testing.T) string {
 		server.EndPoint("host.docker.internal", 0),
 		server.Certificate(certDER),
 		server.PrivateKey(privateKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
