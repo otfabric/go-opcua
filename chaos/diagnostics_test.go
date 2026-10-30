@@ -87,7 +87,7 @@ func diagChurn(e *env, wd *watchdog, seed int64, workers int, until time.Time, s
 					if rng.Intn(2) == 0 {
 						opts = append(opts, opcua.ReturnDiagnostics(ua.ReturnDiagnosticsAll))
 					}
-					c, err := opcua.NewClient(e.url(), e.clientOptions(nil, opts...)...)
+					c, err := opcua.NewClient(e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, e.clientOptions(nil, opts...)...)...)
 					if err != nil {
 						return err
 					}

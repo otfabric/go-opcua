@@ -29,7 +29,7 @@ func TestAutoReconnection(t *testing.T) {
 	srv := NewPythonServer("reconnection_server.py")
 	defer func() { _ = srv.Close() }()
 
-	c, err := opcua.NewClient(srv.Endpoint, srv.Opts...)
+	c, err := opcua.NewClient(srv.Endpoint, append([]opcua.Option{opcua.InsecureNoSecurity()}, srv.Opts...)...)
 	require.NoError(t, err, "NewClient failed")
 
 	err = c.Connect(ctx)

@@ -68,7 +68,7 @@ func TestChaosPubSubConfigurationFile(t *testing.T) {
 				err := wd.do("configuration file", func() error {
 					ctx, cancel := opCtx()
 					defer cancel()
-					c, err := opcua.NewClient(surl, opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.AutoReconnect(false))
+					c, err := opcua.NewClient(surl, opcua.InsecureNoSecurity(), opcua.AutoReconnect(false))
 					if err != nil {
 						return err
 					}

@@ -79,12 +79,12 @@ func NewTransportTestServer(t *testing.T, opts ...server.Option) (*server.Server
 func NewTransportTestClient(t *testing.T, url string, opts ...opcua.Option) *opcua.Client {
 	t.Helper()
 	defaults := []opcua.Option{
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.TLSConfig(TLS(t).ClientConfig()),
 		opcua.DialTimeout(30 * time.Second),
 		opcua.RequestTimeout(30 * time.Second),
 	}
-	c, err := opcua.NewClient(url, append(defaults, opts...)...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(defaults, opts...)...)...)
 	if err != nil {
 		t.Fatalf("testutil: new client: %v", err)
 	}

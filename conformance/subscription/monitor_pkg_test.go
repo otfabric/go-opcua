@@ -363,7 +363,7 @@ func TestSubscription_BuilderOptions(t *testing.T) {
 	})
 
 	t.Run("StartFailsWhenNotConnected", func(t *testing.T) {
-		offline, err := opcua.NewClient("opc.tcp://localhost:1")
+		offline, err := opcua.NewClient("opc.tcp://localhost:1", opcua.InsecureNoSecurity())
 		require.NoError(t, err)
 		_, _, err = offline.NewSubscription().Monitor(f.Int32).Start(ctx)
 		require.ErrorIs(t, err, ua.StatusBadServerNotConnected)

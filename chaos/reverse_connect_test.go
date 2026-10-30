@@ -307,7 +307,7 @@ func TestReverseConnectShutdownLeavesNoGoroutines(t *testing.T) {
 	newClient := func(t *testing.T, opts ...opcua.Option) *opcua.Client {
 		t.Helper()
 		c, err := opcua.NewClient("", append([]opcua.Option{
-			opcua.SecurityMode(ua.MessageSecurityModeNone),
+			opcua.InsecureNoSecurity(),
 			opcua.DialTimeout(30 * time.Second),
 			opcua.RequestTimeout(30 * time.Second),
 			opcua.ReconnectInterval(20 * time.Millisecond),

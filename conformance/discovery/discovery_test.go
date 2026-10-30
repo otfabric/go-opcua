@@ -52,7 +52,7 @@ func knownServerURIs(t *testing.T, url string) []string {
 func dialDiscovery(t *testing.T, url string, opts ...opcua.Option) *opcua.Client {
 	t.Helper()
 	all := append(discoveryOpts(), opcua.AutoReconnect(false))
-	c, err := opcua.NewClient(url, append(all, opts...)...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(all, opts...)...)...)
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()

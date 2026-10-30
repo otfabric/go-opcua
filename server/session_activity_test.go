@@ -46,7 +46,7 @@ func TestSessionTouchedWhenRequestArrives(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	connect := func() *opcua.Client {
-		c, err := opcua.NewClient(url, opcua.SecurityMode(ua.MessageSecurityModeNone),
+		c, err := opcua.NewClient(url, opcua.InsecureNoSecurity(),
 			opcua.AutoReconnect(false), opcua.RequestTimeout(30*time.Second))
 		require.NoError(t, err)
 		require.NoError(t, c.Connect(ctx))

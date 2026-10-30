@@ -230,7 +230,7 @@ func lifecycleRound(t *testing.T, wd *chaoskit.Watchdog, l *uacp.ReverseListener
 			defer workers.Done()
 			for !isClosed() {
 				c, err := opcua.NewClient("",
-					opcua.SecurityMode(ua.MessageSecurityModeNone),
+					opcua.InsecureNoSecurity(),
 					opcua.ReverseConnectListener(l, opcua.ReverseServerURI(uri)),
 					opcua.AutoReconnect(false),
 					opcua.DialTimeout(250*time.Millisecond),

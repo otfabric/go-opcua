@@ -82,7 +82,7 @@ func TestServiceError(t *testing.T) {
 
 func TestDiagnosticsHelpers_NotConnected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://localhost:1")
+	c, err := NewClient("opc.tcp://localhost:1", InsecureNoSecurity())
 	require.NoError(t, err)
 	ctx := context.Background()
 	_, err = c.ServerDiagnosticsSummary(ctx)

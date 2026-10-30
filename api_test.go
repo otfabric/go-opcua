@@ -91,7 +91,7 @@ func TestReadMultiChunking(t *testing.T) {
 
 func TestReadMultiEmptyItems(t *testing.T) {
 	t.Parallel()
-	c, _ := opcua.NewClient("opc.tcp://localhost:4840")
+	c, _ := opcua.NewClient("opc.tcp://localhost:4840", opcua.InsecureNoSecurity())
 	ctx := context.Background()
 	results, err := c.ReadMulti(ctx, nil)
 	require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestBrowseAll(t *testing.T) {
 func TestWithConnStateHandler(t *testing.T) {
 	t.Parallel()
 	var got []opcua.ConnState
-	_, err := opcua.NewClient("opc.tcp://example.com:4840",
+	_, err := opcua.NewClient("opc.tcp://example.com:4840", opcua.InsecureNoSecurity(),
 		opcua.WithConnStateHandler(func(s opcua.ConnState) {
 			got = append(got, s)
 		}),
@@ -444,7 +444,7 @@ func TestClientServerStatus(t *testing.T) {
 
 func TestClientSecurityAccessors(t *testing.T) {
 	t.Parallel()
-	c, err := opcua.NewClient("opc.tcp://example.com:4840")
+	c, err := opcua.NewClient("opc.tcp://example.com:4840", opcua.InsecureNoSecurity())
 	require.NoError(t, err)
 	defer func() { _ = c.Close(context.Background()) }()
 

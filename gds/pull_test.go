@@ -152,7 +152,7 @@ func TestPull_EnrollAndApply(t *testing.T) {
 	connect := func(e *gds.Enrollment) error {
 		opts, err := e.ClientOptions()
 		require.NoError(t, err)
-		c, err := opcua.NewClient(surl, append(opts, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous), opcua.AutoReconnect(false))...)
+		c, err := opcua.NewClient(surl, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(opts, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeAnonymous), opcua.AutoReconnect(false))...)...)
 		require.NoError(t, err)
 		defer func() { _ = c.Close(context.Background()) }()
 		return c.Connect(ctx)

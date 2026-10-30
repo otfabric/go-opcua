@@ -194,7 +194,7 @@ func TestDiagnostics_SessionTimeout(t *testing.T) {
 	srv, url := diagServer(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	short, err := opcua.NewClient(url, opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.SessionTimeout(time.Second), opcua.AutoReconnect(false))
+	short, err := opcua.NewClient(url, opcua.InsecureNoSecurity(), opcua.SessionTimeout(time.Second), opcua.AutoReconnect(false))
 	require.NoError(t, err)
 	require.NoError(t, short.Connect(ctx))
 	t.Cleanup(func() { _ = short.Close(context.Background()) })
@@ -259,7 +259,7 @@ func BenchmarkDiagnostics_Read(b *testing.B) {
 			}
 			defer func() { _ = srv.Close() }()
 			ctx := context.Background()
-			c, err := opcua.NewClient(srv.Endpoints()[0].EndpointURL, opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.ReturnDiagnostics(tc.mask))
+			c, err := opcua.NewClient(srv.Endpoints()[0].EndpointURL, opcua.InsecureNoSecurity(), opcua.ReturnDiagnostics(tc.mask))
 			if err != nil {
 				b.Fatal(err)
 			}

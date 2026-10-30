@@ -179,7 +179,7 @@ func startStation(name string, srv *server.Server) (*station, error) {
 		return nil, fmt.Errorf("%s: Start: %w", name, err)
 	}
 	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()),
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(30*time.Second),
 		opcua.RequestTimeout(60*time.Second),
 		opcua.AutoReconnect(false),

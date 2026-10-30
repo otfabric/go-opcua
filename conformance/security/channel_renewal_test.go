@@ -163,7 +163,7 @@ func testChannelRenewalServerRotatesSecurityToken(t *testing.T) {
 
 	// A 2 s lifetime makes the client renew every second.
 	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://localhost:%d", sniffer.port()),
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.Lifetime(2*time.Second),
 		opcua.DialTimeout(30*time.Second),
 		opcua.RequestTimeout(30*time.Second),

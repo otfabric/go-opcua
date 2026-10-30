@@ -583,7 +583,7 @@ func TestParallelSessionChurn(t *testing.T) {
 			for r := 0; r < rounds; r++ {
 				err := wd.do("session lifecycle", func() error {
 					rec := newStateRecorder(fmt.Sprintf("g%d.r%d", g, r), false)
-					c, err := opcua.NewClient(e.url(), e.clientOptions(rec, opcua.AutoReconnect(false))...)
+					c, err := opcua.NewClient(e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, e.clientOptions(rec, opcua.AutoReconnect(false))...)...)
 					if err != nil {
 						return err
 					}

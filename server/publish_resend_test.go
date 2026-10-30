@@ -34,7 +34,7 @@ func TestPublish_ResendsMessageOfDeadRequest(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	c, err := opcua.NewClient(srv.Endpoints()[0].EndpointURL, opcua.SecurityMode(ua.MessageSecurityModeNone),
+	c, err := opcua.NewClient(srv.Endpoints()[0].EndpointURL, opcua.InsecureNoSecurity(),
 		opcua.AutoReconnect(false), opcua.RequestTimeout(30*time.Second))
 	require.NoError(t, err)
 	require.NoError(t, c.Connect(ctx))

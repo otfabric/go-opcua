@@ -165,7 +165,7 @@ func TestCancel_AfterRecreateForgetsCurrentID(t *testing.T) {
 func TestConnect_DialFailureEndsClosed(t *testing.T) {
 	t.Parallel()
 	var states []ConnState
-	c, err := NewClient("opc.tcp://127.0.0.1:1", // nothing listens on port 1
+	c, err := NewClient("opc.tcp://127.0.0.1:1", InsecureNoSecurity(), // nothing listens on port 1
 		DialTimeout(5*time.Second),
 		WithConnStateHandler(func(s ConnState) { states = append(states, s) }),
 	)
@@ -182,7 +182,7 @@ func TestConnect_DialFailureEndsClosed(t *testing.T) {
 // Connect on a client that was already closed must not come up.
 func TestConnect_AfterCloseFails(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://127.0.0.1:1", DialTimeout(5*time.Second))
+	c, err := NewClient("opc.tcp://127.0.0.1:1", InsecureNoSecurity(), DialTimeout(5*time.Second))
 	require.NoError(t, err)
 	require.NoError(t, c.Close(context.Background()))
 
@@ -228,7 +228,7 @@ func TestDeliverPublishResponse_StatusChangeSchedulesRecreation(t *testing.T) {
 		}
 	}
 	setup := func(t *testing.T, opts ...Option) (*Client, <-chan *PublishNotificationData) {
-		c, err := NewClient("opc.tcp://example.com:4840", opts...)
+		c, err := NewClient("opc.tcp://example.com:4840", append([]Option{InsecureNoSecurity()}, opts...)...)
 		require.NoError(t, err)
 		ended, ch := newNotifyTestSub(7)
 		sibling, _ := newNotifyTestSub(8)
@@ -385,7 +385,7 @@ func TestPublish_SubscriptionTransferred(t *testing.T) {
 // pending at the next reconnect, that reconnect recreated the subscription
 // instead of transferring and republishing it.
 func TestPublish_NoSubscriptionOfLeftSession(t *testing.T) {
-	c, err := NewClient("opc.tcp://example.com:4840", AutoReconnect(true))
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(), AutoReconnect(true))
 	require.NoError(t, err)
 	sub, _ := newNotifyTestSub(7)
 	sub.c = c
