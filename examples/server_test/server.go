@@ -40,7 +40,7 @@ func main() {
 	var opts []server.Option
 
 	opts = append(opts,
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic128Rsa15", ua.MessageSecurityModeSign),
 		server.EnableSecurity("Basic128Rsa15", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableSecurity("Basic256", ua.MessageSecurityModeSign),
@@ -123,7 +123,7 @@ func main() {
 		}
 	}
 
-	s, err := server.New(opts...)
+	s, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		log.Fatalf("Error creating server: %s", err)
 	}

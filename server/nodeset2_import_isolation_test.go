@@ -20,7 +20,7 @@ import (
 func TestBuiltinNodeSetValuesAreNotSharedBetweenServers(t *testing.T) {
 	newServer := func() *Server {
 		t.Helper()
-		s, err := New(EndPoint("localhost", 0))
+		s, err := New(InsecureNoSecurity(), EndPoint("localhost", 0))
 		require.NoError(t, err)
 		return s
 	}

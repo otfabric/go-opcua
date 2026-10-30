@@ -129,7 +129,7 @@ func TestNodeOpcuaServer_DiscoveryServerUnsupported(t *testing.T) {
 	srv, err := server.New(
 		server.ListenOn("127.0.0.1:0"),
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI("urn:otfabric:go-opcua:interop:registrant"),
 		server.WithDiscoveryRegistration(h.endpoint,

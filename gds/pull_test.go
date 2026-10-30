@@ -40,7 +40,7 @@ func gdsServer(t *testing.T, cfg gdsserver.Config) (*gdsserver.GDS, string) {
 		server.EndPoint("localhost", 0),
 		server.Certificate(p.ServerCert),
 		server.PrivateKey(p.ServerKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
@@ -318,7 +318,7 @@ func fakeGDS(t *testing.T, hs map[uint32]pullHandler) *gds.PullClient {
 		server.EndPoint("localhost", 0),
 		server.Certificate(p.ServerCert),
 		server.PrivateKey(p.ServerKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)

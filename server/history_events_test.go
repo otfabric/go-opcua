@@ -645,7 +645,7 @@ func TestHistoryReadAuditEvents(t *testing.T) {
 }
 
 func TestHistoryServerCapabilities(t *testing.T) {
-	s, err := New()
+	s, err := New(InsecureNoSecurity())
 	require.NoError(t, err)
 	value := func(nid uint32) any {
 		dv := s.Node(ua.NewNumericNodeID(0, nid)).Value()

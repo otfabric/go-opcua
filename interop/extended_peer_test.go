@@ -272,7 +272,7 @@ func startRenewalGoServer(t *testing.T) (string, *atomic.Int64) {
 		server.EndPoint("host.docker.internal", 0),
 		server.Certificate(loadGoServerCert(t)),
 		server.PrivateKey(loadGoServerKey(t)),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(slog.New(openChannelCounter{n: renewals})),

@@ -48,7 +48,7 @@ func gdsPullServer(t *testing.T, cfg gdsserver.Config, opts ...server.Option) (*
 	var g atomic.Pointer[gdsserver.GDS]
 	srv, err := server.New(append([]server.Option{
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.Certificate(p.serverCert),
 		server.PrivateKey(p.serverKey),

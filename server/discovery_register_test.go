@@ -19,7 +19,7 @@ import (
 // the end of the test.
 func startedServer(t *testing.T, opts ...Option) *Server {
 	t.Helper()
-	s, err := New(append([]Option{EndPoint("localhost", 0)}, opts...)...)
+	s, err := New(append([]Option{InsecureNoSecurity()}, append([]Option{EndPoint("localhost", 0)}, opts...)...)...)
 	require.NoError(t, err)
 	require.NoError(t, s.Start(context.Background()))
 	t.Cleanup(func() { _ = s.Close() })
@@ -73,7 +73,7 @@ func TestRegistration_Options(t *testing.T) {
 		"none":     WithDiscoveryRegistration("opc.tcp://localhost:4840", RegisterSecurity(ua.SecurityPolicyURINone, ua.MessageSecurityModeSign)),
 		"modeNone": WithDiscoveryRegistration("opc.tcp://localhost:4840", RegisterSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeNone)),
 	} {
-		_, err := New(EndPoint("localhost", 0), opt)
+		_, err := New(InsecureNoSecurity(), EndPoint("localhost", 0), opt)
 		require.Error(t, err, name)
 	}
 
@@ -85,7 +85,7 @@ func TestRegistration_Options(t *testing.T) {
 		"policy needs a certificate": {WithDiscoveryRegistration("opc.tcp://localhost:4840", RegisterInsecure(),
 			RegisterSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt))},
 	} {
-		s, err := New(append([]Option{EndPoint("localhost", 0)}, opts...)...)
+		s, err := New(append([]Option{InsecureNoSecurity()}, append([]Option{EndPoint("localhost", 0)}, opts...)...)...)
 		require.NoError(t, err, name)
 		require.Error(t, s.Start(context.Background()), name)
 	}
@@ -132,11 +132,11 @@ func TestRegistration_AssignResponse(t *testing.T) {
 func TestRegistration_InsecureRegisterAndUnregister(t *testing.T) {
 	accepted := make(chan *ua.RegisteredServer, 8)
 	lds, url := startedLDS(t, []LDSOption{LDSAllowInsecureRegistration(), LDSRegistrationCallback(func(rs *ua.RegisteredServer) { accepted <- rs })},
-		EnableSecurity("None", ua.MessageSecurityModeNone))
+		InsecureNoSecurity())
 
 	const uri = "urn:test:register:insecure"
 	s, events := registrant(t, url, uri, []RegistrationOption{RegisterInsecure(), RegisterMdnsServerName("press")},
-		EnableSecurity("None", ua.MessageSecurityModeNone))
+		InsecureNoSecurity())
 	ev := nextEvent(t, events)
 	require.NoError(t, ev.Err)
 	require.True(t, ev.Online)
@@ -160,7 +160,7 @@ func TestRegistration_Secure(t *testing.T) {
 	require.NoError(t, err)
 	lds, url := startedLDS(t, nil,
 		Certificate(ldsCert), PrivateKey(ldsKey),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSign),
 		EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt))
 
@@ -203,7 +203,7 @@ func TestRegistration_Secure(t *testing.T) {
 // cannot be reached.
 func TestRegistration_Failures(t *testing.T) {
 	// Only SecurityPolicy None: no secured endpoint.
-	_, url := startedLDS(t, []LDSOption{LDSAllowInsecureRegistration()}, EnableSecurity("None", ua.MessageSecurityModeNone))
+	_, url := startedLDS(t, []LDSOption{LDSAllowInsecureRegistration()}, InsecureNoSecurity())
 	cert, key, err := testpki.SelfSigned("registrant", "urn:test:register:fail")
 	require.NoError(t, err)
 	backoff := RegisterBackoff(time.Hour, time.Hour)
@@ -221,10 +221,10 @@ func TestRegistration_Failures(t *testing.T) {
 
 	// A server that is no discovery server: RegisterServer2 and then
 	// RegisterServer are refused.
-	plain := startedServer(t, ApplicationURI("urn:test:register:plain"), EnableSecurity("None", ua.MessageSecurityModeNone))
+	plain := startedServer(t, ApplicationURI("urn:test:register:plain"), InsecureNoSecurity())
 	plainURL := fmt.Sprintf("opc.tcp://localhost:%d", plain.Port())
 	_, events = registrant(t, plainURL, "urn:test:register:legacy", []RegistrationOption{backoff, RegisterInsecure()},
-		EnableSecurity("None", ua.MessageSecurityModeNone))
+		InsecureNoSecurity())
 	ev = nextEvent(t, events)
 	require.Equal(t, "RegisterServer", ev.Service)
 	require.ErrorIs(t, ev.Err, ua.StatusBadServiceUnsupported)
@@ -234,7 +234,7 @@ func TestRegistration_Failures(t *testing.T) {
 	// can be bound again by a server of a parallel test.
 	goneURL := fmt.Sprintf("opc.tcp://localhost:%d", testport.TCP(t))
 	s, events := registrant(t, goneURL, "urn:test:register:gone", []RegistrationOption{backoff, RegisterInsecure()},
-		EnableSecurity("None", ua.MessageSecurityModeNone))
+		InsecureNoSecurity())
 	ev = nextEvent(t, events)
 	require.Error(t, ev.Err)
 	require.NoError(t, s.Close())

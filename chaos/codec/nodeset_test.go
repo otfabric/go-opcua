@@ -165,7 +165,7 @@ type station struct {
 func newStation(name string) (*station, error) {
 	srv, err := server.New(
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	if err != nil {
@@ -403,7 +403,7 @@ func TestNodeSet_ServersInParallel(t *testing.T) {
 
 	// The reference: an untouched server, compared with what this test
 	// decodes from the NodeSet itself.
-	ref, err := server.New(server.EndPoint("localhost", 0))
+	ref, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -669,7 +669,7 @@ func TestNodeSet_ConcurrentImport(t *testing.T) {
 	importInto := func(name string) (*station, error) {
 		srv, err := server.New(
 			server.EndPoint("localhost", 0),
-			server.EnableSecurity("None", ua.MessageSecurityModeNone),
+			server.InsecureNoSecurity(),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		)
 		if err != nil {

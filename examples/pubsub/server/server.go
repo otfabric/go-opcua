@@ -44,7 +44,7 @@ func main() {
 
 	srv, err := server.New(
 		server.EndPoint("localhost", *port),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.WithPubSub(cfg),
 	)

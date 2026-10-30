@@ -24,7 +24,7 @@ import (
 // publishing intervals away.
 func TestPublish_ResendsMessageOfDeadRequest(t *testing.T) {
 	srv, err := New(EndPoint("localhost", 0),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous))
 	require.NoError(t, err)
 	ns := NewNodeNameSpace(srv, "resend")

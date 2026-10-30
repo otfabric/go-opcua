@@ -308,7 +308,7 @@ func startGDSGoServer(t *testing.T) (string, *gdsserver.GDS) {
 		server.EndPoint("host.docker.internal", 0),
 		server.Certificate(loadGoServerCert(t)),
 		server.PrivateKey(loadGoServerKey(t)),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),

@@ -20,7 +20,7 @@ func TestSetMethodArguments_Errors(t *testing.T) {
 	m.SetNodeClass(ua.NodeClassMethod)
 	require.ErrorIs(t, m.SetMethodArguments(nil, nil), ua.StatusBadNodeIDUnknown, "not in a namespace")
 
-	srv, err := New()
+	srv, err := New(InsecureNoSecurity())
 	require.NoError(t, err)
 	ns := NewNodeNameSpace(srv, "urn:test")
 	ns.AddNode(m)

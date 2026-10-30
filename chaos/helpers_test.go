@@ -240,7 +240,7 @@ func (e *env) objectsID() *ua.NodeID         { return ua.NewNumericNodeID(e.ns, 
 func (e *env) startServer() {
 	e.t.Helper()
 	opts := []server.Option{
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(debugLogger()),
 	}
@@ -250,7 +250,7 @@ func (e *env) startServer() {
 	} else {
 		opts = append(opts, server.EndPoint("127.0.0.1", e.directPort))
 	}
-	srv, err := server.New(opts...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		e.t.Fatalf("chaos: new server: %v", err)
 	}

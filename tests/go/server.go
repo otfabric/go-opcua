@@ -20,7 +20,7 @@ func startServer() *server.Server {
 	port := 4840
 
 	opts = append(opts,
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic128Rsa15", ua.MessageSecurityModeSign),
 		server.EnableSecurity("Basic128Rsa15", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableSecurity("Basic256", ua.MessageSecurityModeSign),
@@ -51,7 +51,7 @@ func startServer() *server.Server {
 		server.EndPoint("localhost", port),
 	)
 
-	s, err := server.New(opts...)
+	s, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		log.Fatalf("Error creating server: %s", err)
 	}

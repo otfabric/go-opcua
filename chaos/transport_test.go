@@ -59,7 +59,7 @@ func newTransportEnv(t *testing.T, seed int64, opts ...server.Option) *transport
 		server.HTTPSEndPoint("localhost", https.Port()),
 		server.ListenHTTPSOn("localhost:0"),
 		server.TLSConfig(pki.ServerConfig()),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.SetLogger(debugLogger()),
 	}, opts...)...)

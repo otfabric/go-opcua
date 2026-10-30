@@ -58,9 +58,9 @@ func TestTransportTLS(t *testing.T) {
 	require.Equal(t, uint16(tls.VersionTLS12), tc.MinVersion)
 	require.Equal(t, uint16(tls.VersionTLS10), cfg.tlsConfig.MinVersion, "the caller's config is not changed")
 
-	_, err = New(EndPoint("localhost", 0), HTTPSEndPoint("localhost", 0))
+	_, err = New(InsecureNoSecurity(), EndPoint("localhost", 0), HTTPSEndPoint("localhost", 0))
 	require.NoError(t, err)
-	s, err := New(EndPoint("localhost", 0), ListenOn("127.0.0.1:0"), HTTPSEndPoint("localhost", 0))
+	s, err := New(InsecureNoSecurity(), EndPoint("localhost", 0), ListenOn("127.0.0.1:0"), HTTPSEndPoint("localhost", 0))
 	require.NoError(t, err)
 	require.ErrorIs(t, s.Start(context.Background()), errors.ErrInvalidSecurityConfig, "no certificate for TLS")
 	require.NoError(t, s.Close())
@@ -83,7 +83,7 @@ func startHTTPSServer(tb testing.TB) (*Server, string, *http.Client) {
 		HTTPSEndPoint("localhost", 0),
 		ListenHTTPSOn("127.0.0.1:0"),
 		TLSConfig(pki.ServerConfig()),
-		EnableSecurity("None", ua.MessageSecurityModeNone),
+		InsecureNoSecurity(),
 		EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)
 	require.NoError(tb, err)

@@ -95,10 +95,10 @@ func proxiedECCServer(t *testing.T, hook func(dir string, msg []byte) []byte, ex
 	opts := append([]server.Option{
 		server.EndPoint("localhost", proxy.port()),
 		server.ListenOn("localhost:0"),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}, mixedServerOpts(t, extra...)...)
-	srv, err := server.New(opts...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
 	t.Cleanup(func() { _ = srv.Close() })
@@ -511,15 +511,11 @@ func TestECC_ServerConfiguration(t *testing.T) {
 	})
 
 	t.Run("KeyMustBelongToTheCertificate", func(t *testing.T) {
-		_, err := server.New(
-			server.EndPoint("localhost", 0),
-			server.ApplicationIdentity(ecc.server[curveP256].cert, ecc.stranger.key),
-		)
+		_, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0),
+			server.ApplicationIdentity(ecc.server[curveP256].cert, ecc.stranger.key))
 		require.Error(t, err)
-		_, err = server.New(
-			server.EndPoint("localhost", 0),
-			server.ApplicationIdentity([]byte("not a certificate"), ecc.stranger.key),
-		)
+		_, err = server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0),
+			server.ApplicationIdentity([]byte("not a certificate"), ecc.stranger.key))
 		require.Error(t, err)
 	})
 

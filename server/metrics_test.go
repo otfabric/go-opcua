@@ -20,7 +20,7 @@ func (m *captureServerMetrics) OnError(string, time.Duration, error) {}
 
 func TestServerMetrics_WithMetrics(t *testing.T) {
 	m := &captureServerMetrics{}
-	srv, err := New(WithMetrics(m))
+	srv, err := New(InsecureNoSecurity(), WithMetrics(m))
 	require.NoError(t, err)
 	require.NotNil(t, srv)
 }

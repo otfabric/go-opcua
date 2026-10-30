@@ -160,7 +160,7 @@ func TestStore_Failures(t *testing.T) {
 func TestAttach_Errors(t *testing.T) {
 	t.Parallel()
 	newSrv := func() *server.Server {
-		srv, err := server.New(server.EndPoint("localhost", 0))
+		srv, err := server.New(server.InsecureNoSecurity(), server.EndPoint("localhost", 0))
 		require.NoError(t, err)
 		return srv
 	}

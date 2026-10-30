@@ -223,7 +223,7 @@ func secureServerOptions(t testing.TB) []server.Option {
 	t.Helper()
 	p := pki(t)
 	opts := []server.Option{
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
 		server.WithUsernameValidator(userValidator),
@@ -251,7 +251,7 @@ func (e *env) startServer() {
 	e.t.Helper()
 	opts := append(secureServerOptions(e.t), e.serverOpts...)
 	opts = append(opts, server.EndPoint("localhost", e.proxy.Port()), server.ListenOn("localhost:0"))
-	srv, err := server.New(opts...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		e.t.Fatalf("chaos: new server: %v", err)
 	}

@@ -51,10 +51,10 @@ func newServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	parallel(t)
 	all := append([]server.Option{
 		server.EndPoint("localhost", 0),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	}, opts...)
-	srv, err := server.New(all...)
+	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
 	t.Cleanup(func() { _ = srv.Close() })

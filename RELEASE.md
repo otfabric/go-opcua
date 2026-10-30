@@ -7,7 +7,7 @@
 
 ### Summary
 
-Secure client defaults. A client runs without message security only when asked to by name, and trusts only the certificates it is given. **This release breaks callers that relied on the old defaults.** Go libraries in this organisation stay on v0 or v1, so it ships as a minor version (otfabric/engineering ADR-0010).
+Secure defaults. A client and a server run without message security only when asked to by name, and a client trusts only the certificates it is given. **This release breaks callers that relied on the old defaults.** Go libraries in this organisation stay on v0 or v1, so it ships as a minor version (otfabric/engineering ADR-0010).
 
 ### Breaking
 
@@ -15,13 +15,15 @@ Secure client defaults. A client runs without message security only when asked t
 - **A server that presents no certificate is refused** under Sign and SignAndEncrypt (`errors.ErrNoCertificate`), also on reverse connect. It was accepted.
 - **Server certificates are validated against `TrustedCertificates` only.** The system CA pool is no longer used (Part 4 §6.1.3). A client using message security needs `TrustedCertificates`, or `InsecureSkipVerify` for development.
 
+- **`Server.Start` refuses to offer no message security** (`errors.ErrInsecureNotAllowed`): a server with no security configured, or with `EnableSecurity("None", …)`, needs `server.InsecureNoSecurity()`. A secure-only server still answers the discovery services.
+
 ### Unchanged
 
 Policy None stays supported. `GetEndpoints`, `FindServers`, `FindServersOnNetwork` and `DiscoverServers` need no opt-in, and neither do `opc.https` and `opc.wss`, which TLS secures.
 
 ### Added
 
-- `opcua.InsecureNoSecurity()`, `errors.ErrInsecureNotAllowed`.
+- `opcua.InsecureNoSecurity()`, `server.InsecureNoSecurity()`, `errors.ErrInsecureNotAllowed`.
 
 ---
 

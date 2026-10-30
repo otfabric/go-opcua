@@ -27,7 +27,7 @@ func fakeServer(t *testing.T, sc map[uint32]handler, tl map[uint32]handler) *opc
 		server.EndPoint("localhost", 0),
 		server.Certificate(p.ServerCert),
 		server.PrivateKey(p.ServerKey),
-		server.EnableSecurity("None", ua.MessageSecurityModeNone),
+		server.InsecureNoSecurity(),
 		server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 	)

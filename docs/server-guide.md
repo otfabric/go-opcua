@@ -121,7 +121,7 @@ import (
 func main() {
     s, err := server.New(
         server.EndPoint("localhost", 4840),
-        server.EnableSecurity("None", ua.MessageSecurityModeNone),
+        server.InsecureNoSecurity(),
         server.EnableAuthMode(ua.UserTokenTypeAnonymous),
     )
     if err != nil {
@@ -188,7 +188,7 @@ srv, err := server.New(
     server.WebSocketEndPoint("plc.example.com", 4843),
     server.HTTPSEndPoint("plc.example.com", 4443),
     server.TLSConfig(&tls.Config{Certificates: []tls.Certificate{tlsCert}}),
-    server.EnableSecurity("None", ua.MessageSecurityModeNone),
+    server.InsecureNoSecurity(),
     server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
     server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 )
@@ -230,7 +230,7 @@ srv, err := server.New(
     server.WebSocketEndPoint("plc.example.com", 4843),
     server.HTTPSEndPoint("plc.example.com", 4443),
     server.TLSConfig(&tls.Config{Certificates: []tls.Certificate{tlsCert}}),
-    server.EnableSecurity("None", ua.MessageSecurityModeNone),
+    server.InsecureNoSecurity(),
     server.EnableAuthMode(ua.UserTokenTypeAnonymous),
     server.EnableUAJSON(),
 )
@@ -971,7 +971,7 @@ roles. All of them are opt-in.
 lds, _ := server.New(
     server.EndPoint("plant-gateway", 4840), // the well-known discovery port
     server.Certificate(cert), server.PrivateKey(key),
-    server.EnableSecurity("None", ua.MessageSecurityModeNone), // for FindServers / GetEndpoints
+    server.InsecureNoSecurity(), // for FindServers / GetEndpoints
     server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
     server.WithLocalDiscoveryServer(
         server.LDSApplicationType(ua.ApplicationTypeDiscoveryServer),
@@ -1309,7 +1309,7 @@ func main() {
         server.Certificate(cert),
         server.PrivateKey(pk),
         server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
-        server.EnableSecurity("None", ua.MessageSecurityModeNone),
+        server.InsecureNoSecurity(),
         server.EnableAuthMode(ua.UserTokenTypeAnonymous),
         server.EnableAuthMode(ua.UserTokenTypeUserName),
         server.ServerName("My OPC-UA Server"),
