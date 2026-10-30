@@ -64,13 +64,13 @@ func startScriptedServer(t *testing.T, handlers map[uint16]server.Handler, opts 
 func newCovClient(t *testing.T, url string, opts ...opcua.Option) *opcua.Client {
 	t.Helper()
 	all := append([]opcua.Option{
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.AutoReconnect(false),
 		opcua.DialTimeout(30 * time.Second),
 		opcua.RequestTimeout(30 * time.Second),
 		opcua.Dialer(&uacp.Dialer{Dialer: &net.Dialer{}}),
 	}, opts...)
-	c, err := opcua.NewClient(url, all...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, all...)...)
 	if err != nil {
 		t.Fatalf("new client: %v", err)
 	}

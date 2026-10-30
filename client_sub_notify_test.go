@@ -16,7 +16,7 @@ import (
 
 func newNotifyTestClient(t *testing.T) *Client {
 	t.Helper()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	return c
 }

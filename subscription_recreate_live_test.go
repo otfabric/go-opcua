@@ -89,7 +89,7 @@ written:
 
 func TestClient_recreateSubscription_InvalidID(t *testing.T) {
 	t.Parallel()
-	c, err := opcua.NewClient("opc.tcp://127.0.0.1:1")
+	c, err := opcua.NewClient("opc.tcp://127.0.0.1:1", opcua.InsecureNoSecurity())
 	require.NoError(t, err)
 	err = c.TestingRecreateSubscription(context.Background(), 999)
 	require.ErrorIs(t, err, ua.StatusBadSubscriptionIDInvalid)

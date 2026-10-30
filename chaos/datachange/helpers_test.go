@@ -898,7 +898,7 @@ func (e *env) requireDrained() {
 // clientOptions returns the options of a client that talks through the proxy.
 func (e *env) clientOptions(rec *chaoskit.StateRecorder, extra ...opcua.Option) []opcua.Option {
 	opts := []opcua.Option{
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(10 * time.Second),
 		// Fault-free tests must never fail because the machine is slow, so
 		// the default request timeout only guards against a hang.
@@ -919,7 +919,7 @@ func (e *env) clientOptions(rec *chaoskit.StateRecorder, extra ...opcua.Option) 
 // unless the test closed it earlier.
 func (e *env) connect(rec *chaoskit.StateRecorder, extra ...opcua.Option) *opcua.Client {
 	e.t.Helper()
-	c, err := opcua.NewClient(e.url(), e.clientOptions(rec, extra...)...)
+	c, err := opcua.NewClient(e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, e.clientOptions(rec, extra...)...)...)
 	if err != nil {
 		e.t.Fatalf("new client: %v", err)
 	}

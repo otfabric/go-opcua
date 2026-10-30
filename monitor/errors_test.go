@@ -46,7 +46,7 @@ func (c *errorCollector) wait(t *testing.T, target error) {
 // driving pump with hand-made notifications.
 func pumpSub(t *testing.T, buf int) (*Subscription, *errorCollector) {
 	t.Helper()
-	c, err := opcua.NewClient("opc.tcp://localhost:4840")
+	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.InsecureNoSecurity())
 	require.NoError(t, err)
 	m, err := NewNodeMonitor(c)
 	require.NoError(t, err)
@@ -155,7 +155,7 @@ func errNoConsumerForTest(t *testing.T, col *errorCollector) error {
 
 func TestSubscribeErrors(t *testing.T) {
 	// The client is not connected: the subscription cannot be created.
-	c, err := opcua.NewClient("opc.tcp://localhost:4840")
+	c, err := opcua.NewClient("opc.tcp://localhost:4840", opcua.InsecureNoSecurity())
 	require.NoError(t, err)
 	m, err := NewNodeMonitor(c)
 	require.NoError(t, err)

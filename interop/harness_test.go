@@ -1162,7 +1162,7 @@ func addMethodArgsProperty(ns *server.NodeNameSpace, methodNode *server.Node, ns
 func dialClient(t *testing.T, endpoint string) *opcua.Client {
 	t.Helper()
 
-	c, err := opcua.NewClient(endpoint,
+	c, err := opcua.NewClient(endpoint, opcua.InsecureNoSecurity(),
 		opcua.SecurityModeString("None"),
 		opcua.AuthAnonymous(),
 	)
@@ -1229,7 +1229,7 @@ func dialUsernameClient(t *testing.T, endpoint, user, pass string) (*opcua.Clien
 	}
 	chosen.EndpointURL = endpoint
 
-	c, err := opcua.NewClient(endpoint,
+	c, err := opcua.NewClient(endpoint, opcua.InsecureNoSecurity(),
 		opcua.SecurityFromEndpoint(chosen, ua.UserTokenTypeUserName),
 		opcua.AuthUsername(user, pass),
 	)
@@ -1611,7 +1611,7 @@ func connectSecureClient(t *testing.T, endpoint, policy, mode string, tokenType 
 		opcua.PrivateKeyFile(consumerKey),
 		opcua.TrustedCertificates(ca),
 	}
-	c, err := opcua.NewClient(endpoint, append(opts, extra...)...)
+	c, err := opcua.NewClient(endpoint, append([]opcua.Option{opcua.InsecureNoSecurity()}, append(opts, extra...)...)...)
 	if err != nil {
 		t.Fatalf("NewClient (secure): %v", err)
 	}

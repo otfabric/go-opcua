@@ -12,7 +12,7 @@ import (
 
 func TestSubscriptionBuilder_Chaining(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	nid := ua.NewNumericNodeID(0, 42)
@@ -38,7 +38,7 @@ func TestSubscriptionBuilder_Chaining(t *testing.T) {
 
 func TestSubscriptionBuilder_MonitorEventsBuildsRequests(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	filter := ua.NewEventFilter().Select("Message").Build()
@@ -55,7 +55,7 @@ func TestSubscriptionBuilder_MonitorEventsBuildsRequests(t *testing.T) {
 
 func TestSubscriptionBuilder_NotifyChannel(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	ch := make(chan *PublishNotificationData, 1)

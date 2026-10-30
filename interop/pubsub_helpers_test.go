@@ -725,7 +725,7 @@ func dialSecureUserClient(t *testing.T, endpoint, policy, mode, user, pass strin
 		t.Fatalf("no %s/%s endpoint", policy, mode)
 	}
 	chosen.EndpointURL = endpoint
-	c, err := opcua.NewClient(endpoint,
+	c, err := opcua.NewClient(endpoint, opcua.InsecureNoSecurity(),
 		opcua.SecurityFromEndpoint(chosen, ua.UserTokenTypeUserName),
 		opcua.CertificateFile(filepath.Join(pki, "consumer", "cert.crt")),
 		opcua.PrivateKeyFile(filepath.Join(pki, "consumer", "cert.key")),

@@ -15,6 +15,17 @@ The library handles this automatically. You configure certificates, policies, an
 
 ---
 
+## Secure Defaults
+
+A client refuses to run without message security unless asked to, and trusts only what it is told to trust:
+
+- **No security is a deliberate opt-in.** `NewClient` returns `errors.ErrInsecureNotAllowed` when the resulting configuration is policy None and mode None, however it was reached (no options, `SecurityPolicy("None")`, or a None endpoint given to `SecurityFromEndpoint`). `opcua.InsecureNoSecurity()` opts in. Policy None stays fully supported, as the specification defines it.
+- **Exceptions defined by the specification:** the discovery helpers `GetEndpoints`, `FindServers`, `FindServersOnNetwork` and `DiscoverServers` need no opt-in, and neither do `opc.https` and `opc.wss`, which TLS secures.
+- **A missing server certificate is an error.** With Sign or SignAndEncrypt, a server that presents no certificate is refused (`errors.ErrNoCertificate`).
+- **Trust comes from your trust list only.** Server certificates are validated against `TrustedCertificates`. The system CA pool is not used, because it serves web PKI names, not OPC UA application instance certificates (Part 4 §6.1.3). TLS for `opc.https` and `opc.wss` keeps its own roots (`TLSConfig`).
+
+---
+
 ## Security Policies
 
 The `uapolicy` package implements fourteen security policies:
@@ -634,9 +645,9 @@ validates the server's X.509 certificate by default.
 
 ### Trusting Server Certificates
 
-If the server uses a certificate signed by a public CA already in the system
-trust store, no extra configuration is needed. For self-signed certificates or
-private CAs, add the CA certificate to the trust pool:
+A server certificate must chain to a certificate you trust: add the CA that
+signed it, or the self-signed certificate itself, to the trust list. Without
+one, every server certificate is rejected.
 
 ```go
 // Load the CA certificate that signed the server's certificate
@@ -651,11 +662,11 @@ c, _ := opcua.NewClient(endpoint,
 )
 ```
 
-`TrustedCertificates` accepts one or more `*x509.Certificate` values. They are merged with the system CA pool. The client then validates:
+`TrustedCertificates` accepts one or more `*x509.Certificate` values. They are the only roots: the system CA pool is not used. The client then validates:
 
 | Check | Description |
 |-------|-------------|
-| **Trust chain** | Certificate must chain to a trusted root (system pool + supplied certs) |
+| **Trust chain** | Certificate must chain to a trusted root (the certificates given to `TrustedCertificates`) |
 | **Expiration** | Rejects expired or not-yet-valid certificates |
 | **Key usage** | Rejects certificates that declare `KeyUsage` without `DigitalSignature` (and, for RSA certificates, `KeyEncipherment` for SignAndEncrypt) |
 | **ApplicationURI SAN** | When using `SecurityFromEndpoint`, URI SANs must match the endpoint `ApplicationDescription` |

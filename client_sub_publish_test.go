@@ -25,7 +25,7 @@ func withPublishHook(t *testing.T, fn func(context.Context, *Client) (*ua.Publis
 // still read the hook while the next test installed one: a data race that
 // failed whichever test was running.
 func TestPublishHookWhilePublishLoopRuns(t *testing.T) {
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	running, stop, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	go func() {
@@ -55,7 +55,7 @@ func TestPublishHookWhilePublishLoopRuns(t *testing.T) {
 }
 
 func TestPublish_ErrorSwitch(t *testing.T) {
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	fatalCases := []struct {

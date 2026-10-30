@@ -24,11 +24,11 @@ import (
 func (e *env) connectDirect(opts ...opcua.Option) *opcua.Client {
 	e.t.Helper()
 	all := append([]opcua.Option{
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.AutoReconnect(false),
 		opcua.RequestTimeout(30 * time.Second),
 	}, opts...)
-	c, err := opcua.NewClient("opc.tcp://"+e.directAddr(), all...)
+	c, err := opcua.NewClient("opc.tcp://"+e.directAddr(), append([]opcua.Option{opcua.InsecureNoSecurity()}, all...)...)
 	if err != nil {
 		e.t.Fatal(err)
 	}

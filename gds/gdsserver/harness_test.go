@@ -159,7 +159,7 @@ func (e *env) tryDial(o dialOpts) (*opcua.Client, error) {
 		opcua.AutoReconnect(false),
 	}
 	if o.mode == ua.MessageSecurityModeNone {
-		opts = append(opts, opcua.SecurityMode(ua.MessageSecurityModeNone), opcua.SecurityPolicy("None"))
+		opts = append(opts, opcua.InsecureNoSecurity())
 		if o.user != "" {
 			opts = append(opts, opcua.AuthUsername(o.user, password))
 		} else {
@@ -181,7 +181,7 @@ func (e *env) tryDial(o dialOpts) (*opcua.Client, error) {
 			opts = append(opts, opcua.AuthUsername(o.user, password))
 		}
 	}
-	c, err := opcua.NewClient(e.url, opts...)
+	c, err := opcua.NewClient(e.url, append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		return nil, err
 	}

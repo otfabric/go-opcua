@@ -133,7 +133,7 @@ type DiscoveryResult struct {
 // discovery server without the multicast extension is not an error.
 func DiscoverServers(ctx context.Context, host string, opts ...Option) (*DiscoveryResult, error) {
 	endpoint := DiscoveryURL(host)
-	opts = append(opts, AutoReconnect(false))
+	opts = append(opts, AutoReconnect(false), discoveryNoSecurity())
 	c, err := NewClient(endpoint, opts...)
 	if err != nil {
 		return nil, err

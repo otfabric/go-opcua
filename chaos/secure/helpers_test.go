@@ -575,7 +575,7 @@ func (e *env) dial(rec *chaoskit.StateRecorder, pol policy, extra ...opcua.Optio
 
 // dialWith connects a client with exactly the given options.
 func (e *env) dialWith(rec *chaoskit.StateRecorder, opts []opcua.Option) (*opcua.Client, error) {
-	c, err := opcua.NewClient(e.url(), opts...)
+	c, err := opcua.NewClient(e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, opts...)...)
 	if err != nil {
 		return nil, err
 	}

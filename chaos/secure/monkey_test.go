@@ -392,7 +392,7 @@ func (s *scenario) ephemeralClients(rng *rand.Rand) {
 		var c *opcua.Client
 		err := s.wd.Do("ephemeral connect", func() error {
 			var err error
-			c, err = opcua.NewClient(s.e.url(), s.e.clientOptions(rec, pol, opcua.RequestTimeout(3*time.Second), opcua.SessionTimeout(5*time.Second))...)
+			c, err = opcua.NewClient(s.e.url(), append([]opcua.Option{opcua.InsecureNoSecurity()}, s.e.clientOptions(rec, pol, opcua.RequestTimeout(3*time.Second), opcua.SessionTimeout(5*time.Second))...)...)
 			if err != nil {
 				return err
 			}

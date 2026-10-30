@@ -59,7 +59,7 @@ func setupCustomTypes(t *testing.T) (*opcua.Client, map[string]*ua.NodeID, *ua.N
 	t.Cleanup(func() { _ = srv.Close() })
 
 	c, err := opcua.NewClient(fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()),
-		opcua.SecurityMode(ua.MessageSecurityModeNone),
+		opcua.InsecureNoSecurity(),
 		opcua.DialTimeout(15*time.Second),
 		opcua.RequestTimeout(15*time.Second),
 	)

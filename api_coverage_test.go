@@ -269,7 +269,7 @@ func TestSubscriptionBuilderMonitorEvents(t *testing.T) {
 func TestWithMetrics(t *testing.T) {
 	t.Parallel()
 	m := &captureMetrics{}
-	c, err := opcua.NewClient("opc.tcp://example.com:4840", opcua.WithMetrics(m))
+	c, err := opcua.NewClient("opc.tcp://example.com:4840", opcua.InsecureNoSecurity(), opcua.WithMetrics(m))
 	require.NoError(t, err)
 	_ = c.Close(context.Background())
 }

@@ -19,7 +19,7 @@ func TestWithSubscriptionRecoveryHandler_OptionRegistered(t *testing.T) {
 	t.Parallel()
 	var received []SubscriptionRecoveryEvent
 
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithSubscriptionRecoveryHandler(func(ev SubscriptionRecoveryEvent) {
 			received = append(received, ev)
 		}),
@@ -36,7 +36,7 @@ func TestNotifyRecovery_DeliversEvent(t *testing.T) {
 	t.Parallel()
 	var received []SubscriptionRecoveryEvent
 
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithSubscriptionRecoveryHandler(func(ev SubscriptionRecoveryEvent) {
 			received = append(received, ev)
 		}),
@@ -59,7 +59,7 @@ func TestNotifyRecovery_DeliversEvent(t *testing.T) {
 // when no handler is registered.
 func TestNotifyRecovery_NilHandler_NoPanic(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 	require.Nil(t, c.recoveryFunc)
 
@@ -86,7 +86,7 @@ func TestNotifyRecovery_AllOutcomes(t *testing.T) {
 	}
 
 	var received []SubscriptionRecoveryEvent
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithSubscriptionRecoveryHandler(func(ev SubscriptionRecoveryEvent) {
 			received = append(received, ev)
 		}),
@@ -115,7 +115,7 @@ func TestNotifyRecovery_AllOutcomes(t *testing.T) {
 // returns immediately, but the gap flag is already set.
 func TestSendRepublishRequests_GapDetected(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	sub := &Subscription{
@@ -162,7 +162,7 @@ func TestRetransmissionGap(t *testing.T) {
 // set gapDetected when nextSeq is present in availableSeq.
 func TestSendRepublishRequests_NoGap(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	sub := &Subscription{
@@ -179,7 +179,7 @@ func TestSendRepublishRequests_NoGap(t *testing.T) {
 // does NOT set gapDetected when availableSeq is empty (server may have no buffer).
 func TestSendRepublishRequests_EmptyAvailable(t *testing.T) {
 	t.Parallel()
-	c, err := NewClient("opc.tcp://example.com:4840")
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity())
 	require.NoError(t, err)
 
 	sub := &Subscription{
@@ -200,7 +200,7 @@ func TestNotifyRecovery_BlockingHandlerDelaysCaller(t *testing.T) {
 	release := make(chan struct{})
 	var secondDone atomic.Bool
 
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithSubscriptionRecoveryHandler(func(ev SubscriptionRecoveryEvent) {
 			if ev.SubscriptionID == 1 {
 				close(started)
@@ -243,7 +243,7 @@ func TestNotifyRecovery_BlockingHandlerDelaysCaller(t *testing.T) {
 func TestNotifyRecovery_ConcurrentCalls_NoPanic(t *testing.T) {
 	t.Parallel()
 	var n atomic.Int64
-	c, err := NewClient("opc.tcp://example.com:4840",
+	c, err := NewClient("opc.tcp://example.com:4840", InsecureNoSecurity(),
 		WithSubscriptionRecoveryHandler(func(SubscriptionRecoveryEvent) {
 			n.Add(1)
 		}),

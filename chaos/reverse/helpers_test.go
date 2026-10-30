@@ -463,7 +463,7 @@ func (n *node) clientOptions(rec *chaoskit.StateRecorder, extra ...opcua.Option)
 		opts = append(opts, opcua.SecurityFromEndpoint(n.ep, ua.UserTokenTypeAnonymous))
 		opts = append(opts, n.prof.clientOpts...)
 	} else {
-		opts = append(opts, opcua.SecurityMode(ua.MessageSecurityModeNone))
+		opts = append(opts, opcua.InsecureNoSecurity())
 	}
 	if rec != nil {
 		opts = append(opts, opcua.WithConnStateHandler(rec.Handle))
@@ -486,7 +486,7 @@ func (n *node) dial(rec *chaoskit.StateRecorder, extra ...opcua.Option) (*opcua.
 	if n.anyEndpoint {
 		url = ""
 	}
-	c, err := opcua.NewClient(url, n.clientOptions(rec, extra...)...)
+	c, err := opcua.NewClient(url, append([]opcua.Option{opcua.InsecureNoSecurity()}, n.clientOptions(rec, extra...)...)...)
 	if err != nil {
 		return nil, err
 	}

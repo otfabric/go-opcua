@@ -769,7 +769,7 @@ func TestMulticast_GoAndPeers(t *testing.T) {
 		}
 
 		ctx := shortTestCtx(t)
-		c, err := opcua.NewClient(adapter.endpoint, opcua.AutoReconnect(false))
+		c, err := opcua.NewClient(adapter.endpoint, opcua.InsecureNoSecurity(), opcua.AutoReconnect(false))
 		if err != nil {
 			t.Fatalf("NewClient: %v", err)
 		}
