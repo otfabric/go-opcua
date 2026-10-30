@@ -28,7 +28,7 @@ import (
 
 // FindServers returns the servers known to a server or discovery server.
 func FindServers(ctx context.Context, endpoint string, opts ...Option) ([]*ua.ApplicationDescription, error) {
-	opts = append(opts, AutoReconnect(false))
+	opts = append(opts, AutoReconnect(false), discoveryNoSecurity())
 	c, err := NewClient(endpoint, opts...)
 	if err != nil {
 		return nil, err
@@ -46,7 +46,7 @@ func FindServers(ctx context.Context, endpoint string, opts ...Option) ([]*ua.Ap
 
 // FindServersOnNetwork returns the servers known to a server or discovery server. Unlike FindServers, this service is only implemented by discovery servers.
 func FindServersOnNetwork(ctx context.Context, endpoint string, opts ...Option) ([]*ua.ServerOnNetwork, error) {
-	opts = append(opts, AutoReconnect(false))
+	opts = append(opts, AutoReconnect(false), discoveryNoSecurity())
 	c, err := NewClient(endpoint, opts...)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func FindServersOnNetwork(ctx context.Context, endpoint string, opts ...Option) 
 
 // GetEndpoints returns the available endpoint descriptions for the server.
 func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.EndpointDescription, error) {
-	opts = append(opts, AutoReconnect(false))
+	opts = append(opts, AutoReconnect(false), discoveryNoSecurity())
 	c, err := NewClient(endpoint, opts...)
 	if err != nil {
 		return nil, err
@@ -231,6 +231,9 @@ type Client struct {
 func NewClient(endpoint string, opts ...Option) (*Client, error) {
 	cfg, err := ApplyConfig(opts...)
 	if err != nil {
+		return nil, err
+	}
+	if err := cfg.checkMessageSecurity(endpoint); err != nil {
 		return nil, err
 	}
 	// Propagate logger to sub-components.
