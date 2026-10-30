@@ -2,8 +2,6 @@ module github.com/otfabric/go-opcua
 
 go 1.26.0
 
-toolchain go1.27.3
-
 require (
 	github.com/ProtonMail/go-crypto v1.5.2
 	github.com/cloudflare/circl v1.6.5
