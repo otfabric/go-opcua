@@ -13,10 +13,18 @@ permissions:
 
 jobs:
   ci:
-    uses: otfabric/.github/.github/workflows/go-ci.yml@v2
+    uses: otfabric/.github/.github/workflows/go-ci.yml@v2.1.0
     with:
       codecov-name: go-opcua
       go-versions: '["1.26","1.27"]'
+      run-govulncheck: true
+      # Measured 95.4 % with the coverpkg below (go-ci method). The
+      # per-package gate of the coverage-gate job stays.
+      coverage-min: "94"
+      fuzz-time: 10s
+      # The fuzz job runs all 63 targets in turn: 16 minutes on a laptop, over
+      # the default of 15.
+      timeout-minutes: 30
       # The default exclusions plus chaos/..., which runs in the chaos job.
       test-exclude-regex: "(/example(s)?($|/)|/cmd($|/)|/chaos($|/))"
       # Match Makefile COVER_PKGS so Codecov uses the same merged metric as
@@ -68,15 +76,8 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: '1.26'
-      - name: Regenerate
-        run: go generate ./...
-      - name: Check for drift
-        run: |
-          if ! git diff --quiet; then
-            echo "::error::Generated files are out of date. Run 'go generate ./...' and commit."
-            git diff --stat
-            exit 1
-          fi
+      - name: Regenerate and check for drift
+        run: make check-gen
 
   # The Ethernet transport (pubsub/transport/eth) with real AF_PACKET raw
   # sockets: the tests skip without CAP_NET_RAW, so build the test binary as
