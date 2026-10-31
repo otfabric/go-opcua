@@ -1,5 +1,16 @@
 # go-opcua Releases
 
+## v1.29.2
+
+**Date:** 2026-10-31
+**Previous release:** v1.29.1
+
+### Changed
+
+- Tests, CI and documents only. `make coverage-gate` is now `make coverage-pkg-check`, and `make examples` writes to `bin/`.
+
+---
+
 ## v1.29.1
 
 **Date:** 2026-10-31
