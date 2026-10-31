@@ -31,3 +31,4 @@ coverage-gate.out
 
 # Compiled test binaries (go test -c)
 *.test
+/method_server
