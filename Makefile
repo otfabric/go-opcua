@@ -86,9 +86,9 @@ chaos: ## Run the chaos-monkey and parallelism suites with the race detector (CH
 	@echo "Running chaos suites (CHAOS_DURATION=$(CHAOS_DURATION))"
 	@CHAOS_DURATION=$(CHAOS_DURATION) CHAOS_SEED=$(CHAOS_SEED) go test -race -count=1 -timeout 60m ./chaos/...
 
-examples: ## Build all examples into build/
+examples: ## Build all examples into bin/
 	@echo "Building examples"
-	@go build -o build/ ./examples/...
+	@go build -o bin/ ./examples/...
 
 test-race: ## Run all tests (unit + both integration suites) with race detector
 	@echo "Running all tests with race detector (unit + integration)"
