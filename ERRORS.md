@@ -14,7 +14,7 @@ Do not treat them as interchangeable.
 
 | Situation | How it is reported |
 |-----------|--------------------|
-| Not connected / session or channel closed | Go sentinel (`errors.ErrNotConnected`, `ErrSessionClosed`, …) |
+| Not connected / session or channel closed | Go sentinel (`errors.ErrNotConnected`, `ErrSecureChannelClosed`, …) |
 | Bad endpoint, cert, or security config | Go sentinel (`errors.ErrInvalidEndpoint`, …) |
 | Transport / dial / timeout at client layer | Go `error` (often wrapping or related to timeout sentinels) |
 | Read/write/browse/call item rejected by server | `ua.StatusCode` on the result (`DataValue.Status`, browse status, …) — top-level `error` may still be `nil` |
@@ -54,17 +54,106 @@ if dv.Status != ua.StatusOK {
 
 ## Go sentinel errors
 
-Canonical definitions live in [`errors/sentinel.go`](errors/sentinel.go). Groups include:
+Definitions live in [`errors/sentinel.go`](errors/sentinel.go). Match with `errors.Is`; most are returned wrapped with detail. When wrapping, use `%w`.
 
-- Connection / session: `ErrAlreadyConnected`, `ErrNotConnected`, `ErrSecureChannelClosed`, `ErrSessionClosed`, …
-- Configuration / security setup: `ErrInvalidEndpoint`, `ErrNoCertificate`, `ErrInsecureNotAllowed` (no message security without `InsecureNoSecurity`), …
-- Subscriptions: `ErrSubscriptionNotFound`, `ErrSlowConsumer`, …
-- Codec / protocol: `ErrUnsupportedType`, `ErrInvalidMessageType`, …
-- Reverse connect: `ErrReverseHelloRejected` (the announced ServerUri or EndpointUrl is not what the client expects, or does not match the server certificate)
+### Connection and session
 
-Match with `errors.Is`. When wrapping, use `%w`.
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrAlreadyConnected` | `Connect` or `Dial` on a client that already has a connection |
+| `ErrNotConnected` | No secure channel is open to carry the request |
+| `ErrSecureChannelClosed` | The secure channel ended while the operation was under way |
+| `ErrSessionClosed`, `ErrSessionNotActivated`, `ErrReconnectAborted` | Defined for API stability; the library does not return them at present |
 
-Other packages define the errors of their own API next to it: package
+### Configuration
+
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrInvalidEndpoint` | Endpoint URL does not parse, has an unsupported scheme, no host or a bad port, or does not suit the transport profile |
+| `ErrNoCertificate` | The server presented no certificate, or a reverse connection's server certificate is unknown |
+| `ErrInvalidPrivateKey` | Private key cannot be parsed or does not suit the policy |
+| `ErrInvalidCertificate` | Certificate cannot be parsed, is not a CERTIFICATE PEM block, or fails validation |
+| `ErrNoMatchingEndpoint` | No endpoint has the requested policy, mode or transport profile |
+| `ErrNoEndpoints` | The endpoint list is empty |
+| `ErrInsecureNotAllowed` | No message security without the `InsecureNoSecurity` option |
+
+### Subscriptions
+
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrSubscriptionNotFound` | Monitor request on a subscription that no longer exists |
+| `ErrMonitoredItemNotFound` | Notification or request for an item `monitor` does not hold |
+| `ErrInvalidSubscriptionID` | Subscription ID is zero or does not match the notification |
+| `ErrSlowConsumer` | A subscriber's channel is full and messages may be dropped; also exported by `monitor` |
+
+### Namespaces and node IDs
+
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrNamespaceNotFound` | Namespace URI is not in the server's NamespaceArray |
+| `ErrInvalidNamespaceType` | The NamespaceArray value is not a string array |
+| `ErrInvalidNodeID` | Node ID text or value is malformed |
+| `ErrInvalidNamespace` | Namespace in a node ID is out of range, or a URI needs a NamespaceArray that was not given |
+| `ErrTypeAlreadyRegistered` | An extension object or type ID is registered twice |
+
+### Codec and responses
+
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrUnsupportedType` | Value has a Go type the codec or `Variant` does not handle |
+| `ErrArrayTooLarge` | Array length exceeds the limit of the codec |
+| `ErrUnbalancedArray` | Multi-dimensional Variant slice is not rectangular |
+| `ErrInvalidResponseType` | Response has an unexpected type or length |
+| `ErrEmptyResponse` | Response carries no results where the request needs one |
+
+### Security
+
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrUnsupportedSecurityPolicy` | Security policy URI is unknown, or the policy lacks the operation |
+| `ErrInvalidSecurityConfig` | Security configuration cannot work, for example a WebSocket listener without a TLS certificate |
+| `ErrSignatureValidationFailed` | A signature does not verify |
+| `ErrInvalidCiphertext` | Ciphertext has an invalid length or fails authentication |
+| `ErrInvalidPlaintext` | Plaintext does not fit the cipher's block or size rules |
+
+### Protocol
+
+| Sentinel | Meaning |
+|----------|---------|
+| `ErrInvalidMessageType` | UACP or secure channel message type is unknown or unexpected |
+| `ErrMessageTooLarge` | Message or chunk exceeds the negotiated or configured limit |
+| `ErrMessageTooSmall` | Message is shorter than its header requires |
+| `ErrTooManyChunks` | Chunk count exceeds `MaxChunkCount` |
+| `ErrInvalidState` | An internal or protocol invariant does not hold: an unsupported ACK version, a sequence number that would reuse a nonce, an inconsistent encrypted secret, a channel without its expected instance or thumbprint |
+| `ErrDuplicateHandler` | A response handler is already registered for the request ID |
+| `ErrUnknownService` | Request or response type has no service encoding |
+| `ErrReverseHelloRejected` | The announced ServerUri or EndpointUrl is not what the client expects, or does not match the server certificate |
+
+### Other packages
+
+| Sentinel | Meaning |
+|----------|---------|
+| `uapolicy.ErrPFXPassword` | PKCS #12 MAC does not verify or the contents do not decrypt: in practice a wrong password. Also matches `ErrInvalidPrivateKey` |
+| `pubsub.ErrActionTimeout` | An Action call got no Done response within its timeout; wraps `ua.StatusBadTimeout` |
+| `pubsub.ErrNotRunning` | `PubSub.Ready` on a runtime that is not started or stopped while waiting |
+| `pubsub/jsonmsg.ErrDecode` | Malformed input |
+| `pubsub/security.ErrPolicyMismatch` | Keys offered for a SecurityGroup with another policy; wraps `ua.StatusBadSecurityPolicyRejected` |
+| `pubsub/security.ErrUnknownPolicy` | `PolicyByURI` for an unsupported SecurityPolicyUri |
+| `pubsub/security.ErrInvalidKey` | Key material of the wrong length |
+| `pubsub/security.ErrInvalidNonce` | MessageNonce of the wrong length |
+| `pubsub/security.ErrSignature` | `Verify`: the signature does not match |
+| `pubsub/security.ErrNoKeys` | No key for this security token |
+| `pubsub/sks.ErrBadResponse` | GetSecurityKeys response without the method's output arguments |
+| `pubsub/transport/eth.ErrNotSupported` | `Open` on an OS other than Linux, macOS or FreeBSD; wraps `errors.ErrUnsupported` |
+| `pubsub/uadp.ErrChunkRejected` | `Reassembler.Add` discards a chunk: outside its message, wrong size, duplicate, beyond the limits, or no room. Wrapped with the reason |
+| `pubsub/uadp.ErrFiltered` | The Accept callback rejected the message after its header was decoded |
+| `pubsub/uadp.ErrMalformed` | Message does not follow the UADP encoding, or `Encode` cannot encode the NetworkMessage |
+| `pubsub/uadp.ErrUnsupported` | Valid UADP feature this package does not implement: discovery messages of PubSub Actions, reserved DataSetMessage types |
+| `pubsub/uadp.ErrSecurityMode` | Message security weaker than required, or a secured message with no keys to verify it |
+| `pubsub/uadp.ErrSecurityChecksFailed` | Invalid security header, bad signature or failed decryption; or `Encode` could not sign or encrypt |
+| `pubsub/uadp.ErrNoMetaData` | RawData DataSetMessage whose DataSetMetaData the MetaData callback does not supply |
+
+Further API errors: package
 `server` the condition errors (`ErrConditionRemoved`, `ErrConditionNotAlarm`,
 `ErrConditionUnsupport`, `ErrBranchUnknown`, `ErrTooManyBranches`), package
 `gds/gdsserver` `ErrClosed` and `ErrUnknownRequest`.
