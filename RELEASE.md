@@ -1,5 +1,16 @@
 # go-opcua Releases
 
+## v1.29.1
+
+**Date:** 2026-10-31
+**Previous release:** v1.29.0
+
+### Changed
+
+- Compiled binaries are removed from the repository and its history. Library code is unchanged from v1.29.0. Tags from before this release were rewritten, so GitHub now serves different module contents for 13 of them, and `GOPRIVATE` builds that pin one of those versions fail their `go.sum` check; move to this release.
+
+---
+
 ## v1.29.0
 
 **Date:** 2026-10-30
