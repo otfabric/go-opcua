@@ -31,7 +31,7 @@ The interop images and PKI variables are listed in [INTEROP.md](INTEROP.md#envir
 
 ## Coverage
 
-Two gates. `make coverage` measures `COVER_PKGS`, conformance tests included, and fails below 90; `.github/workflows/ci.yml` requires 94 with the same `coverpkg`. `make coverage-gate` requires `COVERAGE_MIN` (90) per library package, generated code excluded. `cmd/`, `examples/`, `tests/`, `interop/`, `chaos/` and `conformance/` are test or tool code and are not library packages.
+Two gates. `make coverage` measures `COVER_PKGS`, conformance tests included, and fails below 90; `.github/workflows/ci.yml` requires 94 with the same `coverpkg`. `make coverage-pkg-check` requires `COVER_PKG_MIN` (90) per library package, generated code excluded. `cmd/`, `examples/`, `tests/`, `interop/`, `chaos/` and `conformance/` are test or tool code and are not library packages.
 
 ## Fuzz regressions
 

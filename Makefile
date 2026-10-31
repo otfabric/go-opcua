@@ -3,12 +3,15 @@
 
 .DEFAULT_GOAL := help
 
+# A parent go.work must not change this module's dependencies.
+export GOWORK := off
+
 # Core library packages measured by `make coverage` (excludes cmd/, examples/, tests/).
 TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ ./id/ ./internal/stats/ ./internal/mdns/ ./internal/websocket/ ./pubsub/ ./pubsub/uadp/ ./pubsub/jsonmsg/ ./pubsub/transport/ ./pubsub/transport/udp/ ./pubsub/transport/eth/ ./pubsub/transport/mqtt/ ./pubsub/transport/amqp/ ./pubsub/security/ ./pubsub/sks/ ./pubsub/remote/ ./gds/ ./gds/gdsserver/ ./internal/mqtt/ ./internal/amqp/
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/internal/websocket,github.com/otfabric/go-opcua/pubsub,github.com/otfabric/go-opcua/pubsub/message,github.com/otfabric/go-opcua/pubsub/uadp,github.com/otfabric/go-opcua/pubsub/jsonmsg,github.com/otfabric/go-opcua/pubsub/transport,github.com/otfabric/go-opcua/pubsub/transport/udp,github.com/otfabric/go-opcua/pubsub/transport/eth,github.com/otfabric/go-opcua/pubsub/transport/mqtt,github.com/otfabric/go-opcua/pubsub/transport/amqp,github.com/otfabric/go-opcua/pubsub/security,github.com/otfabric/go-opcua/pubsub/sks,github.com/otfabric/go-opcua/pubsub/remote,github.com/otfabric/go-opcua/gds,github.com/otfabric/go-opcua/gds/gdsserver,github.com/otfabric/go-opcua/internal/mqtt,github.com/otfabric/go-opcua/internal/amqp
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/...
 
-.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-gate cross fuzz bench e2e
+.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-check coverage-pkg-check cross fuzz bench e2e
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -101,16 +104,18 @@ coverage: ## Run tests with coverage on core library only (writes coverage.out)
 	echo "Total coverage: $$pct%"; \
 	awk -v p="$$pct" 'BEGIN { if (p+0 < 90) { printf "ERROR: coverage %.1f%% is below 90%% threshold\n", p; exit 1 } }'
 
-# Every library package must reach COVERAGE_MIN percent on its own, generated
+coverage-check: coverage ## Alias of coverage: fail below the 90 % total
+
+# Every library package must reach COVER_PKG_MIN percent on its own, generated
 # code excluded (internal/cmd/coverage-gate). The coverage of a package counts
 # what any test in the module exercises (conformance and chaos included).
-COVERAGE_MIN ?= 90
+COVER_PKG_MIN := 90
 LIB_PKGS = $(shell go list ./... | grep -Ev '/(cmd|examples|tests|interop|chaos|conformance)(/|$$)|/internal/(testutil|cmd)(/|$$)')
-coverage-gate: ## Per-package coverage gate: every library package >= COVERAGE_MIN% (generated code excluded)
-	@echo "Running coverage gate (min $(COVERAGE_MIN)% per package)"
+coverage-pkg-check: ## Per-package coverage gate: every library package >= COVER_PKG_MIN% (generated code excluded)
+	@echo "Running coverage gate (min $(COVER_PKG_MIN)% per package)"
 	@go test -count=1 -timeout=600s -covermode=atomic -coverprofile=coverage-gate.out \
 		-coverpkg=$$(echo $(LIB_PKGS) | tr ' ' ',') $$(go list ./... | grep -Ev '/(cmd|examples)(/|$$)')
-	@go run ./internal/cmd/coverage-gate -profile coverage-gate.out -min $(COVERAGE_MIN)
+	@go run ./internal/cmd/coverage-gate -profile coverage-gate.out -min $(COVER_PKG_MIN)
 
 cover: coverage ## Open coverage report in browser
 	@echo "Opening coverage report"

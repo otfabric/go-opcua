@@ -423,6 +423,8 @@ you rely on.
 
 ## Service Support Matrix
 
+Per-area verification status: [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md).
+
 | Service Set | Service | Client | Server |
 |---|---|:---:|:---:|
 | **Discovery** | FindServers | Yes | Yes |
