@@ -1,0 +1,95 @@
+name: Self-interop
+run-name: "Self-interop against opcua-interop-otfabric:latest, by @${{ github.actor }} on ${{ github.ref_name }}"
+
+# Manual only. This commit against the latest published image of go-opcua itself
+# (ghcr.io/otfabric/opcua-interop-otfabric:latest, from otfabric/opcua-interop),
+# in both roles. The e2e tests run both sides from one commit; this one finds a
+# change on the wire that breaks an earlier release.
+#
+# Not part of the Interop workflow, which runs against the independent references,
+# and never a required check. Nothing is pinned or committed, so it cannot ask for
+# a release. A pass is not independent verification (INTEROP.md).
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/otfabric/opcua-interop-otfabric:latest
+
+jobs:
+  self-interop:
+    name: This commit against opcua-interop-otfabric:latest
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      # The secured tests need the opcua-interop test PKI. It is generated, never
+      # committed: take the generator of the latest harness release.
+      - name: The latest harness release
+        id: harness
+        run: |
+          harness=$(git ls-remote --tags --refs https://github.com/otfabric/opcua-interop.git 'v[0-9]*' \
+            | sed 's,.*refs/tags/,,' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | sort -V | tail -1)
+          [ -n "${harness}" ] || { echo "::error::no harness release found"; exit 1; }
+          echo "ref=${harness}" >> "$GITHUB_OUTPUT"
+
+      - name: Check out opcua-interop (test PKI generator)
+        uses: actions/checkout@v7
+        with:
+          repository: otfabric/opcua-interop
+          ref: ${{ steps.harness.outputs.ref }}
+          path: .opcua-interop
+          sparse-checkout: certs
+
+      - name: Generate the test PKI
+        run: |
+          openssl version
+          bash .opcua-interop/certs/generate.sh
+          echo "OPCUA_INTEROP_PKI_DIR=${GITHUB_WORKSPACE}/.opcua-interop/certs/test-pki" >> "$GITHUB_ENV"
+
+      - name: Pull the image
+        run: docker pull "${IMAGE}"
+
+      - name: Versions
+        id: versions
+        env:
+          SHA: ${{ github.sha }}
+          REF: ${{ github.ref_name }}
+          HARNESS: ${{ steps.harness.outputs.ref }}
+        run: |
+          digest=$(docker inspect --format '{{index .RepoDigests 0}}' "${IMAGE}")
+          echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          {
+            echo "## Versions"
+            echo
+            echo "| | |"
+            echo "|---|---|"
+            echo "| go-opcua under test | \`${REF}\` at \`${SHA}\` (\`$(git describe --tags --always)\`) |"
+            echo "| Go | \`$(go env GOVERSION)\` |"
+            echo "| Image | \`${IMAGE}\` |"
+            echo "| Image digest | \`${digest}\` |"
+            echo "| Image reports | \`$(docker run --rm "${IMAGE}" version)\` |"
+            docker run --rm "${IMAGE}" print-capabilities | jq -r '"| go-opcua in the image | `\(.upstream.version)` at `\(.upstream.revision)` |"'
+            echo "| Test PKI generator | opcua-interop \`${HARNESS}\` |"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Run the interop suite
+        env:
+          OPCUA_INTEROP_OTFABRIC_IMAGE: ${{ steps.versions.outputs.digest }}
+        run: |
+          set -o pipefail
+          GOWORK=off go test -v -tags interop -count=1 -timeout 25m -run Otfabric ./interop/ 2>&1 | tee interop.log
+          {
+            echo "## Result"
+            echo
+            echo "- $(grep -c -- '--- PASS' interop.log) passed, $(grep -c -- '--- SKIP' interop.log) skipped, $(grep -c -- '--- FAIL' interop.log) failed"
+          } | tee -a "$GITHUB_STEP_SUMMARY"

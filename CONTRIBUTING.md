@@ -25,6 +25,7 @@ go mod download
 - **Chaos and parallelism tests**: the packages under `chaos/` run with `make test` (short fault-injection phase) and, for longer, with `make chaos` (`CHAOS_DURATION=10m CHAOS_SEED=42 make chaos`). A failing randomized scenario prints its seed and the command to replay it. They are bug-finding tests: when one fails, fix the product and pin the defect with a small deterministic regression test; do not loosen the invariant. See `chaos/doc.go`.
 
 - **Interop tests** (tag-gated, need Docker): `make interop` runs `go test -tags=interop ./interop/...` against the opcua-interop adapter images of the six peer stacks; see [INTEROP.md](INTEROP.md). A new capability needs an entry in `interop/capabilities.json`, rows in `interop/coverage.json` and in every `interop/testdata/ledger-*.json`, then `go generate ./interop/` to regenerate `interop/COVERAGE.md` and `interop/GAPS.md` (never edit those by hand). `go test ./interop/` checks the ledgers without Docker.
+- **Self-interop** (the Self-interop workflow, run by hand): `OPCUA_INTEROP_OTFABRIC_IMAGE=ghcr.io/otfabric/opcua-interop-otfabric:latest go test -tags=interop -run Otfabric ./interop/` runs this commit against the latest published image of go-opcua itself, in both roles, and needs the test PKI like the secured peer tests. The tests skip without the variable. A pass is not independent verification.
 
 By default, `go test ./...` does not run integration or interop tests; use the targets above.
 
