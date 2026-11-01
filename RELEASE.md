@@ -2,7 +2,7 @@
 
 ## v1.29.3
 
-**Date:** unreleased
+**Date:** 2026-11-01
 **Previous release:** v1.29.2
 
 ### Security
