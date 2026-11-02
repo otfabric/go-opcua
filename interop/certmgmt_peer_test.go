@@ -181,95 +181,99 @@ func containsCert(list [][]byte, c []byte) bool {
 // ServerConfiguration object of each peer server.
 func TestCertMgmtPush_GoClient_PeerServers(t *testing.T) {
 	for _, p := range pushPeers {
-		t.Run(p.name, func(t *testing.T) {
-			requirePushFeature(t, p.env, p.image, "serverFeatures", "push-management")
-			h := startSecureAdapterServerIn(t, p.env, p.image, p.pki, pushFixtureDir(t))
-			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-			defer cancel()
-
-			t.Run("coverage/certmgmt.push.access/"+p.direction, func(t *testing.T) {
-				props, err := gds.New(pushClient(t, h.endpoint, true)).Properties(ctx)
-				if err != nil {
-					t.Fatalf("Properties: %v", err)
-				}
-				t.Logf("%s: SupportedPrivateKeyFormats %v, MaxTrustListSize %d, CertificateTypes %v",
-					p.name, props.SupportedPrivateKeyFormats, props.MaxTrustListSize, props.CertificateTypes)
-				if !p.roles {
-					return
-				}
-				anon := gds.New(pushClient(t, h.endpoint, false))
-				if _, err := anon.ReadTrustList(ctx, ua.TrustListMasksAll); !errors.Is(err, ua.StatusBadUserAccessDenied) {
-					t.Errorf("anonymous ReadTrustList: %v, want Bad_UserAccessDenied", err)
-				}
-				if _, err := anon.GetRejectedList(ctx); !errors.Is(err, ua.StatusBadUserAccessDenied) {
-					t.Errorf("anonymous GetRejectedList: %v, want Bad_UserAccessDenied", err)
-				}
-			})
-
-			t.Run("coverage/certmgmt.push.trust-list/"+p.direction, func(t *testing.T) {
-				extra, _, err := testpki.SelfSigned("go-opcua interop push "+p.name, "urn:otfabric:interop:push")
-				if err != nil {
-					t.Fatal(err)
-				}
-				before := readTrustList(t, ctx, h.endpoint)
-				if containsCert(before.TrustedCertificates, extra) {
-					t.Fatal("the new certificate is trusted before AddCertificate")
-				}
-				g := gds.New(pushClient(t, h.endpoint, true))
-				if err := g.AddCertificate(ctx, extra, true); err != nil {
-					t.Fatalf("AddCertificate: %v", err)
-				}
-				applyChanges(t, ctx, g, p, true)
-				after := readTrustList(t, ctx, h.endpoint)
-				if !containsCert(after.TrustedCertificates, extra) {
-					t.Fatalf("trusted certificates after AddCertificate + ApplyChanges: %d, the new one is missing",
-						len(after.TrustedCertificates))
-				}
-
-				g = gds.New(pushClient(t, h.endpoint, true))
-				if err := g.RemoveCertificate(ctx, gds.Thumbprint(extra), true); err != nil {
-					t.Fatalf("RemoveCertificate: %v", err)
-				}
-				applyChanges(t, ctx, g, p, true)
-				if containsCert(readTrustList(t, ctx, h.endpoint).TrustedCertificates, extra) {
-					t.Fatal("the certificate is still trusted after RemoveCertificate + ApplyChanges")
-				}
-
-				// The whole list written back with the file methods.
-				g = gds.New(pushClient(t, h.endpoint, true))
-				cur, err := g.ReadTrustList(ctx, ua.TrustListMasksAll)
-				if err != nil {
-					t.Fatalf("ReadTrustList: %v", err)
-				}
-				cur.TrustedCertificates = append(cur.TrustedCertificates, extra)
-				if _, err := g.WriteTrustList(ctx, cur); err != nil {
-					t.Fatalf("WriteTrustList: %v", err)
-				}
-				applyChanges(t, ctx, g, p, true)
-				if !containsCert(readTrustList(t, ctx, h.endpoint).TrustedCertificates, extra) {
-					t.Fatal("the certificate written with Open / Write / CloseAndUpdate is not trusted")
-				}
-				// The go-opcua client (consumer, issued by the test CA) still connects.
-				pushClient(t, h.endpoint, false)
-			})
-
-			t.Run("coverage/certmgmt.push.rejected-list/"+p.direction, func(t *testing.T) {
-				rej, err := gds.New(pushClient(t, h.endpoint, true)).GetRejectedList(ctx)
-				if err != nil {
-					t.Fatalf("GetRejectedList: %v", err)
-				}
-				for i, c := range rej {
-					if _, err := x509.ParseCertificate(c); err != nil {
-						t.Errorf("rejected certificate %d does not parse: %v", i, err)
-					}
-				}
-			})
-
-			t.Run("coverage/certmgmt.push.certificate-update/"+p.direction, func(t *testing.T) {
-				pushCertificateUpdate(t, ctx, h.endpoint, p)
-			})
-		})
+		t.Run(p.name, func(t *testing.T) { testCertMgmtPushPeerServer(t, p) })
 	}
+}
+
+// testCertMgmtPushPeerServer pushes to the server of p.
+func testCertMgmtPushPeerServer(t *testing.T, p pushPeer) {
+	t.Helper()
+	requirePushFeature(t, p.env, p.image, "serverFeatures", "push-management")
+	h := startSecureAdapterServerIn(t, p.env, p.image, p.pki, pushFixtureDir(t))
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	t.Run("coverage/certmgmt.push.access/"+p.direction, func(t *testing.T) {
+		props, err := gds.New(pushClient(t, h.endpoint, true)).Properties(ctx)
+		if err != nil {
+			t.Fatalf("Properties: %v", err)
+		}
+		t.Logf("%s: SupportedPrivateKeyFormats %v, MaxTrustListSize %d, CertificateTypes %v",
+			p.name, props.SupportedPrivateKeyFormats, props.MaxTrustListSize, props.CertificateTypes)
+		if !p.roles {
+			return
+		}
+		anon := gds.New(pushClient(t, h.endpoint, false))
+		if _, err := anon.ReadTrustList(ctx, ua.TrustListMasksAll); !errors.Is(err, ua.StatusBadUserAccessDenied) {
+			t.Errorf("anonymous ReadTrustList: %v, want Bad_UserAccessDenied", err)
+		}
+		if _, err := anon.GetRejectedList(ctx); !errors.Is(err, ua.StatusBadUserAccessDenied) {
+			t.Errorf("anonymous GetRejectedList: %v, want Bad_UserAccessDenied", err)
+		}
+	})
+
+	t.Run("coverage/certmgmt.push.trust-list/"+p.direction, func(t *testing.T) {
+		extra, _, err := testpki.SelfSigned("go-opcua interop push "+p.name, "urn:otfabric:interop:push")
+		if err != nil {
+			t.Fatal(err)
+		}
+		before := readTrustList(t, ctx, h.endpoint)
+		if containsCert(before.TrustedCertificates, extra) {
+			t.Fatal("the new certificate is trusted before AddCertificate")
+		}
+		g := gds.New(pushClient(t, h.endpoint, true))
+		if err := g.AddCertificate(ctx, extra, true); err != nil {
+			t.Fatalf("AddCertificate: %v", err)
+		}
+		applyChanges(t, ctx, g, p, true)
+		after := readTrustList(t, ctx, h.endpoint)
+		if !containsCert(after.TrustedCertificates, extra) {
+			t.Fatalf("trusted certificates after AddCertificate + ApplyChanges: %d, the new one is missing",
+				len(after.TrustedCertificates))
+		}
+
+		g = gds.New(pushClient(t, h.endpoint, true))
+		if err := g.RemoveCertificate(ctx, gds.Thumbprint(extra), true); err != nil {
+			t.Fatalf("RemoveCertificate: %v", err)
+		}
+		applyChanges(t, ctx, g, p, true)
+		if containsCert(readTrustList(t, ctx, h.endpoint).TrustedCertificates, extra) {
+			t.Fatal("the certificate is still trusted after RemoveCertificate + ApplyChanges")
+		}
+
+		// The whole list written back with the file methods.
+		g = gds.New(pushClient(t, h.endpoint, true))
+		cur, err := g.ReadTrustList(ctx, ua.TrustListMasksAll)
+		if err != nil {
+			t.Fatalf("ReadTrustList: %v", err)
+		}
+		cur.TrustedCertificates = append(cur.TrustedCertificates, extra)
+		if _, err := g.WriteTrustList(ctx, cur); err != nil {
+			t.Fatalf("WriteTrustList: %v", err)
+		}
+		applyChanges(t, ctx, g, p, true)
+		if !containsCert(readTrustList(t, ctx, h.endpoint).TrustedCertificates, extra) {
+			t.Fatal("the certificate written with Open / Write / CloseAndUpdate is not trusted")
+		}
+		// The go-opcua client (consumer, issued by the test CA) still connects.
+		pushClient(t, h.endpoint, false)
+	})
+
+	t.Run("coverage/certmgmt.push.rejected-list/"+p.direction, func(t *testing.T) {
+		rej, err := gds.New(pushClient(t, h.endpoint, true)).GetRejectedList(ctx)
+		if err != nil {
+			t.Fatalf("GetRejectedList: %v", err)
+		}
+		for i, c := range rej {
+			if _, err := x509.ParseCertificate(c); err != nil {
+				t.Errorf("rejected certificate %d does not parse: %v", i, err)
+			}
+		}
+	})
+
+	t.Run("coverage/certmgmt.push.certificate-update/"+p.direction, func(t *testing.T) {
+		pushCertificateUpdate(t, ctx, h.endpoint, p)
+	})
 }
 
 // pushCertificateUpdate: CreateSigningRequest for the existing key, the test

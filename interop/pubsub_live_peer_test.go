@@ -47,14 +47,17 @@ const (
 
 // psLiveCase is one configuration of a live test.
 type psLiveCase struct {
-	name     string
-	fcm      ua.DataSetFieldContentMask // DataSetFieldContentMask of writer and reader
-	mode     ua.MessageSecurityMode
-	policy   security.Policy
-	key      []byte
-	tokenID  uint32
-	vars     []psVar
-	maxStrLn uint32
+	name string
+	fcm  ua.DataSetFieldContentMask // DataSetFieldContentMask of writer and reader
+	// noTimestamps: the publisher does not add the timestamps fcm selects to a value
+	// written without any (psPeer.noWrittenTimestamps).
+	noTimestamps bool
+	mode         ua.MessageSecurityMode
+	policy       security.Policy
+	key          []byte
+	tokenID      uint32
+	vars         []psVar
+	maxStrLn     uint32
 }
 
 func (c psLiveCase) encoding() message.FieldEncoding {
@@ -225,7 +228,7 @@ func assertPublisherHeaders(t *testing.T, c psLiveCase, nm *message.NetworkMessa
 			if f.Value.Status != ua.StatusOK {
 				t.Errorf("field %d status %v", i, f.Value.Status)
 			}
-			if f.Value.SourceTimestamp.IsZero() || f.Value.ServerTimestamp.IsZero() {
+			if !c.noTimestamps && (f.Value.SourceTimestamp.IsZero() || f.Value.ServerTimestamp.IsZero()) {
 				t.Errorf("field %d without the timestamps the DataSetFieldContentMask selects: %+v", i, f.Value)
 			}
 		}
@@ -256,6 +259,7 @@ func psPeerPublishesUDP(t *testing.T, p *psPeer) {
 	for _, c := range psUDPCases() {
 		t.Run(c.name, func(t *testing.T) {
 			t.Parallel()
+			c.noTimestamps = p.noWrittenTimestamps != ""
 			port, ch := psListenUDP(t)
 			pub := startPubSubServer(t, pubsubServerOpts{peer: p, config: psUDPPublisherConfig(c, port)})
 			values := psValues(c.vars, psFresh())

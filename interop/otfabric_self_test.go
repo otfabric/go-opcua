@@ -24,6 +24,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -583,4 +584,98 @@ func TestOtfabricClient_ProxiedPort(t *testing.T) {
 	if !strings.Contains(string(result.Results), "-123456789") {
 		t.Errorf("results: %s", result.Results)
 	}
+}
+
+// ---------------------------------------------------------------------------
+// certificate management, GDS and PubSub: only what the image declares, so an image
+// of an earlier version skips them
+// ---------------------------------------------------------------------------
+
+// TestOtfabricServer_Push: gds.Client against the ServerConfiguration of the image.
+func TestOtfabricServer_Push(t *testing.T) {
+	requireOtfabricServer(t, "push-management")
+	testCertMgmtPushPeerServer(t, pushPeer{name: "otfabric", env: otfabricEnv, pki: "go-server",
+		direction: "go-client-to-otfabric-server", roles: true})
+}
+
+// TestOtfabricClient_Push: the image's `client push` against server.WithPushManagement.
+func TestOtfabricClient_Push(t *testing.T) {
+	requireOtfabricClient(t, "push")
+	endpoint, srv := startPushGoServer(t)
+	raw, err := os.ReadFile(filepath.Join(pkiDir(t), "node-opcua-client", "cert.crt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	added := pemCertDER(t, raw)
+	args := []string{"--certificate", "/pki/consumer/cert.crt", "--private-key", "/pki/consumer/cert.key", "--trust-list", "/pki/ca/ca.crt",
+		"--security-policy", "Basic256Sha256", "--security-mode", "SignAndEncrypt", "--username", pushAdminUser, "--password", pushAdminPass}
+	res := runOtfabricPKIClient(t, endpoint, "push", append(args, "--add-certificate", "/pki/node-opcua-client/cert.crt", "--apply")...)
+	if !res.Success {
+		t.Fatalf("client push: %s %s", res.ServiceResult.Name, res.Error)
+	}
+	var items []pushClientResult
+	if err := json.Unmarshal(res.Results, &items); err != nil || len(items) != 1 {
+		t.Fatalf("push results %s: %v", res.Results, err)
+	}
+	if !items[0].TrustList.has(loadCACertDER(t)) || items[0].TrustList.has(added) {
+		t.Errorf("the trust list before AddCertificate: %+v", items[0].TrustList)
+	}
+	if !items[0].TrustListAfter.has(added) {
+		t.Errorf("the trust list after ApplyChanges lacks the certificate: %+v", items[0].TrustListAfter)
+	}
+	if !containsCert(srv.TrustList().TrustedCertificates, added) {
+		t.Error("the go server does not trust the certificate the image added")
+	}
+}
+
+// TestOtfabricServer_GDS: gds.PullClient against the image as a GDS.
+func TestOtfabricServer_GDS(t *testing.T) {
+	requireOtfabricServer(t, "gds-pull")
+	testGDSPullPeerServer(t, otfabricEnv, "", "go-server", "go-client-to-otfabric-server")
+}
+
+// TestOtfabricClient_GDS: the image's `client gds-pull` against gdsserver.
+func TestOtfabricClient_GDS(t *testing.T) {
+	requireOtfabricClient(t, "gds-pull")
+	testGDSPullGoServer(t, gdsPullClient{name: "otfabric", env: otfabricEnv, pki: "consumer", direction: "otfabric-client-to-go-server"})
+}
+
+// psOtfabric is the image as a PubSub peer.
+var psOtfabric = &psPeer{name: "otfabric", env: otfabricEnv,
+	codecUnsupported: map[string]string{
+		// pubsub/uadp/decode.go: the decoder stops at a DataSetMessage that says it is not
+		// valid, so it has no fields to compare; open62541 decodes them.
+		"dataset-message-invalid": "go-opcua does not decode the fields of an invalid DataSetMessage",
+	},
+	// server/attribute_service.go stores the DataValue of a Write as it came, and
+	// pubsub/publisher.go leaves out a selected timestamp that is zero.
+	noWrittenTimestamps: "server: a written value has no timestamps to publish",
+}
+
+// TestOtfabricPubSub_Codec: this commit's codec against the image's, both ways.
+func TestOtfabricPubSub_Codec(t *testing.T) {
+	requireOtfabricClient(t, "codec-pubsub")
+	t.Run("go-encodes-uadp", func(t *testing.T) { psGoEncodesUADP(t, psOtfabric) })
+	t.Run("image-encodes-uadp", func(t *testing.T) { psPeerEncodesUADP(t, psOtfabric) })
+	t.Run("go-encodes-json", func(t *testing.T) { psGoEncodesJSON(t, psOtfabric) })
+	t.Run("image-encodes-json", func(t *testing.T) { psPeerEncodesJSON(t, psOtfabric) })
+}
+
+// TestOtfabricPubSub_Transports: the transports of the image, in each role.
+func TestOtfabricPubSub_Transports(t *testing.T) {
+	requireOtfabricServer(t, "pubsub")
+	t.Run("udp-image-publishes", func(t *testing.T) { psPeerPublishesUDP(t, psOtfabric) })
+	t.Run("udp-go-publishes", func(t *testing.T) { psGoPublishesUDP(t, psOtfabric) })
+	t.Run("mqtt-image-publishes", func(t *testing.T) { psPeerPublishesMQTT(t, psOtfabric) })
+	t.Run("mqtt-go-publishes", func(t *testing.T) { psGoPublishesMQTT(t, psOtfabric) })
+	t.Run("multicast-image-publishes", func(t *testing.T) { psMulticastPeerPublishes(t, psOtfabric) })
+	t.Run("multicast-go-publishes", func(t *testing.T) { psMulticastGoPublishes(t, psOtfabric) })
+}
+
+// TestOtfabricPubSub_Runtime: the runtimes of this commit and of the image.
+func TestOtfabricPubSub_Runtime(t *testing.T) {
+	requireOtfabricServer(t, "pubsub")
+	t.Run("go-publishes", func(t *testing.T) { psRuntimeGoPublishes(t, psOtfabric) })
+	t.Run("image-publishes", func(t *testing.T) { psRuntimePeerPublishes(t, psOtfabric) })
+	t.Run("image-publishes-target-variables", func(t *testing.T) { psRuntimePeerPublishesTargetVariables(t, psOtfabric) })
 }

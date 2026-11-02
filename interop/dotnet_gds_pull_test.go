@@ -76,7 +76,14 @@ func requireDotnetGDS(t *testing.T, list string) {
 // Global Discovery Server of UA-.NETStandard 2.0.1.
 func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 	requireDotnetGDS(t, "serverFeatures")
-	h := startSecureAdapterServerIn(t, dotnetGDSEnv, defaultDotnetGDSImage, "dotnet-server",
+	testGDSPullPeerServer(t, dotnetGDSEnv, defaultDotnetGDSImage, "dotnet-server", dirGoClientToDotnetServer)
+}
+
+// testGDSPullPeerServer runs gds.PullClient against the Global Discovery Server of an
+// image, with the test PKI identity pki.
+func testGDSPullPeerServer(t *testing.T, env, image, pki, dir string) {
+	t.Helper()
+	h := startSecureAdapterServerIn(t, env, image, pki,
 		fixtureDirWithUser(t, gdsAdminUser, gdsAdminPass, "AuthenticatedUser", "DiscoveryAdmin", "CertificateAuthorityAdmin", "SecurityAdmin"))
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
@@ -101,7 +108,7 @@ func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 	}
 	var appID *ua.NodeID
 
-	t.Run("coverage/gds.pull.directory/"+dirGoClientToDotnetServer, func(t *testing.T) {
+	t.Run("coverage/gds.pull.directory/"+dir, func(t *testing.T) {
 		var err error
 		if appID, err = p.RegisterApplication(ctx, rec); err != nil {
 			t.Fatalf("RegisterApplication: %v", err)
@@ -137,7 +144,7 @@ func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 	}
 
 	var issued []byte
-	t.Run("coverage/gds.pull.certificate-request/"+dirGoClientToDotnetServer, func(t *testing.T) {
+	t.Run("coverage/gds.pull.certificate-request/"+dir, func(t *testing.T) {
 		key, err := testpki.NewKey(testpki.CurveP256)
 		if err != nil {
 			t.Fatal(err)
@@ -181,7 +188,7 @@ func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 		issued = res.Certificate
 	})
 
-	t.Run("coverage/gds.pull.trust-list/"+dirGoClientToDotnetServer, func(t *testing.T) {
+	t.Run("coverage/gds.pull.trust-list/"+dir, func(t *testing.T) {
 		groups, err := p.GetCertificateGroups(ctx, appID)
 		if err != nil || len(groups) == 0 {
 			t.Fatalf("GetCertificateGroups: %v %v", err, groups)
@@ -216,7 +223,7 @@ func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 		t.Logf("GetCertificateStatus: updateRequired %v", update)
 	})
 
-	t.Run("coverage/gds.pull.revocation/"+dirGoClientToDotnetServer, func(t *testing.T) {
+	t.Run("coverage/gds.pull.revocation/"+dir, func(t *testing.T) {
 		if issued == nil {
 			t.Skip("no certificate issued")
 		}

@@ -100,6 +100,9 @@ type psPeer struct {
 	// 3.1.1 tests in which the peer publishes keep it on 5.0, with
 	// go-opcua subscribing over 3.1.1 through the same broker.
 	mqtt5Publisher bool
+	// noWrittenTimestamps: the peer publishes a value a client wrote without the
+	// timestamps a DataSetFieldContentMask selects, with the reason.
+	noWrittenTimestamps string
 }
 
 var psOpen62541 = &psPeer{name: "open62541", env: "OPEN62541_IMAGE", image: defaultOpen62541Image,
