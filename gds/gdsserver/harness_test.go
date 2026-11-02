@@ -86,6 +86,9 @@ func (e *env) start() {
 		server.EnableSecurity(ua.SecurityPolicyURIECCNistP256, ua.MessageSecurityModeSignAndEncrypt),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
+		// The tests log in with user names over None too, to show that
+		// the GDS refuses its administrators there.
+		server.AllowUsernameOnNone(),
 		server.WithUsernameValidator(func(user, pass string) error {
 			if pass != password {
 				return ua.StatusBadUserAccessDenied

@@ -29,6 +29,21 @@ func scNone() *uasc.SecureChannel {
 	})
 }
 
+// offerTokens gives srv an endpoint of policy and mode that offers the user
+// token types types: ActivateSession accepts only those.
+func offerTokens(srv *Server, policy string, mode ua.MessageSecurityMode, types ...ua.UserTokenType) {
+	ep := &ua.EndpointDescription{
+		EndpointURL:         "opc.tcp://localhost:4840",
+		SecurityPolicyURI:   policy,
+		SecurityMode:        mode,
+		TransportProfileURI: ua.TransportProfileUATCP,
+	}
+	for _, tt := range types {
+		ep.UserIdentityTokens = append(ep.UserIdentityTokens, &ua.UserTokenPolicy{PolicyID: tt.String(), TokenType: tt})
+	}
+	srv.endpoints = append(srv.endpoints, ep)
+}
+
 func TestSessionService_CreateSession_TimeoutClamping(t *testing.T) {
 	srv := newTestServer()
 	srv.endpoints = []*ua.EndpointDescription{{
@@ -168,6 +183,7 @@ func TestSessionService_ActivateSession_UnknownAndUsername(t *testing.T) {
 		}
 		return ua.StatusBadUserAccessDenied
 	}
+	offerTokens(srv, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone, ua.UserTokenTypeUserName)
 	svc := &SessionService{srv: srv}
 	sc := scNone()
 

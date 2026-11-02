@@ -80,6 +80,7 @@ func newECCSessionFixture(t *testing.T) *eccSessionFixture {
 		f.tokens = append(f.tokens, tok)
 		return DefaultRoleMapper(tok)
 	}
+	offerTokens(srv, f.policy, ua.MessageSecurityModeSignAndEncrypt, ua.UserTokenTypeAnonymous, ua.UserTokenTypeUserName, ua.UserTokenTypeCertificate, ua.UserTokenTypeIssuedToken)
 	f.svc = &SessionService{srv: srv}
 	f.sc = uasc.NewCryptoChannel(&uasc.Config{
 		SecurityMode:      ua.MessageSecurityModeSignAndEncrypt,

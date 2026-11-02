@@ -8,6 +8,7 @@
 ### Fixed
 
 - server: a rejected ActivateSession changed the user identity of the session to the one it rejected (Part 4 §5.6.3 leaves the session as it was). A client of an activated session that sent ActivateSession with another user's name and a wrong password got `Bad_UserAccessDenied`, but the session then reported that user in `Session.Identity()`, which an `AccessController` may decide on, and counted as that user's session for TransferSubscriptions. The roles were not affected. The session now takes an identity only once it has been accepted.
+- server: ActivateSession accepted every user token type, also those no endpoint offers (Part 4 §5.6.3: the EndpointDescription says which UserIdentityTokens the server accepts). A server that offers only user names let in anonymous clients, and one that offers user names only on secured endpoints accepted a clear text password over a None channel. A token type is now accepted only if an endpoint of the client's channel (same security policy and mode; opc.https and opcua+uajson for their virtual channels) offers it, else `Bad_IdentityTokenRejected`. A null or empty token counts as anonymous, as Part 4 says; before, it kept the identity of the previous activation. A token that is no user identity token is `Bad_IdentityTokenInvalid`.
 
 ---
 

@@ -132,6 +132,25 @@ func newVirtualChannels(s *Server, modes map[string]ua.MessageSecurityMode) *vir
 	return v
 }
 
+// has reports whether sc is one of the virtual channels.
+func (v *virtualChannels) has(sc *uasc.SecureChannel) bool {
+	if v == nil || sc == nil {
+		return false
+	}
+	for _, c := range v.channels {
+		if c.sc == sc {
+			return true
+		}
+	}
+	return false
+}
+
+// isVirtualChannel reports whether sc is a virtual channel of opc.https or
+// of opcua+uajson.
+func (s *Server) isVirtualChannel(sc *uasc.SecureChannel) bool {
+	return (s.hs != nil && s.hs.vc.has(sc)) || (s.wj != nil && s.wj.vc.has(sc))
+}
+
 // stop ends the requests that wait for their response.
 func (v *virtualChannels) stop() { v.cancel() }
 
