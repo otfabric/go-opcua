@@ -1,6 +1,6 @@
 # Feature status
 
-What go-opcua implements and how each area is verified. Status: v1.29.1, interop ledger pinned to opcua-interop v0.17.0. The sources of truth are the service matrix in the [README](../README.md#service-support-matrix) and the ledger [interop/COVERAGE.md](../interop/COVERAGE.md); this page summarises them per area. What is out of scope or unverified is in [LIMITATIONS.md](../LIMITATIONS.md).
+What go-opcua implements and how each area is verified. Status: v1.29.1, interop ledger pinned to opcua-interop v0.19.0. The sources of truth are the service matrix in the [README](../README.md#service-support-matrix) and the ledger [interop/COVERAGE.md](../interop/COVERAGE.md); this page summarises them per area. What is out of scope or unverified is in [LIMITATIONS.md](../LIMITATIONS.md).
 
 Nothing here is a conformance claim: no OPC Foundation certification has been attempted.
 

@@ -32,7 +32,7 @@ jobs:
       # opcua-interop release the suite and interop/coverage.json are written
       # against (interopVersion in interop/harness_test.go). Keep in step
       # with the image digests below.
-      OPCUA_INTEROP_REF: v0.17.0
+      OPCUA_INTEROP_REF: v0.19.0
 
     steps:
       - uses: actions/checkout@v7
@@ -69,18 +69,18 @@ jobs:
 
       - name: Run interop matrix
         env:
-          # Digest-pinned opcua-interop v0.17.0 multi-arch indexes, the same as
+          # Digest-pinned opcua-interop v0.19.0 multi-arch indexes, the same as
           # the harness defaults:
-          # https://github.com/otfabric/opcua-interop/releases/tag/v0.17.0
+          # https://github.com/otfabric/opcua-interop/releases/tag/v0.19.0
           # Release run: https://github.com/otfabric/opcua-interop/actions/runs/40237547159
           # Set the *_IMAGE variables in the env to test local builds.
-          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:90487dbca66d623c0d5234dbab8d6b9b4c4c12317d27ef424c93156a17dfa16f
-          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:cb2b182ef3bfe5a4fb6fd67b4c949945be27d1a2380ef0bed3fbafa1eed2924e
-          ASYNC_OPCUA_IMAGE: ghcr.io/otfabric/opcua-interop-async-opcua@sha256:dcb809cc8eaa20de7f1a34893a24300e228c8067a79d60e330997b3a0d413caa
-          DOTNET_IMAGE: ghcr.io/otfabric/opcua-interop-dotnet@sha256:aae1a636b3321c96678f4da972ba0e003ba3666f9d01293c42e0f912883c4728
-          NODE_OPCUA_IMAGE: ghcr.io/otfabric/opcua-interop-node-opcua@sha256:0bd16799d9a187af640c178c9fcc4f50103097bcfea18184050803d7750ff054
-          ASYNCUA_IMAGE: ghcr.io/otfabric/opcua-interop-asyncua@sha256:aad312f3fb23addd9fcc33f742d0816a69bc91c99f1b09331a0c197109578fb6
-          DOTNET_GDS_IMAGE: ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:9782e45ee4f3c55b1dadea5975bcd95831e6c3b8ac96c7a11f028febb64489bd
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:6e87e0a33ed42450b923eb5576f5e3b730c3c3cdd1c489ea7da9f197631a2441
+          MILO_IMAGE: ghcr.io/otfabric/opcua-interop-milo@sha256:068a7936824407d1559ed9a54b45e5499323f0f8a4ac3263bcff9b6f295f72de
+          ASYNC_OPCUA_IMAGE: ghcr.io/otfabric/opcua-interop-async-opcua@sha256:d444d6547c1b352a802459621c23e23e719145d0a5f06bcf479121a2590f05a9
+          DOTNET_IMAGE: ghcr.io/otfabric/opcua-interop-dotnet@sha256:8af83163505066b5920d79a2b86cab45bc4946f482a3c85c814de7168d2706f8
+          NODE_OPCUA_IMAGE: ghcr.io/otfabric/opcua-interop-node-opcua@sha256:34efae37d76ecb6f5e3d8b6224d28805c01d7eaf2931a75dd4bc9601e959d19e
+          ASYNCUA_IMAGE: ghcr.io/otfabric/opcua-interop-asyncua@sha256:88b6b9df33927e15543e81d89093ffbde29d5fc4c7bb3b7e332900532e5f3924
+          DOTNET_GDS_IMAGE: ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:f8b1cff268b650a192bf33616d66e56c988546dd6a2fecc9f189535fe0596ebd
           OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
         run: |
           # Pull the adapter images once, up front, instead of inside the
@@ -136,8 +136,8 @@ jobs:
       - name: Run the Ethernet tests as root
         working-directory: interop
         env:
-          # Same digest as the shards (opcua-interop v0.17.0).
-          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:90487dbca66d623c0d5234dbab8d6b9b4c4c12317d27ef424c93156a17dfa16f
+          # Same digest as the shards (opcua-interop v0.19.0).
+          OPEN62541_IMAGE: ghcr.io/otfabric/opcua-interop-open62541@sha256:6e87e0a33ed42450b923eb5576f5e3b730c3c3cdd1c489ea7da9f197631a2441
           OPCUA_INTEROP_REQUIRE_CAPABILITIES: "1"
           GO_OPCUA_ETH_REQUIRE: "1"
         run: |
