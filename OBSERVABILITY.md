@@ -55,8 +55,9 @@ only when you have a concrete consumer (Prometheus, statsd, …).
 ## Connection and session events
 
 `server.WithSessionObserver` reports client connections (opened, closed with
-their duration) and sessions (activated, closed by the client, timed out,
-closed by the server) as they happen, with the client's address and
+their duration), sessions (activated, closed by the client, timed out,
+closed by the server) and refused requests (an untrusted certificate at
+OpenSecureChannel, a refused CreateSession, a wrong password) as they happen, with the client's address and
 application description: what a server logs or audits about its clients. The
 callbacks are synchronous and must not block. See the
 [server guide](docs/server-guide.md#connection-and-session-events).
@@ -88,6 +89,9 @@ and, in a server, the PublishSubscribe information model. See
 `server.WithAuditing(true)` (or `Server.SetAuditing` at run time) makes the
 server report audit events (Part 5 §6.4.3): an AuditConditionEventType subtype
 for every call of a condition method (Part 9 §5.10), the audit events of the
+SecureChannel and Session service sets and of refused certificates (Part 4
+§6.5.5, §6.5.6; see the
+[server guide](docs/server-guide.md#security-audit-events)), the audit events of the
 GDS NodeSet when a `gds/gdsserver` Global Discovery Server is attached, and
 the events the application reports with `Server.ReportAuditEvent`. They carry
 the user and the arguments of the call, so only sessions an

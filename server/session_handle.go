@@ -36,8 +36,9 @@ func (h *Session) ID() *ua.NodeID {
 }
 
 // Identity returns the user identity token the session was activated with;
-// nil before ActivateSession. The token is the one the client sent: the
-// password of a UserNameIdentityToken is still encrypted.
+// nil before ActivateSession. The session does not keep the password of a
+// UserNameIdentityToken: its Password is nil. The [RoleMapper] gets the
+// token with the password, decrypted.
 func (h *Session) Identity() ua.IdentityToken {
 	if h == nil {
 		return nil

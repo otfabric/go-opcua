@@ -1053,14 +1053,16 @@ func (s *SecureChannel) handleOpenSecureChannelResponse(resp *ua.OpenSecureChann
 	return
 }
 
-func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Request) error {
+func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Request) (err error) {
 	s.cfg.Logger.Info("handling OpenSecureChannelRequest")
-
-	var err error
 
 	req, ok := svc.(*ua.OpenSecureChannelRequest)
 	if !ok {
 		s.cfg.Logger.Warn("expected OpenSecureChannelRequest", "got", fmt.Sprintf("%T", svc))
+		return ua.StatusBadUnexpectedError
+	}
+	if hook := s.cfg.OpenSecureChannelHook; hook != nil {
+		defer func() { hook(req, statusOf(err)) }()
 	}
 
 	// Part 6 §6.7.4: ClientProtocolVersion must match the version
@@ -1794,4 +1796,18 @@ func mergeChunks(chunks []*MessageChunk) []byte {
 		b = append(b, c.Data...)
 	}
 	return b
+}
+
+// statusOf returns the status an OpenSecureChannel request failed with: the
+// status code of err, or Bad_SecurityChecksFailed for the errors without
+// one, which come from the keys and certificates of the request.
+func statusOf(err error) ua.StatusCode {
+	if err == nil {
+		return ua.StatusOK
+	}
+	var st ua.StatusCode
+	if errors.As(err, &st) {
+		return st
+	}
+	return ua.StatusBadSecurityChecksFailed
 }

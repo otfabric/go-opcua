@@ -13,7 +13,6 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
-	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // Alarms & Conditions (Part 9).
@@ -1340,16 +1339,5 @@ func clientUserID(ctx context.Context) string {
 	if !ok || caller == nil {
 		return ""
 	}
-	switch t := caller.Identity.(type) {
-	case *ua.UserNameIdentityToken:
-		return t.UserName
-	case *ua.X509IdentityToken:
-		if cert, err := uapolicy.LeafCertificate(t.CertificateData); err == nil {
-			return cert.Subject.String()
-		}
-		return "X509"
-	case *ua.IssuedIdentityToken:
-		return "IssuedToken"
-	}
-	return "Anonymous"
+	return auditUserID(caller.Identity)
 }

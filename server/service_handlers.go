@@ -167,6 +167,7 @@ func (s *Server) serve(ctx context.Context, sc *uasc.SecureChannel, reqID uint32
 	}
 
 	s.diag.afterRequest(sc, typeID, req, sess, resp, err, before)
+	s.sessionServiceDone(sc, req, resp, err)
 
 	if err != nil {
 		if statusCode, ok := err.(ua.StatusCode); ok {

@@ -671,6 +671,8 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.cb.localIdentity = s.cfg.localIdentity
 	s.cb.onRequest = func(hdr *ua.RequestHeader) { s.sb.touchToken(hdr.AuthenticationToken) }
+	s.cb.channelOpened = s.channelOpened
+	s.cb.channelClosed = s.channelClosed
 	s.cb.writeTimeout = s.cfg.responseWriteTimeout
 	s.cb.maxPending = s.cfg.maxPendingResponses
 
@@ -768,6 +770,7 @@ func (s *Server) Close() error {
 func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
 	s.diag.sessionRemoved(sess, reason == SessionTimedOut)
 	s.observeSessionClosed(sess, reason)
+	s.auditSessionEnd(sess, reason)
 }
 
 // sessionReapInterval is how often the server looks for timed-out sessions.

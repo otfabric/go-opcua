@@ -118,9 +118,9 @@ func TestIdentityTypeOf(t *testing.T) {
 		&ua.X509IdentityToken{}:      ua.UserTokenTypeCertificate,
 		&ua.IssuedIdentityToken{}:    ua.UserTokenTypeIssuedToken,
 	} {
-		require.Equal(t, want, identityTypeOf(tok))
+		require.Equal(t, want, tokenTypeOf(tok))
 	}
-	require.Equal(t, ua.UserTokenTypeAnonymous, identityTypeOf(nil))
+	require.Equal(t, ua.UserTokenTypeAnonymous, tokenTypeOf(nil))
 }
 
 func TestSessionCloseReason_String(t *testing.T) {
@@ -138,6 +138,7 @@ func (panickingObserver) OnConnectionOpened(net.Addr)                     { pani
 func (panickingObserver) OnConnectionClosed(net.Addr, time.Duration)      { panic("closed") }
 func (panickingObserver) OnSessionActivated(SessionInfo)                  { panic("activated") }
 func (panickingObserver) OnSessionClosed(SessionInfo, SessionCloseReason) { panic("session closed") }
+func (panickingObserver) OnRejected(Rejection)                            { panic("rejected") }
 
 // TestSessionObserver_PanicIsRecovered: a panicking observer does not take
 // the connection, the session or the server down.
@@ -152,6 +153,7 @@ func TestSessionObserver_PanicIsRecovered(t *testing.T) {
 		s.observeConnectionClosed(addr, time.Now())
 		sess := newObservedSession(s, "panic", true)
 		require.NoError(t, s.sb.Close(sess.AuthTokenID))
+		s.observeRejected(Rejection{Service: RejectedActivateSession})
 	})
 }
 
