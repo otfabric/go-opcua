@@ -2015,7 +2015,7 @@ the nonces.
 func (s *Session) ID() *ua.NodeID                 // SessionId
 func (s *Session) Identity() ua.IdentityToken     // as the client sent it; nil before ActivateSession
 func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper; a copy
-func (s *Session) ClientCertificate() []byte      // of CreateSession; a copy
+func (s *Session) ClientCertificate() []byte      // of CreateSession; a copy; nil with SecurityPolicy None
 ```
 
 `Server.Session` looks up the session of a request header, for code that

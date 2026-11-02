@@ -100,6 +100,11 @@ func TestSessionService_CreateSession_EndpointsForOtherURL(t *testing.T) {
 	}
 }
 
+// TestSessionService_CreateSession_ClientCertRejected: over a secured
+// channel the client certificate is checked against the trust list. The
+// test used a channel without security before; Part 4 §5.7.2.2 tells the
+// server to ignore the certificate there (see
+// TestSessionService_CreateSession_NoneIgnoresClientCert).
 func TestSessionService_CreateSession_ClientCertRejected(t *testing.T) {
 	srv := newTestServer()
 	srv.cfg.clientCertificateValidator = func([]byte) error {
@@ -113,13 +118,44 @@ func TestSessionService_CreateSession_ClientCertRejected(t *testing.T) {
 		ClientCertificate:       []byte("cert"),
 		ClientNonce:             []byte("n"),
 	}
-	_, err := svc.CreateSession(context.Background(), scNone(), req, 1)
+	sc := uasc.NewCryptoChannel(&uasc.Config{
+		SecurityMode:      ua.MessageSecurityModeSignAndEncrypt,
+		SecurityPolicyURI: ua.SecurityPolicyURIBasic256Sha256,
+	})
+	_, err := svc.CreateSession(context.Background(), sc, req, 1)
 	require.EqualError(t, err, "untrusted")
 	// Regression: the session created for the refused request stayed in
 	// the broker until its timeout.
 	srv.sb.mu.Lock()
 	defer srv.sb.mu.Unlock()
 	require.Empty(t, srv.sb.s, "no session is kept for a request that was refused")
+}
+
+// TestSessionService_CreateSession_NoneIgnoresClientCert: "If the
+// securityPolicyUri is None, the Server shall ignore the
+// ApplicationInstanceCertificate" (Part 4 §5.7.2.2). A client that sends
+// its certificate on such a session (node-opcua does) is not refused by
+// the trust list.
+func TestSessionService_CreateSession_NoneIgnoresClientCert(t *testing.T) {
+	srv := newTestServer()
+	called := false
+	srv.cfg.clientCertificateValidator = func([]byte) error {
+		called = true
+		return ua.StatusBadSecurityChecksFailed
+	}
+	svc := &SessionService{srv: srv}
+	resp, err := svc.CreateSession(context.Background(), scNone(), &ua.CreateSessionRequest{
+		RequestHeader:           reqHeader(),
+		EndpointURL:             "opc.tcp://localhost:4840",
+		RequestedSessionTimeout: 5000,
+		ClientCertificate:       []byte("not trusted"),
+		ClientNonce:             []byte("n"),
+	}, 1)
+	require.NoError(t, err)
+	sess := srv.sb.Session(resp.(*ua.CreateSessionResponse).AuthenticationToken)
+	require.NotNil(t, sess)
+	require.False(t, called, "the trust list is not consulted without security")
+	require.Nil(t, sess.handle().ClientCertificate(), "nor is the certificate kept")
 }
 
 func TestSessionService_ActivateSession_UnknownAndUsername(t *testing.T) {

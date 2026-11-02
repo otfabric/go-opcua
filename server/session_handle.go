@@ -55,7 +55,8 @@ func (h *Session) Roles() []*ua.NodeID {
 }
 
 // ClientCertificate returns the application instance certificate (DER) the
-// client sent in CreateSession; nil without one.
+// client sent in CreateSession; nil without one, and nil on a session with
+// SecurityPolicy None, where the server ignores it (Part 4 §5.7.2.2).
 func (h *Session) ClientCertificate() []byte {
 	if h == nil {
 		return nil

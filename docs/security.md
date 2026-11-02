@@ -674,7 +674,7 @@ c, _ := opcua.NewClient(endpoint,
 
 ### Validating Client Certificates (server)
 
-Reject untrusted client application certificates at **OpenSecureChannel** (CreateSession is still checked as defense-in-depth):
+Reject untrusted client application certificates at **OpenSecureChannel** (CreateSession is still checked as defense-in-depth). On a session with SecurityPolicy None the server ignores the certificate a client sends in CreateSession, as Part 4 §5.7.2.2 requires: the trust list does not refuse it, and `Session.ClientCertificate` is nil.
 
 ```go
 caDER, _ := os.ReadFile("client-ca.der")

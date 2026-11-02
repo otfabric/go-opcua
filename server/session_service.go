@@ -32,7 +32,7 @@ type SessionService struct {
 }
 
 // CreateSession implements the OPC UA CreateSession service.
-// https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.2
+// https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.2
 func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Info("handling CreateSession request")
 
@@ -68,14 +68,23 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 	}
 	sess.serverNonce = nonce
 	sess.clientNonce = req.ClientNonce
-	sess.remoteCertificate = req.ClientCertificate
+
+	// "If the securityPolicyUri is None, the Server shall ignore the
+	// ApplicationInstanceCertificate" (Part 4 §5.7.2.2): it is neither
+	// checked against the trust list nor kept as the certificate of the
+	// session. Some clients (node-opcua) send theirs anyway.
+	clientCert := req.ClientCertificate
+	if sc != nil && sc.SecurityPolicyURI() == ua.SecurityPolicyURINone {
+		clientCert = nil
+	}
+	sess.remoteCertificate = clientCert
 
 	// Validate the client's application certificate against the server's
-	// configured trust store (OPC UA Part 4 §5.6.3). Skip validation when no
-	// validator is configured (the secure channel still enforces message
+	// configured trust store (Part 4 §5.7.2.2, §6.1.3). Skip validation when
+	// no validator is configured (the secure channel still enforces message
 	// integrity; this is an additional application-level trust check).
-	if s.srv.cfg.clientCertificateValidator != nil && len(req.ClientCertificate) > 0 {
-		if err := s.srv.cfg.clientCertificateValidator(req.ClientCertificate); err != nil {
+	if s.srv.cfg.clientCertificateValidator != nil && len(clientCert) > 0 {
+		if err := s.srv.cfg.clientCertificateValidator(clientCert); err != nil {
 			s.srv.cfg.logger.Warn("client certificate rejected", "error", err)
 			// The client never learns of the session: do not keep it
 			// until its timeout.
