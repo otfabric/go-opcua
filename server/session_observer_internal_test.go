@@ -191,3 +191,29 @@ func TestWithSessionObserver(t *testing.T) {
 	require.NoError(t, WithSessionObserver(nil)(&cfg))
 	require.Nil(t, cfg.sessionObserver)
 }
+
+// Every SessionInfo is a copy: an observer that changes the client
+// description it was given changes neither the session nor later events.
+func TestSessionObserver_InfoIsCopy(t *testing.T) {
+	t.Parallel()
+	var o sessionObs
+	o.describe(ua.NewNumericNodeID(1, 1), &ua.CreateSessionRequest{
+		SessionName: "s",
+		ClientDescription: &ua.ApplicationDescription{
+			ApplicationName: ua.NewLocalizedText("app"),
+			DiscoveryURLs:   []string{"opc.tcp://a"},
+		},
+	})
+	got := o.activate(nil, nil, false, time.Now())
+	got.Client.ApplicationURI = "changed"
+	got.Client.ApplicationName.Text = "changed"
+	got.Client.DiscoveryURLs[0] = "changed"
+
+	again := o.snapshot()
+	require.Empty(t, again.Client.ApplicationURI)
+	require.Equal(t, "app", again.Client.ApplicationName.Text)
+	require.Equal(t, []string{"opc.tcp://a"}, again.Client.DiscoveryURLs)
+
+	var empty sessionObs
+	require.Nil(t, empty.snapshot().Client, "no description, nothing to copy")
+}

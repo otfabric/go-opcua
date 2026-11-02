@@ -130,7 +130,8 @@ s, err := server.New(server.EndPoint("localhost", 4840), server.WithSessionObser
 ```
 
 The methods run synchronously, on the connection's goroutine or the request
-dispatcher, and must not block. A panic in them is recovered and logged. A
+dispatcher, and must not block: the dispatcher serves all clients, so a slow
+session method delays every client. A panic in them is recovered and logged. A
 connection loss does not end a session: the session ends when the client
 closes it or its timeout elapses, so a lost client shows
 `OnConnectionClosed` first and `OnSessionClosed` with `SessionTimedOut`

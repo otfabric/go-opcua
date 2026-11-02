@@ -4,6 +4,7 @@ package server
 
 import (
 	"net"
+	"slices"
 	"sync"
 	"time"
 
@@ -17,7 +18,9 @@ import (
 //
 // The methods are called synchronously where the event happens: on the
 // goroutine of the connection, or on the request dispatcher for the session
-// events. They must not block; hand slow work to another goroutine. A
+// events. The dispatcher handles the requests of all clients, so a session
+// method that blocks holds up every client of the server, not only its own.
+// They must not block; hand slow work to another goroutine. A
 // panicking method is recovered and logged, and does not affect the
 // connection or the session. Embed [BaseSessionObserver] to implement only
 // some of the methods.
@@ -52,8 +55,9 @@ func (BaseSessionObserver) OnConnectionClosed(net.Addr, time.Duration)      {}
 func (BaseSessionObserver) OnSessionActivated(SessionInfo)                  {}
 func (BaseSessionObserver) OnSessionClosed(SessionInfo, SessionCloseReason) {}
 
-// SessionInfo describes a session for a [SessionObserver]. It is a copy: the
-// observer may keep it.
+// SessionInfo describes a session for a [SessionObserver]. Every call gets
+// its own copy, which the observer may keep; ID is shared with the server and
+// must not be modified.
 type SessionInfo struct {
 	// ID is the SessionId (CreateSession).
 	ID *ua.NodeID
@@ -149,14 +153,28 @@ func (o *sessionObs) activate(sc *uasc.SecureChannel, tok ua.IdentityToken, reac
 	o.info.IdentityType = identityTypeOf(tok)
 	o.info.Activated = at
 	o.info.Reactivated = reactivated
-	return o.info
+	return o.info.clone()
 }
 
 // snapshot returns a copy of the info.
 func (o *sessionObs) snapshot() SessionInfo {
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	return o.info
+	return o.info.clone()
+}
+
+// clone returns a copy of i that shares no mutable data with i but the ID.
+func (i SessionInfo) clone() SessionInfo {
+	if i.Client != nil {
+		c := *i.Client
+		if c.ApplicationName != nil {
+			name := *c.ApplicationName
+			c.ApplicationName = &name
+		}
+		c.DiscoveryURLs = slices.Clone(c.DiscoveryURLs)
+		i.Client = &c
+	}
+	return i
 }
 
 // identityTypeOf returns the token type of an identity token.

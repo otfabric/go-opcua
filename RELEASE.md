@@ -2,7 +2,7 @@
 
 ## v1.30.0
 
-**Date:** unreleased
+**Date:** 2026-11-02
 **Previous release:** v1.29.5
 
 ### Added
