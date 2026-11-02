@@ -154,6 +154,30 @@ func TestTransportWSS_PolicyModeMatrix(t *testing.T) {
 	}
 }
 
+// TestTransportWSS_UsernameOnNone: with AllowUsernameOnNone the opc.wss None
+// endpoint offers UserName with an RSA policy that encrypts the password
+// (Part 4 §7.41 allows it with SecurityMode None), as UA-.NETStandard
+// requires; the secured endpoints leave the policy to the channel.
+func TestTransportWSS_UsernameOnNone(t *testing.T) {
+	f, _, urls := transportServer(t, secureServerOpts(t,
+		server.EnableAuthMode(ua.UserTokenTypeUserName),
+		server.WithUsernameValidator(userValidator),
+		server.AllowUsernameOnNone())...)
+	wss := urls[ua.TransportProfileWSS]
+
+	none := endpointForTLS(t, wss, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)
+	requireUserTokenPolicy(t, none, ua.SecurityPolicyURIAes256Sha256RsaPss)
+	requireUserTokenPolicy(t, endpointForTLS(t, wss, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSign), "")
+
+	c := newClient(t, wss, tlsClient(t), opcua.SecurityFromEndpoint(none, ua.UserTokenTypeUserName), opcua.AuthUsername("alice", "wonderland"))
+	exerciseSession(t, c, f, "wss-None-username")
+	_, err := dialClient(t, wss, tlsClient(t), opcua.SecurityFromEndpoint(none, ua.UserTokenTypeUserName), opcua.AuthUsername("alice", "wrong"))
+	require.ErrorIs(t, err, ua.StatusBadUserAccessDenied)
+
+	// opc.tcp keeps the clear-text password AllowUsernameOnNone asks for.
+	requireUserTokenPolicy(t, endpointFor(t, urls[ua.TransportProfileUATCP], ua.SecurityPolicyURINone, ua.MessageSecurityModeNone), "")
+}
+
 // endpointForTLS is endpointFor for an opc.wss or opc.https URL.
 func endpointForTLS(t *testing.T, endpoint, policyURI string, mode ua.MessageSecurityMode) *ua.EndpointDescription {
 	t.Helper()

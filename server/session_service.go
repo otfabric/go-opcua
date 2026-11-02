@@ -5,6 +5,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -393,7 +394,9 @@ func (s *SessionService) checkChannelSecurity(sc *uasc.SecureChannel) ua.StatusC
 // When the token carries no EncryptionAlgorithm the password is already clear
 // text (unsecured token policy). Otherwise the secret was encrypted with the
 // server certificate's public key using the asymmetric algorithm of the
-// SecureChannel's security policy and has the layout (Part 4 §7.41.2.3):
+// security policy of the token policy, which is that of the SecureChannel
+// unless the token policy names one (see tokenSecurityPolicy), and has the
+// layout (Part 4 §7.41.2.3):
 //
 //	UInt32 length | password bytes | serverNonce
 //
@@ -413,13 +416,16 @@ func (s *SessionService) decryptUserPassword(sc *uasc.SecureChannel, sess *sessi
 	if sc == nil {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
-	policyURI := sc.SecurityPolicyURI()
-	if policyURI == ua.SecurityPolicyURINone {
+	policyURI := s.tokenSecurityPolicy(sc, tok.PolicyID)
+	if policyURI == ua.SecurityPolicyURINone || uapolicy.IsECC(policyURI) {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
 	// The key of the channel: after push certificate management replaced
 	// the certificate, a channel opened before keeps the key it has.
-	key := sc.LocalPrivateKey()
+	var key crypto.PrivateKey
+	if policyURI == sc.SecurityPolicyURI() {
+		key = sc.LocalPrivateKey()
+	}
 	if key == nil {
 		_, k, ok := s.srv.cfg.identityFor(policyURI)
 		if !ok || k == nil {
@@ -567,9 +573,28 @@ func (s *SessionService) serverCertificate(sc *uasc.SecureChannel) []byte {
 	return cert
 }
 
-// userTokenPolicy returns the security policy that protects the user identity
-// tokens of a channel. The UserTokenPolicies of this server do not name a
-// policy of their own, so it is the policy of the SecureChannel.
+// tokenSecurityPolicy returns the security policy that protects a user
+// identity token with the PolicyId policyID: the SecurityPolicyUri of the
+// UserTokenPolicy if it names one, the policy of the SecureChannel if it
+// does not (Part 4 §7.41). Only the UserName policies of opc.https and
+// opc.wss endpoints name one (see Server.tokenPolicyOverTLS).
+func (s *SessionService) tokenSecurityPolicy(sc *uasc.SecureChannel, policyID string) string {
+	if policyID != "" {
+		for _, ep := range s.srv.Endpoints() {
+			for _, utp := range ep.UserIdentityTokens {
+				if utp != nil && utp.PolicyID == policyID && utp.SecurityPolicyURI != "" {
+					return utp.SecurityPolicyURI
+				}
+			}
+		}
+	}
+	return s.userTokenPolicy(sc)
+}
+
+// userTokenPolicy returns the security policy of a channel, which protects
+// its user identity tokens unless their UserTokenPolicy names another one
+// (see tokenSecurityPolicy). ECC policies are never named by a
+// UserTokenPolicy of this server.
 func (s *SessionService) userTokenPolicy(sc *uasc.SecureChannel) string {
 	if sc == nil {
 		return ua.SecurityPolicyURINone

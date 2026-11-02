@@ -260,7 +260,19 @@ server nonces are signed in CreateSession / ActivateSession. `ECC_nistP256_AesGc
 and `ECC_nistP256_ChaChaPoly` are not offered over HTTPS: their
 SecureChannelEnhancements bind the session signatures to a secure channel
 thumbprint that HTTPS does not have (`uasc.HTTPSPolicySupported`). A None endpoint over HTTPS
-accepts user names in plain text, protected by TLS.
+accepts user names, protected by TLS.
+
+The UserName token policies of opc.https and opc.wss name the security policy
+that encrypts the password, as Part 6 §7.4.1 asks over HTTPS ("If a
+UserIdentityToken is to be encrypted, it shall be explicitly specified in the
+UserTokenPolicy"): a secured opc.https endpoint names its own policy, and a None
+endpoint of either transport names the enabled RSA policy with the highest
+security level whose certificate the endpoint carries (Part 4 §7.41 allows RSA
+token encryption with SecurityMode None). Clients such as UA-.NETStandard do not
+send a password unencrypted on an endpoint that is not SignAndEncrypt, TLS or
+not. Without an enabled RSA policy the password goes in clear text inside TLS.
+A secured opc.wss endpoint leaves the policy to the secure channel, and
+opc.tcp is unchanged: `AllowUsernameOnNone` sends the password in clear text.
 
 The UA JSON mappings (`server.EnableUAJSON`, `opcua.TransportProfile`) have no
 secure conversation either. https-uajson (Part 6 §7.4.5) works as https-uabinary:

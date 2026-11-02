@@ -76,9 +76,13 @@ func TestTransportHTTPS_PolicyMatrix(t *testing.T) {
 	exerciseSession(t, newClient(t, plain, tlsClient(t)), f, "https-plain")
 }
 
-// TestTransportHTTPS_Username checks user name tokens over HTTPS: in clear
-// text on the None endpoint, where TLS protects them, and encrypted with the
-// server certificate on a secured one.
+// TestTransportHTTPS_Username checks user name tokens over HTTPS: encrypted
+// with the server certificate on the None endpoint as on a secured one.
+// Over HTTPS a token that is to be encrypted "shall be explicitly specified
+// in the UserTokenPolicy" (Part 6 §7.4.1), so each UserName policy names its
+// SecurityPolicy; on the None endpoint an RSA policy, which Part 4 §7.41
+// allows with SecurityMode None. UA-.NETStandard refuses to send a password
+// whose policy resolves to None on an endpoint that is not SignAndEncrypt.
 func TestTransportHTTPS_Username(t *testing.T) {
 	f, _, urls := transportServer(t, secureServerOpts(t,
 		server.EnableAuthMode(ua.UserTokenTypeUserName),
@@ -86,16 +90,23 @@ func TestTransportHTTPS_Username(t *testing.T) {
 	addr := urls[ua.TransportProfileHTTPS]
 	ctx := context.Background()
 
-	none := endpointForTLS(t, addr, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)
-	var hasUser bool
-	for _, tok := range none.UserIdentityTokens {
-		hasUser = hasUser || tok.TokenType == ua.UserTokenTypeUserName
+	eps, err := opcua.GetEndpoints(ctx, addr, tlsClient(t))
+	require.NoError(t, err)
+	for _, ep := range eps {
+		want := ep.SecurityPolicyURI
+		if want == ua.SecurityPolicyURINone {
+			want = ua.SecurityPolicyURIAes256Sha256RsaPss // the strongest RSA policy enabled
+		}
+		requireUserTokenPolicy(t, ep, want)
 	}
-	require.True(t, hasUser, "the HTTPS None endpoint offers user names: TLS protects them")
+
+	none := endpointForTLS(t, addr, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)
 
 	c := newClient(t, addr, tlsClient(t), opcua.SecurityFromEndpoint(none, ua.UserTokenTypeUserName), opcua.AuthUsername("alice", "wonderland"))
-	_, err := c.ReadValue(ctx, f.Int32)
+	_, err = c.ReadValue(ctx, f.Int32)
 	require.NoError(t, err)
+	_, err = dialClient(t, addr, tlsClient(t), opcua.SecurityFromEndpoint(none, ua.UserTokenTypeUserName), opcua.AuthUsername("alice", "wrong"))
+	require.ErrorIs(t, err, ua.StatusBadUserAccessDenied, "the password is decrypted, then checked")
 
 	ep := endpointForTLS(t, addr, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt)
 	c = newClient(t, addr, append(secureClientOpts(t, ep, ua.UserTokenTypeUserName), tlsClient(t), opcua.AuthUsername("alice", "wonderland"))...)
@@ -285,4 +296,17 @@ func TestTransportHTTPS_Reconnect(t *testing.T) {
 
 	writeInt32(t, writer, f.Int32, 99)
 	awaitValue(t, ch, 0, int32(99))
+}
+
+// requireUserTokenPolicy checks that the UserName token policy of ep names
+// the security policy want.
+func requireUserTokenPolicy(t *testing.T, ep *ua.EndpointDescription, want string) {
+	t.Helper()
+	for _, tok := range ep.UserIdentityTokens {
+		if tok.TokenType == ua.UserTokenTypeUserName {
+			require.Equal(t, want, tok.SecurityPolicyURI, "%s %s %s", ep.EndpointURL, shortPolicy(ep.SecurityPolicyURI), ep.SecurityMode)
+			return
+		}
+	}
+	t.Fatalf("%s %s %s offers no UserName token", ep.EndpointURL, shortPolicy(ep.SecurityPolicyURI), ep.SecurityMode)
 }

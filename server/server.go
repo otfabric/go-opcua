@@ -4,6 +4,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/rsa"
 	"crypto/tls"
@@ -927,6 +928,15 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 			continue
 		}
 
+		// The token policy names its SecurityPolicy only where the
+		// channel does not decide it (see tokenPolicyOverTLS).
+		tokenPolicyURI := ""
+		if auth.tokenType == ua.UserTokenTypeUserName {
+			if p := s.tokenPolicyOverTLS(profile, sec.secPolicy, ep.ServerCertificate); p != "" {
+				authSecPolicy, tokenPolicyURI = p, p
+			}
+		}
+
 		policyID := strings.ToLower(
 			strings.TrimPrefix(auth.tokenType.String(), "UserTokenType") +
 				"_" +
@@ -944,7 +954,7 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 		if dup {
 			continue
 		}
-		// Per OPC UA Part 4 §7.36.1: SecurityPolicyURI in the token
+		// Per OPC UA Part 4 §7.41: SecurityPolicyURI in the token
 		// policy specifies how the credential is encrypted.  An empty
 		// string means "inherit from the SecureChannel's policy",
 		// which is the most interoperable choice.  Using the explicit
@@ -955,12 +965,56 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 			TokenType:         auth.tokenType,
 			IssuedTokenType:   "",
 			IssuerEndpointURL: "",
-			SecurityPolicyURI: "",
+			SecurityPolicyURI: tokenPolicyURI,
 		}
 
 		ep.UserIdentityTokens = append(ep.UserIdentityTokens, tok)
 	}
 	return ep
+}
+
+// tokenPolicyOverTLS returns the SecurityPolicy a UserName token policy of
+// an endpoint with transport profile profile and security policy policy
+// names, "" to leave it to the SecureChannel.
+//
+//   - opc.https: "If a UserIdentityToken is to be encrypted, it shall be
+//     explicitly specified in the UserTokenPolicy" (Part 6 §7.4.1). A
+//     secured endpoint names its own policy.
+//   - opc.https and opc.wss with SecurityPolicy None: the password is
+//     encrypted with an RSA policy, which Part 4 §7.41 allows with
+//     SecurityMode None: the enabled RSA policy with the highest
+//     SecurityLevel whose certificate is serverCert. Clients such as
+//     UA-.NETStandard do not send a password unencrypted on an endpoint that
+//     is not SignAndEncrypt, TLS or not. Without such a policy the password
+//     stays in clear text inside TLS.
+//
+// opc.tcp is left as it is: a None endpoint there offers UserName only with
+// AllowUsernameOnNone, which asks for the clear text.
+func (s *Server) tokenPolicyOverTLS(profile, policy string, serverCert []byte) string {
+	if profile == ua.TransportProfileUATCP || ua.TransportProfileScheme(profile) == "" {
+		return ""
+	}
+	if policy != ua.SecurityPolicyURINone {
+		if tlsOnly(profile) {
+			return policy
+		}
+		return ""
+	}
+	if len(serverCert) == 0 {
+		return ""
+	}
+	best, level := "", uint8(0)
+	for _, sec := range s.cfg.enabledSec {
+		p := sec.secPolicy
+		if p == ua.SecurityPolicyURINone || uapolicy.IsECC(p) || !uapolicy.IsSupported(p) ||
+			!bytes.Equal(s.cfg.certificateFor(p), serverCert) {
+			continue
+		}
+		if l := uapolicy.SecurityLevel(p, ua.MessageSecurityModeSignAndEncrypt); best == "" || l > level {
+			best, level = p, l
+		}
+	}
+	return best
 }
 
 // publishNamespaces makes s.namespaces the view of Node. It is called with

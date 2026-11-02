@@ -205,7 +205,9 @@ srv, err := server.New(
   `ECC_nistP256_ChaChaPoly`, whose SecureChannelEnhancements bind the session
   signatures to a channel thumbprint) once, in its strongest
   enabled mode; a user name is accepted on the None endpoint because TLS
-  protects it.
+  protects it. The UserName token policies of opc.https, and of the opc.wss
+  None endpoint, name an RSA security policy that encrypts the password when
+  one is enabled (docs/security.md, Part 6 §7.4.1).
 - **HTTPS requests.** All HTTPS requests to the server share one virtual secure
   channel per policy, selected by the `OPCUA-SecurityPolicy` header (None
   without it). The body is limited to the maximum message size (413), POST
