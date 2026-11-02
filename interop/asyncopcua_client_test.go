@@ -1172,7 +1172,7 @@ func TestGoServer_AsyncOpcuaClient_UntrustedCert_Rejected(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // TestGoServer_AsyncOpcuaClient_BatchWrite verifies per-item WriteResponse.Results
-// (IEC 62541-4 Write Service): Good, BadUserAccessDenied, and BadNodeIdUnknown
+// (IEC 62541-4 Write Service): Good, BadNotWritable, and BadNodeIdUnknown
 // in a single request.
 func TestGoServer_AsyncOpcuaClient_BatchWrite(t *testing.T) {
 	requireAsyncOpcuaImage(t)
@@ -1192,9 +1192,9 @@ func TestGoServer_AsyncOpcuaClient_BatchWrite(t *testing.T) {
 	if !statusCodeIs(items[0].StatusCode, ua.StatusOK) {
 		t.Errorf("Access.ReadWrite: got %s, want Good", items[0].StatusCode)
 	}
-	if !statusCodeIs(items[1].StatusCode, ua.StatusBadUserAccessDenied) &&
-		!statusCodeNameHas(items[1].StatusCode, "UserAccessDenied") {
-		t.Errorf("Access.ReadOnly: got %s, want BadUserAccessDenied", items[1].StatusCode)
+	if !statusCodeIs(items[1].StatusCode, ua.StatusBadNotWritable) &&
+		!statusCodeNameHas(items[1].StatusCode, "NotWritable") {
+		t.Errorf("Access.ReadOnly: got %s, want BadNotWritable", items[1].StatusCode)
 	}
 	if !statusCodeIs(items[2].StatusCode, ua.StatusBadNodeIDUnknown) &&
 		!statusCodeNameHas(items[2].StatusCode, "NodeIdUnknown") {
