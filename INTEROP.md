@@ -152,8 +152,9 @@ make interop
 
 The **Self-interop** workflow, run by hand, tests this commit against
 `ghcr.io/otfabric/opcua-interop-otfabric:latest`, the latest go-opcua release behind
-the adapter contract (a core subset; see `own/go-opcua` in opcua-interop). It finds a
-change on the wire that breaks an earlier release. It is not independent: a pass is
+the adapter contract (see `own/go-opcua` in opcua-interop). It finds a change on the
+wire that breaks an earlier release. Tests of what the image does not declare skip and
+say so; point the variable at a locally built image to run them before it is published. It is not independent: a pass is
 no evidence for `interop/coverage.json`, and it is no required check.
 
 ```sh
