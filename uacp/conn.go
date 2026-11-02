@@ -713,10 +713,11 @@ func (c *Conn) srvhandshake(endpoint string) error {
 	}
 }
 
-// endpointMatch compares two OPC-UA endpoint URLs. It normalises port
-// differences that arise when the server listens on ":0" (random port).
-// If either URL cannot be parsed the function falls back to a plain
-// string comparison.
+// endpointMatch compares two OPC-UA endpoint URLs by scheme, host and path. The
+// port is not compared: the connection has already reached this listener, and a
+// server behind a published port or a proxy cannot know the port the client used.
+// If either URL cannot be parsed the function falls back to a plain string
+// comparison.
 func endpointMatch(clientURL, serverURL string) bool {
 	cu, cerr := url.Parse(clientURL)
 	su, serr := url.Parse(serverURL)
@@ -727,8 +728,8 @@ func endpointMatch(clientURL, serverURL string) bool {
 		return false
 	}
 	// An unspecified server host is a bind wildcard, not a client-reachable
-	// endpoint hostname. In that case, match the client URL by scheme, path,
-	// and port without requiring the hostname to equal the bind address.
+	// endpoint hostname. In that case, match the client URL by scheme and path
+	// without requiring the hostname to equal the bind address.
 	serverHost := su.Hostname()
 	serverIP := net.ParseIP(serverHost)
 	serverHostIsWildcard := serverIP != nil && serverIP.IsUnspecified()
@@ -738,21 +739,7 @@ func endpointMatch(clientURL, serverURL string) bool {
 	// A server registered without a path (su.Path == "") accepts any client
 	// path, just as an unspecified host accepts any client hostname. A server
 	// that explicitly registers a path requires the client to match it.
-	if su.Path != "" && cu.Path != su.Path {
-		return false
-	}
-	// Accept any client port when the server was configured with port 0.
-	cp, sp := cu.Port(), su.Port()
-	if sp == "0" || sp == "" {
-		return true
-	}
-	if cp == "" {
-		cp = defaultPort
-		if strings.EqualFold(cu.Scheme, SchemeWebSocket) {
-			cp = defaultWebSocketPort
-		}
-	}
-	return cp == sp
+	return su.Path == "" || cu.Path == su.Path
 }
 
 // hdrlen is the size of the uacp header.

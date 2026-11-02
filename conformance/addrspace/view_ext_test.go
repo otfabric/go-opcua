@@ -669,7 +669,7 @@ func TestNode_AttributeHelpers(t *testing.T) {
 	}
 	// A node that may not be read does not even reveal its access level.
 	_, err = c.Node(f.NoAccess).AccessLevel(ctx)
-	require.ErrorIs(t, err, ua.StatusBadUserAccessDenied)
+	require.ErrorIs(t, err, ua.StatusBadNotReadable)
 
 	// Errors for a node that does not exist.
 	ghost := c.Node(ua.NewStringNodeID(f.NSIndex, "Ghost"))

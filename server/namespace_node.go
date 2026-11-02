@@ -174,11 +174,11 @@ func (as *NodeNameSpace) Attribute(id *ua.NodeID, attr ua.AttributeID) *ua.DataV
 		}
 	}
 
-	if !n.Access(ua.AccessLevelTypeCurrentRead) {
+	if st := n.AccessStatus(ua.AccessLevelTypeCurrentRead); st != ua.StatusOK {
 		return &ua.DataValue{
 			EncodingMask:    ua.DataValueServerTimestamp | ua.DataValueStatusCode,
 			ServerTimestamp: time.Now(),
-			Status:          ua.StatusBadUserAccessDenied,
+			Status:          st,
 		}
 	}
 
@@ -352,8 +352,8 @@ func (as *NodeNameSpace) SetAttribute(id *ua.NodeID, attr ua.AttributeID, val *u
 		return ua.StatusBadNodeIDUnknown
 	}
 
-	if !n.Access(ua.AccessLevelTypeCurrentWrite) {
-		return ua.StatusBadUserAccessDenied
+	if st := n.AccessStatus(ua.AccessLevelTypeCurrentWrite); st != ua.StatusOK {
+		return st
 	}
 
 	err := n.SetAttribute(attr, val)

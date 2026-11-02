@@ -209,12 +209,12 @@ func TestAttribute_AccessControl(t *testing.T) {
 			Value:        ua.MustVariant(int32(999)),
 		})
 		require.NoError(t, err)
-		require.Equal(t, ua.StatusBadUserAccessDenied, status)
+		require.Equal(t, ua.StatusBadNotWritable, status)
 	})
 
 	t.Run("no-access denied on read", func(t *testing.T) {
 		dv, err := c.ReadValue(ctx, f.NoAccess)
 		require.NoError(t, err)
-		require.Equal(t, ua.StatusBadUserAccessDenied, dv.Status)
+		require.Equal(t, ua.StatusBadNotReadable, dv.Status)
 	})
 }

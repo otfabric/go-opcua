@@ -1,5 +1,21 @@
 # go-opcua Releases
 
+## v1.29.4
+
+**Date:** 2026-11-02
+**Previous release:** v1.29.3
+
+### Fixed
+
+- A server no longer refuses a Hello whose EndpointUrl names another port than the one it listens on with `BadTcpEndpointUrlInvalid`. A server behind a published port or a proxy could not be reached (`docker run -p 5000:4840`). The scheme, host and path are still compared.
+- A Read or Write that the AccessLevel of a node rules out now answers `BadNotReadable` or `BadNotWritable` (Part 4). `BadUserAccessDenied` remains for what only the UserAccessLevel or the access controller rules out. A client that tests for `BadUserAccessDenied` on such a node has to test for the new status.
+
+### Added
+
+- `server.Node.AccessStatus`, the status of a read or write of the node.
+
+---
+
 ## v1.29.3
 
 **Date:** 2026-11-01

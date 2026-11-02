@@ -137,7 +137,7 @@ func TestNode_AccessLevels(t *testing.T) {
 		n := mk(Attributes{ua.AttributeIDAccessLevel: DataValueFromValue(byte(rd))})
 		assert.True(t, n.Access(rd))
 		assert.False(t, n.Access(wr))
-		require.Equal(t, ua.StatusBadUserAccessDenied, n.SetAttribute(ua.AttributeIDValue, newVal))
+		require.Equal(t, ua.StatusBadNotWritable, n.SetAttribute(ua.AttributeIDValue, newVal))
 		assert.Equal(t, int32(1), n.Value().Value.Value(), "a denied write must not change the value")
 	})
 
@@ -148,6 +148,42 @@ func TestNode_AccessLevels(t *testing.T) {
 		})
 		assert.True(t, n.Access(rd))
 		assert.False(t, n.Access(wr))
+	})
+
+	t.Run("status names what ruled the access out", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			attrs       Attributes
+			read, write ua.StatusCode
+		}{
+			{"no access attributes", nil, ua.StatusOK, ua.StatusOK},
+			{"write only", Attributes{ua.AttributeIDAccessLevel: DataValueFromValue(byte(wr))},
+				ua.StatusBadNotReadable, ua.StatusOK},
+			{"read only", Attributes{ua.AttributeIDAccessLevel: DataValueFromValue(byte(rd))},
+				ua.StatusOK, ua.StatusBadNotWritable},
+			{"no access", Attributes{ua.AttributeIDAccessLevel: DataValueFromValue(byte(0))},
+				ua.StatusBadNotReadable, ua.StatusBadNotWritable},
+			{"only the user may not write", Attributes{
+				ua.AttributeIDAccessLevel:     DataValueFromValue(byte(rd | wr)),
+				ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(rd)),
+			}, ua.StatusOK, ua.StatusBadUserAccessDenied},
+			{"only the user may not read", Attributes{
+				ua.AttributeIDAccessLevel:     DataValueFromValue(byte(rd | wr)),
+				ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(wr)),
+			}, ua.StatusBadUserAccessDenied, ua.StatusOK},
+			{"the node rules it out before the user", Attributes{
+				ua.AttributeIDAccessLevel:     DataValueFromValue(byte(rd)),
+				ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(rd)),
+			}, ua.StatusOK, ua.StatusBadNotWritable},
+			{"access level of the wrong type", Attributes{ua.AttributeIDAccessLevel: DataValueFromValue(uint32(rd | wr))},
+				ua.StatusBadUserAccessDenied, ua.StatusBadUserAccessDenied},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				n := mk(tc.attrs)
+				assert.Equal(t, tc.read, n.AccessStatus(rd))
+				assert.Equal(t, tc.write, n.AccessStatus(wr))
+			})
+		}
 	})
 
 	t.Run("access level of the wrong type denies access", func(t *testing.T) {

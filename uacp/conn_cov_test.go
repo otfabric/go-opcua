@@ -414,15 +414,37 @@ func TestListener_AckDoesNotFit(t *testing.T) {
 	requireClosed(t, raw)
 }
 
+// TestListener_HelloWithAnotherPort: a server published on another port, as with
+// `docker run -p 5000:4840`, sees that port in the Hello and accepts it.
+func TestListener_HelloWithAnotherPort(t *testing.T) {
+	ln, err := Listen(context.Background(), "opc.tcp://127.0.0.1:4841", nil)
+	require.NoError(t, err)
+	defer func() { _ = ln.Close() }()
+
+	raw, err := net.Dial("tcp", ln.Addr().String())
+	require.NoError(t, err)
+	defer func() { _ = raw.Close() }()
+	hel, err := (&Hello{ReceiveBufSize: 65535, SendBufSize: 65535, EndpointURL: "opc.tcp://127.0.0.1:5000"}).Encode()
+	require.NoError(t, err)
+	_, err = raw.Write(frame("HELF", hel))
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithTimeout(context.Background(), testWait)
+	defer cancel()
+	c, err := ln.Accept(ctx)
+	require.NoError(t, err)
+	defer func() { _ = c.Close() }()
+}
+
 func TestEndpointMatch_Fallbacks(t *testing.T) {
 	// URLs that do not parse are compared as strings.
 	require.True(t, endpointMatch("opc.tcp://host/%zz", "opc.tcp://host/%zz"))
 	require.False(t, endpointMatch("opc.tcp://host/%zz", "opc.tcp://host/%zy"))
 	require.False(t, endpointMatch("opc.tcp://host:4840/", "opc.tcp://host/%zz"))
 
-	// A client URL without a port means the default port.
+	// A client URL without a port matches, whatever the server listens on.
 	require.True(t, endpointMatch("opc.tcp://host/", "opc.tcp://host:4840/"))
-	require.False(t, endpointMatch("opc.tcp://host/", "opc.tcp://host:4841/"))
+	require.True(t, endpointMatch("opc.tcp://host/", "opc.tcp://host:4841/"))
 }
 
 // TestListener_CloseAfterAcceptError: Close ends an accept loop that is

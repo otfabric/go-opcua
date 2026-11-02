@@ -96,7 +96,7 @@ func TestAttributeService_Read(t *testing.T) {
 
 		readResp := resp.(*ua.ReadResponse)
 		require.Len(t, readResp.Results, 1)
-		assert.Equal(t, ua.StatusBadUserAccessDenied, readResp.Results[0].Status)
+		assert.Equal(t, ua.StatusBadNotReadable, readResp.Results[0].Status)
 	})
 
 	t.Run("read browse name attribute", func(t *testing.T) {
@@ -224,7 +224,7 @@ func TestAttributeService_Write(t *testing.T) {
 
 		writeResp := resp.(*ua.WriteResponse)
 		require.Len(t, writeResp.Results, 1)
-		assert.Equal(t, ua.StatusBadUserAccessDenied, writeResp.Results[0])
+		assert.Equal(t, ua.StatusBadNotWritable, writeResp.Results[0])
 	})
 }
 

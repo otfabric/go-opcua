@@ -805,7 +805,7 @@ Codec and client defects found the same way with v0.7.0:
 | The XML encoder wrote the content of an XmlElement as raw markup into a document whose default namespace is the OPC UA types namespace | Milo decoded `<compat>test</compat>` as `<compat xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">test</compat>` | Unprefixed top-level elements of the fragment get `xmlns=""`; the decoder removes it again (`ua/xml_encode.go`, `TestXMLElementNamespace`) |
 | A client told to use an endpoint with a policy that is not implemented failed with whatever broke first | open62541 brainpool / Ed448 endpoints: `x509: unsupported elliptic curve`, `unsupported public key type <nil>` | `uasc.NewSecureChannel` returns `ErrUnsupportedSecurityPolicy` for a client channel before anything else (`uapolicy.IsSupported`) |
 
-Not changed, but worth knowing: the Go server answers a Hello whose EndpointUrl names another **port** than the one it listens on with `Bad_TcpEndpointUrlInvalid`, so a go-opcua server in a container must be published on the same port number it listens on (`-p 4841:4841`, not `-p 5000:4840`) — see `startGoPeerContainer`.
+Since v1.29.4 the Go server does not compare the **port** of the EndpointUrl in a Hello, so a go-opcua server in a container can be published on another port (`-p 5000:4840`). Before that it answered `Bad_TcpEndpointUrlInvalid`.
 
 #### events — Go↔Go companions
 

@@ -6,7 +6,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -308,6 +310,56 @@ func TestSession_CloseDeletesSubscriptionsAndItems(t *testing.T) {
 
 	// A second CloseSession without a session is a no-op.
 	require.NoError(t, c.CloseSession(ctx))
+}
+
+// TestClient_ServerPublishedOnAnotherPort does what `docker run -p 5000:4840`
+// does: the client dials a port the server does not listen on and names it in
+// the Hello. The server needs a fixed port here: on port 0 the check this guards
+// against never compared the port.
+func TestClient_ServerPublishedOnAnotherPort(t *testing.T) {
+	probe, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	listenPort := probe.Addr().(*net.TCPAddr).Port
+	require.NoError(t, probe.Close())
+
+	srv, err := server.New(server.EndPoint("localhost", listenPort), server.InsecureNoSecurity(),
+		server.EnableAuthMode(ua.UserTokenTypeAnonymous))
+	require.NoError(t, err)
+	require.NoError(t, srv.Start(context.Background()))
+	t.Cleanup(func() { _ = srv.Close() })
+	require.Equal(t, listenPort, srv.Port())
+	f := testutil.AddFixture(t, srv)
+
+	published, err := net.Listen("tcp", "localhost:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = published.Close() })
+	go func() {
+		for {
+			in, err := published.Accept()
+			if err != nil {
+				return
+			}
+			out, err := net.Dial("tcp", fmt.Sprintf("localhost:%d", listenPort))
+			if err != nil {
+				_ = in.Close()
+				return
+			}
+			forward := func(dst, src net.Conn) {
+				_, _ = io.Copy(dst, src)
+				_ = dst.Close()
+				_ = src.Close()
+			}
+			go forward(out, in)
+			go forward(in, out)
+		}
+	}()
+	publishedPort := published.Addr().(*net.TCPAddr).Port
+	require.NotEqual(t, listenPort, publishedPort)
+
+	c := newClient(t, fmt.Sprintf("opc.tcp://localhost:%d", publishedPort))
+	dv, err := c.ReadValue(context.Background(), f.Int32)
+	require.NoError(t, err)
+	require.Equal(t, int32(42), dv.Value.Value())
 }
 
 func TestClient_ConnectErrors(t *testing.T) {

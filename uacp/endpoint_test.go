@@ -137,10 +137,21 @@ func TestEndpointMatch(t *testing.T) {
 			server: "opc.tcp://0.0.0.0:4840/opcua-interop",
 			match:  false,
 		},
-		// Port mismatch with wildcard host is rejected.
+		// A published port differs from the listen port: not compared.
 		{
-			client: "opc.tcp://localhost:4841/opcua-interop",
+			client: "opc.tcp://localhost:5000/opcua-interop",
 			server: "opc.tcp://0.0.0.0:4840/opcua-interop",
+			match:  true,
+		},
+		// The same with a named host: its host is still compared.
+		{
+			client: "opc.tcp://expected-host:5000/opcua-interop",
+			server: "opc.tcp://expected-host:4840/opcua-interop",
+			match:  true,
+		},
+		{
+			client: "opc.tcp://other-host:5000/opcua-interop",
+			server: "opc.tcp://expected-host:4840/opcua-interop",
 			match:  false,
 		},
 		// Non-wildcard hostname: different hosts are rejected.

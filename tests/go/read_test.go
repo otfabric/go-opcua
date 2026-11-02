@@ -118,7 +118,7 @@ func TestReadPerms(t *testing.T) {
 		{ua.NewStringNodeID(1, "NoPermVariable"), ua.StatusOK, int32(742)},
 		{ua.NewStringNodeID(1, "ReadWriteVariable"), ua.StatusOK, 12.34},
 		{ua.NewStringNodeID(1, "ReadOnlyVariable"), ua.StatusOK, 9.87},
-		{ua.NewStringNodeID(1, "NoAccessVariable"), ua.StatusBadUserAccessDenied, nil},
+		{ua.NewStringNodeID(1, "NoAccessVariable"), ua.StatusBadNotReadable, nil},
 	}
 
 	ctx := context.Background()

@@ -253,8 +253,8 @@ func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error {
 	defer n.mu.Unlock()
 	switch id {
 	case ua.AttributeIDValue:
-		if !n.access(ua.AccessLevelTypeCurrentWrite) {
-			return ua.StatusBadUserAccessDenied
+		if st := n.accessStatus(ua.AccessLevelTypeCurrentWrite); st != ua.StatusOK {
+			return st
 		}
 
 		// Validate the data type if the node has a DataType attribute and
@@ -685,4 +685,30 @@ func (n *Node) Access(flag ua.AccessLevelType) bool {
 	n.mu.RLock()
 	defer n.mu.RUnlock()
 	return n.access(flag)
+}
+
+// accessStatus is the status of a read or write that needs flag (Part 4 §5.10):
+// BadNotReadable or BadNotWritable when AccessLevel rules it out for everyone,
+// BadUserAccessDenied when only UserAccessLevel does.
+func (n *Node) accessStatus(flag ua.AccessLevelType) ua.StatusCode {
+	if a, err := n.attribute(ua.AttributeIDAccessLevel); err == nil {
+		if val, ok := a.Value.Value.Value().(uint8); ok && val&uint8(flag) == 0 {
+			if flag&ua.AccessLevelTypeCurrentRead != 0 {
+				return ua.StatusBadNotReadable
+			}
+			return ua.StatusBadNotWritable
+		}
+	}
+	if !n.access(flag) {
+		return ua.StatusBadUserAccessDenied
+	}
+	return ua.StatusOK
+}
+
+// AccessStatus returns the status of a read or write of the node that needs
+// flag, StatusOK if it is allowed.
+func (n *Node) AccessStatus(flag ua.AccessLevelType) ua.StatusCode {
+	n.mu.RLock()
+	defer n.mu.RUnlock()
+	return n.accessStatus(flag)
 }

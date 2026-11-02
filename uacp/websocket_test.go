@@ -212,7 +212,7 @@ func TestWebSocketEndpointHelpers(t *testing.T) {
 	require.Error(t, err)
 
 	require.True(t, endpointMatch("opc.wss://h/ua", "opc.wss://h:443/ua"))
-	require.False(t, endpointMatch("opc.wss://h/ua", "opc.wss://h:4840/ua"))
+	require.True(t, endpointMatch("opc.wss://h/ua", "opc.wss://h:4840/ua"))
 	require.False(t, endpointMatch("opc.tcp://h:443/ua", "opc.wss://h:443/ua"))
 
 	cfg := transportTLS(&tls.Config{MinVersion: tls.VersionTLS10, NextProtos: []string{"h2"}})

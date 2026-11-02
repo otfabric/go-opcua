@@ -132,7 +132,7 @@ func TestAttribute_ClassSpecificAttributes(t *testing.T) {
 		require.Equal(t, byte(ua.AccessLevelTypeCurrentRead), dvs[1].Value.Value())
 		// Without read access no attribute is disclosed at all.
 		for _, dv := range readAttrs(t, c, f.NoAccess, ua.AttributeIDValue, ua.AttributeIDBrowseName, ua.AttributeIDAccessLevel) {
-			require.Equal(t, ua.StatusBadUserAccessDenied, dv.Status)
+			require.Equal(t, ua.StatusBadNotReadable, dv.Status)
 			require.Nil(t, dv.Value.Value())
 		}
 	})
@@ -317,7 +317,7 @@ func TestAttribute_WriteStatuses(t *testing.T) {
 		require.Equal(t, []ua.StatusCode{
 			ua.StatusOK,
 			ua.StatusBadNodeIDUnknown,
-			ua.StatusBadUserAccessDenied,
+			ua.StatusBadNotWritable,
 			ua.StatusBadTypeMismatch,
 			ua.StatusBadNodeNotInView,
 			ua.StatusOK,
@@ -358,7 +358,7 @@ func TestAttribute_WriteStatuses(t *testing.T) {
 		// Not writable without write access.
 		st, err = c.WriteAttribute(ctx, f.ReadOnly, ua.AttributeIDDescription, val(ua.NewLocalizedText("x")))
 		require.NoError(t, err)
-		require.Equal(t, ua.StatusBadUserAccessDenied, st)
+		require.Equal(t, ua.StatusBadNotWritable, st)
 	})
 }
 
@@ -405,7 +405,7 @@ func TestAttribute_ReadTimestampsToReturn(t *testing.T) {
 		NodesToRead:        []*ua.ReadValueID{{NodeID: f.NoAccess, AttributeID: ua.AttributeIDValue}},
 	})
 	require.NoError(t, err)
-	require.Equal(t, ua.StatusBadUserAccessDenied, resp.Results[0].Status)
+	require.Equal(t, ua.StatusBadNotReadable, resp.Results[0].Status)
 }
 
 // TestAttribute_ServerSideValueSources covers values produced by the hosting

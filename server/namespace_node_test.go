@@ -89,7 +89,7 @@ func TestNodeNameSpace_Attribute(t *testing.T) {
 		)
 		ns.AddNode(noAccess)
 		dv := ns.Attribute(ua.NewStringNodeID(ns.ID(), "locked"), ua.AttributeIDValue)
-		assert.Equal(t, ua.StatusBadUserAccessDenied, dv.Status)
+		assert.Equal(t, ua.StatusBadNotReadable, dv.Status)
 	})
 }
 

@@ -129,7 +129,7 @@ func TestClientCovWrappers(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.Equal(t, ua.StatusOK, sts[0])
-	require.Equal(t, ua.StatusBadUserAccessDenied, sts[1])
+	require.Equal(t, ua.StatusBadNotWritable, sts[1])
 	st, err := c.WriteAttribute(ctx, f.Writable, ua.AttributeIDValue, valueDV(int32(13)))
 	require.NoError(t, err)
 	require.Equal(t, ua.StatusOK, st)
