@@ -444,8 +444,8 @@ func assertPeerUpdatesGoEvents(t *testing.T, p peerEventClient) {
 }
 
 // assertPeerDeletesGoEvents: DeleteEventDetails (Part 11 §6.9.7) of a stored
-// and an unknown EventId; go-opcua answers Bad_NoData for the unknown one
-// (§6.9.7.2).
+// and an unknown EventId; go-opcua answers Bad_NoEntryExists for the unknown
+// one (§6.2.2 Table 25).
 func assertPeerDeletesGoEvents(t *testing.T, p peerEventClient) {
 	t.Helper()
 	requireAdapterOp(t, p.env, p.image, "history-update-events")
@@ -455,7 +455,7 @@ func assertPeerDeletesGoEvents(t *testing.T, p peerEventClient) {
 		"--event-id", base64.StdEncoding.EncodeToString(histEventID(1)),
 		"--event-id", base64.StdEncoding.EncodeToString([]byte("hist-evt-unknown")))
 	requireStatus(t, "delete: node status", r.StatusCode, ua.StatusOK)
-	requireOperationResults(t, "delete", r, ua.StatusOK, ua.StatusBadNoData)
+	requireOperationResults(t, "delete", r, ua.StatusOK, ua.StatusBadNoEntryExists)
 	if got, want := g.eventIDs(t), histIDs(0, 2, 3, 4); !slices.Equal(got, want) {
 		t.Fatalf("after delete: history %v, want %v", got, want)
 	}
@@ -746,7 +746,7 @@ func TestGoServer_GoClient_HistoryEventsFixture(t *testing.T) {
 	assertGoContinuesPeerEvents(t, g.endpoint, true)
 	assertGoFiltersPeerEvents(t, g.endpoint, true)
 	assertGoUpdatesPeerEvents(t, g.endpoint)
-	assertGoDeletesPeerEvents(t, g.endpoint, ua.StatusBadNoData)
+	assertGoDeletesPeerEvents(t, g.endpoint, ua.StatusBadNoEntryExists)
 }
 
 // assertGoHistoryUpdateRefused: a HistoryUpdate (UpdateEventDetails insert,

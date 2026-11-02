@@ -2550,7 +2550,8 @@ func (h *Historian) DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.His
   resume after the last event returned.
 - UpdateEventDetails matches events by EventId: Insert `Good_EntryInserted` /
   `Bad_EntryExists`, Replace `Good_EntryReplaced` / `Bad_NoEntryExists`, Update
-  either. DeleteEventDetails answers `Good` or `Bad_NoData` per EventId. A
+  either. DeleteEventDetails answers `Good` or `Bad_NoEntryExists` per EventId,
+  and the node status `Bad_NoData` when no event matched any of them. A
   notifier without the HistoryWrite bit answers `Bad_NotWritable`.
 - Audit events in the history go to the sessions an `EventAccessController`
   allows.

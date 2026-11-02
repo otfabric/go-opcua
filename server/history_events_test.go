@@ -566,7 +566,8 @@ func TestHistoryUpdateEvents(t *testing.T) {
 
 	t.Run("delete", func(t *testing.T) {
 		r := historyUpdate(t, svc, &ua.DeleteEventDetails{NodeID: src.ID(), EventIDs: [][]byte{[]byte("e0"), []byte("e0")}})[0]
-		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadNoData}, r.OperationResults)
+		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadNoEntryExists}, r.OperationResults)
+		require.Equal(t, ua.StatusOK, r.StatusCode, "one event was deleted")
 		r = historyUpdate(t, svc, ua.DeleteEventDetails{NodeID: ua.NewStringNodeID(9, "x")})[0]
 		require.Equal(t, ua.StatusBadNodeIDUnknown, r.StatusCode)
 	})

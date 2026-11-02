@@ -317,8 +317,16 @@ func TestHistoryEvents_Update(t *testing.T) {
 
 	resp, err = c.HistoryDeleteEvents(ctx, &ua.DeleteEventDetails{NodeID: node, EventIDs: [][]byte{[]byte("e0"), []byte("gone")}})
 	require.NoError(t, err)
-	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadNoData}, resp.Results[0].OperationResults)
+	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadNoEntryExists}, resp.Results[0].OperationResults)
+	require.Equal(t, ua.StatusOK, resp.Results[0].StatusCode)
 	require.Equal(t, []string{"e1", "e2", "i5", "u6"}, all())
+
+	// No event has any of the EventIds: the node status is Bad_NoData
+	// (Part 11 §6.9.7.2).
+	resp, err = c.HistoryDeleteEvents(ctx, &ua.DeleteEventDetails{NodeID: node, EventIDs: [][]byte{[]byte("gone")}})
+	require.NoError(t, err)
+	require.Equal(t, ua.StatusBadNoData, resp.Results[0].StatusCode)
+	require.Equal(t, []ua.StatusCode{ua.StatusBadNoEntryExists}, resp.Results[0].OperationResults)
 
 	t.Run("DetailsErrors", func(t *testing.T) {
 		resp, err := c.HistoryUpdateEvents(ctx,

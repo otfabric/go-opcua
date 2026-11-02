@@ -312,7 +312,10 @@ func (h *Historian) UpdateEvents(notifier *ua.NodeID, perform ua.PerformUpdateTy
 }
 
 // DeleteEvents implements EventHistoryDeleter: it deletes every event with
-// one of the EventIds (Part 11 §6.9.7.2).
+// one of the EventIds (Part 11 §6.9.7.2). An EventId without an event is
+// Bad_NoEntryExists, "no matching entry exists" (Part 11 §6.2.2 Table 25).
+// When no event matches any of the EventIds, the node status is Bad_NoData
+// (§6.9.7.2).
 func (h *Historian) DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.HistoryUpdateResult {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -321,12 +324,18 @@ func (h *Historian) DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.His
 		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
 	}
 	ops := make([]ua.StatusCode, len(eventIDs))
+	deleted := false
 	for i, eventID := range eventIDs {
-		ops[i] = ua.StatusBadNoData
+		ops[i] = ua.StatusBadNoEntryExists
 		for idx := findEventLocked(eh, eventID); idx >= 0; idx = findEventLocked(eh, eventID) {
 			eh.events = append(eh.events[:idx], eh.events[idx+1:]...)
 			ops[i] = ua.StatusOK
+			deleted = true
 		}
 	}
-	return &ua.HistoryUpdateResult{StatusCode: ua.StatusOK, OperationResults: ops}
+	status := ua.StatusOK
+	if len(eventIDs) > 0 && !deleted {
+		status = ua.StatusBadNoData
+	}
+	return &ua.HistoryUpdateResult{StatusCode: status, OperationResults: ops}
 }

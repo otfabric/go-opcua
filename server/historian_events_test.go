@@ -312,9 +312,17 @@ func TestHistorianEvents_Delete(t *testing.T) {
 	h.RecordEvent(n, hev("e1", evAt(9), 1)) // a second event with EventId e1
 	res := h.DeleteEvents(n, [][]byte{[]byte("e1"), []byte("nope"), nil, []byte("e3")})
 	require.Equal(t, ua.StatusOK, res.StatusCode)
-	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadNoData, ua.StatusBadNoData, ua.StatusOK}, res.OperationResults)
+	// An EventId without an event is Bad_NoEntryExists (Part 11 §6.2.2
+	// Table 25), as UA-.NETStandard answers.
+	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadNoEntryExists, ua.StatusBadNoEntryExists, ua.StatusOK}, res.OperationResults)
 	got, _ := readAll(t, h, n, evAt(0), evAt(100), 0, nil)
 	require.Equal(t, []string{"e0", "e2"}, got)
+
+	// No event matches any EventId: the node status is Bad_NoData
+	// (Part 11 §6.9.7.2).
+	res = h.DeleteEvents(n, [][]byte{[]byte("e1"), []byte("nope")})
+	require.Equal(t, ua.StatusBadNoData, res.StatusCode)
+	require.Equal(t, []ua.StatusCode{ua.StatusBadNoEntryExists, ua.StatusBadNoEntryExists}, res.OperationResults)
 
 	res = h.DeleteEvents(ua.NewStringNodeID(1, "Nope"), nil)
 	require.Equal(t, ua.StatusBadHistoryOperationUnsupported, res.StatusCode)
