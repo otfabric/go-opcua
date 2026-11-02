@@ -52,6 +52,15 @@ Callbacks run on the request path and must not block. See
 Absence of a metrics implementation is intentional for simple apps; attach one
 only when you have a concrete consumer (Prometheus, statsd, …).
 
+## Connection and session events
+
+`server.WithSessionObserver` reports client connections (opened, closed with
+their duration) and sessions (activated, closed by the client, timed out,
+closed by the server) as they happen, with the client's address and
+application description: what a server logs or audits about its clients. The
+callbacks are synchronous and must not block. See the
+[server guide](docs/server-guide.md#connection-and-session-events).
+
 ## Server diagnostics
 
 The server keeps the OPC UA diagnostics of Part 5 §6.3.3 live under

@@ -173,6 +173,7 @@ type serverConfig struct {
 	allowUsernameOnNone        bool
 	uajson                     bool
 	metrics                    ServerMetrics
+	sessionObserver            SessionObserver
 
 	// lds, multicast and registrations configure the discovery roles of the
 	// server (discovery_lds.go, discovery_mdns.go, discovery_register.go).
@@ -393,7 +394,7 @@ func New(opts ...Option) (*Server, error) {
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
 	s.sb.idNamespace = s.diag.sessionNamespace
-	s.sb.removed = s.diag.sessionRemoved
+	s.sb.removed = s.sessionRemoved
 
 	return s, nil
 }
@@ -448,7 +449,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 	s.registerAlarmMethods()
 	s.auditing.Store(cfg.auditing)
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
-	s.sb.removed = s.diag.sessionRemoved
+	s.sb.removed = s.sessionRemoved
 	return s, nil
 }
 
@@ -763,6 +764,12 @@ func (s *Server) Close() error {
 	return err
 }
 
+// sessionRemoved is called by the session broker after it forgot a session.
+func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
+	s.diag.sessionRemoved(sess, reason == SessionTimedOut)
+	s.observeSessionClosed(sess, reason)
+}
+
 // sessionReapInterval is how often the server looks for timed-out sessions.
 const sessionReapInterval = 250 * time.Millisecond
 
@@ -830,6 +837,10 @@ func (s *Server) serveConn(ctx context.Context, c *uacp.Conn) {
 			_ = c.Close()
 		}
 	}()
+	remote, opened := c.RemoteAddr(), time.Now()
+	s.observeConnectionOpened(remote)
+	defer s.observeConnectionClosed(remote, opened)
+
 	cert, key := s.cfg.primaryIdentity()
 	_ = s.cb.RegisterConn(ctx, c, cert, key)
 }

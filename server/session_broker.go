@@ -66,6 +66,10 @@ type session struct {
 	// diag holds the diagnostics of the session (diagnostics.go).
 	diag sessionDiag
 
+	// obs is what the session observer is told about the session
+	// (session_observer.go).
+	obs sessionObs
+
 	// pub is the Session handle of the session, handed to the
 	// AccessController (session_handle.go).
 	pub Session
@@ -192,10 +196,10 @@ type sessionBroker struct {
 	closed bool
 
 	// idNamespace returns the namespace of new SessionIds (nil: 1), and
-	// removed is told about every session the broker forgets, after it
-	// released its lock (see serverDiagnostics).
+	// removed is told about every session the broker forgets, and why,
+	// after it released its lock (see Server.sessionRemoved).
 	idNamespace func() uint16
-	removed     func(s *session, timedOut bool)
+	removed     func(s *session, reason SessionCloseReason)
 }
 
 func newSessionBroker(l *slog.Logger) *sessionBroker {
@@ -232,6 +236,7 @@ func (sb *sessionBroker) NewSession() *session {
 	}
 	s.pub.s = s
 	s.diag.created = time.Now()
+	s.obs.info.Created = s.diag.created
 	s.touch()
 
 	sb.mu.Lock()
@@ -253,7 +258,7 @@ func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
 	sb.mu.Unlock()
 
 	if s != nil && sb.removed != nil {
-		sb.removed(s, false)
+		sb.removed(s, SessionClosedByClient)
 	}
 	return nil
 }
@@ -306,7 +311,7 @@ func (sb *sessionBroker) closeAll() {
 	sb.mu.Unlock()
 	if sb.removed != nil {
 		for _, s := range gone {
-			sb.removed(s, false)
+			sb.removed(s, SessionClosedByServer)
 		}
 	}
 }
@@ -373,7 +378,7 @@ func (sb *sessionBroker) reapExpired(now time.Time) []*session {
 
 	if sb.removed != nil {
 		for _, s := range expired {
-			sb.removed(s, true)
+			sb.removed(s, SessionTimedOut)
 		}
 	}
 	return expired

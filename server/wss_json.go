@@ -138,6 +138,8 @@ func (w *wssJSONServer) serve(c uacp.MessageConn) {
 	}
 	// The end of the connection ends its requests: their responses have
 	// nowhere to go.
+	remote, opened := c.RemoteAddr(), time.Now()
+	w.srv.observeConnectionOpened(remote)
 	ctx, cancel := context.WithCancel(context.Background())
 	var requests sync.WaitGroup
 	defer func() {
@@ -145,6 +147,7 @@ func (w *wssJSONServer) serve(c uacp.MessageConn) {
 		_ = c.Close() // unblocks the writes
 		requests.Wait()
 		w.remove(c)
+		w.srv.observeConnectionClosed(remote, opened)
 	}()
 	defer func() {
 		if p := recover(); p != nil {

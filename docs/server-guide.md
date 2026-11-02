@@ -101,6 +101,42 @@ channel and ends by CloseSession or timeout. In `SubscriptionDiagnostics`,
 (Part 5 lets a server omit them). Publish responses sent after the request
 waited (the usual case) carry no DiagnosticInfos.
 
+### Connection and session events
+
+`server.WithSessionObserver(o)` tells the application about clients as the
+events happen, for example to log them. `o` implements `SessionObserver`
+(embed `BaseSessionObserver` to implement only some methods):
+
+| Method | Called when |
+|--------|-------------|
+| `OnConnectionOpened(remote)` | an opc.tcp, reverse or opc.wss connection completed Hello/Acknowledge |
+| `OnConnectionClosed(remote, duration)` | that connection ended, by either side |
+| `OnSessionActivated(info)` | ActivateSession succeeded; `info.Reactivated` for a session activated before, e.g. moved to a new secure channel after a reconnect |
+| `OnSessionClosed(info, reason)` | an activated session ended: `SessionClosedByClient` (CloseSession), `SessionTimedOut` (Part 4 §5.6.2), `SessionClosedByServer` (shutdown) |
+
+`SessionInfo` has the SessionId and SessionName, the client's
+ApplicationDescription, the EndpointUrl, the client's address, the security
+policy and mode, and the identity token type and user of the last
+activation. It does not depend on the server diagnostics, which may be off.
+
+```go
+type logObserver struct{ server.BaseSessionObserver }
+
+func (logObserver) OnSessionActivated(i server.SessionInfo) {
+    slog.Info("client session", "name", i.Name, "app", i.Client.ApplicationName.Text, "remote", i.RemoteAddr)
+}
+
+s, err := server.New(server.EndPoint("localhost", 4840), server.WithSessionObserver(logObserver{}))
+```
+
+The methods run synchronously, on the connection's goroutine or the request
+dispatcher, and must not block. A panic in them is recovered and logged. A
+connection loss does not end a session: the session ends when the client
+closes it or its timeout elapses, so a lost client shows
+`OnConnectionClosed` first and `OnSessionClosed` with `SessionTimedOut`
+later. opc.https has no connections; its sessions are reported without a
+remote address.
+
 ---
 
 ## Minimal Server

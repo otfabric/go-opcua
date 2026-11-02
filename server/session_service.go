@@ -109,6 +109,8 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		return nil, st
 	}
 
+	sess.obs.describe(sess.ID, req)
+
 	response := &ua.CreateSessionResponse{
 		ResponseHeader:        hdr,
 		SessionID:             sess.ID,
@@ -253,7 +255,8 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		return nil, st
 	}
 
-	sess.activated.Store(true)
+	reactivated := sess.activated.Swap(true)
+	s.srv.observeSessionActivated(sc, sess, reactivated)
 
 	response := &ua.ActivateSessionResponse{
 		ResponseHeader: hdr,

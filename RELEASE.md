@@ -1,5 +1,16 @@
 # go-opcua Releases
 
+## v1.30.0
+
+**Date:** unreleased
+**Previous release:** v1.29.5
+
+### Added
+
+- `server.WithSessionObserver` and `server.SessionObserver`: the application is told about client connections (`OnConnectionOpened`, `OnConnectionClosed` with the duration) and sessions (`OnSessionActivated`, `OnSessionClosed` with the reason `SessionClosedByClient`, `SessionTimedOut` or `SessionClosedByServer`) where they happen, with the session name, the client's ApplicationDescription, the endpoint, the client's address, the security and the user (`SessionInfo`). Before, a server could only find out about its clients by polling the session diagnostics or parsing its log. `server.BaseSessionObserver` implements the interface with no-op methods for embedding.
+
+---
+
 ## v1.29.5
 
 **Date:** 2026-11-02
