@@ -3,11 +3,22 @@
 ## v1.30.0
 
 **Date:** 2026-11-02
-**Previous release:** v1.29.5
+**Previous release:** v1.29.6
 
 ### Added
 
 - `server.WithSessionObserver` and `server.SessionObserver`: the application is told about client connections (`OnConnectionOpened`, `OnConnectionClosed` with the duration) and sessions (`OnSessionActivated`, `OnSessionClosed` with the reason `SessionClosedByClient`, `SessionTimedOut` or `SessionClosedByServer`) where they happen, with the session name, the client's ApplicationDescription, the endpoint, the client's address, the security and the user (`SessionInfo`). Before, a server could only find out about its clients by polling the session diagnostics or parsing its log. `server.BaseSessionObserver` implements the interface with no-op methods for embedding.
+
+---
+
+## v1.29.6
+
+**Date:** 2026-11-02
+**Previous release:** v1.29.5
+
+### Fixed
+
+- server: a rejected ActivateSession changed the user identity of the session to the one it rejected (Part 4 §5.6.3 leaves the session as it was). A client of an activated session that sent ActivateSession with another user's name and a wrong password got `Bad_UserAccessDenied`, but the session then reported that user in `Session.Identity()`, which an `AccessController` may decide on, and counted as that user's session for TransferSubscriptions. The roles were not affected. The session now takes an identity only once it has been accepted.
 
 ---
 

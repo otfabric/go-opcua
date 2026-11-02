@@ -166,17 +166,20 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		return nil, ua.StatusBadInternalError
 	}
 
-	// Extract user identity, validate credentials, and resolve roles.
+	// Extract user identity, validate credentials, and resolve roles. The
+	// session takes the identity only once it has been accepted: a rejected
+	// ActivateSession leaves the session as it was (Part 4 §5.6.3).
+	identity := sess.identityToken
 	if req.UserIdentityToken != nil {
 		if token, ok := req.UserIdentityToken.Value.(ua.IdentityToken); ok {
-			sess.identityToken = token
+			identity = token
 		}
 	}
 
 	// Validate username/password credentials if the client presented a
 	// UserNameIdentityToken. Without a validator nobody can check them, so
 	// they are rejected.
-	if uname, ok := sess.identityToken.(*ua.UserNameIdentityToken); ok {
+	if uname, ok := identity.(*ua.UserNameIdentityToken); ok {
 		if s.srv.cfg.usernameValidator == nil {
 			s.srv.cfg.logger.Warn("ActivateSession username rejected: no UsernameValidator configured",
 				"username", uname.UserName)
@@ -211,7 +214,7 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	// The data of an issued token is a secret like a password. With an ECC
 	// security policy it arrives as an EccEncryptedSecret; the role mapper
 	// gets the token the issuer created.
-	if issued, ok := sess.identityToken.(*ua.IssuedIdentityToken); ok && uapolicy.IsECC(s.userTokenPolicy(sc)) {
+	if issued, ok := identity.(*ua.IssuedIdentityToken); ok && uapolicy.IsECC(s.userTokenPolicy(sc)) {
 		data, st := s.decryptEccSecret(sc, sess, issued.TokenData, prevNonce)
 		if st != ua.StatusOK {
 			s.srv.cfg.logger.Warn("ActivateSession issued token: cannot decrypt token data", "status", st)
@@ -223,7 +226,7 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 
 	// An issued token is only accepted by a configured validator: without
 	// one nobody has checked it.
-	if issued, ok := sess.identityToken.(*ua.IssuedIdentityToken); ok {
+	if issued, ok := identity.(*ua.IssuedIdentityToken); ok {
 		v := s.srv.cfg.issuedTokenValidator
 		if v == nil {
 			s.srv.cfg.logger.Warn("ActivateSession issued token rejected: no IssuedTokenValidator configured")
@@ -236,13 +239,14 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	}
 
 	// Validate X.509 identity token (OPC UA Part 4 §5.6.3.3).
-	if x509tok, ok := sess.identityToken.(*ua.X509IdentityToken); ok {
+	if x509tok, ok := identity.(*ua.X509IdentityToken); ok {
 		if err := s.validateX509UserToken(sc, sess, req, x509tok); err != nil {
 			return nil, err
 		}
 	}
 
 	sess.serverNonce = nonce
+	sess.identityToken = identity
 
 	if rm := s.srv.cfg.roleMapper; rm != nil {
 		sess.roles = rm(sess.identityToken)
