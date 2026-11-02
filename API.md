@@ -84,6 +84,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Registered Custom DataTypes](#registered-custom-datatypes)
   - [HistoryProvider](#historyprovider)
   - [ServerMetrics](#servermetrics)
+  - [SessionObserver](#sessionobserver)
   - [Push certificate management (server)](#push-certificate-management-server)
 - [Package `pubsub`](#package-pubsub)
   - [Runtime](#runtime)
@@ -1766,6 +1767,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithResponseWriteTimeout(d time.Duration)` | Close the connection of a client that has not read a response for `d` (default 15 s) |
 | `WithMaxPendingResponses(n int)` | Stop reading a client's requests while `n` of its responses are unwritten (default 256; waiting Publish requests do not count) |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
+| `WithSessionObserver(o SessionObserver)` | Told about client connections and sessions as they begin and end; see [SessionObserver](#sessionobserver) |
 | `WithAccessController(ac AccessController)` | Access controller |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session to a `ua.UserRole`; used by the default access controller |
@@ -2574,6 +2576,46 @@ type ServerMetrics interface {
     OnError(service string, duration time.Duration, err error)
 }
 ```
+
+### SessionObserver
+
+```go
+type SessionObserver interface {
+    OnConnectionOpened(remote net.Addr)
+    OnConnectionClosed(remote net.Addr, duration time.Duration)
+    OnSessionActivated(info SessionInfo)
+    OnSessionClosed(info SessionInfo, reason SessionCloseReason)
+}
+type BaseSessionObserver struct{} // no-op methods, for embedding
+
+type SessionInfo struct {
+    ID                *ua.NodeID
+    Name              string                     // CreateSession SessionName
+    Client            *ua.ApplicationDescription // CreateSession ClientDescription
+    EndpointURL       string
+    RemoteAddr        net.Addr                   // nil over opc.https
+    SecurityPolicyURI string
+    SecurityMode      ua.MessageSecurityMode
+    IdentityType      ua.UserTokenType
+    User              string                     // user name, X.509 subject, or empty
+    Created           time.Time
+    Activated         time.Time                  // last ActivateSession
+    Reactivated       bool                       // not the first ActivateSession of the session
+}
+
+type SessionCloseReason int // String()
+const (
+    SessionClosedByClient SessionCloseReason // CloseSession
+    SessionTimedOut                          // session timeout (Part 4 §5.6.2)
+    SessionClosedByServer                    // server shutdown
+)
+
+func WithSessionObserver(o SessionObserver) Option
+```
+
+Synchronous, must not block; a panic is recovered and logged. Sessions that
+were never activated are not reported. See the
+[server guide](docs/server-guide.md#connection-and-session-events).
 
 ### Push certificate management (server)
 
