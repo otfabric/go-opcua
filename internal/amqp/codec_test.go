@@ -40,7 +40,7 @@ func TestValueRoundTrip(t *testing.T) {
 		Array{}, Array{Symbol("a"), Symbol("b")}, Array{true, false}, Array{uint8(1)}, Array{uint16(1)},
 		Array{uint32(1), uint32(1 << 20)}, Array{uint64(3)}, Array{int8(-1)}, Array{int16(-1)},
 		Array{int32(-1)}, Array{int64(-1)}, Array{float32(1)}, Array{1.0}, Array{Char('a')},
-		Array{ts}, Array{UUID{9}}, Array{[]byte{1}}, Array{"s", long}, Array{nil, nil},
+		Array{ts}, Array{UUID{9}}, Array{[]byte{1}}, Array{"s", long},
 	}
 	for _, v := range same {
 		require.Equal(t, v, roundTrip(t, v), "%#v", v)
@@ -71,10 +71,16 @@ func TestValueEncodeErrors(t *testing.T) {
 		struct{}{}, []any{struct{}{}}, Map{{Key: struct{}{}}}, Map{{Key: "k", Value: struct{}{}}},
 		Array{struct{}{}}, Array{"a", uint32(1)}, Array{[]any{}}, &Described{Descriptor: struct{}{}},
 		&Described{Descriptor: uint64(1), Value: struct{}{}},
+		// An array of nulls would not decode: its elements take no bytes.
+		Array{nil}, Array{nil, nil, nil, nil},
 	} {
 		_, err := AppendValue(nil, v)
 		require.Error(t, err, "%#v", v)
 	}
+	// FuzzDecodeValue a4f3c492af39a039: the array8 of four nulls is
+	// refused by the decoder, so the encoder does not write it.
+	_, _, err := DecodeValue([]byte{0xe0, 0x02, 0x04, 0x40})
+	require.Error(t, err)
 }
 
 func TestDecodeMalformed(t *testing.T) {
