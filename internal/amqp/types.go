@@ -360,6 +360,12 @@ func appendArray(b []byte, a Array) ([]byte, error) {
 	if !ok {
 		return b, fmt.Errorf("amqp: cannot encode an array of %T", first)
 	}
+	// The elements of an array of nulls take no bytes, and the decoder
+	// accepts no more elements than the array has bytes (decoder.sized):
+	// such an array would not decode. AMQP has no use for one.
+	if code == codeNull && len(a) > 0 {
+		return b, fmt.Errorf("amqp: cannot encode an array of %d nulls", len(a))
+	}
 	body := []byte{code}
 	for _, v := range a {
 		if c, ok := arrayCode(v); !ok || c != code {
