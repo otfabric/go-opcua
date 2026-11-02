@@ -209,8 +209,12 @@ func eventHistoryRound(e *env, rng *rand.Rand, notifier *ua.NodeID, pages, aband
 				ids[i] = []byte(fmt.Sprintf("ev-%d", rng.Intn(5000)))
 			}
 			resp, err := c.HistoryDeleteEvents(ctx, &ua.DeleteEventDetails{NodeID: notifier, EventIDs: ids})
-			if err == nil && resp.Results[0].StatusCode != ua.StatusOK {
-				err = resp.Results[0].StatusCode
+			// None of the EventIds matched an event: Bad_NoData for the
+			// node (Part 11 §6.9.7.2).
+			if err == nil {
+				if st := resp.Results[0].StatusCode; st != ua.StatusOK && st != ua.StatusBadNoData {
+					err = st
+				}
 			}
 			op = "delete"
 			if err := ok(op, err); err != nil {
