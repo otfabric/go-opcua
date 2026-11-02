@@ -15,7 +15,7 @@
 | **Session** | CreateSession, ActivateSession, CloseSession, Cancel | Fully implemented |
 | **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences | Fully implemented |
 | **View** | Browse, BrowseNext, TranslateBrowsePathsToNodeIDs, RegisterNodes, UnregisterNodes | Fully implemented |
-| **Attribute** | Read, Write | Fully implemented (IndexRange / NumericRange, `TimestampsToReturn`, value-only Write) |
+| **Attribute** | Read, Write | Fully implemented (IndexRange / NumericRange, `TimestampsToReturn`, value-only Write; the server stamps the SourceTimestamp and ServerTimestamp of a written value with the time it received it, Part 4 §7.11.3, §7.11.4) |
 | | HistoryRead | Via pluggable `HistoryProvider` (`SetHistorian`); default `*Historian` supports raw, modified, at-time, processed aggregates and events (`ReadEventDetails`) |
 | | HistoryUpdate | Via optional historian interfaces (`HistoryDataUpdater`, `EventHistoryUpdater`, deleters); default `*Historian` supports UpdateData, raw/at-time deletes, UpdateEventDetails and DeleteEventDetails |
 | **Method** | Call | Fully implemented |

@@ -571,3 +571,59 @@ func TestAttributeService_Write_IndexRangeAndEncodingMask(t *testing.T) {
 		assert.Equal(t, ua.StatusBadIndexRangeInvalid, resp.(*ua.WriteResponse).Results[0])
 	})
 }
+
+// TestAttributeService_Write_StampsTimestamps: a written value carries a
+// SourceTimestamp and a ServerTimestamp, the time the server received it
+// (Part 4 §7.11.3, §7.11.4). The client cannot write them: this server
+// answers Bad_WriteNotSupported (§5.11.4.2). Without them a PubSub
+// DataSetMessage left out the timestamps its DataSetFieldContentMask
+// selects, and a Read with TimestampsToReturn Source returned none.
+func TestAttributeService_Write_StampsTimestamps(t *testing.T) {
+	srv := newTestServer()
+	ns, obj := addTestNamespace(srv)
+	arr := ns.AddNewVariableStringNode("rw_array_ts", []int32{1, 2, 3})
+	obj.AddRef(arr, id.HasComponent, true)
+	svc := &AttributeService{srv: srv}
+
+	for _, tc := range []struct {
+		name  string
+		write *ua.WriteValue
+	}{
+		{"value", &ua.WriteValue{
+			NodeID:      ua.NewStringNodeID(ns.ID(), "rw_int32"),
+			AttributeID: ua.AttributeIDValue,
+			Value:       &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(int32(7))},
+		}},
+		{"index range", &ua.WriteValue{
+			NodeID:      ua.NewStringNodeID(ns.ID(), "rw_array_ts"),
+			AttributeID: ua.AttributeIDValue,
+			IndexRange:  "0",
+			Value:       &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant([]int32{9})},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			before := time.Now()
+			resp, err := svc.Write(context.Background(), nil, &ua.WriteRequest{RequestHeader: reqHeader(), NodesToWrite: []*ua.WriteValue{tc.write}}, 1)
+			require.NoError(t, err)
+			require.Equal(t, ua.StatusOK, resp.(*ua.WriteResponse).Results[0])
+			after := time.Now()
+			require.Zero(t, tc.write.Value.SourceTimestamp, "the request is not changed")
+
+			// What the PubSub publisher samples.
+			dv := srv.readPublished(&ua.PublishedVariableDataType{PublishedVariable: tc.write.NodeID, AttributeID: ua.AttributeIDValue})
+			for name, ts := range map[string]time.Time{"SourceTimestamp": dv.SourceTimestamp, "ServerTimestamp": dv.ServerTimestamp} {
+				require.False(t, ts.Before(before) || ts.After(after), "%s %v not in [%v, %v]", name, ts, before, after)
+			}
+			require.NotZero(t, dv.EncodingMask&ua.DataValueSourceTimestamp)
+			require.NotZero(t, dv.EncodingMask&ua.DataValueServerTimestamp)
+
+			rr, err := svc.Read(context.Background(), nil, &ua.ReadRequest{
+				RequestHeader:      reqHeader(),
+				TimestampsToReturn: ua.TimestampsToReturnSource,
+				NodesToRead:        []*ua.ReadValueID{{NodeID: tc.write.NodeID, AttributeID: ua.AttributeIDValue}},
+			}, 2)
+			require.NoError(t, err)
+			require.Equal(t, dv.SourceTimestamp, rr.(*ua.ReadResponse).Results[0].SourceTimestamp)
+		})
+	}
+}
