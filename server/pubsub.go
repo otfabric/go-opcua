@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/pubsub"
@@ -156,6 +157,12 @@ func (s *Server) readPublished(v *ua.PublishedVariableDataType) *ua.DataValue {
 		return badValue(ua.StatusBadNodeIDUnknown)
 	}
 	cp := *dv
+	// The value is known to be accurate now (Part 4 §7.11.4), as a Read
+	// stamps it (ua.ApplyTimestampsToReturn).
+	if attr == ua.AttributeIDValue && cp.ServerTimestamp.IsZero() {
+		cp.ServerTimestamp = time.Now().UTC()
+		cp.EncodingMask |= ua.DataValueServerTimestamp
+	}
 	if v.IndexRange != "" {
 		if attr != ua.AttributeIDValue || cp.Value == nil || cp.Status&0x80000000 != 0 {
 			return badValue(ua.StatusBadIndexRangeInvalid)

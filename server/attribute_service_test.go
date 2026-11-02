@@ -572,9 +572,10 @@ func TestAttributeService_Write_IndexRangeAndEncodingMask(t *testing.T) {
 	})
 }
 
-// TestAttributeService_Write_StampsTimestamps: a written value carries a
-// SourceTimestamp and a ServerTimestamp, the time the server received it
-// (Part 4 §7.11.3, §7.11.4). The client cannot write them: this server
+// TestAttributeService_Write_StampsTimestamps: a written value carries the
+// time the server received it as its SourceTimestamp (Part 4 §7.11.3), and
+// the PubSub publisher samples it with a ServerTimestamp, the time it takes
+// the value (§7.11.4). The client cannot write timestamps: this server
 // answers Bad_WriteNotSupported (§5.11.4.2). Without them a PubSub
 // DataSetMessage left out the timestamps its DataSetFieldContentMask
 // selects, and a Read with TimestampsToReturn Source returned none.
@@ -606,14 +607,16 @@ func TestAttributeService_Write_StampsTimestamps(t *testing.T) {
 			resp, err := svc.Write(context.Background(), nil, &ua.WriteRequest{RequestHeader: reqHeader(), NodesToWrite: []*ua.WriteValue{tc.write}}, 1)
 			require.NoError(t, err)
 			require.Equal(t, ua.StatusOK, resp.(*ua.WriteResponse).Results[0])
-			after := time.Now()
+			written := time.Now()
 			require.Zero(t, tc.write.Value.SourceTimestamp, "the request is not changed")
 
 			// What the PubSub publisher samples.
 			dv := srv.readPublished(&ua.PublishedVariableDataType{PublishedVariable: tc.write.NodeID, AttributeID: ua.AttributeIDValue})
-			for name, ts := range map[string]time.Time{"SourceTimestamp": dv.SourceTimestamp, "ServerTimestamp": dv.ServerTimestamp} {
-				require.False(t, ts.Before(before) || ts.After(after), "%s %v not in [%v, %v]", name, ts, before, after)
-			}
+			sampled := time.Now()
+			require.False(t, dv.SourceTimestamp.Before(before) || dv.SourceTimestamp.After(written),
+				"SourceTimestamp %v not in [%v, %v]", dv.SourceTimestamp, before, written)
+			require.False(t, dv.ServerTimestamp.Before(written) || dv.ServerTimestamp.After(sampled),
+				"ServerTimestamp %v not in [%v, %v]", dv.ServerTimestamp, written, sampled)
 			require.NotZero(t, dv.EncodingMask&ua.DataValueSourceTimestamp)
 			require.NotZero(t, dv.EncodingMask&ua.DataValueServerTimestamp)
 

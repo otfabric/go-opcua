@@ -231,10 +231,14 @@ func withElement(v any, i int, d float64) any {
 }
 
 // The source timestamp of every server-side write encodes the generation of
-// the server instance and a sequence number that is unique for the test.
+// the server instance and a sequence number that is unique for the test. The
+// stamps lie in 2000 to 2003, far from the time of a test run: the server
+// stamps a value a client writes with the time of the write (Part 4
+// §7.11.3), and such a value is not one of these.
 const (
-	stampBaseSec    = 1_767_225_600 // 2026-01-01T00:00:00Z
+	stampBaseSec    = 946_684_800 // 2000-01-01T00:00:00Z
 	stampGenSpanSec = 100_000
+	stampGenMax     = 1_000
 )
 
 func stamp(gen, seq int64) time.Time {
@@ -242,7 +246,7 @@ func stamp(gen, seq int64) time.Time {
 }
 
 // unstamp is the inverse of stamp. ok is false for a timestamp that was not
-// produced by stamp (the zero time of a value written by a client).
+// produced by stamp (the time a client wrote a value, or none).
 func unstamp(ts time.Time) (gen, seq int64, ok bool) {
 	if ts.IsZero() {
 		return 0, 0, false
@@ -252,6 +256,9 @@ func unstamp(ts time.Time) (gen, seq int64, ok bool) {
 		return 0, 0, false
 	}
 	span := int64(stampGenSpanSec) * 1_000_000
+	if us/span >= stampGenMax {
+		return 0, 0, false
+	}
 	return us / span, us % span, true
 }
 
