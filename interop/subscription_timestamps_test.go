@@ -71,6 +71,9 @@ func TestGoServer_SubscribeTimestampsToReturn(t *testing.T) {
 			writeInt32(t, c, ctx, nodeID, tc.writeVal)
 			dcn2 := collectDataChange(t, notifyCh, 1, 5*time.Second)
 			dv2 := dcn2.MonitoredItems[0].Value
+			if hasSrc2 := dv2.EncodingMask&ua.DataValueSourceTimestamp != 0; hasSrc2 != tc.wantSrc {
+				t.Errorf("subsequent source timestamp present=%v, want %v", hasSrc2, tc.wantSrc)
+			}
 			hasSrv2 := dv2.EncodingMask&ua.DataValueServerTimestamp != 0
 			if hasSrv2 != tc.wantServer {
 				t.Errorf("subsequent server timestamp present=%v, want %v", hasSrv2, tc.wantServer)
