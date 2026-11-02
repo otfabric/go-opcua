@@ -45,6 +45,7 @@ opcua-interop v0.17.0
       dotnet_gds_pull_test.go              GDS pull model against the dotnet-gds adapter (opt-in)
       optional_peers_test.go               opt-in adapter images (DOTNET_GDS_IMAGE)
       otfabric_self_test.go                this commit against opcua-interop-otfabric, in both roles
+      otfabric_features_test.go            the same for what newer images declare, gated by capability
                                            (OPCUA_INTEROP_OTFABRIC_IMAGE; not independent, no ledger)
 
       # Capability companions (COVERAGE sections)

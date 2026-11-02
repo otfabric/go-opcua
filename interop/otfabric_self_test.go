@@ -20,6 +20,9 @@ package interop
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
+	"net"
 	"os"
 	"slices"
 	"strconv"
@@ -438,4 +441,146 @@ func TestOtfabricClient_Secure(t *testing.T) {
 			t.Fatal("the server accepted a wrong password")
 		}
 	})
+}
+
+// ---------------------------------------------------------------------------
+// the two fixes of v1.29.4, in both directions
+// ---------------------------------------------------------------------------
+
+const (
+	accessWriteOnly = "Access.WriteOnly"
+	accessReadOnly  = "Access.ReadOnly"
+)
+
+// requireOtfabricFixes skips an image from before v1.29.4, which answered
+// BadUserAccessDenied and refused a Hello with another port.
+func requireOtfabricFixes(t *testing.T) {
+	t.Helper()
+	version := readOtfabricCaps(t).Stack.Version
+	var major, minor, patch int
+	if _, err := fmt.Sscanf(version, "v%d.%d.%d", &major, &minor, &patch); err != nil {
+		t.Fatalf("image version %q: %v", version, err)
+	}
+	if major == 1 && (minor < 29 || (minor == 29 && patch < 4)) {
+		t.Skipf("the image is go-opcua %s, from before v1.29.4", version)
+	}
+}
+
+// assertAccessStatuses asserts the status names of reading the write-only and writing
+// the read-only node of the fixture.
+func assertAccessStatuses(t *testing.T, read, write ua.StatusCode) {
+	t.Helper()
+	if read != ua.StatusBadNotReadable {
+		t.Errorf("reading %s: %v, want BadNotReadable", accessWriteOnly, read)
+	}
+	if write != ua.StatusBadNotWritable {
+		t.Errorf("writing %s: %v, want BadNotWritable", accessReadOnly, write)
+	}
+}
+
+// readWriteStatuses does both operations with this commit's client.
+func readWriteStatuses(t *testing.T, endpoint string) (ua.StatusCode, ua.StatusCode) {
+	t.Helper()
+	c := dialClient(t, endpoint)
+	ctx, nsIdx := findNS(t, c)
+	readResp, err := c.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{
+		NodeID: ua.NewStringNodeID(nsIdx, accessWriteOnly), AttributeID: ua.AttributeIDValue,
+	}}})
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	write, err := c.WriteNodeValue(ctx, ua.NewStringNodeID(nsIdx, accessReadOnly), "nope")
+	if err != nil {
+		t.Fatalf("WriteNodeValue: %v", err)
+	}
+	return readResp.Results[0].Status, write
+}
+
+// TestOtfabricServer_AccessStatus: this commit's client, the image's server.
+func TestOtfabricServer_AccessStatus(t *testing.T) {
+	requireOtfabricFixes(t)
+	read, write := readWriteStatuses(t, startOtfabricServer(t).endpoint)
+	assertAccessStatuses(t, read, write)
+}
+
+// TestOtfabricClient_AccessStatus: the image's client, this commit's server.
+func TestOtfabricClient_AccessStatus(t *testing.T) {
+	requireOtfabricFixes(t)
+	endpoint := startGoServer(t)
+	item := func(subcmd string, args ...string) ua.StatusCode {
+		t.Helper()
+		result := runAdapterClientResult(t, otfabricEnv, "", endpoint, subcmd, args...)
+		if result.Success {
+			t.Fatalf("%s %v succeeded", subcmd, args)
+		}
+		var items []struct {
+			StatusCode statusCodeObj `json:"statusCode"`
+		}
+		if err := json.Unmarshal(result.Results, &items); err != nil || len(items) != 1 {
+			t.Fatalf("results: %v: %s", err, result.Results)
+		}
+		return ua.StatusCode(items[0].StatusCode.Code)
+	}
+	assertAccessStatuses(t,
+		item("read", "--node", "nsu="+interopNamespaceURI+";s="+accessWriteOnly),
+		item("write", "--node", "nsu="+interopNamespaceURI+";s="+accessReadOnly, "--type", "String", "--value", "nope"))
+}
+
+// TestOtfabricServer_PublishedPort reaches the image's server through a published
+// port other than the one it listens on, so the port in the Hello differs.
+func TestOtfabricServer_PublishedPort(t *testing.T) {
+	requireOtfabricFixes(t)
+	h := startOtfabricServer(t)
+	if strings.Contains(h.endpoint, ":4840") {
+		t.Fatalf("published on the listen port: %s", h.endpoint)
+	}
+	c := dialClient(t, h.endpoint)
+	ctx, nsIdx := findNS(t, c)
+	if _, err := c.Node(ua.NewStringNodeID(nsIdx, "Scalar.Int32")).Value(ctx); err != nil {
+		t.Fatalf("Value: %v", err)
+	}
+}
+
+// TestOtfabricClient_ProxiedPort reaches this commit's server from the image's client
+// through a port the server does not listen on.
+func TestOtfabricClient_ProxiedPort(t *testing.T) {
+	requireOtfabricFixes(t)
+	endpoint := startGoServer(t)
+	_, target, ok := strings.Cut(strings.TrimPrefix(endpoint, "opc.tcp://"), ":")
+	if !ok {
+		t.Fatalf("endpoint %s", endpoint)
+	}
+	target, _, _ = strings.Cut(target, "/")
+	l, err := net.Listen("tcp", "0.0.0.0:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = l.Close() })
+	go func() {
+		for {
+			conn, err := l.Accept()
+			if err != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = conn.Close() }()
+				up, err := net.Dial("tcp", "127.0.0.1:"+target)
+				if err != nil {
+					return
+				}
+				defer func() { _ = up.Close() }()
+				go func() { _, _ = io.Copy(up, conn) }()
+				_, _ = io.Copy(conn, up)
+			}()
+		}
+	}()
+	port := l.Addr().(*net.TCPAddr).Port
+	if strconv.Itoa(port) == target {
+		t.Fatalf("the proxy has the listen port %s", target)
+	}
+	result := runOtfabricClient(t, fmt.Sprintf("opc.tcp://localhost:%d%s", port, endpointPath), "read",
+		"--node", "nsu="+interopNamespaceURI+";s=Scalar.Int32")
+	if !strings.Contains(string(result.Results), "-123456789") {
+		t.Errorf("results: %s", result.Results)
+	}
 }
