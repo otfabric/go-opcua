@@ -169,11 +169,19 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	// Extract user identity, validate credentials, and resolve roles. The
 	// session takes the identity only once it has been accepted: a rejected
 	// ActivateSession leaves the session as it was (Part 4 §5.6.3).
-	identity := sess.identityToken
-	if req.UserIdentityToken != nil {
-		if token, ok := req.UserIdentityToken.Value.(ua.IdentityToken); ok {
-			identity = token
+	// A null or empty token is an anonymous one (Part 4 §5.6.3). The
+	// server accepts only the token types an endpoint of the channel offers.
+	var identity ua.IdentityToken = &ua.AnonymousIdentityToken{}
+	if req.UserIdentityToken != nil && req.UserIdentityToken.Value != nil {
+		token, ok := req.UserIdentityToken.Value.(ua.IdentityToken)
+		if !ok {
+			return nil, ua.StatusBadIdentityTokenInvalid
 		}
+		identity = token
+	}
+	if tt := tokenTypeOf(identity); !s.srv.tokenOffered(sc, tt) {
+		s.srv.cfg.logger.Warn("ActivateSession rejected: no endpoint of the channel offers the token type", "token_type", tt)
+		return nil, ua.StatusBadIdentityTokenRejected
 	}
 
 	// Validate username/password credentials if the client presented a
@@ -718,4 +726,42 @@ func createSessionEndpoints(endpoints []*ua.EndpointDescription, requestURL stri
 		return append(matching, endpoints...)
 	}
 	return matching
+}
+
+// tokenTypeOf returns the type of a user identity token.
+func tokenTypeOf(tok ua.IdentityToken) ua.UserTokenType {
+	switch tok.(type) {
+	case *ua.UserNameIdentityToken:
+		return ua.UserTokenTypeUserName
+	case *ua.X509IdentityToken:
+		return ua.UserTokenTypeCertificate
+	case *ua.IssuedIdentityToken:
+		return ua.UserTokenTypeIssuedToken
+	}
+	return ua.UserTokenTypeAnonymous
+}
+
+// tokenOffered reports whether an endpoint the client can have reached sc
+// through offers a user token policy of type tt: the EndpointDescription
+// says which UserIdentityTokens the server accepts (Part 4 §5.6.3). The
+// endpoints of the channel are those of its security policy and mode, of
+// the opc.https and opcua+uajson transports for a virtual channel and of
+// the others for a real one.
+func (s *Server) tokenOffered(sc *uasc.SecureChannel, tt ua.UserTokenType) bool {
+	policy, mode := ua.SecurityPolicyURINone, ua.MessageSecurityModeNone
+	if sc != nil {
+		policy, mode = sc.SecurityPolicyURI(), sc.SecurityMode()
+	}
+	virtual := s.isVirtualChannel(sc)
+	for _, ep := range s.Endpoints() {
+		if ep.SecurityPolicyURI != policy || ep.SecurityMode != mode || tlsOnly(ep.TransportProfileURI) != virtual {
+			continue
+		}
+		for _, utp := range ep.UserIdentityTokens {
+			if utp != nil && utp.TokenType == tt {
+				return true
+			}
+		}
+	}
+	return false
 }

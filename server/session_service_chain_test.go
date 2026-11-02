@@ -62,6 +62,7 @@ func newChainSessionFixture(t *testing.T, serverChain bool) *chainSessionFixture
 		f.users = append(f.users, cert)
 		return nil
 	}
+	offerTokens(srv, chainPolicy, ua.MessageSecurityModeSignAndEncrypt, ua.UserTokenTypeAnonymous, ua.UserTokenTypeUserName, ua.UserTokenTypeCertificate, ua.UserTokenTypeIssuedToken)
 	f.svc = &SessionService{srv: srv}
 	f.sc = uasc.NewCryptoChannel(&uasc.Config{
 		SecurityMode:      ua.MessageSecurityModeSignAndEncrypt,
