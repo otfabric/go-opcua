@@ -879,7 +879,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.12 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.12 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.read.events",
@@ -894,7 +894,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.12 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.12 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.read.events.continuation",
@@ -909,7 +909,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.12 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.12 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.read.events.filter",
@@ -937,7 +937,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.12's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CLIENT_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.update.events",
@@ -965,7 +965,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.12's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CLIENT_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.12's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.delete.events",

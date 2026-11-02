@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// The Eclipse Milo adapter's `client push` (CLIENT_CONTRACT §1 "push flags",
+// The Eclipse Milo adapter's `client push` (CONTAINER_CONTRACT §1 "push flags",
 // §15) and `client gds-pull` (§16.2) of opcua-interop v0.15.0 (unreleased
 // when these tests were written; built from the opcua-interop branch
 // feat/milo-push). Milo 1.1.8 has neither a push nor a GDS client, so the

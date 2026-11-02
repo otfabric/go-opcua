@@ -6,11 +6,11 @@
 //
 //   - the go-opcua client against the alarm fixture of the peer servers that
 //     declare serverFeatures "alarms" (UA-.NETStandard, node-opcua,
-//     open62541; opcua-interop fixtures/baseline/README.md "Alarms"):
+//     open62541; opcua-interop docs/FIXTURES.md "Alarms"):
 //     ConditionRefresh (Part 9 §5.5.7), Acknowledge / Confirm (§5.7.3,
 //     §5.7.4), AddComment (§5.5.6), Disable / Enable (§5.5.4, §5.5.5);
 //   - every adapter's `client alarms` operation against a condition of the
-//     go-opcua server (CLIENT_CONTRACT §1 "alarms flags", §4 "alarms").
+//     go-opcua server (CONTAINER_CONTRACT §1 "alarms flags", §4 "alarms").
 //
 // The UA-.NETStandard, node-opcua and async-opcua tests are in
 // dotnet_alarms_test.go, nodeopcua_alarms_test.go and asyncopcua_alarms_test.go
@@ -505,7 +505,7 @@ func TestGoServer_AsyncuaClient_Alarms(t *testing.T) {
 }
 
 // alarmsConditionEntry is a ConditionEntry of the `alarms` result
-// (CLIENT_CONTRACT §4). Nullable fields are pointers.
+// (CONTAINER_CONTRACT §4). Nullable fields are pointers.
 type alarmsConditionEntry struct {
 	ConditionID   string  `json:"conditionId"`
 	EventID       *string `json:"eventId"`
@@ -554,7 +554,7 @@ type peerAlarmsRun struct {
 }
 
 // startGoServerWithAlarm starts the baseline go-opcua server with the alarm
-// fixture of opcua-interop (fixtures/baseline/README.md "Alarms"): an active,
+// fixture of opcua-interop (docs/FIXTURES.md "Alarms"): an active,
 // unacknowledged, confirmable AlarmConditionType InteropAlarm on
 // s=Alarms.Source, a notifier of the Server object.
 func startGoServerWithAlarm(t *testing.T) (string, *server.Condition) {

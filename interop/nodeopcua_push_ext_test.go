@@ -63,7 +63,7 @@ import (
 )
 
 // pushExtClient is an adapter whose `client push` has the flags of
-// opcua-interop v0.15.0 (CLIENT_CONTRACT §1 "push flags"); the push tests
+// opcua-interop v0.15.0 (CONTAINER_CONTRACT §1 "push flags"); the push tests
 // against the go server run once per such adapter.
 type pushExtClient struct {
 	name         string // adapter name, in subjects and certificate names
@@ -104,7 +104,7 @@ func requireNodeOpcuaV015(t *testing.T, list, capability string) {
 }
 
 // pushExtResult is the result of `client push` with the v0.15.0 keys
-// (CLIENT_CONTRACT §4 "push").
+// (CONTAINER_CONTRACT §4 "push").
 type pushExtResult struct {
 	CertificateGroupID                string             `json:"certificateGroupId"`
 	TrustList                         trustListJSON      `json:"trustList"`
@@ -613,7 +613,7 @@ func startQueryGoServer(t *testing.T) (string, uint16) {
 	return endpoint, nsIdx
 }
 
-// queryResult is the result of `client query` (CLIENT_CONTRACT §4 "query").
+// queryResult is the result of `client query` (CONTAINER_CONTRACT §4 "query").
 type queryResult struct {
 	TypeDefinitionNode string `json:"typeDefinitionNode"`
 	QueryFirst         struct {

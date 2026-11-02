@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // Push certificate management (Part 12 §7) of the go-opcua server driven by
-// the generic operations of the peer clients (CLIENT_CONTRACT §1 "call
+// the generic operations of the peer clients (CONTAINER_CONTRACT §1 "call
 // flags", "translate flags", "read flags"), for the adapters that have no
 // `client push` or whose `client push` does not cover the method:
 //

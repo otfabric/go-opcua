@@ -4,7 +4,7 @@
 
 // Part 9 v1.05 alarm timing, sound, first-in-group and metrics peer tests:
 // every adapter's generic `client read` and `client call` operations
-// (CLIENT_CONTRACT §1) against the go-opcua server, whose alarm timers run
+// (CONTAINER_CONTRACT §1) against the go-opcua server, whose alarm timers run
 // on a manual clock the test advances:
 //
 //   - alarms.alarm-timing: OnDelay / OffDelay / ReAlarmTime Properties, an

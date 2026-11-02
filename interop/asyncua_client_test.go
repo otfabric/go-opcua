@@ -1702,7 +1702,7 @@ func TestGoServer_AsyncuaClient_InvalidNodeId(t *testing.T) {
 
 // asyncuaGoServerValues are the values the go-opcua test server serves
 // (startGoServer, the baseline fixture's initialValue fields) in the JSON
-// encoding of CLIENT_CONTRACT §7, with the expected dataType. Matrices are
+// encoding of CONTAINER_CONTRACT §7, with the expected dataType. Matrices are
 // compared flattened (row-major).
 var asyncuaGoServerValues = map[string]struct {
 	dataType string

@@ -17,7 +17,7 @@
 //     built this way publishes to go-opcua.
 //
 // Method argument conventions of open62541 1.5.9: opcua-interop
-// docs/CLIENT_CONTRACT.md §14.6.
+// docs/CONTAINER_CONTRACT.md §14.6.
 
 package interop
 
@@ -147,7 +147,7 @@ func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 	// DataSetMetaData and writes to it; an existing node (a fixture
 	// variable) cannot be the target: the add fails and every write fails
 	// with BadNodeIdUnknown (contrary to opcua-interop
-	// docs/CLIENT_CONTRACT.md §14.6). So the target is a new node.
+	// docs/CONTAINER_CONTRACT.md §14.6). So the target is a new node.
 	rg, err := r.AddReaderGroup(ctx, conn, pubsub.ReaderGroup("RemoteRG"))
 	if err != nil {
 		t.Fatalf("AddReaderGroup: %v", err)

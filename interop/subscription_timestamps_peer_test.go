@@ -114,7 +114,7 @@ type subscribeTimestampItem struct {
 }
 
 // TestGoServer_Open62541Client_SubscribeTimestamps verifies adapter subscribe
-// --timestamps Neither/Both against the Go server (CLIENT_CONTRACT omission rules).
+// --timestamps Neither/Both against the Go server (CONTAINER_CONTRACT omission rules).
 func TestGoServer_Open62541Client_SubscribeTimestamps(t *testing.T) {
 	t.Run("coverage/subscription.timestamps/open62541-client-to-go-server", func(t *testing.T) {
 		requireAdapterOp(t, "OPEN62541_IMAGE", defaultOpen62541Image, "subscribe")

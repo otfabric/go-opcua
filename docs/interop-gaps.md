@@ -90,7 +90,7 @@ on the side of the application that talks to the peer.
 
 The Global Discovery Server and GDS client (Opc.Ua.Gds.Server / .Gds.Client 2.0.1, opcua-interop adapter dotnet-gds; 1.5.378 until opcua-interop v0.15.0):
 
-- The server sends its certificate with its issuer (SendCertificateChain defaults to true), which Part 6 allows; the go-opcua client signs over the leaf and accepts the chain. open62541 1.5.9 and async-opcua 0.19.0 clients cannot connect to such a server (CLIENT_CONTRACT §16.3).
+- The server sends its certificate with its issuer (SendCertificateChain defaults to true), which Part 6 allows; the go-opcua client signs over the leaf and accepts the chain. open62541 1.5.9 and async-opcua 0.19.0 clients cannot connect to such a server (CONTAINER_CONTRACT §16.3).
 - StartSigningRequest, StartNewKeyPairRequest and FinishRequest need a SignAndEncrypt session, CheckRevocationStatus at least Sign; GetCertificateStatus needs a CA, self or application admin role. FindApplications is open to Anonymous.
 - UnregisterApplication revokes the application's certificates, and CheckRevocationStatus reads the GDS CRL (`Bad_CertificateRevoked`). The ECC CA's CRL is well formed (1.5.378 named sha256WithRSAEncryption inside the TBSCertList).
 - The client reads a TrustList with the MethodIds of FileType (Part 4 §5.11.2.2), which the go-opcua server resolves since v1.22.0.

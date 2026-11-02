@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The NetworkMessage description of the opcua-interop codec operations
-// (docs/CLIENT_CONTRACT.md §14.9) and its conversion from and to the
+// (docs/CONTAINER_CONTRACT.md §14.9) and its conversion from and to the
 // go-opcua model (pubsub/message). Not ledger evidence by itself.
 //
 // The description is what the open62541 adapter prints for a NetworkMessage

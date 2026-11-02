@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// The UA-.NETStandard (dotnet) adapter's `client push` (CLIENT_CONTRACT §1
+// The UA-.NETStandard (dotnet) adapter's `client push` (CONTAINER_CONTRACT §1
 // "push flags", §15) and `client gds-pull` (§16.2) of opcua-interop v0.15.0
 // (unreleased when these tests were written; built from the opcua-interop
 // branch feat/dotnet-push). The push client is plain Calls on the

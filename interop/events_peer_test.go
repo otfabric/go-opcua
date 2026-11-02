@@ -228,7 +228,7 @@ func TestGoServer_MiloClient_EventEmissionBase(t *testing.T) {
 }
 
 // TestGoServer_Open62541Client_EventFilterSelectClauses asserts the adapter
-// reports BaseEvent selectClauses per CLIENT_CONTRACT.
+// reports BaseEvent selectClauses per CONTAINER_CONTRACT.
 func TestGoServer_Open62541Client_EventFilterSelectClauses(t *testing.T) {
 	t.Run("coverage/event.filter.select-clauses/open62541-client-to-go-server", func(t *testing.T) {
 		requireAdapterOp(t, "OPEN62541_IMAGE", defaultOpen62541Image, "event-subscribe")
@@ -252,7 +252,7 @@ func TestGoServer_Open62541Client_EventFilterSelectClauses(t *testing.T) {
 }
 
 // TestGoServer_MiloClient_EventFilterSelectClauses asserts the Milo adapter
-// reports BaseEvent selectClauses per CLIENT_CONTRACT.
+// reports BaseEvent selectClauses per CONTAINER_CONTRACT.
 func TestGoServer_MiloClient_EventFilterSelectClauses(t *testing.T) {
 	t.Run("coverage/event.filter.select-clauses/milo-client-to-go-server", func(t *testing.T) {
 		requireAdapterOp(t, "MILO_IMAGE", defaultMiloImage, "event-subscribe")

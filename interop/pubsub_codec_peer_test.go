@@ -8,7 +8,7 @@
 // COVERAGE.md: pubsub / pubsub.uadp.codec, pubsub.json.codec,
 // pubsub.uadp.delta-frame, pubsub.uadp.keepalive-message
 //
-// The adapter operations (opcua-interop docs/CLIENT_CONTRACT.md §14.9):
+// The adapter operations (opcua-interop docs/CONTAINER_CONTRACT.md §14.9):
 //
 //	client codec pubsub-uadp-encode | pubsub-json-encode   description → NetworkMessage
 //	client codec pubsub-uadp-decode | pubsub-json-decode   NetworkMessage → description

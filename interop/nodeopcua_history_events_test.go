@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7; CLIENT_CONTRACT §17):
+// Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7; CONTAINER_CONTRACT §17):
 // the node-opcua client against the go-opcua fixture s=History.Events. The
 // node-opcua server historizes variables only (§17.3).
 // The assertions are in history_events_test.go.

@@ -4,7 +4,7 @@
 
 // Shared helpers of the PubSub (Part 14) peer tests: the open62541 adapter
 // as a PubSub publisher / subscriber / SKS (server --pubsub-config,
-// opcua-interop docs/CLIENT_CONTRACT.md §14), the Mosquitto broker, the
+// opcua-interop docs/CONTAINER_CONTRACT.md §14), the Mosquitto broker, the
 // fixture variables of the PubSub folder and static keys. Not ledger
 // evidence by itself.
 //

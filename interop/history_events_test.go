@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// The historical events fixture of opcua-interop (CLIENT_CONTRACT §17) on
+// The historical events fixture of opcua-interop (CONTAINER_CONTRACT §17) on
 // the go-opcua server, the assertions the peer clients run against it and
 // the ones the go-opcua client runs against the peer servers.
 // COVERAGE.md: history / history.read.events, history.read.events.continuation,
@@ -137,7 +137,7 @@ func startGoServerWithEventHistory(t *testing.T) *goEventHistory {
 }
 
 // ---------------------------------------------------------------------------
-// Adapter client results (CLIENT_CONTRACT §4 history-read-events,
+// Adapter client results (CONTAINER_CONTRACT §4 history-read-events,
 // history-update-events)
 // ---------------------------------------------------------------------------
 
@@ -612,7 +612,7 @@ func assertGoContinuesPeerEvents(t *testing.T, endpoint string, statefulCPs bool
 
 // assertGoFiltersPeerEvents: OfType SystemEventType, Severity >= 300 and
 // [And(1, 2), OfType BaseEventType, Severity >= 300] (an And before its
-// operands, CLIENT_CONTRACT §1).
+// operands, CONTAINER_CONTRACT §1).
 func assertGoFiltersPeerEvents(t *testing.T, endpoint string, subtypes bool) {
 	t.Helper()
 	p := dialPeerEventServer(t, endpoint)

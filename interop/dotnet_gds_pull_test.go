@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // The GDS pull model (Part 12 §6, §7.9) against UA-.NETStandard: the
-// opcua-interop adapter dotnet-gds (opcua-interop v0.17.0, CLIENT_CONTRACT
+// opcua-interop adapter dotnet-gds (opcua-interop v0.17.0, CONTAINER_CONTRACT
 // §16) runs the stack's Global Discovery Server and GDS client on
 // OPCFoundation.NetStandard.Opc.Ua.Gds.Server / .Gds.Client 2.0.1.
 //
@@ -347,7 +347,7 @@ func startGDSGoServer(t *testing.T) (string, *gdsserver.GDS) {
 	return fmt.Sprintf("opc.tcp://localhost:%d", s.Port()), g
 }
 
-// gdsPullResult is the result of the adapter's `client gds-pull` (CLIENT_CONTRACT §16.2).
+// gdsPullResult is the result of the adapter's `client gds-pull` (CONTAINER_CONTRACT §16.2).
 type gdsPullResult struct {
 	FindApplications   []string      `json:"findApplications"`
 	Registered         bool          `json:"registered"`
@@ -367,7 +367,7 @@ type gdsPullResult struct {
 	UnregisterStatus   statusCodeObj `json:"unregisterStatus"`
 }
 
-// gdsPullClient is an adapter with `client gds-pull` (CLIENT_CONTRACT
+// gdsPullClient is an adapter with `client gds-pull` (CONTAINER_CONTRACT
 // §16.2); the GDS pull tests against the go server run once per such
 // adapter.
 type gdsPullClient struct {

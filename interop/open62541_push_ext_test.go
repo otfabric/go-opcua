@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// The open62541 adapter's `client push` (CLIENT_CONTRACT §1 "push flags",
+// The open62541 adapter's `client push` (CONTAINER_CONTRACT §1 "push flags",
 // §15) and `client gds-pull` (§16.2) of opcua-interop v0.15.0 (unreleased
 // when these tests were written; built from the opcua-interop branch
 // feat/open62541-push). open62541 v1.5.9 has neither a push nor a GDS client

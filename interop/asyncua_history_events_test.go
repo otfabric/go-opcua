@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7; CLIENT_CONTRACT §17)
+// Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7; CONTAINER_CONTRACT §17)
 // with asyncua 2.1.0: the asyncua client against the go-opcua fixture
 // s=History.Events, the go-opcua client against the asyncua fixture (read
 // only; its deviations in §17.4).

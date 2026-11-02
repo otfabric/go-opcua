@@ -868,7 +868,7 @@
       "test": "TestAsyncuaServer_HistoryReadEvents",
       "case": "coverage/history.read.events/go-client-to-asyncua-server",
       "fixture": "baseline",
-      "nextAction": "Verified with asyncua 2.1.0's deviations (CLIENT_CONTRACT §17.4): both ends of the time range are inclusive and a range without events answers Good, not Good_NoData"
+      "nextAction": "Verified with asyncua 2.1.0's deviations (CONTAINER_CONTRACT §17.4): both ends of the time range are inclusive and a range without events answers Good, not Good_NoData"
     },
     {
       "capability": "history.read.events",
@@ -885,7 +885,7 @@
       "test": "TestAsyncuaServer_HistoryReadEventsContinuation",
       "case": "coverage/history.read.events.continuation/go-client-to-asyncua-server",
       "fixture": "baseline",
-      "nextAction": "Paging verified; asyncua 2.1.0's continuation points are stateless (CLIENT_CONTRACT §17.4), so a released point still continues the read (Part 4 §5.10.3: Bad_ContinuationPointInvalid); the test asserts Good for the reuse"
+      "nextAction": "Paging verified; asyncua 2.1.0's continuation points are stateless (CONTAINER_CONTRACT §17.4), so a released point still continues the read (Part 4 §5.10.3: Bad_ContinuationPointInvalid); the test asserts Good for the reuse"
     },
     {
       "capability": "history.read.events.continuation",
@@ -902,7 +902,7 @@
       "test": "TestAsyncuaServer_HistoryReadEventsFilter",
       "case": "coverage/history.read.events.filter/go-client-to-asyncua-server",
       "fixture": "baseline",
-      "nextAction": "Verified with asyncua 2.1.0's deviation (CLIENT_CONTRACT §17.4): OfType compares the event type exactly, so OfType BaseEventType does not match the SystemEventType event hist-evt-3 (Part 4 §7.7.3 includes subtypes); the test asserts that"
+      "nextAction": "Verified with asyncua 2.1.0's deviation (CONTAINER_CONTRACT §17.4): OfType compares the event type exactly, so OfType BaseEventType does not match the SystemEventType event hist-evt-3 (Part 4 §7.7.3 includes subtypes); the test asserts that"
     },
     {
       "capability": "history.read.events.filter",
@@ -931,7 +931,7 @@
       "test": "TestAsyncuaServer_HistoryUpdateEvents",
       "case": "coverage/history.update.events/go-client-to-asyncua-server",
       "fixture": "baseline",
-      "nextAction": "asyncua 2.1.0 has no HistoryUpdate handler: the server refuses the request with BadUserAccessDenied before dispatch, for UpdateEventDetails and DeleteEventDetails alike; the opcua-interop asyncua fixture s=History.Events has EventNotifier 0x05 (no HistoryWrite) and the adapter declares history-events only (CLIENT_CONTRACT §17.4). TestAsyncuaServer_HistoryUpdateEvents pins the refusal; revisit when a pinned asyncua release serves HistoryUpdate"
+      "nextAction": "asyncua 2.1.0 has no HistoryUpdate handler: the server refuses the request with BadUserAccessDenied before dispatch, for UpdateEventDetails and DeleteEventDetails alike; the opcua-interop asyncua fixture s=History.Events has EventNotifier 0x05 (no HistoryWrite) and the adapter declares history-events only (CONTAINER_CONTRACT §17.4). TestAsyncuaServer_HistoryUpdateEvents pins the refusal; revisit when a pinned asyncua release serves HistoryUpdate"
     },
     {
       "capability": "history.update.events",
@@ -960,7 +960,7 @@
       "test": "TestAsyncuaServer_HistoryUpdateEvents",
       "case": "coverage/history.delete.events/go-client-to-asyncua-server",
       "fixture": "baseline",
-      "nextAction": "asyncua 2.1.0 has no HistoryUpdate handler: the server refuses the request with BadUserAccessDenied before dispatch, for UpdateEventDetails and DeleteEventDetails alike; the opcua-interop asyncua fixture s=History.Events has EventNotifier 0x05 (no HistoryWrite) and the adapter declares history-events only (CLIENT_CONTRACT §17.4). TestAsyncuaServer_HistoryUpdateEvents pins the refusal; revisit when a pinned asyncua release serves HistoryUpdate"
+      "nextAction": "asyncua 2.1.0 has no HistoryUpdate handler: the server refuses the request with BadUserAccessDenied before dispatch, for UpdateEventDetails and DeleteEventDetails alike; the opcua-interop asyncua fixture s=History.Events has EventNotifier 0x05 (no HistoryWrite) and the adapter declares history-events only (CONTAINER_CONTRACT §17.4). TestAsyncuaServer_HistoryUpdateEvents pins the refusal; revisit when a pinned asyncua release serves HistoryUpdate"
     },
     {
       "capability": "history.delete.events",

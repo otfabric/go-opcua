@@ -22,7 +22,7 @@
 //
 // The tests need the adapter operation "codec" and the client features
 // "codec-json" / "codec-xml" (print-capabilities). The contract they rely on
-// (opcua-interop docs/CLIENT_CONTRACT.md, "codec"):
+// (opcua-interop docs/CONTAINER_CONTRACT.md, "codec"):
 //
 //	client codec --endpoint <url> --node <nodeId> [--node ...]
 //

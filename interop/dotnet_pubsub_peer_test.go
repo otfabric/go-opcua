@@ -5,7 +5,7 @@
 // PubSub (Part 14) against UA-.NETStandard 2.0.1 (Opc.Ua.PubSub): the
 // opcua-interop dotnet adapter as publisher and subscriber (server
 // --pubsub-config), its codec pubsub-* operations and its UADP discovery
-// (client pubsub-discover); opcua-interop docs/CLIENT_CONTRACT.md §14.13.
+// (client pubsub-discover); opcua-interop docs/CONTAINER_CONTRACT.md §14.13.
 // Ledger: testdata/ledger-dotnet.json, profile pubsub.
 //
 // The transport, codec and runtime tests are those of open62541

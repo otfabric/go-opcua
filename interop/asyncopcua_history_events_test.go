@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7; CLIENT_CONTRACT §17):
+// Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7; CONTAINER_CONTRACT §17):
 // the async-opcua client against the go-opcua fixture s=History.Events.
 // async-opcua has no event history server (§17.5).
 // The assertions are in history_events_test.go.

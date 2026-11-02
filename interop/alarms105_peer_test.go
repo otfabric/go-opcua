@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // Part 9 v1.05 Alarms & Conditions peer tests: every adapter's generic
-// `client call` and `client event-subscribe` operations (CLIENT_CONTRACT §1
+// `client call` and `client event-subscribe` operations (CONTAINER_CONTRACT §1
 // "call flags", "event-subscribe flags") against the go-opcua server:
 //
 //   - alarms.alarm-state-methods: Suppress2, Silence, RemoveFromService2,

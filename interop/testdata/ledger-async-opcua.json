@@ -880,7 +880,7 @@
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events",
@@ -895,7 +895,7 @@
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events.continuation",
@@ -910,7 +910,7 @@
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events.filter",
@@ -937,7 +937,7 @@
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.update.events",
@@ -964,7 +964,7 @@
       "direction": "go-client-to-async-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "async-opcua 0.19.0 has no event history server: no event store backs its HistoryRead / HistoryUpdate, so the opcua-interop async-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.delete.events",

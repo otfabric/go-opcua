@@ -82,7 +82,7 @@ func requireAsyncOpcuaV015(t *testing.T, list, capability string) {
 	}
 }
 
-// asyncOpcuaPushResult is the result of `client push` (CLIENT_CONTRACT §4
+// asyncOpcuaPushResult is the result of `client push` (CONTAINER_CONTRACT §4
 // "push") with the keys pushExtResult does not decode.
 type asyncOpcuaPushResult struct {
 	pushExtResult

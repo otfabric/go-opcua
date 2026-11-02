@@ -7,7 +7,7 @@
 // against the UA-.NETStandard adapter server: go-opcua dials the JSON twins
 // that UA-.NETStandard advertises next to its binary endpoints with the
 // security mode None (HttpsServiceHost). The adapter client never selects
-// these endpoints (CLIENT_CONTRACT.md), so there is no reverse direction.
+// these endpoints (CONTAINER_CONTRACT.md), so there is no reverse direction.
 //
 // UA-.NETStandard dispatches an HTTPS POST to its JSON decoder only for the
 // Content-Type application/opcua+uajson, not for the application/json of

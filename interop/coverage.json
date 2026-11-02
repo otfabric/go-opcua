@@ -1656,7 +1656,7 @@
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.delete.events",
@@ -1668,7 +1668,7 @@
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.delete.events",
@@ -1775,7 +1775,7 @@
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events",
@@ -1787,7 +1787,7 @@
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events",
@@ -1825,7 +1825,7 @@
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events.continuation",
@@ -1837,7 +1837,7 @@
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events.continuation",
@@ -1875,7 +1875,7 @@
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events.filter",
@@ -1887,7 +1887,7 @@
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.read.events.filter",
@@ -2033,7 +2033,7 @@
         "stack": "open62541",
         "version": "1.5.9"
       },
-      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "open62541 1.5.9 has no event store: its HistoryRead / HistoryUpdate of events have no backend (the history plugin keeps data values only), so the opcua-interop open62541 server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.update.events",
@@ -2045,7 +2045,7 @@
         "stack": "eclipse-milo",
         "version": "1.1.8"
       },
-      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CLIENT_CONTRACT §17.5); nothing to test against"
+      "nextAction": "Eclipse Milo 1.1.8 has no event history server: no event store backs its AddressSpace historyRead / historyUpdate, so the opcua-interop milo server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.5); nothing to test against"
     },
     {
       "capability": "history.update.events",
