@@ -2015,7 +2015,7 @@ the nonces.
 
 ```go
 func (s *Session) ID() *ua.NodeID                 // SessionId
-func (s *Session) Identity() ua.IdentityToken     // as the client sent it; nil before ActivateSession
+func (s *Session) Identity() ua.IdentityToken     // as the client sent it, without a password; nil before ActivateSession
 func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper; a copy
 func (s *Session) ClientCertificate() []byte      // of CreateSession; a copy; nil with SecurityPolicy None
 ```
@@ -2256,7 +2256,8 @@ func (g *AlarmGroup) Members() []*ua.NodeID
 func (g *AlarmGroup) SetSuppressing(on bool) error // suppression groups
 func (g *AlarmGroup) Evaluate() error              // from the DigitalVariables
 
-// Audit events (AuditConditionEventType and subtypes); off by default
+// Audit events (AuditConditionEventType and subtypes; the SecureChannel and
+// Session service sets; certificate errors); off by default
 func WithAuditing(enabled bool) Option
 func (s *Server) SetAuditing(enabled bool)
 func (s *Server) Auditing() bool
@@ -2585,6 +2586,7 @@ type SessionObserver interface {
     OnConnectionClosed(remote net.Addr, duration time.Duration)
     OnSessionActivated(info SessionInfo)
     OnSessionClosed(info SessionInfo, reason SessionCloseReason)
+    OnRejected(r Rejection)
 }
 type BaseSessionObserver struct{} // no-op methods, for embedding
 
@@ -2609,6 +2611,17 @@ const (
     SessionTimedOut                          // session timeout (Part 4 §5.6.2)
     SessionClosedByServer                    // server shutdown
 )
+
+// A request the server refused
+type Rejection struct {
+    Service           string // RejectedOpenSecureChannel, RejectedCreateSession, RejectedActivateSession
+    Status            ua.StatusCode
+    RemoteAddr        net.Addr
+    SecurityPolicyURI string
+    SecurityMode      ua.MessageSecurityMode
+    ClientCertificate []byte       // application instance certificate, if any
+    Session           *SessionInfo // CreateSession, ActivateSession: with the identity tried; nil for OpenSecureChannel
+}
 
 func WithSessionObserver(o SessionObserver) Option
 ```

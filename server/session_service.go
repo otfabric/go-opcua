@@ -254,13 +254,18 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	}
 
 	sess.serverNonce = nonce
-	sess.identityToken = identity
 
+	// The role mapper gets the token the client sent, with its password in
+	// clear text; the session keeps it without (Session.Identity).
 	if rm := s.srv.cfg.roleMapper; rm != nil {
-		sess.roles = rm(sess.identityToken)
+		sess.roles = rm(identity)
 	} else {
-		sess.roles = DefaultRoleMapper(sess.identityToken)
+		sess.roles = DefaultRoleMapper(identity)
 	}
+	if uname, ok := identity.(*ua.UserNameIdentityToken); ok {
+		identity = withoutSecrets(uname)
+	}
+	sess.identityToken = identity
 
 	hdr := responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK)
 	if st := s.issueEphemeralKey(sc, sess, req.RequestHeader, hdr, false); st != ua.StatusOK {

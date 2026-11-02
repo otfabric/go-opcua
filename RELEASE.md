@@ -3,18 +3,18 @@
 ## v1.30.0
 
 **Date:** 2026-11-02
-**Previous release:** v1.29.6
+**Previous release:** v1.29.5
 
 ### Added
 
 - `server.WithSessionObserver` and `server.SessionObserver`: the application is told about client connections (`OnConnectionOpened`, `OnConnectionClosed` with the duration) and sessions (`OnSessionActivated`, `OnSessionClosed` with the reason `SessionClosedByClient`, `SessionTimedOut` or `SessionClosedByServer`) where they happen, with the session name, the client's ApplicationDescription, the endpoint, the client's address, the security and the user (`SessionInfo`). Before, a server could only find out about its clients by polling the session diagnostics or parsing its log. `server.BaseSessionObserver` implements the interface with no-op methods for embedding.
+- `SessionObserver.OnRejected` and `server.Rejection`: the observer is also told about the requests the server refused: an OpenSecureChannel (an untrusted client certificate), a CreateSession, an ActivateSession (a wrong password, a token type no endpoint offers), with the status, the client's address, the security, the client certificate and, for the sessions, the session name and the identity the client tried.
+- Security audit events (Part 4 §6.5.5, §6.5.6; Part 5 §6.4): with `WithAuditing(true)` the server reports AuditOpenSecureChannelEventType (opened channels and every failed OpenSecureChannel), AuditChannelEventType (CloseSecureChannel), AuditCreateSessionEventType and AuditActivateSessionEventType (every call, refused ones too), AuditSessionEventType (`Session/CloseSession`, `Session/Timeout`, `Session/Terminated`) and the AuditCertificateEventType subtypes of a refused certificate, which the failed AuditOpenSecureChannelEventType names in CertificateErrorEventId. The user identity token of AuditActivateSessionEventType carries no password or issued token data. Before, only the condition methods, the GDS and `ReportAuditEvent` raised audit events.
+- `uasc.Config.OpenSecureChannelHook`: a server channel reports every OpenSecureChannel request it handled and the status it answered with.
 
----
+### Changed
 
-## v1.29.6
-
-**Date:** 2026-11-02
-**Previous release:** v1.29.5
+- `Session.Identity()` (and `MethodCaller.Identity`) no longer carry the password of a UserNameIdentityToken: the session does not keep it. The doc comment said the password was still encrypted; it was the clear text. The `RoleMapper` still gets the token with the password.
 
 ### Fixed
 

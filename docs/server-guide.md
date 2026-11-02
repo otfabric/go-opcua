@@ -113,6 +113,7 @@ events happen, for example to log them. `o` implements `SessionObserver`
 | `OnConnectionClosed(remote, duration)` | that connection ended, by either side |
 | `OnSessionActivated(info)` | ActivateSession succeeded; `info.Reactivated` for a session activated before, e.g. moved to a new secure channel after a reconnect |
 | `OnSessionClosed(info, reason)` | an activated session ended: `SessionClosedByClient` (CloseSession), `SessionTimedOut` (Part 4 §5.6.2), `SessionClosedByServer` (shutdown) |
+| `OnRejected(r)` | the server refused an OpenSecureChannel (e.g. an untrusted application certificate), a CreateSession or an ActivateSession (e.g. a wrong password, a token type no endpoint offers) |
 
 `SessionInfo` has the SessionId and SessionName, the client's
 ApplicationDescription, the EndpointUrl, the client's address, the security
@@ -137,6 +138,44 @@ closes it or its timeout elapses, so a lost client shows
 `OnConnectionClosed` first and `OnSessionClosed` with `SessionTimedOut`
 later. opc.https has no connections; its sessions are reported without a
 remote address.
+
+A `Rejection` has the service, the status, the client's address, the
+security, the application certificate the client sent and, for CreateSession
+and ActivateSession, a `SessionInfo` with what the request tells: the session
+name and client description, and the identity type and user the client
+tried. Requests the server cannot decrypt or verify are not reported.
+
+With `server.WithAuditing(true)` the same events are also OPC UA audit
+events, for the clients that monitor the Server object ([audit
+events](#security-audit-events)).
+
+### Security audit events
+
+With `server.WithAuditing(true)` the server reports the audit events of the
+SecureChannel and Session service sets (Part 4 §6.5.5, §6.5.6) to its Server
+object:
+
+| Event type | SourceName | When |
+|------------|------------|------|
+| AuditOpenSecureChannelEventType | `SecureChannel/OpenSecureChannel` | a channel opened (Issue), and every OpenSecureChannel that failed, a renewal too |
+| AuditChannelEventType | `SecureChannel/CloseSecureChannel` | an opened channel ended |
+| AuditCreateSessionEventType | `Session/CreateSession` | every CreateSession |
+| AuditActivateSessionEventType | `Session/ActivateSession` | every ActivateSession |
+| AuditSessionEventType | `Session/CloseSession`, `Session/Timeout`, `Session/Terminated` | a session ended (CloseSession, its timeout, the server shut down), and a CloseSession that failed |
+| AuditCertificate…EventType | `Security/Certificate` | an application or user certificate was refused: Expired, Untrusted, Revoked, Mismatch, DataMismatch or Invalid by its status |
+
+They carry Status and StatusCodeId, ClientUserId (`System/OpenSecureChannel`
+and `System/CreateSession` where there is no user yet), ClientAuditEntryId,
+SessionId and SecureChannelId; AuditOpenSecureChannelEventType the client
+certificate, its thumbprint, RequestType, SecurityPolicyUri, SecurityMode,
+RequestedLifetime and, for a certificate error, the CertificateErrorEventId
+of the certificate event; AuditActivateSessionEventType the user identity
+token without its password or issued token data (Part 5 §6.4.10) and, once
+activated, CurrentRoleIds. Like all audit events they go only to the sessions
+an `EventAccessController` allows (RBAC: ReceiveEvents for SecurityAdmin).
+Channels of opc.https and opcua+uajson are not opened or closed and have no
+SecureChannelId. OpenSecureChannel requests the server cannot decrypt or
+verify are not reported.
 
 ---
 

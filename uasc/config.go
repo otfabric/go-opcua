@@ -117,6 +117,14 @@ type Config struct {
 	// Nil means no application-certificate trust check at channel open.
 	ClientCertificateValidator func(certDER []byte) error
 
+	// OpenSecureChannelHook, when set on a server SecureChannel, is called
+	// for every OpenSecureChannel request the channel handled, issue or
+	// renewal, with the status it was answered with: StatusOK once the
+	// response has been sent, the error otherwise. A request the channel
+	// cannot decrypt or verify is not seen. The hook runs on the goroutine
+	// that reads the channel and must not block.
+	OpenSecureChannelHook func(req *ua.OpenSecureChannelRequest, status ua.StatusCode)
+
 	// HTTPSJSONContentType is the Content-Type of the requests of an
 	// https-uajson channel (NewHTTPSJSONChannel). Empty means
 	// HTTPSJSONContentType (Part 6 §7.4.2); HTTPSJSONContentTypeLegacy

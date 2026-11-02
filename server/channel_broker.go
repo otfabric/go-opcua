@@ -73,6 +73,25 @@ type channelBroker struct {
 	// onRequest is called with the header of every request as it arrives,
 	// before it waits for the request handler (session activity).
 	onRequest func(*ua.RequestHeader)
+
+	// channelOpened is told about every OpenSecureChannel request of a
+	// channel and the status it was answered with, channelClosed about the
+	// end of a channel that was opened (session_audit.go).
+	channelOpened func(sc *uasc.SecureChannel, id uint32, req *ua.OpenSecureChannelRequest, status ua.StatusCode)
+	channelClosed func(id uint32)
+}
+
+// channelID returns the SecureChannelId of sc; 0 for a channel the broker
+// does not serve.
+func (c *channelBroker) channelID(sc *uasc.SecureChannel) uint32 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for id, ch := range c.s {
+		if ch == sc {
+			return id
+		}
+	}
+	return 0
 }
 
 func newChannelBroker(l *slog.Logger, endpointURL string, clientCertValidator ClientCertificateValidator) *channelBroker {
@@ -118,6 +137,18 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 	secureTokenID := c.secureTokenID
 	sequenceNumber := sequenceNumberSeed(mrand.Int31n)
 	c.mu.Unlock()
+
+	// The hook runs on the goroutine that reads the channel, after sc is set.
+	var sc *uasc.SecureChannel
+	var opened bool
+	if hook := c.channelOpened; hook != nil {
+		cfg.OpenSecureChannelHook = func(req *ua.OpenSecureChannelRequest, status ua.StatusCode) {
+			if status == ua.StatusOK {
+				opened = true
+			}
+			hook(sc, secureChannelID, req, status)
+		}
+	}
 
 	errch := make(chan error, 1)
 	sc, err := uasc.NewServerSecureChannel(
@@ -170,6 +201,9 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 	w.close()
 	<-w.exited
 	_ = sc.Close()
+	if opened && c.channelClosed != nil {
+		c.channelClosed(secureChannelID)
+	}
 	c.wg.Done()
 
 	return ctx.Err()

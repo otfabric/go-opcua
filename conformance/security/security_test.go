@@ -11,8 +11,10 @@ import (
 	"log/slog"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -725,3 +727,88 @@ func TestSecurity_NoValidatorRejects(t *testing.T) {
 type writerFunc func([]byte) (int, error)
 
 func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// rejections records what a SessionObserver is told about refused requests.
+type rejections struct {
+	server.BaseSessionObserver
+	mu  sync.Mutex
+	got []server.Rejection
+}
+
+func (r *rejections) OnRejected(rej server.Rejection) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.got = append(r.got, rej)
+}
+
+func (r *rejections) first(service string) (server.Rejection, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for _, rej := range r.got {
+		if rej.Service == service {
+			return rej, true
+		}
+	}
+	return server.Rejection{}, false
+}
+
+// An untrusted client application certificate is refused at
+// OpenSecureChannel: the session observer is told, with the certificate
+// and the security the client asked for, and with auditing on the server
+// reports an AuditCertificateUntrustedEventType and a failed
+// AuditOpenSecureChannelEventType that names it (Part 4 §6.5.5).
+func TestSecurity_UntrustedCertificateReported(t *testing.T) {
+	p := pki(t)
+	rec := &rejections{}
+	_, url := secureServer(t, server.WithClientCertificateTrustList(p.CACert), server.WithSessionObserver(rec), server.WithAuditing(true))
+	ctx := context.Background()
+
+	// An anonymous watcher over None receives the audit events.
+	watcher := newClient(t, url)
+	filter := ua.NewEventFilter().SelectPaths("EventType", "SourceName", "Status", "StatusCodeId", "CertificateErrorEventId", "EventId", "Certificate").Build()
+	sub, ch, err := watcher.NewSubscription().Interval(20*time.Millisecond).MonitorEvents(filter, ua.NewNumericNodeID(0, id.Server)).Start(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+
+	ep := endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt)
+	_, err = dialClient(t, url, secureClientOpts(t, ep, ua.UserTokenTypeAnonymous)...)
+	require.ErrorIs(t, err, ua.StatusBadCertificateUntrusted)
+
+	rej, ok := rec.first(server.RejectedOpenSecureChannel)
+	require.True(t, ok)
+	require.Equal(t, ua.StatusBadCertificateUntrusted, rej.Status)
+	require.Equal(t, ua.SecurityPolicyURIBasic256Sha256, rej.SecurityPolicyURI)
+	require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, rej.SecurityMode)
+	require.NotEmpty(t, rej.ClientCertificate)
+	require.NotNil(t, rej.RemoteAddr)
+	require.Nil(t, rej.Session)
+
+	var certEventID, errorEventID []byte
+	deadline := time.After(waitTimeout)
+	for certEventID == nil || errorEventID == nil {
+		select {
+		case msg := <-ch:
+			enl, ok := msg.Value.(*ua.EventNotificationList)
+			if !ok {
+				continue
+			}
+			for _, e := range enl.Events {
+				f := e.EventFields
+				typ, _ := f[0].Value().(*ua.NodeID)
+				switch {
+				case typ != nil && typ.IntID() == id.AuditCertificateUntrustedEventType:
+					require.Equal(t, "Security/Certificate", f[1].Value())
+					require.Equal(t, false, f[2].Value())
+					require.Equal(t, ua.StatusBadCertificateUntrusted, f[3].Value())
+					require.NotEmpty(t, f[6].Value())
+					certEventID, _ = f[5].Value().([]byte)
+				case typ != nil && typ.IntID() == id.AuditOpenSecureChannelEventType && f[2].Value() == false:
+					errorEventID, _ = f[4].Value().([]byte)
+				}
+			}
+		case <-deadline:
+			t.Fatal("no audit events of the untrusted certificate")
+		}
+	}
+	require.Equal(t, certEventID, errorEventID, "CertificateErrorEventId names the certificate event")
+}

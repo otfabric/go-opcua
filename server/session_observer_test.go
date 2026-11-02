@@ -21,6 +21,7 @@ type observedEvent struct {
 	duration time.Duration
 	info     server.SessionInfo
 	reason   server.SessionCloseReason
+	rejected server.Rejection
 }
 
 // eventRecorder is a SessionObserver that records every call.
@@ -49,6 +50,10 @@ func (r *eventRecorder) OnSessionActivated(info server.SessionInfo) {
 
 func (r *eventRecorder) OnSessionClosed(info server.SessionInfo, reason server.SessionCloseReason) {
 	r.add(observedEvent{kind: "session-closed", info: info, reason: reason})
+}
+
+func (r *eventRecorder) OnRejected(rej server.Rejection) {
+	r.add(observedEvent{kind: "rejected", rejected: rej})
 }
 
 // wait returns the events of kind once there are n of them.
@@ -193,4 +198,63 @@ func TestSessionObserver_SessionTimeout(t *testing.T) {
 	closed := rec.wait(t, "session-closed", 1)[0]
 	require.Equal(t, server.SessionTimedOut, closed.reason)
 	require.Equal(t, act.ID.String(), closed.info.ID.String())
+}
+
+// TestSessionObserver_Rejected: a wrong password and a token type no
+// endpoint offers are reported with the session and the user the client
+// tried.
+func TestSessionObserver_Rejected(t *testing.T) {
+	t.Parallel()
+	rec := &eventRecorder{}
+	srv, err := server.New(
+		server.EndPoint("localhost", 0),
+		server.InsecureNoSecurity(),
+		server.EnableAuthMode(ua.UserTokenTypeUserName),
+		server.AllowUsernameOnNone(),
+		server.WithUsernameValidator(func(user, pass string) error {
+			if pass != "secret" {
+				return ua.StatusBadUserAccessDenied
+			}
+			return nil
+		}),
+		server.WithSessionObserver(rec),
+	)
+	require.NoError(t, err)
+	require.NoError(t, srv.Start(context.Background()))
+	t.Cleanup(func() { _ = srv.Close() })
+	url := srv.Endpoints()[0].EndpointURL
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	connect := func(opts ...opcua.Option) error {
+		c, err := opcua.NewClient(url, append([]opcua.Option{
+			opcua.InsecureNoSecurity(),
+			opcua.AutoReconnect(false),
+			opcua.SessionName("rejected session"),
+		}, opts...)...)
+		require.NoError(t, err)
+		err = c.Connect(ctx)
+		_ = c.Close(ctx)
+		return err
+	}
+
+	require.Error(t, connect(opcua.AuthUsername("mallory", "guess"), opcua.AuthPolicyID("username_none")))
+	rej := rec.wait(t, "rejected", 1)[0].rejected
+	require.Equal(t, server.RejectedActivateSession, rej.Service)
+	require.Equal(t, ua.StatusBadUserAccessDenied, rej.Status)
+	require.NotNil(t, rej.RemoteAddr)
+	require.Equal(t, ua.SecurityPolicyURINone, rej.SecurityPolicyURI)
+	require.NotNil(t, rej.Session)
+	require.NotNil(t, rej.Session.ID)
+	require.Equal(t, "rejected session", rej.Session.Name)
+	require.Equal(t, ua.UserTokenTypeUserName, rej.Session.IdentityType)
+	require.Equal(t, "mallory", rej.Session.User)
+	require.False(t, rej.Session.Reactivated)
+
+	require.Error(t, connect(opcua.AuthAnonymous(), opcua.AuthPolicyID("username_none")))
+	rej = rec.wait(t, "rejected", 2)[1].rejected
+	require.Equal(t, ua.StatusBadIdentityTokenRejected, rej.Status)
+	require.Equal(t, ua.UserTokenTypeAnonymous, rej.Session.IdentityType)
+
+	require.Empty(t, rec.wait(t, "activated", 0), "no session was activated")
 }

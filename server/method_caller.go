@@ -19,7 +19,8 @@ type MethodCaller struct {
 	// SecurityPolicyURI and SecurityMode are those of the secure channel.
 	SecurityPolicyURI string
 	SecurityMode      ua.MessageSecurityMode
-	// Identity is the user identity token of the session.
+	// Identity is the user identity token of the session, without the
+	// password of a UserNameIdentityToken.
 	Identity ua.IdentityToken
 	// Roles are the role NodeIds granted to the session.
 	Roles []*ua.NodeID

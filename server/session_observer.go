@@ -43,6 +43,13 @@ type SessionObserver interface {
 	// OnSessionClosed is called when an activated session ended. A session
 	// that was created but never activated is not reported.
 	OnSessionClosed(info SessionInfo, reason SessionCloseReason)
+
+	// OnRejected is called when the server refused a client's
+	// OpenSecureChannel (e.g. an untrusted application certificate),
+	// CreateSession or ActivateSession (e.g. a wrong password or a token
+	// type no endpoint offers). A request the server cannot decrypt or
+	// verify is not reported.
+	OnRejected(r Rejection)
 }
 
 // BaseSessionObserver implements [SessionObserver] with methods that do
@@ -54,6 +61,7 @@ func (BaseSessionObserver) OnConnectionOpened(net.Addr)                     {}
 func (BaseSessionObserver) OnConnectionClosed(net.Addr, time.Duration)      {}
 func (BaseSessionObserver) OnSessionActivated(SessionInfo)                  {}
 func (BaseSessionObserver) OnSessionClosed(SessionInfo, SessionCloseReason) {}
+func (BaseSessionObserver) OnRejected(Rejection)                            {}
 
 // SessionInfo describes a session for a [SessionObserver]. Every call gets
 // its own copy, which the observer may keep; ID is shared with the server and
@@ -150,7 +158,7 @@ func (o *sessionObs) activate(sc *uasc.SecureChannel, tok ua.IdentityToken, reac
 		o.info.SecurityMode = sc.SecurityMode()
 	}
 	o.info.User, _ = userOf(tok)
-	o.info.IdentityType = identityTypeOf(tok)
+	o.info.IdentityType = tokenTypeOf(tok)
 	o.info.Activated = at
 	o.info.Reactivated = reactivated
 	return o.info.clone()
@@ -175,19 +183,6 @@ func (i SessionInfo) clone() SessionInfo {
 		i.Client = &c
 	}
 	return i
-}
-
-// identityTypeOf returns the token type of an identity token.
-func identityTypeOf(tok ua.IdentityToken) ua.UserTokenType {
-	switch tok.(type) {
-	case *ua.UserNameIdentityToken:
-		return ua.UserTokenTypeUserName
-	case *ua.X509IdentityToken:
-		return ua.UserTokenTypeCertificate
-	case *ua.IssuedIdentityToken:
-		return ua.UserTokenTypeIssuedToken
-	}
-	return ua.UserTokenTypeAnonymous
 }
 
 // The observe methods call the session observer, if there is one, and
