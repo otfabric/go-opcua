@@ -148,6 +148,14 @@ func applyVariableAttributes(n *Node, va *ua.VariableAttributes) {
 	if specified(ua.NodeAttributesMaskUserAccessLevel) {
 		n.attr[ua.AttributeIDUserAccessLevel] = DataValueFromValue(va.UserAccessLevel)
 	}
+	// The Write service lets clients write the other attributes only where
+	// the WriteMask allows it (Part 3 §5.2.7, §5.2.8).
+	if specified(ua.NodeAttributesMaskWriteMask) {
+		n.attr[ua.AttributeIDWriteMask] = DataValueFromValue(va.WriteMask)
+	}
+	if specified(ua.NodeAttributesMaskUserWriteMask) {
+		n.attr[ua.AttributeIDUserWriteMask] = DataValueFromValue(va.UserWriteMask)
+	}
 }
 
 // AddReferences implements the OPC UA AddReferences service.

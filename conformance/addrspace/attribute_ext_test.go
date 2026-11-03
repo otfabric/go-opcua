@@ -348,14 +348,22 @@ func TestAttribute_WriteStatuses(t *testing.T) {
 	})
 
 	t.Run("WriteAttributeOtherThanValue", func(t *testing.T) {
-		st, err := c.WriteAttribute(ctx, f.String, ua.AttributeIDDescription, val(ua.NewLocalizedText("a described node")))
+		// A non-Value Attribute is writable only with its WriteMask bit
+		// (Part 3 §5.2.7); the fixture Nodes have no WriteMask.
+		st, err := c.WriteAttribute(ctx, f.String, ua.AttributeIDDescription, val(ua.NewLocalizedText("x")))
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusBadNotWritable, st)
+		require.NoError(t, f.NS.Node(f.String).SetAttribute(ua.AttributeIDWriteMask,
+			server.DataValueFromValue(uint32(ua.AttributeWriteMaskDescription))))
+
+		st, err = c.WriteAttribute(ctx, f.String, ua.AttributeIDDescription, val(ua.NewLocalizedText("a described node")))
 		require.NoError(t, err)
 		require.Equal(t, ua.StatusOK, st)
 		desc, err := c.Node(f.String).Description(ctx)
 		require.NoError(t, err)
 		require.Equal(t, "a described node", desc.Text)
 
-		// Not writable without write access.
+		// Not writable without a WriteMask bit, whatever the AccessLevel.
 		st, err = c.WriteAttribute(ctx, f.ReadOnly, ua.AttributeIDDescription, val(ua.NewLocalizedText("x")))
 		require.NoError(t, err)
 		require.Equal(t, ua.StatusBadNotWritable, st)

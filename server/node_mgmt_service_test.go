@@ -45,6 +45,40 @@ func TestNodeManagementService_AddNodes(t *testing.T) {
 		assert.Equal(t, &ua.QualifiedName{NamespaceIndex: ns.ID(), Name: "dynamic_var_1"}, n.BrowseName())
 	})
 
+	t.Run("the WriteMask of the attributes is kept", func(t *testing.T) {
+		newNodeID := ua.NewStringNodeID(ns.ID(), "dynamic_var_mask")
+		req := &ua.AddNodesRequest{
+			RequestHeader: reqHeader(),
+			NodesToAdd: []*ua.AddNodesItem{{
+				ParentNodeID:       ua.NewExpandedNodeID(obj.ID(), "", 0),
+				ReferenceTypeID:    ua.NewNumericNodeID(0, id.HasComponent),
+				RequestedNewNodeID: ua.NewExpandedNodeID(newNodeID, "", 0),
+				BrowseName:         &ua.QualifiedName{NamespaceIndex: ns.ID(), Name: "dynamic_var_mask"},
+				NodeClass:          ua.NodeClassVariable,
+				NodeAttributes: ua.NewExtensionObject(&ua.VariableAttributes{
+					SpecifiedAttributes: uint32(ua.NodeAttributesMaskWriteMask | ua.NodeAttributesMaskUserWriteMask),
+					WriteMask:           uint32(ua.AttributeWriteMaskDisplayName),
+					UserWriteMask:       uint32(ua.AttributeWriteMaskDisplayName),
+				}),
+			}},
+		}
+		resp, err := svc.AddNodes(context.Background(), nil, req, 1)
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusGood, resp.(*ua.AddNodesResponse).Results[0].StatusCode)
+
+		write := func(attr ua.AttributeID, v any) ua.StatusCode {
+			resp, err := (&AttributeService{srv: srv}).Write(context.Background(), nil, &ua.WriteRequest{
+				RequestHeader: reqHeader(),
+				NodesToWrite: []*ua.WriteValue{{NodeID: newNodeID, AttributeID: attr,
+					Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(v)}}},
+			}, 1)
+			require.NoError(t, err)
+			return resp.(*ua.WriteResponse).Results[0]
+		}
+		assert.Equal(t, ua.StatusOK, write(ua.AttributeIDDisplayName, &ua.LocalizedText{EncodingMask: ua.LocalizedTextText, Text: "renamed"}))
+		assert.Equal(t, ua.StatusBadNotWritable, write(ua.AttributeIDDescription, &ua.LocalizedText{EncodingMask: ua.LocalizedTextText, Text: "x"}))
+	})
+
 	t.Run("add duplicate node returns error", func(t *testing.T) {
 		existingID := ua.NewStringNodeID(ns.ID(), "rw_int32")
 		req := &ua.AddNodesRequest{
