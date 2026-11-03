@@ -554,29 +554,13 @@ func (n *Node) hasRefTo(target, typ *ua.NodeID, forward bool) bool {
 	return false
 }
 
-// sameNodeID reports whether a and b are the same NodeId, without the
-// allocations of NodeID.Equal for the numeric NodeIds of the comparisons on
-// the hot path.
+// sameNodeID reports whether a and b are the same NodeId (NodeID.Equal,
+// which compares without allocating).
 func sameNodeID(a, b *ua.NodeID) bool {
 	if a == nil || b == nil {
 		return a == b
 	}
-	if a.Namespace() != b.Namespace() {
-		return false
-	}
-	if numericNodeID(a) && numericNodeID(b) {
-		return a.IntID() == b.IntID()
-	}
-	return a.String() == b.String()
-}
-
-func numericNodeID(n *ua.NodeID) bool {
-	switch n.Type() {
-	case ua.NodeIDTypeTwoByte, ua.NodeIDTypeFourByte, ua.NodeIDTypeNumeric:
-		return true
-	default:
-		return false
-	}
+	return a.Equal(b)
 }
 
 // refsSnapshot returns a copy of the node's references. The address space
