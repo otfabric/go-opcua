@@ -447,6 +447,10 @@ func newClient(opts Options) (*Client, error) {
 	if opts.PersistentSession && opts.ClientID == "" {
 		return nil, errors.New("mqtt: a persistent session needs a client identifier")
 	}
+	if len(opts.ClientID) > maxField || len(opts.Username) > maxField || len(opts.Password) > maxField ||
+		opts.Will != nil && len(opts.Will.Payload) > maxField {
+		return nil, fmt.Errorf("mqtt: client identifier, user name, password or will payload longer than %d bytes", maxField)
+	}
 	if _, err := appendProps(nil, TypeConnect, &Properties{User: opts.UserProperties}); err != nil {
 		return nil, fmt.Errorf("mqtt: connect user properties: %w", err)
 	}

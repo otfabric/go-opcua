@@ -1064,9 +1064,25 @@ func (c *Client) onAttach(cs *conn, a *Attach) error {
 // serialDiff returns a - b in serial number arithmetic (RFC 1982).
 func serialDiff(a, b uint32) int64 { return int64(int32(a - b)) }
 
+// windowLeft is what remains of a window the peer granted when its count
+// was theirs, now that ours has moved on (§2.5.6, §2.6.7). The window is a
+// plain count, so the sum of count and window is not compared as a serial
+// number: a window of 2^31 or more (MaxUint32 is common for "unlimited")
+// would read as negative.
+func windowLeft(window, theirs, ours uint32) uint32 {
+	used := serialDiff(ours, theirs)
+	switch {
+	case used <= 0:
+		return window
+	case used >= int64(window):
+		return 0
+	}
+	return window - uint32(used)
+}
+
 func (c *Client) onFlow(cs *conn, f *Flow) {
 	if f.NextIncomingID != nil {
-		cs.remoteIncomingWindow = uint32(max(0, serialDiff(*f.NextIncomingID+f.IncomingWindow, cs.nextOutgoingID)))
+		cs.remoteIncomingWindow = windowLeft(f.IncomingWindow, *f.NextIncomingID, cs.nextOutgoingID)
 	} else {
 		cs.remoteIncomingWindow = f.IncomingWindow
 	}
@@ -1088,7 +1104,7 @@ func (c *Client) onFlow(cs *conn, f *Flow) {
 		}
 		// §2.6.7: link-credit = delivery-count(rcv) + link-credit(rcv) -
 		// delivery-count(snd).
-		l.credit = uint32(max(0, serialDiff(dc+*f.LinkCredit, l.deliveryCount)))
+		l.credit = windowLeft(*f.LinkCredit, dc, l.deliveryCount)
 		l.drain = f.Drain
 		c.checkDrain(cs, l)
 		c.broadcast()

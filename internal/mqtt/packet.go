@@ -51,6 +51,9 @@ const SubackFailure byte = 0x80
 // express (§2.2.3).
 const MaxRemainingLength = 268435455
 
+// maxField is the longest string or binary data field (§1.5.4, §1.5.6).
+const maxField = 0xffff
+
 // ErrProtocol is wrapped by all errors about malformed packets.
 var ErrProtocol = errors.New("mqtt: protocol error")
 
@@ -213,6 +216,15 @@ func EncodeVersion(p Packet, version byte) ([]byte, error) {
 			}
 		}
 		v5 = level >= Version5
+		// Strings and binary data carry a two-byte length (§1.5.4, §1.5.6);
+		// a longer one would be written with a wrapped length and the
+		// broker would read its tail as the next fields.
+		long := len(name) > maxField || len(p.ClientID) > maxField || len(p.Password) > maxField ||
+			p.Username != nil && len(*p.Username) > maxField ||
+			p.Will != nil && (len(p.Will.Topic) > maxField || len(p.Will.Payload) > maxField)
+		if long {
+			return nil, protoErr("CONNECT field longer than %d bytes", maxField)
+		}
 		body = appendString(body, name)
 		body = append(body, level)
 		var cf byte

@@ -837,10 +837,23 @@ func (s *session) sendFlow(l *blink) {
 	s.c.send(s.channel, f, nil)
 }
 
+// windowLeft is what remains of a window the peer granted when its count
+// was theirs, now that ours has moved on; the client's rule (§2.5.6,
+// §2.6.7): the window is a count, not a serial number.
+func windowLeft(window, theirs, ours uint32) uint32 {
+	used := int64(int32(ours - theirs))
+	switch {
+	case used <= 0:
+		return window
+	case used >= int64(window):
+		return 0
+	}
+	return window - uint32(used)
+}
+
 func (s *session) flow(f *amqp.Flow) {
 	if f.NextIncomingID != nil {
-		w := int64(int32(*f.NextIncomingID + f.IncomingWindow - s.nextOutgoingID))
-		s.remoteIncomingWindow = uint32(max(0, w))
+		s.remoteIncomingWindow = windowLeft(f.IncomingWindow, *f.NextIncomingID, s.nextOutgoingID)
 	} else {
 		s.remoteIncomingWindow = f.IncomingWindow
 	}
@@ -853,7 +866,7 @@ func (s *session) flow(f *amqp.Flow) {
 		if f.DeliveryCount != nil {
 			dc = *f.DeliveryCount
 		}
-		l.credit = uint32(max(0, int64(int32(dc+*f.LinkCredit-l.deliveryCount))))
+		l.credit = windowLeft(*f.LinkCredit, dc, l.deliveryCount)
 	}
 	s.c.b.pumpSession(s)
 	if l != nil && l.role == amqp.RoleSender && f.Drain {

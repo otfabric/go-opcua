@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -562,4 +564,20 @@ func TestErrors(t *testing.T) {
 	require.Contains(t, (&amqp.DeliveryError{State: &amqp.Accepted{}}).Error(), "unexpected")
 	require.Equal(t, "c", (&amqp.Error{Condition: "c"}).Error())
 	require.True(t, errors.Is(amqp.ErrClosed, amqp.ErrClosed))
+}
+
+func TestUnlimitedSessionWindow(t *testing.T) {
+	// A broker that announces an incoming window of MaxUint32 ("unlimited")
+	// in its flows. The window is a count, not a serial number: read as
+	// one it is negative and the client would never send again.
+	b := startBroker(t, amqpbroker.Options{SessionWindow: math.MaxUint32})
+	pub := dial(t, amqp.Options{Server: b.URL()})
+	sub := dial(t, amqp.Options{Server: b.URL()})
+	in, _ := subscribe(t, sub, "u", true)
+	ctx, cancel := context.WithTimeout(bg, 10*time.Second)
+	defer cancel()
+	for i := range 3 {
+		require.NoError(t, pub.Send(ctx, "u", dataMsg(fmt.Sprint(i)), false))
+		require.Equal(t, fmt.Sprint(i), string(in.next(t).Payload()))
+	}
 }
