@@ -649,6 +649,17 @@ s, err := server.New(
 
 The `DefaultAccessController` allows all operations. Override it to enforce your security model.
 
+### Writable Attributes
+
+The `AccessController` decides who may write a node; the node decides which of its attributes can be written at all:
+
+- **Value:** governed by AccessLevel and UserAccessLevel (Part 3 §5.6.2).
+- **Every other attribute:** writable through the Write service only where the node's WriteMask has its bit (Part 3 §5.2.7, §8.60), else `Bad_NotWritable`. A UserWriteMask on the node narrows that per user (§5.2.8, `Bad_UserAccessDenied`), and a value of the wrong DataType is `Bad_TypeMismatch`.
+- **Defaults:** nodes built with the Go API have no WriteMask, so clients can write only their Value, as in UA-.NETStandard and open62541. Set `ua.AttributeIDWriteMask` (UInt32) on a node to open DisplayName, Description and the others. NodeSet2 imports keep their WriteMask, and AddNodes keeps the WriteMask the client sends.
+- **Never writable:** NodeId and NodeClass, whatever the WriteMask says, because the address space is keyed by them.
+
+Code in the server that calls `Node.SetAttribute` directly is not subject to the WriteMask.
+
 ---
 
 ## Server Certificate Validation
@@ -875,6 +886,26 @@ from what others announce. mDNS has no authentication:
   dropped (RFC 6762 §11).
 - **Port.** mDNS uses UDP 5353, shared with Avahi/Bonjour if they run.
 
+## Session and Subscription Limits (Server)
+
+A client can open sessions and subscriptions before it has proven anything: CreateSession comes before ActivateSession, and an anonymous user can create subscriptions. The server therefore keeps a bounded number of them:
+
+| Option | Default | Refusal |
+|---|---|---|
+| `WithMaxSessions(n)` | 100 | CreateSession: `Bad_TooManySessions` (Part 4 §5.6.2) |
+| `WithMaxSubscriptions(n)` | 1024 (all sessions) | CreateSubscription: `Bad_TooManySubscriptions` (Part 4 §5.13.2) |
+| `WithMaxSubscriptionsPerSession(n)` | 64 | CreateSubscription: `Bad_TooManySubscriptions`; TransferSubscriptions: `Bad_TooManySubscriptions` in the TransferResult of each subscription beyond the limit |
+
+The defaults are those of open62541 (`maxSessions`, `maxSubscriptions`, `maxSubscriptionsPerSession`); UA-.NETStandard also allows 100 sessions. Zero or a negative value selects the default; there is no unlimited setting.
+
+- Every session counts, activated or not, so a client that never activates its sessions still runs into the limit. A session frees its place when it is closed (CloseSession, a failed CreateSession) or when its revised session timeout expires.
+- Subscriptions of a session closed with `DeleteSubscriptions=false` keep counting against `WithMaxSubscriptions` until their lifetime expires or another session takes them over, but no longer against any session.
+- The limits are published in ServerCapabilities as `MaxSessions`, `MaxSubscriptions` and `MaxSubscriptionsPerSession` (Part 5 §6.3.2), so clients can read them.
+
+Size the limits to the clients you expect: an engineering tool and a few HMIs need far fewer than the defaults, and a smaller limit bounds the memory an unauthenticated client can tie up.
+
+---
+
 ## Security Checklist
 
 - [ ] Use `MessageSecurityModeSignAndEncrypt` in production
@@ -890,6 +921,8 @@ from what others announce. mDNS has no authentication:
 - [ ] Enable `server.EnableUAJSON` only where TLS alone is acceptable protection: wss-uajson always runs at security policy None
 - [ ] For reverse connect: use a secured endpoint, pin the server certificate, set `ReverseServerURI`, and bind and firewall the client's listener
 - [ ] Implement `AccessController` for fine-grained server authorization
+- [ ] Set a WriteMask only on the attributes clients must change
+- [ ] Size `WithMaxSessions`, `WithMaxSubscriptions` and `WithMaxSubscriptionsPerSession` to the clients you expect
 - [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart
 - [ ] On a Local Discovery Server, keep secured registration (no `LDSAllowInsecureRegistration`) and configure `WithClientCertificateTrustList`
 - [ ] Enable `WithMulticastDiscovery` only on interfaces where the server should be discoverable, and never trust a discovered URL without validating the server certificate

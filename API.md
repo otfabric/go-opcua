@@ -1766,6 +1766,9 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `SetLogger(l *slog.Logger)`, `WithSlogLogger(l *slog.Logger)` | Logger (`*slog.Logger`; silent by default; `nil` restores silent) |
 | `WithResponseWriteTimeout(d time.Duration)` | Close the connection of a client that has not read a response for `d` (default 15 s) |
 | `WithMaxPendingResponses(n int)` | Stop reading a client's requests while `n` of its responses are unwritten (default 256; waiting Publish requests do not count) |
+| `WithMaxSessions(n int)` | Most sessions the server keeps, activated or not (default 100); CreateSession beyond it fails with `BadTooManySessions`; published as ServerCapabilities `MaxSessions` |
+| `WithMaxSubscriptions(n int)` | Most subscriptions over all sessions (default 1024); CreateSubscription beyond it fails with `BadTooManySubscriptions`; published as `MaxSubscriptions` |
+| `WithMaxSubscriptionsPerSession(n int)` | Most subscriptions one session owns (default 64); CreateSubscription and TransferSubscriptions beyond it give `BadTooManySubscriptions`; published as `MaxSubscriptionsPerSession` |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithSessionObserver(o SessionObserver)` | Told about client connections and sessions as they begin and end; see [SessionObserver](#sessionobserver) |
 | `WithAccessController(ac AccessController)` | Access controller |
@@ -3138,6 +3141,8 @@ func (c *Conn) ReceiveBufSize() uint32
 func (c *Conn) SendBufSize() uint32
 func (c *Conn) MaxMessageSize() uint32
 func (c *Conn) MaxChunkCount() uint32
+func (c *Conn) PeerMaxMessageSize() uint32
+func (c *Conn) PeerMaxChunkCount() uint32
 func (c *Conn) SetLogger(l *slog.Logger)
 func (c *Conn) Handshake(ctx context.Context, endpoint string) error
 func (c *Conn) AcceptHello(ctx context.Context, endpoint string) error
