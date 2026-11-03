@@ -96,11 +96,11 @@ func main() {
 		if err != nil {
 			log.Fatalf("problem creating cert: %v", err)
 		}
-		err = os.WriteFile(*certfile, c, 0)
+		err = os.WriteFile(*certfile, c, 0o644)
 		if err != nil {
 			log.Fatalf("problem writing cert: %v", err)
 		}
-		err = os.WriteFile(*keyfile, k, 0)
+		err = os.WriteFile(*keyfile, k, 0o600)
 		if err != nil {
 			log.Fatalf("problem writing key: %v", err)
 		}

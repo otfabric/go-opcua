@@ -1,5 +1,40 @@
 # go-opcua Releases
 
+## v1.31.0
+
+**Date:** 2026-11-03
+**Previous release:** v1.30.0
+
+Findings of a static analysis review (integer conversions, file modes, HTTP headers): defects, and limits that were only kept by a check elsewhere are now checked where the value is converted.
+
+### Added
+
+- `message.PublisherID.Validate`: checks the type and that a numeric PublisherId fits it. `uadp.Encode` and the PubSub configuration use it; `PublisherID.Variant` still truncates, so call `Validate` first.
+
+### Changed
+
+- `server.DataValueFromValue` and the server's own values encode a Go `int` outside the Int32 range as an Int64. Before, it was truncated to an Int32.
+- `server.Server.AddNamespace` refuses a namespace beyond the 65536 that a UInt16 NamespaceIndex can address (Part 3 §8.2.2): it logs an error and returns -1. A NodeSet2 import that would pass that limit fails before it adds a namespace.
+- The PubSub configuration refuses a PublishedDataSet with more than 65535 fields (Part 14 §7.2.4.5: FieldCount and the field index are UInt16). Before, the key frame failed to encode, but the delta frames after it went out with wrapped field indexes. `jsonmsg.DecodeOptions.MaxFields` is capped at 65535 for the same reason.
+- `uadp.Encode` refuses a chunk with no ChunkData or ChunkData beyond TotalSize, as the decoder does, and a PublisherId wider than its type.
+- `opc.https` responses carry `X-Content-Type-Options: nosniff`.
+
+### Fixed
+
+- The client's AMQP transport read a broker's incoming window or link credit of 2^31 or more, MaxUint32 for "unlimited" among them, as negative and stopped sending (AMQP 1.0 §2.5.6, §2.6.7: they are counts, not serial numbers). PubSub publishing over such a broker stalled.
+- The client's MQTT transport wrote a client identifier, user name, password or will payload over 65535 bytes with a wrapped two-byte length (MQTT §1.5.4, §1.5.6), and the broker read its tail as the following fields. `Dial` and the encoder now refuse it.
+- `Client.NodeFromQualifiedPath` accepted a namespace index above 65535 ("70000:Name"), which its documentation excludes, and addressed namespace 4464. It now refuses it.
+- server: a DataType whose numeric id ends in the byte of a built-in number (DiagnosticsLevel i=19723, ContinuationPoint i=521, ...) counted as numeric, so an absolute or percent deadband on such a Variable was accepted instead of `Bad_FilterNotAllowed` (Part 4 §7.22.2).
+- server: an event filter's BitwiseAnd and BitwiseOr with a UInt64 operand returned an Int64, so results of 2^63 and above compared as negative (Part 4 §7.4.3: the result has the size of the larger operand). They now return a UInt64.
+- server: a NodeSet2 file with an AccessLevel or UserAccessLevel above 255 or a ValueRank outside Int32 had the value truncated; an AccessLevel of 259 became CurrentRead|CurrentWrite. Such values are now skipped with a warning. An EventNotifier stored as an Int32 or UInt32 outside 0..255 reads as 0.
+- uasc: a message of many chunks is refused with `ErrMessageTooLarge` as soon as its chunks pass MaxMessageSize, not after all of them are collected. Message sizes are compared without truncation, a chunk that cannot fit the UInt32 MessageSize is refused on send, and uacp compares the send size before converting it.
+- ua: a multi-dimensional array whose element count passes Int32, an ExtensionObject body over 2 GiB, and an unsigned enumeration or option set value above MaxInt64 in JSON and XML were encoded with wrapped or negative lengths or values. The first two now fail with an encoding error; the third is written and read as an unsigned number.
+- `Node.NodeClass` refuses a NodeClass outside UInt32 from a server instead of truncating it. Session `Lifetime` and the request TimeoutHint are clamped to the UInt32 milliseconds they are sent in.
+- PubSub: received RawData with a zero dimension in a multi-dimensional array or a dimension above Int32 is refused in the UADP decoder. The MQTT transport compares a MaximumPacketSize property above 2^31 correctly on 32-bit platforms.
+- Examples: `examples/crypto` wrote the generated private key world-readable (0644), now 0600; three example servers wrote their certificate and key with mode 0, so they could not read them back. The PubSub and translate examples refuse a PublisherId or namespace flag outside UInt16 instead of truncating it.
+
+---
+
 ## v1.30.0
 
 **Date:** 2026-11-02

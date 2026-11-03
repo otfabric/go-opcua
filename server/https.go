@@ -396,6 +396,9 @@ func (h *httpsServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.Header().Set("Content-Type", uasc.HTTPSContentType)
 	}
+	// The body echoes strings a client wrote (browse names, values); a
+	// browser must not sniff it as HTML.
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Length", strconv.Itoa(len(b)))
 	_, _ = w.Write(b)
 }
