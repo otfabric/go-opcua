@@ -278,7 +278,11 @@ func (c *channelInstance) signAndEncrypt(m *Message, b []byte) ([]byte, error) {
 		encryptedLength = len(b[headerLength:]) + c.algo.SignatureLength()
 	}
 
-	// Fix header size to account for signing / encryption
+	// Fix header size to account for signing / encryption. The MessageSize
+	// is a UInt32 (Part 6 §6.7.2.2).
+	if uint64(headerLength)+uint64(encryptedLength) > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: %d bytes", errors.ErrMessageTooLarge, headerLength+encryptedLength)
+	}
 	binary.LittleEndian.PutUint32(b[4:], uint32(headerLength+encryptedLength))
 	m.MessageSize = uint32(headerLength + encryptedLength)
 
@@ -393,6 +397,9 @@ func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, e
 func (c *channelInstance) sealChunk(m *Message, b []byte, headerLength int) ([]byte, error) {
 	if len(b) < headerLength+8 {
 		return nil, ua.StatusBadSecurityChecksFailed
+	}
+	if uint64(len(b))+uint64(c.algo.SignatureLength()) > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: %d bytes", errors.ErrMessageTooLarge, len(b)+c.algo.SignatureLength())
 	}
 	size := uint32(len(b) + c.algo.SignatureLength())
 	binary.LittleEndian.PutUint32(b[4:], size)
