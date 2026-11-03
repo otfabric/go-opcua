@@ -85,6 +85,28 @@ func (m *MessageAbort) MessageAbort() string {
 	return ua.StatusCode(m.ErrorCode).Error()
 }
 
+// encodeAbort returns the abort chunk of m (Part 6 §6.7.3): a final chunk of
+// type 'A' that tells the receiver to discard the message, with code and
+// reason as its body. m keeps its headers and sequence number.
+func (m *Message) encodeAbort(code ua.StatusCode, reason string) ([]byte, error) {
+	body, err := (&MessageAbort{ErrorCode: uint32(code), Reason: reason}).Encode()
+	if err != nil {
+		return nil, err
+	}
+	size, err := messageSize(symmetricChunkHeaderSize, len(body))
+	if err != nil {
+		return nil, err
+	}
+	m.MessageSize = size
+	m.ChunkType = ChunkTypeError
+	chunk := ua.NewBuffer(nil)
+	chunk.WriteStruct(m.Header)
+	chunk.WriteStruct(m.SymmetricSecurityHeader)
+	chunk.WriteStruct(m.SequenceHeader)
+	chunk.Write(body)
+	return chunk.Bytes(), chunk.Error()
+}
+
 // Message represents a OPC UA Secure Conversation message.
 type Message struct {
 	*MessageHeader
@@ -135,7 +157,28 @@ func messageSize(headerSize, bodySize int) (uint32, error) {
 	return uint32(headerSize + bodySize), nil
 }
 
+// checkPeerLimits returns ErrMessageTooLarge if a message body of bodySize
+// bytes in chunks chunks exceeds the MaxMessageSize or MaxChunkCount the
+// peer announced (Part 6 §7.1.2.3, §7.1.2.4). The size is that of the
+// unencrypted body; zero means no limit.
+func checkPeerLimits(bodySize int, chunks, maxMessageSize, maxChunkCount uint32) error {
+	if maxMessageSize > 0 && int64(bodySize) > int64(maxMessageSize) {
+		return fmt.Errorf("%w: %d bytes > %d the peer accepts", errors.ErrMessageTooLarge, bodySize, maxMessageSize)
+	}
+	if maxChunkCount > 0 && chunks > maxChunkCount {
+		return fmt.Errorf("%w: %d chunks > %d the peer accepts", errors.ErrMessageTooLarge, chunks, maxChunkCount)
+	}
+	return nil
+}
+
 func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
+	return m.encodeChunks(maxBodySize, 0, 0)
+}
+
+// encodeChunks is EncodeChunks for a peer that accepts messages of at most
+// maxMessageSize bytes in at most maxChunkCount chunks; zero means no limit.
+// The limits apply to MSG and CLO messages: an OPN is a single chunk.
+func (m *Message) encodeChunks(maxBodySize, maxMessageSize, maxChunkCount uint32) ([][]byte, error) {
 	dataBody := ua.NewBuffer(nil)
 	dataBody.WriteStruct(m.TypeID)
 	dataBody.WriteStruct(m.Service)
@@ -184,6 +227,9 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 		return [][]byte{buf.Bytes()}, buf.Error()
 
 	case "CLO", "MSG":
+		if err := checkPeerLimits(dataBody.Len(), nrChunks, maxMessageSize, maxChunkCount); err != nil {
+			return nil, err
+		}
 
 		for i := uint32(0); i < nrChunks-1; i++ {
 			m.MessageSize = maxBodySize + 24

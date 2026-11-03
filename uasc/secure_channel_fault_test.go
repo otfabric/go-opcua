@@ -3,6 +3,7 @@
 package uasc
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"encoding/binary"
@@ -403,7 +404,7 @@ func TestDispatcher_UnsolicitedResponse(t *testing.T) {
 
 // TestReceive_ChunkLimits covers the limits a connection has agreed on: more
 // chunks or a larger message than that is refused, for the request it
-// belongs to, on both ends.
+// belongs to, on both ends, and the rest of a refused message is dropped.
 func TestReceive_ChunkLimits(t *testing.T) {
 	big := func(p *covPair, msg *MessageBody) bool {
 		req := msg.Request().(*ua.ReadRequest)
@@ -422,10 +423,14 @@ func TestReceive_ChunkLimits(t *testing.T) {
 		// A response of five chunks.
 		require.ErrorIs(t, p.tryRead(context.Background(), 1), errors.ErrTooManyChunks)
 		p.read(t, 2) // the channel still works
-		// A request of five chunks.
-		require.NoError(t, p.client.SendRequest(context.Background(), covReadRequest(16000), nil, nil))
+		// A request of five chunks, from a client that ignores the limit.
+		const reqID = 0xabc0
+		p.sendRaw(t, reqID, ChunkTypeIntermediate, 100, ChunkTypeIntermediate, 100, ChunkTypeIntermediate, 100)
 		msg := p.waitSrvErr(t, errors.ErrTooManyChunks)
-		require.NotZero(t, msg.RequestID, "the error belongs to the request")
+		require.EqualValues(t, reqID, msg.RequestID, "the error belongs to the request")
+		p.sendRaw(t, reqID, ChunkTypeIntermediate, 100, ChunkTypeFinal, 100)
+		p.read(t, 2)
+		p.requireNoSrvErr(t, reqID)
 	})
 	t.Run("message size", func(t *testing.T) {
 		ack := *uacp.DefaultServerACK
@@ -435,22 +440,122 @@ func TestReceive_ChunkLimits(t *testing.T) {
 		p.read(t, 2) // the channel still works
 	})
 	t.Run("message size while collecting", func(t *testing.T) {
-		// A request of several chunks to a server that takes 64 KiB: it is
-		// refused at the chunk that goes over the limit, before the final
-		// chunk is merged, and nothing stays buffered for it.
+		// A request of several chunks to a server that takes 64 KiB, from a
+		// client that ignores the limit: it is refused at the chunk that
+		// goes over the limit, before the final chunk is merged, and
+		// nothing stays buffered for it.
 		ack := *uacp.DefaultServerACK
 		ack.MaxMessageSize = 64 * 1024
 		p := newCovPair(t, covNone, covOpts{serverACK: &ack, handle: big})
-		require.NoError(t, p.client.SendRequest(context.Background(), covReadRequest(16000), nil, nil))
+		const reqID = 0xabc1
+		p.sendRaw(t, reqID, ChunkTypeIntermediate, 40000, ChunkTypeIntermediate, 40000)
 		msg := p.waitSrvErr(t, errors.ErrMessageTooLarge)
-		require.NotZero(t, msg.RequestID, "the error belongs to the request")
+		require.EqualValues(t, reqID, msg.RequestID, "the error belongs to the request")
 		require.ErrorContains(t, msg.Err, "more than 65536 bytes", "refused while the chunks arrive")
+		p.sendRaw(t, reqID, ChunkTypeIntermediate, 40000, ChunkTypeFinal, 100)
+		p.read(t, 2)
+		p.requireNoSrvErr(t, reqID)
 		p.server.chunksMu.Lock()
-		for id, n := range p.server.chunkBytes {
-			require.LessOrEqual(t, n, 64*1024, "request %d", id)
-		}
+		require.Empty(t, p.server.chunks, "nothing buffered")
+		require.Empty(t, p.server.chunkBytes)
+		require.Empty(t, p.server.chunksAborted, "the final chunk ended the refused message")
 		p.server.chunksMu.Unlock()
 	})
+	t.Run("no limits", func(t *testing.T) {
+		// Zero is no limit (Part 6 §7.1.2.3, §7.1.2.4): the server takes a
+		// request of several chunks. The client, with no limits of its own,
+		// falls back to the defaults for what it receives.
+		ack := *uacp.DefaultServerACK
+		ack.MaxChunkCount, ack.MaxMessageSize = 0, 0
+		p := newCovPair(t, covNone, covOpts{serverACK: &ack})
+		require.Zero(t, p.serverConn.MaxChunkCount())
+		require.Zero(t, p.serverConn.MaxMessageSize())
+		require.EqualValues(t, uacp.DefaultMaxChunkCount, p.clientConn.MaxChunkCount())
+		require.EqualValues(t, uacp.DefaultMaxMessageSize, p.clientConn.MaxMessageSize())
+		p.read(t, 16000)
+	})
+	t.Run("request too large for the server", func(t *testing.T) {
+		// The client does not send what the server announced it cannot
+		// take (Part 6 §7.1.2.4) and the channel goes on working.
+		for _, tc := range []struct {
+			name  string
+			limit func(*uacp.Acknowledge)
+		}{
+			{"chunks", func(a *uacp.Acknowledge) { a.MaxChunkCount = 2 }},
+			{"bytes", func(a *uacp.Acknowledge) { a.MaxMessageSize = 64 * 1024 }},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				ack := *uacp.DefaultServerACK
+				tc.limit(&ack)
+				p := newCovPair(t, covNone, covOpts{serverACK: &ack})
+				err := p.tryRead(context.Background(), 16000)
+				require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+				require.ErrorIs(t, err, ua.StatusBadRequestTooLarge)
+				p.read(t, 2)
+				select {
+				case msg := <-p.srvErrs:
+					t.Fatalf("the server saw %v: the request was sent", msg.Err)
+				default:
+				}
+			})
+		}
+	})
+	t.Run("response too large for the client", func(t *testing.T) {
+		// The server aborts a response the client cannot take with
+		// Bad_ResponseTooLarge (Part 6 §7.1.2.3) instead of sending it.
+		for _, tc := range []struct {
+			name  string
+			limit func(*uacp.Acknowledge)
+		}{
+			{"chunks", func(a *uacp.Acknowledge) { a.MaxChunkCount = 2 }},
+			{"bytes", func(a *uacp.Acknowledge) { a.MaxMessageSize = 64 * 1024 }},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				own := *uacp.DefaultClientACK
+				tc.limit(&own)
+				p := newCovPair(t, covNone, covOpts{clientACK: &own, handle: big})
+				require.ErrorIs(t, p.tryRead(context.Background(), 1), ua.StatusBadResponseTooLarge)
+				p.read(t, 2) // the channel still works
+
+				err := p.server.SendResponseWithContext(context.Background(), 0xabc2, readResponse(covReadRequest(16000)))
+				require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+				require.ErrorIs(t, err, ua.StatusBadResponseTooLarge)
+				if own.MaxMessageSize > 0 {
+					// SendMsgWithContext sends one chunk, whatever its size.
+					err = p.server.SendMsgWithContext(context.Background(), nil, 0xabc3, readResponse(covReadRequest(16000)))
+					require.ErrorIs(t, err, ua.StatusBadResponseTooLarge)
+				}
+				p.read(t, 2)
+			})
+		}
+	})
+}
+
+// sendRaw writes chunks of request reqID from the client's connection to the
+// server, past the client's secure channel and its limits: pairs of chunk
+// type and body size. It needs a channel without security.
+func (p *covPair) sendRaw(t *testing.T, reqID uint32, chunks ...any) {
+	t.Helper()
+	channelID, tokenID := token(p.client)
+	for i := 0; i < len(chunks); i += 2 {
+		typ := byte(chunks[i].(rune))
+		body := bytes.Repeat([]byte{0xee}, chunks[i+1].(int))
+		_, err := p.clientConn.Write(covRawChunk("MSG", typ, channelID, tokenID, 1, reqID, body))
+		require.NoError(t, err)
+	}
+}
+
+// requireNoSrvErr checks that the server reported nothing for reqID.
+func (p *covPair) requireNoSrvErr(t *testing.T, reqID uint32) {
+	t.Helper()
+	for {
+		select {
+		case msg := <-p.srvErrs:
+			require.NotEqual(t, reqID, msg.RequestID, "the server reported %v", msg.Err)
+		default:
+			return
+		}
+	}
 }
 
 // TestReceive_ContextDone does not read once the context is done.

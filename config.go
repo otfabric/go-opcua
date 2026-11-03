@@ -747,7 +747,11 @@ func DialTimeout(d time.Duration) Option {
 	}
 }
 
-// MaxMessageSize sets the maximum message size for the UACP handshake.
+// MaxMessageSize sets the maximum message size for the UACP handshake: the
+// largest response body the client accepts (Part 6 §7.1.2.3). The client
+// accepts no more than this even if the server announces a larger limit; 0,
+// the default, takes the server's limit, or uacp.DefaultMaxMessageSize when
+// the server has none.
 func MaxMessageSize(n uint32) Option {
 	return func(cfg *Config) error {
 		cfg.dialer.ClientACK.MaxMessageSize = n
@@ -755,7 +759,9 @@ func MaxMessageSize(n uint32) Option {
 	}
 }
 
-// MaxChunkCount sets the maximum chunk count for the UACP handshake.
+// MaxChunkCount sets the maximum chunk count for the UACP handshake: the
+// most chunks of a response the client accepts (Part 6 §7.1.2.3). As with
+// MaxMessageSize, 0 takes the server's limit, or uacp.DefaultMaxChunkCount.
 func MaxChunkCount(n uint32) Option {
 	return func(cfg *Config) error {
 		cfg.dialer.ClientACK.MaxChunkCount = n

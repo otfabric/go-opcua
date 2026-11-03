@@ -133,6 +133,11 @@ type SecureChannel struct {
 	// arrive rather than after all of them have been buffered. It is
 	// guarded by chunksMu.
 	chunkBytes map[uint32]int
+	// chunksAborted holds the request IDs whose collection was given up
+	// (too many chunks or bytes): their remaining chunks are dropped up to
+	// and including the final one, rather than collected again and merged
+	// into a message of their own. It is guarded by chunksMu.
+	chunksAborted map[uint32]struct{}
 
 	// openingInstance is a temporary var that allows the dispatcher know how to handle a open channel request
 	// note: we only allow a single "open" request in flight at any point in time. The mutex is held for the entire
@@ -520,6 +525,17 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			s.chunksMu.Lock()
 
+			if _, ok := s.chunksAborted[reqID]; ok {
+				// The rest of a message that was refused: its error has
+				// been reported. The final or abort chunk ends it.
+				if hdr.ChunkType != ChunkTypeIntermediate {
+					delete(s.chunksAborted, reqID)
+				}
+				s.chunksMu.Unlock()
+				s.cfg.Logger.Debug("dropping chunk of a refused message", "channel_id", s.c.ID(), "request_id", reqID, "chunk_type", string([]byte{hdr.ChunkType}))
+				continue
+			}
+
 			switch hdr.ChunkType {
 			case 'A':
 				s.dropChunks(reqID)
@@ -535,24 +551,25 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 				return &MessageBody{RequestID: reqID, Err: ua.StatusCode(msga.ErrorCode)}
 
 			case 'C':
+				// MaxChunkCount and MaxMessageSize bound the whole message,
+				// the size counting its unencrypted body (Part 6 §7.1.2.3,
+				// §7.1.2.4). Zero means no limit. A message over either is
+				// refused at the chunk that goes over it, and the chunks
+				// still to come for it are dropped.
 				s.chunks[reqID] = append(s.chunks[reqID], chunk)
-				if n := len(s.chunks[reqID]); n > int(s.c.MaxChunkCount()) {
-					s.dropChunks(reqID)
+				if n, limit := len(s.chunks[reqID]), s.c.MaxChunkCount(); limit > 0 && int64(n) > int64(limit) {
+					s.abortChunks(reqID)
 					s.chunksMu.Unlock()
-					msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrTooManyChunks, n, s.c.MaxChunkCount())
+					msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrTooManyChunks, n, limit)
 					return msg
 				}
-				// MaxMessageSize bounds the unencrypted body of the whole
-				// message (Part 6 §7.1.2.3, §7.1.2.4), so the chunks of one
-				// that is already too large are not collected any further.
-				// A limit of zero keeps the check after merging.
 				if limit := s.c.MaxMessageSize(); limit > 0 {
 					if s.chunkBytes == nil {
 						s.chunkBytes = make(map[uint32]int)
 					}
 					total := s.chunkBytes[reqID] + len(chunk.Data)
-					if total > int(limit) {
-						s.dropChunks(reqID)
+					if int64(total) > int64(limit) {
+						s.abortChunks(reqID)
 						s.chunksMu.Unlock()
 						msg.Err = fmt.Errorf("%w: more than %d bytes", errors.ErrMessageTooLarge, limit)
 						return msg
@@ -571,8 +588,8 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			b := mergeChunks(all)
 
-			if len(b) > int(s.c.MaxMessageSize()) {
-				msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrMessageTooLarge, len(b), s.c.MaxMessageSize())
+			if limit := s.c.MaxMessageSize(); limit > 0 && int64(len(b)) > int64(limit) {
+				msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrMessageTooLarge, len(b), limit)
 				return msg
 			}
 
@@ -1504,8 +1521,13 @@ func (s *SecureChannel) sendAsyncWithTimeout(
 		return fail(err)
 	}
 
-	chunks, err := m.EncodeChunks(instance.maxBodySize)
+	// A request the server cannot take is not sent: the client aborts it
+	// with Bad_RequestTooLarge (Part 6 §7.1.2.4).
+	chunks, err := m.encodeChunks(instance.maxBodySize, s.c.PeerMaxMessageSize(), s.c.PeerMaxChunkCount())
 	if err != nil {
+		if errors.Is(err, errors.ErrMessageTooLarge) {
+			err = fmt.Errorf("%w: %w", ua.StatusBadRequestTooLarge, err)
+		}
 		return fail(err)
 	}
 
@@ -1574,11 +1596,15 @@ func (s *SecureChannel) SendMsgWithContext(ctx context.Context, instance *channe
 	// contiguous.
 	prevSeq, prevStarted := instance.sequenceNumber, instance.seqStarted
 	m := instance.newMessage(resp, typeID, reqID)
-	b, err := m.Encode()
+	chunks, err := m.encodeChunks(math.MaxUint32, s.c.PeerMaxMessageSize(), s.c.PeerMaxChunkCount())
 	if err != nil {
+		if errors.Is(err, errors.ErrMessageTooLarge) && m.MessageType == MessageTypeMessage {
+			return s.abortResponse(ctx, instance, m, resp, err)
+		}
 		instance.sequenceNumber, instance.seqStarted = prevSeq, prevStarted
 		return err
 	}
+	b := chunks[0]
 
 	// encrypt the message prior to sending it
 	// if SecurityMode == None, this returns the byte stream untouched
@@ -1655,8 +1681,11 @@ func (s *SecureChannel) sendResponseWithContext(ctx context.Context, instance *c
 	// on the wire have to stay contiguous.
 	prevSeq, prevStarted := instance.sequenceNumber, instance.seqStarted
 	m := instance.newMessage(resp, typeID, reqID)
-	chunks, err := m.EncodeChunks(maxBodySize)
+	chunks, err := m.encodeChunks(maxBodySize, s.c.PeerMaxMessageSize(), s.c.PeerMaxChunkCount())
 	if err != nil {
+		if errors.Is(err, errors.ErrMessageTooLarge) && m.MessageType == MessageTypeMessage {
+			return s.abortResponse(ctx, instance, m, resp, err)
+		}
 		instance.sequenceNumber, instance.seqStarted = prevSeq, prevStarted
 		s.cfg.Logger.Warn("error encoding msg", "error", err)
 		return err
@@ -1805,6 +1834,55 @@ func (s *SecureChannel) timeNow() time.Time {
 func (s *SecureChannel) dropChunks(reqID uint32) {
 	delete(s.chunks, reqID)
 	delete(s.chunkBytes, reqID)
+}
+
+// abortResponse sends the abort chunk for a response the client cannot take
+// (Part 6 §7.1.2.3: the server aborts it with Bad_ResponseTooLarge) and
+// returns cause wrapped with that status. The abort uses the sequence
+// number newMessage gave m. The caller holds the instance lock.
+func (s *SecureChannel) abortResponse(ctx context.Context, instance *channelInstance, m *Message, resp any, cause error) error {
+	err := fmt.Errorf("%w: %w", ua.StatusBadResponseTooLarge, cause)
+	s.cfg.Logger.Warn("response too large for the client", "channel_id", s.c.ID(), "request_id", m.RequestID, "type", fmt.Sprintf("%T", resp), "error", cause)
+	chunk, aerr := m.encodeAbort(ua.StatusBadResponseTooLarge, "response too large")
+	if aerr == nil {
+		chunk, aerr = instance.signAndEncrypt(m, chunk)
+	}
+	if aerr == nil {
+		if deadline, ok := ctx.Deadline(); ok {
+			_ = s.c.SetWriteDeadline(deadline)
+			defer func() { _ = s.c.SetWriteDeadline(time.Time{}) }()
+		}
+		var n int
+		if n, aerr = s.c.Write(chunk); aerr == nil {
+			atomic.AddUint64(&instance.bytesSent, uint64(n))
+			atomic.AddUint32(&instance.messagesSent, 1)
+		}
+	}
+	if aerr != nil {
+		return fmt.Errorf("%w (abort not sent: %w)", err, aerr)
+	}
+	return err
+}
+
+// maxAbortedChunks bounds the number of refused messages whose remaining
+// chunks are waited for. A peer that never sends their final chunks cannot
+// make the set grow: one of the marks is forgotten to make room.
+const maxAbortedChunks = 64
+
+// abortChunks forgets the chunks collected for reqID and drops the ones still
+// to come for it, up to its final chunk. The caller holds chunksMu.
+func (s *SecureChannel) abortChunks(reqID uint32) {
+	s.dropChunks(reqID)
+	if s.chunksAborted == nil {
+		s.chunksAborted = make(map[uint32]struct{})
+	}
+	if len(s.chunksAborted) >= maxAbortedChunks {
+		for id := range s.chunksAborted {
+			delete(s.chunksAborted, id)
+			break
+		}
+	}
+	s.chunksAborted[reqID] = struct{}{}
 }
 
 func mergeChunks(chunks []*MessageChunk) []byte {

@@ -206,3 +206,28 @@ func TestTimeoutHint(t *testing.T) {
 	require.EqualValues(t, uint32(math.MaxUint32), timeoutHint(50*24*time.Hour))
 	require.EqualValues(t, uint32(math.MaxUint32), timeoutHint(math.MaxUint32*time.Millisecond))
 }
+
+// TestCheckPeerLimits: a message over the MaxMessageSize or MaxChunkCount the
+// peer announced is refused; zero is no limit (Part 6 §7.1.2.3, §7.1.2.4).
+func TestCheckPeerLimits(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, checkPeerLimits(1000, 3, 0, 0))
+	require.NoError(t, checkPeerLimits(1000, 3, 1000, 3))
+	require.ErrorIs(t, checkPeerLimits(1001, 1, 1000, 0), errors.ErrMessageTooLarge)
+	require.ErrorIs(t, checkPeerLimits(10, 4, 0, 3), errors.ErrMessageTooLarge)
+	require.NoError(t, checkPeerLimits(math.MaxInt32, 1, math.MaxUint32, 0), "limits above MaxInt32 work on 32-bit platforms")
+}
+
+// TestAbortChunks_Bounded: a peer that never finishes the messages it had
+// refused cannot make the set of their request ids grow.
+func TestAbortChunks_Bounded(t *testing.T) {
+	t.Parallel()
+	s := &SecureChannel{chunks: make(map[uint32][]*MessageChunk)}
+	for id := uint32(0); id < 10*maxAbortedChunks; id++ {
+		s.chunks[id] = []*MessageChunk{{}}
+		s.abortChunks(id)
+		require.NotContains(t, s.chunks, id)
+		require.Contains(t, s.chunksAborted, id)
+	}
+	require.Len(t, s.chunksAborted, maxAbortedChunks)
+}
