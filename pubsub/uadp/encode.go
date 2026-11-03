@@ -22,7 +22,13 @@ func (e *encoder) has(m ua.UADPNetworkMessageContentMask) bool {
 // check validates the type and the body of the NetworkMessage.
 func (e *encoder) check() error {
 	nm := e.nm
-	if nm.Chunk != nil {
+	if c := nm.Chunk; c != nil {
+		// What decodeChunk accepts: ChunkData that is not empty and lies
+		// within TotalSize (Part 14 §7.2.4.4.4). This also keeps the
+		// length of ChunkData within its UInt32.
+		if len(c.Data) == 0 || uint64(c.ChunkOffset)+uint64(len(c.Data)) > uint64(c.TotalSize) {
+			return malformed("chunk of %d bytes at %d of a message of %d bytes", len(c.Data), c.ChunkOffset, c.TotalSize)
+		}
 		if nm.Action != nil {
 			if err := checkActionChunk(nm); err != nil {
 				return err
@@ -140,8 +146,9 @@ func (e *encoder) writeHeader(b *ua.Buffer, payloadHeader bool) error {
 	}
 	var ext1 byte
 	if e.has(ua.UADPNetworkMessageContentMaskPublisherID) {
-		if nm.PublisherID.Type > message.PublisherIDString {
-			return malformed("PublisherId type %d", nm.PublisherID.Type)
+		// A Num wider than its Type would be truncated on the wire.
+		if nm.PublisherID.Validate() != nil {
+			return malformed("PublisherId %v of type %v", nm.PublisherID, nm.PublisherID.Type)
 		}
 		ext1 = byte(nm.PublisherID.Type)
 	}

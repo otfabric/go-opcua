@@ -291,7 +291,9 @@ func mqtt5Options(opts *imqtt.Options, props map[string]string) {
 	if n, ok := num(PropReceiveMaximum); ok {
 		opts.ReceiveMaximum = uint16(n)
 	}
-	if n, ok := num(PropMaximumPacketSize); ok && int(n) < opts.MaxPacketSize {
+	// Compared as UInt32 values: int(n) of a Maximum Packet Size above
+	// 2^31-1 is negative where int has 32 bits.
+	if n, ok := num(PropMaximumPacketSize); ok && opts.MaxPacketSize > 0 && n < uint64(opts.MaxPacketSize) {
 		opts.MaxPacketSize = int(n)
 	}
 	if n, ok := num(PropSessionExpiryInterval); ok && n > 0 {

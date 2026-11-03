@@ -42,6 +42,21 @@ func TestPublisherID(t *testing.T) {
 	require.False(t, NewPublisherID(PublisherIDByte, 1).Equal(NewPublisherID(PublisherIDByte, 2)))
 }
 
+func TestPublisherIDValidate(t *testing.T) {
+	for _, ok := range []PublisherID{
+		NewPublisherID(PublisherIDByte, 255), NewPublisherID(PublisherIDUInt16, 65535),
+		NewPublisherID(PublisherIDUInt32, 1<<32-1), NewPublisherID(PublisherIDUInt64, 1<<64-1), StringPublisherID("p"),
+	} {
+		require.NoError(t, ok.Validate(), ok)
+	}
+	for _, bad := range []PublisherID{
+		NewPublisherID(PublisherIDByte, 256), NewPublisherID(PublisherIDUInt16, 1<<16),
+		NewPublisherID(PublisherIDUInt32, 1<<32), {Type: 5},
+	} {
+		require.Error(t, bad.Validate(), bad)
+	}
+}
+
 func TestStrings(t *testing.T) {
 	for typ, want := range map[PublisherIDType]string{
 		PublisherIDByte: "Byte", PublisherIDUInt16: "UInt16", PublisherIDUInt32: "UInt32",

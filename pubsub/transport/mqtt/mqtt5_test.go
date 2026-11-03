@@ -152,3 +152,14 @@ func TestParseVersionAndContentType(t *testing.T) {
 	require.Equal(t, transport.ContentTypeJSON, ContentTypeOf(transport.ProfileMQTTJSON))
 	require.Empty(t, ContentTypeOf(transport.ProfileUDPUADP))
 }
+
+// TestMQTT5MaximumPacketSize checks that a Maximum Packet Size only lowers
+// the limit and that a UInt32 above 2^31-1 is compared as such, not as an
+// int that is negative on 32-bit platforms.
+func TestMQTT5MaximumPacketSize(t *testing.T) {
+	for v, want := range map[string]int{"1000": 1000, "4294967295": 1 << 20, "2147483648": 1 << 20, "1048576": 1 << 20} {
+		opts := imqtt.Options{MaxPacketSize: 1 << 20}
+		mqtt5Options(&opts, map[string]string{PropMaximumPacketSize: v})
+		require.Equal(t, want, opts.MaxPacketSize, v)
+	}
+}

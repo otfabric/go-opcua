@@ -130,13 +130,14 @@ func EncodeChunks(nm *message.NetworkMessage, opts *EncodeOptions, maxSize int) 
 	}
 
 	// The overhead of a chunk: its headers and chunk fields, plus the
-	// security header and the signature.
-	base.Chunk = &message.Chunk{}
-	empty, err := Encode(&base, &EncodeOptions{})
+	// security header and the signature. It is measured with one byte of
+	// ChunkData, as Encode refuses an empty chunk.
+	base.Chunk = &message.Chunk{TotalSize: 1, Data: []byte{0}}
+	one, err := Encode(&base, &EncodeOptions{})
 	if err != nil {
 		return nil, err
 	}
-	overhead := len(empty)
+	overhead := len(one) - 1
 	if sec, err := securityOverhead(opts); err != nil {
 		return nil, err
 	} else {

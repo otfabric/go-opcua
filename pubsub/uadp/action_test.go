@@ -195,6 +195,10 @@ func TestActionEncodeErrors(t *testing.T) {
 		"requestor type": func(nm *message.NetworkMessage) {
 			nm.Action.RequestorID = &message.PublisherID{Type: 7}
 		},
+		"requestor width": func(nm *message.NetworkMessage) {
+			r := message.NewPublisherID(message.PublisherIDUInt16, 1<<16)
+			nm.Action.RequestorID = &r
+		},
 		"nan timeout":  func(nm *message.NetworkMessage) { nm.Action.TimeoutHint = nan() },
 		"state":        func(nm *message.NetworkMessage) { nm.Messages[0].ActionState = 3 },
 		"datavalue":    func(nm *message.NetworkMessage) { nm.Messages[0].FieldEncoding = message.FieldEncodingDataValue },
@@ -227,7 +231,11 @@ func TestActionEncodeErrors(t *testing.T) {
 		"no type":        func(a *message.ActionHeader) { a.Type = 0 },
 		"long address":   func(a *message.ActionHeader) { a.ResponseAddress = string(make([]byte, maxActionString+1)) },
 		"requestor type": func(a *message.ActionHeader) { a.RequestorID = &message.PublisherID{Type: 7} },
-		"nan timeout":    func(a *message.ActionHeader) { a.TimeoutHint = nan() },
+		"requestor width": func(a *message.ActionHeader) {
+			r := message.NewPublisherID(message.PublisherIDByte, 256)
+			a.RequestorID = &r
+		},
+		"nan timeout": func(a *message.ActionHeader) { a.TimeoutHint = nan() },
 	} {
 		nm = actionRequestNM()
 		nm.Messages = nm.Messages[:1]
