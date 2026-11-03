@@ -1,5 +1,16 @@
 # go-opcua Releases
 
+## v1.31.1
+
+**Date:** 2026-11-03
+**Previous release:** v1.31.0
+
+### Fixed
+
+- The client's MQTT transport kept a long reconnect backoff after it had connected again. The backoff only started over after a connection that lasted `MaxReconnectDelay` (30 s, which the PubSub transport does not change), so under repeated faults it grew to its maximum, and one DISCONNECT from the broker (Server busy, Keep Alive timeout, ...) or a broker outage of a fraction of a second then kept the client away for 24 to 36 s. A PubSub subscriber with a persistent session missed its data for that long while the broker queued it. The backoff of failed connection attempts now starts over once the client is connected, as it did before v1.9.1. The wait after a DISCONNECT has a backoff of its own: it grows while the connections last shorter than it and starts over after one that lasted longer, so two clients with one client identifier still back off instead of taking the session from each other in a tight loop (the reason for the v1.9.1 change), and so does a client a broker disconnects right after every CONNACK.
+
+---
+
 ## v1.31.0
 
 **Date:** 2026-11-03
