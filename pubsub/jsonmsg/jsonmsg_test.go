@@ -502,6 +502,20 @@ func TestDecodeErrors(t *testing.T) {
 	require.ErrorIs(t, err, ErrDecode)
 	_, err = Decode([]byte(`[{"Payload":{"a":1,"b":2,"c":3}}]`), &DecodeOptions{MaxFields: 2})
 	require.ErrorIs(t, err, ErrDecode)
+	// MaxFields beyond the UInt16 field index is capped: field 65536
+	// would otherwise get index 0.
+	var many strings.Builder
+	many.WriteString(`[{"Payload":{`)
+	for i := range DefaultMaxFields + 1 {
+		if i > 0 {
+			many.WriteByte(',')
+		}
+		fmt.Fprintf(&many, `"f%d":1`, i)
+	}
+	many.WriteString(`}}]`)
+	_, err = Decode([]byte(many.String()), &DecodeOptions{MaxFields: 1 << 20})
+	require.ErrorIs(t, err, ErrDecode)
+	require.ErrorContains(t, err, "65535")
 	_, err = Decode([]byte(`[{}]`), &DecodeOptions{MaxMessageSize: 3})
 	require.ErrorIs(t, err, ErrDecode)
 	deep := strings.Repeat("[", 200) + strings.Repeat("]", 200)

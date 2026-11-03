@@ -4,6 +4,7 @@ package uadp
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"sync"
 	"time"
@@ -276,6 +277,13 @@ func (rf *rawField) read(b *ua.Buffer) (*ua.Variant, error) {
 			}
 			if rf.maxDims != nil && rf.maxDims[i] != 0 && d > rf.maxDims[i] {
 				return nil, malformed("dimension %d of %d elements, at most %d", i, d, rf.maxDims[i])
+			}
+			// The ArrayDimensions of a Variant are Int32 and at least 1
+			// (ua.Variant.Decode rejects others); a zero dimension would
+			// also keep total at 0 and let any later dimension through.
+			// A one-dimensional array of 0 elements is the empty array.
+			if d > math.MaxInt32 || (d == 0 && rf.dims > 1) {
+				return nil, malformed("dimension %d of %d elements", i, d)
 			}
 			// Every element takes at least one byte.
 			if total *= uint64(d); total > uint64(min(b.Len(), ua.MaxVariantArrayLength)) {

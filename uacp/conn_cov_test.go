@@ -249,6 +249,14 @@ func TestSend_Errors(t *testing.T) {
 	require.Equal(t, "MSGF", typ)
 	require.Equal(t, []byte{0xca, 0xfe}, body)
 
+	// The limit is the whole message, header included: 8 + 56 bytes fit in
+	// a send buffer of 64, one more byte does not.
+	require.ErrorIs(t, c.Send("MSGF", &Message{Data: make([]byte, 57)}), errors.ErrMessageTooLarge)
+	require.NoError(t, c.Send("MSGF", &Message{Data: make([]byte, 56)}))
+	_, body, err = readMsg(b)
+	require.NoError(t, err)
+	require.Len(t, body, 56)
+
 	// A write on a closed connection fails.
 	require.NoError(t, c.Close())
 	require.ErrorIs(t, c.Close(), io.EOF, "a second Close")

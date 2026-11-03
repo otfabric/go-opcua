@@ -58,6 +58,19 @@ func TestValidate(t *testing.T) {
 		"events no fields": func(c *ua.PubSubConfigurationDataType) {
 			c.PublishedDataSets[0].DataSetSource = ua.NewExtensionObject(&ua.PublishedEventsDataType{EventNotifier: nodeA})
 		},
+		"pds too many fields": func(c *ua.PubSubConfigurationDataType) {
+			c.PublishedDataSets[0].DataSetMetaData = nil
+			v := items(c).PublishedData[0]
+			items(c).PublishedData = make([]*ua.PublishedVariableDataType, math.MaxUint16+1)
+			for i := range items(c).PublishedData {
+				items(c).PublishedData[i] = v
+			}
+		},
+		"events too many fields": func(c *ua.PubSubConfigurationDataType) {
+			c.PublishedDataSets[0].DataSetMetaData = nil
+			c.PublishedDataSets[0].DataSetSource = ua.NewExtensionObject(&ua.PublishedEventsDataType{EventNotifier: nodeA,
+				SelectedFields: make([]*ua.SimpleAttributeOperand, math.MaxUint16+1)})
+		},
 		"events md": func(c *ua.PubSubConfigurationDataType) {
 			c.PublishedDataSets[0].DataSetSource = ua.NewExtensionObject(&ua.PublishedEventsDataType{EventNotifier: nodeA, SelectedFields: []*ua.SimpleAttributeOperand{{}}})
 		},
@@ -223,7 +236,7 @@ func TestPublisherIDVariant(t *testing.T) {
 	v, err = PublisherIDVariant(message.StringPublisherID("p"))
 	require.NoError(t, err)
 	require.Equal(t, "p", v.Value())
-	for _, bad := range []any{-1, int32(-1), int64(-1), 1.5, ua.MustVariant(1.5)} {
+	for _, bad := range []any{-1, int32(-1), int64(-1), 1.5, ua.MustVariant(1.5), message.NewPublisherID(message.PublisherIDUInt16, 1<<16)} {
 		_, err := PublisherIDVariant(bad)
 		require.Error(t, err)
 	}

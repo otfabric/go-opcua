@@ -106,3 +106,26 @@ func TestVariantDimensionCountIsLimited(t *testing.T) {
 		require.Equal(t, want, got, name)
 	}
 }
+
+// TestNewVariant_ArrayLengthLimit: the ArrayLength of a Variant is an Int32
+// (Part 6 §5.2.2.16). Rows that share one backing slice make a
+// multi-dimensional array of 2^32 elements out of little memory; its length
+// must be refused rather than wrap to 0, which would make Encode write a zero
+// length followed by every element.
+func TestNewVariant_ArrayLengthLimit(t *testing.T) {
+	row := make([]bool, 1<<16)
+	rows := make([][]bool, 1<<16)
+	for i := range rows {
+		rows[i] = row
+	}
+	_, err := NewVariant(rows)
+	require.ErrorIs(t, err, StatusBadEncodingLimitsExceeded)
+
+	// Just below the limit is fine: 2^15 rows of 2^16 make 2^31 elements,
+	// which is one too many; 2^15-1 rows fit.
+	_, err = NewVariant(rows[:1<<15])
+	require.ErrorIs(t, err, StatusBadEncodingLimitsExceeded)
+	v, err := NewVariant(rows[:1<<15-1])
+	require.NoError(t, err)
+	require.EqualValues(t, (1<<15-1)*(1<<16), v.ArrayLength())
+}

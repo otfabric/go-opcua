@@ -599,9 +599,11 @@ func TestTransport_LimitsEnforced(t *testing.T) {
 			opcua.MaxChunkCount(4),
 			opcua.AutoReconnect(false),
 		)
-		// 200 KiB needs ~25 chunks of 8 KiB: over the limit of 4.
+		// 200 KiB needs ~25 chunks of 8 KiB: over the limit of 4. The server
+		// knows the limit from the Hello and aborts the response (Part 6
+		// §7.1.2.3).
 		_, err := c.ReadValue(ctx, f.ByteString)
-		require.ErrorIs(t, err, errors.ErrTooManyChunks)
+		require.ErrorIs(t, err, ua.StatusBadResponseTooLarge)
 
 		// A response within the limit still works on the same connection.
 		dv, err := c.ReadValue(ctx, f.Int32)
@@ -615,7 +617,7 @@ func TestTransport_LimitsEnforced(t *testing.T) {
 			opcua.AutoReconnect(false),
 		)
 		_, err := c.ReadValue(ctx, f.ByteString)
-		require.ErrorIs(t, err, errors.ErrMessageTooLarge)
+		require.ErrorIs(t, err, ua.StatusBadResponseTooLarge)
 
 		dv, err := c.ReadValue(ctx, f.Int32)
 		require.NoError(t, err)
@@ -642,7 +644,7 @@ func TestTransport_LimitsEnforced(t *testing.T) {
 			MaxChunkCount:  4,
 		}), opcua.AutoReconnect(false))
 		_, err := c.ReadValue(ctx, f.ByteString)
-		require.ErrorIs(t, err, errors.ErrTooManyChunks)
+		require.ErrorIs(t, err, ua.StatusBadResponseTooLarge)
 	})
 }
 

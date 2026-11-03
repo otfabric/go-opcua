@@ -15,6 +15,7 @@ package message
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -90,7 +91,32 @@ func PublisherIDFromVariant(v *ua.Variant) (PublisherID, error) {
 	return PublisherID{}, fmt.Errorf("pubsub: PublisherId of type %T is not allowed", v.Value())
 }
 
-// Variant returns the PublisherId as a Variant of its type.
+// Validate checks that the PublisherId has one of the five types of Part 14
+// §7.2.2.2.2 and that a numeric Num fits the width of its Type: a Byte
+// PublisherId of 300 cannot be encoded.
+func (p PublisherID) Validate() error {
+	var max uint64
+	switch p.Type {
+	case PublisherIDByte:
+		max = math.MaxUint8
+	case PublisherIDUInt16:
+		max = math.MaxUint16
+	case PublisherIDUInt32:
+		max = math.MaxUint32
+	case PublisherIDUInt64, PublisherIDString:
+		return nil
+	default:
+		return fmt.Errorf("pubsub: PublisherId type %d", p.Type)
+	}
+	if p.Num > max {
+		return fmt.Errorf("pubsub: PublisherId %d does not fit its type %v", p.Num, p.Type)
+	}
+	return nil
+}
+
+// Variant returns the PublisherId as a Variant of its type. A Num that does
+// not fit the Type is truncated to it: check the PublisherId with Validate
+// first.
 func (p PublisherID) Variant() *ua.Variant {
 	switch p.Type {
 	case PublisherIDByte:

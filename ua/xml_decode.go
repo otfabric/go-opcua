@@ -8,6 +8,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -155,6 +156,17 @@ func (d *xmlDecoder) value(n *xmlNode, dst reflect.Value) error {
 	case kindInvalid:
 		return d.errorf(n, "unsupported type %s", t)
 	case kindEnum:
+		if !dst.CanInt() {
+			// An unsigned 64-bit option set above MaxInt64, which
+			// parseEnum cannot read as an int64.
+			if u, err := strconv.ParseUint(strings.TrimSpace(n.text), 10, 64); err == nil && u > math.MaxInt64 {
+				if dst.OverflowUint(u) {
+					return d.errorf(n, "%d overflows %s", u, t)
+				}
+				dst.SetUint(u)
+				return nil
+			}
+		}
 		v, ok := parseEnum(n.text, codecTypes.enumInfo(t))
 		if !ok {
 			return d.errorf(n, "%q is not a value of %s", n.text, t)

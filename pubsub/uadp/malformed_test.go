@@ -142,6 +142,29 @@ func TestRawDataMetaDataErrors(t *testing.T) {
 	require.ErrorIs(t, err, ErrMalformed)
 }
 
+// TestRawDataDimensions checks the dimensions of a RawData array: a zero
+// dimension of a multi-dimensional array, which would keep the element count
+// at 0 for any later dimension, and a dimension beyond the Int32 of the
+// Variant ArrayDimensions are malformed; the empty one-dimensional array is
+// not.
+func TestRawDataDimensions(t *testing.T) {
+	matrix := &ua.DataSetMetaDataType{Fields: []*ua.FieldMetaData{{BuiltInType: uint8(ua.TypeIDInt32), ValueRank: 2}}}
+	for name, tc := range map[string]struct{ hex, err string }{
+		"zero first":      {"01 03 00000000 00000080", "dimension 0 of 0 elements"},
+		"zero second":     {"01 03 01000000 00000000", "dimension 1 of 0 elements"},
+		"beyond int32":    {"01 03 00000080 01000000", "dimension 0 of 2147483648 elements"},
+		"zero then wraps": {"01 03 00000000 ffffffff", "dimension 0 of 0 elements"},
+	} {
+		_, err := Decode(h(t, tc.hex), &DecodeOptions{MetaData: metaLookup(matrix)})
+		require.ErrorIs(t, err, ErrMalformed, name)
+		require.ErrorContains(t, err, tc.err, name)
+	}
+	vector := &ua.DataSetMetaDataType{Fields: []*ua.FieldMetaData{{BuiltInType: uint8(ua.TypeIDInt32), ValueRank: 1}}}
+	nm, err := Decode(h(t, "01 03 00000000"), &DecodeOptions{MetaData: metaLookup(vector)})
+	require.NoError(t, err)
+	require.Equal(t, []int32{}, nm.Messages[0].Fields[0].Value.Value.Value())
+}
+
 func TestEncodeErrors(t *testing.T) {
 	kf := func(fs ...*message.Field) *message.DataSetMessage {
 		return keyFrame(message.FieldEncodingVariant, fs...)
@@ -168,6 +191,9 @@ func TestEncodeErrors(t *testing.T) {
 		{"256 messages", &message.NetworkMessage{UADPMask: ph, Messages: many}, nil},
 		{"bad type", &message.NetworkMessage{Type: 7}, nil},
 		{"bad publisher type", &message.NetworkMessage{UADPMask: ua.UADPNetworkMessageContentMaskPublisherID, PublisherID: message.PublisherID{Type: 9}, Messages: []*message.DataSetMessage{kf()}}, nil},
+		{"byte publisher id too wide", &message.NetworkMessage{UADPMask: ua.UADPNetworkMessageContentMaskPublisherID, PublisherID: message.NewPublisherID(message.PublisherIDByte, 300), Messages: []*message.DataSetMessage{kf()}}, nil},
+		{"uint16 publisher id too wide", &message.NetworkMessage{UADPMask: ua.UADPNetworkMessageContentMaskPublisherID, PublisherID: message.NewPublisherID(message.PublisherIDUInt16, 1<<16), Messages: []*message.DataSetMessage{kf()}}, nil},
+		{"uint32 publisher id too wide", &message.NetworkMessage{UADPMask: ua.UADPNetworkMessageContentMaskPublisherID, PublisherID: message.NewPublisherID(message.PublisherIDUInt32, 1<<32), Messages: []*message.DataSetMessage{kf()}}, nil},
 		{"nil message", &message.NetworkMessage{Messages: []*message.DataSetMessage{nil}}, nil},
 		{"nil message in payload header", &message.NetworkMessage{UADPMask: ph, Messages: []*message.DataSetMessage{kf(), nil}}, nil},
 		{"field encoding", &message.NetworkMessage{Messages: []*message.DataSetMessage{{FieldEncoding: 3}}}, nil},

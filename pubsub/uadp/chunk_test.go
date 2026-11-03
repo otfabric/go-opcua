@@ -259,6 +259,24 @@ func TestChunkEncodeErrors(t *testing.T) {
 	require.ErrorIs(t, err, ErrMalformed)
 
 	// Encode of a single chunk.
+	for name, ch := range map[string]*message.Chunk{
+		"empty":           {TotalSize: 1},
+		"empty non-nil":   {TotalSize: 1, Data: []byte{}},
+		"beyond total":    {ChunkOffset: 9, TotalSize: 10, Data: []byte{1, 2}},
+		"no total":        {Data: []byte{1}},
+		"offset overflow": {ChunkOffset: 1<<32 - 1, TotalSize: 1<<32 - 1, Data: []byte{1}},
+	} {
+		c = chunkNM()
+		c.Chunk = ch
+		_, err = Encode(c, nil)
+		require.ErrorIs(t, err, ErrMalformed, name)
+		require.ErrorContains(t, err, "chunk of", name)
+	}
+	c = chunkNM()
+	c.Chunk = &message.Chunk{ChunkOffset: 9, TotalSize: 10, Data: []byte{1}}
+	_, err = Encode(c, nil)
+	require.NoError(t, err, "last byte of the message")
+
 	c = chunkNM()
 	c.Chunk = &message.Chunk{TotalSize: 1, Data: []byte{1}}
 	c.Messages = nil

@@ -3,6 +3,7 @@
 package server
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -38,6 +39,30 @@ func TestDataValueFromValue(t *testing.T) {
 	got = DataValueFromValue(float64(1.5))
 	require.NotNil(t, got)
 	assert.Equal(t, float64(1.5), got.Value.Value())
+}
+
+// TestDataValueFromValue_IntRange checks that a Go int outside the Int32
+// range becomes an Int64 instead of being cut, the same in DataValueFromValue
+// and variantOf.
+func TestDataValueFromValue_IntRange(t *testing.T) {
+	if math.MaxInt == math.MaxInt32 {
+		t.Skip("int is 32 bits: every int fits an Int32")
+	}
+	// The inputs are int64 so that the file also builds where int is 32 bits.
+	for _, tc := range []struct {
+		in   int64
+		want any
+	}{
+		{math.MaxInt32, int32(math.MaxInt32)},
+		{math.MinInt32, int32(math.MinInt32)},
+		{math.MaxInt32 + 1, int64(math.MaxInt32 + 1)},
+		{math.MinInt32 - 1, int64(math.MinInt32 - 1)},
+		{math.MaxInt64, int64(math.MaxInt64)},
+	} {
+		in := int(tc.in)
+		assert.Equal(t, tc.want, DataValueFromValue(in).Value.Value(), "DataValueFromValue(%d)", in)
+		assert.Equal(t, tc.want, variantOf(in).Value(), "variantOf(%d)", in)
+	}
 }
 
 func TestNewAttrValue(t *testing.T) {

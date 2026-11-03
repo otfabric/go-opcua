@@ -140,7 +140,7 @@ func clientOptsFromFlags(endpoints []*ua.EndpointDescription) []opcua.Option {
 			if err := os.WriteFile(*certfile, certPEM, 0644); err != nil {
 				log.Fatalf("failed to write %s: %v", *certfile, err)
 			}
-			if err := os.WriteFile(*keyfile, keyPEM, 0644); err != nil {
+			if err := os.WriteFile(*keyfile, keyPEM, 0o600); err != nil {
 				log.Fatalf("failed to write %s: %v", *keyfile, err)
 			}
 		}

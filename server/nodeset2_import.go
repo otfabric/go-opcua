@@ -5,6 +5,7 @@ package server
 import (
 	"encoding/xml"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync"
@@ -77,9 +78,14 @@ func (s *Server) importNodeSet(nodes *schema.UANodeSet) error {
 	return nil
 }
 
-func (s *Server) namespacesImportNodeSet(nodes *schema.UANodeSet) error { //nolint:unparam
+func (s *Server) namespacesImportNodeSet(nodes *schema.UANodeSet) error {
 	if nodes.NamespaceUris == nil {
 		return nil
+	}
+	// Every URI becomes a new namespace; refuse the file before adding any
+	// if their indexes would not fit a UInt16 (Part 3 §8.2.2).
+	if have, add := len(s.Namespaces()), len(nodes.NamespaceUris.URI); have+add > maxNamespaces {
+		return fmt.Errorf("nodeset import: %d namespaces do not fit the %d namespace indexes (%d in use)", add, maxNamespaces, have)
 	}
 	for i := range nodes.NamespaceUris.URI {
 		_ = NewNodeNameSpace(s, nodes.NamespaceUris.URI[i])
@@ -385,8 +391,14 @@ func (s *Server) importVariableAttributes(attrs Attributes, v *schema.UAVariable
 	attrs[ua.AttributeIDDataType] = DataValueFromValue(ua.NewExpandedNodeID(dataType, "", 0))
 
 	valueRank := int32(-1) // Scalar
-	if v.ValueRankAttr != nil {
-		valueRank = int32(*v.ValueRankAttr)
+	if r := v.ValueRankAttr; r != nil {
+		// ValueRank is an Int32 of at least -3, ScalarOrOneDimension
+		// (Part 3 §5.6.2); anything else is not truncated but ignored.
+		if *r >= -3 && *r <= math.MaxInt32 {
+			valueRank = int32(*r)
+		} else {
+			s.cfg.logger.Warn("nodeset import: invalid value rank", "node_id", v.NodeIDAttr, "value_rank", *r)
+		}
 	}
 	attrs[ua.AttributeIDValueRank] = DataValueFromValue(valueRank)
 
@@ -405,11 +417,25 @@ func (s *Server) importVariableAttributes(attrs Attributes, v *schema.UAVariable
 			attrs[ua.AttributeIDArrayDimensions] = DataValueFromValue(dims)
 		}
 	}
-	if v.AccessLevelAttr != nil {
-		attrs[ua.AttributeIDAccessLevel] = DataValueFromValue(byte(*v.AccessLevelAttr))
-	}
-	if v.UserAccessLevelAttr != nil {
-		attrs[ua.AttributeIDUserAccessLevel] = DataValueFromValue(byte(*v.UserAccessLevelAttr))
+	// AccessLevel and UserAccessLevel are a Byte (Part 3 §5.6.2): a
+	// larger value is ignored rather than cut to its low byte, which could
+	// grant access the file does not describe.
+	for _, a := range []struct {
+		id    ua.AttributeID
+		value *uint32
+		name  string
+	}{
+		{ua.AttributeIDAccessLevel, v.AccessLevelAttr, "access_level"},
+		{ua.AttributeIDUserAccessLevel, v.UserAccessLevelAttr, "user_access_level"},
+	} {
+		if a.value == nil {
+			continue
+		}
+		if *a.value > math.MaxUint8 {
+			s.cfg.logger.Warn("nodeset import: invalid access level", "node_id", v.NodeIDAttr, a.name, *a.value)
+			continue
+		}
+		attrs[a.id] = DataValueFromValue(byte(*a.value))
 	}
 }
 

@@ -408,3 +408,33 @@ func TestBrowse_TypeDefinition(t *testing.T) {
 	require.Equal(t, ua.NewNumericExpandedNodeID(0, id.AnalogItemType), got["v"], "the Variable's type definition, not its DataType")
 	require.Equal(t, ua.NewTwoByteExpandedNodeID(0), got["m"], "a Method has no type definition")
 }
+
+// TestAddNamespace_Limit checks that AddNamespace refuses a namespace once
+// every UInt16 NamespaceIndex (Part 3 §8.2.2) is taken instead of wrapping to
+// index 0, and that a NodeSet2 import that would need more fails.
+func TestAddNamespace_Limit(t *testing.T) {
+	srv := newTestServer()
+	filler := NewNameSpace("urn:test:filler")
+	srv.mu.Lock()
+	for len(srv.namespaces) < maxNamespaces-1 {
+		srv.namespaces = append(srv.namespaces, filler)
+	}
+	srv.publishNamespaces()
+	srv.mu.Unlock()
+
+	last := NewNameSpace("urn:test:last")
+	require.Equal(t, maxNamespaces-1, srv.AddNamespace(last))
+	require.Equal(t, uint16(maxNamespaces-1), last.ID())
+	require.Equal(t, maxNamespaces-1, srv.AddNamespace(last), "already registered")
+
+	extra := NewNameSpace("urn:test:extra")
+	require.Equal(t, -1, srv.AddNamespace(extra))
+	require.Len(t, srv.Namespaces(), maxNamespaces)
+	require.Same(t, srv.namespaces[0], srv.ns0(), "namespace 0 is not replaced")
+
+	err := srv.ImportNodeSetXML([]byte(`<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+  <NamespaceUris><Uri>urn:test:one-too-many</Uri></NamespaceUris>
+</UANodeSet>`))
+	require.ErrorContains(t, err, "namespace indexes")
+	require.Len(t, srv.Namespaces(), maxNamespaces)
+}

@@ -42,8 +42,8 @@ var (
 	DefaultClientACK = &Acknowledge{
 		ReceiveBufSize: DefaultReceiveBufSize,
 		SendBufSize:    DefaultSendBufSize,
-		MaxChunkCount:  0, // use what the server wants
-		MaxMessageSize: 0, // use what the server wants
+		MaxChunkCount:  0, // the server's limit, or DefaultMaxChunkCount
+		MaxMessageSize: 0, // the server's limit, or DefaultMaxMessageSize
 	}
 
 	// DefaultServerACK is the ACK handshake message sent to the client
@@ -433,6 +433,13 @@ type Conn struct {
 	ack    *Acknowledge
 	logger *slog.Logger
 
+	// peerMaxMessageSize and peerMaxChunkCount are the limits the peer
+	// announced for the messages it receives, which bound what this side
+	// sends: the Acknowledge for requests, the Hello for responses (Part 6
+	// §7.1.2.3, §7.1.2.4). Zero means no limit.
+	peerMaxMessageSize uint32
+	peerMaxChunkCount  uint32
+
 	closeOnce sync.Once
 	bufPool   sync.Pool
 }
@@ -524,12 +531,47 @@ func (c *Conn) SendBufSize() uint32 {
 	return c.ack.SendBufSize
 }
 
+// MaxMessageSize returns the largest message body this side accepts, in
+// bytes. Zero means no limit.
 func (c *Conn) MaxMessageSize() uint32 {
 	return c.ack.MaxMessageSize
 }
 
+// MaxChunkCount returns the largest number of chunks of a message this side
+// accepts. Zero means no limit.
 func (c *Conn) MaxChunkCount() uint32 {
 	return c.ack.MaxChunkCount
+}
+
+// PeerMaxMessageSize returns the largest message body the peer accepts, in
+// bytes, as it announced in the handshake: the Acknowledge of a server for
+// requests, the Hello of a client for responses (Part 6 §7.1.2.3,
+// §7.1.2.4). Zero means no limit.
+func (c *Conn) PeerMaxMessageSize() uint32 {
+	return c.peerMaxMessageSize
+}
+
+// PeerMaxChunkCount returns the largest number of chunks of a message the
+// peer accepts, as it announced in the handshake. Zero means no limit.
+func (c *Conn) PeerMaxChunkCount() uint32 {
+	return c.peerMaxChunkCount
+}
+
+// receiveLimit returns the limit a client applies to the messages it
+// receives: what the server announced, but never more than what the client
+// itself is configured to accept (own). A server announcing no limit (0)
+// gets the client's own limit, and def when the client has none either.
+func receiveLimit(server, own, def uint32) uint32 {
+	switch {
+	case server == 0 && own == 0:
+		return def
+	case server == 0:
+		return own
+	case own == 0:
+		return server
+	default:
+		return min(server, own)
+	}
 }
 
 func (c *Conn) Close() (err error) {
@@ -592,14 +634,14 @@ func (c *Conn) Handshake(ctx context.Context, endpoint string) error {
 		if ack.Version != 0 {
 			return fmt.Errorf("%w: version=%d", errors.ErrInvalidState, ack.Version)
 		}
-		if ack.MaxChunkCount == 0 {
-			ack.MaxChunkCount = DefaultMaxChunkCount
-			c.logDebug("server has no chunk limit, using default", "conn_id", c.id, "max_chunk_count", ack.MaxChunkCount)
-		}
-		if ack.MaxMessageSize == 0 {
-			ack.MaxMessageSize = DefaultMaxMessageSize
-			c.logDebug("server has no message size limit, using default", "conn_id", c.id, "max_message_size", ack.MaxMessageSize)
-		}
+		// The Acknowledge carries the limits of the server for requests
+		// (Part 6 §7.1.2.4): they bound what this client sends. The client
+		// also applies them to the responses it receives, capped at its
+		// own configured limits, so that a server cannot make it buffer
+		// more than it was configured for.
+		c.peerMaxMessageSize, c.peerMaxChunkCount = ack.MaxMessageSize, ack.MaxChunkCount
+		ack.MaxChunkCount = receiveLimit(ack.MaxChunkCount, hel.MaxChunkCount, DefaultMaxChunkCount)
+		ack.MaxMessageSize = receiveLimit(ack.MaxMessageSize, hel.MaxMessageSize, DefaultMaxMessageSize)
 		// The server revises the buffer sizes of the Hello downwards (Part 6
 		// §7.1.2.4); it cannot raise them. The receive buffers of this
 		// connection have the size that was offered: an Acknowledge with a
@@ -684,6 +726,9 @@ func (c *Conn) srvhandshake(endpoint string) error {
 			ack.MaxChunkCount = minNonZero(ack.MaxChunkCount, hel.MaxChunkCount)
 		}
 		c.ack = &ack
+		// The Hello carries the limits of the client for responses (Part 6
+		// §7.1.2.3): they bound what this server sends.
+		c.peerMaxMessageSize, c.peerMaxChunkCount = hel.MaxMessageSize, hel.MaxChunkCount
 
 		if err := c.Send("ACKF", c.ack); err != nil {
 			c.SendError(ua.StatusBadTCPInternalError)
@@ -799,14 +844,17 @@ func (c *Conn) Send(typ string, msg interface{}) error {
 		return fmt.Errorf("uacp: encode msg failed: %w", err)
 	}
 
+	// Compared before the conversion: a size that does not fit in the UInt32
+	// MessageSize must not wrap into one that passes the check.
+	size := len(body) + hdrlen
+	if int64(size) > int64(c.ack.SendBufSize) {
+		return fmt.Errorf("%w: %d > %d bytes", errors.ErrMessageTooLarge, size, c.ack.SendBufSize)
+	}
+
 	h := Header{
 		MessageType: typ[:3],
 		ChunkType:   typ[3],
-		MessageSize: uint32(len(body) + hdrlen),
-	}
-
-	if h.MessageSize > c.ack.SendBufSize {
-		return fmt.Errorf("%w: %d > %d bytes", errors.ErrMessageTooLarge, h.MessageSize, c.ack.SendBufSize)
+		MessageSize: uint32(size),
 	}
 
 	hdr, err := h.Encode()

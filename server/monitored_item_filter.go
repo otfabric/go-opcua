@@ -299,7 +299,10 @@ func (s *MonitoredItemService) hasNumericDataType(nodeid *ua.NodeID) bool {
 	}
 	vague := dt == nil || (dt.Namespace() == 0 && (dt.IntID() == 0 || dt.IntID() == id.BaseDataType))
 	if !vague {
-		if dt.Namespace() == 0 && isNumericType(ua.TypeID(dt.IntID())) {
+		// TypeID is a byte: compare the identifier before narrowing it, or an
+		// identifier such as DiagnosticsLevel (19723 = 0x4D0B) would pass as
+		// the built-in Double (11).
+		if dt.Namespace() == 0 && dt.IntID() <= uint32(ua.TypeIDDouble) && isNumericType(ua.TypeID(dt.IntID())) {
 			return true
 		}
 		return srv.isSubtypeOf(dt, ua.NewNumericNodeID(0, id.Number))

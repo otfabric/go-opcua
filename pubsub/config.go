@@ -110,6 +110,9 @@ func PublisherIDVariant(v any) (*ua.Variant, error) {
 		}
 		return x, nil
 	case message.PublisherID:
+		if err := x.Validate(); err != nil {
+			return nil, err
+		}
 		return x.Variant(), nil
 	case byte, uint16, uint32, uint64, string:
 		return ua.MustVariant(x), nil
@@ -394,6 +397,9 @@ func validatePublishedDataSet(path string, pds *ua.PublishedDataSetDataType) err
 			return configErr(path, "DataSetMetaData has %d fields but there is no DataSetSource", len(md.Fields))
 		}
 	case *ua.PublishedDataItemsDataType:
+		if err := checkFieldCount(path, len(src.PublishedData)); err != nil {
+			return err
+		}
 		for i, v := range src.PublishedData {
 			if v == nil || v.PublishedVariable == nil {
 				return configErr(path, "PublishedData[%d]: no PublishedVariable", i)
@@ -431,6 +437,9 @@ func validatePublishedDataSet(path string, pds *ua.PublishedDataSetDataType) err
 		}
 		if len(src.SelectedFields) == 0 {
 			return configErr(path, "PublishedEvents without SelectedFields")
+		}
+		if err := checkFieldCount(path, len(src.SelectedFields)); err != nil {
+			return err
 		}
 		if md := pds.DataSetMetaData; md != nil && len(md.Fields) > 0 && len(md.Fields) != len(src.SelectedFields) {
 			return configErr(path, "DataSetMetaData has %d fields for %d selected fields", len(md.Fields), len(src.SelectedFields))
@@ -488,6 +497,16 @@ func validateActionSource(path string, pds *ua.PublishedDataSetDataType, request
 		return err
 	}
 	return validateFieldNames(path, pds.DataSetMetaData)
+}
+
+// checkFieldCount checks the number of fields of a published data set: the
+// FieldCount and FieldIndex of a UADP DataSetMessage are UInt16 (Part 14
+// §7.2.4.5), so a larger data set cannot be published.
+func checkFieldCount(path string, n int) error {
+	if n > math.MaxUint16 {
+		return configErr(path, "%d fields, at most %d fit into a DataSetMessage", n, math.MaxUint16)
+	}
+	return nil
 }
 
 func validateFieldNames(path string, md *ua.DataSetMetaDataType) error {

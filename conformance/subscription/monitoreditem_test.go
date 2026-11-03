@@ -452,6 +452,9 @@ func TestMonitoredItem_NonValueAttribute(t *testing.T) {
 	require.True(t, ok, "got %T", first[0].DV.Value.Value())
 	require.Equal(t, "Int32", lt.Text)
 
+	// DisplayName is writable only with its WriteMask bit (Part 3 §5.2.7).
+	require.NoError(t, f.NS.Node(f.Int32).SetAttribute(ua.AttributeIDWriteMask,
+		server.DataValueFromValue(uint32(ua.AttributeWriteMaskDisplayName))))
 	st, err := c.WriteAttribute(ctx, f.Int32, ua.AttributeIDDisplayName, &ua.DataValue{
 		EncodingMask: ua.DataValueValue,
 		Value:        ua.MustVariant(ua.NewLocalizedText("Renamed")),

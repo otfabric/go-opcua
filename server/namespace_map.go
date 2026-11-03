@@ -322,9 +322,18 @@ func (ns *MapNamespace) SetAttribute(node *ua.NodeID, attr ua.AttributeID, val *
 
 	// we would normally look up the node in our actual address space, but since that's dumb, we're just
 	// going to use the node id directly to look it up from our data map.
+	//
+	// Only the Value is stored. Other Attributes are synthesised by
+	// Attribute and a write of one is dropped here; the Write service
+	// refuses it before (checkAttributeWrite: the map exposes no WriteMask,
+	// so nothing but the Value is writable, Part 3 §5.2.7).
 	if attr == ua.AttributeIDValue {
-		v := val.Value.Value()
-		ns.Data[key] = v
+		// A Value write without a value has nothing to store (Part 4
+		// §5.10.4); without this guard it dereferences a nil Variant.
+		if val == nil || val.Value == nil {
+			return ua.StatusBadTypeMismatch
+		}
+		ns.Data[key] = val.Value.Value()
 	}
 
 	// notify the opc ua server the value has changed.

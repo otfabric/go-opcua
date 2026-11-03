@@ -8,6 +8,7 @@ import (
 	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -145,7 +146,14 @@ func EncryptSecret(uri string, signingKey crypto.PrivateKey, signingCertificate,
 	if len(out) != headerLength+payloadLength {
 		return nil, fmt.Errorf("%w: encrypted secret: inconsistent length", errors.ErrInvalidState)
 	}
-	binary.LittleEndian.PutUint32(out[lengthPos:], uint32(len(out)-eccSecretPrefixLength+p.symmetric.secretOverhead()+signatureLength))
+	// Length counts the bytes after the Length field, signature included
+	// (Part 4 §7.41.2.3); the secret is a ByteString, whose length is an
+	// Int32.
+	length := len(out) - eccSecretPrefixLength + p.symmetric.secretOverhead() + signatureLength
+	if length > math.MaxInt32 {
+		return nil, fmt.Errorf("%w: encrypted secret of %d bytes", errors.ErrArrayTooLarge, length)
+	}
+	binary.LittleEndian.PutUint32(out[lengthPos:], uint32(length))
 
 	encrypted, err := p.symmetric.sealSecret(key, iv, out[:headerLength], out[headerLength:])
 	clear(out[headerLength:])

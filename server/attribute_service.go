@@ -379,6 +379,13 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 			continue
 		}
 
+		if n.AttributeID != ua.AttributeIDValue {
+			if st := checkAttributeWrite(ns, n.NodeID, n.AttributeID, n.Value); st != ua.StatusOK {
+				status[i] = st
+				continue
+			}
+		}
+
 		val := n.Value
 		if n.AttributeID == ua.AttributeIDValue && val != nil {
 			val = stampWritten(val, time.Now())
@@ -401,6 +408,179 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 
 	return response, nil
 
+}
+
+// attributeWriteBits is the AttributeWriteMask bit (Part 3 §8.60) that makes
+// each non-Value Attribute writable. Value is governed by AccessLevel and
+// UserAccessLevel (Part 3 §5.6.2) and is not in the table. UserRolePermissions
+// has no bit: it is derived per Session (Part 3 §5.2.10) and never written.
+var attributeWriteBits = map[ua.AttributeID]ua.AttributeWriteMask{
+	ua.AttributeIDNodeID:                  ua.AttributeWriteMaskNodeID,
+	ua.AttributeIDNodeClass:               ua.AttributeWriteMaskNodeClass,
+	ua.AttributeIDBrowseName:              ua.AttributeWriteMaskBrowseName,
+	ua.AttributeIDDisplayName:             ua.AttributeWriteMaskDisplayName,
+	ua.AttributeIDDescription:             ua.AttributeWriteMaskDescription,
+	ua.AttributeIDWriteMask:               ua.AttributeWriteMaskWriteMask,
+	ua.AttributeIDUserWriteMask:           ua.AttributeWriteMaskUserWriteMask,
+	ua.AttributeIDIsAbstract:              ua.AttributeWriteMaskIsAbstract,
+	ua.AttributeIDSymmetric:               ua.AttributeWriteMaskSymmetric,
+	ua.AttributeIDInverseName:             ua.AttributeWriteMaskInverseName,
+	ua.AttributeIDContainsNoLoops:         ua.AttributeWriteMaskContainsNoLoops,
+	ua.AttributeIDEventNotifier:           ua.AttributeWriteMaskEventNotifier,
+	ua.AttributeIDDataType:                ua.AttributeWriteMaskDataType,
+	ua.AttributeIDValueRank:               ua.AttributeWriteMaskValueRank,
+	ua.AttributeIDArrayDimensions:         ua.AttributeWriteMaskArrayDimensions,
+	ua.AttributeIDAccessLevel:             ua.AttributeWriteMaskAccessLevel,
+	ua.AttributeIDUserAccessLevel:         ua.AttributeWriteMaskUserAccessLevel,
+	ua.AttributeIDMinimumSamplingInterval: ua.AttributeWriteMaskMinimumSamplingInterval,
+	ua.AttributeIDHistorizing:             ua.AttributeWriteMaskHistorizing,
+	ua.AttributeIDExecutable:              ua.AttributeWriteMaskExecutable,
+	ua.AttributeIDUserExecutable:          ua.AttributeWriteMaskUserExecutable,
+	ua.AttributeIDDataTypeDefinition:      ua.AttributeWriteMaskDataTypeDefinition,
+	ua.AttributeIDRolePermissions:         ua.AttributeWriteMaskRolePermissions,
+	ua.AttributeIDAccessRestrictions:      ua.AttributeWriteMaskAccessRestrictions,
+	ua.AttributeIDAccessLevelEx:           ua.AttributeWriteMaskAccessLevelEx,
+}
+
+// checkAttributeWrite decides a Write of a non-Value Attribute (Part 4
+// §5.10.4) before the namespace stores it:
+//
+//   - NodeId and NodeClass: Bad_NotWritable whatever the WriteMask says. Part 3
+//     §8.60 has bits for them, but this server keys its address space by
+//     NodeId and derives references and Read results from the NodeClass, so
+//     it cannot honour them (open62541 refuses both as well).
+//   - UserRolePermissions and unknown Attribute ids: Bad_NotWritable and
+//     Bad_AttributeIdInvalid.
+//   - The bit of the Attribute must be set in the WriteMask of the Node
+//     (Part 3 §5.2.7), else Bad_NotWritable. A Node without a WriteMask
+//     Attribute, which includes every Node built with the Go API unless it
+//     sets one, has nothing writable.
+//   - If the Node carries a UserWriteMask Attribute (Part 3 §5.2.8) the bit
+//     must be set there too, else Bad_UserAccessDenied, as UserAccessLevel is
+//     for the Value (Node.accessStatus). Per-user decisions beyond that stay
+//     with the AccessController, which is asked first.
+//   - The value must be a scalar or array of the DataType Part 3 defines for
+//     the Attribute (Part 3 §5.2 to §5.8, summarised in §5.9), else
+//     Bad_TypeMismatch (Part 4 §5.10.4).
+//
+// Server-internal code that sets attributes through Node.SetAttribute or
+// NameSpace.SetAttribute is not subject to these checks.
+func checkAttributeWrite(ns NameSpace, id *ua.NodeID, attr ua.AttributeID, dv *ua.DataValue) ua.StatusCode {
+	if attr == ua.AttributeIDNodeID || attr == ua.AttributeIDNodeClass || attr == ua.AttributeIDUserRolePermissions {
+		return ua.StatusBadNotWritable
+	}
+	bit, ok := attributeWriteBits[attr]
+	if !ok {
+		return ua.StatusBadAttributeIDInvalid
+	}
+	mask, st := writeMaskOf(ns, id, ua.AttributeIDWriteMask)
+	if st == ua.StatusBadNodeIDUnknown {
+		return st
+	}
+	if mask&uint32(bit) == 0 {
+		return ua.StatusBadNotWritable
+	}
+	if user, st := writeMaskOf(ns, id, ua.AttributeIDUserWriteMask); st == ua.StatusOK && user&uint32(bit) == 0 {
+		return ua.StatusBadUserAccessDenied
+	}
+	if !attributeValueTypeOK(attr, dv) {
+		return ua.StatusBadTypeMismatch
+	}
+	return ua.StatusOK
+}
+
+// writeMaskOf reads the WriteMask or UserWriteMask of a Node: from the Node
+// itself when the namespace holds Nodes (so that the AccessLevel check of
+// NodeNameSpace.Attribute, which is about the Value, does not hide it), from
+// the namespace otherwise. A missing Attribute or one that is not a UInt32
+// is reported as Bad_AttributeIdInvalid with a zero mask.
+func writeMaskOf(ns NameSpace, id *ua.NodeID, attr ua.AttributeID) (uint32, ua.StatusCode) {
+	var dv *ua.DataValue
+	if n := ns.Node(id); n != nil {
+		a, err := n.Attribute(attr)
+		if err != nil || a == nil {
+			return 0, ua.StatusBadAttributeIDInvalid
+		}
+		dv = a.Value
+	} else {
+		dv = ns.Attribute(id, attr)
+		if dv != nil && dv.Status == ua.StatusBadNodeIDUnknown {
+			return 0, ua.StatusBadNodeIDUnknown
+		}
+	}
+	if dv == nil || dv.Value == nil || dv.Status != ua.StatusOK {
+		return 0, ua.StatusBadAttributeIDInvalid
+	}
+	m, ok := dv.Value.Value().(uint32)
+	if !ok {
+		return 0, ua.StatusBadAttributeIDInvalid
+	}
+	return m, ua.StatusOK
+}
+
+// attributeValueTypeOK reports whether dv holds a value of the DataType of a
+// non-Value Attribute (Part 3 §5.2 to §5.8, summarised in §5.9). A missing
+// value is a mismatch: these Attributes have no null value to write.
+func attributeValueTypeOK(attr ua.AttributeID, dv *ua.DataValue) bool {
+	if dv == nil || dv.Value == nil {
+		return false
+	}
+	switch v := dv.Value.Value().(type) {
+	case *ua.QualifiedName:
+		return v != nil && attr == ua.AttributeIDBrowseName
+	case *ua.LocalizedText:
+		return v != nil && (attr == ua.AttributeIDDisplayName || attr == ua.AttributeIDDescription ||
+			attr == ua.AttributeIDInverseName)
+	case uint32:
+		// WriteMask and UserWriteMask are AttributeWriteMask, AccessLevelEx
+		// is AccessLevelExType: OptionSets of UInt32 (Part 3 §8.60, §8.58).
+		return attr == ua.AttributeIDWriteMask || attr == ua.AttributeIDUserWriteMask ||
+			attr == ua.AttributeIDAccessLevelEx
+	case bool:
+		return attr == ua.AttributeIDIsAbstract || attr == ua.AttributeIDSymmetric ||
+			attr == ua.AttributeIDContainsNoLoops || attr == ua.AttributeIDHistorizing ||
+			attr == ua.AttributeIDExecutable || attr == ua.AttributeIDUserExecutable
+	case byte:
+		// EventNotifier is EventNotifierType, AccessLevel and UserAccessLevel
+		// are AccessLevelType: OptionSets of Byte (Part 3 §8.59, §8.57).
+		return attr == ua.AttributeIDEventNotifier || attr == ua.AttributeIDAccessLevel ||
+			attr == ua.AttributeIDUserAccessLevel
+	case uint16:
+		// AccessRestrictionType is an OptionSet of UInt16 (Part 3 §8.56).
+		return attr == ua.AttributeIDAccessRestrictions
+	case *ua.NodeID:
+		return v != nil && attr == ua.AttributeIDDataType
+	case int32:
+		return attr == ua.AttributeIDValueRank
+	case []uint32:
+		return attr == ua.AttributeIDArrayDimensions
+	case float64:
+		// Duration is a subtype of Double (Part 3 §8.13).
+		return attr == ua.AttributeIDMinimumSamplingInterval
+	case *ua.ExtensionObject:
+		if v == nil || attr != ua.AttributeIDDataTypeDefinition {
+			return false
+		}
+		switch v.Value.(type) {
+		case *ua.StructureDefinition, *ua.EnumDefinition:
+			return true
+		}
+		return false
+	case []*ua.ExtensionObject:
+		if attr != ua.AttributeIDRolePermissions {
+			return false
+		}
+		for _, eo := range v {
+			if eo == nil {
+				return false
+			}
+			if _, ok := eo.Value.(*ua.RolePermissionType); !ok {
+				return false
+			}
+		}
+		return true
+	}
+	return false
 }
 
 // stampWritten returns a copy of a DataValue a client wrote to a Value

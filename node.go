@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"iter"
+	"math"
 	"strings"
 
 	"github.com/otfabric/go-opcua/id"
@@ -189,7 +190,18 @@ func (n *Node) NodeClass(ctx context.Context) (ua.NodeClass, error) {
 	if err != nil {
 		return 0, err
 	}
-	return ua.NodeClass(v.Int()), nil
+	return nodeClassOf(v)
+}
+
+// nodeClassOf returns the NodeClass in v. The attribute is an Int32
+// enumeration (Part 3 §5.2.1, Part 6 §5.2.4); a server value that does not
+// fit is refused rather than truncated into another node class.
+func nodeClassOf(v *ua.Variant) (ua.NodeClass, error) {
+	n := v.Int()
+	if n < 0 || n > math.MaxUint32 {
+		return 0, fmt.Errorf("opcua: NodeClass %d out of range", n)
+	}
+	return ua.NodeClass(n), nil
 }
 
 // BrowseName returns the browse name of the node.
@@ -347,7 +359,9 @@ func (n *Node) Summary(ctx context.Context) (*NodeSummary, error) {
 
 	// NodeClass
 	if v := results[0]; v.Status == ua.StatusOK && v.Value != nil {
-		s.NodeClass = ua.NodeClass(v.Value.Int())
+		if nc, err := nodeClassOf(v.Value); err == nil {
+			s.NodeClass = nc
+		}
 	}
 
 	// BrowseName

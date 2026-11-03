@@ -27,6 +27,9 @@ func main() {
 	interval := flag.Duration("interval", 100*time.Millisecond, "publishing interval")
 	publisherID := flag.Uint("publisher", 2234, "PublisherId (UInt16)")
 	flag.Parse()
+	if *publisherID > math.MaxUint16 {
+		log.Fatalf("-publisher %d is not a UInt16", *publisherID)
+	}
 
 	counter := ua.NewStringNodeID(1, "counter")
 	sine := ua.NewStringNodeID(1, "sine")

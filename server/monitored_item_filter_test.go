@@ -394,6 +394,10 @@ func TestParseDataChangeFilter_DataTypes(t *testing.T) {
 		{"BaseDataType with text value", typed("dt_base_str", ua.NewNumericNodeID(0, id.BaseDataType), "x"), ua.StatusBadFilterNotAllowed},
 		{"no DataType, numeric value", typed("dt_none_num", nil, uint16(1)), ua.StatusOK},
 		{"no DataType, text value", typed("dt_none_str", nil, "x"), ua.StatusBadFilterNotAllowed},
+		// Identifiers above 255 whose low byte is a built-in number id
+		// (19723 & 0xFF = 11 Double, 521 & 0xFF = 9 Int64) are not numbers.
+		{"enumeration DiagnosticsLevel", typed("dt_diaglevel", ua.NewNumericNodeID(0, id.DiagnosticsLevel), int32(1)), ua.StatusBadFilterNotAllowed},
+		{"ByteString ContinuationPoint", typed("dt_cp", ua.NewNumericNodeID(0, id.ContinuationPoint), []byte{1}), ua.StatusBadFilterNotAllowed},
 	}
 	for _, tc := range cases {
 		_, st := svc.parseDataChangeFilter(value(tc.node.ID()), abs)

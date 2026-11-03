@@ -147,6 +147,37 @@ func TestFilter_Bitwise(t *testing.T) {
 	require.Equal(t, tvlTrue, evalFilter(srv, node, f))
 }
 
+// TestFilter_BitwiseUInt64 checks that BitwiseAnd and BitwiseOr of UInt64
+// operands give a UInt64 (Part 4 §7.4.3 FilterOperator: the result has the size of
+// the largest operand), so values of 2^63 and above keep their value.
+func TestFilter_BitwiseUInt64(t *testing.T) {
+	srv := newTestServer()
+	node := NewNode(ua.NewStringNodeID(0, "anon"), nil, nil, nil)
+	top := lit(ua.MustVariant(uint64(1) << 63))
+	for _, op := range []ua.FilterOperator{ua.FilterOperatorBitwiseAnd, ua.FilterOperatorBitwiseOr} {
+		f := &ua.ContentFilter{Elements: []*ua.ContentFilterElement{
+			cfe(ua.FilterOperatorEquals, elemOp(1), top),
+			cfe(op, top, top),
+		}}
+		require.Equal(t, tvlTrue, evalFilter(srv, node, f), "operator %v", op)
+		v, st := evalWithStatus(srv, node, cfe(op, top, lit(ua.MustVariant(int32(1)))))
+		require.Equal(t, ua.StatusGood, st)
+		// A smaller operand is widened: the result is a UInt64 either way.
+		want := uint64(0)
+		if op == ua.FilterOperatorBitwiseOr {
+			want = uint64(1)<<63 | 1
+		}
+		require.Equal(t, want, v.Value(), "operator %v", op)
+	}
+	// A negative signed operand is widened with its sign: -1 has all bits set.
+	v, st := evalWithStatus(srv, node, cfe(ua.FilterOperatorBitwiseAnd, lit(ua.MustVariant(int32(-1))), top))
+	require.Equal(t, ua.StatusGood, st)
+	require.Equal(t, uint64(1)<<63, v.Value())
+	v, st = evalWithStatus(srv, node, cfe(ua.FilterOperatorBitwiseOr, top, lit(ua.MustVariant("x"))))
+	require.Equal(t, ua.StatusGood, st)
+	require.Nil(t, v)
+}
+
 func TestFilter_Like(t *testing.T) {
 	cases := []struct {
 		s, pat string

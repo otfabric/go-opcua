@@ -74,7 +74,7 @@ func checkAction(nm *message.NetworkMessage) error {
 	if len(a.ResponseAddress) > maxActionString {
 		return malformed("ResponseAddress of %d bytes", len(a.ResponseAddress))
 	}
-	if r := a.RequestorID; r != nil && (r.Type > message.PublisherIDString || len(r.Str) > maxActionString) {
+	if r := a.RequestorID; r != nil && (r.Validate() != nil || len(r.Str) > maxActionString) {
 		return malformed("RequestorId %v", r)
 	}
 	if math.IsNaN(a.TimeoutHint) || math.IsInf(a.TimeoutHint, 0) {
@@ -95,7 +95,7 @@ func checkActionChunk(nm *message.NetworkMessage) error {
 	if len(a.ResponseAddress) > maxActionString {
 		return malformed("ResponseAddress of %d bytes", len(a.ResponseAddress))
 	}
-	if r := a.RequestorID; r != nil && (r.Type > message.PublisherIDString || len(r.Str) > maxActionString) {
+	if r := a.RequestorID; r != nil && (r.Validate() != nil || len(r.Str) > maxActionString) {
 		return malformed("RequestorId %v", r)
 	}
 	if math.IsNaN(a.TimeoutHint) || math.IsInf(a.TimeoutHint, 0) {

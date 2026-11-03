@@ -352,8 +352,14 @@ func (as *NodeNameSpace) SetAttribute(id *ua.NodeID, attr ua.AttributeID, val *u
 		return ua.StatusBadNodeIDUnknown
 	}
 
-	if st := n.AccessStatus(ua.AccessLevelTypeCurrentWrite); st != ua.StatusOK {
-		return st
+	// AccessLevel and UserAccessLevel govern the Value Attribute only (Part 3
+	// §5.6.2, §8.57). The other Attributes are governed by the WriteMask
+	// (Part 3 §5.2.7), which the Write service checks before it gets here
+	// (checkAttributeWrite); server-internal callers set them directly.
+	if attr == ua.AttributeIDValue {
+		if st := n.AccessStatus(ua.AccessLevelTypeCurrentWrite); st != ua.StatusOK {
+			return st
+		}
 	}
 
 	err := n.SetAttribute(attr, val)

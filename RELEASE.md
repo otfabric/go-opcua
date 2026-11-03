@@ -1,5 +1,50 @@
 # go-opcua Releases
 
+## v1.31.0
+
+**Date:** 2026-11-03
+**Previous release:** v1.30.0
+
+Findings of a static analysis review: defects, limits that were only kept by a check elsewhere and are now checked where the value is converted, and server limits that were missing. Three changes need attention when upgrading: the server limits sessions and subscriptions, clients can write attributes other than Value only where the node's WriteMask allows it, and both sides keep to the message size and chunk count the peer announced.
+
+### Added
+
+- server: `WithMaxSessions` (default 100), `WithMaxSubscriptions` (default 1024, all sessions) and `WithMaxSubscriptionsPerSession` (default 64), the defaults of open62541. They are published as ServerCapabilities `MaxSessions`, `MaxSubscriptions` and `MaxSubscriptionsPerSession` (Part 5 §6.3.2). Before, the number of sessions and subscriptions was unbounded, and a client that never activated its sessions could fill memory.
+- `uacp.Conn.PeerMaxMessageSize` and `PeerMaxChunkCount`: the limits the peer announced for what it receives.
+- `message.PublisherID.Validate`: checks the type and that a numeric PublisherId fits it. `uadp.Encode` and the PubSub configuration use it; `PublisherID.Variant` still truncates, so call `Validate` first.
+
+### Changed
+
+- server: CreateSession fails with `Bad_TooManySessions` (Part 4 §5.6.2) once the server keeps `WithMaxSessions` sessions, activated or not; a closed or timed-out session frees its place. CreateSubscription fails with `Bad_TooManySubscriptions` (§5.13.2) at the server-wide or the per-session limit. TransferSubscriptions answers `Bad_TooManySubscriptions` for a subscription that would take the session past its limit and leaves it where it was.
+- server: the Write service enforces the WriteMask of a node for every attribute other than Value (Part 3 §5.2.7, §8.60). Without its bit, a write is `Bad_NotWritable`; a UserWriteMask on the node narrows it further (`Bad_UserAccessDenied`, §5.2.8). Nodes built with the Go API have no WriteMask, so clients can write only their Value, as in UA-.NETStandard and open62541. Before, a client could overwrite NodeClass, BrowseName, EventNotifier, DataType and the others with any value. To open DisplayName, Description and the others, set `ua.AttributeIDWriteMask` (UInt32) on the node; a custom `NameSpace` returns it from `Attribute`. NodeSet2 imports keep their WriteMask, and AddNodes now keeps the WriteMask and UserWriteMask the client sends. NodeId and NodeClass are never writable; UserRolePermissions is `Bad_NotWritable`, and an unknown AttributeId is `Bad_AttributeIdInvalid`.
+- uasc: the client sends no request above the MaxMessageSize or MaxChunkCount of the server's Acknowledge (Part 6 §7.1.2.4) and fails it with `ErrMessageTooLarge` and `Bad_RequestTooLarge`. The server aborts a response above the limits of the client's Hello (§7.1.2.3) with an abort chunk carrying `Bad_ResponseTooLarge`, so the client gets that status at once and the channel stays open. Before, the server sent the response and the client discarded it with `ErrTooManyChunks` or `ErrMessageTooLarge`.
+- The client's `MaxMessageSize` and `MaxChunkCount` options cap what it accepts even if the server announces more. Left at 0, the client takes the server's limits, or 512 chunks and 2 MiB when the server has none, as before; a server that announces MaxUint32 no longer raises them. With default settings nothing changes on the wire.
+- server: `NodeNameSpace.SetAttribute` applies AccessLevel only to the Value attribute (Part 3 §5.6.2). Before, a read-only Value also made the node's other attributes read-only.
+- `server.DataValueFromValue` and the server's own values encode a Go `int` outside the Int32 range as an Int64. Before, it was truncated to an Int32.
+- `server.Server.AddNamespace` refuses a namespace beyond the 65536 that a UInt16 NamespaceIndex can address (Part 3 §8.2.2): it logs an error and returns -1. A NodeSet2 import that would pass that limit fails before it adds a namespace.
+- The PubSub configuration refuses a PublishedDataSet with more than 65535 fields (Part 14 §7.2.4.5: FieldCount and the field index are UInt16). Before, the key frame failed to encode, but the delta frames after it went out with wrapped field indexes. `jsonmsg.DecodeOptions.MaxFields` is capped at 65535 for the same reason.
+- `uadp.Encode` refuses a chunk with no ChunkData or ChunkData beyond TotalSize, as the decoder does, and a PublisherId wider than its type.
+- `opc.https` responses carry `X-Content-Type-Options: nosniff`.
+
+### Fixed
+
+- server: a write of an attribute other than Value with a value of the wrong DataType (a String for EventNotifier, an Int32 for NodeClass) is refused with `Bad_TypeMismatch` instead of being stored. A write of the Value of a `MapNamespace` key with no value returns `Bad_TypeMismatch` instead of dereferencing a nil Variant.
+- The client's AMQP transport read a broker's incoming window or link credit of 2^31 or more, MaxUint32 for "unlimited" among them, as negative and stopped sending (AMQP 1.0 §2.5.6, §2.6.7: they are counts, not serial numbers). PubSub publishing over such a broker stalled.
+- The client's MQTT transport wrote a client identifier, user name, password or will payload over 65535 bytes with a wrapped two-byte length (MQTT §1.5.4, §1.5.6), and the broker read its tail as the following fields. `Dial` and the encoder now refuse it.
+- `Client.NodeFromQualifiedPath` accepted a namespace index above 65535 ("70000:Name"), which its documentation excludes, and addressed namespace 4464. It now refuses it.
+- server: a DataType whose numeric id ends in the byte of a built-in number (DiagnosticsLevel i=19723, ContinuationPoint i=521, ...) counted as numeric, so an absolute or percent deadband on such a Variable was accepted instead of `Bad_FilterNotAllowed` (Part 4 §7.22.2).
+- server: an event filter's BitwiseAnd and BitwiseOr with a UInt64 operand returned an Int64, so results of 2^63 and above compared as negative (Part 4 §7.4.3: the result has the size of the larger operand). They now return a UInt64.
+- server: a NodeSet2 file with an AccessLevel or UserAccessLevel above 255 or a ValueRank outside Int32 had the value truncated; an AccessLevel of 259 became CurrentRead|CurrentWrite. Such values are now skipped with a warning. An EventNotifier stored as an Int32 or UInt32 outside 0..255 reads as 0.
+- uasc: a server or `uacp.Listener` configured with MaxChunkCount or MaxMessageSize 0, which Part 6 §7.1.2 defines as no limit, refused every message of more than one chunk, or every message. Zero now means no limit.
+- uasc: after a message was refused for too many chunks or bytes, its remaining chunks were collected again and merged with its final chunk into a message of their own. They are now dropped up to the final chunk.
+- uasc: a message of many chunks is refused with `ErrMessageTooLarge` as soon as its chunks pass MaxMessageSize, not after all of them are collected. Message sizes are compared without truncation, a chunk that cannot fit the UInt32 MessageSize is refused on send, and uacp compares the send size before converting it.
+- ua: a multi-dimensional array whose element count passes Int32, an ExtensionObject body over 2 GiB, and an unsigned enumeration or option set value above MaxInt64 in JSON and XML were encoded with wrapped or negative lengths or values. The first two now fail with an encoding error; the third is written and read as an unsigned number.
+- `Node.NodeClass` refuses a NodeClass outside UInt32 from a server instead of truncating it. Session `Lifetime` and the request TimeoutHint are clamped to the UInt32 milliseconds they are sent in.
+- PubSub: received RawData with a zero dimension in a multi-dimensional array or a dimension above Int32 is refused in the UADP decoder. The MQTT transport compares a MaximumPacketSize property above 2^31 correctly on 32-bit platforms.
+- Examples: `examples/crypto` wrote the generated private key world-readable (0644), now 0600; three example servers wrote their certificate and key with mode 0, so they could not read them back. The PubSub and translate examples refuse a PublisherId or namespace flag outside UInt16 instead of truncating it.
+
+---
+
 ## v1.30.0
 
 **Date:** 2026-11-02

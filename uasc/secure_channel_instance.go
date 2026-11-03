@@ -127,9 +127,23 @@ func (s *SecureChannel) setRequestHeader(req ua.Request, reqID uint32, authToken
 	if timeout > 0 && timeout < s.cfg.RequestTimeout {
 		timeout = s.cfg.RequestTimeout
 	}
-	reqHdr.TimeoutHint = uint32(timeout / time.Millisecond)
+	reqHdr.TimeoutHint = timeoutHint(timeout)
 	req.SetHeader(reqHdr)
 	return typeID, nil
+}
+
+// timeoutHint returns the TimeoutHint of a RequestHeader, a UInt32 of
+// milliseconds (Part 4 §7.33): a negative timeout is sent as 0, no timeout,
+// and one longer than about 49.7 days as the largest value.
+func timeoutHint(timeout time.Duration) uint32 {
+	switch ms := timeout / time.Millisecond; {
+	case ms < 0:
+		return 0
+	case ms > math.MaxUint32:
+		return math.MaxUint32
+	default:
+		return uint32(ms)
+	}
 }
 
 func (c *channelInstance) newMessage(srv interface{}, typeID uint16, requestID uint32) *Message {
@@ -264,7 +278,11 @@ func (c *channelInstance) signAndEncrypt(m *Message, b []byte) ([]byte, error) {
 		encryptedLength = len(b[headerLength:]) + c.algo.SignatureLength()
 	}
 
-	// Fix header size to account for signing / encryption
+	// Fix header size to account for signing / encryption. The MessageSize
+	// is a UInt32 (Part 6 §6.7.2.2).
+	if uint64(headerLength)+uint64(encryptedLength) > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: %d bytes", errors.ErrMessageTooLarge, headerLength+encryptedLength)
+	}
 	binary.LittleEndian.PutUint32(b[4:], uint32(headerLength+encryptedLength))
 	m.MessageSize = uint32(headerLength + encryptedLength)
 
@@ -379,6 +397,9 @@ func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, e
 func (c *channelInstance) sealChunk(m *Message, b []byte, headerLength int) ([]byte, error) {
 	if len(b) < headerLength+8 {
 		return nil, ua.StatusBadSecurityChecksFailed
+	}
+	if uint64(len(b))+uint64(c.algo.SignatureLength()) > math.MaxUint32 {
+		return nil, fmt.Errorf("%w: %d bytes", errors.ErrMessageTooLarge, len(b)+c.algo.SignatureLength())
 	}
 	size := uint32(len(b) + c.algo.SignatureLength())
 	binary.LittleEndian.PutUint32(b[4:], size)

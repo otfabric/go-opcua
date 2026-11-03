@@ -169,7 +169,9 @@ type DecodeOptions struct {
 	// Limits; zero selects the defaults.
 	MaxMessageSize     int
 	MaxDataSetMessages int
-	MaxFields          int
+	// MaxFields is capped at DefaultMaxFields (65535), the most a UInt16
+	// field index can number.
+	MaxFields int
 }
 
 func (o *DecodeOptions) maxMessageSize() int {
@@ -186,9 +188,11 @@ func (o *DecodeOptions) maxDataSetMessages() int {
 	return DefaultMaxDataSetMessages
 }
 
+// maxFields is at most DefaultMaxFields: the Index of a message.Field is a
+// UInt16.
 func (o *DecodeOptions) maxFields() int {
 	if o != nil && o.MaxFields > 0 {
-		return o.MaxFields
+		return min(o.MaxFields, DefaultMaxFields)
 	}
 	return DefaultMaxFields
 }

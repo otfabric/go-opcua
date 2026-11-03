@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -390,6 +391,16 @@ func TestDialErrors(t *testing.T) {
 	}
 	_, err := mqtt.Dial(bg, mqtt.Options{Server: "mqtt://127.0.0.1:1", PersistentSession: true})
 	require.Error(t, err)
+	// Fields with a two-byte length: refused before any dial.
+	long := strings.Repeat("x", 0x10000)
+	for _, o := range []mqtt.Options{
+		{ClientID: long}, {Username: "u", Password: long}, {Username: long},
+		{Will: &mqtt.Will{Topic: "w", Payload: []byte(long)}},
+	} {
+		o.Server = "mqtt://127.0.0.1:1"
+		_, err := mqtt.Dial(bg, o)
+		require.ErrorContains(t, err, "longer than 65535 bytes")
+	}
 
 	// Nothing listens: retried until the context ends.
 	addr := fmt.Sprintf("127.0.0.1:%d", testport.TCP(t))

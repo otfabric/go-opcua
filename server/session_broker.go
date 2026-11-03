@@ -225,6 +225,14 @@ func newAuthenticationToken() *ua.NodeID {
 }
 
 func (sb *sessionBroker) NewSession() *session {
+	return sb.newSessionWithin(0)
+}
+
+// newSessionWithin is NewSession for a server that keeps at most limit
+// sessions (0: no limit). It returns nil when the broker already keeps that
+// many; the check and the insertion are one step, so concurrent
+// CreateSession requests cannot exceed the limit together.
+func (sb *sessionBroker) newSessionWithin(limit int) *session {
 	ns := uint16(1)
 	if sb.idNamespace != nil {
 		ns = sb.idNamespace()
@@ -240,11 +248,14 @@ func (sb *sessionBroker) NewSession() *session {
 	s.touch()
 
 	sb.mu.Lock()
-	if !sb.closed {
-		sb.s[s.AuthTokenID.String()] = s
+	defer sb.mu.Unlock()
+	if sb.closed {
+		return s
 	}
-	sb.mu.Unlock()
-
+	if limit > 0 && len(sb.s) >= limit {
+		return nil
+	}
+	sb.s[s.AuthTokenID.String()] = s
 	return s
 }
 

@@ -80,6 +80,12 @@ func TestEncodeDefaultsAndErrors(t *testing.T) {
 		&Unsubscribe{PacketID: 1},
 		&Simple{Kind: TypePublish},
 		&Publish{Topic: "a", Payload: make([]byte, MaxRemainingLength)},
+		// A two-byte length would wrap (§1.5.4, §1.5.6).
+		&Connect{ClientID: strings.Repeat("c", maxField+1)},
+		&Connect{Username: strp("u"), Password: make([]byte, maxField+1)},
+		&Connect{Username: strp(strings.Repeat("u", maxField+1))},
+		&Connect{Will: &Will{Topic: "w", Payload: make([]byte, maxField+1)}},
+		&Connect{ProtocolName: strings.Repeat("M", maxField+1)},
 		nil,
 	}
 	for _, p := range bad {

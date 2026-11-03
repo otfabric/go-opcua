@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"log/slog"
+	"math"
 	"os"
 
 	"github.com/otfabric/go-opcua"
@@ -41,6 +42,9 @@ func main() {
 	flag.BoolVar(&debugMode, "debug", false, "enable debug logging")
 
 	flag.Parse()
+	if *ns < 0 || *ns > math.MaxUint16 {
+		log.Fatalf("-namespace %d is not a namespace index (0..65535)", *ns)
+	}
 	if debugMode {
 		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	}

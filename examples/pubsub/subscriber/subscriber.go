@@ -10,6 +10,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"math"
 	"os"
 	"os/signal"
 	"strings"
@@ -24,6 +25,9 @@ func main() {
 	publisherID := flag.Uint("publisher", 2234, "PublisherId to accept (UInt16)")
 	timeout := flag.Duration("timeout", 2*time.Second, "MessageReceiveTimeout")
 	flag.Parse()
+	if *publisherID > math.MaxUint16 {
+		log.Fatalf("-publisher %d is not a UInt16", *publisherID)
+	}
 
 	// The reader needs the DataSetMetaData of the writer: UADP carries
 	// neither field names nor, for RawData, types.

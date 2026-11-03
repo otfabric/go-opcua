@@ -109,6 +109,24 @@ func postBody(tb testing.TB, c *http.Client, url string, body []byte) int {
 	return resp.StatusCode
 }
 
+func TestHTTPSResponseNoSniff(t *testing.T) {
+	_, url, c := startHTTPSServer(t)
+	body, err := uasc.EncodeServiceMessage(&ua.ReadRequest{RequestHeader: &ua.RequestHeader{Timestamp: time.Now()}})
+	require.NoError(t, err)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", uasc.HTTPSContentType)
+	resp, err := c.Do(req)
+	require.NoError(t, err)
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "nosniff", resp.Header.Get("X-Content-Type-Options"))
+	require.Equal(t, uasc.HTTPSContentType, resp.Header.Get("Content-Type"))
+}
+
 func TestHTTPSServerClosing(t *testing.T) {
 	s, url, c := startHTTPSServer(t)
 
