@@ -32,6 +32,9 @@ func NewAttrValue(v *ua.DataValue) *AttrValue {
 
 }
 
+// DataValueFromValue returns val as a DataValue: a DataValue or Variant as
+// is, any other value in a new Variant. A Go int, which has no OPC UA type of
+// its own, becomes an Int32, or an Int64 if it does not fit an Int32.
 func DataValueFromValue(val any) *ua.DataValue {
 	// if we already have a data value, just return it.
 	switch v := val.(type) {
@@ -54,7 +57,7 @@ func DataValueFromValue(val any) *ua.DataValue {
 	case int:
 		return &ua.DataValue{
 			EncodingMask:    ua.DataValueValue,
-			Value:           ua.MustVariant(int32(v)),
+			Value:           ua.MustVariant(intValue(v)),
 			SourceTimestamp: time.Now(),
 		}
 

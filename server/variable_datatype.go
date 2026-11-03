@@ -3,6 +3,7 @@
 package server
 
 import (
+	"math"
 	"strings"
 
 	"github.com/otfabric/go-opcua/id"
@@ -42,13 +43,22 @@ func variantOf(value any) *ua.Variant {
 	case ua.Variant:
 		return &v
 	case int:
-		value = int32(v)
+		value = intValue(v)
 	}
 	v, err := ua.NewVariant(value)
 	if err != nil {
 		return nil
 	}
 	return v
+}
+
+// intValue returns a Go int as the value DataValueFromValue and variantOf
+// encode: an int32 when it fits, else an int64, so that no value is cut.
+func intValue(v int) any {
+	if v >= math.MinInt32 && v <= math.MaxInt32 {
+		return int32(v)
+	}
+	return int64(v)
 }
 
 // variantDataType returns the DataType NodeId of the value of v (Part 3

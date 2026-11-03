@@ -722,3 +722,24 @@ func TestHistoryEventsAccessDenied(t *testing.T) {
 	r := historyUpdate(t, svc, &ua.DeleteEventDetails{NodeID: src.ID()})
 	require.Equal(t, ua.StatusBadUserAccessDenied, r[0].StatusCode)
 }
+
+// TestEventNotifierOf_Range checks that an Int32 or UInt32 EventNotifier
+// outside the Byte range (Part 3 §5.5.1) reads as 0, not as its low byte.
+func TestEventNotifierOf_Range(t *testing.T) {
+	n := NewNode(ua.NewStringNodeID(1, "notifier"), nil, nil, nil)
+	for _, tc := range []struct {
+		v    any
+		want byte
+	}{
+		{byte(5), 5},
+		{int32(5), 5},
+		{uint32(255), 255},
+		{int32(0x105), 0},
+		{int32(-1), 0},
+		{uint32(0x104), 0},
+		{"5", 0},
+	} {
+		require.NoError(t, n.SetAttribute(ua.AttributeIDEventNotifier, DataValueFromValue(tc.v)))
+		require.Equal(t, tc.want, eventNotifierOf(n), "%T %v", tc.v, tc.v)
+	}
+}

@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"math"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -284,7 +285,9 @@ func storedFields(filter *ua.EventFilter) map[string]bool {
 	return keys
 }
 
-// eventNotifierOf returns the EventNotifier attribute of n.
+// eventNotifierOf returns the EventNotifier attribute of n. The attribute is
+// a Byte (Part 3 §5.5.1); an Int32 or UInt32 value outside 0..255 is not an
+// EventNotifier and reads as 0 rather than as its low byte.
 func eventNotifierOf(n *Node) byte {
 	av, err := n.Attribute(ua.AttributeIDEventNotifier)
 	if err != nil || av == nil || av.Value == nil || av.Value.Value == nil {
@@ -294,9 +297,13 @@ func eventNotifierOf(n *Node) byte {
 	case byte:
 		return v
 	case int32:
-		return byte(v)
+		if v >= 0 && v <= math.MaxUint8 {
+			return byte(v)
+		}
 	case uint32:
-		return byte(v)
+		if v <= math.MaxUint8 {
+			return byte(v)
+		}
 	}
 	return 0
 }

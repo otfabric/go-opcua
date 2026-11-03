@@ -531,6 +531,20 @@ func (ev *filterEvaluator) evalBitwise(el *ua.ContentFilterElement, and bool) (*
 	if a == nil || b == nil {
 		return nil, ua.StatusGood
 	}
+	// The operands are converted to the size of the larger one and so is the
+	// result (Part 4 §7.4.3, BitwiseAnd and BitwiseOr): a UInt64 operand
+	// makes the result a UInt64, which keeps values of 2^63 and above.
+	if isUInt64(a) || isUInt64(b) {
+		au, ok1 := uint64Bits(a)
+		bu, ok2 := uint64Bits(b)
+		if !ok1 || !ok2 {
+			return nil, ua.StatusGood
+		}
+		if and {
+			return ua.MustVariant(au & bu), ua.StatusGood
+		}
+		return ua.MustVariant(au | bu), ua.StatusGood
+	}
 	ai, ok1 := intOf(a)
 	bi, ok2 := intOf(b)
 	if !ok1 || !ok2 {
@@ -540,6 +554,35 @@ func (ev *filterEvaluator) evalBitwise(el *ua.ContentFilterElement, and bool) (*
 		return ua.MustVariant(ai & bi), ua.StatusGood
 	}
 	return ua.MustVariant(ai | bi), ua.StatusGood
+}
+
+func isUInt64(v *ua.Variant) bool {
+	_, ok := v.Value().(uint64)
+	return ok
+}
+
+// uint64Bits returns an integer operand as the 64 bits of its two's
+// complement, the way a smaller operand is widened to a UInt64.
+func uint64Bits(v *ua.Variant) (uint64, bool) {
+	switch x := v.Value().(type) {
+	case uint8:
+		return uint64(x), true
+	case uint16:
+		return uint64(x), true
+	case uint32:
+		return uint64(x), true
+	case uint64:
+		return x, true
+	}
+	n, ok := intOf(v)
+	if !ok {
+		return 0, false
+	}
+	if n >= 0 {
+		return uint64(n), true
+	}
+	// ^n is not negative for a negative n, and ^uint64(^n) has the bits of n.
+	return ^uint64(^n), true
 }
 
 // --- three-valued logic ---------------------------------------------------

@@ -12,6 +12,7 @@ import (
 	stderrors "errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"net"
 	"slices"
 	"strconv"
@@ -502,15 +503,26 @@ func methodKey(objectID, methodID *ua.NodeID) string {
 	return objectID.String() + "\x00" + methodID.String()
 }
 
+// maxNamespaces is the number of namespace indexes: a NamespaceIndex is a
+// UInt16 (Part 3 §8.2.2).
+const maxNamespaces = math.MaxUint16 + 1
+
 // AddNamespace registers a namespace with the server and assigns it a namespace index.
 //
 // If the namespace is already registered, its existing index is returned.
+// When the server already has 65536 namespaces, the most a UInt16
+// NamespaceIndex can address, the namespace is not registered, its ID is not
+// set, an error is logged and AddNamespace returns -1.
 // Use [NewNodeNameSpace] or [NewMapNamespace] which call this automatically.
 func (s *Server) AddNamespace(ns NameSpace) int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if idx := slices.Index(s.namespaces, ns); idx >= 0 {
 		return idx
+	}
+	if len(s.namespaces) >= maxNamespaces {
+		s.cfg.logger.Error("server: too many namespaces, namespace not added", "name", ns.Name(), "max", maxNamespaces)
+		return -1
 	}
 	ns.SetID(uint16(len(s.namespaces)))
 	s.namespaces = append(slices.Clip(s.namespaces), ns)

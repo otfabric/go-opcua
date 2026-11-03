@@ -3,6 +3,9 @@
 package server
 
 import (
+	"bytes"
+	"log/slog"
+	"strings"
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
@@ -223,4 +226,62 @@ func TestImportNodeSet_StandardValues(t *testing.T) {
 		n++
 	}
 	require.Greater(t, n, 1000)
+}
+
+// rangeNodeSet has a ValueRank and access levels outside their types.
+const rangeNodeSet = `<?xml version="1.0" encoding="utf-8"?>
+<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+  <NamespaceUris><Uri>urn:test:ranges</Uri></NamespaceUris>
+  <UAVariable NodeId="ns=1;i=7001" BrowseName="1:Wide" DataType="i=6" ValueRank="4294967297" AccessLevel="259" UserAccessLevel="256">
+    <DisplayName>Wide</DisplayName>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=7002" BrowseName="1:Low" DataType="i=6" ValueRank="-4" AccessLevel="255" UserAccessLevel="1">
+    <DisplayName>Low</DisplayName>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=7003" BrowseName="1:Any" DataType="i=6" ValueRank="-3">
+    <DisplayName>Any</DisplayName>
+  </UAVariable>
+</UANodeSet>`
+
+// TestImportNodeSetXML_OutOfRange checks that a ValueRank outside Int32 or
+// below -3 and an AccessLevel or UserAccessLevel above a Byte (Part 3
+// §5.6.2) are ignored with a warning, the way invalid ArrayDimensions are,
+// instead of being truncated.
+func TestImportNodeSetXML_OutOfRange(t *testing.T) {
+	srv := newTestServer()
+	var logs bytes.Buffer
+	srv.cfg.logger = slog.New(slog.NewTextHandler(&logs, nil))
+	require.NoError(t, srv.ImportNodeSetXML([]byte(rangeNodeSet)))
+
+	value := func(i uint32, a ua.AttributeID) (any, bool) {
+		t.Helper()
+		n := srv.Node(ua.NewNumericNodeID(1, i))
+		require.NotNil(t, n, "ns=1;i=%d", i)
+		v, err := n.Attribute(a)
+		if err != nil {
+			return nil, false
+		}
+		return v.Value.Value.Value(), true
+	}
+
+	vr, _ := value(7001, ua.AttributeIDValueRank)
+	require.Equal(t, int32(-1), vr, "ValueRank 2^32+1 falls back to Scalar")
+	_, ok := value(7001, ua.AttributeIDAccessLevel)
+	require.False(t, ok, "AccessLevel 259 is not cut to 3")
+	_, ok = value(7001, ua.AttributeIDUserAccessLevel)
+	require.False(t, ok, "UserAccessLevel 256 is not cut to 0")
+
+	vr, _ = value(7002, ua.AttributeIDValueRank)
+	require.Equal(t, int32(-1), vr, "ValueRank -4 falls back to Scalar")
+	al, _ := value(7002, ua.AttributeIDAccessLevel)
+	require.Equal(t, byte(255), al)
+	ual, _ := value(7002, ua.AttributeIDUserAccessLevel)
+	require.Equal(t, byte(1), ual)
+
+	vr, _ = value(7003, ua.AttributeIDValueRank)
+	require.Equal(t, int32(-3), vr)
+
+	out := logs.String()
+	require.Equal(t, 2, strings.Count(out, "nodeset import: invalid value rank"), out)
+	require.Equal(t, 2, strings.Count(out, "nodeset import: invalid access level"), out)
 }
