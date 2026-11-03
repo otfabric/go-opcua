@@ -52,8 +52,14 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		return nil, st
 	}
 
-	// New session
-	sess := s.srv.sb.NewSession()
+	// New session. The server keeps a bounded number of sessions; closed
+	// and timed-out ones have left the broker and do not count
+	// (Part 4 §5.6.2: Bad_TooManySessions).
+	sess := s.srv.sb.newSessionWithin(s.srv.cfg.sessionLimit())
+	if sess == nil {
+		s.srv.cfg.logger.Warn("CreateSession rejected: too many sessions", "max_sessions", s.srv.cfg.sessionLimit())
+		return nil, ua.StatusBadTooManySessions
+	}
 
 	// Ensure session timeout is reasonable
 	sessionTimeout := time.Duration(req.RequestedSessionTimeout) * time.Millisecond

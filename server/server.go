@@ -187,6 +187,12 @@ type serverConfig struct {
 	responseWriteTimeout time.Duration
 	maxPendingResponses  int
 
+	// maxSessions, maxSubscriptions and maxSubscriptionsPerSession are the
+	// limits of session_limits.go. Zero selects the default.
+	maxSessions                int
+	maxSubscriptions           int
+	maxSubscriptionsPerSession int
+
 	logger *slog.Logger
 
 	// wss and https are the WebSocket and HTTPS transports (transport.go).
@@ -391,6 +397,7 @@ func New(opts ...Option) (*Server, error) {
 	}
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
+	s.bindSessionCapabilities()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()

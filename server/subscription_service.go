@@ -134,6 +134,11 @@ func (s *SubscriptionService) CreateSubscription(ctx context.Context, sc *uasc.S
 	if s.closed {
 		return nil, ua.StatusBadShutdown
 	}
+	// Bad_TooManySubscriptions: the server or the session has reached its
+	// maximum number of subscriptions (Part 4 §5.13.2).
+	if len(s.Subs) >= s.srv.cfg.subscriptionLimit() || s.subscriptionsOfLocked(sess) >= s.srv.cfg.subscriptionsPerSessionLimit() {
+		return nil, ua.StatusBadTooManySubscriptions
+	}
 
 	newsubid := s.nextSubscriptionID()
 
@@ -564,6 +569,9 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 
 	s.Mu.Lock()
 
+	// The subscriptions the requesting session owns, which it may not hold
+	// more of than WithMaxSubscriptionsPerSession allows.
+	owned := s.subscriptionsOfLocked(requester)
 	results := make([]*ua.TransferResult, len(req.SubscriptionIDs))
 	for i, subID := range req.SubscriptionIDs {
 		sub, ok := s.Subs[subID]
@@ -586,6 +594,16 @@ func (s *SubscriptionService) TransferSubscriptions(ctx context.Context, sc *uas
 			continue
 		}
 		if owner != requester {
+			// The per-session limit of CreateSubscription also bounds
+			// what a session takes over; Part 4 §5.13.7 lists no result
+			// for it, so the one CreateSubscription returns is used.
+			if owned >= s.srv.cfg.subscriptionsPerSessionLimit() {
+				results[i] = &ua.TransferResult{
+					StatusCode: ua.StatusBadTooManySubscriptions,
+				}
+				continue
+			}
+			owned++
 			left = append(left, moved{sub: sub, from: owner, channel: ownerChannel})
 			requester.dropStatusChanges(sub.ID)
 			// Queued before the subscription leaves: a Publish request of
