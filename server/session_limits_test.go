@@ -197,8 +197,9 @@ func TestServerCapabilities_SessionLimits(t *testing.T) {
 }
 
 // TestSessionBroker_ReclaimsAbandoned: a full broker makes room by closing
-// the least recently used session whose secure channel is closed. Sessions on
-// open channels, and on virtual channels (id 0), are never closed for it.
+// the least recently used session whose secure channel is closed, and then
+// the least recently used one on a virtual channel (id 0) that has been idle
+// for virtualIdleReclaim. Sessions on open channels are never closed for it.
 func TestSessionBroker_ReclaimsAbandoned(t *testing.T) {
 	var removed []*session
 	var reasons []SessionCloseReason
@@ -221,7 +222,7 @@ func TestSessionBroker_ReclaimsAbandoned(t *testing.T) {
 	newer := add(2)
 	live := add(3)
 	now := time.Now()
-	virtual.touchAt(now.Add(-time.Hour))
+	virtual.touchAt(now)
 	older.touchAt(now.Add(time.Second))
 	newer.touchAt(now.Add(2 * time.Second))
 	live.touchAt(now.Add(-time.Hour))
@@ -252,6 +253,16 @@ func TestSessionBroker_ReclaimsAbandoned(t *testing.T) {
 	require.Nil(t, s)
 	require.Nil(t, reclaimed)
 	require.Equal(t, 4, sb.count())
+
+	// The virtual session has been idle long enough, and its client
+	// cannot be told from one that left: it goes, before the live one used
+	// even less recently.
+	virtual.lastActivity.Store(int64(now.Add(-virtualIdleReclaim - time.Second).Sub(monoEpoch)))
+	s, reclaimed = sb.newSessionWithin(4, isOpen)
+	require.NotNil(t, s)
+	require.Same(t, virtual, reclaimed)
+	s.channelID.Store(6)
+	open[6] = true
 
 	// A request on a new channel moves the session there.
 	sb.touchTokenOn(live.AuthTokenID, 9)

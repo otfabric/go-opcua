@@ -64,9 +64,10 @@ type session struct {
 	timeout      atomic.Int64
 
 	// channelID is the SecureChannelId of the session's last request, 0
-	// before one or on a virtual channel (opc.https), which does not close.
-	// A session whose channel closed is abandoned until its client comes
-	// back; a full server reclaims the one abandoned longest
+	// before one or on a virtual channel (opc.https, UA JSON over opc.wss),
+	// which does not close. A session whose channel closed is abandoned
+	// until its client comes back; a full server reclaims the one abandoned
+	// longest, or else the longest idle one on a virtual channel
 	// (newSessionWithin).
 	channelID atomic.Uint32
 
@@ -247,8 +248,10 @@ func (sb *sessionBroker) NewSession() *session {
 // sessionTimeoutMax), so without this clients on an unreliable network
 // would fill the limit with sessions nobody can use and lock everyone out.
 // A session on an open channel is never reclaimed: that would let anyone
-// who can create sessions close the sessions of others. It returns a nil
-// session when the broker is full of those.
+// who can create sessions close the sessions of others. A session on a
+// virtual channel, which has no connection to close, is reclaimed once it
+// has been unused for virtualIdleReclaim, after the sessions of closed
+// channels. It returns a nil session when the broker is full of neither.
 func (sb *sessionBroker) newSessionWithin(limit int, channelOpen func(id uint32) bool) (created, reclaimed *session) {
 	ns := uint16(1)
 	if sb.idNamespace != nil {
@@ -287,24 +290,43 @@ func (sb *sessionBroker) newSessionWithin(limit int, channelOpen func(id uint32)
 	return s, reclaimed
 }
 
-// abandonedLocked returns the key of the session whose secure channel is
-// closed and that was used least recently, "" for none. sb.mu is held.
+// virtualIdleReclaim is how long a session on a virtual channel must have
+// been unused before a full broker may reclaim it. A virtual channel
+// (opc.https, opc.wss with UA JSON) has no connection that closes, so an
+// abandoned session there looks like an idle one. A client that keeps its
+// session uses it more often than this: with Publish requests, or with the
+// reads it sends to keep a session without subscriptions alive.
+const virtualIdleReclaim = 30 * time.Second
+
+// abandonedLocked returns the key of the session to reclaim, "" for none:
+// the least recently used one whose secure channel is closed, or else the
+// least recently used one on a virtual channel (channelID 0) that has been
+// idle for virtualIdleReclaim. sb.mu is held.
 func (sb *sessionBroker) abandonedLocked(channelOpen func(id uint32) bool) string {
 	if channelOpen == nil {
 		return ""
 	}
-	var key string
-	var oldest int64
+	now := time.Now()
+	var closedKey, idleKey string
+	var closedAt, idleAt int64
 	for k, s := range sb.s {
+		at := s.lastActivity.Load()
 		id := s.channelID.Load()
-		if id == 0 || channelOpen(id) {
-			continue
-		}
-		if at := s.lastActivity.Load(); key == "" || at < oldest {
-			key, oldest = k, at
+		switch {
+		case id != 0 && !channelOpen(id):
+			if closedKey == "" || at < closedAt {
+				closedKey, closedAt = k, at
+			}
+		case id == 0 && s.idle(now) >= virtualIdleReclaim:
+			if idleKey == "" || at < idleAt {
+				idleKey, idleAt = k, at
+			}
 		}
 	}
-	return key
+	if closedKey != "" {
+		return closedKey
+	}
+	return idleKey
 }
 
 func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
