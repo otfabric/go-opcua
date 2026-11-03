@@ -63,6 +63,13 @@ type session struct {
 	lastActivity atomic.Int64
 	timeout      atomic.Int64
 
+	// channelID is the SecureChannelId of the session's last request, 0
+	// before one or on a virtual channel (opc.https), which does not close.
+	// A session whose channel closed is abandoned until its client comes
+	// back; a full server reclaims the one abandoned longest
+	// (newSessionWithin).
+	channelID atomic.Uint32
+
 	// diag holds the diagnostics of the session (diagnostics.go).
 	diag sessionDiag
 
@@ -225,14 +232,24 @@ func newAuthenticationToken() *ua.NodeID {
 }
 
 func (sb *sessionBroker) NewSession() *session {
-	return sb.newSessionWithin(0)
+	s, _ := sb.newSessionWithin(0, nil)
+	return s
 }
 
 // newSessionWithin is NewSession for a server that keeps at most limit
-// sessions (0: no limit). It returns nil when the broker already keeps that
-// many; the check and the insertion are one step, so concurrent
-// CreateSession requests cannot exceed the limit together.
-func (sb *sessionBroker) newSessionWithin(limit int) *session {
+// sessions (0: no limit). The check and the insertion are one step, so
+// concurrent CreateSession requests cannot exceed the limit together.
+//
+// A full broker makes room by removing the session whose secure channel is
+// no longer open (channelOpen reports false for its channelID) and that was
+// used least recently, and returns it as reclaimed. A client that lost its
+// connection leaves its session behind until the session times out (up to
+// sessionTimeoutMax), so without this clients on an unreliable network
+// would fill the limit with sessions nobody can use and lock everyone out.
+// A session on an open channel is never reclaimed: that would let anyone
+// who can create sessions close the sessions of others. It returns a nil
+// session when the broker is full of those.
+func (sb *sessionBroker) newSessionWithin(limit int, channelOpen func(id uint32) bool) (created, reclaimed *session) {
 	ns := uint16(1)
 	if sb.idNamespace != nil {
 		ns = sb.idNamespace()
@@ -248,15 +265,46 @@ func (sb *sessionBroker) newSessionWithin(limit int) *session {
 	s.touch()
 
 	sb.mu.Lock()
-	defer sb.mu.Unlock()
 	if sb.closed {
-		return s
+		sb.mu.Unlock()
+		return s, nil
 	}
 	if limit > 0 && len(sb.s) >= limit {
-		return nil
+		key := sb.abandonedLocked(channelOpen)
+		if key == "" {
+			sb.mu.Unlock()
+			return nil, nil
+		}
+		reclaimed = sb.s[key]
+		delete(sb.s, key)
 	}
 	sb.s[s.AuthTokenID.String()] = s
-	return s
+	sb.mu.Unlock()
+	// Told outside the lock, like reapExpired.
+	if reclaimed != nil && sb.removed != nil {
+		sb.removed(reclaimed, SessionClosedByServer)
+	}
+	return s, reclaimed
+}
+
+// abandonedLocked returns the key of the session whose secure channel is
+// closed and that was used least recently, "" for none. sb.mu is held.
+func (sb *sessionBroker) abandonedLocked(channelOpen func(id uint32) bool) string {
+	if channelOpen == nil {
+		return ""
+	}
+	var key string
+	var oldest int64
+	for k, s := range sb.s {
+		id := s.channelID.Load()
+		if id == 0 || channelOpen(id) {
+			continue
+		}
+		if at := s.lastActivity.Load(); key == "" || at < oldest {
+			key, oldest = k, at
+		}
+	}
+	return key
 }
 
 func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
@@ -360,14 +408,20 @@ func (sb *sessionBroker) Session(authToken *ua.NodeID) *session {
 // and requests are handled one at a time, so a request waiting behind slow
 // ones must already keep its session alive.
 func (sb *sessionBroker) touchToken(authToken *ua.NodeID) {
+	sb.touchTokenOn(authToken, 0)
+}
+
+// touchTokenOn is touchToken for a request that arrived on the secure
+// channel channelID (0: a virtual channel); the session is then on it.
+func (sb *sessionBroker) touchTokenOn(authToken *ua.NodeID, channelID uint32) {
 	if authToken == nil {
 		return
 	}
 	sb.mu.Lock()
 	s := sb.s[authToken.String()]
 	sb.mu.Unlock()
-	if s != nil {
-		s.touchIfAlive(time.Now())
+	if s != nil && s.touchIfAlive(time.Now()) && channelID != 0 {
+		s.channelID.Store(channelID)
 	}
 }
 

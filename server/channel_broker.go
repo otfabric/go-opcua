@@ -24,7 +24,22 @@ type inbound struct {
 	reqID uint32
 	req   ua.Request
 	sc    *uasc.SecureChannel
-	w     *channelWriter
+	// secureChannelID is the SecureChannelId of sc. It is taken when the
+	// request arrives: by the time it is handled the channel may have
+	// closed and left the broker.
+	secureChannelID uint32
+	w               *channelWriter
+}
+
+// secureChannelIDKey is the context key of the SecureChannelId of the
+// request being handled (requestChannelID).
+type secureChannelIDKey struct{}
+
+// requestChannelID returns the SecureChannelId of the request ctx belongs
+// to, 0 for a virtual channel (opc.https) or no request.
+func requestChannelID(ctx context.Context) uint32 {
+	id, _ := ctx.Value(secureChannelIDKey{}).(uint32)
+	return id
 }
 
 type channelBroker struct {
@@ -72,13 +87,20 @@ type channelBroker struct {
 
 	// onRequest is called with the header of every request as it arrives,
 	// before it waits for the request handler (session activity).
-	onRequest func(*ua.RequestHeader)
+	onRequest func(secureChannelID uint32, hdr *ua.RequestHeader)
 
 	// channelOpened is told about every OpenSecureChannel request of a
 	// channel and the status it was answered with, channelClosed about the
 	// end of a channel that was opened (session_audit.go).
 	channelOpened func(sc *uasc.SecureChannel, id uint32, req *ua.OpenSecureChannelRequest, status ua.StatusCode)
 	channelClosed func(id uint32)
+}
+
+// channelOpen reports whether the broker still serves the secure channel id.
+func (c *channelBroker) channelOpen(id uint32) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.s[id] != nil
 }
 
 // channelID returns the SecureChannelId of sc; 0 for a channel the broker
@@ -300,7 +322,7 @@ func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *
 
 		if c.onRequest != nil {
 			if hdr := msg.Request().Header(); hdr != nil {
-				c.onRequest(hdr)
+				c.onRequest(secureChannelID, hdr)
 			}
 		}
 
@@ -311,7 +333,7 @@ func (c *channelBroker) receive(ctx context.Context, sc *uasc.SecureChannel, w *
 		if !w.acquire(ctx) {
 			return
 		}
-		queue <- inbound{reqID: msg.RequestID, req: msg.Request(), sc: sc, w: w}
+		queue <- inbound{reqID: msg.RequestID, req: msg.Request(), sc: sc, secureChannelID: secureChannelID, w: w}
 	}
 }
 

@@ -689,7 +689,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cb.endpointURL = s.url
 	}
 	s.cb.localIdentity = s.cfg.localIdentity
-	s.cb.onRequest = func(hdr *ua.RequestHeader) { s.sb.touchToken(hdr.AuthenticationToken) }
+	s.cb.onRequest = func(id uint32, hdr *ua.RequestHeader) { s.sb.touchTokenOn(hdr.AuthenticationToken, id) }
 	s.cb.channelOpened = s.channelOpened
 	s.cb.channelClosed = s.channelClosed
 	s.cb.writeTimeout = s.cfg.responseWriteTimeout
@@ -881,7 +881,7 @@ func (s *Server) monitorConnections(ctx context.Context) {
 		// Write and the data change it triggers, for example, are applied
 		// in request order). What must not happen here is waiting for a
 		// client, so the response is only queued on the channel's writer.
-		resp := s.serve(ctx, in.sc, in.reqID, in.req)
+		resp := s.serve(context.WithValue(ctx, secureChannelIDKey{}, in.secureChannelID), in.sc, in.reqID, in.req)
 		if resp == nil {
 			// answered later (Publish): the request is no longer in flight
 			in.w.release()

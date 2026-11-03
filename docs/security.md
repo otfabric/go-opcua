@@ -899,6 +899,7 @@ A client can open sessions and subscriptions before it has proven anything: Crea
 The defaults are those of open62541 (`maxSessions`, `maxSubscriptions`, `maxSubscriptionsPerSession`); UA-.NETStandard also allows 100 sessions. Zero or a negative value selects the default; there is no unlimited setting.
 
 - Every session counts, activated or not, so a client that never activates its sessions still runs into the limit. A session frees its place when it is closed (CloseSession, a failed CreateSession) or when its revised session timeout expires.
+- A client that loses its connection leaves its session behind until the session timeout expires (up to 30 minutes). A full server therefore closes the session whose secure channel has been gone longest to make room for a new one. Sessions on an open channel, and on the virtual channel of opc.https, are never closed for this, so creating sessions cannot push other clients out.
 - Subscriptions of a session closed with `DeleteSubscriptions=false` keep counting against `WithMaxSubscriptions` until their lifetime expires or another session takes them over, but no longer against any session.
 - The limits are published in ServerCapabilities as `MaxSessions`, `MaxSubscriptions` and `MaxSubscriptionsPerSession` (Part 5 §6.3.2), so clients can read them.
 
