@@ -1820,7 +1820,9 @@ func parseQualifiedPath(path string) ([]*ua.QualifiedName, error) {
 		if name == "" {
 			return nil, fmt.Errorf("opcua: qualified path segment %d has empty name after namespace", i+1)
 		}
-		ns64, err := strconv.ParseUint(strings.TrimSpace(nsStr), 10, 32)
+		// The namespace index is a UInt16 (Part 6 §5.2.2.13); parsing it with
+		// 16 bits rejects a larger index instead of truncating it.
+		ns64, err := strconv.ParseUint(strings.TrimSpace(nsStr), 10, 16)
 		if err != nil {
 			return nil, fmt.Errorf("opcua: qualified path segment %d namespace %q: %w", i+1, nsStr, err)
 		}

@@ -5,6 +5,8 @@ package uasc
 import (
 	"bytes"
 	stderrors "errors"
+	"math"
+	"strconv"
 	"testing"
 	"time"
 
@@ -165,4 +167,42 @@ func TestMessage_DecodeErrors(t *testing.T) {
 		_, err := m.Decode(bad)
 		require.Equal(t, ua.StatusBadServiceUnsupported, err)
 	})
+}
+
+// TestMessageSize covers the bound on the UInt32 MessageSize of a chunk
+// (Part 6 §6.7.2.2) without allocating a body of 4 GiB.
+func TestMessageSize(t *testing.T) {
+	t.Parallel()
+	if strconv.IntSize < 64 {
+		t.Skip("a body of 4 GiB has no int length here")
+	}
+	// Kept out of constant expressions so that the file builds where int
+	// has 32 bits.
+	maxU32 := uint64(math.MaxUint32)
+	got, err := messageSize(symmetricChunkHeaderSize, 100)
+	require.NoError(t, err)
+	require.EqualValues(t, 124, got)
+
+	got, err = messageSize(symmetricChunkHeaderSize, int(maxU32-symmetricChunkHeaderSize))
+	require.NoError(t, err)
+	require.EqualValues(t, uint32(math.MaxUint32), got)
+
+	for _, tc := range []struct{ header, body int }{
+		{symmetricChunkHeaderSize, int(maxU32 - symmetricChunkHeaderSize + 1)},
+		{12 + 100, int(maxU32)},
+		{symmetricChunkHeaderSize, -1},
+	} {
+		_, err := messageSize(tc.header, tc.body)
+		require.ErrorIs(t, err, errors.ErrMessageTooLarge, "header %d body %d", tc.header, tc.body)
+	}
+}
+
+// TestTimeoutHint: the TimeoutHint is a UInt32 of milliseconds (Part 4
+// §7.33); timeouts outside it are clamped, not wrapped.
+func TestTimeoutHint(t *testing.T) {
+	t.Parallel()
+	require.EqualValues(t, 1500, timeoutHint(1500*time.Millisecond))
+	require.EqualValues(t, 0, timeoutHint(-time.Second))
+	require.EqualValues(t, uint32(math.MaxUint32), timeoutHint(50*24*time.Hour))
+	require.EqualValues(t, uint32(math.MaxUint32), timeoutHint(math.MaxUint32*time.Millisecond))
 }

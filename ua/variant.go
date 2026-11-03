@@ -5,6 +5,7 @@ package ua
 import (
 	"encoding/hex"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"time"
@@ -523,7 +524,14 @@ func sliceDim(val reflect.Value) (typ reflect.Type, dim []int32, count int32, er
 	if err != nil {
 		return nil, nil, 0, err
 	}
-	return typ, append([]int32{int32(val.Len())}, dim...), count * int32(val.Len()), nil
+	// ArrayLength and the dimensions are Int32 (Part 6 §5.2.2.16). Rows
+	// that share one backing slice can make an array too long for an Int32
+	// out of little memory, so the product is computed in 64 bits.
+	total := int64(count) * int64(val.Len())
+	if val.Len() > math.MaxInt32 || total > math.MaxInt32 {
+		return nil, nil, 0, StatusBadEncodingLimitsExceeded
+	}
+	return typ, append([]int32{int32(val.Len())}, dim...), int32(total), nil
 }
 
 // set sets the value and updates the flags according to the type.

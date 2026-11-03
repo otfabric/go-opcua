@@ -120,6 +120,21 @@ func (m *Message) Encode() ([]byte, error) {
 	return chunks[0], nil
 }
 
+// symmetricChunkHeaderSize is the size of the message header, the symmetric
+// security header and the sequence header of a MSG or CLO chunk (Part 6
+// §6.7.2.2 to §6.7.2.4).
+const symmetricChunkHeaderSize = 24
+
+// messageSize returns the MessageSize of a chunk with headerSize bytes of
+// headers and bodySize bytes of body. The MessageSize field is a UInt32
+// (Part 6 §6.7.2.2): a chunk that does not fit in it cannot be sent.
+func messageSize(headerSize, bodySize int) (uint32, error) {
+	if headerSize < 0 || bodySize < 0 || uint64(headerSize)+uint64(bodySize) > math.MaxUint32 {
+		return 0, fmt.Errorf("%w: %d bytes of body", errors.ErrMessageTooLarge, bodySize)
+	}
+	return uint32(headerSize + bodySize), nil
+}
+
 func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 	dataBody := ua.NewBuffer(nil)
 	dataBody.WriteStruct(m.TypeID)
@@ -136,7 +151,14 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 		maxBodySize = 1 << 12
 	}
 
-	nrChunks := uint32(dataBody.Len())/(maxBodySize) + 1
+	// The final chunk carries the 24 bytes of the message, symmetric
+	// security and sequence headers; the asymmetric header of an OPN is
+	// checked below.
+	bodySize, err := messageSize(symmetricChunkHeaderSize, dataBody.Len())
+	if err != nil {
+		return nil, err
+	}
+	nrChunks := (bodySize-symmetricChunkHeaderSize)/maxBodySize + 1
 	chunks := make([][]byte, nrChunks)
 
 	switch m.MessageType {
@@ -149,7 +171,11 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 			return nil, partialHeader.Error()
 		}
 
-		m.MessageSize = uint32(12 + partialHeader.Len() + dataBody.Len())
+		size, err := messageSize(12+partialHeader.Len(), dataBody.Len())
+		if err != nil {
+			return nil, err
+		}
+		m.MessageSize = size
 		buf := ua.NewBuffer(nil)
 		buf.WriteStruct(m.Header)
 		buf.Write(partialHeader.Bytes())
@@ -175,7 +201,11 @@ func (m *Message) EncodeChunks(maxBodySize uint32) ([][]byte, error) {
 		}
 
 		m.ChunkType = ChunkTypeFinal
-		m.MessageSize = uint32(24 + dataBody.Len())
+		size, err := messageSize(symmetricChunkHeaderSize, dataBody.Len())
+		if err != nil {
+			return nil, err
+		}
+		m.MessageSize = size
 		chunk := ua.NewBuffer(nil)
 		chunk.WriteStruct(m.Header)
 		chunk.WriteStruct(m.SymmetricSecurityHeader)

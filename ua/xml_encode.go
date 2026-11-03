@@ -163,7 +163,14 @@ func (e *xmlEncoder) content(x *xmlElem, v reflect.Value) error {
 		if v.CanInt() {
 			n = v.Int()
 		} else {
-			n = int64(v.Uint())
+			u := v.Uint()
+			if u > math.MaxInt64 {
+				// Only an unsigned 64-bit option set gets here: bit 63
+				// would turn into a sign, and option sets have no symbols.
+				x.text = strconv.FormatUint(u, 10)
+				return nil
+			}
+			n = int64(u)
 		}
 		x.text = strconv.FormatInt(n, 10)
 		if name, ok := codecTypes.enumInfo(v.Type()).symbol(n); ok {

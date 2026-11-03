@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"encoding/binary"
 	"fmt"
+	"math"
 
 	"github.com/otfabric/go-opcua/errors"
 
@@ -78,7 +79,12 @@ func (s *SecureChannel) EncryptUserPassword(policyURI, password string, cert, no
 		return nil, "", err
 	}
 
+	// The legacy secret format starts with the length of the password and
+	// nonce as a UInt32 (Part 4 §7.41.2.2); the decoders take it as an Int32.
 	l := len(password) + len(nonce)
+	if l > math.MaxInt32 {
+		return nil, "", fmt.Errorf("%w: password and nonce of %d bytes", errors.ErrArrayTooLarge, l)
+	}
 	secret := make([]byte, 4)
 	binary.LittleEndian.PutUint32(secret, uint32(l))
 	secret = append(secret, []byte(password)...)

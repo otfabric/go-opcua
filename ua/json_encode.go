@@ -195,7 +195,14 @@ func (e *jsonEncoder) enum(v reflect.Value) error {
 	if v.CanInt() {
 		n = v.Int()
 	} else {
-		n = int64(v.Uint())
+		u := v.Uint()
+		if u > math.MaxInt64 {
+			// Only an unsigned 64-bit option set gets here: bit 63 would
+			// turn into a sign, and option sets have no symbols.
+			e.uint(u)
+			return nil
+		}
+		n = int64(u)
 	}
 	if e.symbolic() {
 		if name, ok := codecTypes.enumInfo(v.Type()).symbol(n); ok {

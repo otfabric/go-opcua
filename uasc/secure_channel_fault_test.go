@@ -434,6 +434,23 @@ func TestReceive_ChunkLimits(t *testing.T) {
 		require.ErrorIs(t, p.tryRead(context.Background(), 1), errors.ErrMessageTooLarge)
 		p.read(t, 2) // the channel still works
 	})
+	t.Run("message size while collecting", func(t *testing.T) {
+		// A request of several chunks to a server that takes 64 KiB: it is
+		// refused at the chunk that goes over the limit, before the final
+		// chunk is merged, and nothing stays buffered for it.
+		ack := *uacp.DefaultServerACK
+		ack.MaxMessageSize = 64 * 1024
+		p := newCovPair(t, covNone, covOpts{serverACK: &ack, handle: big})
+		require.NoError(t, p.client.SendRequest(context.Background(), covReadRequest(16000), nil, nil))
+		msg := p.waitSrvErr(t, errors.ErrMessageTooLarge)
+		require.NotZero(t, msg.RequestID, "the error belongs to the request")
+		require.ErrorContains(t, msg.Err, "more than 65536 bytes", "refused while the chunks arrive")
+		p.server.chunksMu.Lock()
+		for id, n := range p.server.chunkBytes {
+			require.LessOrEqual(t, n, 64*1024, "request %d", id)
+		}
+		p.server.chunksMu.Unlock()
+	})
 }
 
 // TestReceive_ContextDone does not read once the context is done.

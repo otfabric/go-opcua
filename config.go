@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"log/slog"
+	"math"
 	"math/rand"
 	"net"
 	"net/http"
@@ -201,10 +202,25 @@ func ReconnectInterval(d time.Duration) Option {
 }
 
 // Lifetime sets the lifetime of the secure channel in milliseconds.
+// The RequestedLifetime is a UInt32 (Part 4 §5.5.2.2): a negative duration
+// is sent as 0 and one longer than about 49.7 days as the largest value.
 func Lifetime(d time.Duration) Option {
 	return func(cfg *Config) error {
-		cfg.sechan.Lifetime = uint32(d / time.Millisecond)
+		cfg.sechan.Lifetime = clampMillis(d)
 		return nil
+	}
+}
+
+// clampMillis returns d in whole milliseconds, limited to the range of a
+// UInt32.
+func clampMillis(d time.Duration) uint32 {
+	switch ms := d / time.Millisecond; {
+	case ms < 0:
+		return 0
+	case ms > math.MaxUint32:
+		return math.MaxUint32
+	default:
+		return uint32(ms)
 	}
 }
 

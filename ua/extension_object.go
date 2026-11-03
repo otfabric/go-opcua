@@ -3,9 +3,12 @@
 package ua
 
 import (
+	"fmt"
 	"log/slog"
+	"math"
 	"reflect"
 
+	"github.com/otfabric/go-opcua/errors"
 	"github.com/otfabric/go-opcua/id"
 )
 
@@ -119,6 +122,10 @@ func (e *ExtensionObject) Encode() ([]byte, error) {
 	}
 	if body.Error() != nil {
 		return nil, body.Error()
+	}
+	// The body is a ByteString (Part 6 §5.2.2.15), whose length is an Int32.
+	if body.Len() > math.MaxInt32 {
+		return nil, fmt.Errorf("%w: extension object body of %d bytes", errors.ErrArrayTooLarge, body.Len())
 	}
 	buf.WriteUint32(uint32(body.Len()))
 	buf.Write(body.Bytes())

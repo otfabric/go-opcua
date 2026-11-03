@@ -799,14 +799,17 @@ func (c *Conn) Send(typ string, msg interface{}) error {
 		return fmt.Errorf("uacp: encode msg failed: %w", err)
 	}
 
+	// Compared before the conversion: a size that does not fit in the UInt32
+	// MessageSize must not wrap into one that passes the check.
+	size := len(body) + hdrlen
+	if size > int(c.ack.SendBufSize) {
+		return fmt.Errorf("%w: %d > %d bytes", errors.ErrMessageTooLarge, size, c.ack.SendBufSize)
+	}
+
 	h := Header{
 		MessageType: typ[:3],
 		ChunkType:   typ[3],
-		MessageSize: uint32(len(body) + hdrlen),
-	}
-
-	if h.MessageSize > c.ack.SendBufSize {
-		return fmt.Errorf("%w: %d > %d bytes", errors.ErrMessageTooLarge, h.MessageSize, c.ack.SendBufSize)
+		MessageSize: uint32(size),
 	}
 
 	hdr, err := h.Encode()

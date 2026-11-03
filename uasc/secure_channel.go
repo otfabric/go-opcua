@@ -128,6 +128,11 @@ type SecureChannel struct {
 	// chunks maintains a temporary list of chunks for a given request ID
 	chunks   map[uint32][]*MessageChunk
 	chunksMu sync.Mutex
+	// chunkBytes is the number of body bytes in chunks for a request ID, so
+	// that a message larger than MaxMessageSize is refused while its chunks
+	// arrive rather than after all of them have been buffered. It is
+	// guarded by chunksMu.
+	chunkBytes map[uint32]int
 
 	// openingInstance is a temporary var that allows the dispatcher know how to handle a open channel request
 	// note: we only allow a single "open" request in flight at any point in time. The mutex is held for the entire
@@ -517,7 +522,7 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			switch hdr.ChunkType {
 			case 'A':
-				delete(s.chunks, reqID)
+				s.dropChunks(reqID)
 				s.chunksMu.Unlock()
 
 				msga := new(MessageAbort)
@@ -531,11 +536,28 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			case 'C':
 				s.chunks[reqID] = append(s.chunks[reqID], chunk)
-				if n := len(s.chunks[reqID]); uint32(n) > s.c.MaxChunkCount() {
-					delete(s.chunks, reqID)
+				if n := len(s.chunks[reqID]); n > int(s.c.MaxChunkCount()) {
+					s.dropChunks(reqID)
 					s.chunksMu.Unlock()
 					msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrTooManyChunks, n, s.c.MaxChunkCount())
 					return msg
+				}
+				// MaxMessageSize bounds the unencrypted body of the whole
+				// message (Part 6 §7.1.2.3, §7.1.2.4), so the chunks of one
+				// that is already too large are not collected any further.
+				// A limit of zero keeps the check after merging.
+				if limit := s.c.MaxMessageSize(); limit > 0 {
+					if s.chunkBytes == nil {
+						s.chunkBytes = make(map[uint32]int)
+					}
+					total := s.chunkBytes[reqID] + len(chunk.Data)
+					if total > int(limit) {
+						s.dropChunks(reqID)
+						s.chunksMu.Unlock()
+						msg.Err = fmt.Errorf("%w: more than %d bytes", errors.ErrMessageTooLarge, limit)
+						return msg
+					}
+					s.chunkBytes[reqID] = total
 				}
 				s.chunksMu.Unlock()
 				continue
@@ -543,14 +565,14 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 
 			// merge chunks
 			all := append(s.chunks[reqID], chunk)
-			delete(s.chunks, reqID)
+			s.dropChunks(reqID)
 
 			s.chunksMu.Unlock()
 
 			b := mergeChunks(all)
 
-			if uint32(len(b)) > s.c.MaxMessageSize() {
-				msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrMessageTooLarge, uint32(len(b)), s.c.MaxMessageSize())
+			if len(b) > int(s.c.MaxMessageSize()) {
+				msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrMessageTooLarge, len(b), s.c.MaxMessageSize())
 				return msg
 			}
 
@@ -1776,6 +1798,13 @@ func (s *SecureChannel) timeNow() time.Time {
 		return s.time()
 	}
 	return time.Now()
+}
+
+// dropChunks forgets the chunks collected for reqID. The caller holds
+// chunksMu.
+func (s *SecureChannel) dropChunks(reqID uint32) {
+	delete(s.chunks, reqID)
+	delete(s.chunkBytes, reqID)
 }
 
 func mergeChunks(chunks []*MessageChunk) []byte {
