@@ -18,7 +18,7 @@ jobs:
     uses: otfabric/.github/.github/workflows/go-ci.yml@v3.3.0
     with:
       codecov-name: go-opcua
-      policy-version: v1.4.1
+      policy-version: v1.4.2
       go-versions: '["1.26","1.27"]'
       run-govulncheck: true
       # Measured 95.4 % with the coverpkg below (go-ci method). The
