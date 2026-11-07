@@ -1636,10 +1636,12 @@ ExponentialBackoffConfig provides full control over exponential back-off retry b
 
 ```go
 type InvalidResponseTypeError struct {
-	Got  string
-	Want string
+	Got  string // the Go type of the response received
+	Want string // the Go type of the response the request expects
 }
 ```
+
+InvalidResponseTypeError reports that the server answered a request with a response of another service type than the request expects. Got and Want are the Go types of the received and the expected response. It matches [errors.ErrInvalidResponseType](https://pkg.go.dev/github.com/otfabric/go-opcua/errors#ErrInvalidResponseType) with errors.Is.
 
 #### func (InvalidResponseTypeError) Error
 
@@ -1647,11 +1649,15 @@ type InvalidResponseTypeError struct {
 func (e *InvalidResponseTypeError) Error() string
 ```
 
+Error returns the message, naming both response types.
+
 #### func (InvalidResponseTypeError) Is
 
 ```go
 func (e *InvalidResponseTypeError) Is(target error) bool
 ```
+
+Is reports whether target is [errors.ErrInvalidResponseType](https://pkg.go.dev/github.com/otfabric/go-opcua/errors#ErrInvalidResponseType).
 
 ### type Node
 

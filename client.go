@@ -2309,15 +2309,21 @@ func send[T any](ctx context.Context, c *Client, req ua.Request) (*T, error) {
 	return res, err
 }
 
+// InvalidResponseTypeError reports that the server answered a request with a
+// response of another service type than the request expects. Got and Want are
+// the Go types of the received and the expected response. It matches
+// [errors.ErrInvalidResponseType] with errors.Is.
 type InvalidResponseTypeError struct {
-	Got  string
-	Want string
+	Got  string // the Go type of the response received
+	Want string // the Go type of the response the request expects
 }
 
+// Error returns the message, naming both response types.
 func (e *InvalidResponseTypeError) Error() string {
 	return fmt.Sprintf("opcua: invalid response: got %s want %s", e.Got, e.Want)
 }
 
+// Is reports whether target is [errors.ErrInvalidResponseType].
 func (e *InvalidResponseTypeError) Is(target error) bool {
 	return target == errors.ErrInvalidResponseType
 }
