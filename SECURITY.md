@@ -13,8 +13,8 @@ Include a clear description, steps to reproduce, and the impact. We will acknowl
 
 | Version | Supported |
 |---------|-----------|
-| 1.31.x | Yes |
-| < 1.31 | No |
+| Latest release | Yes |
+| Older releases | No |
 
 ## Security-related documentation
 
