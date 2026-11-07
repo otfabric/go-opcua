@@ -106,7 +106,9 @@ const (
 	// revised session timeout (Part 4 §5.6.2), e.g. because its connection
 	// was lost and it did not come back.
 	SessionTimedOut
-	// SessionClosedByServer: the server shut down.
+	// SessionClosedByServer: the server shut down, or it was full and closed
+	// the session to make room for a new one: the session's secure channel
+	// had closed and its client had not come back (WithMaxSessions).
 	SessionClosedByServer
 )
 

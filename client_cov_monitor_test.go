@@ -16,6 +16,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testhook"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -314,6 +315,11 @@ func TestClientCovMonitorTriggers(t *testing.T) {
 			rec.waitEvent(t, tt.want)
 			require.NotEqual(t, before, c.Session().SessionID().String(), "a new session is created")
 			require.Len(t, c.SubscriptionIDs(), 1)
+			// The server still had the session the client gave up on; the
+			// client closed it rather than leave it occupying a place.
+			require.Eventually(t, func() bool {
+				return testhook.ServerResourcesOf(ts.srv.Load()).Sessions == 1
+			}, recoveryTimeout, 5*time.Millisecond)
 			readOK()
 		})
 	}

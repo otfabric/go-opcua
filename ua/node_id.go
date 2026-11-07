@@ -3,6 +3,7 @@
 package ua
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/xml"
@@ -385,8 +386,51 @@ func (n *NodeID) Encode() ([]byte, error) {
 	return buf.Bytes(), buf.Error()
 }
 
+// Equal reports whether n and o have the same String form: the same
+// namespace and identifier, a numeric one in any of its encodings. It
+// compares the fields, without building the strings: the server compares
+// NodeIds for every reference it removes.
 func (n *NodeID) Equal(o *NodeID) bool {
+	if n == nil || o == nil {
+		return n == nil && o == nil
+	}
+	if n.ns != o.ns {
+		return false
+	}
+	numeric := func(t NodeIDType) bool {
+		return t == NodeIDTypeTwoByte || t == NodeIDTypeFourByte || t == NodeIDTypeNumeric
+	}
+	nt, ot := n.Type(), o.Type()
+	switch {
+	case numeric(nt) && numeric(ot):
+		return n.nid == o.nid
+	case nt != ot:
+		if numeric(nt) || numeric(ot) || !nodeIDTypeKnown(nt) || !nodeIDTypeKnown(ot) {
+			return n.String() == o.String() // panics for an invalid type, as String does
+		}
+		return false
+	case nt == NodeIDTypeString || nt == NodeIDTypeByteString:
+		return bytes.Equal(n.bid, o.bid)
+	case nt == NodeIDTypeGUID:
+		a, b := n.gid, o.gid
+		if a == nil || b == nil {
+			return a == nil && b == nil
+		}
+		if len(a.Data4) != 8 || len(b.Data4) != 8 {
+			return n.String() == o.String()
+		}
+		return a.Data1 == b.Data1 && a.Data2 == b.Data2 && a.Data3 == b.Data3 && bytes.Equal(a.Data4, b.Data4)
+	}
 	return n.String() == o.String()
+}
+
+// nodeIDTypeKnown reports whether String accepts a NodeId of type t.
+func nodeIDTypeKnown(t NodeIDType) bool {
+	switch t {
+	case NodeIDTypeTwoByte, NodeIDTypeFourByte, NodeIDTypeNumeric, NodeIDTypeString, NodeIDTypeGUID, NodeIDTypeByteString:
+		return true
+	}
+	return false
 }
 
 func (n *NodeID) MarshalJSON() ([]byte, error) {

@@ -501,10 +501,11 @@ func (c *Client) monitor(ctx context.Context) {
 			c.setPublishRecovering(true)
 
 			var (
-				subsToRepublish []uint32            // subscription ids for which to send republish requests
-				subsToRecreate  []uint32            // subscription ids which need to be recreated as new subscriptions
-				availableSeqs   map[uint32][]uint32 // available sequence numbers per subscription
-				activeSubs      int                 // number of active subscriptions to resume/recreate
+				subsToRepublish []uint32                         // subscription ids for which to send republish requests
+				subsToRecreate  []uint32                         // subscription ids which need to be recreated as new subscriptions
+				availableSeqs   map[uint32][]uint32              // available sequence numbers per subscription
+				activeSubs      int                              // number of active subscriptions to resume/recreate
+				fullDelay       = c.cfg.sechan.ReconnectInterval // wait after Bad_TooManySessions
 			)
 
 			for action != none {
@@ -601,15 +602,40 @@ func (c *Client) monitor(ctx context.Context) {
 
 						c.setStateFromMonitor(ctx, Reconnecting)
 
+						// The client gives up on its session. Close it if the
+						// server still has it, or it occupies a place there
+						// until it times out; a server cannot tell that a
+						// session on a transport without connections (opc.https,
+						// opc.wss with UA JSON) was abandoned. Its
+						// subscriptions stay for the transfer below
+						// (Part 4 §5.6.4).
+						if old := c.Session(); old != nil {
+							c.abandonSession(old)
+						}
 						c.setSession(nil)
 
 						c.cfg.logger.Debug("monitor: trying to recreate session")
 						s, err := c.CreateSession(ctx, c.cfg.session)
+						if errors.Is(err, ua.StatusBadTooManySessions) {
+							// The server is full. Ask again later, less often
+							// each time, rather than adding to the load of a
+							// server in trouble.
+							c.cfg.logger.Debug("monitor: server has too many sessions", "retry_in", fullDelay)
+							select {
+							case <-ctx.Done():
+								return
+							case <-time.After(fullDelay):
+							}
+							fullDelay = nextFullDelay(fullDelay)
+							action = createSecureChannel
+							continue
+						}
 						if err != nil {
 							c.cfg.logger.Debug("monitor: recreate session failed", "error", err)
 							action = c.retryReconnect(ctx)
 							continue
 						}
+						fullDelay = c.cfg.sechan.ReconnectInterval
 						if _, err := c.activateSession(ctx, s); err != nil {
 							c.cfg.logger.Debug("monitor: reactivate session failed", "error", err)
 							c.discardSession(s)
@@ -1090,6 +1116,35 @@ func (c *Client) discardSession(s *Session) {
 	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.sechan.RequestTimeout)
 	defer cancel()
 	_ = sc.SendRequest(ctx, &ua.CloseSessionRequest{DeleteSubscriptions: true}, s.resp.AuthenticationToken, nil)
+}
+
+// abandonSession closes the session s that the client gives up on, keeping
+// its subscriptions for a transfer to the next session (Part 4 §5.6.4). This
+// is best effort: the server may have lost the session already.
+func (c *Client) abandonSession(s *Session) {
+	sc := c.SecureChannel()
+	if sc == nil || s.resp == nil {
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), c.cfg.sechan.RequestTimeout)
+	defer cancel()
+	_ = sc.SendRequest(ctx, &ua.CloseSessionRequest{DeleteSubscriptions: false}, s.resp.AuthenticationToken, nil)
+}
+
+// maxFullDelay bounds the wait between the CreateSession requests of a
+// client that a full server refuses (Bad_TooManySessions).
+const maxFullDelay = 30 * time.Second
+
+// nextFullDelay doubles the wait d after Bad_TooManySessions, up to
+// maxFullDelay.
+func nextFullDelay(d time.Duration) time.Duration {
+	if d <= 0 {
+		return time.Second
+	}
+	if d >= maxFullDelay/2 {
+		return maxFullDelay
+	}
+	return 2 * d
 }
 
 // State returns the current connection state.
