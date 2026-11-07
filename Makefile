@@ -7,7 +7,7 @@
 export GOWORK := off
 
 # docsync release of docs-check (DOC-008).
-DOCSYNC_VERSION := v0.2.0
+DOCSYNC_VERSION := v0.3.0
 
 # Core library packages measured by `make coverage` (excludes cmd/, examples/, tests/).
 TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ ./id/ ./internal/stats/ ./internal/mdns/ ./internal/websocket/ ./pubsub/ ./pubsub/uadp/ ./pubsub/jsonmsg/ ./pubsub/transport/ ./pubsub/transport/udp/ ./pubsub/transport/eth/ ./pubsub/transport/mqtt/ ./pubsub/transport/amqp/ ./pubsub/security/ ./pubsub/sks/ ./pubsub/remote/ ./gds/ ./gds/gdsserver/ ./internal/mqtt/ ./internal/amqp/
