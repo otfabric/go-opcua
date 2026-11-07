@@ -165,6 +165,18 @@ certificate management method that failed and its status); the A&C helpers
 of the client (`Acknowledge`, `Suppress2`, ...) return the StatusCode of the
 method call itself.
 
+## Error types
+
+Match these with `errors.As`.
+
+| Type | Meaning |
+|------|---------|
+| `*opcua.InvalidResponseTypeError` | A response of another type than the request expects (`Got`, `Want`); `errors.Is(err, errors.ErrInvalidResponseType)` holds for it |
+| `*monitor.ItemError` | The server rejected one monitored item of a batch (`NodeID`, `StatusCode`); the other items are still monitored. Unwraps to the StatusCode |
+| `*pubsub.ConfigError` | An invalid PubSub configuration (`Path` of the setting, `Msg`); unwraps to `ua.StatusBadConfigurationError` |
+| `*jsonmsg.UnsupportedMessageTypeError` | A well-formed JSON message of a type package `pubsub/jsonmsg` does not decode, or the called function does not handle (`MessageType`) |
+| `*uasc.RequestFault` | How the secure channel reports a service fault that asks for recovery (an invalid session or subscription): the fault (`Err`, which it unwraps to) and the `AuthToken` of the request it answers |
+
 Package documentation: [`errors/doc.go`](errors/doc.go).
 
 ## Wire status codes

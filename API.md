@@ -553,7 +553,7 @@ func (s *Subscription) Stats(ctx context.Context) (*ua.SubscriptionDiagnosticsDa
 
 If the server closes the connection during CreateMonitoredItems (e.g. it does not support event or alarm subscriptions), the error may wrap `io.EOF` with a message suggesting that; use `errors.Is(err, io.EOF)` to detect it.
 
-`Monitor` returns the full server response; individual item results are in `Response.Results`. `ModifyMonitoredItems` adjusts parameters (e.g. sampling interval) on already-monitored items. `SetMonitoringMode` enables or disables sampling for a set of items. `SetTriggering` links items so that one item's data change triggers publishing of dependent items. `Stats` returns the server's subscription diagnostics for this subscription.
+`Monitor` returns the full server response; individual item results are in its `Results` field (`ua.CreateMonitoredItemsResponse`). `ModifyMonitoredItems` adjusts parameters (e.g. sampling interval) on already-monitored items. `SetMonitoringMode` enables or disables sampling for a set of items. `SetTriggering` links items so that one item's data change triggers publishing of dependent items. `Stats` returns the server's subscription diagnostics for this subscription.
 
 **Server queue semantics (v1.3.0+):** `RequestedParameters.QueueSize` is revised to `max(1, requested)` (capped at 100) and returned as `RevisedQueueSize`. When the queue overflows and `QueueSize > 1`, the DataValue Overflow InfoBit is set (`StatusCode` `0x480`). With `DiscardOldest=true`, the newest `QueueSize` samples are kept; with `false`, the oldest `QueueSize-1` samples plus the newest are kept (Part 4 — e.g. writes `1..5` / QS=3 → `[1,2,5]`). `SubscriptionBuilder.Timestamps` is applied to DataChange notifications (same enum as Read).
 
@@ -1773,7 +1773,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithSessionObserver(o SessionObserver)` | Told about client connections and sessions as they begin and end; see [SessionObserver](#sessionobserver) |
 | `WithAccessController(ac AccessController)` | Access controller |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
-| `WithRoleMapper(rm RoleMapper)` | Maps a session to a `ua.UserRole`; used by the default access controller |
+| `WithRoleMapper(rm RoleMapper)` | Maps a session's identity token to its role NodeIDs (`RoleMapper func(token ua.IdentityToken) []*ua.NodeID`); used by the default access controller |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
 | `WithReverseConnect(clientURL string, opts ...ReverseConnectOption)` | Open reverse connections to the client listening at `clientURL`; see [Reverse connect (server)](#reverse-connect-server) |
 | `WebSocketEndPoint(host string, port int)` | Add an `opc.wss://host:port` endpoint (Part 6 §7.5, wss-uasc-uabinary); the server listens on the first one, port 0 picks a free port |
@@ -2816,22 +2816,27 @@ Pull model:
 
 ```go
 func NewPullClient(c *opcua.Client) *PullClient
-func (p *PullClient) Namespace(ctx) (uint16, error)              // the GDS namespace index
-func (p *PullClient) DefaultApplicationGroup(ctx) (*ua.NodeID, error)
-func (p *PullClient) FindApplications(ctx, applicationURI string) ([]*ApplicationRecord, error)
-func (p *PullClient) RegisterApplication(ctx, r *ApplicationRecord) (*ua.NodeID, error)
-func (p *PullClient) UpdateApplication(ctx, r *ApplicationRecord) error
-func (p *PullClient) UnregisterApplication(ctx, applicationID *ua.NodeID) error
-func (p *PullClient) GetApplication(ctx, applicationID *ua.NodeID) (*ApplicationRecord, error)
-func (p *PullClient) QueryApplications(ctx, q *ApplicationQuery) (*ApplicationQueryResult, error)
-func (p *PullClient) QueryServers(ctx, q *ServerQuery) (*ServerQueryResult, error)
-func (p *PullClient) StartSigningRequest(ctx, applicationID, group, certificateType *ua.NodeID, csr []byte) (*ua.NodeID, error)
-func (p *PullClient) StartNewKeyPairRequest(ctx, applicationID *ua.NodeID, r *NewKeyPairRequest) (*ua.NodeID, error)
-func (p *PullClient) FinishRequest(ctx, applicationID, requestID *ua.NodeID) (*IssuedCertificate, error) // Bad_NothingToDo while pending
-func (p *PullClient) WaitForCertificate(ctx, applicationID, requestID *ua.NodeID, interval time.Duration) (*IssuedCertificate, error)
-func (p *PullClient) RevokeCertificate(ctx, applicationID *ua.NodeID, cert []byte) error
-func (p *PullClient) GetCertificateGroups / GetCertificates / GetTrustList / ReadTrustList / GetCertificateStatus / CheckRevocationStatus
-func (p *PullClient) Enroll(ctx, r *EnrollRequest) (*Enrollment, error)
+func (p *PullClient) Namespace(ctx context.Context) (uint16, error)              // the GDS namespace index
+func (p *PullClient) DefaultApplicationGroup(ctx context.Context) (*ua.NodeID, error)
+func (p *PullClient) FindApplications(ctx context.Context, applicationURI string) ([]*ApplicationRecord, error)
+func (p *PullClient) RegisterApplication(ctx context.Context, r *ApplicationRecord) (*ua.NodeID, error)
+func (p *PullClient) UpdateApplication(ctx context.Context, r *ApplicationRecord) error
+func (p *PullClient) UnregisterApplication(ctx context.Context, applicationID *ua.NodeID) error
+func (p *PullClient) GetApplication(ctx context.Context, applicationID *ua.NodeID) (*ApplicationRecord, error)
+func (p *PullClient) QueryApplications(ctx context.Context, q *ApplicationQuery) (*ApplicationQueryResult, error)
+func (p *PullClient) QueryServers(ctx context.Context, q *ServerQuery) (*ServerQueryResult, error)
+func (p *PullClient) StartSigningRequest(ctx context.Context, applicationID, group, certificateType *ua.NodeID, csr []byte) (*ua.NodeID, error)
+func (p *PullClient) StartNewKeyPairRequest(ctx context.Context, applicationID *ua.NodeID, r *NewKeyPairRequest) (*ua.NodeID, error)
+func (p *PullClient) FinishRequest(ctx context.Context, applicationID, requestID *ua.NodeID) (*IssuedCertificate, error) // Bad_NothingToDo while pending
+func (p *PullClient) WaitForCertificate(ctx context.Context, applicationID, requestID *ua.NodeID, interval time.Duration) (*IssuedCertificate, error)
+func (p *PullClient) RevokeCertificate(ctx context.Context, applicationID *ua.NodeID, cert []byte) error
+func (p *PullClient) GetCertificateGroups(ctx context.Context, applicationID *ua.NodeID) ([]*ua.NodeID, error)
+func (p *PullClient) GetCertificates(ctx context.Context, applicationID, group *ua.NodeID) (types []*ua.NodeID, certs [][]byte, err error)
+func (p *PullClient) GetTrustList(ctx context.Context, applicationID, group *ua.NodeID) (*ua.NodeID, error)
+func (p *PullClient) ReadTrustList(ctx context.Context, applicationID, group *ua.NodeID) (*ua.TrustListDataType, error)
+func (p *PullClient) GetCertificateStatus(ctx context.Context, applicationID, group, certificateType *ua.NodeID) (bool, error)
+func (p *PullClient) CheckRevocationStatus(ctx context.Context, cert []byte) (status ua.StatusCode, validUntil time.Time, err error)
+func (p *PullClient) Enroll(ctx context.Context, r *EnrollRequest) (*Enrollment, error)
 func (e *Enrollment) ClientOptions() ([]opcua.Option, error)
 func (e *Enrollment) ServerOptions() []server.Option
 func NewCertificateRequest(key crypto.Signer, applicationURI, subject string, hosts []string) ([]byte, error) // any key type
@@ -2851,8 +2856,11 @@ Global Discovery Server of the pull model (Part 12 §6, §7.9).
 func Attach(srv *server.Server, cfg Config) (*GDS, error)       // before srv.Start
 func (g *GDS) Close()                                           // later calls: Bad_Shutdown
 func (g *GDS) Namespace() uint16
-func (g *GDS) DiscoveryAdminRole() / CertificateAuthorityAdminRole() *ua.NodeID
-func (g *GDS) DefaultApplicationGroup() / DefaultHTTPSGroup() / DefaultUserTokenGroup() *ua.NodeID
+func (g *GDS) DiscoveryAdminRole() *ua.NodeID
+func (g *GDS) CertificateAuthorityAdminRole() *ua.NodeID
+func (g *GDS) DefaultApplicationGroup() *ua.NodeID
+func (g *GDS) DefaultHTTPSGroup() *ua.NodeID
+func (g *GDS) DefaultUserTokenGroup() *ua.NodeID
 func (g *GDS) Requests() []*PendingRequest
 func (g *GDS) ApproveRequest(ctx context.Context, requestID string, approve bool) error // ErrUnknownRequest, ErrClosed
 func (g *GDS) RequestID(n *ua.NodeID) string

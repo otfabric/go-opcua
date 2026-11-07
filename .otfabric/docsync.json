@@ -1,0 +1,6 @@
+{
+  "ignore": [
+    {"rule": "DS-REF", "subject": "Server.ServerDiagnostics", "reason": "an OPC UA browse path in the server address space (Part 5 §6.3.3), not a Go identifier"},
+    {"rule": "DS-REF", "subject": "Server.ServerStatus", "reason": "an OPC UA browse path in the server address space (an example path for NodeFromPath), not a Go identifier"}
+  ]
+}

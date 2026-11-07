@@ -6,12 +6,15 @@
 # A parent go.work must not change this module's dependencies.
 export GOWORK := off
 
+# docsync release of docs-check (DOC-008).
+DOCSYNC_VERSION := v0.2.0
+
 # Core library packages measured by `make coverage` (excludes cmd/, examples/, tests/).
 TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ ./id/ ./internal/stats/ ./internal/mdns/ ./internal/websocket/ ./pubsub/ ./pubsub/uadp/ ./pubsub/jsonmsg/ ./pubsub/transport/ ./pubsub/transport/udp/ ./pubsub/transport/eth/ ./pubsub/transport/mqtt/ ./pubsub/transport/amqp/ ./pubsub/security/ ./pubsub/sks/ ./pubsub/remote/ ./gds/ ./gds/gdsserver/ ./internal/mqtt/ ./internal/amqp/
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/internal/websocket,github.com/otfabric/go-opcua/pubsub,github.com/otfabric/go-opcua/pubsub/message,github.com/otfabric/go-opcua/pubsub/uadp,github.com/otfabric/go-opcua/pubsub/jsonmsg,github.com/otfabric/go-opcua/pubsub/transport,github.com/otfabric/go-opcua/pubsub/transport/udp,github.com/otfabric/go-opcua/pubsub/transport/eth,github.com/otfabric/go-opcua/pubsub/transport/mqtt,github.com/otfabric/go-opcua/pubsub/transport/amqp,github.com/otfabric/go-opcua/pubsub/security,github.com/otfabric/go-opcua/pubsub/sks,github.com/otfabric/go-opcua/pubsub/remote,github.com/otfabric/go-opcua/gds,github.com/otfabric/go-opcua/gds/gdsserver,github.com/otfabric/go-opcua/internal/mqtt,github.com/otfabric/go-opcua/internal/amqp
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/...
 
-.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-check coverage-pkg-check cross fuzz bench e2e
+.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-check coverage-pkg-check cross fuzz bench e2e docs-check
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -165,4 +168,8 @@ bench: ## Benchmarks
 
 e2e: selfintegration ## Alias of selfintegration: Go client against the in-process Go server
 
-check: fmt lint lint-ci vuln verify coverage ## Run lint + vet + vuln + unit/race/interop + coverage
+check: fmt lint lint-ci vuln verify coverage docs-check ## Run lint + vet + vuln + unit/race/interop + coverage + docs
+
+# The documents against the code (DOC-008): docsync, as docs-check.yml runs it.
+docs-check: ## Check that the documents agree with the code (docsync)
+	@go run github.com/otfabric/docsync@$(DOCSYNC_VERSION) check .

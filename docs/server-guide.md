@@ -565,10 +565,10 @@ handler := func(ctx context.Context, objectID, methodID *ua.NodeID, args []*ua.V
     if len(args) < 1 {
         return nil, ua.StatusBadArgumentsMissing
     }
-    factor, err := args[0].Float()
-    if err != nil {
+    if t := args[0].Type(); t != ua.TypeIDFloat && t != ua.TypeIDDouble {
         return nil, ua.StatusBadTypeMismatch
     }
+    factor := args[0].Float()
     result := factor * 2.0
     return []*ua.Variant{ua.MustVariant(result)}, ua.StatusOK
 }
