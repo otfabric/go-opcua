@@ -364,7 +364,7 @@ To test connectivity at different layers:
 
 - **TCP only** — Use `uacp.DialTCP(ctx, endpoint)` to open a raw TCP connection; close the returned `net.Conn` when done. Use this to verify TCP reachability without OPC UA handshakes.
 - **SecureChannel** — Call `Client.Dial(ctx)` (no session).
-- **Session + Auth + Browse** — Call `Client.Connect(ctx)` then e.g. `Client.BrowseAll(ctx, ua.ObjectIDRootFolder)` to verify full stack (session, auth, browse root).
+- **Session + Auth + Browse** — Call `Client.Connect(ctx)` then e.g. `Client.BrowseAll(ctx, ua.NewNumericNodeID(0, id.RootFolder))` to verify full stack (session, auth, browse root).
 
 A "ping" or connection-test command can run these steps in order and report which layer failed.
 
