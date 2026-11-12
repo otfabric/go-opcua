@@ -289,9 +289,10 @@ container-id as `ClientID`) and from the connection properties (B.3.4):
 frames, and `container-id`, `username`, `password`, `sasl-mechanism`,
 `credit` and `idle-timeout` (seconds) are honoured as well.
 
-The AMQP transport has been tested with the in-process test broker
-(`internal/testutil/amqpbroker`) only so far; tests against RabbitMQ and
-ActiveMQ Artemis are pending.
+The AMQP transport is tested with the in-process test broker
+(`internal/testutil/amqpbroker`) and, in the interop suite
+(`TestPubSubAMQP_RabbitMQ`, `TestPubSubAMQP_Artemis`), through RabbitMQ 4 and
+ActiveMQ Artemis.
 
 ## In the server
 

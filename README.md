@@ -56,8 +56,10 @@ Requires **Go 1.26** or later (`go.mod` and CI matrix; toolchain/`golang.org/x/t
   using OPC UA Binary over UA-TCP, WebSockets and HTTPS, and UA JSON over
   WebSockets and HTTPS.
 - **Pure Go** — No CGO or native C library dependencies. Cryptography is the
-  Go standard library, plus ChaCha20-Poly1305 from `golang.org/x/crypto` for
-  two of the ECC security policies.
+  Go standard library, plus `golang.org/x/crypto` (ChaCha20-Poly1305 for two
+  of the ECC security policies, ASN.1 parsing), `github.com/cloudflare/circl`
+  (Ed448 and X448 for ECC_curve448) and `github.com/ProtonMail/go-crypto`
+  (the Brainpool curves).
 - **Secure communication** — OPC UA message signing, encryption,
   X.509 certificates, and multiple authentication mechanisms.
 - **Data access** — Read, write, browse, and manage OPC UA nodes.
