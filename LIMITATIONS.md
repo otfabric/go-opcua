@@ -7,8 +7,9 @@ behaviour you may notice, and the deviations of peers are in
 
 ## Scope not implemented
 
-- JSON over HTTPS and WebSockets (`https-uajson`, `wss-uajson`, the OpenAPI
-  mapping). The binary `opc.https` and `opc.wss` transports are implemented.
+- The OpenAPI mapping of the UA JSON services. UA JSON over HTTPS and
+  WebSockets (`https-uajson`, `wss-uajson`) and the binary `opc.https` and
+  `opc.wss` transports are implemented.
 - A file-based certificate store for the push model: `server.CertificateStore`
   has no implementation in the library, so without one, pushed trust lists,
   certificates and keys live in memory only.
