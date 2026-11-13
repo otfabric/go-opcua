@@ -10,6 +10,7 @@ import (
 	"io"
 	"math"
 	"net"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -332,6 +333,22 @@ func (s *SecureChannel) dispatcher() {
 		close(s.disconnected)
 	}()
 
+	// A panic while receiving cannot be attributed to a request and leaves
+	// the stream in an unknown state. It ends this channel, as it does on a
+	// server (the channel broker recovers too), not the process.
+	defer func() {
+		if r := recover(); r != nil {
+			s.cfg.Logger.Error("panic receiving on secure channel", "channel_id", s.c.ID(), "panic", r, "stack", string(debug.Stack()))
+			msg := &MessageBody{Err: fmt.Errorf("uasc: panic receiving on secure channel: %v: %w", r, ua.StatusBadInternalError)}
+			_ = s.c.Close()
+			s.failHandlers(msg)
+			select {
+			case s.errch <- msg.Err:
+			default:
+			}
+		}
+	}()
+
 	for {
 		select {
 		case <-s.closing:
@@ -363,19 +380,7 @@ func (s *SecureChannel) dispatcher() {
 					// carries no request ID. Broadcast it to all pending handlers so
 					// callers receive the specific OPC UA status code rather than bare
 					// io.EOF when the disconnected channel fires on the next loop.
-					s.handlersMu.Lock()
-					pending := make(map[uint32]chan *MessageBody, len(s.handlers))
-					for id, h := range s.handlers {
-						pending[id] = h.ch
-						delete(s.handlers, id)
-					}
-					s.handlersMu.Unlock()
-					for _, hch := range pending {
-						select {
-						case hch <- msg:
-						default:
-						}
-					}
+					s.failHandlers(msg)
 				} else if ok {
 					select {
 					case ch <- msg:
@@ -1845,6 +1850,24 @@ func (s *SecureChannel) timeNow() time.Time {
 
 // dropChunks forgets the chunks collected for reqID. The caller holds
 // chunksMu.
+// failHandlers hands msg to every request waiting for a response and
+// forgets them.
+func (s *SecureChannel) failHandlers(msg *MessageBody) {
+	s.handlersMu.Lock()
+	pending := make(map[uint32]chan *MessageBody, len(s.handlers))
+	for id, h := range s.handlers {
+		pending[id] = h.ch
+		delete(s.handlers, id)
+	}
+	s.handlersMu.Unlock()
+	for _, hch := range pending {
+		select {
+		case hch <- msg:
+		default:
+		}
+	}
+}
+
 func (s *SecureChannel) dropChunks(reqID uint32) {
 	s.chunksTotal -= int64(s.chunkBytes[reqID])
 	delete(s.chunks, reqID)

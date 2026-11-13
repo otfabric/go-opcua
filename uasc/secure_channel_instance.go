@@ -374,15 +374,28 @@ func (c *channelInstance) verifyAndDecrypt(m *MessageChunk, r []byte) ([]byte, e
 		c.sc.binding.received(c.sc, signature)
 	}
 
+	// PaddingSize and ExtraPaddingSize (Part 6 §6.7.2.5) come from the
+	// plaintext and must fit in it: the padding, its size bytes and the
+	// header cannot be longer than the chunk.
+	body := len(messageToVerify) - headerLength
 	var paddingLength int
 	if encrypted {
+		if body < 1 {
+			return nil, ua.StatusBadSecurityChecksFailed
+		}
 		paddingLength = int(messageToVerify[len(messageToVerify)-1])
 		if c.algo.SignatureLength() > 256 {
+			if body < 2 {
+				return nil, ua.StatusBadSecurityChecksFailed
+			}
 			paddingLength <<= 8
 			paddingLength += int(messageToVerify[len(messageToVerify)-2])
 			paddingLength += 1
 		}
 		paddingLength += 1
+		if paddingLength > body {
+			return nil, ua.StatusBadSecurityChecksFailed
+		}
 	}
 
 	b = messageToVerify[headerLength : len(messageToVerify)-paddingLength]
