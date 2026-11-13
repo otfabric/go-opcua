@@ -216,3 +216,63 @@ func (s *Server) checkMonitorRead(ctx context.Context, sc *uasc.SecureChannel, s
 	}
 	return ua.StatusOK
 }
+
+// CheckAddNodes allows AddNodes below a parent node whose RolePermissions
+// grant one of the session's roles the AddNode permission (Part 3 §8.55).
+// Unlike the other checks of the RBACAccessController, node management
+// needs an explicit permission: a parent without RolePermissions, or no
+// parent, refuses it.
+func (ac *RBACAccessController) CheckAddNodes(_ context.Context, sess *Session, item *ua.AddNodesItem) ua.StatusCode {
+	if item == nil || item.ParentNodeID == nil || ac.srv.Node(item.ParentNodeID.NodeID) == nil {
+		return ua.StatusBadUserAccessDenied
+	}
+	return ac.checkExplicitPermission(sess, item.ParentNodeID.NodeID, ua.PermissionTypeAddNode)
+}
+
+// CheckDeleteNodes allows DeleteNodes of a node whose RolePermissions grant
+// the DeleteNode permission.
+func (ac *RBACAccessController) CheckDeleteNodes(_ context.Context, sess *Session, item *ua.DeleteNodesItem) ua.StatusCode {
+	if item == nil {
+		return ua.StatusBadUserAccessDenied
+	}
+	return ac.checkExplicitPermission(sess, item.NodeID, ua.PermissionTypeDeleteNode)
+}
+
+// CheckAddReferences allows AddReferences from a source node whose
+// RolePermissions grant the AddReference permission.
+func (ac *RBACAccessController) CheckAddReferences(_ context.Context, sess *Session, item *ua.AddReferencesItem) ua.StatusCode {
+	if item == nil {
+		return ua.StatusBadUserAccessDenied
+	}
+	return ac.checkExplicitPermission(sess, item.SourceNodeID, ua.PermissionTypeAddReference)
+}
+
+// CheckDeleteReferences allows DeleteReferences from a source node whose
+// RolePermissions grant the RemoveReference permission.
+func (ac *RBACAccessController) CheckDeleteReferences(_ context.Context, sess *Session, item *ua.DeleteReferencesItem) ua.StatusCode {
+	if item == nil {
+		return ua.StatusBadUserAccessDenied
+	}
+	return ac.checkExplicitPermission(sess, item.SourceNodeID, ua.PermissionTypeRemoveReference)
+}
+
+// checkExplicitPermission is checkPermission for operations that need the
+// permission to be granted: a node without RolePermissions refuses them.
+// A node that does not exist is left to the service, which refuses the
+// operation with the status of an unknown node.
+func (ac *RBACAccessController) checkExplicitPermission(sess *Session, nodeID *ua.NodeID, required ua.PermissionType) ua.StatusCode {
+	if nodeID == nil {
+		return ua.StatusOK
+	}
+	n := ac.srv.Node(nodeID)
+	if n == nil {
+		return ua.StatusOK
+	}
+	n.mu.RLock()
+	empty := len(n.rolePermissions) == 0
+	n.mu.RUnlock()
+	if empty {
+		return ua.StatusBadUserAccessDenied
+	}
+	return ac.checkPermission(sess, nodeID, required)
+}

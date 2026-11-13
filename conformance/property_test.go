@@ -110,7 +110,7 @@ func TestProperty_NodeIDCodec(t *testing.T) {
 // TestProperty_WriteReadIdentity is a server round-trip property: writing a
 // random int64 and reading it back must be the identity function.
 func TestProperty_WriteReadIdentity(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 	nid := addFreshNode(t, c, f, ctx, "prop_i64")
 
 	// Seed with an int64 so the type-match check is satisfied on every write.

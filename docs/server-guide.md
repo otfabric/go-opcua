@@ -549,9 +549,29 @@ Add and remove nodes at runtime via OPC-UA service calls:
 ns.AddNode(newNode)
 ns.DeleteNode(nodeID)
 
-// Client-side: clients can use AddNodes/DeleteNodes service calls
-// (if your access controller allows it)
 ```
+
+The Node Management services (AddNodes, AddReferences, DeleteNodes,
+DeleteReferences; Part 4 §5.7) are optional and off by default: the server
+answers them with `Bad_ServiceUnsupported`. Turn them on with
+`server.EnableNodeManagement()`. Every operation is then authorized:
+
+- an `AccessController` that implements `NodeManagementAccessController`
+  (`CheckAddNodes`, `CheckDeleteNodes`, `CheckAddReferences`,
+  `CheckDeleteReferences`) decides each operation; `RBACAccessController`
+  does, from the AddNode, DeleteNode, AddReference and RemoveReference
+  permissions, which a node must grant explicitly (a node without
+  RolePermissions refuses node management);
+- any other controller, `DefaultAccessController` included, is asked
+  `CheckWrite` for the node the operation changes (the parent of AddNodes,
+  the node of DeleteNodes, the source node of the reference services), and
+  namespace 0 is protected: its nodes cannot be added or deleted and their
+  references cannot be changed (adding a node below the Objects folder is
+  allowed).
+
+A refused operation answers `Bad_UserAccessDenied`. With the
+`DefaultAccessController`, enabling node management lets every session
+change the application's namespaces.
 
 ---
 

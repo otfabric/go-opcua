@@ -660,6 +660,10 @@ The `AccessController` decides who may write a node; the node decides which of i
 
 Code in the server that calls `Node.SetAttribute` directly is not subject to the WriteMask or the AccessLevel.
 
+### Node Management
+
+AddNodes, AddReferences, DeleteNodes and DeleteReferences are off unless the server is created with `server.EnableNodeManagement()` (`Bad_ServiceUnsupported` otherwise). When enabled, an AccessController that implements `NodeManagementAccessController` decides each operation (`RBACAccessController`: the AddNode, DeleteNode, AddReference and RemoveReference permissions, granted explicitly); any other controller is asked `CheckWrite` for the changed node, and namespace 0 cannot be changed. See the [server guide](server-guide.md#dynamic-node-management).
+
 ---
 
 ## Server Certificate Validation

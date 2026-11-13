@@ -104,6 +104,7 @@ func TestDeleteNodeUnlinksTargets(t *testing.T) {
 func TestNodeManagementInverseReferences(t *testing.T) {
 	srv := newTestServer()
 	ns, obj := addTestNamespace(srv)
+	srv.cfg.nodeManagement = true
 	svc := &NodeManagementService{srv: srv}
 	nid := ua.NewStringNodeID(ns.ID(), "added")
 	resp, err := svc.AddNodes(context.Background(), nil, &ua.AddNodesRequest{

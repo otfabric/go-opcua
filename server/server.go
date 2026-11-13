@@ -166,6 +166,7 @@ type serverConfig struct {
 	cap ServerCapabilities
 
 	accessController           AccessController
+	nodeManagement             bool // EnableNodeManagement
 	roleMapper                 RoleMapper
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator

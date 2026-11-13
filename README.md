@@ -405,7 +405,7 @@ you rely on.
 |------|-------------|
 | **Namespaces** | Custom `NameSpace` interface, `NodeNameSpace` in-memory implementation |
 | **Services** | Read, Write, HistoryRead/HistoryUpdate of data and events (via `HistoryProvider`), Browse, BrowseNext, TranslateBrowsePaths, Call |
-| **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences |
+| **Node Management** | AddNodes, DeleteNodes, AddReferences, DeleteReferences (opt-in with `EnableNodeManagement`, authorized per operation) |
 | **Subscriptions** | Create, Modify, Delete, Publish, Republish, TransferSubscriptions, SetPublishingMode; revise clamps, `MoreNotifications`, Publish ACK |
 | **MonitoredItems** | Create, Modify, Delete, SetMonitoringMode, SetTriggering; exact `QueueSize`/`DiscardOldest`/Overflow; `DataChangeFilter` (Status / StatusValue / StatusValueTimestamp, absolute and percent deadband), sampling interval, per-item `IndexRange`; per-item rejection for unknown nodes and unusable filters |
 | **View** | RegisterNodes, UnregisterNodes |
