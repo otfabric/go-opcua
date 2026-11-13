@@ -1544,6 +1544,10 @@ type Config struct {
 	// (TransportProfile option, SecurityFromEndpoint); a JSON profile makes
 	// an opc.https or opc.wss endpoint use the UA JSON mapping.
 
+	// discoveredEndpoint is the endpoint given to SecurityFromEndpoint.
+	// CreateSession compares it with the server's endpoints (Part 4
+	// §5.7.2).
+
 }
 ```
 
@@ -2244,6 +2248,8 @@ func SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType)
 ```
 
 SecurityFromEndpoint sets the server-related security parameters from a chosen endpoint (received from GetEndpoints()).
+
+CreateSession compares the endpoint with the one the server returns in the CreateSession response, which arrives over the SecureChannel, and fails with StatusBadSecurityChecksFailed when they differ in the security policy, mode, level, transport profile, application URI or user token policies (Part 4 §5.7.2). The endpoint URL is not compared.
 
 #### func SecurityMode
 

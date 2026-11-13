@@ -274,6 +274,16 @@ not. Without an enabled RSA policy the password goes in clear text inside TLS.
 A secured opc.wss endpoint leaves the policy to the secure channel, and
 opc.tcp is unchanged: `AllowUsernameOnNone` sends the password in clear text.
 
+X.509 user token policies of None endpoints (opc.https, opc.wss, or opc.tcp
+with `AllowUsernameOnNone`) always name a security policy: the enabled RSA
+policy with the highest security level, or the highest ECC one if no RSA
+policy is enabled. The client then signs the token with the key of the user
+certificate (Part 4 §7.40.5: "Servers should specify a SecurityPolicy for the
+UserTokenPolicy if the SecureChannel has a SecurityPolicy of None"). A server
+that enables only None offers no certificate tokens on None endpoints, and an
+X.509 token whose policy resolves to None is rejected with
+`Bad_IdentityTokenRejected`.
+
 The UA JSON mappings (`server.EnableUAJSON`, `opcua.TransportProfile`) have no
 secure conversation either. https-uajson (Part 6 §7.4.5) works as https-uabinary:
 the same policies, named in the `OPCUA-SecurityPolicy` header, sign the session
@@ -504,7 +514,7 @@ s, err := server.New(
 
 ### Certificate-Based
 
-Client presents a certificate for authentication, separate from the secure channel certificate.
+Client presents a certificate for authentication, separate from the secure channel certificate. It proves that it holds the key of the certificate with a UserTokenSignature; on None endpoints the token policy names the security policy for it (see [TLS for opc.wss and opc.https](#tls-for-opcwss-and-opchttps)).
 
 ```go
 // Client
@@ -595,6 +605,8 @@ opts := []opcua.Option{
     opcua.PrivateKeySigner(key), // RSA, ECDSA, Ed25519 or Ed448
 }
 ```
+
+The endpoints of `GetEndpoints` come over a channel without security. CreateSession therefore compares the endpoint given to `SecurityFromEndpoint` with the endpoints the server returns in the CreateSession response, which the secure channel protects (Part 4 §5.7.2): when no endpoint there has the same application URI, security policy, mode and level, transport profile and user token policies (the URL is not compared), the client closes the session before ActivateSession and Connect fails with `StatusBadSecurityChecksFailed`. The comparison is skipped when other options changed the security policy or mode after `SecurityFromEndpoint`.
 
 `opcua.SelectEndpoint` ranks by the server's `SecurityLevel` like `ua.SelectEndpoint`, but only among the endpoints the client can use: it leaves out policies this library does not implement and secured endpoints whose policy does not fit the key type of the certificate. That matters with servers that offer RSA and ECC endpoints, where the highest ranked endpoint is an ECC one that a client with an RSA certificate cannot open.
 
@@ -821,8 +833,10 @@ can point clients at a server of their choosing, replace the entry of a real
 server, or remove it. A go-opcua discovery server (`WithLocalDiscoveryServer`)
 therefore accepts `RegisterServer` and `RegisterServer2`
 
-- only on a SecureChannel with Sign or SignAndEncrypt
-  (`BadSecurityModeInsufficient` otherwise), and
+- only on a SecureChannel with Sign or SignAndEncrypt that was opened with a
+  client certificate (`BadSecurityModeInsufficient` otherwise; the channels of
+  opc.https and opcua+uajson have no client certificate and count as
+  without security, also with `LDSSkipServerURICheck`), and
 - only for the `ServerUri` that is an application URI of the certificate the
   channel was opened with (`BadServerUriInvalid`): an application can register
   and unregister itself, nobody else.
@@ -836,7 +850,7 @@ a discovery server that is reachable by more than the machines you control.
 | Option | Effect | Use |
 |--------|--------|-----|
 | `LDSAllowInsecureRegistration()` | Registration without security: anybody who reaches the port can add, replace and remove servers | Tests, closed lab networks, servers without certificates |
-| `LDSSkipServerURICheck()` | A certificate may register any `ServerUri` | A gateway registering the servers behind it |
+| `LDSSkipServerURICheck()` | A certificate may register any `ServerUri`; a certificate is still required | A gateway registering the servers behind it |
 | `LDSMaxRegisteredServers(n)` | Bounds the table (default 1024) | Limits what a registrant can make the server hold |
 
 Other things a discovery server takes from a registrant: the discovery URLs
@@ -898,6 +912,20 @@ Before a secure channel is open, and on a channel without security, a peer is no
 - **Partial messages.** A channel collects the chunks of at most 16 messages at a time, holding together at most twice the largest message it accepts (`MaxMessageSize`, or `MaxChunkCount` chunks of the receive buffer when `MaxMessageSize` is 0). A peer that goes over either loses the connection (`Bad_TcpMessageTooLarge`, Part 6 §7.1.5). `MaxChunkCount` and `MaxMessageSize` still bound each message.
 - **Nesting.** UA Binary values nest Variant, DataValue, DiagnosticInfo and ExtensionObject at most 100 levels deep (`ua.MaxBinaryNestingDepth`), as the JSON and XML codecs do; deeper values fail with `Bad_EncodingLimitsExceeded`.
 - **Padding.** The padding sizes of a decrypted chunk are checked against its length; a chunk that does not hold them fails with `Bad_SecurityChecksFailed`.
+
+## Sessions and SecureChannels (Server)
+
+A session belongs to the SecureChannel it was created on and, after that, to
+the channel of its last successful ActivateSession (Part 4 §5.7.3). The server
+serves the requests of a session only on that channel; on any other channel
+they fail with `Bad_SecureChannelIdInvalid`, CloseSession included. The first
+ActivateSession has to come over the channel of CreateSession. A client that
+lost its channel moves the session to a new one with ActivateSession, which
+the server accepts when the new channel has the same security policy and mode,
+was opened with the same client certificate, and the user identity is the same
+user (`Bad_IdentityChangeNotSupported` otherwise; Part 4 §5.7.3.1). opc.https
+and opcua+uajson have one virtual channel per security policy, so there the
+session is tied to the policy, and TLS protects the AuthenticationToken.
 
 ## Session and Subscription Limits (Server)
 

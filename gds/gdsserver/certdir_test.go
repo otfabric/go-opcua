@@ -497,3 +497,48 @@ func TestCertificates_GroupsAndStatusArguments(t *testing.T) {
 		require.True(t, errors.Is(sc, ua.StatusBadTypeMismatch) || errors.Is(sc, ua.StatusBadTooManyArguments) || errors.Is(sc, ua.StatusBadInvalidArgument), "%d: %v", m, sc)
 	}
 }
+
+// TestCertificates_HostNamesFixedAtRequest checks that the host names of an
+// issued certificate are those of the application record when the request
+// was made, and that a wildcard host is refused.
+func TestCertificates_HostNamesFixedAtRequest(t *testing.T) {
+	t.Parallel()
+	e := newEnv(t, Config{SelfAdmin: selfAdminAll})
+	ctx := ctxT(t)
+	appID, err := e.admin().RegisterApplication(ctx, record(testClientURI, "opc.tcp://host.example:4840"))
+	require.NoError(t, err)
+	self := e.anonymous()
+	key := newKey(t, testpki.CurveP256)
+
+	csrReq, err := self.StartSigningRequest(ctx, appID, nil, nil, csrFor(t, key, testClientURI))
+	require.NoError(t, err)
+	keyReq, err := self.StartNewKeyPairRequest(ctx, appID, nil)
+	require.NoError(t, err)
+	for _, r := range e.gds.Requests() {
+		require.Equal(t, []string{"host.example"}, r.DomainNames, "the approver sees the names")
+		require.NoError(t, e.gds.ApproveRequest(ctx, r.ID, true))
+	}
+
+	// The application changes its discovery URLs after the approval.
+	rec, err := self.GetApplication(ctx, appID)
+	require.NoError(t, err)
+	rec.DiscoveryURLs = []string{"opc.tcp://other.example:4840", "opc.tcp://192.0.2.9:4840"}
+	require.NoError(t, self.UpdateApplication(ctx, rec))
+
+	for _, reqID := range []*ua.NodeID{csrReq, keyReq} {
+		res, err := self.FinishRequest(ctx, appID, reqID)
+		require.NoError(t, err)
+		cert, err := x509.ParseCertificate(res.Certificate)
+		require.NoError(t, err)
+		require.Equal(t, []string{"host.example"}, cert.DNSNames)
+		require.Empty(t, cert.IPAddresses)
+	}
+
+	// A wildcard host is not certified.
+	rec.DiscoveryURLs = []string{"opc.tcp://*.example:4840"}
+	require.NoError(t, self.UpdateApplication(ctx, rec))
+	_, err = self.StartSigningRequest(ctx, appID, nil, nil, csrFor(t, key, testClientURI))
+	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
+	_, err = self.StartNewKeyPairRequest(ctx, appID, nil)
+	require.ErrorIs(t, err, ua.StatusBadInvalidArgument)
+}

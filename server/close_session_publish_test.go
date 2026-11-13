@@ -28,7 +28,8 @@ func TestCloseSession_AnswersQueuedPublishRequests(t *testing.T) {
 	defer func() { _ = srv.Close() }()
 
 	sessions := &SessionService{srv: srv}
-	resp, err := sessions.CreateSession(context.Background(), scNone(), &ua.CreateSessionRequest{
+	sc := scNone()
+	resp, err := sessions.CreateSession(context.Background(), sc, &ua.CreateSessionRequest{
 		RequestHeader:           reqHeader(),
 		EndpointURL:             "opc.tcp://localhost:4840",
 		RequestedSessionTimeout: 60000,
@@ -45,7 +46,7 @@ func TestCloseSession_AnswersQueuedPublishRequests(t *testing.T) {
 
 	hdr := reqHeader()
 	hdr.AuthenticationToken = token
-	_, err = sessions.CloseSession(context.Background(), scNone(), &ua.CloseSessionRequest{RequestHeader: hdr, DeleteSubscriptions: true}, 2)
+	_, err = sessions.CloseSession(context.Background(), sc, &ua.CloseSessionRequest{RequestHeader: hdr, DeleteSubscriptions: true}, 2)
 	require.NoError(t, err)
 	require.Empty(t, sess.PublishRequests, "no Publish request is left waiting in a closed session")
 	require.Nil(t, srv.sb.peek(token))

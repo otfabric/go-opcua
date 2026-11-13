@@ -1754,7 +1754,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `EnableSecurity(policy string, mode ua.MessageSecurityMode)` | Enable a security policy/mode combination (returns error for unsupported or duplicate). An ECC policy needs a matching `ApplicationIdentity` |
 | `EnableAuthMode(tokenType ua.UserTokenType)` | Enable an authentication token type (returns error for duplicate). `UserName`, `Certificate` and `IssuedToken` also need their validator: without it every token of that type is rejected and `New` logs a warning |
 | `InsecureNoSecurity()` | Offer security policy None; `Start` refuses None without it (INSECURE) |
-| `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only |
+| `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only; X.509 token policies there name a real security policy |
 | `WithUsernameValidator(v UsernameValidator)` | Callback `func(username, password string) error` called during `ActivateSession` for `UserNameIdentityToken`; without one, username tokens are rejected with `BadUserAccessDenied` |
 | `WithX509UserValidator(v X509UserValidator)` | Callback `func(certDER []byte) error` called during `ActivateSession` for `X509IdentityToken`; must also call `EnableAuthMode(ua.UserTokenTypeCertificate)`; without one, X.509 user tokens are rejected |
 | `WithIssuedTokenValidator(v IssuedTokenValidator)` | Callback `func(tok *ua.IssuedIdentityToken) error` called during `ActivateSession` for `IssuedIdentityToken` (token data decrypted where the policy encrypts it); must also call `EnableAuthMode(ua.UserTokenTypeIssuedToken)`; without one, issued tokens are rejected with `BadIdentityTokenRejected` |
@@ -1849,7 +1849,7 @@ func (s ReverseConnectState) String() string
 |-------------|-------------|
 | `LDSRegistrationTimeout(d time.Duration)` | Lifetime of a registration that is not renewed (default `DefaultRegistrationTimeout`, one hour; `<= 0` disables) |
 | `LDSAllowInsecureRegistration()` | Accept registrations on channels without security (tests, lab) |
-| `LDSSkipServerURICheck()` | Do not require the `ServerUri` to be the application URI of the channel's certificate |
+| `LDSSkipServerURICheck()` | Do not require the `ServerUri` to be the application URI of the channel's certificate (a client certificate is still required) |
 | `LDSMaxRegisteredServers(n int)` | Bound of the table (default 1024) |
 | `LDSApplicationType(t ua.ApplicationType)` | ApplicationType reported by the server, e.g. `ua.ApplicationTypeDiscoveryServer` |
 | `LDSRegistrationCallback(fn func(server *ua.RegisteredServer))` | Called for every accepted registration and unregistration |
@@ -3388,6 +3388,7 @@ func ParseCertificate(der []byte) (*x509.Certificate, error)
 func ParseCertificates(der []byte) ([]*x509.Certificate, error)
 func CreateCertificate(rand io.Reader, template, parent *x509.Certificate, pub crypto.PublicKey, priv crypto.Signer) ([]byte, error)
 func VerifyCertificate(certs []*x509.Certificate, roots *x509.CertPool, anchors []*x509.Certificate) error
+func VerifyCertificateChains(certs []*x509.Certificate, roots *x509.CertPool, anchors []*x509.Certificate) ([][]*x509.Certificate, error)
 func CreateCertificateRequest(rand io.Reader, template *x509.CertificateRequest, priv crypto.Signer) ([]byte, error)
 func ParseCertificateRequest(der []byte) (*x509.CertificateRequest, error)
 func CheckCertificateRequestSignature(csr *x509.CertificateRequest) error
@@ -3409,7 +3410,7 @@ func EncryptSecret(uri string, signingKey crypto.PrivateKey, signingCertificate,
 
 `AsymmetricKeys` is the key-type independent form of `Asymmetric`: RSA policies take `*rsa.PrivateKey` / `*rsa.PublicKey`, the ECC policies a `crypto.Signer` with an ECDSA public key and an `*ecdsa.PublicKey`, `ECC_curve25519` a `crypto.Signer` with an `ed25519.PublicKey` and an `ed25519.PublicKey`, and `ECC_curve448` the same with `ed448.PublicKey` (`github.com/cloudflare/circl/sign/ed448`). The asymmetric algorithm of an ECC policy is `SignOnly`: OpenSecureChannel messages are signed, not encrypted. `ECDSA`, `EdDSA` and `Ed448` are the signature algorithms themselves.
 
-`ParseCertificate` is `x509.ParseCertificate` that also takes certificates with a Brainpool key (returned as an `*ecdsa.PublicKey` on its curve) or an Ed448 key (an `ed448.PublicKey`); `ParseCertificates` likewise for a concatenation. `CreateCertificate` is `x509.CreateCertificate` for such keys, as subject or issuer key (the signature algorithm follows the issuer key; `template.SignatureAlgorithm` must be unset). `VerifyCertificate` verifies `certs[0]` with `certs[1:]` as intermediates: with `crypto/x509` against `roots`, or, when a certificate is signed with Ed448, with the library's own chain builder against `anchors` (see [Security](docs/security.md#brainpool-and-curve448) for the rules). The client and the server use these wherever they read a certificate.
+`ParseCertificate` is `x509.ParseCertificate` that also takes certificates with a Brainpool key (returned as an `*ecdsa.PublicKey` on its curve) or an Ed448 key (an `ed448.PublicKey`); `ParseCertificates` likewise for a concatenation. `CreateCertificate` is `x509.CreateCertificate` for such keys, as subject or issuer key (the signature algorithm follows the issuer key; `template.SignatureAlgorithm` must be unset). `VerifyCertificate` verifies `certs[0]` with `certs[1:]` as intermediates: with `crypto/x509` against `roots`, or, when a certificate is signed with Ed448, with the library's own chain builder against `anchors` (see [Security](docs/security.md#brainpool-and-curve448) for the rules). `VerifyCertificateChains` does the same and returns the verified chains, leaf to anchor, each certificate linked to the next by its signature. The client and the server use these wherever they read a certificate.
 
 A `KeyExchange` creates the nonce a side sends in OpenSecureChannel and, given the peer's nonce, the symmetric algorithm of the new SecurityToken. For RSA policies the nonce is random and the keys come from P_SHA; for ECC policies the nonce is an ephemeral public key and the keys come from HKDF over the ECDH shared secret. `Symmetric` alone cannot serve the ECC policies and returns an error for them.
 

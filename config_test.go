@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -914,6 +915,12 @@ func TestOptions(t *testing.T) {
 			}
 			cfg.certValidator = serverCertValidator{}
 			tt.cfg.certValidator = serverCertValidator{}
+
+			// SecurityFromEndpoint keeps the endpoint for CreateSession.
+			if strings.HasPrefix(tt.name, "SecurityFromEndpoint") {
+				require.NotNil(t, cfg.discoveredEndpoint)
+			}
+			cfg.discoveredEndpoint = nil
 
 			require.Equal(t, tt.cfg, cfg)
 		})

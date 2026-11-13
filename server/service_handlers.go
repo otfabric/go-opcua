@@ -145,7 +145,7 @@ func (s *Server) serve(ctx context.Context, sc *uasc.SecureChannel, reqID uint32
 
 	typeID := ua.ServiceTypeID(req)
 	h, ok := s.handlers[typeID]
-	sess, status := s.checkSession(req)
+	sess, status := s.checkSession(sc, req)
 	before := s.diag.beforeRequest(req)
 	if ok && status != ua.StatusOK {
 		// The service needs an activated session and the request has none.
@@ -268,9 +268,15 @@ func logPanic(l *slog.Logger, what string, r any, args ...any) {
 // all), and a request carrying the token of a session that was closed or
 // has timed out keeps being served.
 //
+// A session is associated with one SecureChannel, the one it was last
+// activated on (Part 4 §5.7.3): a request on another channel is rejected
+// with Bad_SecureChannelIdInvalid. A client moves its session to a new
+// channel with ActivateSession. opc.https and opcua+uajson have one virtual
+// channel per security policy, so there the association names the policy.
+//
 // It returns the activated session of the request, nil for the services
 // that need none.
-func (s *Server) checkSession(req ua.Request) (*session, ua.StatusCode) {
+func (s *Server) checkSession(sc *uasc.SecureChannel, req ua.Request) (*session, ua.StatusCode) {
 	switch req.(type) {
 	case *ua.FindServersRequest, *ua.FindServersOnNetworkRequest, *ua.GetEndpointsRequest,
 		*ua.RegisterServerRequest, *ua.RegisterServer2Request,
@@ -290,6 +296,9 @@ func (s *Server) checkSession(req ua.Request) (*session, ua.StatusCode) {
 	}
 	if !sess.activated.Load() {
 		return nil, ua.StatusBadSessionNotActivated
+	}
+	if !sess.boundTo(sc) {
+		return nil, ua.StatusBadSecureChannelIDInvalid
 	}
 	return sess, ua.StatusOK
 }

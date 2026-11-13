@@ -1673,7 +1673,7 @@ LDSRegistrationTimeout sets how long a registration lives without being renewed.
 func LDSSkipServerURICheck() LDSOption
 ```
 
-LDSSkipServerURICheck accepts a registration on a secured channel whose ServerUri is not the application URI of the certificate the channel was opened with. Without it an application can only register (and unregister) itself.
+LDSSkipServerURICheck accepts a registration on a secured channel whose ServerUri is not the application URI of the certificate the channel was opened with. Without it an application can only register (and unregister) itself. It still needs a channel opened with a client certificate: a channel without one (opc.https, opcua+uajson) is treated like one without security, see LDSAllowInsecureRegistration.
 
 ### type LimitState
 

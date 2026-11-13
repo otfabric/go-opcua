@@ -311,6 +311,14 @@ roots are the trust anchors for (\*x509.Certificate).Verify, which verifies ever
 
 Any extended key usage is accepted.
 
+### func VerifyCertificateChains
+
+```go
+func VerifyCertificateChains(certs []*x509.Certificate, roots *x509.CertPool, anchors []*x509.Certificate) ([][]*x509.Certificate, error)
+```
+
+VerifyCertificateChains verifies certs like VerifyCertificate and returns the verified chains, each running from certs\[0] to a trust anchor. Every certificate in a chain is linked to the next one by a verified signature, so a check that has to follow the certification path, such as the revocation of the issuers (Part 4 §6.1.3), can use them.
+
 ## Types
 
 ### type AES
