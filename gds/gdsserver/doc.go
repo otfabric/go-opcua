@@ -88,7 +88,9 @@
 // must carry the ApplicationUri of the application and a key of the
 // certificate type, of any key type (uapolicy parses and checks the
 // request); the issued certificate gets the host names of the discovery
-// URLs. The private key of StartNewKeyPairRequest is returned as PEM
+// URLs as they are when the request is made (Request.DomainNames, shown by
+// GDS.Requests): a later UpdateApplication does not change them, and a
+// wildcard host is refused with Bad_InvalidArgument. The private key of StartNewKeyPairRequest is returned as PEM
 // (PKCS #8, encrypted with PBES2 when a password is given) or PFX (PKCS #12
 // with the certificate and its issuer, protected with the password).
 //
