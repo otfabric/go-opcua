@@ -209,7 +209,7 @@ func TestLDS_RegistrationSecurity(t *testing.T) {
 			{"sign and encrypt, second uri", securedChannel(ua.MessageSecurityModeSignAndEncrypt, own), "urn:test:alias", ua.StatusOK},
 			{"foreign uri", securedChannel(ua.MessageSecurityModeSignAndEncrypt, other), "urn:test:a", ua.StatusBadServerURIInvalid},
 			{"certificate without uri", securedChannel(ua.MessageSecurityModeSignAndEncrypt, noURI), "urn:test:a", ua.StatusBadServerURIInvalid},
-			{"no certificate", securedChannel(ua.MessageSecurityModeSignAndEncrypt, nil), "urn:test:a", ua.StatusBadServerURIInvalid},
+			{"no certificate", securedChannel(ua.MessageSecurityModeSignAndEncrypt, nil), "urn:test:a", ua.StatusBadSecurityModeInsufficient},
 			{"garbage certificate", securedChannel(ua.MessageSecurityModeSignAndEncrypt, []byte("junk")), "urn:test:a", ua.StatusBadServerURIInvalid},
 		} {
 			status, _ := s.disc.register(tc.sc, regServer(tc.uri), nil)
@@ -227,6 +227,10 @@ func TestLDS_RegistrationSecurity(t *testing.T) {
 		require.Equal(t, ua.StatusOK, status)
 		status, _ = s.disc.register(nil, regServer("urn:test:a"), nil)
 		require.Equal(t, ua.StatusBadSecurityModeInsufficient, status, "security is still required")
+		// A secured channel without a client certificate, like the virtual
+		// channels of opc.https, identifies nobody.
+		status, _ = s.disc.register(securedChannel(ua.MessageSecurityModeSignAndEncrypt, nil), regServer("urn:test:a"), nil)
+		require.Equal(t, ua.StatusBadSecurityModeInsufficient, status, "a certificate is still required")
 	})
 
 	t.Run("insecure allowed", func(t *testing.T) {
