@@ -1536,6 +1536,8 @@ EncodingMask returns the encoding mask field including the type information and 
 func (n *NodeID) Equal(o *NodeID) bool
 ```
 
+Equal reports whether n and o have the same String form: the same namespace and identifier, a numeric one in any of its encodings. It compares the fields, without building the strings: the server compares NodeIds for every reference it removes.
+
 #### func (NodeID) IndexFlag
 
 ```go
