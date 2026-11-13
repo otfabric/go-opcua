@@ -32,10 +32,12 @@ type BinaryDecoder interface {
 
 func Decode(b []byte, v interface{}) (int, error) {
 	val := reflect.ValueOf(v)
-	return decode(b, val, val.Type().String())
+	return decode(b, val, val.Type().String(), 0)
 }
 
-func decode(b []byte, val reflect.Value, name string) (n int, err error) {
+// decode reads val from b. depth is the nesting depth of the enclosing
+// value (see [MaxBinaryNestingDepth]).
+func decode(b []byte, val reflect.Value, name string, depth int) (n int, err error) {
 	slog.Debug("decode", "name", name, "type", val.Type(), "kind", val.Type().Kind(), "bytes", len(b))
 	if slog.Default().Enabled(context.Background(), slog.LevelDebug) {
 		defer func() {
@@ -46,6 +48,9 @@ func decode(b []byte, val reflect.Value, name string) (n int, err error) {
 	buf := NewBuffer(b)
 	switch {
 	case isBinaryDecoder(val):
+		if v, ok := val.Interface().(depthDecoder); ok {
+			return v.decodeDepth(b, depth)
+		}
 		v := val.Interface().(BinaryDecoder)
 		return v.Decode(b)
 	case isTime(val):
@@ -78,13 +83,13 @@ func decode(b []byte, val reflect.Value, name string) (n int, err error) {
 		case reflect.String:
 			val.SetString(buf.ReadString())
 		case reflect.Slice:
-			return decodeSlice(b, val, name)
+			return decodeSlice(b, val, name, depth)
 		case reflect.Array:
-			return decodeArray(b, val, name)
+			return decodeArray(b, val, name, depth)
 		case reflect.Pointer:
-			return decode(b, val.Elem(), name)
+			return decode(b, val.Elem(), name, depth)
 		case reflect.Struct:
-			return decodeStruct(b, val, name)
+			return decodeStruct(b, val, name, depth)
 		default:
 			return 0, fmt.Errorf("%w: %s", errors.ErrUnsupportedType, val.Type())
 		}
@@ -92,7 +97,7 @@ func decode(b []byte, val reflect.Value, name string) (n int, err error) {
 	return buf.Pos(), buf.Error()
 }
 
-func decodeStruct(b []byte, val reflect.Value, name string) (int, error) {
+func decodeStruct(b []byte, val reflect.Value, name string, depth int) (int, error) {
 	pos := 0
 	valt := val.Type()
 	for i := 0; i < val.NumField(); i++ {
@@ -107,7 +112,7 @@ func decodeStruct(b []byte, val reflect.Value, name string) (int, error) {
 			// fmt.Printf("decode: %s has type %v and has new value %#v\n", fname, f.Type(), f.Interface())
 		}
 
-		n, err := decode(b[pos:], f, fname)
+		n, err := decode(b[pos:], f, fname, depth)
 		if err != nil {
 			return pos, err
 		}
@@ -116,7 +121,7 @@ func decodeStruct(b []byte, val reflect.Value, name string) (int, error) {
 	return pos, nil
 }
 
-func decodeSlice(b []byte, val reflect.Value, name string) (int, error) {
+func decodeSlice(b []byte, val reflect.Value, name string, depth int) (int, error) {
 	buf := NewBuffer(b)
 	n := buf.ReadUint32()
 	if buf.Error() != nil {
@@ -166,7 +171,7 @@ func decodeSlice(b []byte, val reflect.Value, name string) (int, error) {
 		}
 
 		ename := fmt.Sprintf("%s[%d]", name, i)
-		m, err := decode(b[pos:], a.Index(i), ename)
+		m, err := decode(b[pos:], a.Index(i), ename, depth)
 		if err != nil {
 			return pos, err
 		}
@@ -198,7 +203,7 @@ func emptyStructDepth(t reflect.Type, depth int) bool {
 	return true
 }
 
-func decodeArray(b []byte, val reflect.Value, name string) (int, error) {
+func decodeArray(b []byte, val reflect.Value, name string, depth int) (int, error) {
 	buf := NewBuffer(b)
 	n := buf.ReadUint32()
 	if buf.Error() != nil {
@@ -241,7 +246,7 @@ func decodeArray(b []byte, val reflect.Value, name string) (int, error) {
 		}
 
 		ename := fmt.Sprintf("%s[%d]", name, i)
-		m, err := decode(b[pos:], a.Index(i), ename)
+		m, err := decode(b[pos:], a.Index(i), ename, depth)
 		if err != nil {
 			return pos, err
 		}

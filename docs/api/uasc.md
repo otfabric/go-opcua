@@ -615,6 +615,9 @@ type SecureChannel struct {
 	// arrive rather than after all of them have been buffered. It is
 	// guarded by chunksMu.
 
+	// chunksTotal is the sum of chunkBytes: the body bytes of all partial
+	// messages buffered on the channel. It is guarded by chunksMu.
+
 	// chunksAborted holds the request IDs whose collection was given up
 	// (too many chunks or bytes): their remaining chunks are dropped up to
 	// and including the final one, rather than collected again and merged

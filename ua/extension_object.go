@@ -60,7 +60,14 @@ func NewExtensionObject(value interface{}) *ExtensionObject {
 }
 
 func (e *ExtensionObject) Decode(b []byte) (int, error) {
-	buf := NewBuffer(b)
+	return e.decodeDepth(b, 0)
+}
+
+func (e *ExtensionObject) decodeDepth(b []byte, depth int) (int, error) {
+	buf, err := nestedBuffer(b, depth)
+	if err != nil {
+		return 0, err
+	}
 	e.TypeID = new(ExpandedNodeID)
 	buf.ReadStruct(e.TypeID)
 
@@ -75,6 +82,7 @@ func (e *ExtensionObject) Decode(b []byte) (int, error) {
 	}
 
 	body := NewBuffer(buf.ReadN(int(length)))
+	body.depth = buf.depth
 	if buf.Error() != nil {
 		return buf.Pos(), buf.Error()
 	}
@@ -99,7 +107,14 @@ func (e *ExtensionObject) Decode(b []byte) (int, error) {
 }
 
 func (e *ExtensionObject) Encode() ([]byte, error) {
-	buf := NewBuffer(nil)
+	return e.encodeDepth(0)
+}
+
+func (e *ExtensionObject) encodeDepth(depth int) ([]byte, error) {
+	buf, err := nestedBuffer(nil, depth)
+	if err != nil {
+		return nil, err
+	}
 	if e == nil {
 		e = &ExtensionObject{TypeID: NewTwoByteExpandedNodeID(0), EncodingMask: ExtensionObjectEmpty}
 	}
@@ -113,6 +128,7 @@ func (e *ExtensionObject) Encode() ([]byte, error) {
 	_ = buf.WriteByte(e.EncodingMask)
 
 	body := NewBuffer(nil)
+	body.depth = buf.depth
 	if raw, ok := e.Value.([]byte); ok {
 		// An opaque, already encoded body, as the JSON and XML decoders
 		// keep it for types that are not registered.
