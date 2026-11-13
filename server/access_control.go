@@ -194,3 +194,25 @@ func (ac *RBACAccessController) checkPermission(sess *Session, nodeID *ua.NodeID
 	}
 	return ua.StatusBadUserAccessDenied
 }
+
+// checkMonitorRead authorizes the creation of a monitored item: the
+// diagnostics rules for every item and, for a data item, what the Read
+// service checks (the AccessController and the AccessRestrictions of the
+// node), so that a subscription delivers only values Read would return
+// (Part 4 §5.12.2: Bad_UserAccessDenied as the result of the item).
+func (s *Server) checkMonitorRead(ctx context.Context, sc *uasc.SecureChannel, sess *session, rv *ua.ReadValueID) ua.StatusCode {
+	if rv == nil || rv.AttributeID == ua.AttributeIDEventNotifier {
+		var nid *ua.NodeID
+		if rv != nil {
+			nid = rv.NodeID
+		}
+		return s.diag.checkRead(sess, nid)
+	}
+	if st := s.checkRead(ctx, sess, rv.NodeID); st != ua.StatusOK {
+		return st
+	}
+	if n := s.Node(rv.NodeID); n != nil {
+		return checkAccessRestrictions(sc, n)
+	}
+	return ua.StatusOK
+}

@@ -397,8 +397,9 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			}
 			continue
 		}
-		// The diagnostics of other sessions cannot be monitored either.
-		if st := s.diagnostics().checkRead(sess, nodeid); st != ua.StatusOK {
+		// The diagnostics of other sessions cannot be monitored either; a data
+		// item needs what Read needs.
+		if st := s.SubService.srv.checkMonitorRead(ctx, sc, sess, itemreq.ItemToMonitor); st != ua.StatusOK {
 			res[i] = &ua.MonitoredItemCreateResult{StatusCode: st, FilterResult: ua.NewExtensionObject(nil)}
 			continue
 		}
