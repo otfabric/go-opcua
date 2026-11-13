@@ -4,29 +4,55 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
-	"sync"
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
 )
 
-// queryContinuation stores the QueryDataSets that did not fit within a
-// client's MaxDataSetsToReturn limit, to be retrieved via QueryNext.
-type queryContinuation struct {
-	sets []*ua.QueryDataSet
-}
-
-// QueryService implements the Query Service Set.
+// QueryService implements the Query Service Set. It is only served when the
+// server is created WithQuery(true); otherwise QueryFirst and QueryNext
+// answer Bad_ServiceUnsupported.
 //
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.9
 type QueryService struct {
 	srv *Server
 
-	mu  sync.Mutex
-	cps map[string]*queryContinuation // keyed by hex-encoded token
+	// cps holds the QueryDataSets that did not fit within a client's
+	// MaxDataSetsToReturn limit, to be retrieved via QueryNext.
+	cps *cpStore[[]*ua.QueryDataSet]
+}
+
+// WithQuery enables the Query service set (QueryFirst, QueryNext, Part 4
+// §5.9). It is off by default: Query is an optional facet, and a query
+// scans the whole address space. When it is off, QueryFirst and QueryNext
+// answer Bad_ServiceUnsupported.
+//
+// A query only returns nodes the session may browse and attribute values
+// it may read: the AccessController, the diagnostics access rules and the
+// AccessRestrictions of the nodes apply as for Browse and Read.
+func WithQuery(enabled bool) Option {
+	return func(s *serverConfig) error {
+		s.query = enabled
+		return nil
+	}
+}
+
+// store returns the continuation point store, creating it for a
+// QueryService that was built without one.
+func (s *QueryService) store() *cpStore[[]*ua.QueryDataSet] {
+	if s.cps == nil {
+		s.cps = newCPStore[[]*ua.QueryDataSet]()
+	}
+	return s.cps
+}
+
+// queryScope is what one query may see: the session and channel it runs
+// for.
+type queryScope struct {
+	ctx  context.Context
+	sess *session
+	sc   *uasc.SecureChannel
 }
 
 // QueryFirst implements the OPC UA QueryFirst service.
@@ -38,6 +64,11 @@ func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r
 	if err != nil {
 		return nil, err
 	}
+	if !s.srv.cfg.query {
+		return nil, ua.StatusBadServiceUnsupported
+	}
+	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
+	scope := &queryScope{ctx: ctx, sess: sess, sc: sc}
 
 	// Views are not maintained by this server. A null/absent view means the
 	// whole address space; any specific view is unknown.
@@ -83,7 +114,7 @@ func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r
 		parsing[k] = pr
 	}
 
-	sets := s.scan(req, parsing)
+	sets := s.scan(scope, req, parsing)
 
 	resp := &ua.QueryFirstResponse{
 		ResponseHeader:  responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
@@ -95,8 +126,14 @@ func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r
 	// Apply MaxDataSetsToReturn and spill the overflow into a continuation.
 	max := int(req.MaxDataSetsToReturn)
 	if max > 0 && len(sets) > max {
+		cp, ok := s.storeContinuation(sess, sets[max:])
+		if !ok {
+			// Part 4 §7.9: all continuation points of the session are
+			// in use.
+			return nil, ua.StatusBadNoContinuationPoints
+		}
 		resp.QueryDataSets = sets[:max]
-		resp.ContinuationPoint = s.storeContinuation(sets[max:])
+		resp.ContinuationPoint = cp
 	} else {
 		resp.QueryDataSets = sets
 	}
@@ -117,7 +154,7 @@ func (s *QueryService) isTypeNode(id *ua.NodeID) bool {
 
 // scan enumerates candidate nodes, applies type matching and the filter, and
 // builds the resulting QueryDataSets.
-func (s *QueryService) scan(req *ua.QueryFirstRequest, parsing []*ua.ParsingResult) []*ua.QueryDataSet {
+func (s *QueryService) scan(scope *queryScope, req *ua.QueryFirstRequest, parsing []*ua.ParsingResult) []*ua.QueryDataSet {
 	var sets []*ua.QueryDataSet
 
 	for _, ns := range s.srv.Namespaces() {
@@ -136,11 +173,18 @@ func (s *QueryService) scan(req *ua.QueryFirstRequest, parsing []*ua.ParsingResu
 				continue
 			}
 
-			if evalFilter(s.srv, node, req.Filter) != tvlTrue {
+			// A node the session may not browse is not part of the
+			// result.
+			if s.srv.checkBrowse(scope.ctx, scope.sess, node.ID()) != ua.StatusOK ||
+				checkAccessRestrictionsForBrowse(scope.sc, node) != ua.StatusOK {
 				continue
 			}
 
-			sets = append(sets, s.buildDataSet(node, td, req.NodeTypes[k]))
+			if evalFilterFor(s.srv, node, req.Filter, scope.canRead(s.srv)) != tvlTrue {
+				continue
+			}
+
+			sets = append(sets, s.buildDataSet(scope, node, td, req.NodeTypes[k]))
 		}
 	}
 
@@ -167,7 +211,7 @@ func (s *QueryService) matchNodeType(ntds []*ua.NodeTypeDescription, parsing []*
 }
 
 // buildDataSet resolves the requested attributes for a matched node.
-func (s *QueryService) buildDataSet(node *Node, td *ua.NodeID, ntd *ua.NodeTypeDescription) *ua.QueryDataSet {
+func (s *QueryService) buildDataSet(scope *queryScope, node *Node, td *ua.NodeID, ntd *ua.NodeTypeDescription) *ua.QueryDataSet {
 	ds := &ua.QueryDataSet{
 		NodeID:             ua.NewExpandedNodeID(node.ID(), "", 0),
 		TypeDefinitionNode: ua.NewExpandedNodeID(td, "", 0),
@@ -175,12 +219,33 @@ func (s *QueryService) buildDataSet(node *Node, td *ua.NodeID, ntd *ua.NodeTypeD
 	}
 
 	for i, dd := range ntd.DataToReturn {
-		ds.Values[i] = s.readDataDescription(node, dd)
+		ds.Values[i] = s.readDataDescription(scope, node, dd)
 	}
 	return ds
 }
 
-func (s *QueryService) readDataDescription(node *Node, dd *ua.QueryDataDescription) *ua.Variant {
+// canRead returns the read check of the scope for the filter evaluator.
+func (q *queryScope) canRead(srv *Server) func(*ua.NodeID) bool {
+	return func(id *ua.NodeID) bool { return q.readStatus(srv, id) == ua.StatusOK }
+}
+
+// readStatus is the status of reading node id in the scope: the read check
+// of the server and the AccessRestrictions of the node.
+func (q *queryScope) readStatus(srv *Server, id *ua.NodeID) ua.StatusCode {
+	if st := srv.checkRead(q.ctx, q.sess, id); st != ua.StatusOK {
+		return st
+	}
+	if n := srv.Node(id); n != nil {
+		if st := checkAccessRestrictions(q.sc, n); st != ua.StatusOK {
+			return st
+		}
+	}
+	return ua.StatusOK
+}
+
+// readDataDescription resolves one QueryDataDescription of a node. A value
+// the session may not read is returned as the StatusCode of the denied read.
+func (s *QueryService) readDataDescription(scope *queryScope, node *Node, dd *ua.QueryDataDescription) *ua.Variant {
 	target := node.ID()
 	if dd.RelativePath != nil && len(dd.RelativePath.Elements) > 0 {
 		resolved, st := s.srv.resolveRelativePath(node.ID(), dd.RelativePath)
@@ -195,6 +260,10 @@ func (s *QueryService) readDataDescription(node *Node, dd *ua.QueryDataDescripti
 		attr = ua.AttributeIDValue
 	}
 
+	if st := scope.readStatus(s.srv, target); st != ua.StatusOK {
+		return ua.MustVariant(st)
+	}
+
 	ns, err := s.srv.Namespace(int(target.Namespace()))
 	if err != nil {
 		return &ua.Variant{}
@@ -206,22 +275,13 @@ func (s *QueryService) readDataDescription(node *Node, dd *ua.QueryDataDescripti
 	return dv.Value
 }
 
-// storeContinuation saves overflow data sets and returns a continuation token.
-func (s *QueryService) storeContinuation(sets []*ua.QueryDataSet) []byte {
-	var buf [16]byte
-	_, _ = rand.Read(buf[:])
-	token := hex.EncodeToString(buf[:])
-
+// storeContinuation saves overflow data sets for sess and returns a
+// continuation token, or false when sess holds all the continuation points
+// it may (Part 4 §7.9).
+func (s *QueryService) storeContinuation(sess *session, sets []*ua.QueryDataSet) ([]byte, bool) {
 	stored := make([]*ua.QueryDataSet, len(sets))
 	copy(stored, sets)
-
-	s.mu.Lock()
-	if s.cps == nil {
-		s.cps = make(map[string]*queryContinuation)
-	}
-	s.cps[token] = &queryContinuation{sets: stored}
-	s.mu.Unlock()
-	return []byte(token)
+	return s.store().store(sessionKey(sess), s.srv.cfg.queryContinuationPointLimit(), stored)
 }
 
 // QueryNext implements the OPC UA QueryNext service.
@@ -234,22 +294,23 @@ func (s *QueryService) QueryNext(ctx context.Context, sc *uasc.SecureChannel, r 
 		return nil, err
 	}
 
+	if !s.srv.cfg.query {
+		return nil, ua.StatusBadServiceUnsupported
+	}
+
 	if len(req.ContinuationPoint) == 0 {
 		return nil, ua.StatusBadContinuationPointInvalid
 	}
 
-	token := string(req.ContinuationPoint)
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	cp, ok := s.cps[token]
+	// A continuation point belongs to the session that created it (Part 4
+	// §7.9): for any other session it is Bad_ContinuationPointInvalid.
+	owner := sessionKey(s.srv.sb.Session(req.RequestHeader.AuthenticationToken))
+	sets, ok := s.store().take(owner, req.ContinuationPoint)
 	if !ok {
 		return nil, ua.StatusBadContinuationPointInvalid
 	}
 
 	if req.ReleaseContinuationPoint {
-		delete(s.cps, token)
 		return &ua.QueryNextResponse{
 			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
 			QueryDataSets:  []*ua.QueryDataSet{},
@@ -258,9 +319,8 @@ func (s *QueryService) QueryNext(ctx context.Context, sc *uasc.SecureChannel, r 
 
 	// Return all remaining data sets and retire the continuation point. This
 	// server does not re-paginate a QueryNext batch.
-	delete(s.cps, token)
 	return &ua.QueryNextResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
-		QueryDataSets:  cp.sets,
+		QueryDataSets:  sets,
 	}, nil
 }

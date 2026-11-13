@@ -12,7 +12,8 @@ import (
 
 func TestQueryService_EmptyNodeTypes(t *testing.T) {
 	srv := newTestServer()
-	svc := &QueryService{srv: srv, cps: make(map[string]*queryContinuation)}
+	srv.cfg.query = true
+	svc := &QueryService{srv: srv, cps: newCPStore[[]*ua.QueryDataSet]()}
 
 	_, err := svc.QueryFirst(context.Background(), nil, &ua.QueryFirstRequest{
 		RequestHeader: reqHeader(),
@@ -22,7 +23,8 @@ func TestQueryService_EmptyNodeTypes(t *testing.T) {
 
 func TestQueryService_UnknownView(t *testing.T) {
 	srv := newTestServer()
-	svc := &QueryService{srv: srv, cps: make(map[string]*queryContinuation)}
+	srv.cfg.query = true
+	svc := &QueryService{srv: srv, cps: newCPStore[[]*ua.QueryDataSet]()}
 
 	_, err := svc.QueryFirst(context.Background(), nil, &ua.QueryFirstRequest{
 		RequestHeader: reqHeader(),
@@ -36,7 +38,8 @@ func TestQueryService_UnknownView(t *testing.T) {
 
 func TestQueryService_InvalidFilter(t *testing.T) {
 	srv := newTestServer()
-	svc := &QueryService{srv: srv, cps: make(map[string]*queryContinuation)}
+	srv.cfg.query = true
+	svc := &QueryService{srv: srv, cps: newCPStore[[]*ua.QueryDataSet]()}
 
 	resp, err := svc.QueryFirst(context.Background(), nil, &ua.QueryFirstRequest{
 		RequestHeader: reqHeader(),
@@ -54,7 +57,8 @@ func TestQueryService_InvalidFilter(t *testing.T) {
 
 func TestQueryService_QueryNextUnknownToken(t *testing.T) {
 	srv := newTestServer()
-	svc := &QueryService{srv: srv, cps: make(map[string]*queryContinuation)}
+	srv.cfg.query = true
+	svc := &QueryService{srv: srv, cps: newCPStore[[]*ua.QueryDataSet]()}
 
 	_, err := svc.QueryNext(context.Background(), nil, &ua.QueryNextRequest{
 		RequestHeader:     reqHeader(),
@@ -65,7 +69,8 @@ func TestQueryService_QueryNextUnknownToken(t *testing.T) {
 
 func TestQueryService_ScanFindsNodes(t *testing.T) {
 	srv := newTestServer()
-	svc := &QueryService{srv: srv, cps: make(map[string]*queryContinuation)}
+	srv.cfg.query = true
+	svc := &QueryService{srv: srv, cps: newCPStore[[]*ua.QueryDataSet]()}
 
 	// Query for PropertyType (id=68) — a leaf type in ns-0 with no subtypes.
 	// Limiting MaxDataSetsToReturn avoids walking the entire address space.
@@ -85,7 +90,8 @@ func TestQueryService_ScanFindsNodes(t *testing.T) {
 
 func TestQueryService_ContinuationPoint(t *testing.T) {
 	srv := newTestServer()
-	svc := &QueryService{srv: srv, cps: make(map[string]*queryContinuation)}
+	srv.cfg.query = true
+	svc := &QueryService{srv: srv, cps: newCPStore[[]*ua.QueryDataSet]()}
 
 	// Limit to 1 result so we get a continuation point.
 	// Use PropertyType (id=68, leaf type) with no subtype expansion to keep it fast.

@@ -50,73 +50,81 @@ func (s *MonitoredItemService) DeleteMonitoredItem(id uint32) {
 // deleteMonitoredItemNeedsLock is DeleteMonitoredItem for callers that hold
 // s.Mu.
 func (s *MonitoredItemService) deleteMonitoredItemNeedsLock(id uint32) {
-	item, ok := s.Items[id]
-	if !ok {
-		// id does not exist.
+	if item, ok := s.Items[id]; ok {
+		s.removeItemsNeedsLock([]*MonitoredItem{item})
+	}
+}
+
+// removeItemsNeedsLock removes items from all indexes. Every node and
+// subscription list the items are on is compacted once, so removing n items
+// costs O(n) plus the length of the lists they were on, not O(n²).
+// Caller must hold s.Mu.
+func (s *MonitoredItemService) removeItemsNeedsLock(items []*MonitoredItem) {
+	if len(items) == 0 {
 		return
 	}
-
-	if item == nil || item.Req == nil || item.Req.ItemToMonitor == nil || item.Req.ItemToMonitor.NodeID == nil {
-		return
-	}
-	nodeid := item.Req.ItemToMonitor.NodeID.String()
-
-	if s == nil || s.Nodes == nil || s.Nodes[nodeid] == nil {
-		return
-	}
-
-	// delete the monitored item from all nodes
-	// was using slices.DeleteFunc but that is from a newer go version so we'll do it manually with /exp/slices
-	// we've got to go backwards because we're deleting from the slice as we go.
-	// I'm guessing this loop is less efficient than slices.DeleteFunc but it's what we've got.
-	delete(s.Items, id)
-	s.diagnostics().untrackItem(item)
-	// A postponed sample dies with the item, and the sampler timer with the
-	// last postponed sample.
-	s.cancelDeferredSample(item)
-	for i := len(s.Nodes[nodeid]) - 1; i >= 0; i-- {
-		n := s.Nodes[nodeid][i]
-		if n == nil {
+	gone := make(map[*MonitoredItem]struct{}, len(items))
+	nodes := make(map[string]struct{})
+	subs := make(map[uint32]struct{})
+	for _, item := range items {
+		if item == nil || s.Items[item.ID] != item {
 			continue
 		}
-		if n.ID == id {
-			s.Nodes[nodeid] = slices.Delete(s.Nodes[nodeid], i, i+1)
+		delete(s.Items, item.ID)
+		gone[item] = struct{}{}
+		s.diagnostics().untrackItem(item)
+		// A postponed sample dies with the item, and the sampler timer with
+		// the last postponed sample.
+		s.cancelDeferredSample(item)
+		if item.isEvent && s.SubService != nil && s.SubService.srv != nil && s.SubService.srv.eventItems != nil {
+			s.SubService.srv.eventItems.unregister(item.ID)
+		}
+		if item.Sub != nil {
+			// The events of the item are discarded with it.
+			item.Sub.dropEventQueue(item)
+		}
+		if item.Req != nil && item.Req.ItemToMonitor != nil && item.Req.ItemToMonitor.NodeID != nil {
+			nodes[item.Req.ItemToMonitor.NodeID.String()] = struct{}{}
+		}
+		if item.Sub != nil {
+			subs[item.Sub.ID] = struct{}{}
 		}
 	}
-	//slices.DeleteFunc(s.Nodes[nodeid], func(i *MonitoredItem) bool { return i.ID == item.ID })
-	if len(s.Nodes[nodeid]) == 0 {
-		delete(s.Nodes, nodeid)
+	if len(gone) == 0 {
+		return
 	}
-
-	for i := len(s.Subs[item.Sub.ID]) - 1; i >= 0; i-- {
-		n := s.Subs[item.Sub.ID][i]
-		if n == nil {
-			continue
-		}
-		if n.ID == id {
-			s.Subs[item.Sub.ID] = slices.Delete(s.Subs[item.Sub.ID], i, i+1)
+	isGone := func(m *MonitoredItem) bool {
+		_, ok := gone[m]
+		return m == nil || ok
+	}
+	for k := range nodes {
+		if l := slices.DeleteFunc(s.Nodes[k], isGone); len(l) > 0 {
+			s.Nodes[k] = l
+		} else {
+			delete(s.Nodes, k)
 		}
 	}
-	//slices.DeleteFunc(s.Subs[item.Sub.ID], func(i *MonitoredItem) bool { return i.ID == item.ID })
-	if len(s.Subs[item.Sub.ID]) == 0 {
-		delete(s.Subs, item.Sub.ID)
+	for k := range subs {
+		if l, ok := s.Subs[k]; ok {
+			if l = slices.DeleteFunc(l, isGone); len(l) > 0 {
+				s.Subs[k] = l
+			} else {
+				delete(s.Subs, k)
+			}
+		}
 	}
 }
 
 // DeleteSub deletes all monitored items associated with a specific subscription ID.
 func (s *MonitoredItemService) DeleteSub(id uint32) {
 	s.Mu.Lock()
+	defer s.Mu.Unlock()
 	items, ok := s.Subs[id]
 	delete(s.Subs, id)
-	s.Mu.Unlock()
 	if !ok {
 		return
 	}
-	for i := range items {
-		if items[i] != nil {
-			s.DeleteMonitoredItem(items[i].ID)
-		}
-	}
+	s.removeItemsNeedsLock(items)
 }
 
 const maxMonitoredItemQueueSize = 100
@@ -308,6 +316,11 @@ type MonitoredItem struct {
 
 	// isEvent marks an item on the EventNotifier attribute.
 	isEvent bool
+	// The event queue of an event item, its revised QueueSize and its
+	// DiscardOldest, guarded by Sub.evMu (event_queue.go).
+	events          []queuedEvent
+	evQueueSize     uint32
+	evDiscardOldest bool
 	// Data-change sampling state, see monitored_item_filter.go.
 	filter           dataChangeFilter
 	indexRange       string
@@ -383,8 +396,24 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		}, nil
 	}
 
+	counts := s.itemCountsLocked(sess, subID)
 	for i := range req.ItemsToCreate {
 		itemreq := req.ItemsToCreate[i]
+		if counts.full(s.SubService.srv.cfg) {
+			// Part 4 §5.12.2: Bad_TooManyMonitoredItems.
+			res[i] = &ua.MonitoredItemCreateResult{
+				StatusCode:   ua.StatusBadTooManyMonitoredItems,
+				FilterResult: ua.NewExtensionObject(nil),
+			}
+			continue
+		}
+		if itemreq == nil || itemreq.ItemToMonitor == nil {
+			res[i] = &ua.MonitoredItemCreateResult{
+				StatusCode:   ua.StatusBadNodeIDInvalid,
+				FilterResult: ua.NewExtensionObject(nil),
+			}
+			continue
+		}
 		nodeid := itemreq.ItemToMonitor.NodeID
 
 		// Validate the node exists. Reject unknown nodes individually so a
@@ -406,9 +435,12 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 		if itemreq.RequestedParameters == nil {
 			itemreq.RequestedParameters = &ua.MonitoringParameters{DiscardOldest: true}
 		}
-		qsize := reviseQueueSize(itemreq.RequestedParameters.QueueSize)
 		discardOldest := itemreq.RequestedParameters.DiscardOldest
 		isEventItem := itemreq.ItemToMonitor.AttributeID == ua.AttributeIDEventNotifier
+		qsize := reviseQueueSize(itemreq.RequestedParameters.QueueSize)
+		if isEventItem {
+			qsize = reviseEventQueueSize(itemreq.RequestedParameters.QueueSize)
+		}
 
 		// Data items: validate the IndexRange and the DataChangeFilter and
 		// revise the sampling interval before anything is registered.
@@ -445,8 +477,10 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			queueSize:          qsize,
 			discardOldest:      discardOldest,
 			timestampsToReturn: ts,
-			queue:              make([]*ua.MonitoredItemNotification, 0, qsize),
+			queue:              make([]*ua.MonitoredItemNotification, 0, min(qsize, maxMonitoredItemQueueSize)),
 			isEvent:            isEventItem,
+			evQueueSize:        qsize,
+			evDiscardOldest:    discardOldest,
 			filter:             filter,
 			indexRange:         itemreq.ItemToMonitor.IndexRange,
 			samplingInterval:   time.Duration(samplingMS * float64(time.Millisecond)),
@@ -498,6 +532,9 @@ func (s *MonitoredItemService) CreateMonitoredItems(ctx context.Context, sc *uas
 			list = make([]*MonitoredItem, 0, 1)
 		}
 		s.Subs[item.Sub.ID] = append(list, &item)
+		counts.total++
+		counts.session++
+		counts.subscription++
 
 		s.SubService.srv.cfg.logger.Debug("adding monitored item", "node_id", nodeid.String(), "sub_id", subID, "item_id", item.ID, "client_handle", itemreq.RequestedParameters.ClientHandle, "queue_size", qsize)
 		res[i] = &ua.MonitoredItemCreateResult{
@@ -594,8 +631,13 @@ func (s *MonitoredItemService) ModifyMonitoredItems(ctx context.Context, sc *uas
 		// Update the monitored item's parameters.
 		if item.RequestedParameters != nil {
 			mi.Req.RequestedParameters = item.RequestedParameters
-			mi.queueSize = reviseQueueSize(item.RequestedParameters.QueueSize)
 			mi.discardOldest = item.RequestedParameters.DiscardOldest
+			if mi.isEvent {
+				mi.queueSize = reviseEventQueueSize(item.RequestedParameters.QueueSize)
+				mi.setEventQueue(mi.queueSize, mi.discardOldest)
+			} else {
+				mi.queueSize = reviseQueueSize(item.RequestedParameters.QueueSize)
+			}
 			if len(mi.queue) > int(mi.queueSize) {
 				// Keep the newest samples when shrinking the queue.
 				mi.queue = mi.queue[len(mi.queue)-int(mi.queueSize):]

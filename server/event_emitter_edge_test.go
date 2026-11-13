@@ -49,10 +49,9 @@ func TestEventEmitter_NilItemInList(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	select {
-	case evt := <-sub.EventNotifyChannel:
+	if evt, ok := nextQueuedEvent(sub); ok {
 		assert.Equal(t, uint32(10), evt.ClientHandle)
-	default:
+	} else {
 		t.Fatal("expected event even when nil items are present in the list")
 	}
 }
@@ -124,21 +123,19 @@ func TestEventEmitter_MultipleSubscribers(t *testing.T) {
 	require.NoError(t, err)
 
 	// Both subscribers should receive the event.
-	select {
-	case evt := <-sub1.EventNotifyChannel:
+	if evt, ok := nextQueuedEvent(sub1); ok {
 		assert.Equal(t, uint32(100), evt.ClientHandle)
 		require.Len(t, evt.EventFields, 1)
 		assert.Equal(t, "multi_event", evt.EventFields[0].Value())
-	default:
+	} else {
 		t.Fatal("subscriber 1 did not receive event")
 	}
 
-	select {
-	case evt := <-sub2.EventNotifyChannel:
+	if evt, ok := nextQueuedEvent(sub2); ok {
 		assert.Equal(t, uint32(200), evt.ClientHandle)
 		require.Len(t, evt.EventFields, 1)
 		assert.Equal(t, "multi_event", evt.EventFields[0].Value())
-	default:
+	} else {
 		t.Fatal("subscriber 2 did not receive event")
 	}
 }
@@ -166,22 +163,18 @@ func TestEventEmitter_FullChannelDropsEvent(t *testing.T) {
 	srv.MonitoredItemService.Nodes[nodeID.String()] = []*MonitoredItem{item}
 	srv.MonitoredItemService.Mu.Unlock()
 
-	// Fill the event channel (buffer is 100).
-	for i := 0; i < 100; i++ {
-		sub.EventNotifyChannel <- &ua.EventFieldList{
-			ClientHandle: uint32(i),
-			EventFields:  []*ua.Variant{ua.MustVariant(int32(i))},
-		}
+	// The queue of the item holds QueueSize events; beyond that the oldest
+	// is discarded and an overflow event heads the queue.
+	item.evQueueSize, item.evDiscardOldest = 100, true
+	for i := 0; i < 150; i++ {
+		require.NoError(t, srv.EmitEvent(nodeID, &ua.EventFieldList{
+			EventFields: []*ua.Variant{ua.MustVariant(int32(i))},
+		}))
 	}
-
-	// This should not block and should not error — the event is dropped.
-	err := srv.EmitEvent(nodeID, &ua.EventFieldList{
-		EventFields: []*ua.Variant{ua.MustVariant("dropped")},
-	})
-	assert.NoError(t, err, "EmitEvent should not error when channel is full")
-
-	// Channel should still contain the original 100 events.
-	assert.Equal(t, 100, len(sub.EventNotifyChannel))
+	evs, _ := sub.takeEvents(0, true)
+	require.Len(t, evs, 101)
+	assert.Equal(t, int32(50), evs[1].EventFields[0].Value())
+	assert.Equal(t, int32(149), evs[100].EventFields[0].Value())
 }
 
 func TestEventEmitter_MultipleEventFields(t *testing.T) {
@@ -217,14 +210,13 @@ func TestEventEmitter_MultipleEventFields(t *testing.T) {
 	err := srv.EmitEvent(nodeID, fields)
 	require.NoError(t, err)
 
-	select {
-	case evt := <-sub.EventNotifyChannel:
+	if evt, ok := nextQueuedEvent(sub); ok {
 		assert.Equal(t, uint32(33), evt.ClientHandle)
 		require.Len(t, evt.EventFields, 3)
 		assert.Equal(t, "EventType", evt.EventFields[0].Value())
 		assert.Equal(t, int32(42), evt.EventFields[1].Value())
 		assert.Equal(t, float64(3.14), evt.EventFields[2].Value())
-	default:
+	} else {
 		t.Fatal("expected event with multiple fields")
 	}
 }

@@ -79,7 +79,7 @@ func TestAccessControl_BrowseDenied(t *testing.T) {
 	srv := newTestServer()
 	srv.cfg.accessController = denyAllController{}
 	ns, _ := addTestNamespace(srv)
-	svc := &ViewService{srv: srv, cps: make(map[string]*continuationPoint)}
+	svc := &ViewService{srv: srv, cps: newCPStore[[]*ua.ReferenceDescription]()}
 
 	req := &ua.BrowseRequest{
 		RequestHeader: reqHeader(),

@@ -165,7 +165,7 @@ func TestViewService_BrowseDirection(t *testing.T) {
 
 func TestViewService_UnsupportedMethods(t *testing.T) {
 	srv := newTestServer()
-	svc := &ViewService{srv: srv, cps: make(map[string]*continuationPoint)}
+	svc := &ViewService{srv: srv, cps: newCPStore[[]*ua.ReferenceDescription]()}
 
 	t.Run("BrowseNext empty", func(t *testing.T) {
 		resp, err := svc.BrowseNext(context.Background(), nil, &ua.BrowseNextRequest{RequestHeader: reqHeader()}, 1)
@@ -199,7 +199,7 @@ func TestViewService_UnsupportedMethods(t *testing.T) {
 func TestViewService_BrowseNext(t *testing.T) {
 	srv := newTestServer()
 	ns, obj := addTestNamespace(srv)
-	svc := &ViewService{srv: srv, cps: make(map[string]*continuationPoint)}
+	svc := &ViewService{srv: srv, cps: newCPStore[[]*ua.ReferenceDescription]()}
 
 	// Add enough children to produce a continuation point.
 	for i := 0; i < 5; i++ {
@@ -304,7 +304,7 @@ func TestViewService_BrowseNext(t *testing.T) {
 func TestViewService_TranslateBrowsePathsToNodeIDs(t *testing.T) {
 	srv := newTestServer()
 	ns, obj := addTestNamespace(srv)
-	svc := &ViewService{srv: srv, cps: make(map[string]*continuationPoint)}
+	svc := &ViewService{srv: srv, cps: newCPStore[[]*ua.ReferenceDescription]()}
 
 	// Create a child node with a known browse name.
 	child := ns.AddNewVariableStringNode("target_node", int32(100))

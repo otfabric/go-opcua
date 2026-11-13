@@ -183,7 +183,7 @@ func TestAccessControl_ReadOnly_BrowseAllowed(t *testing.T) {
 	srv := newTestServer()
 	ns, _ := addTestNamespace(srv)
 	srv.cfg.accessController = readOnlyController{}
-	svc := &ViewService{srv: srv, cps: make(map[string]*continuationPoint)}
+	svc := &ViewService{srv: srv, cps: newCPStore[[]*ua.ReferenceDescription]()}
 
 	req := &ua.BrowseRequest{
 		RequestHeader: reqHeader(),
