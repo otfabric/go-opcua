@@ -52,42 +52,54 @@ func ed448Chains(leaf *x509.Certificate, intermediates, anchors []*x509.Certific
 			return [][]*x509.Certificate{{leaf}}, nil
 		}
 	}
+	b := &ed448Builder{
+		intermediates: dedupCertificates(intermediates),
+		anchors:       anchors,
+		now:           now,
+		sigs:          make(map[sigEdge]error),
+	}
 	var chains [][]*x509.Certificate
-	err := collectEd448Chains([]*x509.Certificate{leaf}, intermediates, anchors, now, &chains)
+	err := b.collect([]*x509.Certificate{leaf}, &chains)
 	if len(chains) > 0 {
 		return chains, nil
 	}
 	return nil, err
 }
 
-// collectEd448Chains extends chain to every trust anchor it reaches, as
-// buildEd448Chain does, and adds the complete chains to out.
-func collectEd448Chains(chain, intermediates, anchors []*x509.Certificate, now time.Time, out *[][]*x509.Certificate) error {
+// collect extends chain to every trust anchor it reaches, as build does,
+// within the same bounds, and adds the complete chains to out.
+func (b *ed448Builder) collect(chain []*x509.Certificate, out *[][]*x509.Certificate) error {
 	c := chain[len(chain)-1]
 	err := fmt.Errorf("%w: certificate %q is signed by an unknown authority", errors.ErrInvalidCertificate, c.Subject.String())
 	if len(chain) >= maxChainLength {
 		return fmt.Errorf("%w: certificate chain is too long", errors.ErrInvalidCertificate)
 	}
-	for _, a := range anchors {
+	for _, a := range b.anchors {
 		if a == nil || len(*out) >= maxChains {
 			continue
 		}
-		e := checkIssuer(chain, a, now)
+		e := b.checkIssuer(chain, a)
 		if e == nil {
 			*out = append(*out, append(chain[:len(chain):len(chain)], a))
 			continue
+		}
+		if e == errChainWork {
+			return e
 		}
 		if e != errNotIssuer {
 			err = e
 		}
 	}
-	for _, ic := range intermediates {
-		if ic == nil || inChain(chain, ic) || len(*out) >= maxChains {
+	for _, ic := range b.intermediates {
+		if inChain(chain, ic) || len(*out) >= maxChains {
 			continue
 		}
-		e := checkIssuer(chain, ic, now)
+		e := b.checkIssuer(chain, ic)
 		if e == nil {
-			e = collectEd448Chains(append(chain[:len(chain):len(chain)], ic), intermediates, anchors, now, out)
+			e = b.collect(append(chain[:len(chain):len(chain)], ic), out)
+		}
+		if e == errChainWork {
+			return e
 		}
 		if e != nil && e != errNotIssuer {
 			err = e
