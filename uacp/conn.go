@@ -226,6 +226,11 @@ type Listener struct {
 	mu      sync.Mutex
 	pending map[*net.TCPConn]struct{} // connections in handshake
 
+	// openTimeout is how long a handshaken connection may stay silent
+	// before its first OPN message; zero is serverHandshakeTimeout. Tests
+	// shorten it.
+	openTimeout time.Duration
+
 	// upgrade turns an accepted TCP connection into the connection UACP
 	// runs on, within the handshake deadline: TLS and the WebSocket opening
 	// handshake for opc.wss. Nil for opc.tcp.
@@ -394,6 +399,47 @@ func (l *Listener) handshake(c *net.TCPConn) {
 	}
 	if !l.deliver(acceptResult{conn: conn}) {
 		_ = conn.Close()
+		return
+	}
+	// A connection that completed HEL/ACK must open a secure channel
+	// within the same time: until its first OPN message arrives it is
+	// closed after serverHandshakeTimeout of silence. The time starts
+	// when the connection was accepted, not when it was handshaken, so a
+	// slow Accept does not cost the peer its time.
+	wait := l.openTimeout
+	if wait <= 0 {
+		wait = serverHandshakeTimeout
+	}
+	conn.armOpenDeadline(wait)
+}
+
+// armOpenDeadline sets a read deadline of d from now that lasts until the
+// first OPN message is received, unless one was received already.
+func (c *Conn) armOpenDeadline(d time.Duration) {
+	c.openMu.Lock()
+	defer c.openMu.Unlock()
+	if c.opened {
+		return
+	}
+	c.openPending = true
+	_ = c.nc.SetReadDeadline(time.Now().Add(d))
+}
+
+// sawMessage notes a received message of type typ: the first OPN message
+// clears the deadline armOpenDeadline set.
+func (c *Conn) sawMessage(typ string) {
+	if typ != "OPN" {
+		return
+	}
+	c.openMu.Lock()
+	defer c.openMu.Unlock()
+	if c.opened {
+		return
+	}
+	c.opened = true
+	if c.openPending {
+		c.openPending = false
+		_ = c.nc.SetReadDeadline(time.Time{})
 	}
 }
 
@@ -442,6 +488,13 @@ type Conn struct {
 
 	closeOnce sync.Once
 	bufPool   sync.Pool
+
+	// openMu guards the deadline a listener sets for the first
+	// OpenSecureChannel message (armOpenDeadline): openPending while it is
+	// set, opened once an OPN message arrived.
+	openMu      sync.Mutex
+	openPending bool
+	opened      bool
 }
 
 func NewConn(c *net.TCPConn, ack *Acknowledge) (*Conn, error) {
@@ -819,6 +872,7 @@ func (c *Conn) Receive() ([]byte, error) {
 	}
 
 	c.logDebug("received message", "conn_id", c.id, "msg_type", string(h.MessageType), "chunk_type", string(h.ChunkType), "size", h.MessageSize)
+	c.sawMessage(h.MessageType)
 
 	if h.MessageType == "ERR" {
 		errf := new(Error)
