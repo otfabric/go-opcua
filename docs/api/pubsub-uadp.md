@@ -225,7 +225,7 @@ type Reassembler struct {
 }
 ```
 
-Reassembler reassembles chunked NetworkMessages. Chunks are kept per PublisherId, WriterGroupId, DataSetWriterId, NetworkMessage type, security mode and MessageSequenceNumber; the chunks of a message may arrive in any order and interleaved with those of other messages. It is safe for concurrent use.
+Reassembler reassembles chunked NetworkMessages. Chunks are kept per PublisherId, WriterGroupId, DataSetWriterId, NetworkMessage type, security mode, SecurityTokenId and MessageSequenceNumber; the chunks of a message may arrive in any order and interleaved with those of other messages. Chunks that cannot belong to one message discard it: a chunk for a slot that holds other data, and, when the chunks carry the GroupHeader SequenceNumber or NetworkMessageNumber, numbers that neither are the same in every chunk nor advance by one per chunk. It is safe for concurrent use.
 
 #### func NewReassembler
 

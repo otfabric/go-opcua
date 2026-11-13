@@ -460,7 +460,7 @@ chunked. The JSON mapping has no chunks: an oversized JSON message is an
 encoding error, as is a `MaxNetworkMessageSize` too small for any chunk data.
 
 Subscribers reassemble the chunks per publisher, writer group, DataSetWriter,
-security mode and MessageSequenceNumber. Chunks are attacker-controlled
+security mode, SecurityTokenId and MessageSequenceNumber. Chunks are attacker-controlled
 input, so the reassembly is strict and bounded; set the limits with
 `pubsub.WithChunkReassembly(uadp.ReassemblerOptions{...})`, per connection:
 
@@ -475,7 +475,11 @@ input, so the reassembly is strict and bounded; set the limits with
 Every chunk is charged with its size plus 64 bytes. A chunk that lies outside
 its message, overlaps or repeats one already received, disagrees with the
 TotalSize or the chunk size of its message, or does not fit the limits is
-rejected; when a limit is reached the oldest incomplete message of the same
+rejected. Chunks that cannot be of one message discard the message: a chunk
+for an offset already received with other data, and chunks whose GroupHeader
+SequenceNumber or NetworkMessageNumber (when the chunks carry them) are
+neither the same in every chunk nor advance by one per chunk, as go-opcua and
+the .NET stack send them. When a limit is reached the oldest incomplete message of the same
 publisher, then the oldest overall, is dropped. The connection counters
 `ChunksReceived`, `ChunkedMessagesReceived` and `ChunksDiscarded` (rejected
 chunks and the chunks of dropped or expired messages) show what happened;

@@ -314,9 +314,13 @@ type ReassemblerStats struct {
 
 // Reassembler reassembles chunked NetworkMessages. Chunks are kept per
 // PublisherId, WriterGroupId, DataSetWriterId, NetworkMessage type, security
-// mode and MessageSequenceNumber; the chunks of a message may arrive in any
-// order and interleaved with those of other messages. It is safe for
-// concurrent use.
+// mode, SecurityTokenId and MessageSequenceNumber; the chunks of a message
+// may arrive in any order and interleaved with those of other messages.
+// Chunks that cannot belong to one message discard it: a chunk for a slot
+// that holds other data, and, when the chunks carry the GroupHeader
+// SequenceNumber or NetworkMessageNumber, numbers that neither are the same
+// in every chunk nor advance by one per chunk. It is safe for concurrent
+// use.
 type Reassembler struct {
 	opts ReassemblerOptions
 
@@ -342,7 +346,10 @@ type reasmKey struct {
 	hasDSW bool
 	dsw    uint16
 	mode   ua.MessageSecurityMode
-	seq    uint16
+	// token is the SecurityTokenId of a secured chunk: the chunks of a
+	// message are secured with the same keys.
+	token uint32
+	seq   uint16
 	// The ActionHeader of an action message: requests of several
 	// Requestors to one writer, and the responses to them, are told
 	// apart by the RequestorId and the CorrelationData.
@@ -369,6 +376,58 @@ type reasmEntry struct {
 	received int
 	chunks   int
 	charged  int
+	// The GroupHeader numbers of the chunks (see groupSeq).
+	gseq groupSeq
+	// lastNums are the GroupHeader numbers of a last chunk that arrived
+	// before the size, and so its index, was known.
+	lastNums []uint16
+}
+
+// groupSeq checks the GroupHeader SequenceNumber and NetworkMessageNumber
+// of the chunks of one message: a sender either gives every chunk the
+// numbers of the message, or advances them by one per chunk (the .NET
+// stack and EncodeChunks). Each number, if the chunks carry it, has to
+// follow one of the two patterns for all chunks.
+type groupSeq struct {
+	set bool
+	// has tells which numbers the chunks carry; first are their values
+	// in the first chunk with a known index and idx that index.
+	has   [2]bool
+	first [2]uint16
+	idx   int
+	// same and step tell which pattern the chunks so far follow.
+	same, step [2]bool
+}
+
+func chunkNums(nm *message.NetworkMessage) ([2]bool, [2]uint16) {
+	var has [2]bool
+	if nm.UADPMask&ua.UADPNetworkMessageContentMaskGroupHeader != 0 {
+		has[0] = nm.UADPMask&ua.UADPNetworkMessageContentMaskSequenceNumber != 0
+		has[1] = nm.UADPMask&ua.UADPNetworkMessageContentMaskNetworkMessageNumber != 0
+	}
+	return has, [2]uint16{nm.GroupHeader.SequenceNumber, nm.GroupHeader.NetworkMessageNumber}
+}
+
+// add checks the numbers v (present as has) of the chunk at index i.
+func (g *groupSeq) add(has [2]bool, v [2]uint16, i int) bool {
+	if !g.set {
+		*g = groupSeq{set: true, has: has, first: v, idx: i, same: [2]bool{true, true}, step: [2]bool{true, true}}
+		return true
+	}
+	if has != g.has {
+		return false
+	}
+	for k := range 2 {
+		if !has[k] {
+			continue
+		}
+		g.same[k] = g.same[k] && v[k] == g.first[k]
+		g.step[k] = g.step[k] && v[k]-g.first[k] == uint16(i-g.idx)
+		if !g.same[k] && !g.step[k] {
+			return false
+		}
+	}
+	return true
 }
 
 // NewReassembler returns a Reassembler with the given limits (nil: the
@@ -388,6 +447,9 @@ func rejected(format string, args ...any) error {
 
 func keyOf(nm *message.NetworkMessage) reasmKey {
 	k := reasmKey{typ: nm.Type, seq: nm.Chunk.MessageSequenceNumber, mode: modeOf(nm.Security)}
+	if nm.Security != nil && nm.Security.Signed {
+		k.token = nm.Security.SecurityTokenID
+	}
 	if nm.UADPMask&ua.UADPNetworkMessageContentMaskPublisherID != 0 {
 		k.pub = pubKey{has: true, typ: nm.PublisherID.Type, num: nm.PublisherID.Num, str: nm.PublisherID.Str}
 	}
@@ -452,8 +514,22 @@ func (r *Reassembler) addLocked(nm *message.NetworkMessage, c *message.Chunk, no
 	} else if e.total != total {
 		return nil, rejected("TotalSize %d, the message has %d bytes", total, e.total)
 	}
-	if err := e.accept(off, n, last, r.opts.MaxChunks); err != nil {
+	if err := e.accept(off, c.Data, last, r.opts.MaxChunks); err != nil {
+		if errors.Is(err, errConflict) && !isNew {
+			// Chunks of different messages: none of them is taken.
+			r.removeLocked(e)
+			r.stats.Dropped += uint64(e.chunks)
+			*dropped += e.chunks
+		}
 		return nil, err
+	}
+	if !e.checkNums(nm, off, n, last) {
+		if !isNew {
+			r.removeLocked(e)
+			r.stats.Dropped += uint64(e.chunks)
+			*dropped += e.chunks
+		}
+		return nil, rejected("%w: GroupHeader numbers of the chunk do not follow those of the message", errConflict)
 	}
 	charge := n + chunkOverhead
 	if !r.makeRoomLocked(key.pub, e, charge, isNew, dropped) {
@@ -596,13 +672,56 @@ func (r *Reassembler) Stats() ReassemblerStats {
 	return st
 }
 
+// errConflict marks a chunk that cannot belong to the message its key
+// names: the message is discarded with it.
+var errConflict = errors.New("chunk of another message")
+
+// checkNums checks the GroupHeader numbers of a chunk against those of the
+// other chunks of the message, before it is stored. It changes only the
+// bookkeeping of the numbers.
+func (e *reasmEntry) checkNums(nm *message.NetworkMessage, off, n int, last bool) bool {
+	has, v := chunkNums(nm)
+	size := e.size
+	if size == 0 && !last {
+		size = n
+	}
+	if size == 0 {
+		// A last chunk before the size is known: checked once it is.
+		e.lastNums = []uint16{v[0], v[1], b2u(has[0]), b2u(has[1])}
+		return true
+	}
+	if !e.gseq.add(has, v, off/size) {
+		return false
+	}
+	if e.lastNums != nil && e.size == 0 {
+		// The size is known now: the last chunk that arrived first.
+		ln := e.lastNums
+		e.lastNums = nil
+		lastIdx := (e.total+size-1)/size - 1
+		return e.gseq.add([2]bool{ln[2] == 1, ln[3] == 1}, [2]uint16{ln[0], ln[1]}, lastIdx)
+	}
+	return true
+}
+
+func b2u(b bool) uint16 {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 // accept checks a chunk against the layout of its message ("All chunks,
 // except for the last one shall have the same size", Part 14 §7.2.4.4.4 in
-// 1.05) and rejects duplicates, without changing the entry.
-func (e *reasmEntry) accept(off, n int, last bool, maxChunks int) error {
+// 1.05) and rejects duplicates, without changing the entry. A repeated
+// chunk with other data returns an error wrapping errConflict.
+func (e *reasmEntry) accept(off int, data []byte, last bool, maxChunks int) error {
+	n := len(data)
 	if e.size == 0 {
 		if last {
 			if e.lastData != nil {
+				if e.lastOff != off || !bytes.Equal(e.lastData, data) {
+					return rejected("%w: last chunk differs from the one received", errConflict)
+				}
 				return rejected("duplicate last chunk")
 			}
 			return nil
@@ -628,7 +747,10 @@ func (e *reasmEntry) accept(off, n int, last bool, maxChunks int) error {
 	case !last && n != e.size:
 		return rejected("chunk of %d bytes, the chunks have %d", n, e.size)
 	}
-	if _, dup := e.slots[i]; dup {
+	if d, dup := e.slots[i]; dup {
+		if !bytes.Equal(d, data) {
+			return rejected("%w: chunk at offset %d differs from the one received", errConflict, off)
+		}
 		return rejected("duplicate chunk at offset %d", off)
 	}
 	return nil
