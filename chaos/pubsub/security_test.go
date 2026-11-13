@@ -168,12 +168,15 @@ func TestChaosSecurityAttacks(t *testing.T) {
 				}
 				time.Sleep(10 * time.Millisecond)
 			}
+			// A replayed secured message is ignored for its MessageNonce
+			// sequence number before the reader sees it.
+			discards := func(c pubsub.Counters) uint64 { return c.SequenceDiscards + c.NonceSequenceDiscards }
 			t.Logf("rejected %d, tampered %d, replayed %d: decode errors %d, sequence discards %d", rejected, tampered, replayed,
-				after.DecodeErrors-before.DecodeErrors, after.SequenceDiscards-before.SequenceDiscards)
+				after.DecodeErrors-before.DecodeErrors, discards(after)-discards(before))
 			if got := after.DecodeErrors - before.DecodeErrors; got < uint64(rejected) || got > uint64(rejected+tampered) {
 				t.Errorf("%d forged and %d tampered messages, %d decode errors", rejected, tampered, got)
 			}
-			if replayed > 0 && after.SequenceDiscards == before.SequenceDiscards {
+			if replayed > 0 && discards(after) == discards(before) {
 				t.Errorf("%d messages replayed, none discarded", replayed)
 			}
 			p.stopChecking()

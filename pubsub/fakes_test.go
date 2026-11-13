@@ -325,7 +325,9 @@ func (f fakeCodec) Encode(nm *message.NetworkMessage, opts *uadp.EncodeOptions) 
 			return nil, err
 		}
 		out.Secured, out.Token, out.Nonce = opts.SecurityMode, k.TokenID, opts.NonceSequence
-		if opts.NextNonceSequence != nil {
+		if opts.NextNonceSequenceForToken != nil {
+			out.Nonce = opts.NextNonceSequenceForToken(k.TokenID)
+		} else if opts.NextNonceSequence != nil {
 			out.Nonce = opts.NextNonceSequence()
 		}
 	}

@@ -132,9 +132,12 @@ type Counters struct {
 	EncodeErrors uint64
 	SendErrors   uint64
 	DecodeErrors uint64
-	// SequenceDiscards counts DataSetMessages discarded as duplicates or as
-	// older than the last one received; SequenceResyncs counts jumps of the
-	// sequence number that resynchronised the reader.
+	// SequenceDiscards counts DataSetMessages discarded as duplicates, as
+	// older than the last one received or as invalid (a quarter or more of
+	// the number space away, Part 14 §7.2.3); SequenceResyncs counts
+	// writers the reader resynchronised to a lower sequence number after
+	// their sequence record expired (no message for two
+	// MessageReceiveTimeouts).
 	SequenceDiscards uint64
 	SequenceResyncs  uint64
 	// VersionMismatches counts DataSetMessages discarded because their
@@ -161,6 +164,12 @@ type Counters struct {
 	ChunksReceived          uint64
 	ChunkedMessagesReceived uint64
 	ChunksDiscarded         uint64
+	// NonceSequenceDiscards counts secured UADP NetworkMessages (chunks
+	// included) ignored because the sequence number of their MessageNonce
+	// is not newer than the last one processed for their sender and
+	// SecurityTokenId (Part 14 §7.2.4.4.3.2, §7.2.3): repeated or late
+	// copies.
+	NonceSequenceDiscards uint64
 	// DiscoveryRequestsSent and DiscoveryRequestsReceived count UADP
 	// discovery probes (Part 14 §7.2.4.6.12); DiscoveryRequestsIgnored
 	// counts received probes that were not answered: not for this
@@ -218,6 +227,7 @@ func (c *Counters) add(o *Counters) {
 	c.ChunksReceived += o.ChunksReceived
 	c.ChunkedMessagesReceived += o.ChunkedMessagesReceived
 	c.ChunksDiscarded += o.ChunksDiscarded
+	c.NonceSequenceDiscards += o.NonceSequenceDiscards
 	c.DiscoveryRequestsSent += o.DiscoveryRequestsSent
 	c.DiscoveryRequestsReceived += o.DiscoveryRequestsReceived
 	c.DiscoveryRequestsIgnored += o.DiscoveryRequestsIgnored
