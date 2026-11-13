@@ -87,3 +87,37 @@ func TestSessionBoundToSecureChannel(t *testing.T) {
 	_, err = svc.CloseSession(ctx, scB, &ua.CloseSessionRequest{RequestHeader: &ua.RequestHeader{AuthenticationToken: token}}, 4)
 	require.NoError(t, err)
 }
+
+func TestSameChannelSecurityAndIdentity(t *testing.T) {
+	mk := func(policy string, mode ua.MessageSecurityMode, cert []byte) *uasc.SecureChannel {
+		return uasc.NewCryptoChannel(&uasc.Config{SecurityPolicyURI: policy, SecurityMode: mode, RemoteCertificate: cert})
+	}
+	a := mk(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSign, []byte("cert"))
+	require.True(t, sameChannelSecurity(a, mk(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSign, []byte("cert"))))
+	require.False(t, sameChannelSecurity(a, mk(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt, []byte("cert"))))
+	require.False(t, sameChannelSecurity(a, mk(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSign, []byte("other"))))
+	require.False(t, sameChannelSecurity(a, nil))
+	require.True(t, sameChannelSecurity(nil, nil))
+
+	cert := &ua.X509IdentityToken{CertificateData: []byte("c")}
+	require.True(t, sameIdentity(cert, &ua.X509IdentityToken{CertificateData: []byte("c")}))
+	require.False(t, sameIdentity(cert, &ua.X509IdentityToken{CertificateData: []byte("d")}))
+	require.False(t, sameIdentity(cert, &ua.AnonymousIdentityToken{}))
+	require.True(t, sameIdentity(&ua.AnonymousIdentityToken{}, &ua.AnonymousIdentityToken{}))
+	require.True(t, sameIdentity(&ua.IssuedIdentityToken{}, &ua.IssuedIdentityToken{}))
+}
+
+func TestCertificateTokenPolicy(t *testing.T) {
+	srv := newTestServer()
+	srv.cfg.enabledSec = []security{{secPolicy: ua.SecurityPolicyURINone, secMode: ua.MessageSecurityModeNone}}
+	require.Empty(t, srv.certificateTokenPolicy())
+	srv.cfg.enabledSec = append(srv.cfg.enabledSec,
+		security{secPolicy: ua.SecurityPolicyURIECCNistP256, secMode: ua.MessageSecurityModeSign},
+		security{secPolicy: ua.SecurityPolicyURIECCNistP384, secMode: ua.MessageSecurityModeSign},
+		security{secPolicy: "http://example/unsupported", secMode: ua.MessageSecurityModeSign})
+	require.Equal(t, ua.SecurityPolicyURIECCNistP384, srv.certificateTokenPolicy())
+	srv.cfg.enabledSec = append(srv.cfg.enabledSec,
+		security{secPolicy: ua.SecurityPolicyURIBasic128Rsa15, secMode: ua.MessageSecurityModeSign},
+		security{secPolicy: ua.SecurityPolicyURIBasic256Sha256, secMode: ua.MessageSecurityModeSign})
+	require.Equal(t, ua.SecurityPolicyURIBasic256Sha256, srv.certificateTokenPolicy())
+}
