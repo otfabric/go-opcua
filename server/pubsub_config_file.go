@@ -501,6 +501,9 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 	}
 	f.closeLocked(h)
 	f.mu.Unlock()
+	if st := f.m.checkConnectionTargets(ctx, file.Connections...); st != ua.StatusOK {
+		return nil, st
+	}
 
 	old := f.m.rt.Configuration()
 	f.mu.Lock()

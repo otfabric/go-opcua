@@ -2936,7 +2936,9 @@ cfg may be nil for an empty, enabled runtime that clients configure. The runtime
 func WithPubSubAuthorizer(a PubSubAuthorizer) Option
 ```
 
-WithPubSubAuthorizer restricts the PubSub configuration methods. Without it every session may call them, as with open62541.
+WithPubSubAuthorizer restricts the PubSub configuration methods. Without it every session the AccessController allows to call them (CheckCall) may call them, as with open62541; the RBACAccessController allows them to ConfigureAdmin only (the RolePermissions of AddConnection in the standard NodeSet, given to every configuration method).
+
+Whatever the authorizer, a session that configures a reader must be allowed to write its TargetVariables (CheckWrite and AccessLevel for the Value, CheckWrite and WriteMask for other Attributes), and one that adds published variables must be allowed to read them (CheckRead): Bad\_UserAccessDenied, Bad\_NotWritable otherwise. The runtime writes a target Attribute other than the Value only where its WriteMask allows it.
 
 #### func WithPushManagement
 

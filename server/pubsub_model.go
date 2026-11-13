@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/pubsub"
@@ -145,6 +146,7 @@ func (s *Server) buildPubSubModel() error {
 	}
 	m.setCapabilities()
 	m.bindRootDiagnostics()
+	s.restrictPubSubMethods()
 
 	// Published data sets first: writers reference them.
 	comps := rt.Components()
@@ -327,6 +329,28 @@ func eos[T any](xs []*T) []*ua.ExtensionObject {
 	return out
 }
 
+// redactProperties returns the properties as the information model shows
+// them: a property that carries a secret (its name contains "password" or
+// "secret", case-insensitively; the MQTT and AMQP transports take the broker
+// password from the "password" connection property) keeps its key with a
+// null value. The runtime keeps using the real value. Part 14 §9.1.4 leaves
+// the content of the properties to the transport.
+func redactProperties(props []*ua.KeyValuePair) []*ua.KeyValuePair {
+	out := make([]*ua.KeyValuePair, 0, len(props))
+	for _, p := range props {
+		if p != nil && p.Key != nil && isSecretProperty(p.Key.Name) {
+			p = &ua.KeyValuePair{Key: p.Key, Value: ua.MustVariant(nil)}
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+func isSecretProperty(name string) bool {
+	n := strings.ToLower(name)
+	return strings.Contains(n, "password") || strings.Contains(n, "secret")
+}
+
 func eo(v any) *ua.ExtensionObject {
 	if v == nil {
 		return ua.NewExtensionObject(nil)
@@ -446,7 +470,7 @@ func (m *pubsubModel) addConnectionNodes(c *psComp, info pubsub.ComponentInfo) e
 	c.obj = m.object(c, m.root, id.HasPubSubConnection, info.Name, m.ns.ID(), id.PubSubConnectionType)
 	m.variable(c, c.obj, id.HasProperty, "PublisherId", id.BaseDataType, -1, publisherIDValue(cfg.PublisherID))
 	m.variable(c, c.obj, id.HasComponent, "TransportProfileUri", id.String, -1, static(cfg.TransportProfileURI))
-	m.prop(c, c.obj, "ConnectionProperties", id.KeyValuePair, 1, eos(cfg.ConnectionProperties))
+	m.prop(c, c.obj, "ConnectionProperties", id.KeyValuePair, 1, eos(redactProperties(cfg.ConnectionProperties)))
 	addr := m.object(c, c.obj, id.HasComponent, "Address", 0, id.NetworkAddressURLType)
 	var url, iface string
 	if a, ok := cfg.Address.Value.(*ua.NetworkAddressURLDataType); ok {
@@ -471,7 +495,7 @@ func (m *pubsubModel) groupProps(c *psComp, mode ua.MessageSecurityMode, groupID
 	m.prop(c, c.obj, "SecurityGroupId", id.String, -1, groupID)
 	m.prop(c, c.obj, "SecurityKeyServices", id.EndpointDescription, 1, eos(sks))
 	m.prop(c, c.obj, "MaxNetworkMessageSize", id.UInt32, -1, maxSize)
-	m.prop(c, c.obj, "GroupProperties", id.KeyValuePair, 1, eos(props))
+	m.prop(c, c.obj, "GroupProperties", id.KeyValuePair, 1, eos(redactProperties(props)))
 }
 
 func (m *pubsubModel) addWriterGroupNodes(c *psComp, info pubsub.ComponentInfo) error {
@@ -550,7 +574,7 @@ func (m *pubsubModel) addWriterNodes(c *psComp, info pubsub.ComponentInfo) error
 	m.prop(c, c.obj, "DataSetWriterId", id.UInt16, -1, cfg.DataSetWriterID)
 	m.prop(c, c.obj, "DataSetFieldContentMask", id.DataSetFieldContentMask, -1, uint32(cfg.DataSetFieldContentMask))
 	m.prop(c, c.obj, "KeyFrameCount", id.UInt32, -1, cfg.KeyFrameCount)
-	m.prop(c, c.obj, "DataSetWriterProperties", id.KeyValuePair, 1, eos(cfg.DataSetWriterProperties))
+	m.prop(c, c.obj, "DataSetWriterProperties", id.KeyValuePair, 1, eos(redactProperties(cfg.DataSetWriterProperties)))
 	m.status(c)
 	m.diagnostics(c)
 	if cfg.DataSetName != "" {
@@ -593,7 +617,7 @@ func (m *pubsubModel) addReaderNodes(c *psComp, info pubsub.ComponentInfo) error
 	m.prop(c, c.obj, "SecurityMode", id.MessageSecurityMode, -1, int32(cfg.SecurityMode))
 	m.prop(c, c.obj, "SecurityGroupId", id.String, -1, cfg.SecurityGroupID)
 	m.prop(c, c.obj, "SecurityKeyServices", id.EndpointDescription, 1, eos(cfg.SecurityKeyServices))
-	m.prop(c, c.obj, "DataSetReaderProperties", id.KeyValuePair, 1, eos(cfg.DataSetReaderProperties))
+	m.prop(c, c.obj, "DataSetReaderProperties", id.KeyValuePair, 1, eos(redactProperties(cfg.DataSetReaderProperties)))
 	m.status(c)
 	m.diagnostics(c)
 	switch sds := cfg.SubscribedDataSet.Value.(type) {
@@ -829,10 +853,13 @@ func (m *pubsubModel) componentOf(n *ua.NodeID) (pubsub.ComponentInfo, bool) {
 	return info, err == nil
 }
 
-func (m *pubsubModel) addConnection(_ context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pubsubModel) addConnection(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	cfg, ok := argStruct[ua.PubSubConnectionDataType](args, 0)
 	if !ok {
 		return nil, ua.StatusBadTypeMismatch
+	}
+	if st := m.checkConnectionTargets(ctx, cfg); st != ua.StatusOK {
+		return nil, st
 	}
 	cid, err := m.rt.AddConnection(cfg)
 	if err != nil {
@@ -854,7 +881,7 @@ func (m *pubsubModel) removeConnection(_ context.Context, _ *ua.NodeID, args []*
 }
 
 func (m *pubsubModel) addGroup(conn pubsub.ComponentID, writer bool) func(context.Context, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	return func(_ context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	return func(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		var cid pubsub.ComponentID
 		var err error
 		if writer {
@@ -867,6 +894,9 @@ func (m *pubsubModel) addGroup(conn pubsub.ComponentID, writer bool) func(contex
 			cfg, ok := argStruct[ua.ReaderGroupDataType](args, 0)
 			if !ok {
 				return nil, ua.StatusBadTypeMismatch
+			}
+			if st := m.checkGroupTargets(ctx, cfg); st != ua.StatusOK {
+				return nil, st
 			}
 			cid, err = m.rt.AddReaderGroup(conn, cfg)
 		}
@@ -892,10 +922,13 @@ func (m *pubsubModel) addWriter(group pubsub.ComponentID) func(context.Context, 
 }
 
 func (m *pubsubModel) addReader(group pubsub.ComponentID) func(context.Context, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	return func(_ context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	return func(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		cfg, ok := argStruct[ua.DataSetReaderDataType](args, 0)
 		if !ok {
 			return nil, ua.StatusBadTypeMismatch
+		}
+		if st := m.checkReaderTargets(ctx, cfg); st != ua.StatusOK {
+			return nil, st
 		}
 		cid, err := m.rt.AddDataSetReader(group, cfg)
 		if err != nil {
@@ -931,9 +964,10 @@ func (m *pubsubModel) removeChild(parent pubsub.ComponentID, kinds ...pubsub.Com
 	}
 }
 
-// publishedVariables checks the variables to publish: those that exist get
-// Good, the others Bad_NodeIdUnknown.
-func (m *pubsubModel) publishedVariables(vars []*ua.PublishedVariableDataType) []ua.StatusCode {
+// publishedVariables checks the variables to publish: those that exist and
+// the calling session may read get Good, the others Bad_NodeIdUnknown or the
+// status of the refusal.
+func (m *pubsubModel) publishedVariables(ctx context.Context, vars []*ua.PublishedVariableDataType) []ua.StatusCode {
 	results := make([]ua.StatusCode, len(vars))
 	for i, v := range vars {
 		if v.AttributeID == 0 {
@@ -941,12 +975,14 @@ func (m *pubsubModel) publishedVariables(vars []*ua.PublishedVariableDataType) [
 		}
 		if v.PublishedVariable == nil || m.s.Node(v.PublishedVariable) == nil {
 			results[i] = ua.StatusBadNodeIDUnknown
+			continue
 		}
+		results[i] = m.checkPublishedRead(ctx, v)
 	}
 	return results
 }
 
-func (m *pubsubModel) addPublishedDataItems(_ context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pubsubModel) addPublishedDataItems(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	name, ok := argValue[string](args, 0)
 	if !ok {
 		return nil, ua.StatusBadTypeMismatch
@@ -970,7 +1006,7 @@ func (m *pubsubModel) addPublishedDataItems(_ context.Context, _ *ua.NodeID, arg
 	if len(aliases) != len(vars) || (len(flags) != 0 && len(flags) != len(vars)) {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	results := m.publishedVariables(vars)
+	results := m.publishedVariables(ctx, vars)
 	ds := serverDataSource{m.s}
 	md := &ua.DataSetMetaDataType{Name: name, Description: &ua.LocalizedText{}}
 	items := &ua.PublishedDataItemsDataType{}
@@ -1002,7 +1038,7 @@ func (m *pubsubModel) addPublishedDataItems(_ context.Context, _ *ua.NodeID, arg
 	return append(m.nodeOf(cid), ua.MustVariant(eo(cfg.DataSetMetaData.ConfigurationVersion)), ua.MustVariant(results)), ua.StatusOK
 }
 
-func (m *pubsubModel) addPublishedDataItemsTemplate(_ context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (m *pubsubModel) addPublishedDataItemsTemplate(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	name, ok := argValue[string](args, 0)
 	if !ok {
 		return nil, ua.StatusBadTypeMismatch
@@ -1018,7 +1054,14 @@ func (m *pubsubModel) addPublishedDataItemsTemplate(_ context.Context, _ *ua.Nod
 	if len(md.Fields) != len(vars) {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	results := m.publishedVariables(vars)
+	results := m.publishedVariables(ctx, vars)
+	// The template publishes every variable, so one the session may not
+	// read refuses the call.
+	for _, st := range results {
+		if st != ua.StatusOK && st != ua.StatusBadNodeIDUnknown {
+			return nil, st
+		}
+	}
 	cid, err := m.rt.AddPublishedDataSet(&ua.PublishedDataSetDataType{
 		Name: name, DataSetMetaData: md,
 		DataSetSource: ua.NewExtensionObject(&ua.PublishedDataItemsDataType{PublishedData: vars}),
