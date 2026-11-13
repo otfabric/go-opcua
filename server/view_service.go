@@ -4,11 +4,8 @@ package server
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"slices"
-	"sync"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -20,18 +17,14 @@ var (
 	hasSubtype = ua.NewNumericNodeID(0, id.HasSubtype)
 )
 
-// continuationPoint stores remaining references for a BrowseNext call.
-type continuationPoint struct {
-	refs []*ua.ReferenceDescription
-}
-
 // ViewService implements the View Service Set.
 //
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.8
 type ViewService struct {
 	srv *Server
-	mu  sync.Mutex
-	cps map[string]*continuationPoint // keyed by hex-encoded token
+	// cps holds the Browse continuation points: the references of a node
+	// that did not fit RequestedMaxReferencesPerNode.
+	cps *cpStore[[]*ua.ReferenceDescription]
 }
 
 // Browse implements the OPC UA Browse service.
@@ -90,7 +83,13 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 
 		// Apply continuation point logic when maxRefs > 0 and there are more refs.
 		if maxRefs > 0 && uint32(len(result.References)) > maxRefs {
-			cp := s.storeContinuation(result.References[maxRefs:])
+			cp, ok := s.storeContinuation(sess, result.References[maxRefs:])
+			if !ok {
+				// Part 4 §5.8.2: all continuation points of the session
+				// are in use.
+				resp.Results[i] = &ua.BrowseResult{StatusCode: ua.StatusBadNoContinuationPoints}
+				continue
+			}
 			result.ContinuationPoint = cp
 			result.References = result.References[:maxRefs]
 		}
@@ -100,22 +99,22 @@ func (s *ViewService) Browse(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 	return resp, nil
 }
 
-// storeContinuation saves remaining references and returns a continuation point token.
-func (s *ViewService) storeContinuation(refs []*ua.ReferenceDescription) []byte {
-	var buf [16]byte
-	_, _ = rand.Read(buf[:])
-	token := hex.EncodeToString(buf[:])
-
+// storeContinuation saves remaining references for sess and returns a
+// continuation point token, or false when sess holds all the continuation
+// points it may (Part 4 §7.9).
+func (s *ViewService) storeContinuation(sess *session, refs []*ua.ReferenceDescription) ([]byte, bool) {
 	stored := make([]*ua.ReferenceDescription, len(refs))
 	copy(stored, refs)
+	return s.store().store(sessionKey(sess), s.srv.cfg.browseContinuationPointLimit(), stored)
+}
 
-	s.mu.Lock()
+// store returns the continuation point store, creating it for a ViewService
+// that was built without one.
+func (s *ViewService) store() *cpStore[[]*ua.ReferenceDescription] {
 	if s.cps == nil {
-		s.cps = make(map[string]*continuationPoint)
+		s.cps = newCPStore[[]*ua.ReferenceDescription]()
 	}
-	s.cps[token] = &continuationPoint{refs: stored}
-	s.mu.Unlock()
-	return []byte(token)
+	return s.cps
 }
 
 // BrowseNext implements the OPC UA BrowseNext service.
@@ -130,28 +129,26 @@ func (s *ViewService) BrowseNext(ctx context.Context, sc *uasc.SecureChannel, r 
 
 	results := make([]*ua.BrowseResult, len(req.ContinuationPoints))
 
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
+	// A continuation point belongs to the session that created it (Part 4
+	// §7.9): for any other session it is Bad_ContinuationPointInvalid.
+	owner := sessionKey(s.srv.sb.Session(req.RequestHeader.AuthenticationToken))
+	cps := s.store()
 	for i, cpBytes := range req.ContinuationPoints {
-		token := string(cpBytes)
-		cp, ok := s.cps[token]
+		refs, ok := cps.take(owner, cpBytes)
 		if !ok {
 			results[i] = &ua.BrowseResult{StatusCode: ua.StatusBadContinuationPointInvalid}
 			continue
 		}
 
 		if req.ReleaseContinuationPoints {
-			delete(s.cps, token)
 			results[i] = &ua.BrowseResult{StatusCode: ua.StatusGood}
 			continue
 		}
 
 		// Return all remaining references (no further pagination for simplicity).
-		delete(s.cps, token)
 		results[i] = &ua.BrowseResult{
 			StatusCode: ua.StatusGood,
-			References: cp.refs,
+			References: refs,
 		}
 	}
 

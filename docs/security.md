@@ -181,7 +181,7 @@ The Brainpool policies are `ECC_nistP256` / `ECC_nistP384` on another curve, `Si
 - `uapolicy.CreateCertificate` makes certificates with these keys or signed by them (other keys go to `x509.CreateCertificate`); `uapolicy.MarshalPrivateKey` writes any key as PKCS #8. `uapolicy.ParsePrivateKey` reads Brainpool keys in PKCS #8 and SEC 1 and Ed448 keys in PKCS #8, as OpenSSL writes them.
 - `uapolicy.CreateCertificateRequest` / `ParseCertificateRequest` / `CheckCertificateRequestSignature` make and check PKCS #10 requests for these keys (CreateSigningRequest of the push model), and `uapolicy.ParseRevocationList` / `CheckRevocationListSignature` read CRLs signed by such CAs (trust lists).
 - `uapolicy.ParsePFX` / `EncodePFX` read and write PKCS #12 (PFX) files with any of these keys: PBES2 (PBKDF2, AES-CBC), the PKCS #12 PBEs (3DES, RC2) and the SHA-1 / SHA-2 MAC, or PBMAC1, in DER or BER (indefinite lengths and constructed OCTET STRINGs, as Java keytool and older tools write them). RC4 and the public-key integrity and privacy modes are refused on purpose: RC4 is broken and the public-key modes are not used by OPC UA tools; they are not gaps.
-- `uapolicy.VerifyCertificate` verifies a chain. Without Ed448 signatures that is `crypto/x509`, Brainpool keys included. A chain in which a certificate is signed with Ed448 is built by the library against the trusted certificates only (`TrustedCertificates`, `WithClientCertificateTrustList`; not the system roots, which carry no Ed448 keys), with this subset of RFC 5280 §6.1: validity period; no unknown critical extension; every issuer a CA by basicConstraints, with keyCertSign if it has a key usage, and within its path length; issuer and subject names equal byte for byte; authority and subject key identifiers equal where both are present; at most 8 certificates. A CA with name constraints is refused on such a path and policy constraints are not evaluated: keep such CAs out of chains with Ed448 signatures.
+- `uapolicy.VerifyCertificate` verifies a chain. Without Ed448 signatures that is `crypto/x509`, Brainpool keys included. A chain in which a certificate is signed with Ed448 is built by the library against the trusted certificates only (`TrustedCertificates`, `WithClientCertificateTrustList`; not the system roots, which carry no Ed448 keys), with this subset of RFC 5280 §6.1: validity period; no unknown critical extension; every issuer a CA by basicConstraints, with keyCertSign if it has a key usage, and within its path length; issuer and subject names equal byte for byte; authority and subject key identifiers equal where both are present; at most 8 certificates. The search for a path verifies each signature once per certificate and issuer key, at most 100 signatures in all (the bound `crypto/x509` applies), and looks at no more than 10000 issuer candidates; duplicate intermediates are ignored. A chain that needs more is refused. A CA with name constraints is refused on such a path and policy constraints are not evaluated: keep such CAs out of chains with Ed448 signatures.
 
 The parsers are fuzzed (`uapolicy/x509_fuzz_test.go`).
 
@@ -273,6 +273,16 @@ send a password unencrypted on an endpoint that is not SignAndEncrypt, TLS or
 not. Without an enabled RSA policy the password goes in clear text inside TLS.
 A secured opc.wss endpoint leaves the policy to the secure channel, and
 opc.tcp is unchanged: `AllowUsernameOnNone` sends the password in clear text.
+
+X.509 user token policies of None endpoints (opc.https, opc.wss, or opc.tcp
+with `AllowUsernameOnNone`) always name a security policy: the enabled RSA
+policy with the highest security level, or the highest ECC one if no RSA
+policy is enabled. The client then signs the token with the key of the user
+certificate (Part 4 §7.40.5: "Servers should specify a SecurityPolicy for the
+UserTokenPolicy if the SecureChannel has a SecurityPolicy of None"). A server
+that enables only None offers no certificate tokens on None endpoints, and an
+X.509 token whose policy resolves to None is rejected with
+`Bad_IdentityTokenRejected`.
 
 The UA JSON mappings (`server.EnableUAJSON`, `opcua.TransportProfile`) have no
 secure conversation either. https-uajson (Part 6 §7.4.5) works as https-uabinary:
@@ -504,7 +514,7 @@ s, err := server.New(
 
 ### Certificate-Based
 
-Client presents a certificate for authentication, separate from the secure channel certificate.
+Client presents a certificate for authentication, separate from the secure channel certificate. It proves that it holds the key of the certificate with a UserTokenSignature; on None endpoints the token policy names the security policy for it (see [TLS for opc.wss and opc.https](#tls-for-opcwss-and-opchttps)).
 
 ```go
 // Client
@@ -596,6 +606,8 @@ opts := []opcua.Option{
 }
 ```
 
+The endpoints of `GetEndpoints` come over a channel without security. CreateSession therefore compares the endpoint given to `SecurityFromEndpoint` with the endpoints the server returns in the CreateSession response, which the secure channel protects (Part 4 §5.7.2): when no endpoint there has the same application URI, security policy, mode and level, transport profile and user token policies (the URL is not compared), the client closes the session before ActivateSession and Connect fails with `StatusBadSecurityChecksFailed`. The comparison is skipped when other options changed the security policy or mode after `SecurityFromEndpoint`.
+
 `opcua.SelectEndpoint` ranks by the server's `SecurityLevel` like `ua.SelectEndpoint`, but only among the endpoints the client can use: it leaves out policies this library does not implement and secured endpoints whose policy does not fit the key type of the certificate. That matters with servers that offer RSA and ECC endpoints, where the highest ranked endpoint is an ECC one that a client with an RSA certificate cannot open.
 
 Where a server gives several usable endpoints the same `SecurityLevel` the ranking of this library decides (see [ECC Security Policies](#ecc-security-policies)). open62541 does that for all its ECC policies; a client with a P-256 certificate then gets `ECC_nistP256_ChaChaPoly`, one with an Ed25519 certificate `ECC_curve25519`, one with an Ed448 certificate `ECC_curve448`.
@@ -653,12 +665,16 @@ The `DefaultAccessController` allows all operations. Override it to enforce your
 
 The `AccessController` decides who may write a node; the node decides which of its attributes can be written at all:
 
-- **Value:** governed by AccessLevel and UserAccessLevel (Part 3 §5.6.2).
+- **Value:** governed by AccessLevel and UserAccessLevel (Part 3 §5.6.2). NodeSet2 imports apply the schema default `CurrentRead` when a variable has no AccessLevel, and the namespace-0 Server variables the server builds itself (ServerStatus and its children, CurrentTime, NamespaceArray, OperationLimits) are `CurrentRead`: clients cannot write them under any AccessController.
 - **Every other attribute:** writable through the Write service only where the node's WriteMask has its bit (Part 3 §5.2.7, §8.60), else `Bad_NotWritable`. A UserWriteMask on the node narrows that per user (§5.2.8, `Bad_UserAccessDenied`), and a value of the wrong DataType is `Bad_TypeMismatch`.
 - **Defaults:** nodes built with the Go API have no WriteMask, so clients can write only their Value, as in UA-.NETStandard and open62541. Set `ua.AttributeIDWriteMask` (UInt32) on a node to open DisplayName, Description and the others. NodeSet2 imports keep their WriteMask, and AddNodes keeps the WriteMask the client sends.
 - **Never writable:** NodeId and NodeClass, whatever the WriteMask says, because the address space is keyed by them.
 
-Code in the server that calls `Node.SetAttribute` directly is not subject to the WriteMask.
+Code in the server that calls `Node.SetAttribute` directly is not subject to the WriteMask or the AccessLevel.
+
+### Node Management
+
+AddNodes, AddReferences, DeleteNodes and DeleteReferences are off unless the server is created with `server.EnableNodeManagement()` (`Bad_ServiceUnsupported` otherwise). When enabled, an AccessController that implements `NodeManagementAccessController` decides each operation (`RBACAccessController`: the AddNode, DeleteNode, AddReference and RemoveReference permissions, granted explicitly); any other controller is asked `CheckWrite` for the changed node, and namespace 0 cannot be changed. See the [server guide](server-guide.md#dynamic-node-management).
 
 ---
 
@@ -817,8 +833,10 @@ can point clients at a server of their choosing, replace the entry of a real
 server, or remove it. A go-opcua discovery server (`WithLocalDiscoveryServer`)
 therefore accepts `RegisterServer` and `RegisterServer2`
 
-- only on a SecureChannel with Sign or SignAndEncrypt
-  (`BadSecurityModeInsufficient` otherwise), and
+- only on a SecureChannel with Sign or SignAndEncrypt that was opened with a
+  client certificate (`BadSecurityModeInsufficient` otherwise; the channels of
+  opc.https and opcua+uajson have no client certificate and count as
+  without security, also with `LDSSkipServerURICheck`), and
 - only for the `ServerUri` that is an application URI of the certificate the
   channel was opened with (`BadServerUriInvalid`): an application can register
   and unregister itself, nobody else.
@@ -832,7 +850,7 @@ a discovery server that is reachable by more than the machines you control.
 | Option | Effect | Use |
 |--------|--------|-----|
 | `LDSAllowInsecureRegistration()` | Registration without security: anybody who reaches the port can add, replace and remove servers | Tests, closed lab networks, servers without certificates |
-| `LDSSkipServerURICheck()` | A certificate may register any `ServerUri` | A gateway registering the servers behind it |
+| `LDSSkipServerURICheck()` | A certificate may register any `ServerUri`; a certificate is still required | A gateway registering the servers behind it |
 | `LDSMaxRegisteredServers(n)` | Bounds the table (default 1024) | Limits what a registrant can make the server hold |
 
 Other things a discovery server takes from a registrant: the discovery URLs
@@ -886,6 +904,29 @@ from what others announce. mDNS has no authentication:
   dropped (RFC 6762 §11).
 - **Port.** mDNS uses UDP 5353, shared with Avahi/Bonjour if they run.
 
+## Connection and Message Limits
+
+Before a secure channel is open, and on a channel without security, a peer is not authenticated. These bounds are fixed and apply to client and server alike:
+
+- **Opening a channel.** A connection accepted by a server's listener has 10 s for the HEL/ACK handshake and then 10 s more to send its OpenSecureChannel request; a connection that does neither is closed.
+- **Partial messages.** A channel collects the chunks of at most 16 messages at a time, holding together at most twice the largest message it accepts (`MaxMessageSize`, or `MaxChunkCount` chunks of the receive buffer when `MaxMessageSize` is 0). A peer that goes over either loses the connection (`Bad_TcpMessageTooLarge`, Part 6 §7.1.5). `MaxChunkCount` and `MaxMessageSize` still bound each message.
+- **Nesting.** UA Binary values nest Variant, DataValue, DiagnosticInfo and ExtensionObject at most 100 levels deep (`ua.MaxBinaryNestingDepth`), as the JSON and XML codecs do; deeper values fail with `Bad_EncodingLimitsExceeded`.
+- **Padding.** The padding sizes of a decrypted chunk are checked against its length; a chunk that does not hold them fails with `Bad_SecurityChecksFailed`.
+
+## Sessions and SecureChannels (Server)
+
+A session belongs to the SecureChannel it was created on and, after that, to
+the channel of its last successful ActivateSession (Part 4 §5.7.3). The server
+serves the requests of a session only on that channel; on any other channel
+they fail with `Bad_SecureChannelIdInvalid`, CloseSession included. The first
+ActivateSession has to come over the channel of CreateSession. A client that
+lost its channel moves the session to a new one with ActivateSession, which
+the server accepts when the new channel has the same security policy and mode,
+was opened with the same client certificate, and the user identity is the same
+user (`Bad_IdentityChangeNotSupported` otherwise; Part 4 §5.7.3.1). opc.https
+and opcua+uajson have one virtual channel per security policy, so there the
+session is tied to the policy, and TLS protects the AuthenticationToken.
+
 ## Session and Subscription Limits (Server)
 
 A client can open sessions and subscriptions before it has proven anything: CreateSession comes before ActivateSession, and an anonymous user can create subscriptions. The server therefore keeps a bounded number of them:
@@ -906,6 +947,29 @@ The defaults are those of open62541 (`maxSessions`, `maxSubscriptions`, `maxSubs
 
 Size the limits to the clients you expect: an engineering tool and a few HMIs need far fewer than the defaults, and a smaller limit bounds the memory an unauthenticated client can tie up.
 
+### Per-call and per-session resource limits
+
+| Option | Default | Refusal |
+|---|---|---|
+| `WithOperationLimits(l)` | 32 per service (a zero field: no limit) | The whole request: `Bad_TooManyOperations` (Part 4 §7.38). Covers Read, Write, Call, Browse / BrowseNext, RegisterNodes / UnregisterNodes, TranslateBrowsePathsToNodeIds, NodeManagement, the MonitoredItem services and HistoryRead / HistoryUpdate |
+| `WithMaxMonitoredItems(n)` | 100000 (server) | CreateMonitoredItems: `Bad_TooManyMonitoredItems` per item beyond the limit |
+| `WithMaxMonitoredItemsPerSubscription(n)` | 10000 | as above |
+| `WithMaxMonitoredItemsPerSession(n)` | 20000 | as above |
+| `WithMaxBrowseContinuationPoints(n)` | 10 per session | Browse: `Bad_NoContinuationPoints` for the node |
+| `WithMaxQueryContinuationPoints(n)` | 5 per session | QueryFirst: `Bad_NoContinuationPoints` |
+
+The values in force are published in ServerCapabilities (`OperationLimits`, `MaxMonitoredItems`, `MaxMonitoredItemsPerSubscription`, `MaxBrowseContinuationPoints`, `MaxQueryContinuationPoints`).
+
+- Browse and Query continuation points belong to the session that created them: another session gets `Bad_ContinuationPointInvalid`. They are released when the session is closed or times out, and an unused one expires after 10 minutes.
+- The event queue of an event monitored item holds its revised QueueSize (default 1000 for QueueSize 0, at most 10000). On overflow an `EventQueueOverflowEventType` event marks the loss (Part 4 §5.12.1.5): with DiscardOldest the oldest event is dropped and the overflow event heads the queue, otherwise the new event is dropped.
+- A Publish response carries at most MaxNotificationsPerPublish data and event notifications together, with `MoreNotifications` when more remain.
+- Republish and the SubscriptionAcknowledgements of Publish only reach the subscriptions of the calling session (`Bad_SubscriptionIdInvalid` otherwise).
+- ContentFilters (Query) and EventFilter WhereClauses have at most 256 elements (`Bad_ContentFilterInvalid` / `Bad_EventFilterInvalid`); an element shared by several operands is evaluated once.
+
+### Query
+
+The Query service set is off by default (`Bad_ServiceUnsupported`): a QueryFirst scans the whole address space. `WithQuery(true)` enables it; a query then only returns nodes the session may browse (`AccessController.CheckBrowse`, AccessRestrictions with ApplyRestrictionsToBrowse), and an attribute the session may not read (`CheckRead`, AccessRestrictions) is returned as the denying StatusCode and is NULL to the filter.
+
 ---
 
 ## Security Checklist
@@ -925,6 +989,7 @@ Size the limits to the clients you expect: an engineering tool and a few HMIs ne
 - [ ] Implement `AccessController` for fine-grained server authorization
 - [ ] Set a WriteMask only on the attributes clients must change
 - [ ] Size `WithMaxSessions`, `WithMaxSubscriptions` and `WithMaxSubscriptionsPerSession` to the clients you expect
+- [ ] Keep `WithOperationLimits` and the monitored item limits as small as the clients allow; enable `WithQuery` only where clients need it
 - [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart
 - [ ] On a Local Discovery Server, keep secured registration (no `LDSAllowInsecureRegistration`) and configure `WithClientCertificateTrustList`
 - [ ] Enable `WithMulticastDiscovery` only on interfaces where the server should be discoverable, and never trust a discovered URL without validating the server certificate

@@ -488,13 +488,18 @@ func TestMonitoredItem_ManyItemsOneSubscription(t *testing.T) {
 		reqs[i] = opcua.NewMonitoredItemCreateRequestWithDefaults(
 			ua.NewStringNodeID(f.NSIndex, fmt.Sprintf("Bulk%03d", i)), ua.AttributeIDValue, uint32(1000+i))
 	}
-	resp, err := sub.Monitor(ctx, ua.TimestampsToReturnNeither, reqs...)
-	require.NoError(t, err)
-	require.Len(t, resp.Results, n)
-	itemIDs := make([]uint32, n)
-	for i, r := range resp.Results {
-		require.Equal(t, ua.StatusOK, r.StatusCode)
-		itemIDs[i] = r.MonitoredItemID
+	// The server takes MaxMonitoredItemsPerCall (32) items per call.
+	const perCall = 32
+	itemIDs := make([]uint32, 0, n)
+	for start := 0; start < n; start += perCall {
+		batch := reqs[start:min(start+perCall, n)]
+		resp, err := sub.Monitor(ctx, ua.TimestampsToReturnNeither, batch...)
+		require.NoError(t, err)
+		require.Len(t, resp.Results, len(batch))
+		for _, r := range resp.Results {
+			require.Equal(t, ua.StatusOK, r.StatusCode)
+			itemIDs = append(itemIDs, r.MonitoredItemID)
+		}
 	}
 
 	// Every handle reports exactly its node's value.
@@ -514,12 +519,15 @@ func TestMonitoredItem_ManyItemsOneSubscription(t *testing.T) {
 	require.Equal(t, uint32(1123), samples[0].Handle)
 	require.Equal(t, int32(-5), samples[0].DV.Value.Value())
 
-	// Remove them all in one call.
-	del, err := sub.Unmonitor(ctx, itemIDs...)
-	require.NoError(t, err)
-	require.Len(t, del.Results, n)
-	for _, st := range del.Results {
-		require.Equal(t, ua.StatusOK, st)
+	// Remove them all, MaxMonitoredItemsPerCall per call.
+	for start := 0; start < n; start += perCall {
+		batch := itemIDs[start:min(start+perCall, n)]
+		del, err := sub.Unmonitor(ctx, batch...)
+		require.NoError(t, err)
+		require.Len(t, del.Results, len(batch))
+		for _, st := range del.Results {
+			require.Equal(t, ua.StatusOK, st)
+		}
 	}
 	eventually(t, func() bool {
 		r := mustSendRaw[ua.SetMonitoringModeResponse](t, c, &ua.SetMonitoringModeRequest{

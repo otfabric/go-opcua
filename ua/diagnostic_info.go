@@ -29,7 +29,14 @@ type DiagnosticInfo struct {
 }
 
 func (d *DiagnosticInfo) Decode(b []byte) (int, error) {
-	buf := NewBuffer(b)
+	return d.decodeDepth(b, 0)
+}
+
+func (d *DiagnosticInfo) decodeDepth(b []byte, depth int) (int, error) {
+	buf, err := nestedBuffer(b, depth)
+	if err != nil {
+		return 0, err
+	}
 	d.EncodingMask = buf.ReadUint8()
 	if d.Has(DiagnosticInfoSymbolicID) {
 		d.SymbolicID = buf.ReadInt32()
@@ -57,7 +64,14 @@ func (d *DiagnosticInfo) Decode(b []byte) (int, error) {
 }
 
 func (d *DiagnosticInfo) Encode() ([]byte, error) {
-	buf := NewBuffer(nil)
+	return d.encodeDepth(0)
+}
+
+func (d *DiagnosticInfo) encodeDepth(depth int) ([]byte, error) {
+	buf, err := nestedBuffer(nil, depth)
+	if err != nil {
+		return nil, err
+	}
 	if d == nil {
 		// A nil pointer is the empty DiagnosticInfo: no field is present.
 		_ = buf.WriteByte(0)

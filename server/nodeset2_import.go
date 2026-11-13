@@ -369,10 +369,10 @@ func nodeSetAliases(nodes *schema.UANodeSet) map[string]string {
 // AccessLevel and UserAccessLevel attributes of a UAVariable.
 //
 // DataType and ValueRank get the defaults of the NodeSet schema (BaseDataType
-// and Scalar) when the attribute is absent. The access levels are only set
-// when the attribute is present: a variable without them stays readable and
-// writable, as imported variables have always been, instead of becoming
-// read-only through the schema default of CurrentRead.
+// and Scalar) when the attribute is absent, and so do AccessLevel and
+// UserAccessLevel: CurrentRead (UANodeSet.xsd UAVariable, default="1"). Both
+// are mandatory Attributes of a Variable (Part 3 §5.6.2); a variable whose
+// NodeSet does not make it writable is read-only.
 func (s *Server) importVariableAttributes(attrs Attributes, v *schema.UAVariable, aliases map[string]string) {
 	dataType := ua.NewNumericNodeID(0, id.BaseDataType)
 	if v.DataTypeAttr != "" {
@@ -428,14 +428,15 @@ func (s *Server) importVariableAttributes(attrs Attributes, v *schema.UAVariable
 		{ua.AttributeIDAccessLevel, v.AccessLevelAttr, "access_level"},
 		{ua.AttributeIDUserAccessLevel, v.UserAccessLevelAttr, "user_access_level"},
 	} {
-		if a.value == nil {
-			continue
+		level := byte(ua.AccessLevelTypeCurrentRead)
+		if a.value != nil {
+			if *a.value > math.MaxUint8 {
+				s.cfg.logger.Warn("nodeset import: invalid access level", "node_id", v.NodeIDAttr, a.name, *a.value)
+			} else {
+				level = byte(*a.value)
+			}
 		}
-		if *a.value > math.MaxUint8 {
-			s.cfg.logger.Warn("nodeset import: invalid access level", "node_id", v.NodeIDAttr, a.name, *a.value)
-			continue
-		}
-		attrs[a.id] = DataValueFromValue(byte(*a.value))
+		attrs[a.id] = DataValueFromValue(level)
 	}
 }
 

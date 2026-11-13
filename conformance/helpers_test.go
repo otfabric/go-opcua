@@ -2,7 +2,15 @@
 
 package conformance
 
-import "github.com/otfabric/go-opcua/internal/testutil/conformkit"
+import (
+	"context"
+	"testing"
+
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
+	"github.com/otfabric/go-opcua/server"
+)
 
 // The generic helpers are shared with the other conformance packages, see
 // conformkit.
@@ -31,3 +39,10 @@ var (
 	secureServerOpts = conformkit.SecureServerOpts
 	secureClientOpts = conformkit.SecureClientOpts
 )
+
+// setupNodeMgmt is setup with the Node Management services enabled.
+func setupNodeMgmt(t *testing.T) (*opcua.Client, *testutil.Fixture, context.Context) {
+	t.Helper()
+	c, f, _, _ := conformkit.SetupWith(t, nil, server.EnableNodeManagement())
+	return c, f, context.Background()
+}

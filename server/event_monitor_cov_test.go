@@ -150,7 +150,8 @@ func TestEventMonitorCov_EvalNullResults(t *testing.T) {
 	sev := saoOp(ua.AttributeIDValue, &ua.QualifiedName{Name: "Severity"})
 	str := lit(ua.MustVariant("ten"))
 	eval := func(ev *BaseEvent, elems ...*ua.ContentFilterElement) tvl {
-		return s.evalEventElement(ev, elems, 0, make([]bool, len(elems)))
+		n := len(elems)
+		return s.evalEventElement(ev, elems, 0, &eventEvalState{visiting: make([]bool, n), done: make([]bool, n), memo: make([]tvl, n)})
 	}
 
 	// OfType that cannot be decided.
@@ -241,22 +242,22 @@ func TestEventMonitorCov_EmitSkipsAndDrops(t *testing.T) {
 
 	// A BaseEventType event: only the item without OfType gets it.
 	require.NoError(t, srv.EmitBaseEvent(nodeID, sampleBaseEvent(1)))
-	require.Len(t, sub.EventNotifyChannel, 1)
-	evt := <-sub.EventNotifyChannel
-	require.Equal(t, uint32(6), evt.ClientHandle)
+	evs, _ := sub.takeEvents(0, true)
+	require.Len(t, evs, 1)
+	require.Equal(t, uint32(6), evs[0].ClientHandle)
 
-	// A full queue drops the event instead of blocking the emitter.
-	for len(sub.EventNotifyChannel) < cap(sub.EventNotifyChannel) {
-		sub.EventNotifyChannel <- &ua.EventFieldList{ClientHandle: 99}
+	// A full queue discards the oldest event instead of blocking the emitter.
+	plain.evQueueSize, plain.evDiscardOldest = 2, true
+	for i := 0; i < 5; i++ {
+		require.NoError(t, srv.EmitBaseEvent(nodeID, sampleBaseEvent(uint16(10+i))))
 	}
-	require.NoError(t, srv.EmitBaseEvent(nodeID, sampleBaseEvent(2)))
-	require.Len(t, sub.EventNotifyChannel, cap(sub.EventNotifyChannel))
-	for len(sub.EventNotifyChannel) > 0 {
-		require.Equal(t, uint32(99), (<-sub.EventNotifyChannel).ClientHandle)
-	}
+	evs, _ = sub.takeEvents(0, true)
+	require.Len(t, evs, 3, "two events and the overflow event")
+	require.Equal(t, uint16(13), evs[1].EventFields[0].Value())
+	require.Equal(t, uint16(14), evs[2].EventFields[0].Value())
 
 	// The event registry no longer knows an unregistered item.
 	srv.eventItems.unregister(plain.ID)
 	require.NoError(t, srv.EmitBaseEvent(nodeID, sampleBaseEvent(3)))
-	require.Empty(t, sub.EventNotifyChannel)
+	require.False(t, sub.pendingEvents())
 }

@@ -218,6 +218,11 @@ Both decoders are meant to be usable on untrusted input:
   only UTF-8 is accepted;
 - memory use is linear in the size of the document.
 
+The UA Binary codec applies the same nesting limit to Variant, DataValue,
+DiagnosticInfo and ExtensionObject values nested inside each other
+(`ua.MaxBinaryNestingDepth`, 100 levels, fixed): decoding or encoding a deeper
+value fails with `StatusBadEncodingLimitsExceeded`.
+
 Every error wraps a `ua.StatusCode` (`StatusBadDecodingError`,
 `StatusBadEncodingLimitsExceeded`, `StatusBadEncodingError`) for `errors.Is`.
 `FuzzDecodeJSON` and `FuzzDecodeXML` in `ua/codec_fuzz_test.go` fuzz both.

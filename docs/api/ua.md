@@ -160,6 +160,12 @@ const (
 Default limits applied by [DecodeJSON](#func-decodejson) and [DecodeXML](#func-decodexml).
 
 ```go
+const MaxBinaryNestingDepth = DefaultCodecMaxDepth
+```
+
+MaxBinaryNestingDepth bounds how deeply Variant, DataValue, DiagnosticInfo and ExtensionObject values may be nested inside each other in the UA Binary encoding. Each of these types counts as one level, whatever the path between them (a Variant holding a DataValue holding a Variant is three levels). Decoding or encoding a deeper value fails with \[StatusBadEncodingLimitsExceeded] (OPC UA Part 6 §5.2.2 lets a stack enforce encoding limits and report them with that status). The value matches DefaultCodecMaxDepth of the JSON and XML codecs.
+
+```go
 const XMLTypesNamespace = "http://opcfoundation.org/UA/2008/02/Types.xsd"
 ```
 
@@ -423,7 +429,11 @@ BinaryEncoder is the interface implemented by an object that can marshal itself 
 
 ```go
 type Buffer struct {
-	// contains filtered or unexported fields
+
+	// depth is the number of enclosing Variant, DataValue,
+	// DiagnosticInfo and ExtensionObject values while decoding or
+	// encoding; see [MaxBinaryNestingDepth].
+
 }
 ```
 
@@ -1525,6 +1535,8 @@ EncodingMask returns the encoding mask field including the type information and 
 ```go
 func (n *NodeID) Equal(o *NodeID) bool
 ```
+
+Equal reports whether n and o have the same String form: the same namespace and identifier, a numeric one in any of its encodings. It compares the fields, without building the strings: the server compares NodeIds for every reference it removes.
 
 #### func (NodeID) IndexFlag
 

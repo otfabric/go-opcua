@@ -156,12 +156,36 @@ func (g *GDS) startSigningRequest(ctx context.Context, c *caller, args []*ua.Var
 	if !slices.Contains(uris, app.Record.ApplicationURI) && (gr.key != GroupHTTPS || len(uris) > 0) {
 		return nil, ua.StatusBadCertificateURIInvalid
 	}
+	hosts, sc := recordHosts(app.Record)
+	if sc != ua.StatusOK {
+		return nil, sc
+	}
 	return g.addRequestLocked(ctx, &Request{
 		ApplicationID:      app.ID,
 		CertificateType:    ct.id,
 		CertificateGroup:   gr.key,
 		CertificateRequest: slices.Clone(der),
+		DomainNames:        hosts,
 	})
+}
+
+// recordHosts returns the host names and IP addresses of the DiscoveryUrls
+// of an application record, the names a certificate issued for it gets
+// unless the request names others. A wildcard host is refused: the CA only
+// certifies names of the application (Part 12 §7.9.4).
+func recordHosts(rec *gds.ApplicationRecord) ([]string, ua.StatusCode) {
+	dns, ips := hostsOf(rec.DiscoveryURLs)
+	hosts := make([]string, 0, len(dns)+len(ips))
+	for _, d := range dns {
+		if strings.ContainsAny(d, " /\\*") {
+			return nil, ua.StatusBadInvalidArgument
+		}
+		hosts = append(hosts, d)
+	}
+	for _, ip := range ips {
+		hosts = append(hosts, ip.String())
+	}
+	return hosts, ua.StatusOK
 }
 
 // startNewKeyPairRequest is StartNewKeyPairRequest (Part 12 §7.9.5): the
@@ -222,6 +246,11 @@ func (g *GDS) startNewKeyPairRequest(ctx context.Context, c *caller, args []*ua.
 		if !admin && !slices.ContainsFunc(dns, func(h string) bool { return strings.EqualFold(h, d) }) &&
 			!slices.ContainsFunc(ips, func(ip net.IP) bool { return ip.Equal(net.ParseIP(d)) }) {
 			return nil, ua.StatusBadUserAccessDenied
+		}
+	}
+	if len(domains) == 0 {
+		if domains, sc = recordHosts(app.Record); sc != ua.StatusOK {
+			return nil, sc
 		}
 	}
 	return g.addRequestLocked(ctx, &Request{
@@ -334,7 +363,15 @@ func (g *GDS) issue(rec *gds.ApplicationRecord, req *Request) (certDER, keyData 
 	ct := certTypes[req.CertificateType]
 	now := g.now()
 	l := &leaf{uri: rec.ApplicationURI, notBefore: now.Add(-clockSkew), notAfter: now.Add(g.cfg.CertificateLifetime)}
-	l.dns, l.ips = hostsOf(rec.DiscoveryURLs)
+	// The host names were fixed when the request was made (Request.
+	// DomainNames), not taken from the record as it is now.
+	for _, d := range req.DomainNames {
+		if ip := net.ParseIP(d); ip != nil {
+			l.ips = append(l.ips, ip)
+		} else {
+			l.dns = append(l.dns, d)
+		}
+	}
 	name := ""
 	if len(rec.ApplicationNames) > 0 && rec.ApplicationNames[0] != nil {
 		name = rec.ApplicationNames[0].Text
@@ -355,16 +392,6 @@ func (g *GDS) issue(rec *gds.ApplicationRecord, req *Request) (certDER, keyData 
 		}
 		l.pub = key.Public()
 		l.subject, _ = parseSubjectName(req.SubjectName)
-		if len(req.DomainNames) > 0 {
-			l.dns, l.ips = nil, nil
-			for _, d := range req.DomainNames {
-				if ip := net.ParseIP(d); ip != nil {
-					l.ips = append(l.ips, ip)
-				} else {
-					l.dns = append(l.dns, d)
-				}
-			}
-		}
 	}
 	if len(l.subject.Names) == 0 && l.subject.CommonName == "" && len(l.subject.Organization) == 0 {
 		l.subject = pkix.Name{CommonName: name}
@@ -661,6 +688,9 @@ type PendingRequest struct {
 	// NewKeyPair tells a StartNewKeyPairRequest from a
 	// StartSigningRequest.
 	NewKeyPair bool
+	// DomainNames are the host names and IP addresses the certificate
+	// gets (Request.DomainNames).
+	DomainNames []string
 }
 
 // Requests returns the open certificate requests, oldest first.
@@ -676,6 +706,7 @@ func (g *GDS) Requests() []*PendingRequest {
 			State:            r.State,
 			Created:          r.Created,
 			NewKeyPair:       len(r.CertificateRequest) == 0,
+			DomainNames:      slices.Clone(r.DomainNames),
 		}
 		if a := g.apps[r.ApplicationID]; a != nil {
 			p.ApplicationURI = a.Record.ApplicationURI

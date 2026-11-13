@@ -89,6 +89,11 @@ type Server struct {
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
 
+	// view and query hold the Browse and Query continuation points, which
+	// are released with their session (sessionRemoved).
+	view  *ViewService
+	query *QueryService
+
 	// eventItems tracks event-monitored-item filter state.
 	eventItems *eventItemRegistry
 
@@ -166,6 +171,7 @@ type serverConfig struct {
 	cap ServerCapabilities
 
 	accessController           AccessController
+	nodeManagement             bool // EnableNodeManagement
 	roleMapper                 RoleMapper
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
@@ -192,6 +198,18 @@ type serverConfig struct {
 	maxSessions                int
 	maxSubscriptions           int
 	maxSubscriptionsPerSession int
+
+	// The monitored item and continuation point limits of
+	// monitored_item_limits.go and continuation_points.go. Zero selects the
+	// default.
+	maxMonitoredItems                int
+	maxMonitoredItemsPerSession      int
+	maxMonitoredItemsPerSubscription int
+	maxBrowseContinuationPoints      int
+	maxQueryContinuationPoints       int
+
+	// query enables the Query service set (WithQuery).
+	query bool
 
 	logger *slog.Logger
 
@@ -398,6 +416,8 @@ func New(opts ...Option) (*Server, error) {
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
 	s.bindSessionCapabilities()
+	s.bindMonitoredItemCapabilities()
+	s.bindContinuationPointCapabilities()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
@@ -787,6 +807,13 @@ func (s *Server) Close() error {
 
 // sessionRemoved is called by the session broker after it forgot a session.
 func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
+	// Part 4 §7.9: the continuation points of a session are released with it.
+	if s.view != nil {
+		s.view.store().releaseSession(sessionKey(sess))
+	}
+	if s.query != nil {
+		s.query.store().releaseSession(sessionKey(sess))
+	}
 	s.diag.sessionRemoved(sess, reason == SessionTimedOut)
 	s.observeSessionClosed(sess, reason)
 	s.auditSessionEnd(sess, reason)
@@ -970,6 +997,20 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 			}
 		}
 
+		// A certificate token on a None endpoint names a real
+		// SecurityPolicy, so the client proves with a UserTokenSignature
+		// that it holds the key of the certificate: "Servers should
+		// specify a SecurityPolicy for the UserTokenPolicy if the
+		// SecureChannel has a SecurityPolicy of None" (Part 4 §7.40.5).
+		// Without an enabled policy to name, none is offered.
+		if auth.tokenType == ua.UserTokenTypeCertificate && authSecPolicy == ua.SecurityPolicyURINone {
+			p := s.certificateTokenPolicy()
+			if p == "" {
+				continue
+			}
+			authSecPolicy, tokenPolicyURI = p, p
+		}
+
 		policyID := strings.ToLower(
 			strings.TrimPrefix(auth.tokenType.String(), "UserTokenType") +
 				"_" +
@@ -1048,6 +1089,35 @@ func (s *Server) tokenPolicyOverTLS(profile, policy string, serverCert []byte) s
 		}
 	}
 	return best
+}
+
+// certificateTokenPolicy returns the SecurityPolicy that an X.509 user token
+// policy of a None endpoint names: the enabled RSA policy with the highest
+// SecurityLevel, or the highest ECC one if no RSA policy is enabled, "" if
+// only None is enabled.
+func (s *Server) certificateTokenPolicy() string {
+	var rsa, ecc string
+	var rsaLevel, eccLevel uint8
+	for _, sec := range s.cfg.enabledSec {
+		p := sec.secPolicy
+		if p == ua.SecurityPolicyURINone || !uapolicy.IsSupported(p) {
+			continue
+		}
+		l := uapolicy.SecurityLevel(p, ua.MessageSecurityModeSignAndEncrypt)
+		if uapolicy.IsECC(p) {
+			if ecc == "" || l > eccLevel {
+				ecc, eccLevel = p, l
+			}
+			continue
+		}
+		if rsa == "" || l > rsaLevel {
+			rsa, rsaLevel = p, l
+		}
+	}
+	if rsa != "" {
+		return rsa
+	}
+	return ecc
 }
 
 // publishNamespaces makes s.namespaces the view of Node. It is called with

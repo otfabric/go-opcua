@@ -64,7 +64,17 @@ func WithPubSub(cfg *ua.PubSubConfigurationDataType, opts ...pubsub.Option) Opti
 type PubSubAuthorizer func(ctx context.Context, caller *MethodCaller, method string) ua.StatusCode
 
 // WithPubSubAuthorizer restricts the PubSub configuration methods. Without
-// it every session may call them, as with open62541.
+// it every session the AccessController allows to call them (CheckCall) may
+// call them, as with open62541; the RBACAccessController allows them to
+// ConfigureAdmin only (the RolePermissions of AddConnection in the standard
+// NodeSet, given to every configuration method).
+//
+// Whatever the authorizer, a session that configures a reader must be
+// allowed to write its TargetVariables (CheckWrite and AccessLevel for the
+// Value, CheckWrite and WriteMask for other Attributes), and one that adds
+// published variables must be allowed to read them (CheckRead):
+// Bad_UserAccessDenied, Bad_NotWritable otherwise. The runtime writes a
+// target Attribute other than the Value only where its WriteMask allows it.
 func WithPubSubAuthorizer(a PubSubAuthorizer) Option {
 	return func(c *serverConfig) error {
 		c.pubsubAuth = a
@@ -292,6 +302,15 @@ func (s *Server) writeTarget(t *ua.FieldTargetDataType, dv *ua.DataValue) ua.Sta
 		cp.Value = merged
 	}
 	cp.UpdateMask()
+	// An Attribute other than the Value is written as by the Write service:
+	// only where the WriteMask allows it, with a value of its DataType
+	// (Part 3 §5.2.7, Part 4 §5.10.4). The Value is governed by AccessLevel,
+	// which NodeNameSpace.SetAttribute checks.
+	if attr != ua.AttributeIDValue {
+		if st := checkAttributeWrite(ns, t.TargetNodeID, attr, &cp); st != ua.StatusOK {
+			return st
+		}
+	}
 	return ns.SetAttribute(t.TargetNodeID, attr, &cp)
 }
 

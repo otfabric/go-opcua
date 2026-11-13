@@ -808,7 +808,7 @@ func (m *metricsRecorder) snapshot(svc string) (req, resp, errs, timeouts int) {
 func TestMetrics_ClientAndServerHooks(t *testing.T) {
 	parallel(t)
 	cm, sm := newMetricsRecorder(), newMetricsRecorder()
-	srv, url := newServer(t, server.WithMetrics(sm))
+	srv, url := newServer(t, server.WithMetrics(sm), server.WithQuery(true)) // QueryNext is the failing request
 	f := testutil.AddFixture(t, srv)
 	ctx := context.Background()
 
@@ -921,7 +921,7 @@ func (r *countingRetry) ShouldRetry(attempt int, err error) (bool, time.Duration
 
 func TestClient_RetryPolicy(t *testing.T) {
 	sm := newMetricsRecorder()
-	srv, url := newServer(t, server.WithMetrics(sm))
+	srv, url := newServer(t, server.WithMetrics(sm), server.WithQuery(true)) // QueryNext is the failing request
 	f := testutil.AddFixture(t, srv)
 	ctx := context.Background()
 

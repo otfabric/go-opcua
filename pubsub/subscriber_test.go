@@ -156,11 +156,13 @@ func TestSequenceNumbers(t *testing.T) {
 	require.Len(t, f.rec.dataSets(), 2)
 	require.Equal(t, uint64(1), f.counters().KeepAlivesReceived)
 
-	// A jump of more than a quarter of the number space resynchronises,
-	// gaps below are lost messages, and the 16 bit numbers wrap around.
+	// A jump of a quarter of the number space or more is invalid and
+	// ignored (Part 14 §7.2.3); gaps below are lost messages, and the 16
+	// bit numbers wrap around.
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 30000, 5, 5, 5))
-	require.Equal(t, uint64(1), f.counters().SequenceResyncs)
-	for _, s := range []uint32{40000, 50000, 60000} {
+	require.Len(t, f.rec.dataSets(), 2)
+	require.Equal(t, uint64(3), f.counters().SequenceDiscards)
+	for _, s := range []uint32{16000, 32000, 48000, 64000} {
 		f.sendSync(msg(message.DataSetMessageKeyFrame, s, 5, 5, 5))
 	}
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 65535, 6, 6, 6))
@@ -170,8 +172,34 @@ func TestSequenceNumbers(t *testing.T) {
 	// 65535 is now older than 2.
 	f.sendSync(msg(message.DataSetMessageKeyFrame, 65535, 9, 9, 9))
 	require.Equal(t, []int32{8, 8, 8}, int32Values(f.last()))
-	require.Equal(t, uint64(3), f.counters().SequenceDiscards)
+	require.Equal(t, uint64(4), f.counters().SequenceDiscards)
 	require.Len(t, f.rec.dataSets(), 9)
+	require.Zero(t, f.counters().SequenceResyncs)
+}
+
+// TestSequenceRecordKeptForTwoTimeouts: a reader keeps the sequence number
+// of a writer for two MessageReceiveTimeouts without a message it took
+// (Part 14 §7.2.3); a message far behind is ignored until then, also after
+// the reader timed out, and resynchronises the reader after.
+func TestSequenceRecordKeptForTwoTimeouts(t *testing.T) {
+	t.Parallel()
+	const timeout = time.Second
+	f := subscriberOnly(t, func(r *ua.DataSetReaderDataType) { r.MessageReceiveTimeout = float64(timeout / time.Millisecond) })
+	f.sendSync(msg(message.DataSetMessageKeyFrame, 100, 1, 1, 1))
+	accepted := time.Now()
+	f.sendSync(msg(message.DataSetMessageKeyFrame, 1, 2, 2, 2))
+	require.Equal(t, uint64(1), f.counters().SequenceDiscards)
+
+	waitState(t, f.p, f.rid, ua.PubSubStateError)
+	time.Sleep(time.Until(accepted.Add(timeout + 100*time.Millisecond)))
+	if time.Since(accepted) < 2*timeout-200*time.Millisecond {
+		f.sendSync(msg(message.DataSetMessageKeyFrame, 1, 3, 3, 3))
+		require.Equal(t, uint64(2), f.counters().SequenceDiscards, "the sequence record expired after one MessageReceiveTimeout")
+	}
+
+	time.Sleep(time.Until(accepted.Add(2*timeout + 50*time.Millisecond)))
+	f.sendSync(msg(message.DataSetMessageKeyFrame, 1, 4, 4, 4))
+	require.Equal(t, []int32{4, 4, 4}, int32Values(f.last()))
 	require.Equal(t, uint64(1), f.counters().SequenceResyncs)
 }
 
@@ -181,10 +209,10 @@ func TestCompareSeq(t *testing.T) {
 	require.Equal(t, seqNewer, compareSeq(0, 65535, true))
 	require.Equal(t, seqDuplicate, compareSeq(5, 5, true))
 	require.Equal(t, seqOlder, compareSeq(65535, 0, true))
-	require.Equal(t, seqResync, compareSeq(30000, 0, true))
+	require.Equal(t, seqInvalid, compareSeq(30000, 0, true))
 	require.Equal(t, seqNewer, compareSeq(0, 1<<32-1, false))
 	require.Equal(t, seqOlder, compareSeq(1<<32-1, 0, false))
-	require.Equal(t, seqResync, compareSeq(1<<31, 0, false))
+	require.Equal(t, seqInvalid, compareSeq(1<<31, 0, false))
 	require.Equal(t, seqNewer, compareSeq(70000, 69999, false))
 }
 

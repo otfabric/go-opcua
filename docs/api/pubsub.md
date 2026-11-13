@@ -668,9 +668,12 @@ type Counters struct {
 	EncodeErrors uint64
 	SendErrors   uint64
 	DecodeErrors uint64
-	// SequenceDiscards counts DataSetMessages discarded as duplicates or as
-	// older than the last one received; SequenceResyncs counts jumps of the
-	// sequence number that resynchronised the reader.
+	// SequenceDiscards counts DataSetMessages discarded as duplicates, as
+	// older than the last one received or as invalid (a quarter or more of
+	// the number space away, Part 14 §7.2.3); SequenceResyncs counts
+	// writers the reader resynchronised to a lower sequence number after
+	// their sequence record expired (no message for two
+	// MessageReceiveTimeouts).
 	SequenceDiscards uint64
 	SequenceResyncs  uint64
 	// VersionMismatches counts DataSetMessages discarded because their
@@ -697,6 +700,12 @@ type Counters struct {
 	ChunksReceived          uint64
 	ChunkedMessagesReceived uint64
 	ChunksDiscarded         uint64
+	// NonceSequenceDiscards counts secured UADP NetworkMessages (chunks
+	// included) ignored because the sequence number of their MessageNonce
+	// is not newer than the last one processed for their sender and
+	// SecurityTokenId (Part 14 §7.2.4.4.3.2, §7.2.3): repeated or late
+	// copies.
+	NonceSequenceDiscards uint64
 	// DiscoveryRequestsSent and DiscoveryRequestsReceived count UADP
 	// discovery probes (Part 14 §7.2.4.6.12); DiscoveryRequestsIgnored
 	// counts received probes that were not answered: not for this
@@ -1273,6 +1282,14 @@ func WithLogger(l *slog.Logger) Option
 
 WithLogger sets the logger. The default discards log output.
 
+#### func WithNonceSequencePerToken
+
+```go
+func WithNonceSequencePerToken(on bool) Option
+```
+
+WithNonceSequencePerToken makes the receivers keep the last MessageNonce sequence number of a secured publisher (Part 14 §7.2.4.4.3.2) for as long as its SecurityTokenId is in the KeySource, instead of discarding it, as §7.2.3 does with sequence records, after two MessageReceiveTimeouts of the readers without a message. A copy of an earlier message is then ignored also after the publisher was silent; a publisher that restarts and secures its messages with the same token, counting from 1 again, is ignored until it uses the next token. The sequence numbers of ActionRequests and ActionResponses are always kept per token.
+
 #### func WithRetryInterval
 
 ```go
@@ -1307,7 +1324,8 @@ type PubSub struct {
 	// it, in order.
 
 	// reqSeq numbers the RequestIds of CallAction (guarded by mu);
-	// actNonce the secured action requests.
+	// actNonces the secured action requests, which actMu sends in the
+	// order of their nonces.
 
 	// actSeq numbers the chunked action messages (their
 	// MessageSequenceNumber).

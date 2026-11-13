@@ -34,11 +34,12 @@ type stream struct {
 	seq    uint32
 	fields []*ua.DataValue
 	key    bool
-	// expired is set by a MessageReceiveTimeout: the writer may have
-	// restarted its sequence numbers meanwhile (see processDSM).
-	expired bool
-	// seen is when the stream last had a message.
-	seen time.Time
+	// seen is when the stream last had a message, accepted when it last
+	// took one. Two MessageReceiveTimeouts after accepted the sequence
+	// number is expired: the writer may have restarted its sequence
+	// numbers meanwhile (see processDSM).
+	seen     time.Time
+	accepted time.Time
 }
 
 // maxReaderStreams bounds the streams a reader keeps: a reader that does
@@ -64,6 +65,8 @@ type readerSnap struct {
 	groupID   string
 	topic     string
 	metaTopic string
+	// timeout is the MessageReceiveTimeout of the reader.
+	timeout time.Duration
 }
 
 func (p *PubSub) snapshotReaders(c *connection) []readerSnap {
@@ -76,7 +79,7 @@ func (p *PubSub) snapshotReaders(c *connection) []readerSnap {
 			if !r.running {
 				continue
 			}
-			s := readerSnap{r: r, pub: r.pub, hasPub: r.hasPub, wgid: r.cfg.WriterGroupID, dswid: r.cfg.DataSetWriterID, mode: r.mode, groupID: r.groupID}
+			s := readerSnap{r: r, pub: r.pub, hasPub: r.hasPub, wgid: r.cfg.WriterGroupID, dswid: r.cfg.DataSetWriterID, mode: r.mode, groupID: r.groupID, timeout: r.timeout}
 			if r.brokerTS != nil {
 				s.topic, s.metaTopic = r.brokerTS.QueueName, r.brokerTS.MetaDataQueueName
 			}
@@ -358,6 +361,21 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		p.receiveAction(c, gen, enc, m, true)
 		return
 	}
+	if nm.Type == message.NetworkMessageDataSet && nm.Action == nil {
+		// Part 14 §7.2.4.4.3.2: a secured message whose MessageNonce
+		// sequence number is not newer than the last one of its sender
+		// and token is ignored, before it is reassembled or delivered.
+		var expiry time.Duration
+		for _, s := range hdr {
+			expiry = max(expiry, 2*s.timeout)
+		}
+		if p.opts.nonceForToken {
+			expiry = 0
+		}
+		if !p.freshNonce(c, gen, nm, keyGroup, expiry, recv) {
+			return
+		}
+	}
 	if nm.Chunk != nil {
 		if nm, err = p.reassemble(c, gen, cd, nm, opts, recv); nm == nil {
 			if err != nil {
@@ -618,9 +636,9 @@ func sameVersion(a, b *ua.ConfigurationVersionDataType) bool {
 	return a.MajorVersion == b.MajorVersion && a.MinorVersion == b.MinorVersion
 }
 
-// Sequence number windows (Part 14 §7.2.2.3.4): a message is newer if it is
+// Sequence number windows (Part 14 §7.2.3): a message is newer if it is
 // less than a quarter of the number space ahead, older if less than a
-// quarter behind, and resynchronises the reader otherwise.
+// quarter behind; any other result is invalid and the message is ignored.
 const (
 	seqWindow16 = 1 << 14
 	seqWindow32 = 1 << 30
@@ -632,7 +650,7 @@ const (
 	seqNewer seqVerdict = iota
 	seqDuplicate
 	seqOlder
-	seqResync
+	seqInvalid
 )
 
 // compareSeq compares a received sequence number with the last one, with
@@ -652,7 +670,7 @@ func compareSeq(recv, last uint32, uadpSeq bool) seqVerdict {
 	case d > n-w:
 		return seqOlder
 	default:
-		return seqResync
+		return seqInvalid
 	}
 }
 
@@ -708,19 +726,21 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 		// UADP carries 16 bits; JSON publishers wrap at 16 bits as well
 		// (open62541 rejects larger values), so both compare in 16 bits.
 		seq := dsm.SequenceNumber & 0xffff
-		if st.hasSeq && st.expired {
-			// After a timeout a publisher that restarted starts again
-			// at a lower number: resynchronise to it, unless the
-			// message is the last one again or just behind it, a late
-			// or duplicated copy that crossed the timeout.
+		// Part 14 §7.2.3: the sequence records are discarded when no
+		// message arrived for two MessageReceiveTimeouts.
+		expired := st.hasSeq && r.timeout > 0 && recv.Sub(st.accepted) >= 2*r.timeout
+		if expired {
+			// A publisher that restarted starts again at a lower
+			// number: resynchronise to it, unless the message is the
+			// last one again or just behind it, a late or duplicated
+			// copy that crossed the timeout.
 			behind := uint16(st.seq - seq)
 			if (behind == 0 && !keepAlive) || (behind > 0 && behind < staleWindow) {
 				r.ctr.SequenceDiscards++
 				return
 			}
 			if !keepAlive {
-				st.expired = false
-				if v := compareSeq(seq, st.seq, true); v == seqOlder || v == seqResync {
+				if v := compareSeq(seq, st.seq, true); v == seqOlder || v == seqInvalid {
 					r.ctr.SequenceResyncs++
 				}
 			}
@@ -731,16 +751,15 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 					r.ctr.SequenceDiscards++
 					return
 				}
-			case seqOlder:
+			case seqOlder, seqInvalid:
+				// Older, or invalid: ignored.
 				r.ctr.SequenceDiscards++
 				return
-			case seqResync:
-				r.ctr.SequenceResyncs++
 			case seqNewer:
 			}
 		}
 		if !keepAlive {
-			st.seq, st.hasSeq = seq, true
+			st.seq, st.hasSeq, st.accepted = seq, true, recv
 		}
 	}
 	if !keepAlive && r.md != nil && r.md.ConfigurationVersion != nil && r.md.ConfigurationVersion.MajorVersion != 0 &&

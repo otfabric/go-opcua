@@ -21,7 +21,13 @@
 | **Method** | Call | Fully implemented |
 | **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow, `DataChangeFilter`, sampling interval, `IndexRange`) |
 | **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
-| **Query** | QueryFirst, QueryNext | Fully implemented |
+| **Query** | QueryFirst, QueryNext | Opt-in with `WithQuery(true)` (`BadServiceUnsupported` otherwise); results honour the access controller and AccessRestrictions |
+
+Every service checks the number of operations of a request against the
+OperationLimits of the server (`WithOperationLimits`, default 32 each, a zero
+field is no limit) and fails a larger request with `BadTooManyOperations`.
+The monitored item, continuation point and event queue limits are listed in
+[security.md](security.md#per-call-and-per-session-resource-limits).
 
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.
@@ -549,9 +555,29 @@ Add and remove nodes at runtime via OPC-UA service calls:
 ns.AddNode(newNode)
 ns.DeleteNode(nodeID)
 
-// Client-side: clients can use AddNodes/DeleteNodes service calls
-// (if your access controller allows it)
 ```
+
+The Node Management services (AddNodes, AddReferences, DeleteNodes,
+DeleteReferences; Part 4 §5.7) are optional and off by default: the server
+answers them with `Bad_ServiceUnsupported`. Turn them on with
+`server.EnableNodeManagement()`. Every operation is then authorized:
+
+- an `AccessController` that implements `NodeManagementAccessController`
+  (`CheckAddNodes`, `CheckDeleteNodes`, `CheckAddReferences`,
+  `CheckDeleteReferences`) decides each operation; `RBACAccessController`
+  does, from the AddNode, DeleteNode, AddReference and RemoveReference
+  permissions, which a node must grant explicitly (a node without
+  RolePermissions refuses node management);
+- any other controller, `DefaultAccessController` included, is asked
+  `CheckWrite` for the node the operation changes (the parent of AddNodes,
+  the node of DeleteNodes, the source node of the reference services), and
+  namespace 0 is protected: its nodes cannot be added or deleted and their
+  references cannot be changed (adding a node below the Objects folder is
+  allowed).
+
+A refused operation answers `Bad_UserAccessDenied`. With the
+`DefaultAccessController`, enabling node management lets every session
+change the application's namespaces.
 
 ---
 
@@ -628,9 +654,12 @@ The importer handles:
 - Aliases
 
 `DataType` and `ValueRank` get the defaults of the NodeSet schema
-(`BaseDataType`, scalar) when the attribute is absent. `AccessLevel` and
-`UserAccessLevel` are only applied when the XML has them: a variable without
-them stays readable and writable. A `<Value>` that cannot be decoded - or
+(`BaseDataType`, scalar) when the attribute is absent, and so do
+`AccessLevel` and `UserAccessLevel`: `CurrentRead` (UANodeSet.xsd default
+`1`, Part 3 §5.6.2). A variable is writable by clients only where the
+NodeSet says so (`AccessLevel="3"`). Server code still updates the value
+of a read-only variable with `Node.SetAttribute`, which does not apply the
+AccessLevel (see below). A `<Value>` that cannot be decoded - or
 whose structure type is not registered - is logged and skipped; it does not
 fail the import.
 
@@ -650,8 +679,12 @@ When you change a node value, notify the server so it can push updates to subscr
 // Using MapNamespace — automatic with SetValue()
 data.SetValue("temperature", 25.0)  // Subscribers notified automatically
 
-// Using NodeNameSpace — call ChangeNotification after updating
+// Using NodeNameSpace — call ChangeNotification after updating.
+// NodeNameSpace.SetAttribute applies the AccessLevel of the node, as for a
+// client Write; Node.SetAttribute is the server-side update of a read-only
+// variable (AccessLevel governs clients only).
 ns.SetAttribute(nodeID, ua.AttributeIDValue, newDataValue)
+srv.Node(readOnlyID).SetAttribute(ua.AttributeIDValue, newDataValue)
 ns.ChangeNotification(nodeID)
 
 // Or notify via the server directly
@@ -1066,7 +1099,7 @@ registered servers from `FindServers`, after itself.
 | Unregistration | `IsOnline = false` removes the registration; `BadNothingToDo` if there is none. |
 | Expiry | A registration that is not renewed is removed after `LDSRegistrationTimeout` (default one hour, as in open62541; `0` disables the expiry). |
 | Semaphore file | A registration with a `SemaphoreFilePath` needs the file to exist (`BadSemaphoreFileMissing`), does not time out, and ends when the file is deleted. |
-| Who may register | Only a SecureChannel with Sign or SignAndEncrypt (`BadSecurityModeInsufficient` otherwise), and only for the `ServerUri` of the certificate the channel was opened with (`BadServerUriInvalid`). `LDSAllowInsecureRegistration()` and `LDSSkipServerURICheck()` lift the two rules for labs and gateways. See [security.md](security.md#discovery). |
+| Who may register | Only a SecureChannel with Sign or SignAndEncrypt opened with a client certificate (`BadSecurityModeInsufficient` otherwise; opc.https and opcua+uajson channels have none), and only for the `ServerUri` of the certificate the channel was opened with (`BadServerUriInvalid`). `LDSAllowInsecureRegistration()` and `LDSSkipServerURICheck()` lift the two rules for labs and gateways. See [security.md](security.md#discovery). |
 | Discovery configurations | Of the `DiscoveryConfiguration` list of RegisterServer2 the first `MdnsDiscoveryConfiguration` is used, if the server has the multicast extension. Every other entry gets `BadNotSupported` in `ConfigurationResults`; the server is registered regardless. |
 | FindServers | `serverUris` restricts the result, `localeIds` selects the server name, and `endpointUrl` selects which of the discovery server's own URLs are returned (those on the host the client used; all of them if the host is not recognised). The URLs of registered servers are returned as registered. |
 | Limits | `LDSMaxRegisteredServers` (1024): `BadResourceUnavailable` beyond it. |
@@ -1298,7 +1331,7 @@ defer gd.Close() // before srv.Close; makes later calls fail with Bad_Shutdown
 | Topic | Behaviour |
 |-------|-----------|
 | Directory | FindApplications, RegisterApplication, UpdateApplication, UnregisterApplication (revokes the application's certificates), GetApplication, QueryApplications, QueryServers; records are validated (URIs, names, at most 32 discovery URLs and capabilities) |
-| Certificate requests | StartSigningRequest (a CSR of any key type — RSA, NIST and Brainpool ECDSA, Ed25519, Ed448 — whose URI must be the application's), StartNewKeyPairRequest (the GDS generates the key; PEM, encrypted with a password, or PFX with the certificate and its issuer), FinishRequest; a request waits for `GDS.ApproveRequest` (`GDS.Requests` lists them) unless `Config.AutoApprove`; at most `MaxRequests` open requests per application |
+| Certificate requests | StartSigningRequest (a CSR of any key type — RSA, NIST and Brainpool ECDSA, Ed25519, Ed448 — whose URI must be the application's), StartNewKeyPairRequest (the GDS generates the key; PEM, encrypted with a password, or PFX with the certificate and its issuer), FinishRequest; the host names of the certificate are fixed when the request is made (those StartNewKeyPairRequest names, or the hosts of the application's discovery URLs at that time; no wildcards) and shown in `GDS.Requests`; a request waits for `GDS.ApproveRequest` (`GDS.Requests` lists them) unless `Config.AutoApprove`; at most `MaxRequests` open requests per application |
 | CA | One issuer per key type (RSA, NistP256, NistP384, BrainpoolP256r1, BrainpoolP384r1, Curve25519, Curve448), generated or given in `Config.Issuers`; DNS names and IP addresses from the discovery URLs or DomainNames; the CRL is re-signed on every revocation and before its NextUpdate |
 | Certificate groups | DefaultApplicationGroup (`Config.CertificateTypes`; trust list: every CA), DefaultHttpsGroup (HttpsCertificateType, RSA or ECDSA P-256 / P-384 TLS certificates, when the GDS has such a CA; a request may leave out the ApplicationUri; trust list: those CAs), DefaultUserTokenGroup (issues nothing; trust list: what a CertificateAuthorityAdmin adds). A client gets the application group, a server all three |
 | Trust list | GetCertificateGroups, GetCertificates, GetTrustList and the TrustList object of each group (the CA certificates and their CRLs, plus the certificates a CertificateAuthorityAdmin adds), GetCertificateStatus, RevokeCertificate, CheckRevocationStatus; `GDS.TrustList`, `GDS.GroupTrustList` |

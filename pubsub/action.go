@@ -677,6 +677,9 @@ func (p *PubSub) receiveAction(c *connection, gen uint64, enc encoding, m *trans
 	if p.protect("decode", func() { nm, err = cd.Decode(m.Payload, opts) }) {
 		err = errDecodePanic
 	}
+	if err == nil && nm.Action != nil && !p.freshNonce(c, gen, nm, keyGroup, 0, time.Now()) {
+		return
+	}
 	if err == nil && nm.Chunk != nil {
 		// A chunk of a request or response (§7.2.4.4.4), verified on its
 		// own: the message is handled once its chunks are complete.
@@ -1306,9 +1309,9 @@ func (p *PubSub) encodeAction(s *actionSend, maxSize int) ([][]byte, error) {
 		}
 		opts.SecurityMode, opts.Keys = s.mode, ks
 		if s.g != nil {
-			opts.NextNonceSequence = s.g.nextNonce
+			opts.NextNonceSequenceForToken = s.g.nextNonce
 		} else {
-			opts.NextNonceSequence = p.nextActionNonce
+			opts.NextNonceSequenceForToken = p.actNonces.next
 		}
 	}
 	cd := p.codecs(s.enc)
@@ -1336,9 +1339,6 @@ func (p *PubSub) encodeAction(s *actionSend, maxSize int) ([][]byte, error) {
 	return parts, err
 }
 
-// nextActionNonce numbers the secured requests of the Requestor.
-func (p *PubSub) nextActionNonce() uint32 { return p.actNonce.Add(1) }
-
 // actionMaxSize returns the largest action NetworkMessage s may be sent
 // in over tc.
 func actionMaxSize(s *actionSend, tc transport.Connection) int {
@@ -1356,6 +1356,21 @@ func (p *PubSub) sendAction(s *actionSend) error {
 	var parts [][]byte
 	var size int
 	tc, err := p.actionTransport(ctx, s.c, s.gen, s.dest)
+	if err == nil && s.enc == encUADP && s.mode > ua.MessageSecurityModeNone {
+		// The receivers ignore a secured message whose MessageNonce
+		// sequence number is not newer than the last one they took
+		// from this sender (Part 14 §7.2.4.4.3.2): the messages that
+		// share a counter go out in the order of their numbers.
+		mu := &p.actMu
+		if s.g != nil {
+			mu = &s.g.actMu
+		}
+		if !mu.lock(ctx) {
+			err = ctx.Err()
+		} else {
+			defer mu.unlock()
+		}
+	}
 	if err == nil {
 		parts, err = p.encodeAction(s, actionMaxSize(s, tc))
 	}

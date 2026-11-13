@@ -11,7 +11,7 @@ import (
 )
 
 func TestNodeMgmt_AddWriteReadDelete(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 
 	newID := ua.NewStringNodeID(f.NSIndex, "AddedVar")
 
@@ -71,7 +71,7 @@ func TestNodeMgmt_AddWriteReadDelete(t *testing.T) {
 }
 
 func TestNodeMgmt_AddDeleteReferences(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 
 	addRef, err := c.AddReferences(ctx, &ua.AddReferencesRequest{
 		ReferencesToAdd: []*ua.AddReferencesItem{{
@@ -100,7 +100,7 @@ func TestNodeMgmt_AddDeleteReferences(t *testing.T) {
 }
 
 func TestNodeMgmt_Errors(t *testing.T) {
-	c, _, ctx := setup(t)
+	c, _, ctx := setupNodeMgmt(t)
 
 	// Requesting a node in a namespace that does not exist must be rejected.
 	resp, err := c.AddNodes(ctx, &ua.AddNodesRequest{

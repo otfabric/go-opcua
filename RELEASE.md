@@ -1,12 +1,53 @@
 # go-opcua Releases
 
-## v1.31.1
+## v1.32.0
 
-**Date:** 2026-11-03
+**Date:** 2026-11-13
 **Previous release:** v1.31.0
+
+Stricter server defaults and more limits, checks of session and certificate state, and the MessageNonce sequence of secured PubSub. Changes that need attention when upgrading: the server limits the operations per request to 32 by default, serves Node Management and Query only when enabled, serves a session only on its own SecureChannel, and a client checks the CreateSession ServerEndpoints against the endpoint it chose. This release also contains the fixes prepared as v1.31.1, which was not released.
+
+### Added
+
+- server: `WithOperationLimits(OperationalLimits)`. The server enforces the OperationLimits it publishes (Part 5 §6.3.11): a request with more operations than its limit fails with `Bad_TooManyOperations` (Part 4 §7.38). The default is 32 for every limit; a field set to 0 has no limit.
+- server: `EnableNodeManagement()` to serve AddNodes, AddReferences, DeleteNodes and DeleteReferences, and the `NodeManagementAccessController` interface to authorize each operation; `RBACAccessController` implements it. Without the option they return `Bad_ServiceUnsupported`.
+- server: `WithQuery(bool)` to serve QueryFirst and QueryNext. When enabled, Query applies the Browse, Read and AccessRestrictions checks of the nodes it returns.
+- server: `WithMaxMonitoredItems` (default 100000), `WithMaxMonitoredItemsPerSubscription` (10000) and `WithMaxMonitoredItemsPerSession` (20000); CreateMonitoredItems beyond them fails with `Bad_TooManyMonitoredItems`.
+- server: `WithMaxBrowseContinuationPoints` (default 10) and `WithMaxQueryContinuationPoints` (default 5) per session.
+- `ua.MaxBinaryNestingDepth` (100): the nesting depth of UA Binary values.
+- `uapolicy.VerifyCertificateChains`: the verified chains of a certificate.
+- `gdsserver.PendingRequest.DomainNames`: the host names a pending certificate request will be issued for.
+- pubsub: `WithNonceSequencePerToken`, `Counters.NonceSequenceDiscards` and `uadp.EncodeOptions.NextNonceSequenceForToken`.
+
+### Changed
+
+- server: Node Management and Query are off by default (see Added). Servers that offer them call `EnableNodeManagement()` or `WithQuery(true)`. With Node Management on and no `NodeManagementAccessController`, clients cannot change namespace 0.
+- server: a request carrying the AuthenticationToken of a session on another SecureChannel fails with `Bad_SecureChannelIdInvalid` (Part 4 §5.7.3), CloseSession included. The first ActivateSession has to come over the channel of CreateSession; a later one moves the session to a new channel when that channel has the same security policy, mode and client certificate and the user is the same (`Bad_IdentityChangeNotSupported` otherwise, §5.7.3.1). A client that reconnects keeps its session as before. On opc.https and UA JSON over opc.wss a session is tied to its security policy.
+- server: an X.509 user token policy on an endpoint with security None names a SecurityPolicy (Part 4 §7.40.5): the enabled RSA policy with the highest SecurityLevel, else the highest ECC one. When only None is enabled, no X.509 user token is offered. An X.509 token whose policy is None is rejected with `Bad_IdentityTokenRejected`.
+- server: an LDS registration over a channel without a client certificate (opc.https, UA JSON over opc.wss) needs `LDSAllowInsecureRegistration`, also with `LDSSkipServerURICheck`.
+- server: HistoryRead and HistoryUpdate of data are authorized per node, as Read and Write are: the AccessController, AccessRestrictions and the HistoryRead/HistoryWrite bits of AccessLevel. CreateMonitoredItems on a data item applies the checks of Read.
+- server: NodeSet2 variables without AccessLevel are CurrentRead, the schema default, and the Server object's own variables are CurrentRead; before, clients could write them.
+- server: `Node.SetAttribute` no longer refuses a Value on AccessLevel, so server code can update read-only values. Client writes and `NodeNameSpace.SetAttribute` are checked as before.
+- server: the PubSub configuration methods check their TargetVariables and PublishedVariables against the calling session, target attributes other than Value obey WriteMask and DataType, and under `RBACAccessController` the methods need ConfigureAdmin. Password and secret ConnectionProperties read as null in the address space.
+- server: Republish and the acknowledgements of a Publish name subscriptions of the calling session only; others fail with `Bad_SubscriptionIdInvalid`.
+- server: Browse and Query continuation points belong to their session, are limited per session (`Bad_NoContinuationPoints`), expire after 10 minutes without use and are released with the session.
+- server: event monitored items with QueueSize 0 get a queue of 1000 (was 1), at most 10000. A full queue discards an event as its DiscardOldest says and marks the place with an EventQueueOverflowEventType event (Part 4 §5.12.1.5). Events count against MaxNotificationsPerPublish. `EmitEvent` and `EmitBaseEvent` never block; their wait argument has no effect.
+- server: a ContentFilter or EventFilter with more than 256 elements is refused.
+- client: CreateSession compares the ServerEndpoints of the response with the endpoint given to `SecurityFromEndpoint` (Part 4 §5.6.2): application URI, security policy and mode, SecurityLevel, transport profile and user token policies. A mismatch fails the connection with `Bad_SecurityChecksFailed` and closes the session. An EndpointDescription built by hand has to match the server's.
+- UA Binary values nested deeper than 100 Variant, DataValue, DiagnosticInfo and ExtensionObject levels fail to decode and encode with `Bad_EncodingLimitsExceeded`, as in the JSON and XML codecs.
+- uasc: a SecureChannel holds the chunks of at most 16 incomplete messages, and at most twice the largest message it accepts; beyond that the connection is closed with `Bad_TcpMessageTooLarge`.
+- uacp: a connection accepted by `uacp.Listener` that does not send OpenSecureChannel within 10 s of the HEL/ACK is closed.
+- GDS: the host names of a certificate are fixed when the request is made, from the request or the DiscoveryUrls of the application at that time. DiscoveryUrls with wildcard hosts are refused with `Bad_InvalidArgument`. Requests stored by an earlier version keep the DomainNames they stored.
+- Push management: the revocation of issuers is checked along the verified certificate chains.
+- Certificate chains with Ed448 signatures: the search for a path verifies at most 100 signatures and looks at at most 10000 candidates; duplicate intermediates are ignored.
+- pubsub: secured UADP messages (PubSub-Aes128-CTR, PubSub-Aes256-CTR) whose MessageNonce sequence number is not newer than the last one of their sender and SecurityTokenId are ignored (Part 14 §7.2.3, Table 156): DataSetMessages, chunks, and Action requests and responses. They count as `NonceSequenceDiscards`. A publisher restarted on the same token is taken again after twice the MessageReceiveTimeout, or with `WithNonceSequencePerToken` at the next token.
+- pubsub: senders start the MessageNonce sequence at 1 for every SecurityTokenId (Table 156); before it never started over.
+- pubsub: a DataSetMessage sequence number a quarter of the number space or more ahead is ignored (`SequenceDiscards`) instead of resynchronising; `SequenceResyncs` counts resynchronisations after a sender's record expired. Reader sequence records expire after twice (was once) the MessageReceiveTimeout.
+- pubsub: reassembly discards a message whose chunks conflict, or whose GroupHeader numbers differ between chunks, and keys chunks by SecurityTokenId.
 
 ### Fixed
 
+- A decrypted chunk whose padding size exceeds its length fails with `Bad_SecurityChecksFailed` instead of panicking. A panic on the client's receive goroutine ends the channel, and its pending requests fail with `Bad_InternalError`, instead of ending the process.
 - server: the session limit of v1.31.0 (`WithMaxSessions`, 100 by default) filled up with sessions their clients had left behind. A client that loses its connection cannot close its session, which then stays until its session timeout (up to 30 minutes), so on an unreliable network the server soon refused every new client with `Bad_TooManySessions`. A full server now closes the session whose secure channel has been gone longest to make room, as `SessionClosedByServer` for the `SessionObserver` and an audit event of a terminated session. A session on an open channel is never closed for it, so a client that can create sessions cannot push others out. opc.https and UA JSON over opc.wss have no connection that closes, so there an abandoned session cannot be told from an idle one: a full server closes the one unused longest once it has been unused for 30 s, after the sessions of closed channels. A client that keeps such a session sends Publish requests, or reads to keep a session without subscriptions alive, more often than that. A client that comes back to a closed session gets `Bad_SessionIdInvalid` and creates a new one.
 - client: a client that gave up on its session after a fault created a new one without closing the old one, which the server kept until its timeout. It now closes it first (best effort, keeping the subscriptions for the transfer to the new session, Part 4 §5.6.4). A server that refuses the new session with `Bad_TooManySessions` is asked again after a wait that starts at `ReconnectInterval` and doubles up to 30 s, instead of every `ReconnectInterval`.
 - server: closing a session took time quadratic in the number of sessions with diagnostics, because removing a reference compared NodeIds through their strings, and the type and summary nodes reference every session's diagnostics. With many clients coming and going, the one goroutine that handles all requests fell behind and the requests of other clients waited. `ua.NodeID.Equal` now compares the fields without allocating and gives the same answer as before. The alarm chaos test, whose clients connect again every round, ran 260 to 300 s on v1.30.0 and runs about 50 s now (race detector, 30 s of faults).

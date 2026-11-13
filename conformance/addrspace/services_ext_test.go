@@ -13,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
@@ -24,7 +25,7 @@ import (
 // ---------------------------------------------------------------------------
 
 func TestNodeMgmt_AddedNodesAreFullyUsable(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 
 	addItem := func(name string, class ua.NodeClass, attrs any) *ua.AddNodesItem {
 		item := &ua.AddNodesItem{
@@ -112,7 +113,7 @@ func TestNodeMgmt_AddedNodesAreFullyUsable(t *testing.T) {
 }
 
 func TestNodeMgmt_ReferencesAndDeletion(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 	forward := func(node *ua.NodeID, refTypeID uint32) []string {
 		t.Helper()
 		refs, err := c.Node(node).References(ctx, refTypeID, ua.BrowseDirectionForward, ua.NodeClassAll, false)
@@ -230,7 +231,8 @@ func TestNodeMgmt_ReferencesAndDeletion(t *testing.T) {
 // (CustomVarA=10, CustomVarB=20 of CustomVarType; CustomSubVar=30 of its
 // subtype).
 func TestQuery_FilterOperators(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, _, _ := conformkit.SetupWith(t, nil, server.EnableNodeManagement(), server.WithQuery(true))
+	ctx := context.Background()
 	value := func() *ua.ExtensionObject { return attributeOperand(ua.AttributeIDValue) }
 	typeID := func(n uint32) *ua.NodeID { return ua.NewNumericNodeID(0, n) }
 

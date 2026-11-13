@@ -8,9 +8,20 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
+
+// setupQuery is setup with the Query service set enabled (server.WithQuery).
+func setupQuery(t *testing.T) (*opcua.Client, *testutil.Fixture, context.Context) {
+	t.Helper()
+	srv, url := conformkit.NewServer(t, server.WithQuery(true))
+	f := testutil.AddFixture(t, srv)
+	return testutil.NewTestClient(t, url), f, context.Background()
+}
 
 // queryByType issues a QueryFirst for the given type, optionally including
 // subtypes, returning the Value attribute of every matching node.
@@ -31,7 +42,7 @@ func queryByType(ctx context.Context, c *opcua.Client, typeID *ua.NodeID, subtyp
 }
 
 func TestQuery_ByType(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	resp, err := queryByType(ctx, c, f.CustomVarType, false, nil, 0)
 	require.NoError(t, err)
@@ -50,7 +61,7 @@ func TestQuery_ByType(t *testing.T) {
 }
 
 func TestQuery_IncludeSubTypes(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	without, err := queryByType(ctx, c, f.CustomVarType, false, nil, 0)
 	require.NoError(t, err)
@@ -62,7 +73,7 @@ func TestQuery_IncludeSubTypes(t *testing.T) {
 }
 
 func TestQuery_Filter(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	// WHERE Value == 30 -> only CustomSubVar matches.
 	filter := &ua.ContentFilter{
@@ -84,7 +95,7 @@ func TestQuery_Filter(t *testing.T) {
 }
 
 func TestQuery_FilterGreaterThan(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	// WHERE Value > 15 -> CustomVarB (20) and CustomSubVar (30).
 	filter := &ua.ContentFilter{
@@ -105,7 +116,7 @@ func TestQuery_FilterGreaterThan(t *testing.T) {
 }
 
 func TestQuery_DataToReturn_MultipleAttributes(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	resp, err := c.QueryFirst(ctx, &ua.QueryFirstRequest{
 		NodeTypes: []*ua.NodeTypeDescription{
@@ -131,7 +142,7 @@ func TestQuery_DataToReturn_MultipleAttributes(t *testing.T) {
 }
 
 func TestQuery_Pagination(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	first, err := queryByType(ctx, c, f.CustomVarType, true, nil, 1)
 	require.NoError(t, err)
@@ -152,7 +163,7 @@ func TestQuery_Pagination(t *testing.T) {
 }
 
 func TestQuery_ReleaseContinuationPoint(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	first, err := queryByType(ctx, c, f.CustomVarType, true, nil, 1)
 	require.NoError(t, err)
@@ -176,7 +187,7 @@ func TestQuery_ReleaseContinuationPoint(t *testing.T) {
 // an operation-level ServiceFault must not tear down the connection, so the
 // subsequent calls on the same client keep working.
 func TestQuery_Errors(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 
 	t.Run("empty node types", func(t *testing.T) {
 		_, err := c.QueryFirst(ctx, &ua.QueryFirstRequest{})

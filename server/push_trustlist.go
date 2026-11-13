@@ -18,8 +18,6 @@ const (
 	defaultMaxTrustListSize = 1 << 20
 	// maxTrustListEntries bounds each of the four lists of a trust list.
 	maxTrustListEntries = 1024
-	// maxIssuerDepth bounds the issuer chains walked for revocation.
-	maxIssuerDepth = 8
 )
 
 // trustList is an immutable snapshot of the trust list of a certificate
@@ -207,39 +205,25 @@ var (
 // the trust list: certs[0] must chain, through the certificates presented
 // after it and the issuer certificates, to a trusted certificate, or be
 // trusted itself; neither it nor an issuer on its chain may be revoked by a
-// CRL of the list.
+// CRL of the list. The issuers are those of the verified chains, each
+// linked to the certificate below it by its signature; a certificate that
+// merely carries the name of an issuer has no say. With several chains one
+// without a revoked issuer suffices.
 func (tl *trustList) verify(certs []*x509.Certificate) error {
 	chain := append(slices.Clone(certs), tl.issuers...)
-	if err := uapolicy.VerifyCertificate(chain, tl.roots, tl.trusted); err != nil {
+	chains, err := uapolicy.VerifyCertificateChains(chain, tl.roots, tl.trusted)
+	if err != nil || len(chains) == 0 {
 		return errUntrusted
 	}
-	// Walk up the issuers by name; the chain itself was verified above.
-	candidates := append(slices.Clone(certs[1:]), tl.issuers...)
-	candidates = append(candidates, tl.trusted...)
-	cur := certs[0]
-	for depth := 0; depth < maxIssuerDepth; depth++ {
-		if tl.isRevoked(cur) {
-			if depth == 0 {
-				return errRevoked
-			}
-			return errIssuerRevoked
-		}
-		if bytes.Equal(cur.RawIssuer, cur.RawSubject) {
-			break
-		}
-		var parent *x509.Certificate
-		for _, c := range candidates {
-			if bytes.Equal(c.RawSubject, cur.RawIssuer) && !c.Equal(cur) {
-				parent = c
-				break
-			}
-		}
-		if parent == nil {
-			break
-		}
-		cur = parent
+	if tl.isRevoked(certs[0]) {
+		return errRevoked
 	}
-	return nil
+	for _, ch := range chains {
+		if !slices.ContainsFunc(ch[1:], tl.isRevoked) {
+			return nil
+		}
+	}
+	return errIssuerRevoked
 }
 
 // crlIssuer returns the RawIssuer of a DER CRL, nil if it does not parse.

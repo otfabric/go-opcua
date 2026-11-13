@@ -15,6 +15,7 @@ import (
 func TestNodeManagementService_AddNodes(t *testing.T) {
 	srv := newTestServer()
 	ns, obj := addTestNamespace(srv)
+	srv.cfg.nodeManagement = true
 	svc := &NodeManagementService{srv: srv}
 
 	t.Run("add a new variable node", func(t *testing.T) {
@@ -123,6 +124,7 @@ func TestNodeManagementService_AddNodes(t *testing.T) {
 func TestNodeManagementService_DeleteNodes(t *testing.T) {
 	srv := newTestServer()
 	ns, _ := addTestNamespace(srv)
+	srv.cfg.nodeManagement = true
 	svc := &NodeManagementService{srv: srv}
 
 	t.Run("delete existing node", func(t *testing.T) {
@@ -190,6 +192,7 @@ func TestNodeManagementService_DeleteNodes(t *testing.T) {
 func TestNodeManagementService_AddReferences(t *testing.T) {
 	srv := newTestServer()
 	ns, obj := addTestNamespace(srv)
+	srv.cfg.nodeManagement = true
 	svc := &NodeManagementService{srv: srv}
 
 	t.Run("add reference between existing nodes", func(t *testing.T) {
@@ -319,6 +322,7 @@ func TestNodeManagementService_AddReferences(t *testing.T) {
 func TestNodeManagementService_DeleteReferences(t *testing.T) {
 	srv := newTestServer()
 	ns, obj := addTestNamespace(srv)
+	srv.cfg.nodeManagement = true
 	svc := &NodeManagementService{srv: srv}
 
 	t.Run("delete existing reference", func(t *testing.T) {

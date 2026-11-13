@@ -13,6 +13,7 @@ import (
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uapolicy"
+	"github.com/otfabric/go-opcua/uasc"
 )
 
 type session struct {
@@ -54,6 +55,12 @@ type session struct {
 	// activated is set once ActivateSession succeeded. Until then the
 	// session cannot be used for anything but activating or closing it.
 	activated atomic.Bool
+
+	// channel is the SecureChannel the session is associated with: the
+	// channel of CreateSession, then the one of the last successful
+	// ActivateSession. Requests of the session are only served on it
+	// (Part 4 §5.7.3). It is nil for a session created without a channel.
+	channel atomic.Pointer[uasc.SecureChannel]
 
 	// lastActivity is when the session was last used, in nanoseconds since
 	// monoEpoch (monotonic: a step of the wall clock neither expires a session
@@ -482,4 +489,12 @@ func (sb *sessionBroker) hasID(sessionID *ua.NodeID) bool {
 		}
 	}
 	return false
+}
+
+// boundTo reports whether a request that arrived on sc may use the session:
+// sc is the channel the session is associated with. A session that was
+// created without a channel is not bound.
+func (s *session) boundTo(sc *uasc.SecureChannel) bool {
+	bound := s.channel.Load()
+	return bound == nil || bound == sc
 }

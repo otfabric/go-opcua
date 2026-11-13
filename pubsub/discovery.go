@@ -525,7 +525,7 @@ func (p *PubSub) sendAnnouncement(ctx context.Context, a announcement, maxSize i
 		if ks == nil {
 			return 0, false
 		}
-		opts.SecurityMode, opts.Keys, opts.NextNonceSequence = g.mode, ks, g.nextNonce
+		opts.SecurityMode, opts.Keys, opts.NextNonceSequenceForToken = g.mode, ks, g.nextNonce
 	}
 	cd := p.codecs(encUADP)
 	b, err := cd.Encode(a.nm, opts)

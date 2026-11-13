@@ -93,7 +93,9 @@ func LDSAllowInsecureRegistration() LDSOption {
 // LDSSkipServerURICheck accepts a registration on a secured channel whose
 // ServerUri is not the application URI of the certificate the channel was
 // opened with. Without it an application can only register (and unregister)
-// itself.
+// itself. It still needs a channel opened with a client certificate: a
+// channel without one (opc.https, opcua+uajson) is treated like one without
+// security, see LDSAllowInsecureRegistration.
 func LDSSkipServerURICheck() LDSOption {
 	return func(c *ldsConfig) { c.skipURICheck = true }
 }
@@ -313,9 +315,13 @@ func (d *discoveryManager) register(sc *uasc.SecureChannel, rs *ua.RegisteredSer
 	}
 
 	// Who may register: only applications that prove their identity with a
-	// certificate, unless the operator decided otherwise.
+	// certificate, unless the operator decided otherwise. A secured channel
+	// without a client certificate (the virtual channels of opc.https and
+	// opcua+uajson, which have no OpenSecureChannel) identifies nobody: it
+	// counts as insecure (Part 4 §5.5.5, §5.5.6).
 	secured := sc != nil && sc.SecurityMode() != ua.MessageSecurityModeNone &&
-		sc.SecurityMode() != ua.MessageSecurityModeInvalid
+		sc.SecurityMode() != ua.MessageSecurityModeInvalid &&
+		len(sc.RemoteCertificate()) > 0
 	if !secured && !cfg.allowInsecure {
 		return ua.StatusBadSecurityModeInsufficient, nil
 	}

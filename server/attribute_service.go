@@ -204,6 +204,8 @@ func (s *AttributeService) HistoryRead(ctx context.Context, sc *uasc.SecureChann
 			if p, ok := historian.(EventHistoryProvider); ok && eventSupported {
 				result = s.readEventHistory(ctx, sc, sess, p, eventDetails, n.NodeID, providerCP)
 			}
+		} else if st := s.srv.checkDataHistory(ctx, sc, sess, n.NodeID, false); st != ua.StatusOK {
+			result = &ua.HistoryReadResult{StatusCode: st}
 		} else {
 			result, err = s.dispatchHistoryRead(historian, details, n.NodeID, providerCP)
 			if err != nil {
@@ -656,6 +658,11 @@ func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.S
 	unsupported := &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
 	if detailEO == nil || detailEO.Value == nil || h == nil {
 		return unsupported
+	}
+	if nodeID, ok := historyUpdateNodeID(detailEO.Value); ok {
+		if st := s.srv.checkDataHistory(ctx, sc, sess, nodeID, true); st != ua.StatusOK {
+			return &ua.HistoryUpdateResult{StatusCode: st}
+		}
 	}
 	switch v := detailEO.Value.(type) {
 	case *ua.UpdateDataDetails:

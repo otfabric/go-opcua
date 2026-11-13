@@ -65,8 +65,11 @@ type connection struct {
 	// reasm reassembles the chunked NetworkMessages the connection
 	// receives; annSeq numbers its discovery announcements and limiter
 	// bounds those sent in answer to probes.
-	reasm   *uadp.Reassembler
-	annSeq  atomic.Uint32
+	reasm  *uadp.Reassembler
+	annSeq atomic.Uint32
+	// nonces are the MessageNonce sequence numbers of the secured
+	// messages the connection received (see nonceTracker).
+	nonces  *nonceTracker
 	limiter *discoveryLimiter
 	// gzip compresses the JSON messages the connection sends
 	// (JsonCompression); gzipWarned is set once it was logged that the
@@ -126,16 +129,19 @@ type writerGroup struct {
 	keysOK bool
 
 	// pubMu serialises the publish cycles; nmSeq belongs to the cycle.
-	// nonceSeq is shared with the discovery announcements, which are
-	// sent from the receive loop.
-	pubMu    chanMutex
-	nmSeq    uint16
-	nonceSeq atomic.Uint32
+	// nonces is shared with the discovery announcements, which are sent
+	// from the receive loop, and the action responses; actMu serialises
+	// the encoding and sending of the action responses, so that they go
+	// out in the order of their nonces.
+	pubMu  chanMutex
+	actMu  chanMutex
+	nmSeq  uint16
+	nonces nonceCounter
 }
 
 // nextNonce is the sequence number of the next secured message of the
-// group (Part 14 §7.2.4.4.3: unique for each message under a key).
-func (g *writerGroup) nextNonce() uint32 { return g.nonceSeq.Add(1) }
+// group under the token of its keys (Part 14 §7.2.4.4.3.2).
+func (g *writerGroup) nextNonce(tokenID uint32) uint32 { return g.nonces.next(tokenID) }
 
 func (g *writerGroup) config() *ua.WriterGroupDataType {
 	out, _ := clone(g.cfg)
@@ -493,6 +499,7 @@ func (p *PubSub) addConnectionLocked(in *ua.PubSubConnectionDataType) (Component
 	c.disc, _ = connectionDiscovery(cfg, c.broker)
 	c.shared = !c.broker && sharedAddress(c.url)
 	c.reasm = uadp.NewReassembler(p.opts.reassembly)
+	c.nonces = newNonceTracker()
 	c.limiter = newDiscoveryLimiter()
 	c.gzip = jsonCompressed(cfg)
 	p.conns = append(p.conns, c)
@@ -609,6 +616,7 @@ func (p *PubSub) addWriterGroupLocked(c *connection, in *ua.WriterGroupDataType)
 		mode:      securityMode(cfg.SecurityMode),
 	}
 	g.pubMu.init()
+	g.actMu.init()
 	switch ms := eoValue(cfg.MessageSettings).(type) {
 	case *ua.UADPWriterGroupMessageDataType:
 		g.uadpMsg = ms

@@ -120,6 +120,11 @@ type EncodeOptions struct {
 	// every secured NetworkMessage Encode and EncodeChunks build (each
 	// chunk is secured on its own) and returns a new counter value.
 	NextNonceSequence func() uint32
+	// NextNonceSequenceForToken, if set, replaces NextNonceSequence: it
+	// is called like it with the SecurityTokenId of the keys the message
+	// is secured with, so that the sender can start its counter at 1
+	// again for a new token (Part 14 §7.2.4.4.3.2 Table 156).
+	NextNonceSequenceForToken func(tokenID uint32) uint32
 	// MetaData supplies the DataSetMetaData of RawData DataSetMessages:
 	// the MaxStringLength padding of String and ByteString fields, the
 	// number of array dimensions and their upper bounds. Without it,

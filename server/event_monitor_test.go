@@ -402,18 +402,15 @@ func TestEmitBaseEvent_FiltersAndDelivery(t *testing.T) {
 	if err := srv.EmitBaseEvent(nodeID, sampleBaseEvent(50)); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-sub.EventNotifyChannel:
+	if _, ok := nextQueuedEvent(sub); ok {
 		t.Fatal("low-severity event should be filtered")
-	default:
 	}
 
 	// Above threshold → delivered with selected fields.
 	if err := srv.EmitBaseEvent(nodeID, sampleBaseEvent(200)); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case evt := <-sub.EventNotifyChannel:
+	if evt, ok := nextQueuedEvent(sub); ok {
 		if evt.ClientHandle != 42 {
 			t.Fatalf("ClientHandle=%d", evt.ClientHandle)
 		}
@@ -423,7 +420,7 @@ func TestEmitBaseEvent_FiltersAndDelivery(t *testing.T) {
 		if v, _ := evt.EventFields[0].Value().(uint16); v != 200 {
 			t.Fatalf("Severity=%v", evt.EventFields[0].Value())
 		}
-	default:
+	} else {
 		t.Fatal("expected delivered event")
 	}
 
@@ -432,10 +429,8 @@ func TestEmitBaseEvent_FiltersAndDelivery(t *testing.T) {
 	if err := srv.EmitBaseEvent(nodeID, sampleBaseEvent(200)); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-sub.EventNotifyChannel:
+	if _, ok := nextQueuedEvent(sub); ok {
 		t.Fatal("disabled item should not receive events")
-	default:
 	}
 
 	// No monitored items / nil service are no-ops.

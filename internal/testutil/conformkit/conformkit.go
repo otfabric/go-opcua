@@ -70,6 +70,27 @@ func NewServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 	return NewServerPrepared(t, nil, opts...)
 }
 
+// MultiChunkReads raises MaxNodesPerRead so that a test can read enough
+// values in one request to span several chunks in both directions; the
+// default OperationLimits (32 per call) are too small for that. The other
+// limits keep their default.
+func MultiChunkReads() server.Option {
+	return server.WithOperationLimits(server.OperationalLimits{
+		MaxNodesPerRead:                          1024,
+		MaxNodesPerWrite:                         32,
+		MaxNodesPerBrowse:                        32,
+		MaxNodesPerMethodCall:                    32,
+		MaxNodesPerRegisterNodes:                 32,
+		MaxNodesPerTranslateBrowsePathsToNodeIDs: 32,
+		MaxNodesPerNodeManagement:                32,
+		MaxMonitoredItemsPerCall:                 32,
+		MaxNodesPerHistoryReadData:               32,
+		MaxNodesPerHistoryReadEvents:             32,
+		MaxNodesPerHistoryUpdateData:             32,
+		MaxNodesPerHistoryUpdateEvents:           32,
+	})
+}
+
 // NewServerPrepared is NewServer with prepare, if not nil, run before the
 // server starts. A server that a client reaches as soon as it starts (reverse
 // connect, a client that reconnects to a restarted server) needs its nodes
@@ -82,6 +103,7 @@ func NewServerPrepared(t *testing.T, prepare func(*server.Server), opts ...serve
 		server.EndPoint("localhost", 0),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		MultiChunkReads(),
 	}, opts...)
 	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	require.NoError(t, err)

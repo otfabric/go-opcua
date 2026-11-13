@@ -193,6 +193,23 @@ func TestChunkRoundTripSecured(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []byte{byte(40 + i), 0, 0, 0}, d.Security.MessageNonce[4:])
 	}
+
+	// NextNonceSequenceForToken is called with the token of the keys and
+	// takes precedence over NextNonceSequence.
+	var tokens []uint32
+	n := uint32(0)
+	chunks, err = EncodeChunks(nm, &EncodeOptions{SecurityMode: ua.MessageSecurityModeSign, Keys: ks,
+		NextNonceSequence:         func() uint32 { panic("not called") },
+		NextNonceSequenceForToken: func(id uint32) uint32 { tokens = append(tokens, id); n += 2; return n }}, 25+6+8+32+4)
+	require.NoError(t, err)
+	k, err := ks.CurrentKeys()
+	require.NoError(t, err)
+	require.Equal(t, []uint32{k.TokenID, k.TokenID, k.TokenID}, tokens)
+	for i, c := range chunks {
+		d, err := Decode(c, &DecodeOptions{Security: requireSecurity(ua.MessageSecurityModeSign, ks)})
+		require.NoError(t, err)
+		require.Equal(t, []byte{byte(2 + 2*i), 0, 0, 0}, d.Security.MessageNonce[4:])
+	}
 }
 
 func TestChunkDiscovery(t *testing.T) {
@@ -432,6 +449,10 @@ func TestReassemblerKeys(t *testing.T) {
 		func(m *message.NetworkMessage) { m.Chunk.MessageSequenceNumber = 2 },
 		func(m *message.NetworkMessage) { m.Type = message.NetworkMessageDiscoveryResponse },
 		func(m *message.NetworkMessage) { m.Security = &message.SecurityHeader{Signed: true} },
+		// Chunks secured with the keys of another token.
+		func(m *message.NetworkMessage) {
+			m.Security = &message.SecurityHeader{Signed: true, SecurityTokenID: 2}
+		},
 		func(m *message.NetworkMessage) { m.UADPMask &^= ua.UADPNetworkMessageContentMaskPublisherID },
 		// Action messages: the requests of two Requestors to one writer,
 		// and the responses to them, do not mix.
@@ -589,4 +610,98 @@ func TestReassemblerConcurrent(t *testing.T) {
 	st := r.Stats()
 	require.Equal(t, uint64(160), st.Completed)
 	require.Zero(t, st.Pending)
+}
+
+// TestReassemblerConflictingDuplicateDiscardsMessage: a chunk for a slot of
+// a message that holds other data cannot belong to the same message: the
+// message is discarded, not completed with either chunk.
+func TestReassemblerConflictingDuplicateDiscardsMessage(t *testing.T) {
+	now := time.Unix(100, 0)
+	data := []byte("0123456789")
+	other := []byte("abcdefghij")
+	for name, tc := range map[string]struct{ first, conflict [2]int }{
+		"chunk":      {first: [2]int{0, 4}, conflict: [2]int{0, 4}},
+		"last chunk": {first: [2]int{8, 2}, conflict: [2]int{8, 2}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := NewReassembler(nil)
+			_, _, err := r.Add(chunk(1, 1, uint32(tc.first[0]), 10, data[tc.first[0]:tc.first[0]+tc.first[1]]), now)
+			require.NoError(t, err)
+			_, dropped, err := r.Add(chunk(1, 1, uint32(tc.conflict[0]), 10, other[tc.conflict[0]:tc.conflict[0]+tc.conflict[1]]), now)
+			require.ErrorIs(t, err, ErrChunkRejected)
+			require.Equal(t, 1, dropped)
+			require.Zero(t, r.Stats().Pending)
+			// The rest of the message does not complete it.
+			for _, off := range []int{0, 4, 8} {
+				if off == tc.first[0] {
+					continue
+				}
+				n := min(4, 10-off)
+				p, _, err := r.Add(chunk(1, 1, uint32(off), 10, data[off:off+n]), now)
+				require.NoError(t, err)
+				require.Nil(t, p)
+			}
+		})
+	}
+}
+
+// TestReassemblerGroupHeaderNumbers: the GroupHeader SequenceNumber and
+// NetworkMessageNumber of the chunks of one message are the same in every
+// chunk or advance by one per chunk (EncodeChunks, the .NET stack); chunks
+// whose numbers do neither are of different messages.
+func TestReassemblerGroupHeaderNumbers(t *testing.T) {
+	now := time.Unix(100, 0)
+	data := []byte("0123456789")
+	numbered := func(off int, seq, nmn uint16) *message.NetworkMessage {
+		n := min(4, 10-off)
+		c := chunk(1, 1, uint32(off), 10, data[off:off+n])
+		c.UADPMask |= ua.UADPNetworkMessageContentMaskGroupHeader | ua.UADPNetworkMessageContentMaskSequenceNumber |
+			ua.UADPNetworkMessageContentMaskNetworkMessageNumber
+		c.GroupHeader.SequenceNumber, c.GroupHeader.NetworkMessageNumber = seq, nmn
+		return c
+	}
+	type part struct {
+		off      int
+		seq, nmn uint16
+	}
+	for name, tc := range map[string]struct {
+		parts []part
+		ok    bool
+	}{
+		"advancing":                {parts: []part{{0, 10, 3}, {4, 11, 4}, {8, 12, 5}}, ok: true},
+		"advancing, wrapping":      {parts: []part{{4, 0, 0}, {8, 1, 1}, {0, 0xffff, 0xffff}}, ok: true},
+		"the same":                 {parts: []part{{8, 10, 3}, {0, 10, 3}, {4, 10, 3}}, ok: true},
+		"last chunk first":         {parts: []part{{8, 12, 5}, {4, 11, 4}, {0, 10, 4 - 1}}, ok: true},
+		"other message":            {parts: []part{{0, 10, 3}, {4, 50, 4}}},
+		"other message, last":      {parts: []part{{0, 10, 3}, {4, 11, 4}, {8, 40, 5}}},
+		"last chunk first, other":  {parts: []part{{8, 99, 5}, {0, 10, 3}}},
+		"numbers of both patterns": {parts: []part{{0, 10, 3}, {4, 10, 4}, {8, 12, 3}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := NewReassembler(nil)
+			var p []byte
+			var err error
+			for _, x := range tc.parts {
+				if p, _, err = r.Add(numbered(x.off, x.seq, x.nmn), now); err != nil {
+					break
+				}
+			}
+			if tc.ok {
+				require.NoError(t, err)
+				require.Equal(t, data, p)
+				return
+			}
+			require.ErrorIs(t, err, ErrChunkRejected)
+			require.Zero(t, r.Stats().Pending, "the message is discarded")
+		})
+	}
+
+	// Chunks that carry the numbers and chunks that do not are of
+	// different messages.
+	r := NewReassembler(nil)
+	_, _, err := r.Add(numbered(0, 1, 1), now)
+	require.NoError(t, err)
+	_, _, err = r.Add(chunk(1, 1, 4, 10, data[4:8]), now)
+	require.ErrorIs(t, err, ErrChunkRejected)
+	require.Zero(t, r.Stats().Pending)
 }

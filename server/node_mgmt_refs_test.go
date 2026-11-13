@@ -16,6 +16,7 @@ import (
 func TestNodeManagementService_DeleteReferencesEnds(t *testing.T) {
 	srv := newTestServer()
 	ns, obj := addTestNamespace(srv)
+	srv.cfg.nodeManagement = true
 	svc := &NodeManagementService{srv: srv}
 	hasComponent := ua.NewNumericNodeID(0, id.HasComponent)
 	del := func(target *Node, bidirectional bool) ua.StatusCode {
@@ -49,6 +50,7 @@ func TestNodeManagementService_DeleteNodesTargetReferences(t *testing.T) {
 	for _, deleteTarget := range []bool{false, true} {
 		srv := newTestServer()
 		ns, obj := addTestNamespace(srv)
+		srv.cfg.nodeManagement = true
 		svc := &NodeManagementService{srv: srv}
 		n := ns.Node(ua.NewStringNodeID(ns.ID(), "rw_int32"))
 		child := ns.AddNewVariableStringNode("child", int32(1))

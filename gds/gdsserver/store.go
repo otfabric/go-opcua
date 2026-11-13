@@ -146,6 +146,12 @@ type Request struct {
 
 	// The arguments of StartNewKeyPairRequest; PrivateKeyFormat is
 	// gds.PrivateKeyFormatPEM or gds.PrivateKeyFormatPFX.
+	//
+	// DomainNames are the host names and IP addresses the certificate gets,
+	// fixed when the request is made: those StartNewKeyPairRequest names,
+	// otherwise the hosts of the application's DiscoveryUrls at that time.
+	// A later change of the DiscoveryUrls does not change them, so what an
+	// administrator approves is what is issued.
 	SubjectName        string
 	DomainNames        []string
 	PrivateKeyFormat   string

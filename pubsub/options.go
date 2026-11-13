@@ -129,6 +129,20 @@ type options struct {
 	actionHandlers  map[actionKey]ActionHandler
 	methodCaller    ActionMethodCaller
 	inflateLimit    int
+	nonceForToken   bool
+}
+
+// WithNonceSequencePerToken makes the receivers keep the last MessageNonce
+// sequence number of a secured publisher (Part 14 §7.2.4.4.3.2) for as long
+// as its SecurityTokenId is in the KeySource, instead of discarding it, as
+// §7.2.3 does with sequence records, after two MessageReceiveTimeouts of the
+// readers without a message. A copy of an earlier message is then ignored
+// also after the publisher was silent; a publisher that restarts and secures
+// its messages with the same token, counting from 1 again, is ignored until
+// it uses the next token. The sequence numbers of ActionRequests and
+// ActionResponses are always kept per token.
+func WithNonceSequencePerToken(on bool) Option {
+	return func(o *options) { o.nonceForToken = on }
 }
 
 // WithLogger sets the logger. The default discards log output.

@@ -125,9 +125,10 @@ func TestRegressionPublisherRestartAfterTimeout(t *testing.T) {
 // Regression (chaos/pubsub network faults): a copy of the last message
 // that a network delayed or duplicated past a MessageReceiveTimeout was
 // delivered a second time, because the timeout made the reader forget the
-// sequence numbers. The timeout now only marks them expired: the last
-// message again, or one just behind it, is still discarded; a publisher
-// that restarted far behind is taken.
+// sequence numbers. The sequence numbers expire after two
+// MessageReceiveTimeouts without a message (Part 14 §7.2.3), and even then
+// the last message again, or one just behind it, is still discarded; a
+// publisher that restarted far behind is taken.
 func TestRegressionDuplicateAfterTimeout(t *testing.T) {
 	t.Parallel()
 	url := memURL(t)
@@ -172,7 +173,9 @@ func TestRegressionDuplicateAfterTimeout(t *testing.T) {
 	waitState(t, sub, rid, ua.PubSubStateError)
 	require.NotZero(t, timeouts())
 
-	// Late copies of 182 and 181 cross the timeout: both are discarded.
+	// After two MessageReceiveTimeouts late copies of 182 and 181 are
+	// still discarded.
+	time.Sleep(2 * 50 * time.Millisecond)
 	send(182, 182)
 	send(181, 181)
 	// The publisher restarted: 1 is far behind 182 and is taken.

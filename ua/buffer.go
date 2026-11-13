@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"io"
 	"math"
+	"reflect"
 	"time"
 
 	"github.com/otfabric/go-opcua/errors"
@@ -21,6 +22,10 @@ type Buffer struct {
 	buf []byte
 	pos int
 	err error
+	// depth is the number of enclosing Variant, DataValue,
+	// DiagnosticInfo and ExtensionObject values while decoding or
+	// encoding; see [MaxBinaryNestingDepth].
+	depth int
 }
 
 func NewBuffer(b []byte) *Buffer {
@@ -170,10 +175,13 @@ func (b *Buffer) ReadStruct(r interface{}) {
 	var n int
 	var err error
 	switch x := r.(type) {
+	case depthDecoder:
+		n, err = x.decodeDepth(b.buf[b.pos:], b.depth)
 	case BinaryDecoder:
 		n, err = x.Decode(b.buf[b.pos:])
 	default:
-		n, err = Decode(b.buf[b.pos:], r)
+		val := reflect.ValueOf(r)
+		n, err = decode(b.buf[b.pos:], val, val.Type().String(), b.depth)
 	}
 	if err != nil {
 		b.err = err
@@ -312,10 +320,13 @@ func (b *Buffer) WriteStruct(w interface{}) {
 	}
 	var d []byte
 	switch x := w.(type) {
+	case depthEncoder:
+		d, b.err = x.encodeDepth(b.depth)
 	case BinaryEncoder:
 		d, b.err = x.Encode()
 	default:
-		d, b.err = Encode(w)
+		val := reflect.ValueOf(w)
+		d, b.err = encode(val, val.Type().String(), b.depth)
 	}
 	b.Write(d)
 }

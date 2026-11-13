@@ -205,6 +205,6 @@ func TestExpiredSubscriptionIsAnnouncedOnNextPublish(t *testing.T) {
 
 // checkSessionStatus returns the status of Server.checkSession.
 func checkSessionStatus(s *Server, req ua.Request) ua.StatusCode {
-	_, st := s.checkSession(req)
+	_, st := s.checkSession(nil, req)
 	return st
 }

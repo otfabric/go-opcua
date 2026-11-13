@@ -1673,7 +1673,7 @@ LDSRegistrationTimeout sets how long a registration lives without being renewed.
 func LDSSkipServerURICheck() LDSOption
 ```
 
-LDSSkipServerURICheck accepts a registration on a secured channel whose ServerUri is not the application URI of the certificate the channel was opened with. Without it an application can only register (and unregister) itself.
+LDSSkipServerURICheck accepts a registration on a secured channel whose ServerUri is not the application URI of the certificate the channel was opened with. Without it an application can only register (and unregister) itself. It still needs a channel opened with a client certificate: a channel without one (opc.https, opcua+uajson) is treated like one without security, see LDSAllowInsecureRegistration.
 
 ### type LimitState
 
@@ -1912,6 +1912,9 @@ type MonitoredItem struct {
 	Mode ua.MonitoringMode
 
 	// isEvent marks an item on the EventNotifier attribute.
+
+	// The event queue of an event item, its revised QueueSize and its
+	// DiscardOldest, guarded by Sub.evMu (event_queue.go).
 
 	// Data-change sampling state, see monitored_item_filter.go.
 
@@ -2314,6 +2317,8 @@ RemoveRef removes the reference of type refTypeID between n and the node targetI
 func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error
 ```
 
+SetAttribute sets an attribute of the node from server code. It does not apply the AccessLevel or WriteMask rules, which govern client access (the Write service and NodeNameSpace.SetAttribute check them).
+
 #### func (Node) SetBrowseName
 
 ```go
@@ -2362,6 +2367,19 @@ SetValueFunc makes the node serve its Value attribute from f, whatever its acces
 func (n *Node) Value() *ua.DataValue
 ```
 
+### type NodeManagementAccessController
+
+```go
+type NodeManagementAccessController interface {
+	CheckAddNodes(ctx context.Context, session *Session, item *ua.AddNodesItem) ua.StatusCode
+	CheckDeleteNodes(ctx context.Context, session *Session, item *ua.DeleteNodesItem) ua.StatusCode
+	CheckAddReferences(ctx context.Context, session *Session, item *ua.AddReferencesItem) ua.StatusCode
+	CheckDeleteReferences(ctx context.Context, session *Session, item *ua.DeleteReferencesItem) ua.StatusCode
+}
+```
+
+NodeManagementAccessController is an [AccessController](#type-accesscontroller) that also decides the operations of the Node Management services, which the server asks it once [EnableNodeManagement](#func-enablenodemanagement) is set. Return [ua.StatusOK](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusOK) to allow the operation, or a Bad status (e.g. [ua.StatusBadUserAccessDenied](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusBadUserAccessDenied)) as its result.
+
 ### type NodeManagementService
 
 ```go
@@ -2371,6 +2389,8 @@ type NodeManagementService struct {
 ```
 
 NodeManagementService implements the Node Management Service Set.
+
+The service set is optional (Part 4 §5.7; the Node Management facets of Part 7) and off unless the server is created with [EnableNodeManagement](#func-enablenodemanagement): without it AddNodes, AddReferences, DeleteNodes and DeleteReferences answer Bad\_ServiceUnsupported. With it, each operation is authorized; see [NodeManagementAccessController](#type-nodemanagementaccesscontroller).
 
 [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7)
 
@@ -2625,6 +2645,19 @@ EnableAuthMode registers a new user authentication mode to the server. All AuthM
 
 The UserName, Certificate and IssuedToken modes also need their validator (WithUsernameValidator, WithX509UserValidator, WithIssuedTokenValidator): without it the server advertises the token type but rejects every token of that type, and New logs a warning.
 
+#### func EnableNodeManagement
+
+```go
+func EnableNodeManagement() Option
+```
+
+EnableNodeManagement lets clients change the address space with the AddNodes, AddReferences, DeleteNodes and DeleteReferences services. Each operation is authorized:
+
+  - An [AccessController](#type-accesscontroller) that implements [NodeManagementAccessController](#type-nodemanagementaccesscontroller) decides every operation ([RBACAccessController](#type-rbacaccesscontroller) does, from the AddNode, DeleteNode, AddReference and RemoveReference permissions).
+  - Any other AccessController, the [DefaultAccessController](#type-defaultaccesscontroller) included, is asked CheckWrite for the node the operation changes: the parent of AddNodes, the node of DeleteNodes and the source node of AddReferences and DeleteReferences. Nodes of namespace 0 cannot be added or deleted and their references cannot be changed.
+
+The diagnostics nodes of other sessions are never changed. A refused operation answers Bad\_UserAccessDenied (Part 4 §5.7.2 to §5.7.5).
+
 #### func EnableSecurity
 
 ```go
@@ -2828,6 +2861,46 @@ Registration changes what clients are told about the network, so by default it i
 
 Combine it with [WithMulticastDiscovery](#func-withmulticastdiscovery) for the multicast extension (LDS-ME): registered servers are then announced with mDNS.
 
+#### func WithMaxBrowseContinuationPoints
+
+```go
+func WithMaxBrowseContinuationPoints(n int) Option
+```
+
+WithMaxBrowseContinuationPoints sets how many Browse continuation points one session may hold. A Browse that would need more answers Bad\_NoContinuationPoints for that node (Part 4 §5.8.2, §7.9). The limit is published as ServerCapabilities.MaxBrowseContinuationPoints (Part 5 §6.3.2).
+
+The default is 10. Zero or a negative value selects the default.
+
+#### func WithMaxMonitoredItems
+
+```go
+func WithMaxMonitoredItems(n int) Option
+```
+
+WithMaxMonitoredItems sets how many monitored items the server keeps at a time over all subscriptions. CreateMonitoredItems answers Bad\_TooManyMonitoredItems for the items beyond it (Part 4 §5.12.2). The limit is published as ServerCapabilities.MaxMonitoredItems (Part 5 §6.3.2).
+
+The default is 100000. Zero or a negative value selects the default.
+
+#### func WithMaxMonitoredItemsPerSession
+
+```go
+func WithMaxMonitoredItemsPerSession(n int) Option
+```
+
+WithMaxMonitoredItemsPerSession sets how many monitored items the subscriptions of one session may have together. CreateMonitoredItems answers Bad\_TooManyMonitoredItems for the items beyond it (Part 4 §5.12.2). The spec defines no ServerCapabilities variable for this limit.
+
+The default is 20000. Zero or a negative value selects the default.
+
+#### func WithMaxMonitoredItemsPerSubscription
+
+```go
+func WithMaxMonitoredItemsPerSubscription(n int) Option
+```
+
+WithMaxMonitoredItemsPerSubscription sets how many monitored items one subscription may have. CreateMonitoredItems answers Bad\_TooManyMonitoredItems for the items beyond it (Part 4 §5.12.2). The limit is published as ServerCapabilities.MaxMonitoredItemsPerSubscription (Part 5 §6.3.2).
+
+The default is 10000. Zero or a negative value selects the default.
+
 #### func WithMaxPendingResponses
 
 ```go
@@ -2839,6 +2912,16 @@ WithMaxPendingResponses sets how many requests of one secure channel may be in f
 When a client has n requests in flight the server stops reading further requests from that client until responses have been written. This bounds the memory one client can occupy with queued responses and applies TCP back pressure to a client that sends requests faster than it reads the answers; it never drops a request. Publish requests that are waiting for a notification do not count.
 
 The default is 256. Zero or a negative value selects the default.
+
+#### func WithMaxQueryContinuationPoints
+
+```go
+func WithMaxQueryContinuationPoints(n int) Option
+```
+
+WithMaxQueryContinuationPoints sets how many QueryFirst continuation points one session may hold. A QueryFirst that would need more fails with Bad\_NoContinuationPoints (Part 4 §7.9). The limit is published as ServerCapabilities.MaxQueryContinuationPoints (Part 5 §6.3.2).
+
+The default is 5. Zero or a negative value selects the default.
 
 #### func WithMaxSessions
 
@@ -2890,6 +2973,29 @@ The mDNS implementation is built in and needs no system service. It uses UDP por
 
 Multicast discovery tells everybody on the local network segment that the server exists, where it is and what it can do, and it trusts what others announce: see docs/security.md.
 
+#### func WithOperationLimits
+
+```go
+func WithOperationLimits(l OperationalLimits) Option
+```
+
+WithOperationLimits sets the OperationLimits of the server: how many operations one call of a service may carry (Part 5 §6.3.11 OperationLimitsType). A request with more operations than its limit fails as a whole with Bad\_TooManyOperations (Part 4 §7.38). The limits are published in Server.ServerCapabilities.OperationLimits, so the advertised values are always the enforced ones.
+
+A field of zero means no limit, which is also how the spec reads a zero in OperationLimits. Without this option every limit is 32.
+
+The limits apply as follows:
+
+  - MaxNodesPerRead: Read
+  - MaxNodesPerWrite: Write
+  - MaxNodesPerMethodCall: Call
+  - MaxNodesPerBrowse: Browse, BrowseNext
+  - MaxNodesPerRegisterNodes: RegisterNodes, UnregisterNodes
+  - MaxNodesPerTranslateBrowsePathsToNodeIDs: TranslateBrowsePathsToNodeIds
+  - MaxNodesPerNodeManagement: AddNodes, AddReferences, DeleteNodes, DeleteReferences
+  - MaxMonitoredItemsPerCall: CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, DeleteMonitoredItems, SetTriggering (each of its link lists)
+  - MaxNodesPerHistoryReadData / MaxNodesPerHistoryReadEvents: HistoryRead of data / of events
+  - MaxNodesPerHistoryUpdateData / MaxNodesPerHistoryUpdateEvents: the data / event details of HistoryUpdate
+
 #### func WithPubSub
 
 ```go
@@ -2906,7 +3012,9 @@ cfg may be nil for an empty, enabled runtime that clients configure. The runtime
 func WithPubSubAuthorizer(a PubSubAuthorizer) Option
 ```
 
-WithPubSubAuthorizer restricts the PubSub configuration methods. Without it every session may call them, as with open62541.
+WithPubSubAuthorizer restricts the PubSub configuration methods. Without it every session the AccessController allows to call them (CheckCall) may call them, as with open62541; the RBACAccessController allows them to ConfigureAdmin only (the RolePermissions of AddConnection in the standard NodeSet, given to every configuration method).
+
+Whatever the authorizer, a session that configures a reader must be allowed to write its TargetVariables (CheckWrite and AccessLevel for the Value, CheckWrite and WriteMask for other Attributes), and one that adds published variables must be allowed to read them (CheckRead): Bad\_UserAccessDenied, Bad\_NotWritable otherwise. The runtime writes a target Attribute other than the Value only where its WriteMask allows it.
 
 #### func WithPushManagement
 
@@ -2915,6 +3023,16 @@ func WithPushManagement(pm PushManagement) Option
 ```
 
 WithPushManagement enables certificate management by the push model of Part 12 §7. See [PushManagement](#type-pushmanagement).
+
+#### func WithQuery
+
+```go
+func WithQuery(enabled bool) Option
+```
+
+WithQuery enables the Query service set (QueryFirst, QueryNext, Part 4 §5.9). It is off by default: Query is an optional facet, and a query scans the whole address space. When it is off, QueryFirst and QueryNext answer Bad\_ServiceUnsupported.
+
+A query only returns nodes the session may browse and attribute values it may read: the AccessController, the diagnostics access rules and the AccessRestrictions of the nodes apply as for Browse and Read.
 
 #### func WithResponseWriteTimeout
 
@@ -3126,12 +3244,13 @@ The server has the three certificate groups of Part 12 §7.8.3:
 ```go
 type QueryService struct {
 
-	// keyed by hex-encoded token
+	// cps holds the QueryDataSets that did not fit within a client's
+	// MaxDataSetsToReturn limit, to be retrieved via QueryNext.
 
 }
 ```
 
-QueryService implements the Query Service Set.
+QueryService implements the Query Service Set. It is only served when the server is created WithQuery(true); otherwise QueryFirst and QueryNext answer Bad\_ServiceUnsupported.
 
 [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.9](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.9)
 
@@ -3171,6 +3290,22 @@ func NewRBACAccessController(srv *Server) *RBACAccessController
 
 NewRBACAccessController creates an RBAC access controller bound to the given server.
 
+#### func (RBACAccessController) CheckAddNodes
+
+```go
+func (ac *RBACAccessController) CheckAddNodes(_ context.Context, sess *Session, item *ua.AddNodesItem) ua.StatusCode
+```
+
+CheckAddNodes allows AddNodes below a parent node whose RolePermissions grant one of the session's roles the AddNode permission (Part 3 §8.55). Unlike the other checks of the RBACAccessController, node management needs an explicit permission: a parent without RolePermissions, or no parent, refuses it.
+
+#### func (RBACAccessController) CheckAddReferences
+
+```go
+func (ac *RBACAccessController) CheckAddReferences(_ context.Context, sess *Session, item *ua.AddReferencesItem) ua.StatusCode
+```
+
+CheckAddReferences allows AddReferences from a source node whose RolePermissions grant the AddReference permission.
+
 #### func (RBACAccessController) CheckBrowse
 
 ```go
@@ -3182,6 +3317,22 @@ func (ac *RBACAccessController) CheckBrowse(ctx context.Context, sess *Session, 
 ```go
 func (ac *RBACAccessController) CheckCall(ctx context.Context, sess *Session, nodeID *ua.NodeID) ua.StatusCode
 ```
+
+#### func (RBACAccessController) CheckDeleteNodes
+
+```go
+func (ac *RBACAccessController) CheckDeleteNodes(_ context.Context, sess *Session, item *ua.DeleteNodesItem) ua.StatusCode
+```
+
+CheckDeleteNodes allows DeleteNodes of a node whose RolePermissions grant the DeleteNode permission.
+
+#### func (RBACAccessController) CheckDeleteReferences
+
+```go
+func (ac *RBACAccessController) CheckDeleteReferences(_ context.Context, sess *Session, item *ua.DeleteReferencesItem) ua.StatusCode
+```
+
+CheckDeleteReferences allows DeleteReferences from a source node whose RolePermissions grant the RemoveReference permission.
 
 #### func (RBACAccessController) CheckRead
 
@@ -3601,6 +3752,9 @@ type Server struct {
 
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
+
+	// view and query hold the Browse and Query continuation points, which
+	// are released with their session (sessionRemoved).
 
 	// eventItems tracks event-monitored-item filter state.
 
@@ -4189,7 +4343,9 @@ const (
 	// revised session timeout (Part 4 §5.6.2), e.g. because its connection
 	// was lost and it did not come back.
 	SessionTimedOut
-	// SessionClosedByServer: the server shut down.
+	// SessionClosedByServer: the server shut down, or it was full and closed
+	// the session to make room for a new one: the session's secure channel
+	// had closed and its client had not come back (WithMaxSessions).
 	SessionClosedByServer
 )
 ```
@@ -4367,6 +4523,11 @@ type Subscription struct {
 	// multiple places can kill the subscription so make sure you check the running flag using the mutex
 	// before closing the shutdown channel.
 	Mu sync.Mutex
+
+	// evMu guards the event queues of the event items of the subscription
+	// (MonitoredItem.events) and looseEvents; see event_queue.go.
+
+	// the items with queued events
 
 }
 ```
@@ -4554,7 +4715,8 @@ type ValueFunc func() *ua.DataValue
 ```go
 type ViewService struct {
 
-	// keyed by hex-encoded token
+	// cps holds the Browse continuation points: the references of a node
+	// that did not fit RequestedMaxReferencesPerNode.
 
 }
 ```
