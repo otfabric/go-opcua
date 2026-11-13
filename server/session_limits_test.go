@@ -195,3 +195,114 @@ func TestServerCapabilities_SessionLimits(t *testing.T) {
 		}
 	}
 }
+
+// TestSessionBroker_ReclaimsAbandoned: a full broker makes room by closing
+// the least recently used session whose secure channel is closed, and then
+// the least recently used one on a virtual channel (id 0) that has been idle
+// for virtualIdleReclaim. Sessions on open channels are never closed for it.
+func TestSessionBroker_ReclaimsAbandoned(t *testing.T) {
+	var removed []*session
+	var reasons []SessionCloseReason
+	sb := &sessionBroker{s: map[string]*session{}, removed: func(s *session, r SessionCloseReason) {
+		removed = append(removed, s)
+		reasons = append(reasons, r)
+	}}
+	open := map[uint32]bool{1: true, 2: true, 3: true}
+	isOpen := func(id uint32) bool { return open[id] }
+	add := func(channelID uint32) *session {
+		t.Helper()
+		s, reclaimed := sb.newSessionWithin(4, isOpen)
+		require.NotNil(t, s)
+		require.Nil(t, reclaimed)
+		s.channelID.Store(channelID)
+		return s
+	}
+	virtual := add(0)
+	older := add(1)
+	newer := add(2)
+	live := add(3)
+	now := time.Now()
+	virtual.touchAt(now)
+	older.touchAt(now.Add(time.Second))
+	newer.touchAt(now.Add(2 * time.Second))
+	live.touchAt(now.Add(-time.Hour))
+
+	// Every channel open: full.
+	s, reclaimed := sb.newSessionWithin(4, isOpen)
+	require.Nil(t, s)
+	require.Nil(t, reclaimed)
+
+	// Channels 1 and 2 close: the session used least recently goes.
+	open[1], open[2] = false, false
+	s, reclaimed = sb.newSessionWithin(4, isOpen)
+	require.NotNil(t, s)
+	require.Same(t, older, reclaimed)
+	require.Equal(t, []SessionCloseReason{SessionClosedByServer}, reasons)
+	require.Equal(t, []*session{older}, removed)
+	s.channelID.Store(4)
+	open[4] = true
+
+	s, reclaimed = sb.newSessionWithin(4, isOpen)
+	require.NotNil(t, s)
+	require.Same(t, newer, reclaimed)
+	s.channelID.Store(5)
+	open[5] = true
+
+	// Only the virtual session and live ones are left: full again.
+	s, reclaimed = sb.newSessionWithin(4, isOpen)
+	require.Nil(t, s)
+	require.Nil(t, reclaimed)
+	require.Equal(t, 4, sb.count())
+
+	// The virtual session has been idle long enough, and its client
+	// cannot be told from one that left: it goes, before the live one used
+	// even less recently.
+	virtual.lastActivity.Store(int64(now.Add(-virtualIdleReclaim - time.Second).Sub(monoEpoch)))
+	s, reclaimed = sb.newSessionWithin(4, isOpen)
+	require.NotNil(t, s)
+	require.Same(t, virtual, reclaimed)
+	s.channelID.Store(6)
+	open[6] = true
+
+	// A request on a new channel moves the session there.
+	sb.touchTokenOn(live.AuthTokenID, 9)
+	require.EqualValues(t, 9, live.channelID.Load())
+	sb.touchTokenOn(live.AuthTokenID, 0)
+	require.EqualValues(t, 9, live.channelID.Load(), "a virtual channel does not move it")
+}
+
+// TestCreateSession_ReclaimsSessionOfClosedChannel: the SecureChannelId of a
+// session is that of its CreateSession request, also when the channel closed
+// before the request was handled. The client of such a session never got the
+// response, so the session is never activated; a full server reclaims it.
+func TestCreateSession_ReclaimsSessionOfClosedChannel(t *testing.T) {
+	srv, _ := limitServer(t, WithMaxSessions(1))
+	sessions := &SessionService{srv: srv}
+	create := func(channelID uint32) (*ua.CreateSessionResponse, error) {
+		ctx := context.WithValue(context.Background(), secureChannelIDKey{}, channelID)
+		resp, err := sessions.CreateSession(ctx, scNone(), &ua.CreateSessionRequest{
+			RequestHeader:           reqHeader(),
+			EndpointURL:             "opc.tcp://localhost:4840",
+			RequestedSessionTimeout: 60000,
+			ClientNonce:             make([]byte, 32),
+		}, 1)
+		if err != nil {
+			return nil, err
+		}
+		return resp.(*ua.CreateSessionResponse), nil
+	}
+	// Channel 4711 is not (any longer) one the server serves.
+	first, err := create(4711)
+	require.NoError(t, err)
+	require.False(t, srv.sb.peek(first.AuthenticationToken).activated.Load())
+
+	second, err := create(4712)
+	require.NoError(t, err)
+	require.Nil(t, srv.sb.peek(first.AuthenticationToken), "the session of the closed channel was reclaimed")
+	require.NotNil(t, srv.sb.peek(second.AuthenticationToken))
+
+	// A virtual channel (0) never closes: its session stays, the server is full.
+	srv.sb.peek(second.AuthenticationToken).channelID.Store(0)
+	_, err = create(4713)
+	require.ErrorIs(t, err, ua.StatusBadTooManySessions)
+}

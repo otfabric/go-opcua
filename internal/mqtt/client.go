@@ -238,10 +238,11 @@ type Options struct {
 	// ConnectTimeout bounds one connection attempt (dial and CONNACK).
 	ConnectTimeout time.Duration
 	// MinReconnectDelay and MaxReconnectDelay bound the exponential backoff
-	// between connection attempts. After a DISCONNECT of the broker the
-	// client waits the backoff before it reconnects (after another lost
-	// connection it reconnects at once); the backoff starts over once a
-	// connection lasted MaxReconnectDelay.
+	// between failed connection attempts; it starts over once the client
+	// is connected. After a DISCONNECT of the broker the client waits
+	// before it reconnects (after another lost connection it reconnects at
+	// once), with a backoff of its own that grows while the connections
+	// last shorter than it and starts over after one that lasted longer.
 	MinReconnectDelay time.Duration
 	MaxReconnectDelay time.Duration
 	// MaxPacketSize limits received packets (the remaining length); larger
@@ -468,7 +469,10 @@ func newClient(opts Options) (*Client, error) {
 // run keeps the client connected until Close.
 func (c *Client) run(ctx context.Context, first chan<- error) {
 	defer c.wg.Done()
+	// delay is the backoff between failed connection attempts, discDelay
+	// the wait after a DISCONNECT of the broker.
 	delay := c.opts.MinReconnectDelay
+	discDelay := c.opts.MinReconnectDelay
 	connected := false
 	for {
 		attemptCtx := ctx
@@ -496,6 +500,8 @@ func (c *Client) run(ctx context.Context, first chan<- error) {
 			_ = l.conn.Close()
 			return
 		}
+		// Connected: the failed attempts before are over.
+		delay = c.opts.MinReconnectDelay
 		if !connected {
 			connected = true
 			first <- nil
@@ -515,10 +521,16 @@ func (c *Client) run(ctx context.Context, first chan<- error) {
 		if c.opts.OnConnectionLost != nil {
 			c.opts.OnConnectionLost(err)
 		}
-		// The backoff starts over after a connection that lasted; one
-		// lost soon after it was made counts as a failed attempt.
-		if time.Since(up) >= c.opts.MaxReconnectDelay {
-			delay = c.opts.MinReconnectDelay
+		// The wait after a DISCONNECT starts over after a connection that
+		// lasted at least that wait; one lost sooner makes it grow.
+		// Connections that end right after they were made (a broker that
+		// will not serve the client, a session two clients take from each
+		// other in turn: each connection lasts about as long as the other
+		// client waited, less than its own doubled wait) back off, one
+		// that worked for a while does not leave the client with the long
+		// wait of earlier ones.
+		if time.Since(up) >= discDelay {
+			discDelay = c.opts.MinReconnectDelay
 		}
 		var de *DisconnectError
 		if errors.As(err, &de) {
@@ -526,10 +538,10 @@ func (c *Client) run(ctx context.Context, first chan<- error) {
 			// session takeover would take the session back from the
 			// other connection while it connects, and two clients with
 			// one identifier would take it from each other in turn.
-			if !c.sleep(ctx, true, delay) {
+			if !c.sleep(ctx, true, discDelay) {
 				return
 			}
-			delay = min(delay*2, c.opts.MaxReconnectDelay)
+			discDelay = min(discDelay*2, c.opts.MaxReconnectDelay)
 		}
 	}
 }

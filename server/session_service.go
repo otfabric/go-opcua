@@ -54,11 +54,19 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 
 	// New session. The server keeps a bounded number of sessions; closed
 	// and timed-out ones have left the broker and do not count
-	// (Part 4 §5.6.2: Bad_TooManySessions).
-	sess := s.srv.sb.newSessionWithin(s.srv.cfg.sessionLimit())
+	// (Part 4 §5.6.2: Bad_TooManySessions). A full server closes the
+	// session whose secure channel has been gone longest to make room.
+	sess, reclaimed := s.srv.sb.newSessionWithin(s.srv.cfg.sessionLimit(), s.srv.cb.channelOpen)
 	if sess == nil {
 		s.srv.cfg.logger.Warn("CreateSession rejected: too many sessions", "max_sessions", s.srv.cfg.sessionLimit())
 		return nil, ua.StatusBadTooManySessions
+	}
+	sess.channelID.Store(requestChannelID(ctx))
+	if reclaimed != nil {
+		s.srv.cfg.logger.Info("session closed to make room: its secure channel is gone", "session_id", reclaimed.ID, "max_sessions", s.srv.cfg.sessionLimit())
+		if _, cps := s.srv.history(); cps != nil && reclaimed.AuthTokenID != nil {
+			cps.releaseSession(reclaimed.AuthTokenID.String())
+		}
 	}
 
 	// Ensure session timeout is reasonable

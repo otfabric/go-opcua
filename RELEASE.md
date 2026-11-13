@@ -1,5 +1,19 @@
 # go-opcua Releases
 
+## v1.31.1
+
+**Date:** 2026-11-03
+**Previous release:** v1.31.0
+
+### Fixed
+
+- server: the session limit of v1.31.0 (`WithMaxSessions`, 100 by default) filled up with sessions their clients had left behind. A client that loses its connection cannot close its session, which then stays until its session timeout (up to 30 minutes), so on an unreliable network the server soon refused every new client with `Bad_TooManySessions`. A full server now closes the session whose secure channel has been gone longest to make room, as `SessionClosedByServer` for the `SessionObserver` and an audit event of a terminated session. A session on an open channel is never closed for it, so a client that can create sessions cannot push others out. opc.https and UA JSON over opc.wss have no connection that closes, so there an abandoned session cannot be told from an idle one: a full server closes the one unused longest once it has been unused for 30 s, after the sessions of closed channels. A client that keeps such a session sends Publish requests, or reads to keep a session without subscriptions alive, more often than that. A client that comes back to a closed session gets `Bad_SessionIdInvalid` and creates a new one.
+- client: a client that gave up on its session after a fault created a new one without closing the old one, which the server kept until its timeout. It now closes it first (best effort, keeping the subscriptions for the transfer to the new session, Part 4 §5.6.4). A server that refuses the new session with `Bad_TooManySessions` is asked again after a wait that starts at `ReconnectInterval` and doubles up to 30 s, instead of every `ReconnectInterval`.
+- server: closing a session took time quadratic in the number of sessions with diagnostics, because removing a reference compared NodeIds through their strings, and the type and summary nodes reference every session's diagnostics. With many clients coming and going, the one goroutine that handles all requests fell behind and the requests of other clients waited. `ua.NodeID.Equal` now compares the fields without allocating and gives the same answer as before. The alarm chaos test, whose clients connect again every round, ran 260 to 300 s on v1.30.0 and runs about 50 s now (race detector, 30 s of faults).
+- The client's MQTT transport kept a long reconnect backoff after it had connected again. The backoff only started over after a connection that lasted `MaxReconnectDelay` (30 s, which the PubSub transport does not change), so under repeated faults it grew to its maximum, and one DISCONNECT from the broker (Server busy, Keep Alive timeout, ...) or a broker outage of a fraction of a second then kept the client away for 24 to 36 s. A PubSub subscriber with a persistent session missed its data for that long while the broker queued it. The backoff of failed connection attempts now starts over once the client is connected, as it did before v1.9.1. The wait after a DISCONNECT has a backoff of its own: it grows while the connections last shorter than it and starts over after one that lasted longer, so two clients with one client identifier still back off instead of taking the session from each other in a tight loop (the reason for the v1.9.1 change), and so does a client a broker disconnects right after every CONNACK.
+
+---
+
 ## v1.31.0
 
 **Date:** 2026-11-03

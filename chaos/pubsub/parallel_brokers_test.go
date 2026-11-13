@@ -102,7 +102,11 @@ func TestParallelBrokers(t *testing.T) {
 							return
 						default:
 						}
-						rs, _ := readerCfg(100 + 10*i + n)
+						// Unique per goroutine and round: two readers of one
+						// name would report each other's data sets as
+						// duplicates (100+10*i+n gave s182 to the 82nd round
+						// of one and the 72nd of the next).
+						rs, _ := readerCfg(100 + 3*n + i)
 						rt, err := pubsub.New(pubsub.NewConfiguration(nil, pubsub.AttachReaderGroups(conn("tmp", nil), pubsub.ReaderGroup("rg", rs...))),
 							pubsub.WithDataSetHandler(chk.handle))
 						if err != nil {

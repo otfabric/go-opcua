@@ -602,3 +602,39 @@ func TestNodeID_UnmarshalXML(t *testing.T) {
 		t.Error("UnmarshalXML with invalid numeric id should fail")
 	}
 }
+
+// TestNodeIDEqualIsStringEqual: Equal compares the fields; it must give
+// the answer of comparing the String forms for every pair.
+func TestNodeIDEqualIsStringEqual(t *testing.T) {
+	ids := []*NodeID{
+		nil,
+		NewTwoByteNodeID(5), NewFourByteNodeID(0, 5), NewNumericNodeID(0, 5), NewNumericNodeID(1, 5),
+		NewFourByteNodeID(1, 5), NewNumericNodeID(0, 6), NewNumericNodeID(0, 70000),
+		NewStringNodeID(0, "a"), NewStringNodeID(1, "a"), NewStringNodeID(0, "b"), NewStringNodeID(0, ""),
+		NewByteStringNodeID(0, []byte("a")), NewByteStringNodeID(0, []byte{}), NewByteStringNodeID(1, []byte("a")),
+		NewGUIDNodeID(0, "AAAABBBB-CCDD-EEFF-0102-030405060708"), NewGUIDNodeID(0, "aaaabbbb-ccdd-eeff-0102-030405060708"),
+		NewGUIDNodeID(1, "AAAABBBB-CCDD-EEFF-0102-030405060708"), NewGUIDNodeID(0, "AAAABBBB-CCDD-EEFF-0102-030405060709"),
+		NewGUIDNodeID(0, "not a guid"),
+		{mask: NodeIDTypeGUID, gid: &GUID{Data1: 1, Data4: []byte{0, 1, 0, 0, 0, 0, 0, 1}}},
+		{mask: NodeIDTypeGUID, gid: &GUID{Data1: 1, Data4: []byte{0, 1, 1}}},
+		{mask: NodeIDTypeGUID, gid: &GUID{Data1: 1, Data4: []byte{0, 1, 0, 0, 0, 1}}},
+	}
+	for _, a := range ids {
+		for _, b := range ids {
+			require.Equal(t, a.String() == b.String(), a.Equal(b), "%v and %v", a, b)
+		}
+	}
+	// A type String rejects panics in Equal as well.
+	bad := &NodeID{mask: 0x0f}
+	require.Panics(t, func() { bad.Equal(NewStringNodeID(0, "a")) })
+}
+
+func BenchmarkNodeIDEqualString(b *testing.B) {
+	x, y := NewStringNodeID(2, "Demo.Static.Scalar.Double"), NewStringNodeID(2, "Demo.Static.Scalar.Double")
+	b.ReportAllocs()
+	for range b.N {
+		if !x.Equal(y) {
+			b.Fatal("not equal")
+		}
+	}
+}
