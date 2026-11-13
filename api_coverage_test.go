@@ -10,6 +10,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -186,7 +187,10 @@ func TestBrowseNext(t *testing.T) {
 
 func TestQueryFirstAndNext(t *testing.T) {
 	t.Parallel()
-	c, f, ctx := setupFixture(t)
+	srv, url := testutil.NewTestServer(t, server.WithQuery(true))
+	f := testutil.AddFixture(t, srv)
+	c := testutil.NewTestClient(t, url)
+	ctx := context.Background()
 
 	resp, err := c.QueryFirst(ctx, &ua.QueryFirstRequest{
 		NodeTypes: []*ua.NodeTypeDescription{{

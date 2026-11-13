@@ -230,7 +230,7 @@ func TestNodeMgmt_ReferencesAndDeletion(t *testing.T) {
 // (CustomVarA=10, CustomVarB=20 of CustomVarType; CustomSubVar=30 of its
 // subtype).
 func TestQuery_FilterOperators(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupQuery(t)
 	value := func() *ua.ExtensionObject { return attributeOperand(ua.AttributeIDValue) }
 	typeID := func(n uint32) *ua.NodeID { return ua.NewNumericNodeID(0, n) }
 

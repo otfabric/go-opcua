@@ -167,6 +167,8 @@ func newStation(name string) (*station, error) {
 		server.EndPoint("localhost", 0),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		// The stations read and write hundreds of values per request.
+		server.WithOperationLimits(server.OperationalLimits{}),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%s: server.New: %w", name, err)

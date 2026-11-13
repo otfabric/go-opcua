@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -53,6 +54,7 @@ func newServer(t *testing.T, opts ...server.Option) (*server.Server, string) {
 		server.EndPoint("localhost", 0),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		conformkit.MultiChunkReads(),
 	}, opts...)
 	srv, err := server.New(append([]server.Option{server.InsecureNoSecurity()}, all...)...)
 	require.NoError(t, err)

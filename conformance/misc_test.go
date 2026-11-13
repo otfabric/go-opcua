@@ -58,10 +58,9 @@ func TestMisc_Discovery(t *testing.T) {
 }
 
 // TestServiceFault_ReturnsError exercises services that answer with a
-// ServiceFault. QueryFirst/QueryNext are now implemented, but these particular
-// empty requests are still rejected at the argument level (NothingToDo and an
-// invalid continuation point respectively), and FindServersOnNetwork is
-// unsupported.
+// ServiceFault. QueryFirst/QueryNext are not enabled on this server
+// (server.WithQuery), so they answer Bad_ServiceUnsupported, and
+// FindServersOnNetwork is unsupported.
 //
 // This is a regression test for a previous bug where a request that failed to
 // decode server-side tore down the whole secure channel without responding,

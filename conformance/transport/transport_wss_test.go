@@ -12,6 +12,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -31,6 +32,7 @@ func transportServer(t *testing.T, opts ...server.Option) (*testutil.Fixture, *s
 		server.TLSConfig(testutil.TLS(t).ServerConfig()),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		conformkit.MultiChunkReads(),
 	}, opts...)...)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
