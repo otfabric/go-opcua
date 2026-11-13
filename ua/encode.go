@@ -28,15 +28,20 @@ func isBinaryEncoder(val reflect.Value) bool {
 
 func Encode(v interface{}) ([]byte, error) {
 	val := reflect.ValueOf(v)
-	return encode(val, val.Type().String())
+	return encode(val, val.Type().String(), 0)
 }
 
-func encode(val reflect.Value, name string) ([]byte, error) {
+// encode writes val. depth is the nesting depth of the enclosing value
+// (see [MaxBinaryNestingDepth]).
+func encode(val reflect.Value, name string, depth int) ([]byte, error) {
 	slog.Debug("encode", "name", name, "type", val.Type(), "kind", val.Type().Kind())
 
 	buf := NewBuffer(nil)
 	switch {
 	case isBinaryEncoder(val):
+		if v, ok := val.Interface().(depthEncoder); ok {
+			return dump(v.encodeDepth(depth))
+		}
 		v := val.Interface().(BinaryEncoder)
 		return dump(v.Encode())
 
@@ -75,15 +80,15 @@ func encode(val reflect.Value, name string) ([]byte, error) {
 				// decode, which always allocates and reads pointer fields
 				// (see decodeStruct). Writing nothing here corrupts the
 				// stream whenever a pointer field is left nil.
-				return dump(encode(reflect.New(val.Type().Elem()), name))
+				return dump(encode(reflect.New(val.Type().Elem()), name, depth))
 			}
-			return dump(encode(val.Elem(), name))
+			return dump(encode(val.Elem(), name, depth))
 		case reflect.Struct:
-			return dump(writeStruct(val, name))
+			return dump(writeStruct(val, name, depth))
 		case reflect.Slice:
-			return dump(writeSlice(val, name))
+			return dump(writeSlice(val, name, depth))
 		case reflect.Array:
-			return dump(writeArray(val, name))
+			return dump(writeArray(val, name, depth))
 		default:
 			return nil, fmt.Errorf("%w: %s", errors.ErrUnsupportedType, val.Type())
 		}
@@ -98,13 +103,13 @@ func dump(b []byte, err error) ([]byte, error) {
 	return b, err
 }
 
-func writeStruct(val reflect.Value, name string) ([]byte, error) {
+func writeStruct(val reflect.Value, name string, depth int) ([]byte, error) {
 	var buf []byte
 	valt := val.Type()
 	for i := 0; i < val.NumField(); i++ {
 		ft := valt.Field(i)
 		fname := name + "." + ft.Name
-		b, err := encode(val.Field(i), fname)
+		b, err := encode(val.Field(i), fname, depth)
 		if err != nil {
 			return nil, err
 		}
@@ -113,7 +118,7 @@ func writeStruct(val reflect.Value, name string) ([]byte, error) {
 	return buf, nil
 }
 
-func writeSlice(val reflect.Value, name string) ([]byte, error) {
+func writeSlice(val reflect.Value, name string, depth int) ([]byte, error) {
 	buf := NewBuffer(nil)
 	if val.IsNil() {
 		buf.WriteUint32(null)
@@ -136,7 +141,7 @@ func writeSlice(val reflect.Value, name string) ([]byte, error) {
 	// loop over elements
 	for i := 0; i < val.Len(); i++ {
 		ename := fmt.Sprintf("%s[%d]", name, i)
-		b, err := encode(val.Index(i), ename)
+		b, err := encode(val.Index(i), ename, depth)
 		if err != nil {
 			return nil, err
 		}
@@ -145,7 +150,7 @@ func writeSlice(val reflect.Value, name string) ([]byte, error) {
 	return buf.Bytes(), buf.Error()
 }
 
-func writeArray(val reflect.Value, name string) ([]byte, error) {
+func writeArray(val reflect.Value, name string, depth int) ([]byte, error) {
 	buf := NewBuffer(nil)
 
 	if val.Len() > math.MaxInt32 {
@@ -167,7 +172,7 @@ func writeArray(val reflect.Value, name string) ([]byte, error) {
 	// we write all the elements, also the zero values
 	for i := 0; i < val.Len(); i++ {
 		ename := fmt.Sprintf("%s[%d]", name, i)
-		b, err := encode(val.Index(i), ename)
+		b, err := encode(val.Index(i), ename, depth)
 		if err != nil {
 			return nil, err
 		}

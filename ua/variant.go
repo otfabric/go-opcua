@@ -140,7 +140,14 @@ func VariantAs[T any](v *Variant) (T, error) {
 
 // Decode implements the codec interface.
 func (m *Variant) Decode(b []byte) (int, error) {
-	buf := NewBuffer(b)
+	return m.decodeDepth(b, 0)
+}
+
+func (m *Variant) decodeDepth(b []byte, depth int) (int, error) {
+	buf, err := nestedBuffer(b, depth)
+	if err != nil {
+		return 0, err
+	}
 	m.mask = buf.ReadUint8()
 
 	// a null value specifies that no other fields are encoded
@@ -345,15 +352,11 @@ func (m *Variant) decodeValue(buf *Buffer) interface{} {
 		buf.ReadStruct(v)
 		return v
 	case TypeIDVariant:
-		// NOTE: nested Variants could cause deep recursion from malicious input.
-		// A depth limit requires threading a counter through the decode interface;
-		// tracked as a known limitation.
+		// Nesting is bounded by MaxBinaryNestingDepth (buf carries the depth).
 		v := new(Variant)
 		buf.ReadStruct(v)
 		return v
 	case TypeIDDiagnosticInfo:
-		// NOTE: nested DiagnosticInfo could cause deep recursion from malicious input.
-		// Same limitation as Variant above.
 		v := new(DiagnosticInfo)
 		buf.ReadStruct(v)
 		return v
@@ -364,7 +367,14 @@ func (m *Variant) decodeValue(buf *Buffer) interface{} {
 
 // Encode implements the codec interface.
 func (m *Variant) Encode() ([]byte, error) {
-	buf := NewBuffer(nil)
+	return m.encodeDepth(0)
+}
+
+func (m *Variant) encodeDepth(depth int) ([]byte, error) {
+	buf, err := nestedBuffer(nil, depth)
+	if err != nil {
+		return nil, err
+	}
 	if m == nil {
 		// A nil pointer is the null Variant. Structures routinely leave
 		// optional Variant fields unset, which must not crash the encoder.
