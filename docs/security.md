@@ -904,6 +904,29 @@ The defaults are those of open62541 (`maxSessions`, `maxSubscriptions`, `maxSubs
 
 Size the limits to the clients you expect: an engineering tool and a few HMIs need far fewer than the defaults, and a smaller limit bounds the memory an unauthenticated client can tie up.
 
+### Per-call and per-session resource limits
+
+| Option | Default | Refusal |
+|---|---|---|
+| `WithOperationLimits(l)` | 32 per service (a zero field: no limit) | The whole request: `Bad_TooManyOperations` (Part 4 §7.38). Covers Read, Write, Call, Browse / BrowseNext, RegisterNodes / UnregisterNodes, TranslateBrowsePathsToNodeIds, NodeManagement, the MonitoredItem services and HistoryRead / HistoryUpdate |
+| `WithMaxMonitoredItems(n)` | 100000 (server) | CreateMonitoredItems: `Bad_TooManyMonitoredItems` per item beyond the limit |
+| `WithMaxMonitoredItemsPerSubscription(n)` | 10000 | as above |
+| `WithMaxMonitoredItemsPerSession(n)` | 20000 | as above |
+| `WithMaxBrowseContinuationPoints(n)` | 10 per session | Browse: `Bad_NoContinuationPoints` for the node |
+| `WithMaxQueryContinuationPoints(n)` | 5 per session | QueryFirst: `Bad_NoContinuationPoints` |
+
+The values in force are published in ServerCapabilities (`OperationLimits`, `MaxMonitoredItems`, `MaxMonitoredItemsPerSubscription`, `MaxBrowseContinuationPoints`, `MaxQueryContinuationPoints`).
+
+- Browse and Query continuation points belong to the session that created them: another session gets `Bad_ContinuationPointInvalid`. They are released when the session is closed or times out, and an unused one expires after 10 minutes.
+- The event queue of an event monitored item holds its revised QueueSize (default 1000 for QueueSize 0, at most 10000). On overflow an `EventQueueOverflowEventType` event marks the loss (Part 4 §5.12.1.5): with DiscardOldest the oldest event is dropped and the overflow event heads the queue, otherwise the new event is dropped.
+- A Publish response carries at most MaxNotificationsPerPublish data and event notifications together, with `MoreNotifications` when more remain.
+- Republish and the SubscriptionAcknowledgements of Publish only reach the subscriptions of the calling session (`Bad_SubscriptionIdInvalid` otherwise).
+- ContentFilters (Query) and EventFilter WhereClauses have at most 256 elements (`Bad_ContentFilterInvalid` / `Bad_EventFilterInvalid`); an element shared by several operands is evaluated once.
+
+### Query
+
+The Query service set is off by default (`Bad_ServiceUnsupported`): a QueryFirst scans the whole address space. `WithQuery(true)` enables it; a query then only returns nodes the session may browse (`AccessController.CheckBrowse`, AccessRestrictions with ApplyRestrictionsToBrowse), and an attribute the session may not read (`CheckRead`, AccessRestrictions) is returned as the denying StatusCode and is NULL to the filter.
+
 ---
 
 ## Security Checklist
@@ -923,6 +946,7 @@ Size the limits to the clients you expect: an engineering tool and a few HMIs ne
 - [ ] Implement `AccessController` for fine-grained server authorization
 - [ ] Set a WriteMask only on the attributes clients must change
 - [ ] Size `WithMaxSessions`, `WithMaxSubscriptions` and `WithMaxSubscriptionsPerSession` to the clients you expect
+- [ ] Keep `WithOperationLimits` and the monitored item limits as small as the clients allow; enable `WithQuery` only where clients need it
 - [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart
 - [ ] On a Local Discovery Server, keep secured registration (no `LDSAllowInsecureRegistration`) and configure `WithClientCertificateTrustList`
 - [ ] Enable `WithMulticastDiscovery` only on interfaces where the server should be discoverable, and never trust a discovered URL without validating the server certificate

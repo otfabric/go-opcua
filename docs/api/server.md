@@ -1913,6 +1913,9 @@ type MonitoredItem struct {
 
 	// isEvent marks an item on the EventNotifier attribute.
 
+	// The event queue of an event item, its revised QueueSize and its
+	// DiscardOldest, guarded by Sub.evMu (event_queue.go).
+
 	// Data-change sampling state, see monitored_item_filter.go.
 
 	// 0 = exception based
@@ -2828,6 +2831,46 @@ Registration changes what clients are told about the network, so by default it i
 
 Combine it with [WithMulticastDiscovery](#func-withmulticastdiscovery) for the multicast extension (LDS-ME): registered servers are then announced with mDNS.
 
+#### func WithMaxBrowseContinuationPoints
+
+```go
+func WithMaxBrowseContinuationPoints(n int) Option
+```
+
+WithMaxBrowseContinuationPoints sets how many Browse continuation points one session may hold. A Browse that would need more answers Bad\_NoContinuationPoints for that node (Part 4 §5.8.2, §7.9). The limit is published as ServerCapabilities.MaxBrowseContinuationPoints (Part 5 §6.3.2).
+
+The default is 10. Zero or a negative value selects the default.
+
+#### func WithMaxMonitoredItems
+
+```go
+func WithMaxMonitoredItems(n int) Option
+```
+
+WithMaxMonitoredItems sets how many monitored items the server keeps at a time over all subscriptions. CreateMonitoredItems answers Bad\_TooManyMonitoredItems for the items beyond it (Part 4 §5.12.2). The limit is published as ServerCapabilities.MaxMonitoredItems (Part 5 §6.3.2).
+
+The default is 100000. Zero or a negative value selects the default.
+
+#### func WithMaxMonitoredItemsPerSession
+
+```go
+func WithMaxMonitoredItemsPerSession(n int) Option
+```
+
+WithMaxMonitoredItemsPerSession sets how many monitored items the subscriptions of one session may have together. CreateMonitoredItems answers Bad\_TooManyMonitoredItems for the items beyond it (Part 4 §5.12.2). The spec defines no ServerCapabilities variable for this limit.
+
+The default is 20000. Zero or a negative value selects the default.
+
+#### func WithMaxMonitoredItemsPerSubscription
+
+```go
+func WithMaxMonitoredItemsPerSubscription(n int) Option
+```
+
+WithMaxMonitoredItemsPerSubscription sets how many monitored items one subscription may have. CreateMonitoredItems answers Bad\_TooManyMonitoredItems for the items beyond it (Part 4 §5.12.2). The limit is published as ServerCapabilities.MaxMonitoredItemsPerSubscription (Part 5 §6.3.2).
+
+The default is 10000. Zero or a negative value selects the default.
+
 #### func WithMaxPendingResponses
 
 ```go
@@ -2839,6 +2882,16 @@ WithMaxPendingResponses sets how many requests of one secure channel may be in f
 When a client has n requests in flight the server stops reading further requests from that client until responses have been written. This bounds the memory one client can occupy with queued responses and applies TCP back pressure to a client that sends requests faster than it reads the answers; it never drops a request. Publish requests that are waiting for a notification do not count.
 
 The default is 256. Zero or a negative value selects the default.
+
+#### func WithMaxQueryContinuationPoints
+
+```go
+func WithMaxQueryContinuationPoints(n int) Option
+```
+
+WithMaxQueryContinuationPoints sets how many QueryFirst continuation points one session may hold. A QueryFirst that would need more fails with Bad\_NoContinuationPoints (Part 4 §7.9). The limit is published as ServerCapabilities.MaxQueryContinuationPoints (Part 5 §6.3.2).
+
+The default is 5. Zero or a negative value selects the default.
 
 #### func WithMaxSessions
 
@@ -2890,6 +2943,29 @@ The mDNS implementation is built in and needs no system service. It uses UDP por
 
 Multicast discovery tells everybody on the local network segment that the server exists, where it is and what it can do, and it trusts what others announce: see docs/security.md.
 
+#### func WithOperationLimits
+
+```go
+func WithOperationLimits(l OperationalLimits) Option
+```
+
+WithOperationLimits sets the OperationLimits of the server: how many operations one call of a service may carry (Part 5 §6.3.11 OperationLimitsType). A request with more operations than its limit fails as a whole with Bad\_TooManyOperations (Part 4 §7.38). The limits are published in Server.ServerCapabilities.OperationLimits, so the advertised values are always the enforced ones.
+
+A field of zero means no limit, which is also how the spec reads a zero in OperationLimits. Without this option every limit is 32.
+
+The limits apply as follows:
+
+  - MaxNodesPerRead: Read
+  - MaxNodesPerWrite: Write
+  - MaxNodesPerMethodCall: Call
+  - MaxNodesPerBrowse: Browse, BrowseNext
+  - MaxNodesPerRegisterNodes: RegisterNodes, UnregisterNodes
+  - MaxNodesPerTranslateBrowsePathsToNodeIDs: TranslateBrowsePathsToNodeIds
+  - MaxNodesPerNodeManagement: AddNodes, AddReferences, DeleteNodes, DeleteReferences
+  - MaxMonitoredItemsPerCall: CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, DeleteMonitoredItems, SetTriggering (each of its link lists)
+  - MaxNodesPerHistoryReadData / MaxNodesPerHistoryReadEvents: HistoryRead of data / of events
+  - MaxNodesPerHistoryUpdateData / MaxNodesPerHistoryUpdateEvents: the data / event details of HistoryUpdate
+
 #### func WithPubSub
 
 ```go
@@ -2915,6 +2991,16 @@ func WithPushManagement(pm PushManagement) Option
 ```
 
 WithPushManagement enables certificate management by the push model of Part 12 §7. See [PushManagement](#type-pushmanagement).
+
+#### func WithQuery
+
+```go
+func WithQuery(enabled bool) Option
+```
+
+WithQuery enables the Query service set (QueryFirst, QueryNext, Part 4 §5.9). It is off by default: Query is an optional facet, and a query scans the whole address space. When it is off, QueryFirst and QueryNext answer Bad\_ServiceUnsupported.
+
+A query only returns nodes the session may browse and attribute values it may read: the AccessController, the diagnostics access rules and the AccessRestrictions of the nodes apply as for Browse and Read.
 
 #### func WithResponseWriteTimeout
 
@@ -3126,12 +3212,13 @@ The server has the three certificate groups of Part 12 §7.8.3:
 ```go
 type QueryService struct {
 
-	// keyed by hex-encoded token
+	// cps holds the QueryDataSets that did not fit within a client's
+	// MaxDataSetsToReturn limit, to be retrieved via QueryNext.
 
 }
 ```
 
-QueryService implements the Query Service Set.
+QueryService implements the Query Service Set. It is only served when the server is created WithQuery(true); otherwise QueryFirst and QueryNext answer Bad\_ServiceUnsupported.
 
 [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.9](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.9)
 
@@ -3601,6 +3688,9 @@ type Server struct {
 
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
+
+	// view and query hold the Browse and Query continuation points, which
+	// are released with their session (sessionRemoved).
 
 	// eventItems tracks event-monitored-item filter state.
 
@@ -4368,6 +4458,11 @@ type Subscription struct {
 	// before closing the shutdown channel.
 	Mu sync.Mutex
 
+	// evMu guards the event queues of the event items of the subscription
+	// (MonitoredItem.events) and looseEvents; see event_queue.go.
+
+	// the items with queued events
+
 }
 ```
 
@@ -4554,7 +4649,8 @@ type ValueFunc func() *ua.DataValue
 ```go
 type ViewService struct {
 
-	// keyed by hex-encoded token
+	// cps holds the Browse continuation points: the references of a node
+	// that did not fit RequestedMaxReferencesPerNode.
 
 }
 ```

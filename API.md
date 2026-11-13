@@ -1769,6 +1769,13 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithMaxSessions(n int)` | Most sessions the server keeps, activated or not (default 100); CreateSession beyond it fails with `BadTooManySessions`; published as ServerCapabilities `MaxSessions` |
 | `WithMaxSubscriptions(n int)` | Most subscriptions over all sessions (default 1024); CreateSubscription beyond it fails with `BadTooManySubscriptions`; published as `MaxSubscriptions` |
 | `WithMaxSubscriptionsPerSession(n int)` | Most subscriptions one session owns (default 64); CreateSubscription and TransferSubscriptions beyond it give `BadTooManySubscriptions`; published as `MaxSubscriptionsPerSession` |
+| `WithOperationLimits(l OperationalLimits)` | Per-call OperationLimits (default 32 each, a zero field is no limit); a request with more operations fails with `BadTooManyOperations`; published as ServerCapabilities `OperationLimits` |
+| `WithMaxMonitoredItems(n int)` | Most monitored items over all subscriptions (default 100000); CreateMonitoredItems gives `BadTooManyMonitoredItems` for the items beyond it; published as `MaxMonitoredItems` |
+| `WithMaxMonitoredItemsPerSubscription(n int)` | Most monitored items of one subscription (default 10000); `BadTooManyMonitoredItems` beyond it; published as `MaxMonitoredItemsPerSubscription` |
+| `WithMaxMonitoredItemsPerSession(n int)` | Most monitored items of the subscriptions of one session (default 20000); `BadTooManyMonitoredItems` beyond it |
+| `WithMaxBrowseContinuationPoints(n int)` | Browse continuation points one session holds (default 10); `BadNoContinuationPoints` beyond it; published as `MaxBrowseContinuationPoints` |
+| `WithMaxQueryContinuationPoints(n int)` | QueryFirst continuation points one session holds (default 5); `BadNoContinuationPoints` beyond it; published as `MaxQueryContinuationPoints` |
+| `WithQuery(enabled bool)` | Serve QueryFirst / QueryNext (default off: `BadServiceUnsupported`); results honour the access controller and AccessRestrictions as Browse and Read do |
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithSessionObserver(o SessionObserver)` | Told about client connections and sessions as they begin and end; see [SessionObserver](#sessionobserver) |
 | `WithAccessController(ac AccessController)` | Access controller |
