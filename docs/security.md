@@ -653,12 +653,12 @@ The `DefaultAccessController` allows all operations. Override it to enforce your
 
 The `AccessController` decides who may write a node; the node decides which of its attributes can be written at all:
 
-- **Value:** governed by AccessLevel and UserAccessLevel (Part 3 §5.6.2).
+- **Value:** governed by AccessLevel and UserAccessLevel (Part 3 §5.6.2). NodeSet2 imports apply the schema default `CurrentRead` when a variable has no AccessLevel, and the namespace-0 Server variables the server builds itself (ServerStatus and its children, CurrentTime, NamespaceArray, OperationLimits) are `CurrentRead`: clients cannot write them under any AccessController.
 - **Every other attribute:** writable through the Write service only where the node's WriteMask has its bit (Part 3 §5.2.7, §8.60), else `Bad_NotWritable`. A UserWriteMask on the node narrows that per user (§5.2.8, `Bad_UserAccessDenied`), and a value of the wrong DataType is `Bad_TypeMismatch`.
 - **Defaults:** nodes built with the Go API have no WriteMask, so clients can write only their Value, as in UA-.NETStandard and open62541. Set `ua.AttributeIDWriteMask` (UInt32) on a node to open DisplayName, Description and the others. NodeSet2 imports keep their WriteMask, and AddNodes keeps the WriteMask the client sends.
 - **Never writable:** NodeId and NodeClass, whatever the WriteMask says, because the address space is keyed by them.
 
-Code in the server that calls `Node.SetAttribute` directly is not subject to the WriteMask.
+Code in the server that calls `Node.SetAttribute` directly is not subject to the WriteMask or the AccessLevel.
 
 ---
 

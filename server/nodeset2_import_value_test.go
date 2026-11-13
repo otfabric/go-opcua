@@ -118,9 +118,8 @@ func TestImportNodeSetXML_VariableValues(t *testing.T) {
 		_, err := n.Attribute(ua.AttributeIDArrayDimensions)
 		require.Error(t, err)
 
-		// UserAccessLevel="1" makes the variable read-only.
-		require.Equal(t, ua.StatusBadUserAccessDenied,
-			n.SetAttribute(ua.AttributeIDValue, DataValueFromValue(int32(1))))
+		// UserAccessLevel="1" makes the variable read-only for clients.
+		require.Equal(t, ua.StatusBadUserAccessDenied, n.AccessStatus(ua.AccessLevelTypeCurrentWrite))
 	})
 
 	t.Run("array", func(t *testing.T) {
@@ -169,8 +168,11 @@ func TestImportNodeSetXML_VariableValues(t *testing.T) {
 		n := node(6005)
 		require.Equal(t, "text", attr(n, ua.AttributeIDValue))
 		require.Equal(t, "i=24", dataType(n), "DataType defaults to BaseDataType")
-		_, err := n.Attribute(ua.AttributeIDAccessLevel)
-		require.Error(t, err, "no AccessLevel attribute, the variable stays writable")
+		// UANodeSet.xsd: AccessLevel and UserAccessLevel default to
+		// CurrentRead; clients may not write the value, the server may.
+		require.Equal(t, byte(ua.AccessLevelTypeCurrentRead), attr(n, ua.AttributeIDAccessLevel))
+		require.Equal(t, byte(ua.AccessLevelTypeCurrentRead), attr(n, ua.AttributeIDUserAccessLevel))
+		require.Equal(t, ua.StatusBadNotWritable, n.AccessStatus(ua.AccessLevelTypeCurrentWrite))
 		require.NoError(t, n.SetAttribute(ua.AttributeIDValue, DataValueFromValue("new")))
 		require.Equal(t, "new", attr(n, ua.AttributeIDValue))
 	})
@@ -266,14 +268,14 @@ func TestImportNodeSetXML_OutOfRange(t *testing.T) {
 
 	vr, _ := value(7001, ua.AttributeIDValueRank)
 	require.Equal(t, int32(-1), vr, "ValueRank 2^32+1 falls back to Scalar")
-	_, ok := value(7001, ua.AttributeIDAccessLevel)
-	require.False(t, ok, "AccessLevel 259 is not cut to 3")
-	_, ok = value(7001, ua.AttributeIDUserAccessLevel)
-	require.False(t, ok, "UserAccessLevel 256 is not cut to 0")
+	al, _ := value(7001, ua.AttributeIDAccessLevel)
+	require.Equal(t, byte(ua.AccessLevelTypeCurrentRead), al, "AccessLevel 259 is not cut to 3; the schema default applies")
+	al, _ = value(7001, ua.AttributeIDUserAccessLevel)
+	require.Equal(t, byte(ua.AccessLevelTypeCurrentRead), al, "UserAccessLevel 256 is not cut to 0; the schema default applies")
 
 	vr, _ = value(7002, ua.AttributeIDValueRank)
 	require.Equal(t, int32(-1), vr, "ValueRank -4 falls back to Scalar")
-	al, _ := value(7002, ua.AttributeIDAccessLevel)
+	al, _ = value(7002, ua.AttributeIDAccessLevel)
 	require.Equal(t, byte(255), al)
 	ual, _ := value(7002, ua.AttributeIDUserAccessLevel)
 	require.Equal(t, byte(1), ual)

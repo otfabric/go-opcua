@@ -48,7 +48,7 @@ const rbacNodeSet = `<?xml version="1.0" encoding="utf-8"?>
       <Reference ReferenceType="HasComponent">ns=1;i=103</Reference>
     </References>
   </UAObject>
-  <UAVariable NodeId="ns=1;i=101" BrowseName="1:Recipe" DataType="String">
+  <UAVariable NodeId="ns=1;i=101" BrowseName="1:Recipe" DataType="String" AccessLevel="3" UserAccessLevel="3">
     <DisplayName>Recipe</DisplayName>
     <RolePermissions>
       <RolePermission Permissions="33">Anonymous</RolePermission>

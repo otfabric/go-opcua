@@ -628,9 +628,12 @@ The importer handles:
 - Aliases
 
 `DataType` and `ValueRank` get the defaults of the NodeSet schema
-(`BaseDataType`, scalar) when the attribute is absent. `AccessLevel` and
-`UserAccessLevel` are only applied when the XML has them: a variable without
-them stays readable and writable. A `<Value>` that cannot be decoded - or
+(`BaseDataType`, scalar) when the attribute is absent, and so do
+`AccessLevel` and `UserAccessLevel`: `CurrentRead` (UANodeSet.xsd default
+`1`, Part 3 §5.6.2). A variable is writable by clients only where the
+NodeSet says so (`AccessLevel="3"`). Server code still updates the value
+of a read-only variable with `Node.SetAttribute`, which does not apply the
+AccessLevel (see below). A `<Value>` that cannot be decoded - or
 whose structure type is not registered - is logged and skipped; it does not
 fail the import.
 
@@ -650,8 +653,12 @@ When you change a node value, notify the server so it can push updates to subscr
 // Using MapNamespace — automatic with SetValue()
 data.SetValue("temperature", 25.0)  // Subscribers notified automatically
 
-// Using NodeNameSpace — call ChangeNotification after updating
+// Using NodeNameSpace — call ChangeNotification after updating.
+// NodeNameSpace.SetAttribute applies the AccessLevel of the node, as for a
+// client Write; Node.SetAttribute is the server-side update of a read-only
+// variable (AccessLevel governs clients only).
 ns.SetAttribute(nodeID, ua.AttributeIDValue, newDataValue)
+srv.Node(readOnlyID).SetAttribute(ua.AttributeIDValue, newDataValue)
 ns.ChangeNotification(nodeID)
 
 // Or notify via the server directly

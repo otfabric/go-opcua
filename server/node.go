@@ -251,14 +251,19 @@ func (n *Node) Attribute(id ua.AttributeID) (*AttrValue, error) {
 	defer n.mu.RUnlock()
 	return n.attribute(id)
 }
+
+// SetAttribute sets an attribute of the node from server code. It does not
+// apply the AccessLevel or WriteMask rules, which govern client access
+// (the Write service and NodeNameSpace.SetAttribute check them).
 func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	switch id {
 	case ua.AttributeIDValue:
-		if st := n.accessStatus(ua.AccessLevelTypeCurrentWrite); st != ua.StatusOK {
-			return st
-		}
+		// AccessLevel and UserAccessLevel say how clients may access the
+		// Value (Part 3 §5.6.2); the server itself updates the value of a
+		// read-only Variable. Client writes reach the node through
+		// NodeNameSpace.SetAttribute, which checks them.
 
 		// Validate the data type if the node has a DataType attribute and
 		// both old and new values carry a typed variant.
