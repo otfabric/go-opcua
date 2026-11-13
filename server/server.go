@@ -970,6 +970,20 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 			}
 		}
 
+		// A certificate token on a None endpoint names a real
+		// SecurityPolicy, so the client proves with a UserTokenSignature
+		// that it holds the key of the certificate: "Servers should
+		// specify a SecurityPolicy for the UserTokenPolicy if the
+		// SecureChannel has a SecurityPolicy of None" (Part 4 §7.40.5).
+		// Without an enabled policy to name, none is offered.
+		if auth.tokenType == ua.UserTokenTypeCertificate && authSecPolicy == ua.SecurityPolicyURINone {
+			p := s.certificateTokenPolicy()
+			if p == "" {
+				continue
+			}
+			authSecPolicy, tokenPolicyURI = p, p
+		}
+
 		policyID := strings.ToLower(
 			strings.TrimPrefix(auth.tokenType.String(), "UserTokenType") +
 				"_" +
@@ -1048,6 +1062,35 @@ func (s *Server) tokenPolicyOverTLS(profile, policy string, serverCert []byte) s
 		}
 	}
 	return best
+}
+
+// certificateTokenPolicy returns the SecurityPolicy that an X.509 user token
+// policy of a None endpoint names: the enabled RSA policy with the highest
+// SecurityLevel, or the highest ECC one if no RSA policy is enabled, "" if
+// only None is enabled.
+func (s *Server) certificateTokenPolicy() string {
+	var rsa, ecc string
+	var rsaLevel, eccLevel uint8
+	for _, sec := range s.cfg.enabledSec {
+		p := sec.secPolicy
+		if p == ua.SecurityPolicyURINone || !uapolicy.IsSupported(p) {
+			continue
+		}
+		l := uapolicy.SecurityLevel(p, ua.MessageSecurityModeSignAndEncrypt)
+		if uapolicy.IsECC(p) {
+			if ecc == "" || l > eccLevel {
+				ecc, eccLevel = p, l
+			}
+			continue
+		}
+		if rsa == "" || l > rsaLevel {
+			rsa, rsaLevel = p, l
+		}
+	}
+	if rsa != "" {
+		return rsa
+	}
+	return ecc
 }
 
 // publishNamespaces makes s.namespaces the view of Node. It is called with

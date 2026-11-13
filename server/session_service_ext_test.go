@@ -295,11 +295,13 @@ func TestSessionService_validateX509UserToken(t *testing.T) {
 	})
 	require.ErrorIs(t, err, ua.StatusBadIdentityTokenRejected)
 
+	// On a None channel without a token SecurityPolicy there is nothing to
+	// prove the key with: the token is rejected even with a validator.
 	srv.cfg.x509UserValidator = func([]byte) error { return nil }
 	err = svc.validateX509UserToken(sc, sess, &ua.ActivateSessionRequest{}, &ua.X509IdentityToken{
 		CertificateData: der,
 	})
-	require.NoError(t, err)
+	require.ErrorIs(t, err, ua.StatusBadIdentityTokenRejected)
 
 	srv.cfg.x509UserValidator = func([]byte) error { return errors.New("nope") }
 	err = svc.validateX509UserToken(sc, sess, &ua.ActivateSessionRequest{}, &ua.X509IdentityToken{
@@ -352,6 +354,11 @@ func TestSessionService_validateX509UserToken_Signature(t *testing.T) {
 
 	require.NoError(t, svc.validateX509UserToken(sc, sess, req, tok))
 
+	// The validator still decides about a token with a valid signature.
+	srv.cfg.x509UserValidator = func([]byte) error { return errors.New("nope") }
+	require.ErrorIs(t, svc.validateX509UserToken(sc, sess, req, tok), ua.StatusBadIdentityTokenRejected)
+	srv.cfg.x509UserValidator = func([]byte) error { return nil }
+
 	// Tampered signature must fail.
 	bad := append([]byte(nil), sig...)
 	bad[0] ^= 0xff
@@ -375,14 +382,16 @@ func TestSessionService_validateX509UserToken_Signature(t *testing.T) {
 	err = svc.validateX509UserToken(sc, sess, req, tok)
 	require.ErrorIs(t, err, ua.StatusBadIdentityTokenInvalid)
 
-	// SecurityPolicy#None skips signature verification.
+	// A token whose policy resolves to SecurityPolicy#None is rejected: the
+	// server only offers certificate tokens under a real SecurityPolicy.
 	scNonePol := uasc.NewCryptoChannel(&uasc.Config{
 		SecurityMode:      ua.MessageSecurityModeNone,
 		SecurityPolicyURI: ua.SecurityPolicyURINone,
 	})
 	tok.PolicyID = ""
 	req.UserTokenSignature.Signature = []byte("ignored")
-	require.NoError(t, svc.validateX509UserToken(scNonePol, sess, req, tok))
+	require.ErrorIs(t, svc.validateX509UserToken(scNonePol, sess, req, tok), ua.StatusBadIdentityTokenRejected)
+	req.UserTokenSignature.Signature = sig
 
 	// Non-RSA user cert fails public-key extraction during signature verify.
 	ecKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)

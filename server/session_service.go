@@ -365,7 +365,16 @@ func (s *SessionService) validateX509UserToken(
 			}
 		}
 
-		if policyURI != ua.SecurityPolicyURINone {
+		// The server offers certificate tokens only under a real
+		// SecurityPolicy (see certificateTokenPolicy): a token whose
+		// policy resolves to None matches no token policy it offers, and
+		// accepting it would need no proof of the key (Part 4 §7.40.5).
+		if policyURI == ua.SecurityPolicyURINone || policyURI == "" {
+			s.srv.cfg.logger.Warn("ActivateSession X.509 user token: no SecurityPolicy for the user token signature")
+			return ua.StatusBadIdentityTokenRejected
+		}
+
+		{
 			// Without a signature nothing shows that the client holds the
 			// private key: a certificate is public and anyone can present it.
 			if req.UserTokenSignature == nil || len(req.UserTokenSignature.Signature) == 0 {
