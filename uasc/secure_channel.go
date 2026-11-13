@@ -1119,8 +1119,15 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 		s.cfg.Logger.Warn("expected OpenSecureChannelRequest", "got", fmt.Sprintf("%T", svc))
 		return ua.StatusBadUnexpectedError
 	}
+	// The hook is told before the client can see the answer: a refusal
+	// that is sent from here calls it first.
+	hooked := false
 	if hook := s.cfg.OpenSecureChannelHook; hook != nil {
-		defer func() { hook(req, statusOf(err)) }()
+		defer func() {
+			if !hooked {
+				hook(req, statusOf(err))
+			}
+		}()
 	}
 
 	// Part 6 §6.7.4: ClientProtocolVersion must match the version
@@ -1166,6 +1173,10 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 			// closed. No SecurityToken has been issued yet, so a ServiceFault
 			// secured with the (not yet established) symmetric keys could not
 			// be decoded by the client.
+			if hook := s.cfg.OpenSecureChannelHook; hook != nil {
+				hook(req, sc)
+				hooked = true
+			}
 			s.c.SendError(sc)
 			return sc
 		}
