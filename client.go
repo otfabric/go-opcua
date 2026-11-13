@@ -10,6 +10,7 @@ import (
 	"io"
 	"iter"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1302,6 +1303,7 @@ func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*S
 	}
 
 	var s *Session
+	var mismatch *ua.NodeID // the token of a session to close
 	// for the CreateSessionRequest the authToken is always nil.
 	// use sc.SendRequest() to enforce this.
 	err := sc.SendRequest(ctx, req, nil, func(v ua.Response) error {
@@ -1321,6 +1323,15 @@ func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*S
 
 		// Validate the server certificate from the CreateSession response.
 		if err := c.cfg.validateServerCertificate(res.ServerCertificate, c.cfg.sechan.SecurityMode); err != nil {
+			return err
+		}
+
+		// "The Client shall verify this list with the list from a
+		// DiscoveryEndpoint if it used a DiscoveryEndpoint to fetch the
+		// EndpointDescriptions" (Part 4 §5.7.2.2): the endpoint the client
+		// chose came over an unsecured channel, the response did not.
+		if err := verifyServerEndpoints(c.cfg.discoveredEndpoint, sc, res.ServerEndpoints); err != nil {
+			mismatch = res.AuthenticationToken
 			return err
 		}
 
@@ -1359,7 +1370,61 @@ func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*S
 
 		return nil
 	})
+	if mismatch != nil {
+		// "the Client shall close the Session and report an error"
+		// (Part 4 §5.7.2.2). Best effort: the error stands either way.
+		_ = sc.SendRequest(ctx, &ua.CloseSessionRequest{DeleteSubscriptions: true}, mismatch, func(ua.Response) error { return nil })
+	}
 	return s, err
+}
+
+// verifyServerEndpoints compares the endpoint ep the client was configured
+// with (SecurityFromEndpoint) with the endpoints of the CreateSession
+// response. It compares the fields Part 4 §5.7.2.2 recommends a server to
+// return, apart from the endpoint URL, which the client may have reached
+// under another name: the application URI, security mode, security policy,
+// user token policies, transport profile and security level. The endpoint is
+// compared only if the channel uses its security policy and mode.
+func verifyServerEndpoints(ep *ua.EndpointDescription, sc *uasc.SecureChannel, server []*ua.EndpointDescription) error {
+	if ep == nil || sc == nil || ep.SecurityPolicyURI != sc.SecurityPolicyURI() || ep.SecurityMode != sc.SecurityMode() {
+		return nil
+	}
+	for _, se := range server {
+		if sameEndpointSecurity(ep, se) {
+			return nil
+		}
+	}
+	return fmt.Errorf("opcua: the server endpoints of CreateSession do not contain the selected endpoint (%s, %s): %w",
+		ep.SecurityPolicyURI, ep.SecurityMode, ua.StatusBadSecurityChecksFailed)
+}
+
+// sameEndpointSecurity reports whether the endpoints a and b agree in the
+// fields verifyServerEndpoints compares.
+func sameEndpointSecurity(a, b *ua.EndpointDescription) bool {
+	if b == nil || a.SecurityPolicyURI != b.SecurityPolicyURI || a.SecurityMode != b.SecurityMode ||
+		a.SecurityLevel != b.SecurityLevel || a.TransportProfileURI != b.TransportProfileURI {
+		return false
+	}
+	if a.Server != nil && b.Server != nil && a.Server.ApplicationURI != b.Server.ApplicationURI {
+		return false
+	}
+	if len(a.UserIdentityTokens) != len(b.UserIdentityTokens) {
+		return false
+	}
+	for _, at := range a.UserIdentityTokens {
+		if !slices.ContainsFunc(b.UserIdentityTokens, func(bt *ua.UserTokenPolicy) bool { return sameTokenPolicy(at, bt) }) {
+			return false
+		}
+	}
+	return true
+}
+
+func sameTokenPolicy(a, b *ua.UserTokenPolicy) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.PolicyID == b.PolicyID && a.TokenType == b.TokenType && a.IssuedTokenType == b.IssuedTokenType &&
+		a.IssuerEndpointURL == b.IssuerEndpointURL && a.SecurityPolicyURI == b.SecurityPolicyURI
 }
 
 // ecdhPolicyFor returns the ECC security policy that protects the secret of
