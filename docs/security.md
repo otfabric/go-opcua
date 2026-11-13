@@ -181,7 +181,7 @@ The Brainpool policies are `ECC_nistP256` / `ECC_nistP384` on another curve, `Si
 - `uapolicy.CreateCertificate` makes certificates with these keys or signed by them (other keys go to `x509.CreateCertificate`); `uapolicy.MarshalPrivateKey` writes any key as PKCS #8. `uapolicy.ParsePrivateKey` reads Brainpool keys in PKCS #8 and SEC 1 and Ed448 keys in PKCS #8, as OpenSSL writes them.
 - `uapolicy.CreateCertificateRequest` / `ParseCertificateRequest` / `CheckCertificateRequestSignature` make and check PKCS #10 requests for these keys (CreateSigningRequest of the push model), and `uapolicy.ParseRevocationList` / `CheckRevocationListSignature` read CRLs signed by such CAs (trust lists).
 - `uapolicy.ParsePFX` / `EncodePFX` read and write PKCS #12 (PFX) files with any of these keys: PBES2 (PBKDF2, AES-CBC), the PKCS #12 PBEs (3DES, RC2) and the SHA-1 / SHA-2 MAC, or PBMAC1, in DER or BER (indefinite lengths and constructed OCTET STRINGs, as Java keytool and older tools write them). RC4 and the public-key integrity and privacy modes are refused on purpose: RC4 is broken and the public-key modes are not used by OPC UA tools; they are not gaps.
-- `uapolicy.VerifyCertificate` verifies a chain. Without Ed448 signatures that is `crypto/x509`, Brainpool keys included. A chain in which a certificate is signed with Ed448 is built by the library against the trusted certificates only (`TrustedCertificates`, `WithClientCertificateTrustList`; not the system roots, which carry no Ed448 keys), with this subset of RFC 5280 §6.1: validity period; no unknown critical extension; every issuer a CA by basicConstraints, with keyCertSign if it has a key usage, and within its path length; issuer and subject names equal byte for byte; authority and subject key identifiers equal where both are present; at most 8 certificates. A CA with name constraints is refused on such a path and policy constraints are not evaluated: keep such CAs out of chains with Ed448 signatures.
+- `uapolicy.VerifyCertificate` verifies a chain. Without Ed448 signatures that is `crypto/x509`, Brainpool keys included. A chain in which a certificate is signed with Ed448 is built by the library against the trusted certificates only (`TrustedCertificates`, `WithClientCertificateTrustList`; not the system roots, which carry no Ed448 keys), with this subset of RFC 5280 §6.1: validity period; no unknown critical extension; every issuer a CA by basicConstraints, with keyCertSign if it has a key usage, and within its path length; issuer and subject names equal byte for byte; authority and subject key identifiers equal where both are present; at most 8 certificates. The search for a path verifies each signature once per certificate and issuer key, at most 100 signatures in all (the bound `crypto/x509` applies), and looks at no more than 10000 issuer candidates; duplicate intermediates are ignored. A chain that needs more is refused. A CA with name constraints is refused on such a path and policy constraints are not evaluated: keep such CAs out of chains with Ed448 signatures.
 
 The parsers are fuzzed (`uapolicy/x509_fuzz_test.go`).
 
@@ -885,6 +885,15 @@ from what others announce. mDNS has no authentication:
   sources that are not on the local link of the receiving interface are
   dropped (RFC 6762 §11).
 - **Port.** mDNS uses UDP 5353, shared with Avahi/Bonjour if they run.
+
+## Connection and Message Limits
+
+Before a secure channel is open, and on a channel without security, a peer is not authenticated. These bounds are fixed and apply to client and server alike:
+
+- **Opening a channel.** A connection accepted by a server's listener has 10 s for the HEL/ACK handshake and then 10 s more to send its OpenSecureChannel request; a connection that does neither is closed.
+- **Partial messages.** A channel collects the chunks of at most 16 messages at a time, holding together at most twice the largest message it accepts (`MaxMessageSize`, or `MaxChunkCount` chunks of the receive buffer when `MaxMessageSize` is 0). A peer that goes over either loses the connection (`Bad_TcpMessageTooLarge`, Part 6 §7.1.5). `MaxChunkCount` and `MaxMessageSize` still bound each message.
+- **Nesting.** UA Binary values nest Variant, DataValue, DiagnosticInfo and ExtensionObject at most 100 levels deep (`ua.MaxBinaryNestingDepth`), as the JSON and XML codecs do; deeper values fail with `Bad_EncodingLimitsExceeded`.
+- **Padding.** The padding sizes of a decrypted chunk are checked against its length; a chunk that does not hold them fails with `Bad_SecurityChecksFailed`.
 
 ## Session and Subscription Limits (Server)
 

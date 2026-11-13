@@ -226,6 +226,10 @@ type Conn struct {
 	// sends: the Acknowledge for requests, the Hello for responses (Part 6
 	// §7.1.2.3, §7.1.2.4). Zero means no limit.
 
+	// openMu guards the deadline a listener sets for the first
+	// OpenSecureChannel message (armOpenDeadline): openPending while it is
+	// set, opened once an OPN message arrived.
+
 }
 ```
 
@@ -579,6 +583,10 @@ type Listener struct {
 	// HEL cannot keep other peers from being accepted.
 
 	// connections in handshake
+
+	// openTimeout is how long a handshaken connection may stay silent
+	// before its first OPN message; zero is serverHandshakeTimeout. Tests
+	// shorten it.
 
 	// upgrade turns an accepted TCP connection into the connection UACP
 	// runs on, within the handshake deadline: TLS and the WebSocket opening
