@@ -13,9 +13,109 @@ import (
 
 // NodeManagementService implements the Node Management Service Set.
 //
+// The service set is optional (Part 4 §5.7; the Node Management facets of
+// Part 7) and off unless the server is created with [EnableNodeManagement]:
+// without it AddNodes, AddReferences, DeleteNodes and DeleteReferences
+// answer Bad_ServiceUnsupported. With it, each operation is authorized; see
+// [NodeManagementAccessController].
+//
 // https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7
 type NodeManagementService struct {
 	srv *Server
+}
+
+// EnableNodeManagement lets clients change the address space with the
+// AddNodes, AddReferences, DeleteNodes and DeleteReferences services. Each
+// operation is authorized:
+//
+//   - An [AccessController] that implements [NodeManagementAccessController]
+//     decides every operation ([RBACAccessController] does, from the
+//     AddNode, DeleteNode, AddReference and RemoveReference permissions).
+//   - Any other AccessController, the [DefaultAccessController] included, is
+//     asked CheckWrite for the node the operation changes: the parent of
+//     AddNodes, the node of DeleteNodes and the source node of
+//     AddReferences and DeleteReferences. Nodes of namespace 0 cannot be
+//     added or deleted and their references cannot be changed.
+//
+// The diagnostics nodes of other sessions are never changed. A refused
+// operation answers Bad_UserAccessDenied (Part 4 §5.7.2 to §5.7.5).
+func EnableNodeManagement() Option {
+	return func(s *serverConfig) error {
+		s.nodeManagement = true
+		return nil
+	}
+}
+
+// NodeManagementAccessController is an [AccessController] that also decides
+// the operations of the Node Management services, which the server asks it
+// once [EnableNodeManagement] is set. Return [ua.StatusOK] to allow the
+// operation, or a Bad status (e.g. [ua.StatusBadUserAccessDenied]) as its
+// result.
+type NodeManagementAccessController interface {
+	CheckAddNodes(ctx context.Context, session *Session, item *ua.AddNodesItem) ua.StatusCode
+	CheckDeleteNodes(ctx context.Context, session *Session, item *ua.DeleteNodesItem) ua.StatusCode
+	CheckAddReferences(ctx context.Context, session *Session, item *ua.AddReferencesItem) ua.StatusCode
+	CheckDeleteReferences(ctx context.Context, session *Session, item *ua.DeleteReferencesItem) ua.StatusCode
+}
+
+// nodeManagementOp is one operation of the Node Management services.
+type nodeManagementOp struct {
+	// node is the node the operation changes: the parent of AddNodes, the
+	// node of DeleteNodes, the source node of Add/DeleteReferences.
+	node *ua.NodeID
+	// created is the node AddNodes creates or DeleteNodes deletes, nil for
+	// the reference services.
+	created *ua.NodeID
+	// controller asks a NodeManagementAccessController.
+	controller func(NodeManagementAccessController, *Session) ua.StatusCode
+}
+
+// checkNodeManagement authorizes one node management operation.
+func (s *NodeManagementService) checkNodeManagement(ctx context.Context, sess *session, op nodeManagementOp) ua.StatusCode {
+	for _, nid := range []*ua.NodeID{op.node, op.created} {
+		if nid != nil {
+			if st := s.srv.diag.checkWrite(sess, nid); st != ua.StatusOK {
+				return st
+			}
+		}
+	}
+	if nmac, ok := s.srv.cfg.accessController.(NodeManagementAccessController); ok {
+		return op.controller(nmac, sess.handle())
+	}
+	// Namespace 0 is the standard address space: its nodes are not added
+	// or deleted, and their references are not changed, unless a
+	// NodeManagementAccessController allows it. AddNodes below a node of
+	// namespace 0 (the Objects folder) is allowed.
+	if op.created != nil && op.created.Namespace() == 0 {
+		return ua.StatusBadUserAccessDenied
+	}
+	if op.created == nil && op.node != nil && op.node.Namespace() == 0 {
+		return ua.StatusBadUserAccessDenied
+	}
+	target := op.node
+	if target == nil {
+		target = op.created
+	}
+	if target == nil {
+		return ua.StatusOK // an invalid item, refused by the service
+	}
+	return s.srv.cfg.accessController.CheckWrite(ctx, sess.handle(), target)
+}
+
+// enabled returns Bad_ServiceUnsupported unless node management is on.
+func (s *NodeManagementService) enabled() error {
+	if !s.srv.cfg.nodeManagement {
+		return ua.StatusBadServiceUnsupported
+	}
+	return nil
+}
+
+// expandedLocal returns the local NodeId of an ExpandedNodeId, nil if none.
+func expandedLocal(e *ua.ExpandedNodeID) *ua.NodeID {
+	if e == nil {
+		return nil
+	}
+	return e.NodeID
 }
 
 // AddNodes implements the OPC UA AddNodes service.
@@ -27,9 +127,28 @@ func (s *NodeManagementService) AddNodes(ctx context.Context, sc *uasc.SecureCha
 	if err != nil {
 		return nil, err
 	}
+	if err := s.enabled(); err != nil {
+		return nil, err
+	}
+	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
 	results := make([]*ua.AddNodesResult, len(req.NodesToAdd))
 	for i, item := range req.NodesToAdd {
+		if item == nil {
+			results[i] = &ua.AddNodesResult{StatusCode: ua.StatusBadNodeIDInvalid}
+			continue
+		}
+		st := s.checkNodeManagement(ctx, sess, nodeManagementOp{
+			node:    expandedLocal(item.ParentNodeID),
+			created: expandedLocal(item.RequestedNewNodeID),
+			controller: func(c NodeManagementAccessController, h *Session) ua.StatusCode {
+				return c.CheckAddNodes(ctx, h, item)
+			},
+		})
+		if st != ua.StatusOK {
+			results[i] = &ua.AddNodesResult{StatusCode: st}
+			continue
+		}
 		results[i] = s.addNode(item)
 	}
 
@@ -167,11 +286,24 @@ func (s *NodeManagementService) AddReferences(ctx context.Context, sc *uasc.Secu
 	if err != nil {
 		return nil, err
 	}
+	if err := s.enabled(); err != nil {
+		return nil, err
+	}
+	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
 	results := make([]ua.StatusCode, len(req.ReferencesToAdd))
 	for i, item := range req.ReferencesToAdd {
-		if item.SourceNodeID == nil {
+		if item == nil || item.SourceNodeID == nil {
 			results[i] = ua.StatusBadSourceNodeIDInvalid
+			continue
+		}
+		if st := s.checkNodeManagement(ctx, sess, nodeManagementOp{
+			node: item.SourceNodeID,
+			controller: func(c NodeManagementAccessController, h *Session) ua.StatusCode {
+				return c.CheckAddReferences(ctx, h, item)
+			},
+		}); st != ua.StatusOK {
+			results[i] = st
 			continue
 		}
 		if item.ReferenceTypeID == nil {
@@ -231,11 +363,25 @@ func (s *NodeManagementService) DeleteNodes(ctx context.Context, sc *uasc.Secure
 	if err != nil {
 		return nil, err
 	}
+	if err := s.enabled(); err != nil {
+		return nil, err
+	}
+	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
 	results := make([]ua.StatusCode, len(req.NodesToDelete))
 	for i, item := range req.NodesToDelete {
-		if item.NodeID == nil {
+		if item == nil || item.NodeID == nil {
 			results[i] = ua.StatusBadNodeIDInvalid
+			continue
+		}
+		if st := s.checkNodeManagement(ctx, sess, nodeManagementOp{
+			node:    item.NodeID,
+			created: item.NodeID,
+			controller: func(c NodeManagementAccessController, h *Session) ua.StatusCode {
+				return c.CheckDeleteNodes(ctx, h, item)
+			},
+		}); st != ua.StatusOK {
+			results[i] = st
 			continue
 		}
 		ns, err := s.srv.Namespace(int(item.NodeID.Namespace()))
@@ -287,11 +433,24 @@ func (s *NodeManagementService) DeleteReferences(ctx context.Context, sc *uasc.S
 	if err != nil {
 		return nil, err
 	}
+	if err := s.enabled(); err != nil {
+		return nil, err
+	}
+	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
 	results := make([]ua.StatusCode, len(req.ReferencesToDelete))
 	for i, item := range req.ReferencesToDelete {
-		if item.SourceNodeID == nil {
+		if item == nil || item.SourceNodeID == nil {
 			results[i] = ua.StatusBadSourceNodeIDInvalid
+			continue
+		}
+		if st := s.checkNodeManagement(ctx, sess, nodeManagementOp{
+			node: item.SourceNodeID,
+			controller: func(c NodeManagementAccessController, h *Session) ua.StatusCode {
+				return c.CheckDeleteReferences(ctx, h, item)
+			},
+		}); st != ua.StatusOK {
+			results[i] = st
 			continue
 		}
 		if item.ReferenceTypeID == nil {

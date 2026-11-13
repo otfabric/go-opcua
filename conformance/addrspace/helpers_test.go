@@ -3,10 +3,13 @@
 package addrspace
 
 import (
+	"context"
 	"testing"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -49,4 +52,11 @@ type logCounter = conformkit.LogCounter
 func mustSendRaw[T any](t *testing.T, c *opcua.Client, req ua.Request) *T {
 	t.Helper()
 	return conformkit.MustSendRaw[T](t, c, req)
+}
+
+// setupNodeMgmt is setup with the Node Management services enabled.
+func setupNodeMgmt(t *testing.T) (*opcua.Client, *testutil.Fixture, context.Context) {
+	t.Helper()
+	c, f, _, _ := conformkit.SetupWith(t, nil, server.EnableNodeManagement())
+	return c, f, context.Background()
 }

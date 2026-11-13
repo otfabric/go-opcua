@@ -2314,6 +2314,8 @@ RemoveRef removes the reference of type refTypeID between n and the node targetI
 func (n *Node) SetAttribute(id ua.AttributeID, val *ua.DataValue) error
 ```
 
+SetAttribute sets an attribute of the node from server code. It does not apply the AccessLevel or WriteMask rules, which govern client access (the Write service and NodeNameSpace.SetAttribute check them).
+
 #### func (Node) SetBrowseName
 
 ```go
@@ -2362,6 +2364,19 @@ SetValueFunc makes the node serve its Value attribute from f, whatever its acces
 func (n *Node) Value() *ua.DataValue
 ```
 
+### type NodeManagementAccessController
+
+```go
+type NodeManagementAccessController interface {
+	CheckAddNodes(ctx context.Context, session *Session, item *ua.AddNodesItem) ua.StatusCode
+	CheckDeleteNodes(ctx context.Context, session *Session, item *ua.DeleteNodesItem) ua.StatusCode
+	CheckAddReferences(ctx context.Context, session *Session, item *ua.AddReferencesItem) ua.StatusCode
+	CheckDeleteReferences(ctx context.Context, session *Session, item *ua.DeleteReferencesItem) ua.StatusCode
+}
+```
+
+NodeManagementAccessController is an [AccessController](#type-accesscontroller) that also decides the operations of the Node Management services, which the server asks it once [EnableNodeManagement](#func-enablenodemanagement) is set. Return [ua.StatusOK](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusOK) to allow the operation, or a Bad status (e.g. [ua.StatusBadUserAccessDenied](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusBadUserAccessDenied)) as its result.
+
 ### type NodeManagementService
 
 ```go
@@ -2371,6 +2386,8 @@ type NodeManagementService struct {
 ```
 
 NodeManagementService implements the Node Management Service Set.
+
+The service set is optional (Part 4 §5.7; the Node Management facets of Part 7) and off unless the server is created with [EnableNodeManagement](#func-enablenodemanagement): without it AddNodes, AddReferences, DeleteNodes and DeleteReferences answer Bad\_ServiceUnsupported. With it, each operation is authorized; see [NodeManagementAccessController](#type-nodemanagementaccesscontroller).
 
 [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7)
 
@@ -2624,6 +2641,19 @@ func EnableAuthMode(tokenType ua.UserTokenType) Option
 EnableAuthMode registers a new user authentication mode to the server. All AuthModes except Anonymous require encryption by default, so EnableSecurity() must also be called with at least one non-"None" SecurityPolicy.
 
 The UserName, Certificate and IssuedToken modes also need their validator (WithUsernameValidator, WithX509UserValidator, WithIssuedTokenValidator): without it the server advertises the token type but rejects every token of that type, and New logs a warning.
+
+#### func EnableNodeManagement
+
+```go
+func EnableNodeManagement() Option
+```
+
+EnableNodeManagement lets clients change the address space with the AddNodes, AddReferences, DeleteNodes and DeleteReferences services. Each operation is authorized:
+
+  - An [AccessController](#type-accesscontroller) that implements [NodeManagementAccessController](#type-nodemanagementaccesscontroller) decides every operation ([RBACAccessController](#type-rbacaccesscontroller) does, from the AddNode, DeleteNode, AddReference and RemoveReference permissions).
+  - Any other AccessController, the [DefaultAccessController](#type-defaultaccesscontroller) included, is asked CheckWrite for the node the operation changes: the parent of AddNodes, the node of DeleteNodes and the source node of AddReferences and DeleteReferences. Nodes of namespace 0 cannot be added or deleted and their references cannot be changed.
+
+The diagnostics nodes of other sessions are never changed. A refused operation answers Bad\_UserAccessDenied (Part 4 §5.7.2 to §5.7.5).
 
 #### func EnableSecurity
 
@@ -2906,7 +2936,9 @@ cfg may be nil for an empty, enabled runtime that clients configure. The runtime
 func WithPubSubAuthorizer(a PubSubAuthorizer) Option
 ```
 
-WithPubSubAuthorizer restricts the PubSub configuration methods. Without it every session may call them, as with open62541.
+WithPubSubAuthorizer restricts the PubSub configuration methods. Without it every session the AccessController allows to call them (CheckCall) may call them, as with open62541; the RBACAccessController allows them to ConfigureAdmin only (the RolePermissions of AddConnection in the standard NodeSet, given to every configuration method).
+
+Whatever the authorizer, a session that configures a reader must be allowed to write its TargetVariables (CheckWrite and AccessLevel for the Value, CheckWrite and WriteMask for other Attributes), and one that adds published variables must be allowed to read them (CheckRead): Bad\_UserAccessDenied, Bad\_NotWritable otherwise. The runtime writes a target Attribute other than the Value only where its WriteMask allows it.
 
 #### func WithPushManagement
 
@@ -3171,6 +3203,22 @@ func NewRBACAccessController(srv *Server) *RBACAccessController
 
 NewRBACAccessController creates an RBAC access controller bound to the given server.
 
+#### func (RBACAccessController) CheckAddNodes
+
+```go
+func (ac *RBACAccessController) CheckAddNodes(_ context.Context, sess *Session, item *ua.AddNodesItem) ua.StatusCode
+```
+
+CheckAddNodes allows AddNodes below a parent node whose RolePermissions grant one of the session's roles the AddNode permission (Part 3 §8.55). Unlike the other checks of the RBACAccessController, node management needs an explicit permission: a parent without RolePermissions, or no parent, refuses it.
+
+#### func (RBACAccessController) CheckAddReferences
+
+```go
+func (ac *RBACAccessController) CheckAddReferences(_ context.Context, sess *Session, item *ua.AddReferencesItem) ua.StatusCode
+```
+
+CheckAddReferences allows AddReferences from a source node whose RolePermissions grant the AddReference permission.
+
 #### func (RBACAccessController) CheckBrowse
 
 ```go
@@ -3182,6 +3230,22 @@ func (ac *RBACAccessController) CheckBrowse(ctx context.Context, sess *Session, 
 ```go
 func (ac *RBACAccessController) CheckCall(ctx context.Context, sess *Session, nodeID *ua.NodeID) ua.StatusCode
 ```
+
+#### func (RBACAccessController) CheckDeleteNodes
+
+```go
+func (ac *RBACAccessController) CheckDeleteNodes(_ context.Context, sess *Session, item *ua.DeleteNodesItem) ua.StatusCode
+```
+
+CheckDeleteNodes allows DeleteNodes of a node whose RolePermissions grant the DeleteNode permission.
+
+#### func (RBACAccessController) CheckDeleteReferences
+
+```go
+func (ac *RBACAccessController) CheckDeleteReferences(_ context.Context, sess *Session, item *ua.DeleteReferencesItem) ua.StatusCode
+```
+
+CheckDeleteReferences allows DeleteReferences from a source node whose RolePermissions grant the RemoveReference permission.
 
 #### func (RBACAccessController) CheckRead
 

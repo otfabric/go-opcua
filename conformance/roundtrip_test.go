@@ -41,7 +41,7 @@ func addFreshNode(t *testing.T, c *opcua.Client, f *testutil.Fixture, ctx contex
 // check for a protocol library because it exercises both sides of the codec for
 // every supported Variant type.
 func TestRoundTrip_Values(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 
 	cases := []struct {
 		name string
@@ -99,7 +99,7 @@ func TestRoundTrip_Values(t *testing.T) {
 }
 
 func TestRoundTrip_DateTime(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 	nid := addFreshNode(t, c, f, ctx, "DateTime")
 
 	// OPC UA DateTime has 100ns resolution; round so equality is exact.
@@ -126,7 +126,7 @@ func TestRoundTrip_DateTime(t *testing.T) {
 // once a node holds a typed value, a write with a different Go type is rejected
 // with StatusBadTypeMismatch (IEC 62541-4 Write Service).
 func TestRoundTrip_TypeMismatchOnRewrite(t *testing.T) {
-	c, f, ctx := setup(t)
+	c, f, ctx := setupNodeMgmt(t)
 
 	// f.Int32 already holds an int32; writing a string must be rejected.
 	status, err := c.WriteValue(ctx, f.Int32, &ua.DataValue{

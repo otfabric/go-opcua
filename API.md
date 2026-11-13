@@ -1772,6 +1772,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithMetrics(m ServerMetrics)` | Metrics handler |
 | `WithSessionObserver(o SessionObserver)` | Told about client connections and sessions as they begin and end; see [SessionObserver](#sessionobserver) |
 | `WithAccessController(ac AccessController)` | Access controller |
+| `EnableNodeManagement()` | Serve AddNodes, AddReferences, DeleteNodes and DeleteReferences (off by default: `Bad_ServiceUnsupported`); every operation is authorized, see [AccessController](#accesscontroller) |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session's identity token to its role NodeIDs (`RoleMapper func(token ua.IdentityToken) []*ua.NodeID`); used by the default access controller |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
@@ -2011,6 +2012,27 @@ to deny.
 ```go
 type DefaultAccessController struct{}  // allows all operations
 ```
+
+With `EnableNodeManagement`, each operation of the Node Management services
+is authorized by an access controller that implements
+`NodeManagementAccessController`:
+
+```go
+type NodeManagementAccessController interface {
+    CheckAddNodes(ctx context.Context, session *Session, item *ua.AddNodesItem) ua.StatusCode
+    CheckDeleteNodes(ctx context.Context, session *Session, item *ua.DeleteNodesItem) ua.StatusCode
+    CheckAddReferences(ctx context.Context, session *Session, item *ua.AddReferencesItem) ua.StatusCode
+    CheckDeleteReferences(ctx context.Context, session *Session, item *ua.DeleteReferencesItem) ua.StatusCode
+}
+```
+
+`RBACAccessController` implements it with the AddNode (on the parent),
+DeleteNode, AddReference and RemoveReference (on the source node) permissions,
+which must be granted explicitly: a node without RolePermissions refuses node
+management. Any other controller, `DefaultAccessController` included, is asked
+`CheckWrite` for the node an operation changes (the parent of AddNodes, the
+node of DeleteNodes, the source node of the reference services), and nodes of
+namespace 0 cannot be added, deleted or have their references changed.
 
 `Session` is the session of the request, read-only; nil without a session
 (its methods then return nil). It does not expose the AuthenticationToken or

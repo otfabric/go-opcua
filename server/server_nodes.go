@@ -10,12 +10,22 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 )
 
+// The Variables built here replace those of the standard NodeSet, which
+// declares them CurrentRead (no AccessLevel attribute, the UANodeSet.xsd
+// default): they are read-only for clients (Part 3 §5.6.2) under every
+// AccessController. They do not take over the generated RolePermissions of
+// the imported nodes: those grant Read to Anonymous, ConfigureAdmin and
+// SecurityAdmin only, and clients of every role read NamespaceArray and
+// ServerStatus when they connect.
+
 func CurrentTimeNode() *Node {
 	return NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("CurrentTime")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("CurrentTime")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(time.Now()) },
@@ -26,8 +36,10 @@ func NamespacesNode(s *Server) *Node {
 	return NewNode(
 		ua.NewNumericNodeID(0, id.ServerNamespaceArray),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("Namespaces")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)), // NamespaceArray is a Variable
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("Namespaces")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)), // NamespaceArray is a Variable
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue {
@@ -68,8 +80,10 @@ func ServerCapabilitiesNodes(s *Server) []*Node {
 		nodes = append(nodes, NewNode(
 			ua.NewNumericNodeID(0, l.nodeID),
 			map[ua.AttributeID]*ua.DataValue{
-				ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName(l.browseName)),
-				ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+				ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName(l.browseName)),
+				ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+				ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+				ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 			},
 			nil,
 			func() *ua.DataValue { return DataValueFromValue(l.valueFunc()) },
@@ -131,8 +145,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	sStatus := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatus),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("Status")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("Status")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(ua.NewExtensionObject(s.Status())) },
@@ -141,8 +157,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	sState := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusState),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("State")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("State")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(int32(s.Status().State)) },
@@ -150,8 +168,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	mName := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoManufacturerName),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ManufacturerName")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("ManufacturerName")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(s.cfg.manufacturerName) },
@@ -159,8 +179,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	pName := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoProductName),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ProductName")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("ProductName")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(s.cfg.productName) },
@@ -169,8 +191,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	pURI := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoProductURI),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ProductURI")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("ProductURI")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(s.cfg.applicationURI) },
@@ -179,8 +203,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	bInfo := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfo),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("BuildInfo")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("BuildInfo")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue("") },
@@ -188,8 +214,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	sVersion := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoSoftwareVersion),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("SoftwareVersion")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("SoftwareVersion")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(s.cfg.softwareVersion) },
@@ -198,8 +226,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	bNumber := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoBuildNumber),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("BuildNumber")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("BuildNumber")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(s.cfg.softwareVersion) },
@@ -209,8 +239,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	bDate := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusBuildInfoBuildDate),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("BuildDate")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("BuildDate")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(ts) },
@@ -218,8 +250,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	timeStart := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusStartTime),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("StartTime")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("StartTime")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(ts) },
@@ -227,8 +261,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	timeCurrent := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("CurrentTime")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("CurrentTime")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(time.Now()) },
@@ -239,8 +275,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	sTillShutdown := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusSecondsTillShutdown),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("SecondsTillShutdown")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("SecondsTillShutdown")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(int32(0)) },
@@ -248,8 +286,10 @@ func ServerStatusNodes(s *Server, ServerNode *Node) []*Node {
 	sReason := NewNode(
 		ua.NewNumericNodeID(0, id.ServerServerStatusShutdownReason),
 		map[ua.AttributeID]*ua.DataValue{
-			ua.AttributeIDBrowseName: DataValueFromValue(attrs.BrowseName("ShutdownReason")),
-			ua.AttributeIDNodeClass:  DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDBrowseName:      DataValueFromValue(attrs.BrowseName("ShutdownReason")),
+			ua.AttributeIDNodeClass:       DataValueFromValue(uint32(ua.NodeClassVariable)),
+			ua.AttributeIDAccessLevel:     DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
+			ua.AttributeIDUserAccessLevel: DataValueFromValue(byte(ua.AccessLevelTypeCurrentRead)),
 		},
 		nil,
 		func() *ua.DataValue { return DataValueFromValue(int32(0)) },

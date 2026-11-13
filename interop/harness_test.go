@@ -652,6 +652,9 @@ func startGoServerWithOptions(t *testing.T, extra ...server.Option) (string, *se
 		server.EndPoint("host.docker.internal", 0),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		// Peer clients exercise AddNodes / DeleteNodes / Add/DeleteReferences
+		// against this server (nodemgmt.* in the coverage ledger).
+		server.EnableNodeManagement(),
 	}, extra...)...)
 	if err != nil {
 		t.Fatalf("server.New: %v", err)

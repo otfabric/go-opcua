@@ -549,9 +549,29 @@ Add and remove nodes at runtime via OPC-UA service calls:
 ns.AddNode(newNode)
 ns.DeleteNode(nodeID)
 
-// Client-side: clients can use AddNodes/DeleteNodes service calls
-// (if your access controller allows it)
 ```
+
+The Node Management services (AddNodes, AddReferences, DeleteNodes,
+DeleteReferences; Part 4 §5.7) are optional and off by default: the server
+answers them with `Bad_ServiceUnsupported`. Turn them on with
+`server.EnableNodeManagement()`. Every operation is then authorized:
+
+- an `AccessController` that implements `NodeManagementAccessController`
+  (`CheckAddNodes`, `CheckDeleteNodes`, `CheckAddReferences`,
+  `CheckDeleteReferences`) decides each operation; `RBACAccessController`
+  does, from the AddNode, DeleteNode, AddReference and RemoveReference
+  permissions, which a node must grant explicitly (a node without
+  RolePermissions refuses node management);
+- any other controller, `DefaultAccessController` included, is asked
+  `CheckWrite` for the node the operation changes (the parent of AddNodes,
+  the node of DeleteNodes, the source node of the reference services), and
+  namespace 0 is protected: its nodes cannot be added or deleted and their
+  references cannot be changed (adding a node below the Objects folder is
+  allowed).
+
+A refused operation answers `Bad_UserAccessDenied`. With the
+`DefaultAccessController`, enabling node management lets every session
+change the application's namespaces.
 
 ---
 
@@ -628,9 +648,12 @@ The importer handles:
 - Aliases
 
 `DataType` and `ValueRank` get the defaults of the NodeSet schema
-(`BaseDataType`, scalar) when the attribute is absent. `AccessLevel` and
-`UserAccessLevel` are only applied when the XML has them: a variable without
-them stays readable and writable. A `<Value>` that cannot be decoded - or
+(`BaseDataType`, scalar) when the attribute is absent, and so do
+`AccessLevel` and `UserAccessLevel`: `CurrentRead` (UANodeSet.xsd default
+`1`, Part 3 §5.6.2). A variable is writable by clients only where the
+NodeSet says so (`AccessLevel="3"`). Server code still updates the value
+of a read-only variable with `Node.SetAttribute`, which does not apply the
+AccessLevel (see below). A `<Value>` that cannot be decoded - or
 whose structure type is not registered - is logged and skipped; it does not
 fail the import.
 
@@ -650,8 +673,12 @@ When you change a node value, notify the server so it can push updates to subscr
 // Using MapNamespace — automatic with SetValue()
 data.SetValue("temperature", 25.0)  // Subscribers notified automatically
 
-// Using NodeNameSpace — call ChangeNotification after updating
+// Using NodeNameSpace — call ChangeNotification after updating.
+// NodeNameSpace.SetAttribute applies the AccessLevel of the node, as for a
+// client Write; Node.SetAttribute is the server-side update of a read-only
+// variable (AccessLevel governs clients only).
 ns.SetAttribute(nodeID, ua.AttributeIDValue, newDataValue)
+srv.Node(readOnlyID).SetAttribute(ua.AttributeIDValue, newDataValue)
 ns.ChangeNotification(nodeID)
 
 // Or notify via the server directly

@@ -137,8 +137,11 @@ func TestNode_AccessLevels(t *testing.T) {
 		n := mk(Attributes{ua.AttributeIDAccessLevel: DataValueFromValue(byte(rd))})
 		assert.True(t, n.Access(rd))
 		assert.False(t, n.Access(wr))
-		require.Equal(t, ua.StatusBadNotWritable, n.SetAttribute(ua.AttributeIDValue, newVal))
-		assert.Equal(t, int32(1), n.Value().Value.Value(), "a denied write must not change the value")
+		require.Equal(t, ua.StatusBadNotWritable, n.AccessStatus(wr))
+		// The server updates the value of a read-only Variable; AccessLevel
+		// governs clients, checked by NodeNameSpace.SetAttribute.
+		require.NoError(t, n.SetAttribute(ua.AttributeIDValue, newVal))
+		assert.Equal(t, int32(2), n.Value().Value.Value())
 	})
 
 	t.Run("user access level narrows access level", func(t *testing.T) {

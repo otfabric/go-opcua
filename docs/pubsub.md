@@ -317,8 +317,28 @@ ActiveMQ Artemis.
   clients can change it with AddConnection, AddWriterGroup,
   AddPublishedDataItems, AddDataSetWriter, AddReaderGroup, AddDataSetReader,
   the Remove methods and Enable / Disable on every Status object.
-  `server.WithPubSubAuthorizer` decides who may call them (default: everyone,
-  as open62541).
+  `server.WithPubSubAuthorizer` decides who may call them (default: every
+  session the AccessController lets call them, as open62541; the
+  `RBACAccessController` allows ConfigureAdmin only, the RolePermissions the
+  standard NodeSet gives AddConnection and the server gives every other
+  configuration method).
+- whatever the authorizer, a session that configures a reader (AddConnection,
+  AddReaderGroup, AddDataSetReader, CloseAndUpdate of the configuration file)
+  must be allowed to write each of its `TargetVariables`: `CheckWrite` of the
+  AccessController and the CurrentWrite bit of AccessLevel / UserAccessLevel
+  for the Value, `CheckWrite` and the WriteMask / UserWriteMask bit for any
+  other Attribute (`Bad_UserAccessDenied`, `Bad_NotWritable`). A session that
+  adds published variables must be allowed to read them (`CheckRead`; the
+  AddResults of AddPublishedDataItems, the call result of the template). A
+  configuration made with the Go API is the operator's and is not checked.
+- the runtime writes a target Attribute other than the Value only where the
+  node's WriteMask allows it and with a value of its DataType, as the Write
+  service does.
+- `ConnectionProperties`, `GroupProperties`, `DataSetWriterProperties` and
+  `DataSetReaderProperties` show a property whose name contains `password` or
+  `secret` with a null value (the MQTT and AMQP broker password); the runtime
+  keeps the real value. The PubSubConfiguration file returns the full
+  configuration: restrict it with RBAC or `WithPubSubAuthorizer`.
 
 `(*Server).PubSub()` returns the runtime; `PubSubNodeID` and
 `PubSubComponentID` map between components and their nodes. See

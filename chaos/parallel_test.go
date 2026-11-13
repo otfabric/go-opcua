@@ -14,6 +14,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
 )
@@ -709,7 +710,7 @@ func TestParallelLargeMessages(t *testing.T) {
 func TestParallelAddressSpaceMutation(t *testing.T) {
 	t.Parallel()
 	seed := seedFor(t)
-	e := newEnv(t, seed)
+	e := newEnv(t, seed, server.EnableNodeManagement())
 	wd := newWatchdog(t)
 	c := e.connect(nil)
 
