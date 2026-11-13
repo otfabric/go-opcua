@@ -89,6 +89,11 @@ type Server struct {
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
 
+	// view and query hold the Browse and Query continuation points, which
+	// are released with their session (sessionRemoved).
+	view  *ViewService
+	query *QueryService
+
 	// eventItems tracks event-monitored-item filter state.
 	eventItems *eventItemRegistry
 
@@ -193,6 +198,18 @@ type serverConfig struct {
 	maxSessions                int
 	maxSubscriptions           int
 	maxSubscriptionsPerSession int
+
+	// The monitored item and continuation point limits of
+	// monitored_item_limits.go and continuation_points.go. Zero selects the
+	// default.
+	maxMonitoredItems                int
+	maxMonitoredItemsPerSession      int
+	maxMonitoredItemsPerSubscription int
+	maxBrowseContinuationPoints      int
+	maxQueryContinuationPoints       int
+
+	// query enables the Query service set (WithQuery).
+	query bool
 
 	logger *slog.Logger
 
@@ -399,6 +416,8 @@ func New(opts ...Option) (*Server, error) {
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
 	s.bindSessionCapabilities()
+	s.bindMonitoredItemCapabilities()
+	s.bindContinuationPointCapabilities()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
@@ -788,6 +807,13 @@ func (s *Server) Close() error {
 
 // sessionRemoved is called by the session broker after it forgot a session.
 func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
+	// Part 4 §7.9: the continuation points of a session are released with it.
+	if s.view != nil {
+		s.view.store().releaseSession(sessionKey(sess))
+	}
+	if s.query != nil {
+		s.query.store().releaseSession(sessionKey(sess))
+	}
 	s.diag.sessionRemoved(sess, reason == SessionTimedOut)
 	s.observeSessionClosed(sess, reason)
 	s.auditSessionEnd(sess, reason)

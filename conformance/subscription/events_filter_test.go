@@ -59,7 +59,7 @@ func newEventRig(t *testing.T, f *testutil.Fixture, url string) *eventRig {
 func (r *eventRig) addItem(handle uint32, filter *ua.ExtensionObject) (uint32, *ua.EventFilterResult) {
 	r.t.Helper()
 	res := r.sub.createItems(ua.TimestampsToReturnNeither, itemSpec{
-		node: r.f.EventObject, attr: ua.AttributeIDEventNotifier, handle: handle, queue: 10, discard: true, filter: filter,
+		node: r.f.EventObject, attr: ua.AttributeIDEventNotifier, handle: handle, queue: 100, discard: true, filter: filter,
 	})
 	require.Equal(r.t, ua.StatusOK, res[0].StatusCode)
 	require.NotNil(r.t, res[0].FilterResult)

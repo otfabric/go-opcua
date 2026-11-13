@@ -335,23 +335,25 @@ func TestAlarmManagerClose(t *testing.T) {
 
 // The events of conditions wait for room in a full subscription queue; other
 // events are dropped.
-func TestDeliverToItemFullQueue(t *testing.T) {
+func TestDeliverToItemQueuesWithoutBlocking(t *testing.T) {
 	s := newTestServer()
 	sub := &Subscription{EventNotifyChannel: make(chan *ua.EventFieldList), shutdown: make(chan struct{})}
-	item := &MonitoredItem{ID: 1, Sub: sub, Req: &ua.MonitoredItemCreateRequest{RequestedParameters: &ua.MonitoringParameters{ClientHandle: 9}}}
+	item := &MonitoredItem{ID: 1, Sub: sub, isEvent: true, evQueueSize: 2, evDiscardOldest: true,
+		Req: &ua.MonitoredItemCreateRequest{RequestedParameters: &ua.MonitoringParameters{ClientHandle: 9}}}
 	s.eventItems.register(1, &EventMonitoredItem{SelectClauses: []*ua.SimpleAttributeOperand{{BrowsePath: []*ua.QualifiedName{{Name: "Severity"}}}}})
-	ev := &BaseEvent{Severity: 7}
 
-	s.deliverToItem(item, ev, false, false) // nobody reads: dropped
+	// Nobody reads the channel: the events go to the queue of the item.
+	for sev := uint16(1); sev <= 3; sev++ {
+		s.deliverToItem(item, &BaseEvent{Severity: sev}, false, false)
+	}
+	sub.evMu.Lock()
+	defer sub.evMu.Unlock()
+	require.Len(t, item.events, 3, "two events and the overflow event")
+	require.True(t, item.events[0].overflow)
+	require.Equal(t, uint32(9), item.events[1].ef.ClientHandle)
+	require.Equal(t, uint16(2), item.events[1].ef.EventFields[0].Value())
+	require.Equal(t, uint16(3), item.events[2].ef.EventFields[0].Value())
 
-	got := make(chan *ua.EventFieldList)
-	go func() { got <- <-sub.EventNotifyChannel }()
-	s.deliverToItem(item, ev, false, true)
-	ef := <-got
-	require.Equal(t, uint32(9), ef.ClientHandle)
-	require.Equal(t, uint16(7), ef.EventFields[0].Value())
-
-	close(sub.shutdown)
-	s.deliverToItem(item, ev, false, true) // the subscription ended: returns
-	s.deliverToItem(&MonitoredItem{ID: 2, Sub: sub}, ev, false, true)
+	// An item that is not registered gets nothing.
+	s.deliverToItem(&MonitoredItem{ID: 2, Sub: sub}, &BaseEvent{}, false, true)
 }

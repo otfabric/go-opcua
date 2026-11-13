@@ -21,7 +21,13 @@
 | **Method** | Call | Fully implemented |
 | **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow, `DataChangeFilter`, sampling interval, `IndexRange`) |
 | **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
-| **Query** | QueryFirst, QueryNext | Fully implemented |
+| **Query** | QueryFirst, QueryNext | Opt-in with `WithQuery(true)` (`BadServiceUnsupported` otherwise); results honour the access controller and AccessRestrictions |
+
+Every service checks the number of operations of a request against the
+OperationLimits of the server (`WithOperationLimits`, default 32 each, a zero
+field is no limit) and fails a larger request with `BadTooManyOperations`.
+The monitored item, continuation point and event queue limits are listed in
+[security.md](security.md#per-call-and-per-session-resource-limits).
 
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.

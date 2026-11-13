@@ -5,7 +5,6 @@ package server
 import (
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
@@ -74,7 +73,11 @@ func (s *Server) validateEventFilter(ef *ua.EventFilter) (*EventMonitoredItem, *
 		selectResults[i] = ua.StatusOK
 	}
 
-	// Validate WhereClause.
+	// Validate WhereClause. Part 4 §7.7.1: a filter the server cannot
+	// process is rejected.
+	if ef.WhereClause != nil && len(ef.WhereClause.Elements) > maxFilterElements {
+		return nil, nil, ua.StatusBadEventFilterInvalid
+	}
 	var whereResult *ua.ContentFilterResult
 	if ef.WhereClause != nil && len(ef.WhereClause.Elements) > 0 {
 		elemResults := make([]*ua.ContentFilterElementResult, len(ef.WhereClause.Elements))
@@ -347,21 +350,41 @@ func (s *Server) evalEventFilter(event eventView, clause *ua.ContentFilter) bool
 	if clause == nil || len(clause.Elements) == 0 {
 		return true
 	}
-	visiting := make([]bool, len(clause.Elements))
-	result := s.evalEventElement(event, clause.Elements, 0, visiting)
+	n := len(clause.Elements)
+	st := &eventEvalState{visiting: make([]bool, n), done: make([]bool, n), memo: make([]tvl, n)}
+	result := s.evalEventElement(event, clause.Elements, 0, st)
 	return result != tvlFalse
 }
 
-func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterElement, idx int, visiting []bool) tvl {
+// eventEvalState is the state of one WhereClause evaluation: the cycle
+// guard and the result of each element evaluated so far, so that an element
+// referenced by several operands is evaluated once.
+type eventEvalState struct {
+	visiting []bool
+	done     []bool
+	memo     []tvl
+}
+
+func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterElement, idx int, st *eventEvalState) tvl {
 	if idx < 0 || idx >= len(elements) {
 		return tvlNull
 	}
-	if visiting[idx] {
+	if st.done[idx] {
+		return st.memo[idx]
+	}
+	if st.visiting[idx] {
 		return tvlNull
 	}
-	visiting[idx] = true
-	defer func() { visiting[idx] = false }()
+	st.visiting[idx] = true
+	r := s.evalEventElementOnce(event, elements, idx, st)
+	st.visiting[idx] = false
+	st.done[idx], st.memo[idx] = true, r
+	return r
+}
 
+// evalEventElementOnce evaluates element idx; evalEventElement memoises its
+// result.
+func (s *Server) evalEventElementOnce(event eventView, elements []*ua.ContentFilterElement, idx int, st *eventEvalState) tvl {
 	el := elements[idx]
 
 	switch el.FilterOperator {
@@ -377,8 +400,8 @@ func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterE
 		return boolTVL(s.eventTypeMatches(eventType, typeNodeID))
 
 	case ua.FilterOperatorEquals:
-		a := s.resolveEventOperand(event, elements, el, 0, visiting)
-		b := s.resolveEventOperand(event, elements, el, 1, visiting)
+		a := s.resolveEventOperand(event, elements, el, 0, st)
+		b := s.resolveEventOperand(event, elements, el, 1, st)
 		eq, ok := variantEquals(a, b)
 		if !ok {
 			return tvlNull
@@ -386,8 +409,8 @@ func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterE
 		return boolTVL(eq)
 
 	case ua.FilterOperatorGreaterThan:
-		a := s.resolveEventOperand(event, elements, el, 0, visiting)
-		b := s.resolveEventOperand(event, elements, el, 1, visiting)
+		a := s.resolveEventOperand(event, elements, el, 0, st)
+		b := s.resolveEventOperand(event, elements, el, 1, st)
 		c, ok := variantOrder(a, b)
 		if !ok {
 			return tvlNull
@@ -395,8 +418,8 @@ func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterE
 		return boolTVL(c > 0)
 
 	case ua.FilterOperatorLessThan:
-		a := s.resolveEventOperand(event, elements, el, 0, visiting)
-		b := s.resolveEventOperand(event, elements, el, 1, visiting)
+		a := s.resolveEventOperand(event, elements, el, 0, st)
+		b := s.resolveEventOperand(event, elements, el, 1, st)
 		c, ok := variantOrder(a, b)
 		if !ok {
 			return tvlNull
@@ -404,8 +427,8 @@ func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterE
 		return boolTVL(c < 0)
 
 	case ua.FilterOperatorGreaterThanOrEqual:
-		a := s.resolveEventOperand(event, elements, el, 0, visiting)
-		b := s.resolveEventOperand(event, elements, el, 1, visiting)
+		a := s.resolveEventOperand(event, elements, el, 0, st)
+		b := s.resolveEventOperand(event, elements, el, 1, st)
 		c, ok := variantOrder(a, b)
 		if !ok {
 			return tvlNull
@@ -413,8 +436,8 @@ func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterE
 		return boolTVL(c >= 0)
 
 	case ua.FilterOperatorLessThanOrEqual:
-		a := s.resolveEventOperand(event, elements, el, 0, visiting)
-		b := s.resolveEventOperand(event, elements, el, 1, visiting)
+		a := s.resolveEventOperand(event, elements, el, 0, st)
+		b := s.resolveEventOperand(event, elements, el, 1, st)
 		c, ok := variantOrder(a, b)
 		if !ok {
 			return tvlNull
@@ -422,17 +445,17 @@ func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterE
 		return boolTVL(c <= 0)
 
 	case ua.FilterOperatorAnd:
-		a := variantTVL(s.resolveEventOperand(event, elements, el, 0, visiting))
-		b := variantTVL(s.resolveEventOperand(event, elements, el, 1, visiting))
+		a := variantTVL(s.resolveEventOperand(event, elements, el, 0, st))
+		b := variantTVL(s.resolveEventOperand(event, elements, el, 1, st))
 		return andTVL(a, b)
 
 	case ua.FilterOperatorOr:
-		a := variantTVL(s.resolveEventOperand(event, elements, el, 0, visiting))
-		b := variantTVL(s.resolveEventOperand(event, elements, el, 1, visiting))
+		a := variantTVL(s.resolveEventOperand(event, elements, el, 0, st))
+		b := variantTVL(s.resolveEventOperand(event, elements, el, 1, st))
 		return orTVL(a, b)
 
 	case ua.FilterOperatorNot:
-		a := variantTVL(s.resolveEventOperand(event, elements, el, 0, visiting))
+		a := variantTVL(s.resolveEventOperand(event, elements, el, 0, st))
 		return notTVL(a)
 
 	default:
@@ -443,7 +466,7 @@ func (s *Server) evalEventElement(event eventView, elements []*ua.ContentFilterE
 
 // resolveEventOperand resolves operand j of a filter element to a *ua.Variant.
 // SimpleAttributeOperand BrowsePath names are resolved against the event fields.
-func (s *Server) resolveEventOperand(event eventView, elements []*ua.ContentFilterElement, el *ua.ContentFilterElement, j int, visiting []bool) *ua.Variant {
+func (s *Server) resolveEventOperand(event eventView, elements []*ua.ContentFilterElement, el *ua.ContentFilterElement, j int, st *eventEvalState) *ua.Variant {
 	if j >= len(el.FilterOperands) {
 		return nil
 	}
@@ -457,7 +480,7 @@ func (s *Server) resolveEventOperand(event eventView, elements []*ua.ContentFilt
 	case *ua.SimpleAttributeOperand:
 		return event.eventField(v)
 	case *ua.ElementOperand:
-		vv := s.evalEventElement(event, elements, int(v.Index), visiting)
+		vv := s.evalEventElement(event, elements, int(v.Index), st)
 		return tvlVariant(vv)
 	default:
 		return nil
@@ -493,13 +516,11 @@ func (s *Server) EmitBaseEvent(nodeID *ua.NodeID, event *BaseEvent) error {
 	return nil
 }
 
-// eventDeliveryWait bounds how long the event of a condition waits for room
-// in the event queue of a subscription whose publish loop is busy.
-const eventDeliveryWait = 5 * time.Second
-
-// emitEvent delivers event to the event items watching nodeID. With wait an
-// item whose subscription queue is full is waited for (see deliverToItem).
+// emitEvent delivers event to the event items watching nodeID. wait has no
+// effect any more: the event queues of the items never block (see
+// deliverToItem).
 func (s *Server) emitEvent(nodeID *ua.NodeID, event *BaseEvent, wait bool) {
+	_ = wait
 	// PublishedEvents of the PubSub runtime see the event too.
 	s.forwardPubSubEvent(nodeID, event)
 	// So does the event history of a HistoricalEventNode (Part 11 §5.4).
@@ -521,17 +542,18 @@ func (s *Server) emitEvent(nodeID *ua.NodeID, event *BaseEvent, wait bool) {
 	s.MonitoredItemService.Mu.Unlock()
 
 	for _, item := range targets {
-		s.deliverToItem(item, event, false, wait)
+		s.deliverToItem(item, event, false, false)
 	}
 }
 
 // deliverToItem applies the filter of an event item to event and queues the
-// selected fields for its subscription. bypassWhere skips the OfType and
-// WhereClause checks (RefreshStart/RefreshEnd events, Part 9 §5.5.7). A full
-// queue drops the event unless wait is set: then the event waits up to
-// eventDeliveryWait for the publish loop (which drains the queue
-// continuously) or until the subscription ends.
-func (s *Server) deliverToItem(item *MonitoredItem, event *BaseEvent, bypassWhere, wait bool) {
+// selected fields in the event queue of the item. bypassWhere skips the
+// OfType and WhereClause checks (RefreshStart/RefreshEnd events, Part 9
+// §5.5.7). The queue is bounded by the QueueSize of the item (Part 4
+// §5.12.1.5), so queueing never blocks. refresh marks the events of a
+// ConditionRefresh: the client asked for all of them at once, so they may
+// exceed QueueSize up to maxEventQueueSize.
+func (s *Server) deliverToItem(item *MonitoredItem, event *BaseEvent, bypassWhere, refresh bool) {
 	emi := s.eventItems.get(item.ID)
 	if emi == nil || item.Sub == nil || !s.mayReceive(item, event) {
 		return
@@ -551,25 +573,8 @@ func (s *Server) deliverToItem(item *MonitoredItem, event *BaseEvent, bypassWher
 		}
 	}
 
-	ef := &ua.EventFieldList{
+	item.Sub.queueEvent(item, &ua.EventFieldList{
 		ClientHandle: item.Req.RequestedParameters.ClientHandle,
 		EventFields:  selectEventFields(event, emi.SelectClauses),
-	}
-	select {
-	case item.Sub.EventNotifyChannel <- ef:
-		return
-	default:
-	}
-	if wait {
-		t := time.NewTimer(eventDeliveryWait)
-		defer t.Stop()
-		select {
-		case item.Sub.EventNotifyChannel <- ef:
-			return
-		case <-item.Sub.shutdown:
-			return
-		case <-t.C:
-		}
-	}
-	s.cfg.logger.Warn("event channel full, dropping event for monitored item", "id", item.ID)
+	}, refresh)
 }

@@ -89,7 +89,7 @@ func TestSubscriptionService_Republish(t *testing.T) {
 	t.Run("republish after ACK returns not available", func(t *testing.T) {
 		msg := &ua.NotificationMessage{SequenceNumber: 8, PublishTime: time.Now()}
 		sub.storeSentMessage(msg)
-		results := svc.ackPublishAcknowledgements([]*ua.SubscriptionAcknowledgement{
+		results := svc.ackPublishAcknowledgements(sub.Session, []*ua.SubscriptionAcknowledgement{
 			{SubscriptionID: sub.ID, SequenceNumber: 8},
 		})
 		require.Equal(t, []ua.StatusCode{ua.StatusOK}, results)
@@ -282,7 +282,7 @@ func TestAckPublishAcknowledgements(t *testing.T) {
 	sub.storeSentMessage(msg)
 	require.Contains(t, sub.availableSequenceNumbers(), uint32(7))
 
-	results := svc.ackPublishAcknowledgements([]*ua.SubscriptionAcknowledgement{
+	results := svc.ackPublishAcknowledgements(sub.Session, []*ua.SubscriptionAcknowledgement{
 		{SubscriptionID: sub.ID, SequenceNumber: 7},
 		{SubscriptionID: sub.ID, SequenceNumber: 99},
 		{SubscriptionID: 999, SequenceNumber: 1},

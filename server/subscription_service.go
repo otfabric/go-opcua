@@ -346,7 +346,7 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 	// Publish request was available. Tell the client now, before anything
 	// else: this is how it learns that the subscription is gone.
 	if change, ok := session.takeStatusChange(); ok {
-		return statusChangeResponse(req, change, s.ackPublishAcknowledgements(req.SubscriptionAcknowledgements)), nil
+		return statusChangeResponse(req, change, s.ackPublishAcknowledgements(session, req.SubscriptionAcknowledgements)), nil
 	}
 
 	// Part 4 §5.13.5: a Publish request for a session without subscriptions
@@ -357,7 +357,7 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 		// Good_SubscriptionTransferred before it left: it may not have
 		// been there yet when the queue was looked at above.
 		if change, ok := session.takeStatusChange(); ok {
-			return statusChangeResponse(req, change, s.ackPublishAcknowledgements(req.SubscriptionAcknowledgements)), nil
+			return statusChangeResponse(req, change, s.ackPublishAcknowledgements(session, req.SubscriptionAcknowledgements)), nil
 		}
 		return nil, ua.StatusBadNoSubscription
 	}
@@ -422,7 +422,7 @@ func nextSequenceNumber(last uint32) uint32 {
 func (s *Subscription) announce(sess *session, ch *uasc.SecureChannel, change pendingStatusChange) {
 	select {
 	case pubreq := <-sess.PublishRequests:
-		resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements))
+		resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(sess, pubreq.Req.SubscriptionAcknowledgements))
 		if err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, resp); err == nil {
 			return
 		}
@@ -450,7 +450,7 @@ func (s *Subscription) sendStatusChange(sess *session, ch *uasc.SecureChannel) {
 		}
 		return
 	}
-	resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements))
+	resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(sess, pubreq.Req.SubscriptionAcknowledgements))
 	if err := s.srv.srv.sendPublishResponse(pubreq.replyChannel(ch), pubreq.ID, resp); err != nil {
 		sess.addStatusChange(change)
 	}
@@ -524,7 +524,9 @@ func (s *SubscriptionService) Republish(ctx context.Context, sc *uasc.SecureChan
 	sub, ok := s.Subs[req.SubscriptionID]
 	s.Mu.Unlock()
 
-	if !ok {
+	// Part 4 §5.13.6: a subscription of another session is
+	// Bad_SubscriptionIdInvalid.
+	if !ok || !sub.ownedBy(s.srv.session(req.RequestHeader)) {
 		return &ua.RepublishResponse{
 			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadSubscriptionIDInvalid),
 		}, nil
@@ -802,6 +804,13 @@ type Subscription struct {
 	running           bool
 	publishingEnabled bool
 	shutdown          chan struct{}
+
+	// evMu guards the event queues of the event items of the subscription
+	// (MonitoredItem.events) and looseEvents; see event_queue.go.
+	evMu        sync.Mutex
+	evSeq       uint64
+	looseEvents []queuedEvent
+	evItems     map[*MonitoredItem]struct{} // the items with queued events
 }
 
 // Subscription parameter revision policy (Part 4 §5.13.2). Peers may choose
@@ -884,9 +893,11 @@ func (s *Subscription) timing() (interval time.Duration, keepAlive, lifetime int
 		int(s.RevisedMaxKeepAliveCount), int(s.RevisedLifetimeCount)
 }
 
-// ackPublishAcknowledgements applies Publish SubscriptionAcknowledgements for
-// this session's subscriptions and returns per-ack StatusCodes.
-func (s *SubscriptionService) ackPublishAcknowledgements(acks []*ua.SubscriptionAcknowledgement) []ua.StatusCode {
+// ackPublishAcknowledgements applies the SubscriptionAcknowledgements of a
+// Publish request of sess and returns per-ack StatusCodes. Only the
+// subscriptions of sess can be acknowledged: the subscription of another
+// session is Bad_SubscriptionIdInvalid (Part 4 §5.13.5).
+func (s *SubscriptionService) ackPublishAcknowledgements(sess *session, acks []*ua.SubscriptionAcknowledgement) []ua.StatusCode {
 	if len(acks) == 0 {
 		return []ua.StatusCode{}
 	}
@@ -899,7 +910,7 @@ func (s *SubscriptionService) ackPublishAcknowledgements(acks []*ua.Subscription
 		s.Mu.Lock()
 		sub, ok := s.Subs[ack.SubscriptionID]
 		s.Mu.Unlock()
-		if !ok || sub == nil {
+		if !ok || sub == nil || !sub.ownedBy(sess) {
 			results[i] = ua.StatusBadSubscriptionIDInvalid
 			continue
 		}
@@ -981,7 +992,7 @@ func (s *Subscription) keepalive(pubreq PubReq) error {
 	if ch == nil {
 		return fmt.Errorf("subscription %d has no channel", s.ID)
 	}
-	ackResults := s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements)
+	ackResults := s.srv.ackPublishAcknowledgements(s.srv.srv.session(pubreq.Req.RequestHeader), pubreq.Req.SubscriptionAcknowledgements)
 
 	// Keepalive: empty NotificationData, next sequence number (not consumed).
 	msg := ua.NotificationMessage{
@@ -1073,10 +1084,6 @@ func (s *Subscription) run() {
 	// publishing intervals away.
 	var unsent *ua.NotificationMessage
 
-	// Events wait here until a notification message carries them; a resent
-	// message leaves them for the next one.
-	var eventQueue []*ua.EventFieldList
-
 	// This is the master run event loop.  It has effectively 3 states that it can be in.  The first two are designated with
 	// the labels L0, and L2.  Everything after the L2 loop is the third state where we send any pending notifications.
 	// The states always go L0 -> L2 -> Sending -> L0.  L0 and L2 are both places where we wait so they are done as for loops with
@@ -1115,7 +1122,7 @@ func (s *Subscription) run() {
 			case <-s.NotifyChannel:
 				pendingData = true
 			case evt := <-s.EventNotifyChannel:
-				eventQueue = append(eventQueue, evt)
+				s.queueLooseEvent(evt)
 			case <-ticker.C:
 				// TransferSubscriptions may have moved the subscription to
 				// another session while this loop was waiting. Follow it, so
@@ -1146,7 +1153,7 @@ func (s *Subscription) run() {
 				}
 
 				hasQueued := unsent != nil || pendingData || s.srv.srv.MonitoredItemService.PendingReportableNotifications(s.ID)
-				if (!hasQueued && len(eventQueue) == 0) || !enabled {
+				if (!hasQueued && !s.pendingEvents()) || !enabled {
 					keepaliveCounter++
 					if keepaliveCounter > maxKeepAlive {
 						select {
@@ -1194,7 +1201,7 @@ func (s *Subscription) run() {
 			case <-s.NotifyChannel:
 				pendingData = true
 			case evt := <-s.EventNotifyChannel:
-				eventQueue = append(eventQueue, evt)
+				s.queueLooseEvent(evt)
 
 			case <-ticker.C:
 				// See L0: keep following a transferred subscription.
@@ -1215,9 +1222,9 @@ func (s *Subscription) run() {
 		// select picks at random among ready cases: the Publish request may
 		// have been taken while events emitted before it were still in the
 		// channel. They belong in this notification message, in order.
-		eventQueue = s.drainEvents(eventQueue)
+		s.drainEvents()
 
-		ackResults := s.srv.ackPublishAcknowledgements(pubreq.Req.SubscriptionAcknowledgements)
+		ackResults := s.srv.ackPublishAcknowledgements(s.srv.srv.session(pubreq.Req.RequestHeader), pubreq.Req.SubscriptionAcknowledgements)
 
 		var (
 			msg                  ua.NotificationMessage
@@ -1240,8 +1247,17 @@ func (s *Subscription) run() {
 			s.Mu.Unlock()
 			finalItems, moreData = s.srv.srv.MonitoredItemService.DrainQueuedNotifications(s.ID, maxNotif)
 
-			// Events currently drain fully in one Publish (event overflow is Phase 15).
-			moreEvents = false
+			// MaxNotificationsPerPublish bounds data and event
+			// notifications together (Part 4 §5.13.2); the data
+			// notifications go first.
+			var events []*ua.EventFieldList
+			if maxNotif == 0 {
+				events, moreEvents = s.takeEvents(0, true)
+			} else if left := int(maxNotif) - len(finalItems); left > 0 {
+				events, moreEvents = s.takeEvents(left, false)
+			} else {
+				moreEvents = s.pendingEvents()
+			}
 			eo := make([]*ua.ExtensionObject, 0, 2)
 			if len(finalItems) > 0 {
 				dcn := ua.DataChangeNotification{
@@ -1252,14 +1268,13 @@ func (s *Subscription) run() {
 				dcnEO.UpdateMask()
 				eo = append(eo, dcnEO)
 			}
-			if len(eventQueue) > 0 {
+			if len(events) > 0 {
 				enl := ua.EventNotificationList{
-					Events: eventQueue,
+					Events: events,
 				}
 				enlEO := ua.NewExtensionObject(&enl)
 				enlEO.UpdateMask()
 				eo = append(eo, enlEO)
-				eventQueue = nil
 			}
 
 			msg = ua.NotificationMessage{
@@ -1318,15 +1333,15 @@ func (s *Subscription) run() {
 
 //PublishRequest_Encoding_DefaultBinary
 
-// drainEvents appends the events waiting in EventNotifyChannel to q without
+// drainEvents queues the events waiting in EventNotifyChannel without
 // blocking.
-func (s *Subscription) drainEvents(q []*ua.EventFieldList) []*ua.EventFieldList {
+func (s *Subscription) drainEvents() {
 	for {
 		select {
 		case evt := <-s.EventNotifyChannel:
-			q = append(q, evt)
+			s.queueLooseEvent(evt)
 		default:
-			return q
+			return
 		}
 	}
 }

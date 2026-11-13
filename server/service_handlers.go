@@ -45,14 +45,16 @@ func (s *Server) initHandlers() {
 	s.RegisterHandler(id.DeleteNodesRequestEncodingDefaultBinary, node.DeleteNodes)
 	s.RegisterHandler(id.DeleteReferencesRequestEncodingDefaultBinary, node.DeleteReferences)
 
-	view := &ViewService{srv: s, cps: make(map[string]*continuationPoint)}
+	view := &ViewService{srv: s, cps: newCPStore[[]*ua.ReferenceDescription]()}
+	s.view = view
 	s.RegisterHandler(id.BrowseRequestEncodingDefaultBinary, view.Browse)
 	s.RegisterHandler(id.BrowseNextRequestEncodingDefaultBinary, view.BrowseNext)
 	s.RegisterHandler(id.TranslateBrowsePathsToNodeIDsRequestEncodingDefaultBinary, view.TranslateBrowsePathsToNodeIDs)
 	s.RegisterHandler(id.RegisterNodesRequestEncodingDefaultBinary, view.RegisterNodes)
 	s.RegisterHandler(id.UnregisterNodesRequestEncodingDefaultBinary, view.UnregisterNodes)
 
-	query := &QueryService{srv: s, cps: make(map[string]*queryContinuation)}
+	query := &QueryService{srv: s, cps: newCPStore[[]*ua.QueryDataSet]()}
+	s.query = query
 	s.RegisterHandler(id.QueryFirstRequestEncodingDefaultBinary, query.QueryFirst)
 	s.RegisterHandler(id.QueryNextRequestEncodingDefaultBinary, query.QueryNext)
 
@@ -148,6 +150,8 @@ func (s *Server) serve(ctx context.Context, sc *uasc.SecureChannel, reqID uint32
 	if ok && status != ua.StatusOK {
 		// The service needs an activated session and the request has none.
 		err = status
+	} else if st := s.checkOperationLimits(req); ok && st != ua.StatusOK {
+		err = st
 	} else if ok {
 		resp, err = h(ctx, sc, req, reqID)
 	} else {

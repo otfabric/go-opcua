@@ -569,7 +569,7 @@ const queryObjects = 5
 // each with a property Serial = "A-<i>".
 func startQueryGoServer(t *testing.T) (string, uint16) {
 	t.Helper()
-	endpoint, srv := startGoServerWithOptions(t)
+	endpoint, srv := startGoServerWithOptions(t, server.WithQuery(true))
 	_, nsIdx := findNSFromServer(t, srv)
 	nsAny, err := srv.Namespace(int(nsIdx))
 	if err != nil {

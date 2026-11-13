@@ -38,6 +38,15 @@ type filterEvaluator struct {
 	typeDef  *ua.NodeID
 	elements []*ua.ContentFilterElement
 	visiting []bool // cycle detection over the element tree
+	// done, memo and memoSt hold the result of each element once it has
+	// been evaluated: an element referenced by several operands is
+	// evaluated once, so evaluation is linear in the size of the filter.
+	done   []bool
+	memo   []*ua.Variant
+	memoSt []ua.StatusCode
+	// canRead, if set, decides whether an attribute of a node may be read
+	// for the filter; an attribute that may not is NULL.
+	canRead func(*ua.NodeID) bool
 }
 
 // operandArity maps each operator to its required operand count. A negative
@@ -66,20 +75,37 @@ var operandArity = map[ua.FilterOperator]int{
 // evalFilter evaluates the WhereClause of a Query for one node. A nil or empty
 // filter matches every node (TRUE).
 func evalFilter(srv *Server, node *Node, filter *ua.ContentFilter) tvl {
+	return evalFilterFor(srv, node, filter, nil)
+}
+
+// evalFilterFor is evalFilter with a read check for the attributes the
+// filter reads (nil: all may be read).
+func evalFilterFor(srv *Server, node *Node, filter *ua.ContentFilter, canRead func(*ua.NodeID) bool) tvl {
 	if filter == nil || len(filter.Elements) == 0 {
 		return tvlTrue
 	}
+	n := len(filter.Elements)
 	ev := &filterEvaluator{
 		srv:      srv,
 		node:     node,
 		nodeID:   node.ID(),
 		typeDef:  nodeTypeDefinition(node),
 		elements: filter.Elements,
-		visiting: make([]bool, len(filter.Elements)),
+		visiting: make([]bool, n),
+		done:     make([]bool, n),
+		memo:     make([]*ua.Variant, n),
+		memoSt:   make([]ua.StatusCode, n),
+		canRead:  canRead,
 	}
 	v, _ := ev.evalElement(0)
 	return variantTVL(v)
 }
+
+// maxFilterElements is the largest number of elements a ContentFilter of a
+// Query or an EventFilter may have. A larger filter is rejected with
+// Bad_ContentFilterInvalid or Bad_EventFilterInvalid (Part 4 §7.7.1 lets
+// a server reject a filter it cannot process).
+const maxFilterElements = 256
 
 // validateFilter performs a structural validation pass without evaluating the
 // filter against any node. It returns a ContentFilterResult with a per-element
@@ -88,6 +114,13 @@ func evalFilter(srv *Server, node *Node, filter *ua.ContentFilter) tvl {
 func validateFilter(filter *ua.ContentFilter) (*ua.ContentFilterResult, bool) {
 	if filter == nil || len(filter.Elements) == 0 {
 		return nil, true
+	}
+
+	if len(filter.Elements) > maxFilterElements {
+		return &ua.ContentFilterResult{
+			ElementResults:         []*ua.ContentFilterElementResult{},
+			ElementDiagnosticInfos: []*ua.DiagnosticInfo{},
+		}, false
 	}
 
 	ok := true
@@ -192,11 +225,23 @@ func (ev *filterEvaluator) evalElement(i int) (*ua.Variant, ua.StatusCode) {
 	if i < 0 || i >= len(ev.elements) {
 		return nil, ua.StatusBadFilterElementInvalid
 	}
+	if ev.done != nil && ev.done[i] {
+		return ev.memo[i], ev.memoSt[i]
+	}
 	if ev.visiting[i] {
 		return nil, ua.StatusBadFilterElementInvalid
 	}
 	ev.visiting[i] = true
-	defer func() { ev.visiting[i] = false }()
+	v, st := ev.evalElementOnce(i)
+	ev.visiting[i] = false
+	if ev.done != nil {
+		ev.done[i], ev.memo[i], ev.memoSt[i] = true, v, st
+	}
+	return v, st
+}
+
+// evalElementOnce evaluates element i; evalElement memoises its result.
+func (ev *filterEvaluator) evalElementOnce(i int) (*ua.Variant, ua.StatusCode) {
 
 	el := ev.elements[i]
 	if !validArity(el.FilterOperator, len(el.FilterOperands)) {
@@ -328,6 +373,9 @@ func (ev *filterEvaluator) resolveSimpleAttributeOperand(op *ua.SimpleAttributeO
 
 func (ev *filterEvaluator) readAttribute(nodeID *ua.NodeID, attr ua.AttributeID) *ua.Variant {
 	if nodeID == nil {
+		return nil
+	}
+	if ev.canRead != nil && !ev.canRead(nodeID) {
 		return nil
 	}
 	ns, err := ev.srv.Namespace(int(nodeID.Namespace()))
