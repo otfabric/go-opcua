@@ -74,7 +74,7 @@ func TestCreateSession_TooManySessions(t *testing.T) {
 
 	// CloseSession frees a place.
 	sessions := &SessionService{srv: srv}
-	_, err = sessions.CloseSession(context.Background(), scNone(), &ua.CloseSessionRequest{RequestHeader: first, DeleteSubscriptions: true}, 2)
+	_, err = sessions.CloseSession(context.Background(), srv.sb.peek(first.AuthenticationToken).channel.Load(), &ua.CloseSessionRequest{RequestHeader: first, DeleteSubscriptions: true}, 2)
 	require.NoError(t, err)
 	_, err = newSession()
 	require.NoError(t, err)

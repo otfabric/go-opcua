@@ -75,6 +75,9 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 	}
 	sess.serverNonce = nonce
 	sess.clientNonce = req.ClientNonce
+	if sc != nil {
+		sess.channel.Store(sc)
+	}
 
 	// "If the securityPolicyUri is None, the Server shall ignore the
 	// ApplicationInstanceCertificate" (Part 4 §5.7.2.2): it is neither
@@ -148,6 +151,23 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 	if sess == nil {
 		return nil, ua.StatusBadSessionIDInvalid
+	}
+
+	// The first ActivateSession has to use the channel of CreateSession; a
+	// later one on another channel moves the session to it if that channel
+	// is secured like the old one and opened with the same client
+	// certificate (Part 4 §5.7.3.1). The user identity is compared once the
+	// token has been validated.
+	rebind := !sess.boundTo(sc)
+	if rebind {
+		if !sess.activated.Load() {
+			s.srv.cfg.logger.Warn("ActivateSession rejected: first activation not on the channel of CreateSession")
+			return nil, ua.StatusBadSecureChannelIDInvalid
+		}
+		if !sameChannelSecurity(sess.channel.Load(), sc) {
+			s.srv.cfg.logger.Warn("ActivateSession rejected: new channel differs in security or client certificate")
+			return nil, ua.StatusBadSecureChannelIDInvalid
+		}
 	}
 
 	var clientSignature []byte
@@ -259,6 +279,14 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		}
 	}
 
+	// "the Server shall verify that the Client supplied a UserIdentityToken
+	// that is identical to the token currently associated with the Session"
+	// (Part 4 §5.7.3.1) when the session moves to another channel.
+	if rebind && !sameIdentity(sess.identityToken, identity) {
+		s.srv.cfg.logger.Warn("ActivateSession rejected: new channel with another user identity")
+		return nil, ua.StatusBadIdentityChangeNotSupported
+	}
+
 	sess.serverNonce = nonce
 
 	// The role mapper gets the token the client sent, with its password in
@@ -278,6 +306,9 @@ func (s *SessionService) ActivateSession(ctx context.Context, sc *uasc.SecureCha
 		return nil, st
 	}
 
+	if sc != nil {
+		sess.channel.Store(sc)
+	}
 	reactivated := sess.activated.Swap(true)
 	s.srv.observeSessionActivated(sc, sess, reactivated)
 
@@ -493,6 +524,10 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 	}
 
 	authToken := req.RequestHeader.AuthenticationToken
+	// Only the channel the session is associated with may close it.
+	if sess := s.srv.sb.peek(authToken); sess != nil && !sess.boundTo(sc) {
+		return nil, ua.StatusBadSecureChannelIDInvalid
+	}
 	if _, cps := s.srv.history(); cps != nil && authToken != nil {
 		cps.releaseSession(authToken.String())
 	}
@@ -775,4 +810,32 @@ func (s *Server) tokenOffered(sc *uasc.SecureChannel, tt ua.UserTokenType) bool 
 		}
 	}
 	return false
+}
+
+// sameChannelSecurity reports whether channel b is secured like channel a:
+// same security policy and mode, opened with the same client certificate.
+func sameChannelSecurity(a, b *uasc.SecureChannel) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.SecurityPolicyURI() == b.SecurityPolicyURI() &&
+		a.SecurityMode() == b.SecurityMode() &&
+		bytes.Equal(a.RemoteCertificate(), b.RemoteCertificate())
+}
+
+// sameIdentity reports whether the user identity tokens a and b name the same
+// user: same token type and the same user name, certificate or issued token.
+func sameIdentity(a, b ua.IdentityToken) bool {
+	if tokenTypeOf(a) != tokenTypeOf(b) {
+		return false
+	}
+	switch at := a.(type) {
+	case *ua.UserNameIdentityToken:
+		bt, _ := b.(*ua.UserNameIdentityToken)
+		return bt != nil && at.UserName == bt.UserName
+	case *ua.X509IdentityToken:
+		bt, _ := b.(*ua.X509IdentityToken)
+		return bt != nil && bytes.Equal(at.CertificateData, bt.CertificateData)
+	}
+	return true
 }
