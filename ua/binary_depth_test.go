@@ -53,7 +53,7 @@ func TestBinaryNestingDepthVariant(t *testing.T) {
 func TestBinaryNestingDepthMixed(t *testing.T) {
 	// Variant -> ExtensionObject(WriteValue) -> DataValue -> Variant -> ...
 	// counts every Variant, ExtensionObject and DataValue as one level.
-	var v *Variant = MustVariant(int32(1))
+	v := MustVariant(int32(1))
 	levels := 1
 	for levels+3 <= MaxBinaryNestingDepth {
 		wv := &WriteValue{NodeID: NewNumericNodeID(0, 1), AttributeID: AttributeIDValue, Value: &DataValue{EncodingMask: DataValueValue, Value: v}}
