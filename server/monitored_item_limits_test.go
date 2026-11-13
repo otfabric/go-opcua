@@ -27,7 +27,7 @@ func newItemTestSub(t *testing.T, srv *Server, subID uint32) (*Subscription, *ua
 	return sub, hdr
 }
 
-func createItems(t *testing.T, srv *Server, hdr *ua.RequestHeader, subID uint32, node *ua.NodeID, n int) []ua.StatusCode {
+func createItemsN(t *testing.T, srv *Server, hdr *ua.RequestHeader, subID uint32, node *ua.NodeID, n int) []ua.StatusCode {
 	t.Helper()
 	reqs := make([]*ua.MonitoredItemCreateRequest, n)
 	for i := range reqs {
@@ -58,9 +58,9 @@ func TestMonitoredItemLimits(t *testing.T) {
 		srv := newTestServer()
 		srv.cfg.maxMonitoredItemsPerSubscription = 3
 		_, hdr := newItemTestSub(t, srv, 1)
-		st := createItems(t, srv, hdr, 1, node, 4)
+		st := createItemsN(t, srv, hdr, 1, node, 4)
 		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusOK, ua.StatusOK, ua.StatusBadTooManyMonitoredItems}, st)
-		st = createItems(t, srv, hdr, 1, node, 1)
+		st = createItemsN(t, srv, hdr, 1, node, 1)
 		require.Equal(t, []ua.StatusCode{ua.StatusBadTooManyMonitoredItems}, st)
 	})
 
@@ -73,11 +73,11 @@ func TestMonitoredItemLimits(t *testing.T) {
 		sub2.Session = sub1.Session
 		sub2.ID = 2
 		srv.SubscriptionService.Subs[2] = sub2
-		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusOK}, createItems(t, srv, hdr, 1, node, 2))
-		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadTooManyMonitoredItems}, createItems(t, srv, hdr, 2, node, 2))
+		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusOK}, createItemsN(t, srv, hdr, 1, node, 2))
+		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadTooManyMonitoredItems}, createItemsN(t, srv, hdr, 2, node, 2))
 		// Another session is not affected.
 		_, hdr3 := newItemTestSub(t, srv, 3)
-		require.Equal(t, []ua.StatusCode{ua.StatusOK}, createItems(t, srv, hdr3, 3, node, 1))
+		require.Equal(t, []ua.StatusCode{ua.StatusOK}, createItemsN(t, srv, hdr3, 3, node, 1))
 	})
 
 	t.Run("server", func(t *testing.T) {
@@ -85,8 +85,8 @@ func TestMonitoredItemLimits(t *testing.T) {
 		srv.cfg.maxMonitoredItems = 2
 		_, hdr1 := newItemTestSub(t, srv, 1)
 		_, hdr2 := newItemTestSub(t, srv, 2)
-		require.Equal(t, []ua.StatusCode{ua.StatusOK}, createItems(t, srv, hdr1, 1, node, 1))
-		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadTooManyMonitoredItems}, createItems(t, srv, hdr2, 2, node, 2))
+		require.Equal(t, []ua.StatusCode{ua.StatusOK}, createItemsN(t, srv, hdr1, 1, node, 1))
+		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadTooManyMonitoredItems}, createItemsN(t, srv, hdr2, 2, node, 2))
 	})
 
 	t.Run("advertised", func(t *testing.T) {
@@ -110,9 +110,9 @@ func TestDeleteManyMonitoredItemsKeepsIndexes(t *testing.T) {
 	_, hdr2 := newItemTestSub(t, srv, 2)
 	const n = 5000
 	for i := 0; i < n/32; i++ {
-		createItems(t, srv, hdr, 1, node, 32)
+		createItemsN(t, srv, hdr, 1, node, 32)
 	}
-	createItems(t, srv, hdr2, 2, node, 3)
+	createItemsN(t, srv, hdr2, 2, node, 3)
 	mis := srv.MonitoredItemService
 	require.Len(t, mis.Nodes[node.String()], n/32*32+3)
 
