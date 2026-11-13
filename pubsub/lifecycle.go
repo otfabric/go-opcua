@@ -584,13 +584,11 @@ func (p *PubSub) readerTimeout(r *dataSetReader, ref *timerRef) {
 		return
 	}
 	r.ctr.Timeouts++
-	// A publisher that was restarted meanwhile starts its sequence
-	// numbers again at 1, and its messages would be discarded as older
-	// than the last ones of its previous run: mark the streams expired
-	// (processDSM resynchronises them) and drop the merged fields, a key
-	// frame starts the stream again.
+	// Drop the merged fields: a key frame starts the stream again. The
+	// sequence numbers expire after two MessageReceiveTimeouts (Part 14
+	// §7.2.3, see processDSM).
 	for _, st := range r.streams {
-		st.expired, st.fields, st.key = true, nil, false
+		st.fields, st.key = nil, false
 	}
 	wasOp := r.state == ua.PubSubStateOperational
 	p.setState(&r.base, ua.PubSubStateError, ua.StatusBadTimeout)

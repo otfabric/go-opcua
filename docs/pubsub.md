@@ -98,11 +98,20 @@ ps, err := pubsub.New(cfg, pubsub.WithDataSetHandler(func(ds *pubsub.ReceivedDat
 ```
 
 The reader filters on PublisherId, WriterGroupId and DataSetWriterId, discards
-duplicate and stale messages by sequence number, merges delta frames onto the
+duplicate and stale messages by sequence number (Part 14 §7.2.3: a number
+less than a quarter of the number space ahead is newer, one less than a
+quarter behind is older; older, repeated and invalid numbers, a quarter or
+more away, are counted in `SequenceDiscards` and ignored), merges delta frames onto the
 last key frame (`ReceivedDataSet.Fields` always holds every field, `Changed`
 lists the ones the message carried) and drops messages with a different
 MajorVersion. With the JSON mapping the field names travel in the message and
 the metadata can also arrive as a `ua-metadata` message on the broker.
+
+A reader keeps the sequence number of a writer until it took no message of
+it for two MessageReceiveTimeouts (§7.2.3); the reader goes to Error after
+one. A publisher that restarted, counting from 1 again, is then taken again
+(`SequenceResyncs`); before, its messages are older and ignored. Without a
+MessageReceiveTimeout the sequence numbers are kept.
 
 `Start` opens the transports in the background. `Ready` waits until every
 running connection has opened its transport and made its first

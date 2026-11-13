@@ -668,9 +668,12 @@ type Counters struct {
 	EncodeErrors uint64
 	SendErrors   uint64
 	DecodeErrors uint64
-	// SequenceDiscards counts DataSetMessages discarded as duplicates or as
-	// older than the last one received; SequenceResyncs counts jumps of the
-	// sequence number that resynchronised the reader.
+	// SequenceDiscards counts DataSetMessages discarded as duplicates, as
+	// older than the last one received or as invalid (a quarter or more of
+	// the number space away, Part 14 §7.2.3); SequenceResyncs counts
+	// writers the reader resynchronised to a lower sequence number after
+	// their sequence record expired (no message for two
+	// MessageReceiveTimeouts).
 	SequenceDiscards uint64
 	SequenceResyncs  uint64
 	// VersionMismatches counts DataSetMessages discarded because their
