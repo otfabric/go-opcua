@@ -133,6 +133,9 @@ type SecureChannel struct {
 	// arrive rather than after all of them have been buffered. It is
 	// guarded by chunksMu.
 	chunkBytes map[uint32]int
+	// chunksTotal is the sum of chunkBytes: the body bytes of all partial
+	// messages buffered on the channel. It is guarded by chunksMu.
+	chunksTotal int64
 	// chunksAborted holds the request IDs whose collection was given up
 	// (too many chunks or bytes): their remaining chunks are dropped up to
 	// and including the final one, rather than collected again and merged
@@ -556,6 +559,15 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 				// §7.1.2.4). Zero means no limit. A message over either is
 				// refused at the chunk that goes over it, and the chunks
 				// still to come for it are dropped.
+				//
+				// The partial messages of the channel together are bounded
+				// too: at most maxOpenMessages request IDs and
+				// partialBytesLimit bytes. Going over either drops what is
+				// buffered and closes the connection (the receiver closes
+				// it on Bad_TcpMessageTooLarge, Part 6 §7.1.5).
+				if _, open := s.chunks[reqID]; !open && len(s.chunks) >= maxOpenMessages {
+					return s.partialOverflow(fmt.Sprintf("more than %d partial messages", maxOpenMessages))
+				}
 				s.chunks[reqID] = append(s.chunks[reqID], chunk)
 				if n, limit := len(s.chunks[reqID]), s.c.MaxChunkCount(); limit > 0 && int64(n) > int64(limit) {
 					s.abortChunks(reqID)
@@ -563,18 +575,20 @@ func (s *SecureChannel) Receive(ctx context.Context) *MessageBody {
 					msg.Err = fmt.Errorf("%w: %d > %d", errors.ErrTooManyChunks, n, limit)
 					return msg
 				}
-				if limit := s.c.MaxMessageSize(); limit > 0 {
-					if s.chunkBytes == nil {
-						s.chunkBytes = make(map[uint32]int)
-					}
-					total := s.chunkBytes[reqID] + len(chunk.Data)
-					if int64(total) > int64(limit) {
-						s.abortChunks(reqID)
-						s.chunksMu.Unlock()
-						msg.Err = fmt.Errorf("%w: more than %d bytes", errors.ErrMessageTooLarge, limit)
-						return msg
-					}
-					s.chunkBytes[reqID] = total
+				if s.chunkBytes == nil {
+					s.chunkBytes = make(map[uint32]int)
+				}
+				total := s.chunkBytes[reqID] + len(chunk.Data)
+				if limit := s.c.MaxMessageSize(); limit > 0 && int64(total) > int64(limit) {
+					s.abortChunks(reqID)
+					s.chunksMu.Unlock()
+					msg.Err = fmt.Errorf("%w: more than %d bytes", errors.ErrMessageTooLarge, limit)
+					return msg
+				}
+				s.chunkBytes[reqID] = total
+				s.chunksTotal += int64(len(chunk.Data))
+				if limit := s.partialBytesLimit(); limit > 0 && s.chunksTotal > limit {
+					return s.partialOverflow(fmt.Sprintf("more than %d bytes in partial messages", limit))
 				}
 				s.chunksMu.Unlock()
 				continue
@@ -1832,8 +1846,39 @@ func (s *SecureChannel) timeNow() time.Time {
 // dropChunks forgets the chunks collected for reqID. The caller holds
 // chunksMu.
 func (s *SecureChannel) dropChunks(reqID uint32) {
+	s.chunksTotal -= int64(s.chunkBytes[reqID])
 	delete(s.chunks, reqID)
 	delete(s.chunkBytes, reqID)
+}
+
+// maxOpenMessages is the number of messages whose chunks may be collected
+// on one channel at the same time. A sender sends the chunks of a message
+// one after the other; a few interleaved messages are accepted.
+const maxOpenMessages = 16
+
+// partialBytesLimit returns the number of body bytes the partial messages
+// of the channel may hold together: twice the largest message the channel
+// accepts (MaxMessageSize, or MaxChunkCount chunks of the receive buffer
+// size when MaxMessageSize is unlimited). Zero means no limit.
+func (s *SecureChannel) partialBytesLimit() int64 {
+	per := int64(s.c.MaxMessageSize())
+	if per == 0 {
+		per = int64(s.c.MaxChunkCount()) * int64(s.c.ReceiveBufSize())
+	}
+	return 2 * per
+}
+
+// partialOverflow drops every partial message, closes the connection and
+// returns the channel-level error for it. The caller holds chunksMu, which
+// partialOverflow releases.
+func (s *SecureChannel) partialOverflow(reason string) *MessageBody {
+	clear(s.chunks)
+	clear(s.chunkBytes)
+	s.chunksTotal = 0
+	s.chunksMu.Unlock()
+	s.cfg.Logger.Warn("closing connection: too much buffered for partial messages", "channel_id", s.c.ID(), "reason", reason)
+	_ = s.c.Close()
+	return &MessageBody{Err: fmt.Errorf("%w: %s", ua.StatusBadTCPMessageTooLarge, reason)}
 }
 
 // abortResponse sends the abort chunk for a response the client cannot take
