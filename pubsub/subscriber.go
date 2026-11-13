@@ -65,6 +65,8 @@ type readerSnap struct {
 	groupID   string
 	topic     string
 	metaTopic string
+	// timeout is the MessageReceiveTimeout of the reader.
+	timeout time.Duration
 }
 
 func (p *PubSub) snapshotReaders(c *connection) []readerSnap {
@@ -77,7 +79,7 @@ func (p *PubSub) snapshotReaders(c *connection) []readerSnap {
 			if !r.running {
 				continue
 			}
-			s := readerSnap{r: r, pub: r.pub, hasPub: r.hasPub, wgid: r.cfg.WriterGroupID, dswid: r.cfg.DataSetWriterID, mode: r.mode, groupID: r.groupID}
+			s := readerSnap{r: r, pub: r.pub, hasPub: r.hasPub, wgid: r.cfg.WriterGroupID, dswid: r.cfg.DataSetWriterID, mode: r.mode, groupID: r.groupID, timeout: r.timeout}
 			if r.brokerTS != nil {
 				s.topic, s.metaTopic = r.brokerTS.QueueName, r.brokerTS.MetaDataQueueName
 			}
@@ -358,6 +360,21 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		// MQTT 5.0 message type that says otherwise.
 		p.receiveAction(c, gen, enc, m, true)
 		return
+	}
+	if nm.Type == message.NetworkMessageDataSet && nm.Action == nil {
+		// Part 14 §7.2.4.4.3.2: a secured message whose MessageNonce
+		// sequence number is not newer than the last one of its sender
+		// and token is ignored, before it is reassembled or delivered.
+		var expiry time.Duration
+		for _, s := range hdr {
+			expiry = max(expiry, 2*s.timeout)
+		}
+		if p.opts.nonceForToken {
+			expiry = 0
+		}
+		if !p.freshNonce(c, gen, nm, keyGroup, expiry, recv) {
+			return
+		}
 	}
 	if nm.Chunk != nil {
 		if nm, err = p.reassemble(c, gen, cd, nm, opts, recv); nm == nil {

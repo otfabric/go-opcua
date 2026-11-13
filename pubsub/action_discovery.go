@@ -286,7 +286,7 @@ func (p *PubSub) sendActionAnnouncements(ctx context.Context, c *connection, gen
 				if ks == nil {
 					continue
 				}
-				opts.SecurityMode, opts.Keys, opts.NextNonceSequence = g.mode, ks, g.nextNonce
+				opts.SecurityMode, opts.Keys, opts.NextNonceSequenceForToken = g.mode, ks, g.nextNonce
 			}
 			cd := p.codecs(encUADP)
 			var b []byte

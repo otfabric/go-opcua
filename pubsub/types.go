@@ -164,6 +164,12 @@ type Counters struct {
 	ChunksReceived          uint64
 	ChunkedMessagesReceived uint64
 	ChunksDiscarded         uint64
+	// NonceSequenceDiscards counts secured UADP NetworkMessages (chunks
+	// included) ignored because the sequence number of their MessageNonce
+	// is not newer than the last one processed for their sender and
+	// SecurityTokenId (Part 14 §7.2.4.4.3.2, §7.2.3): repeated or late
+	// copies.
+	NonceSequenceDiscards uint64
 	// DiscoveryRequestsSent and DiscoveryRequestsReceived count UADP
 	// discovery probes (Part 14 §7.2.4.6.12); DiscoveryRequestsIgnored
 	// counts received probes that were not answered: not for this
@@ -221,6 +227,7 @@ func (c *Counters) add(o *Counters) {
 	c.ChunksReceived += o.ChunksReceived
 	c.ChunkedMessagesReceived += o.ChunkedMessagesReceived
 	c.ChunksDiscarded += o.ChunksDiscarded
+	c.NonceSequenceDiscards += o.NonceSequenceDiscards
 	c.DiscoveryRequestsSent += o.DiscoveryRequestsSent
 	c.DiscoveryRequestsReceived += o.DiscoveryRequestsReceived
 	c.DiscoveryRequestsIgnored += o.DiscoveryRequestsIgnored

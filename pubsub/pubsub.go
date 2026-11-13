@@ -46,9 +46,11 @@ type PubSub struct {
 	pdss    []*publishedDataSet
 	comps   map[ComponentID]component
 	// reqSeq numbers the RequestIds of CallAction (guarded by mu);
-	// actNonce the secured action requests.
-	reqSeq   uint16
-	actNonce atomic.Uint32
+	// actNonces the secured action requests, which actMu sends in the
+	// order of their nonces.
+	reqSeq    uint16
+	actNonces nonceCounter
+	actMu     chanMutex
 	// actSeq numbers the chunked action messages (their
 	// MessageSequenceNumber).
 	actSeq atomic.Uint32
@@ -111,6 +113,7 @@ func New(cfg *ua.PubSubConfigurationDataType, opts ...Option) (*PubSub, error) {
 	for k, v := range p.opts.keySources {
 		p.keySources[k] = v
 	}
+	p.actMu.init()
 	p.root = base{id: Root, kind: KindPubSub, name: "PublishSubscribe", enabled: cfg.Enabled, state: ua.PubSubStateDisabled}
 	p.enabled = cfg.Enabled
 

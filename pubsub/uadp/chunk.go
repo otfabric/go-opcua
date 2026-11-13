@@ -79,7 +79,8 @@ func decodeChunk(data []byte) (*message.Chunk, error) {
 // announcement. Chunk i carries the GroupHeader SequenceNumber and
 // NetworkMessageNumber of nm plus i: the caller advances its counters by the
 // number of chunks. A secured chunk takes its MessageNonce from
-// opts.NextNonceSequence, or from opts.NonceSequence plus i.
+// opts.NextNonceSequenceForToken or opts.NextNonceSequence, or from
+// opts.NonceSequence plus i.
 func EncodeChunks(nm *message.NetworkMessage, opts *EncodeOptions, maxSize int) ([][]byte, error) {
 	if nm == nil {
 		return nil, fmt.Errorf("%w: nil NetworkMessage", ErrMalformed)
@@ -158,7 +159,7 @@ func EncodeChunks(nm *message.NetworkMessage, opts *EncodeOptions, maxSize int) 
 		c.GroupHeader.SequenceNumber += uint16(i)
 		c.GroupHeader.NetworkMessageNumber += uint16(i)
 		o := *opts
-		if o.NextNonceSequence == nil {
+		if o.NextNonceSequence == nil && o.NextNonceSequenceForToken == nil {
 			o.NonceSequence += uint32(i)
 		}
 		b, err := Encode(&c, &o)

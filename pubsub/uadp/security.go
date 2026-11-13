@@ -59,7 +59,10 @@ func newEncodeSecurity(opts *EncodeOptions) (*encodeSecurity, error) {
 		return nil, secError("no current keys")
 	}
 	seq := opts.NonceSequence
-	if opts.NextNonceSequence != nil {
+	switch {
+	case opts.NextNonceSequenceForToken != nil:
+		seq = opts.NextNonceSequenceForToken(k.TokenID)
+	case opts.NextNonceSequence != nil:
 		seq = opts.NextNonceSequence()
 	}
 	nonce, err := p.NewMessageNonce(seq)

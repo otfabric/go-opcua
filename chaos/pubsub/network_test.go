@@ -209,7 +209,7 @@ func TestChaosUDPNetworkFaults(t *testing.T) {
 			t.Logf("relay: forwarded %d dropped %d duplicated %d reordered %d corrupted %d truncated %d",
 				p.relay.forwarded.Load(), p.relay.dropped.Load(), p.relay.duplicated.Load(), p.relay.reordered.Load(), p.relay.corrupted.Load(), p.relay.truncated.Load())
 			t.Logf("subscriber: %+v", root)
-			if p.relay.duplicated.Load() > 10 && root.SequenceDiscards == 0 {
+			if p.relay.duplicated.Load() > 10 && root.SequenceDiscards+root.NonceSequenceDiscards == 0 {
 				t.Errorf("%d datagrams were duplicated but no DataSetMessage was discarded", p.relay.duplicated.Load())
 			}
 			if p.relay.corrupted.Load()+p.relay.truncated.Load() > 10 && root.DecodeErrors == 0 {

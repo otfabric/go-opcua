@@ -193,6 +193,23 @@ func TestChunkRoundTripSecured(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, []byte{byte(40 + i), 0, 0, 0}, d.Security.MessageNonce[4:])
 	}
+
+	// NextNonceSequenceForToken is called with the token of the keys and
+	// takes precedence over NextNonceSequence.
+	var tokens []uint32
+	n := uint32(0)
+	chunks, err = EncodeChunks(nm, &EncodeOptions{SecurityMode: ua.MessageSecurityModeSign, Keys: ks,
+		NextNonceSequence:         func() uint32 { panic("not called") },
+		NextNonceSequenceForToken: func(id uint32) uint32 { tokens = append(tokens, id); n += 2; return n }}, 25+6+8+32+4)
+	require.NoError(t, err)
+	k, err := ks.CurrentKeys()
+	require.NoError(t, err)
+	require.Equal(t, []uint32{k.TokenID, k.TokenID, k.TokenID}, tokens)
+	for i, c := range chunks {
+		d, err := Decode(c, &DecodeOptions{Security: requireSecurity(ua.MessageSecurityModeSign, ks)})
+		require.NoError(t, err)
+		require.Equal(t, []byte{byte(2 + 2*i), 0, 0, 0}, d.Security.MessageNonce[4:])
+	}
 }
 
 func TestChunkDiscovery(t *testing.T) {
@@ -433,7 +450,9 @@ func TestReassemblerKeys(t *testing.T) {
 		func(m *message.NetworkMessage) { m.Type = message.NetworkMessageDiscoveryResponse },
 		func(m *message.NetworkMessage) { m.Security = &message.SecurityHeader{Signed: true} },
 		// Chunks secured with the keys of another token.
-		func(m *message.NetworkMessage) { m.Security = &message.SecurityHeader{Signed: true, SecurityTokenID: 2} },
+		func(m *message.NetworkMessage) {
+			m.Security = &message.SecurityHeader{Signed: true, SecurityTokenID: 2}
+		},
 		func(m *message.NetworkMessage) { m.UADPMask &^= ua.UADPNetworkMessageContentMaskPublisherID },
 		// Action messages: the requests of two Requestors to one writer,
 		// and the responses to them, do not mix.

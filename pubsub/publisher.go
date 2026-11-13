@@ -744,7 +744,7 @@ func (e *encoder) options() *uadp.EncodeOptions {
 	if e.mode > ua.MessageSecurityModeNone && e.g.enc == encUADP {
 		opts.SecurityMode = e.mode
 		opts.Keys = e.ks
-		opts.NextNonceSequence = e.g.nextNonce
+		opts.NextNonceSequenceForToken = e.g.nextNonce
 	}
 	return opts
 }

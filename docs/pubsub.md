@@ -442,6 +442,42 @@ A secured writer group sends nothing until it has keys; a reader requires at
 least the security mode of its group and rejects messages with unknown tokens,
 bad signatures or weaker security.
 
+The MessageNonce of a secured UADP message ends with a UInt32 sequence number
+that the publisher resets to 1 for every new SecurityTokenId (Part 14
+§7.2.4.4.3.2 Table 156). go-opcua counts per writer group and token (the
+DataSetMessages, discovery announcements and Action responses of a group
+share the counter; a Requestor has one for its requests), and sends the
+messages a receiver checks together in the order of their numbers. A receiver keeps the last number it
+processed per publisher (for an ActionRequest the RequestorId, or without one
+the CorrelationData), WriterGroupId and token, separately for DataSetMessages,
+ActionRequests and ActionResponses, and ignores a message - a chunk too - whose
+number is not newer by the rule of §7.2.3, before it is reassembled,
+delivered or executed. A repeated or replayed copy of a secured message is
+so ignored even when its DataSetMessage sequence number would be taken, and
+an ActionRequest is not executed again after the Responder forgot the ended
+exchange. The connection counter `NonceSequenceDiscards` counts these
+messages; ignored ActionRequests count in `ActionRequestsRejected` as well.
+The records of a token are dropped when the token leaves the KeySource.
+Discovery messages are not checked.
+
+For DataSetMessages the record of a publisher is discarded like the
+sequence numbers of a reader: after two MessageReceiveTimeouts of its
+readers without a message it took (kept without a MessageReceiveTimeout). A
+publisher that restarts and keeps using the same token, counting from 1
+again, is ignored until then; a copy of an earlier message under that token
+is taken again after such a silence, as the reader's sequence numbers are
+discarded as well. `pubsub.WithNonceSequencePerToken(true)` keeps the
+records as long as the token is held: copies stay ignored, and a restarted
+publisher on the same token is ignored until it uses the next token (an SKS
+hands out the next one at the KeyLifetime; with static keys, give it a new
+token). The records of ActionRequests and ActionResponses are always kept
+per token, so a Requestor or Responder restarted on the same token is
+ignored until the next token. Senders whose MessageNonce has another layout
+(other policies) are not checked, nor is a sender once one of its numbers is
+a quarter of the number space or more away from the last one: a sequence does
+not produce that under one token (a copy of an earlier message is older), so
+its MessageNonces are not numbered as Table 156 says (random, for instance).
+
 A go-opcua server becomes a Security Key Service with
 `srv.EnableSecurityKeyService(ks)` (GetSecurityKeys, Add/Remove/GetSecurityGroup;
 keys are only handed out over SignAndEncrypt channels and, by default, not to
