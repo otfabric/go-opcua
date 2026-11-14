@@ -108,6 +108,9 @@ func stringer() error {
 	if err := prependSPDX("ua/enums_strings_gen.go"); err != nil {
 		return err
 	}
+	if err := boundStringerIndexes("ua/enums_strings_gen.go"); err != nil {
+		return err
+	}
 	fmt.Println("Wrote ua/enums_strings_gen.go")
 
 	if err := run("go", "tool", "stringer",
@@ -118,6 +121,9 @@ func stringer() error {
 		return err
 	}
 	if err := prependSPDX("connstate_strings_gen.go"); err != nil {
+		return err
+	}
+	if err := boundStringerIndexes("connstate_strings_gen.go"); err != nil {
 		return err
 	}
 	fmt.Println("Wrote connstate_strings_gen.go")

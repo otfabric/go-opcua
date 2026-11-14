@@ -4,6 +4,7 @@ package addrspace
 
 import (
 	"context"
+	"math"
 	"sort"
 	"testing"
 
@@ -721,7 +722,7 @@ func TestView_MapNamespace(t *testing.T) {
 		mns.Data["Count"] = int32(7)
 		mns.Data["Ratio"] = 0.25
 		mns.Data["Flag"] = true
-		mns.Data["Big"] = 9_000_000_000 // a Go int is served as Int64
+		mns.Data["Big"] = math.MaxInt // a Go int is served as Int64 (beyond Int32 on 64-bit builds)
 	})
 	ctx := context.Background()
 
@@ -751,7 +752,7 @@ func TestView_MapNamespace(t *testing.T) {
 			"Count": {int32(7), id.Int32},
 			"Ratio": {0.25, id.Double},
 			"Flag":  {true, id.Boolean},
-			"Big":   {int64(9_000_000_000), id.Int64},
+			"Big":   {int64(math.MaxInt), id.Int64},
 		} {
 			n := c.Node(key(k))
 			v, err := n.Value(ctx)

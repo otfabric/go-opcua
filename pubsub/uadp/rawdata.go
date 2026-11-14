@@ -390,8 +390,10 @@ func (rf *rawField) readLeaf(b *ua.Buffer, vb *ua.Buffer) error {
 	return nil
 }
 
-// structTypes caches the Go type of Structure DataTypes by NodeId.
-var structTypes sync.Map // string -> reflect.Type (nil if unknown)
+// structTypes caches the Go type of Structure DataTypes by NodeId. It holds
+// only the NodeIds that have a registered type, so the NodeIds the
+// DataSetMetaData of a peer names do not add to it.
+var structTypes sync.Map // string -> reflect.Type
 
 // structTypeOf returns the Go type of the structure DataType dt: the type
 // registered for the DataType NodeId, or for the DefaultEncodingId given in
@@ -418,20 +420,19 @@ func structTypeOf(md *ua.DataSetMetaDataType, dt *ua.NodeID) reflect.Type {
 // lookupStructType finds the Go type registered for a DataType or encoding
 // NodeId. The ua package resolves both kinds of NodeId for the JSON
 // ExtensionObject (UaTypeId); an empty JSON ExtensionObject of that type is
-// the only exported way to ask it.
+// the only exported way to ask it. A NodeId without a registered type is
+// asked again on every lookup and not cached.
 func lookupStructType(id *ua.NodeID) reflect.Type {
 	key := id.String()
 	if t, ok := structTypes.Load(key); ok {
-		rt, _ := t.(reflect.Type)
-		return rt
+		return t.(reflect.Type)
 	}
-	var t reflect.Type
 	var eo ua.ExtensionObject
 	if err := ua.DecodeJSON(fmt.Appendf(nil, `{"UaTypeId":%q}`, key), &eo); err == nil && eo.Value != nil {
 		if rt := reflect.TypeOf(eo.Value); rt.Kind() == reflect.Pointer && rt.Elem().Kind() == reflect.Struct {
-			t = rt.Elem()
+			structTypes.Store(key, rt.Elem())
+			return rt.Elem()
 		}
 	}
-	structTypes.Store(key, t)
-	return t
+	return nil
 }

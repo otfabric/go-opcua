@@ -41,6 +41,13 @@ import (
 // maxActionString bounds the ResponseAddress and a String RequestorId.
 const maxActionString = 4096
 
+// maxKeyString bounds a String PublisherId and the CorrelationData of an
+// ActionHeader the decoder accepts: 4096 bytes, the bound the JSON mapping
+// puts on the CorrelationData. With a String RequestorId they tell the
+// chunks of a message apart, and a Reassembler keeps them while chunks are
+// missing.
+const maxKeyString = 4096
+
 // checkAction validates an action NetworkMessage for Encode.
 func checkAction(nm *message.NetworkMessage) error {
 	a := nm.Action
@@ -167,9 +174,13 @@ func decodeActionHeader(body []byte) (*message.ActionHeader, int, error) {
 		}
 	}
 	if flags&actCorrelationData != 0 {
+		cd := b.ReadBytes()
+		if len(cd) > maxKeyString {
+			return nil, 0, malformed("CorrelationData of %d bytes", len(cd))
+		}
 		// A present but empty ByteString stays distinguishable from an
 		// absent one.
-		a.CorrelationData = append([]byte{}, b.ReadBytes()...)
+		a.CorrelationData = append([]byte{}, cd...)
 	}
 	if flags&actRequestorID != 0 {
 		v := new(ua.Variant)

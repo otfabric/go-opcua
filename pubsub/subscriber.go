@@ -317,6 +317,9 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		if p.protect("decode", func() { md, err = cd.DecodeMetaData(m.Payload, opts) }) {
 			err = errDecodePanic
 		}
+		if err == nil {
+			err = checkNetworkMetaData(md.MetaData)
+		}
 		if err != nil {
 			p.decodeFailed(c, gen, snap, hdr, err)
 			return
@@ -393,6 +396,10 @@ func (p *PubSub) receive(c *connection, gen uint64, m *transport.Message) {
 		}
 		p.unlock()
 		if d := nm.Discovery; d != nil && d.Type == message.DiscoveryDataSetMetaData && d.MetaData != nil && isGood(d.StatusCode) {
+			if err := checkNetworkMetaData(d.MetaData); err != nil {
+				p.decodeFailed(c, gen, snap, hdr, err)
+				return
+			}
 			p.applyMetaData(c, gen, nm.PublisherID, d.DataSetWriterID, d.MetaData, securityOf(nm), keyGroup)
 		}
 		return
@@ -585,6 +592,25 @@ func (p *PubSub) lookupMetaData(snap []readerSnap, pub message.PublisherID, wgid
 	}
 	return best
 }
+
+// maxNetworkMetaDataFields is the largest number of fields of a
+// DataSetMetaData a reader takes from the network (a "ua-metadata" message
+// or a UADP announcement): the most a DataSetMessage can carry, whose field
+// indices are UInt16 (jsonmsg.DefaultMaxFields).
+const maxNetworkMetaDataFields = jsonmsg.DefaultMaxFields
+
+// checkNetworkMetaData refuses a DataSetMetaData received from the network
+// that describes more fields than a DataSetMessage can carry.
+func checkNetworkMetaData(md *ua.DataSetMetaDataType) error {
+	if md != nil && len(md.Fields) > maxNetworkMetaDataFields {
+		return fmt.Errorf("%w: DataSetMetaData of %d fields, at most %d are accepted", errMetaDataTooLarge, len(md.Fields), maxNetworkMetaDataFields)
+	}
+	return nil
+}
+
+// errMetaDataTooLarge is the decode error of a DataSetMetaData with more
+// fields than maxNetworkMetaDataFields.
+var errMetaDataTooLarge = errors.New("pubsub: DataSetMetaData too large")
 
 // applyMetaData updates the readers of a connection that take the messages
 // of a writer with DataSetMetaData received from it. mode and keyGroup are
@@ -796,8 +822,12 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 	idxs := make([]int, 0, len(dsm.Fields))
 	msgFields := make([]*message.Field, 0, len(dsm.Fields))
 	n := len(mdFields)
+	var names map[string]int
+	if enc == encJSON {
+		names = r.fieldNames()
+	}
 	for j, f := range dsm.Fields {
-		i := fieldIndex(mdFields, f, j, dsm.Type, enc)
+		i := fieldIndex(names, mdFields, f, j, dsm.Type, enc)
 		if i < 0 || i >= limit {
 			continue
 		}
@@ -909,21 +939,32 @@ func (p *PubSub) processDSM(r *dataSetReader, nm *message.NetworkMessage, dsm *m
 
 // fieldIndex returns the DataSet index of the j-th field of a message: by
 // name if the message names it (JSON), by the index of a delta frame, by
-// position otherwise. UADP carries no field names: the names the decoder
-// gives the fields come from the DataSetMetaData of some reader of the
-// writer, not necessarily this one's.
-func fieldIndex(md []*ua.FieldMetaData, f *message.Field, j int, t message.DataSetMessageType, enc encoding) int {
+// position otherwise. names is the index of the field names of md
+// (dataSetReader.fieldNames): a name is looked up, not searched for, and
+// the field found is compared with it once. UADP carries no field names:
+// the names the decoder gives the fields come from the DataSetMetaData of
+// some reader of the writer, not necessarily this one's.
+func fieldIndex(names map[string]int, md []*ua.FieldMetaData, f *message.Field, j int, t message.DataSetMessageType, enc encoding) int {
 	if f.Name != "" && enc == encJSON {
-		for i, m := range md {
-			if m != nil && m.Name == f.Name {
-				return i
-			}
+		if i, ok := names[f.Name]; ok && i < len(md) && md[i] != nil && sameFieldName(md[i].Name, f.Name) {
+			return i
 		}
 	}
 	if t == message.DataSetMessageDeltaFrame {
 		return int(f.Index)
 	}
 	return j
+}
+
+// nameCompared, if set, is called for every comparison of a field name of
+// a message with one of the DataSetMetaData of a reader; a test seam.
+var nameCompared func()
+
+func sameFieldName(a, b string) bool {
+	if nameCompared != nil {
+		nameCompared()
+	}
+	return a == b
 }
 
 // normalizeValue turns a field received with the Variant encoding whose

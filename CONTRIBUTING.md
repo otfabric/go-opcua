@@ -52,6 +52,7 @@ The driver:
 - runs each generator under `cmd/` in order
 - discovers enum types in `ua/enums*.go` via Go's parser and runs `stringer`
 - uses `go tool stringer` (version pinned in `go.mod` via the `tool` directive)
+- rewrites the range check of each generated `String` method to compare the value as a `uint64` before it becomes an index, so a value of an unsigned type gives `Type(n)` where `int` has 32 bits too; `TestGeneratedStringersAreBounded` fails when a generated file misses it
 - does not install tools or run `go mod tidy`
 
 Generators under `cmd/`:

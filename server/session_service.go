@@ -518,10 +518,14 @@ func (s *SessionService) decryptUserPassword(sc *uasc.SecureChannel, sess *sessi
 	if err != nil || len(plain) < 4 {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
-	n := int(binary.LittleEndian.Uint32(plain[:4]))
-	if n < len(serverNonce) || 4+n > len(plain) {
+	// The length is compared with the bytes that follow it as an unsigned
+	// number before it is converted: where int has 32 bits, 4+n of a
+	// length near 2^31 has no int value.
+	l := binary.LittleEndian.Uint32(plain[:4])
+	if uint64(l) > uint64(len(plain)-4) || uint64(l) < uint64(len(serverNonce)) {
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
+	n := int(l)
 	secret := plain[4 : 4+n]
 	pwLen := n - len(serverNonce)
 	if !bytes.Equal(secret[pwLen:], serverNonce) {

@@ -382,7 +382,7 @@ NewKeyService returns an empty KeyService. Options: WithClock, WithRandom, WithA
 func (ks *KeyService) AddSecurityGroup(cfg SecurityGroupConfig) error
 ```
 
-AddSecurityGroup creates a SecurityGroup with a current key (token id 1) and MaxFutureKeyCount future keys, as open62541 does. Errors carry the status codes of AddSecurityGroup: Bad\_InvalidArgument for an empty or too long id or a non-positive KeyLifetime, Bad\_NodeIdExists for an id in use, Bad\_SecurityPolicyRejected for an unknown policy.
+AddSecurityGroup creates a SecurityGroup with a current key (token id 1) and MaxFutureKeyCount future keys, as open62541 does. Errors carry the status codes of AddSecurityGroup: Bad\_InvalidArgument for an empty or too long id, a non-positive KeyLifetime or a MaxPastKeyCount + MaxFutureKeyCount above 65534, Bad\_NodeIdExists for an id in use, Bad\_SecurityPolicyRejected for an unknown policy.
 
 #### func (KeyService) Authorize
 
@@ -631,6 +631,10 @@ type SecurityGroupConfig struct {
 	MaxFutureKeyCount uint32
 	// MaxPastKeyCount is the number of keys before the current one the
 	// SKS keeps.
+	//
+	// MaxPastKeyCount + MaxFutureKeyCount is at most 65534: with the
+	// current key, the keys of a group fit the Keys array of one
+	// GetSecurityKeys result.
 	MaxPastKeyCount uint32
 	// SecurityGroupFolder is the path of SecurityGroupFolder names below
 	// PublishSubscribe.SecurityGroups the group is listed in; empty for

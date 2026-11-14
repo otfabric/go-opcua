@@ -289,12 +289,25 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 		{"negative lifetime", []any{"sg3", -1.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"name", []any{"", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"types", []any{"sg3", "1000", pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadTypeMismatch},
+		// MaxPastKeyCount + MaxFutureKeyCount is at most 65534.
+		{"future keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(65535), uint32(0)}, ua.StatusBadInvalidArgument},
+		{"past keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(65535)}, ua.StatusBadInvalidArgument},
+		{"past and future keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(32767), uint32(32768)}, ua.StatusBadInvalidArgument},
+		{"largest key counts", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0xffffffff), uint32(0xffffffff)}, ua.StatusBadInvalidArgument},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			require.Equal(t, c.want, call(t, alice, groupsID, addGroupID, c.args...).StatusCode)
 		})
 	}
+	_, ok = ks.SecurityGroup("sg3")
+	require.False(t, ok, "no group was added")
+	// At the limit the group is added.
+	res = call(t, alice, groupsID, addGroupID, "sg4", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(32767), uint32(32767))
+	require.Equal(t, ua.StatusOK, res.StatusCode)
+	cfg, ok = ks.SecurityGroup("sg4")
+	require.True(t, ok)
+	require.Equal(t, uint32(32767), cfg.MaxFutureKeyCount)
 
 	// A group in a SecurityGroupFolder, added through the folder.
 	folder, ok := s.sks.SecurityGroupFolderNodeID("plant", "line 1")

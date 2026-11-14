@@ -3,12 +3,14 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"sort"
 )
@@ -53,6 +55,45 @@ func cleanFiles(files []string) error {
 		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("clean %s: %w", f, err)
 		}
+	}
+	return nil
+}
+
+// stringerIndex is the range check stringer writes for a run of
+// consecutive values starting at k:
+//
+//	idx := int(i) - k
+//	if i < k || idx >= len(_T_index)-1 {
+//		return "T(" + strconv.FormatInt(int64(i), 10) + ")"
+//	}
+var stringerIndex = regexp.MustCompile(`\tidx := int\(i\) - (\d+)\n\tif i < (\d+) \|\| idx >= len\((\w+)\)-1 \{\n(\t\treturn [^\n]*\n)\t\}\n`)
+
+// boundIndexes rewrites the range checks of stringer output so that the
+// value is compared as a 64-bit unsigned number, i >= k and then i-k
+// against the number of names, before it is converted to int, which has
+// 32 bits on some platforms. The conversion that follows is of a value
+// below the number of names. An output with a range check of another
+// shape is an error, so a stringer version that writes one is noticed.
+func boundIndexes(src []byte) ([]byte, error) {
+	out := stringerIndex.ReplaceAll(src, []byte("\tif i < ${2} || uint64(i)-${2} >= uint64(len(${3})-1) {\n${4}\t}\n\tidx := int(i) - ${1}\n"))
+	if bytes.Contains(out, []byte("idx >= len(")) {
+		return nil, fmt.Errorf("stringer output has a range check boundIndexes does not rewrite")
+	}
+	return out, nil
+}
+
+// boundStringerIndexes applies boundIndexes to a stringer-generated file.
+func boundStringerIndexes(path string) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("boundStringerIndexes %s: %w", path, err)
+	}
+	out, err := boundIndexes(data)
+	if err != nil {
+		return fmt.Errorf("boundStringerIndexes %s: %w", path, err)
+	}
+	if err := os.WriteFile(path, out, 0o644); err != nil {
+		return fmt.Errorf("boundStringerIndexes %s: %w", path, err)
 	}
 	return nil
 }

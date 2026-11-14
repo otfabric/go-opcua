@@ -161,11 +161,26 @@ func (b *Buffer) ReadBytes() []byte {
 	if n == 0 || n == null {
 		return nil
 	}
-	d := b.ReadN(int(n))
+	d := b.readLen(n)
 	if b.err != nil {
 		return nil
 	}
 	return d
+}
+
+// readLen reads the n bytes of a value whose length the input declares. The
+// length is compared with the bytes that are left as an unsigned 64-bit
+// number before it is converted: where int has 32 bits, a length above its
+// range has no int value.
+func (b *Buffer) readLen(n uint32) []byte {
+	if b.err != nil {
+		return nil
+	}
+	if uint64(n) > uint64(b.Len()) {
+		b.err = io.ErrUnexpectedEOF
+		return nil
+	}
+	return b.ReadN(int(n))
 }
 
 func (b *Buffer) ReadStruct(r interface{}) {
@@ -209,12 +224,14 @@ func (b *Buffer) ReadTime() time.Time {
 	return time.Unix(ticks/10_000_000-11644473600, (ticks%10_000_000)*100).UTC()
 }
 
+// ReadN reads the next n bytes. A negative n, or more bytes than are left,
+// is io.ErrUnexpectedEOF.
 func (b *Buffer) ReadN(n int) []byte {
 	if b.err != nil {
 		return nil
 	}
 	d := b.buf[b.pos:]
-	if n > len(d) {
+	if n < 0 || n > len(d) {
 		b.err = io.ErrUnexpectedEOF
 		return nil
 	}

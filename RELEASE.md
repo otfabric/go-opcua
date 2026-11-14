@@ -1,5 +1,38 @@
 # go-opcua Releases
 
+## v1.32.1
+
+**Date:** 2026-11-14
+**Previous release:** v1.32.0
+
+Bounds on the work and memory of decoding: Variant arrays, AMQP 1.0 messages, PubSub metadata, chunk reassembly and PKCS #12 files; limits on GDS query patterns and SecurityGroup key counts; and 32-bit builds that handle lengths, enumeration names and NodeSet2 integer attributes as 64-bit builds do. No API changes.
+
+### Fixed
+
+- UA Binary: a Variant array is never longer than the bytes that follow its length (every element takes at least one byte); a longer one is refused before it is allocated. The decoding of an array and of its ArrayDimensions stops at the first element that does not decode.
+- UA Binary: the length of a String, ByteString or ExtensionObject body is compared with the remaining input as an unsigned number, so 32-bit builds take the same lengths as 64-bit builds. `ua.Buffer.ReadN` with a negative count fails with `io.ErrUnexpectedEOF`, as with more bytes than are left.
+- server: the length at the start of a legacy encrypted user password is compared with the decrypted bytes as an unsigned number (`Bad_IdentityTokenInvalid` when they cannot hold it), and a MaxNotificationsPerPublish above the largest `int` of a 32-bit build is taken as that largest value, as on 64-bit builds.
+- ua: the String method of an enumeration with an unsigned type gives `Type(n)` for every value that has no name on 32-bit builds too. `make gen` keeps this when it regenerates the methods.
+- server: the NodeSet2 import reads the integer attributes ValueRank and the `Value` of a DataType field as 64-bit numbers, so 32-bit and 64-bit builds accept and refuse the same files.
+- pubsub AMQP: the element counts of the nested lists, maps and arrays of an AMQP 1.0 message share one budget, the bytes of the message, so decoding allocates in proportion to the message size.
+- GDS: the 4096-byte limit of a QueryApplications or QueryServers pattern is checked before the pattern is compiled, and consecutive `%` compile as one.
+- pubsub JSON: a reader looks the field names of a DataSetMessage up in an index of its DataSetMetaData, built once for each DataSetMetaData, and the JSON decoder builds one index per DataSetMetaData of a NetworkMessage. A DataSetMetaData from the network (`ua-metadata`, or a UADP discovery announcement) with more than 65535 fields is a decode error.
+- pubsub JSON: an unsigned integer of 2^64 or more in exponent or fraction notation is refused, as it is in plain notation.
+- pubsub security: `KeyService.AddSecurityGroup` refuses a `MaxPastKeyCount` + `MaxFutureKeyCount` above 65534 with `Bad_InvalidArgument` before it generates keys, so the keys of a SecurityGroup fit the Keys array of one GetSecurityKeys result.
+- pubsub UADP: the structure type cache of RawData fields keeps only the NodeIds that have a registered Go type.
+- pubsub UADP: the decoder refuses a String PublisherId and a CorrelationData of more than 4096 bytes, and a `Reassembler` charges the first chunk of a message with its String PublisherId, String RequestorId and CorrelationData, which the message keeps while chunks are missing.
+- uapolicy: `ParsePFX` charges a key derivation its iterations times the blocks of hash output it derives against the work limit, and refuses a PBMAC1 key length above the block size of its HMAC.
+
+### Tests
+
+- conformance/addrspace: `TestView_MapNamespace` serves `math.MaxInt` as its Go `int` value, where it served a constant that did not fit the `int` of a 32-bit build, so the package builds and its tests run on 32-bit builds.
+
+### Notes
+
+- v1.32.0 added `DomainNames []string` to `gdsserver.PendingRequest`, so values of the type can no longer be compared with `==` (the API check against v1.31.0 reports it). Code that compared them compares the fields it needs. Nothing in the code changes.
+
+---
+
 ## v1.32.0
 
 **Date:** 2026-11-13

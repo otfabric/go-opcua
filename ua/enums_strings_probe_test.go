@@ -22,13 +22,10 @@ func enumProbeValues() []int64 {
 	return append(vals, 1<<31-1)
 }
 
-// TestEnumStrings_NeverEmptyAndUnknownIsExplicit checks the two properties
-// callers rely on when logging enum values: a String is never empty, and a
-// value outside the enumeration is rendered as "Type(n)" rather than borrowing
-// a neighbour's name.
-func TestEnumStrings_NeverEmptyAndUnknownIsExplicit(t *testing.T) {
-	probes := enumProbeValues()
-	stringers := map[string]func(int64) fmt.Stringer{
+// enumStringers converts an int64 to each enumeration type of the package
+// that has a generated String method.
+func enumStringers() map[string]func(int64) fmt.Stringer {
+	return map[string]func(int64) fmt.Stringer{
 		"AccessLevelExType":                      func(v int64) fmt.Stringer { return AccessLevelExType(v) },
 		"AccessLevelType":                        func(v int64) fmt.Stringer { return AccessLevelType(v) },
 		"AccessRestrictionType":                  func(v int64) fmt.Stringer { return AccessRestrictionType(v) },
@@ -100,6 +97,15 @@ func TestEnumStrings_NeverEmptyAndUnknownIsExplicit(t *testing.T) {
 		"UserConfigurationMask":                  func(v int64) fmt.Stringer { return UserConfigurationMask(v) },
 		"UserTokenType":                          func(v int64) fmt.Stringer { return UserTokenType(v) },
 	}
+}
+
+// TestEnumStrings_NeverEmptyAndUnknownIsExplicit checks the two properties
+// callers rely on when logging enum values: a String is never empty, and a
+// value outside the enumeration is rendered as "Type(n)" rather than borrowing
+// a neighbour's name.
+func TestEnumStrings_NeverEmptyAndUnknownIsExplicit(t *testing.T) {
+	probes := enumProbeValues()
+	stringers := enumStringers()
 
 	for name, conv := range stringers {
 		named, unknown := 0, 0

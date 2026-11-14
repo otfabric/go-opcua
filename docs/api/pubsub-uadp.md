@@ -296,7 +296,7 @@ type ReassemblerOptions struct {
 }
 ```
 
-ReassemblerOptions bound the memory of a [Reassembler](#type-reassembler). Zero values select the defaults. Chunks arrive unauthenticated if the messages are not secured: the limits keep a sender from making the receiver hold more than MaxPendingBytes, and a single PublisherId from taking more than its share. Every stored chunk is charged its size plus a fixed 64 bytes.
+ReassemblerOptions bound the memory of a [Reassembler](#type-reassembler). Zero values select the defaults. Chunks arrive unauthenticated if the messages are not secured: the limits keep a sender from making the receiver hold more than MaxPendingBytes, and a single PublisherId from taking more than its share. Every stored chunk is charged its size plus a fixed 64 bytes; the first stored chunk of a message also the bytes of the strings that tell its chunks apart, a String PublisherId, a String RequestorId and the CorrelationData, which are kept with the message.
 
 ### type ReassemblerStats
 
