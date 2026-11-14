@@ -177,7 +177,7 @@ func (s *MonitoredItemService) DrainQueuedNotifications(subID uint32, max uint32
 	s.Mu.Lock()
 	defer s.Mu.Unlock()
 	items := s.Subs[subID]
-	limit := int(max)
+	limit := intOfUint32(max)
 	unlimited := max == 0
 	for _, item := range items {
 		if item == nil || item.Mode != ua.MonitoringModeReporting || len(item.queue) == 0 {

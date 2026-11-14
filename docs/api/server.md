@@ -3966,6 +3966,8 @@ EnableSecurityKeyService makes the server a Security Key Service (Part 14 §8) f
 
 Every SecurityGroup of ks gets a SecurityGroupType node below PublishSubscribe.SecurityGroups (or the SecurityGroupFolder of its SecurityGroupFolder path) with the properties SecurityGroupId, KeyLifetime, SecurityPolicyUri, MaxFutureKeyCount and MaxPastKeyCount; nodes follow groups added or removed later through ks.
 
+AddSecurityGroup refuses a MaxPastKeyCount + MaxFutureKeyCount above 65534 with Bad\_InvalidArgument (see pubsubsec.SecurityGroupConfig).
+
 The methods only run over a SignAndEncrypt secure channel (Bad\_SecurityModeInsufficient) and for callers the Authorizer of ks allows (Bad\_UserAccessDenied). Call it once, before Start.
 
 #### func (Server) Endpoints

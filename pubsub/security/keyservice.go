@@ -19,6 +19,14 @@ import (
 // accepts (open62541 ua_pubsub_securitygroup.c).
 const MaxSecurityGroupIDLength = 512
 
+// maxGroupKeys is the largest number of keys a SecurityGroup of a
+// KeyService keeps: its past keys, the current key and its future keys,
+// MaxPastKeyCount + 1 + MaxFutureKeyCount. GetSecurityKeys returns at most
+// all of them, as the Keys array of one result, and the UA Binary decoder
+// takes an array of at most 65535 elements (the default of
+// ua.MaxVariantArrayLength).
+const maxGroupKeys = 0xffff
+
 // SecurityGroupConfig configures a SecurityGroup of a KeyService
 // (SecurityGroupType, Part 14 §9.1.5.3; AddSecurityGroup arguments).
 type SecurityGroupConfig struct {
@@ -35,6 +43,10 @@ type SecurityGroupConfig struct {
 	MaxFutureKeyCount uint32
 	// MaxPastKeyCount is the number of keys before the current one the
 	// SKS keeps.
+	//
+	// MaxPastKeyCount + MaxFutureKeyCount is at most 65534: with the
+	// current key, the keys of a group fit the Keys array of one
+	// GetSecurityKeys result.
 	MaxPastKeyCount uint32
 	// SecurityGroupFolder is the path of SecurityGroupFolder names below
 	// PublishSubscribe.SecurityGroups the group is listed in; empty for
@@ -149,14 +161,20 @@ func (ks *KeyService) notify(ev GroupEvent) {
 // AddSecurityGroup creates a SecurityGroup with a current key (token id 1)
 // and MaxFutureKeyCount future keys, as open62541 does. Errors carry the
 // status codes of AddSecurityGroup: Bad_InvalidArgument for an empty or
-// too long id or a non-positive KeyLifetime, Bad_NodeIdExists for an id in
-// use, Bad_SecurityPolicyRejected for an unknown policy.
+// too long id, a non-positive KeyLifetime or a MaxPastKeyCount +
+// MaxFutureKeyCount above 65534, Bad_NodeIdExists for an id in use,
+// Bad_SecurityPolicyRejected for an unknown policy.
 func (ks *KeyService) AddSecurityGroup(cfg SecurityGroupConfig) error {
 	if cfg.SecurityGroupID == "" || len(cfg.SecurityGroupID) > MaxSecurityGroupIDLength {
 		return fmt.Errorf("pubsub/security: invalid SecurityGroupId: %w", ua.StatusBadInvalidArgument)
 	}
 	if cfg.KeyLifetime <= 0 {
 		return fmt.Errorf("pubsub/security: KeyLifetime must be positive: %w", ua.StatusBadInvalidArgument)
+	}
+	// The counts are checked before a key is generated.
+	if uint64(cfg.MaxPastKeyCount)+1+uint64(cfg.MaxFutureKeyCount) > maxGroupKeys {
+		return fmt.Errorf("pubsub/security: MaxPastKeyCount %d and MaxFutureKeyCount %d: a SecurityGroup keeps at most %d keys: %w",
+			cfg.MaxPastKeyCount, cfg.MaxFutureKeyCount, maxGroupKeys, ua.StatusBadInvalidArgument)
 	}
 	if slices.Contains(cfg.SecurityGroupFolder, "") {
 		return fmt.Errorf("pubsub/security: empty SecurityGroupFolder name: %w", ua.StatusBadInvalidArgument)

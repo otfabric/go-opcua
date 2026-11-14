@@ -69,8 +69,14 @@ func TestBufferUnexpectedEOF(t *testing.T) {
 }
 
 func TestBufferWriteByteStringTooLarge(t *testing.T) {
+	// One byte more than an Int32 length can say: a size that only exists
+	// where int has more than 32 bits.
+	size := uint64(math.MaxInt32) + 1
+	if size > uint64(math.MaxInt) {
+		t.Skip("no slice is longer than MaxInt32 bytes on this platform")
+	}
 	buf := NewBuffer(nil)
-	buf.WriteByteString(make([]byte, math.MaxInt32+1))
+	buf.WriteByteString(make([]byte, int(size)))
 	require.ErrorIs(t, buf.Error(), errors.ErrArrayTooLarge)
 }
 

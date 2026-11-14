@@ -248,7 +248,10 @@ const (
 // the defaults. Chunks arrive unauthenticated if the messages are not
 // secured: the limits keep a sender from making the receiver hold more than
 // MaxPendingBytes, and a single PublisherId from taking more than its share.
-// Every stored chunk is charged its size plus a fixed 64 bytes.
+// Every stored chunk is charged its size plus a fixed 64 bytes; the first
+// stored chunk of a message also the bytes of the strings that tell its
+// chunks apart, a String PublisherId, a String RequestorId and the
+// CorrelationData, which are kept with the message.
 type ReassemblerOptions struct {
 	// MaxMessageSize is the largest TotalSize accepted (default 2 MiB).
 	MaxMessageSize int
@@ -288,7 +291,8 @@ func (o *ReassemblerOptions) normalize() ReassemblerOptions {
 	if n.Timeout <= 0 {
 		n.Timeout = DefaultReassemblyTimeout
 	}
-	// One complete message must fit the limits.
+	// One complete message must fit the limits (the strings of its key
+	// are charged on top).
 	n.MaxPublisherBytes = max(n.MaxPublisherBytes, n.MaxMessageSize+chunkOverhead*min(n.MaxChunks, n.MaxMessageSize))
 	n.MaxPendingBytes = max(n.MaxPendingBytes, n.MaxPublisherBytes)
 	n.MaxPendingMessages = max(n.MaxPendingMessages, n.MaxPublisherMessages)
@@ -357,6 +361,11 @@ type reasmKey struct {
 	act       message.ActionMessageType
 	requestor pubKey
 	corr      string
+}
+
+// stringBytes is the size of the strings of the key.
+func (k reasmKey) stringBytes() int {
+	return len(k.pub.str) + len(k.requestor.str) + len(k.corr)
 }
 
 type pubUsage struct{ msgs, bytes int }
@@ -533,6 +542,10 @@ func (r *Reassembler) addLocked(nm *message.NetworkMessage, c *message.Chunk, no
 		return nil, rejected("%w: GroupHeader numbers of the chunk do not follow those of the message", errConflict)
 	}
 	charge := n + chunkOverhead
+	if isNew {
+		// The message keeps the strings of its key until it is removed.
+		charge += key.stringBytes()
+	}
 	if !r.makeRoomLocked(key.pub, e, charge, isNew, dropped) {
 		return nil, rejected("no room for the chunk (%d bytes pending)", r.bytes)
 	}

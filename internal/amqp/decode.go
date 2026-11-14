@@ -10,18 +10,30 @@ import (
 
 // decoder reads AMQP values (Part 1 §1.2) from a buffer. Everything it
 // decodes comes from the network: lengths and counts are checked against
-// the bytes that are left before anything is allocated, so a value can
-// never claim more memory than its input occupies, and nesting is bounded
-// by MaxDepth.
+// the bytes that are left before anything is allocated, the elements of
+// all compounds and arrays together against the length of the input, and
+// nesting is bounded by MaxDepth. The memory a value takes is therefore
+// proportional to the length of its input.
 type decoder struct {
 	b     []byte
 	depth int
+	// elems is the number of elements the compounds and arrays of the
+	// input may still declare (see sized). The decoders of the nested
+	// compounds share it.
+	elems *int
+}
+
+// newDecoder returns a decoder for the input b, with an element budget of
+// one element per byte of b.
+func newDecoder(b []byte) *decoder {
+	n := len(b)
+	return &decoder{b: b, elems: &n}
 }
 
 // DecodeValue decodes one value from b and returns it with the bytes that
 // follow it.
 func DecodeValue(b []byte) (any, []byte, error) {
-	d := &decoder{b: b}
+	d := newDecoder(b)
 	v, err := d.value()
 	if err != nil {
 		return nil, nil, err
@@ -230,8 +242,12 @@ func (d *decoder) body(c byte) (any, error) {
 // and returns a decoder for exactly its size. The count is checked against
 // the size: every element takes at least one byte, except the elements of
 // an array of a zero-width type, whose count is bounded by the size all
-// the same, so no input can make the decoder allocate more than a few
-// times its own length.
+// the same. That bounds one compound, not the compounds nested in it,
+// which lie within the same bytes: the count is therefore also taken from
+// the element budget of the input (decoder.elems), one element per byte
+// of the input for all compounds and arrays at all nesting levels
+// together. The slices allocated for the declared counts are then
+// proportional to the length of the input, whatever the nesting.
 func (d *decoder) sized(wide bool) (*decoder, uint32, error) {
 	var size, count uint32
 	var err error
@@ -263,7 +279,11 @@ func (d *decoder) sized(wide bool) (*decoder, uint32, error) {
 	if count > size {
 		return nil, 0, protoErr("%d elements in %d bytes", count, size)
 	}
-	return &decoder{b: body, depth: d.depth}, count, nil
+	if uint64(count) > uint64(*d.elems) {
+		return nil, 0, protoErr("%d elements, the input has room for %d more", count, *d.elems)
+	}
+	*d.elems -= int(count)
+	return &decoder{b: body, depth: d.depth, elems: d.elems}, count, nil
 }
 
 func (d *decoder) compound(c byte) (any, error) {

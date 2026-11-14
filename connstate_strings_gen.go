@@ -22,9 +22,9 @@ const _ConnState_name = "ClosedConnectedConnectingDisconnectedReconnecting"
 var _ConnState_index = [...]uint8{0, 6, 15, 25, 37, 49}
 
 func (i ConnState) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_ConnState_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_ConnState_index)-1) {
 		return "ConnState(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _ConnState_name[_ConnState_index[idx]:_ConnState_index[idx+1]]
 }

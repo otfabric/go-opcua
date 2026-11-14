@@ -529,6 +529,8 @@ func (b *Buffer) ReadInt8() int8
 func (b *Buffer) ReadN(n int) []byte
 ```
 
+ReadN reads the next n bytes. A negative n, or more bytes than are left, is io.ErrUnexpectedEOF.
+
 #### func (Buffer) ReadString
 
 ```go

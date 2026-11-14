@@ -229,6 +229,33 @@ type dataSetReader struct {
 	probeWait time.Duration
 	probeSent time.Time
 	probeSeen time.Time
+	// names is the index of the field names of md, built for namesOf
+	// (see fieldNames); guarded by PubSub.mu.
+	names   map[string]int
+	namesOf *ua.DataSetMetaDataType
+}
+
+// fieldNames returns the position of every field name of the reader's
+// DataSetMetaData, the first field of a name where several have it. The
+// index is built once per DataSetMetaData: r.md is replaced, never changed,
+// so the index is current while it was built for r.md. p.mu is held.
+func (r *dataSetReader) fieldNames() map[string]int {
+	if r.md == nil {
+		return nil
+	}
+	if r.names == nil || r.namesOf != r.md {
+		r.names = make(map[string]int, len(r.md.Fields))
+		for i, f := range r.md.Fields {
+			if f == nil {
+				continue
+			}
+			if _, ok := r.names[f.Name]; !ok {
+				r.names[f.Name] = i
+			}
+		}
+		r.namesOf = r.md
+	}
+	return r.names
 }
 
 func (r *dataSetReader) config() *ua.DataSetReaderDataType {

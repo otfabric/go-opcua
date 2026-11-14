@@ -154,9 +154,11 @@ func uintValue(raw json.RawMessage, name string, max uint64) (uint64, error) {
 	}
 	n, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
-		// Accept integral numbers written with a fraction or exponent.
+		// Accept integral numbers written with a fraction or exponent. A
+		// number of 2^64 or more has no uint64 value and is refused
+		// before the conversion (float64(math.MaxUint64) is 2^64).
 		f, ferr := strconv.ParseFloat(s, 64)
-		if ferr != nil || f < 0 || f != math.Trunc(f) || f > float64(max) {
+		if ferr != nil || f < 0 || f != math.Trunc(f) || f >= 0x1p64 || f > float64(max) {
 			return 0, errorf("%s: expected an unsigned integer, got %.40s", name, s)
 		}
 		n = uint64(f)

@@ -178,12 +178,14 @@ func sortedKeys[K ~string, V any](m map[K]V) []string {
 func (m *Message) UnmarshalBinary(b []byte) error {
 	*m = Message{}
 	body := uint64(0)
-	for len(b) > 0 {
-		v, rest, err := DecodeValue(b)
+	// One decoder for all sections: they share the element budget of the
+	// message.
+	dec := newDecoder(b)
+	for len(dec.b) > 0 {
+		v, err := dec.value()
 		if err != nil {
 			return err
 		}
-		b = rest
 		d, ok := v.(*Described)
 		if !ok {
 			return protoErr("message section is a %T", v)

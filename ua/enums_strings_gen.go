@@ -143,10 +143,10 @@ const _ActionState_name = "ActionStateIdleActionStateExecutingActionStateDone"
 var _ActionState_index = [...]uint8{0, 15, 35, 50}
 
 func (i ActionState) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_ActionState_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_ActionState_index)-1) {
 		return "ActionState(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _ActionState_name[_ActionState_index[idx]:_ActionState_index[idx+1]]
 }
 func _() {
@@ -193,10 +193,10 @@ const _ApplicationType_name = "ApplicationTypeServerApplicationTypeClientApplica
 var _ApplicationType_index = [...]uint8{0, 21, 42, 72, 102}
 
 func (i ApplicationType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_ApplicationType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_ApplicationType_index)-1) {
 		return "ApplicationType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _ApplicationType_name[_ApplicationType_index[idx]:_ApplicationType_index[idx+1]]
 }
 func _() {
@@ -238,10 +238,10 @@ const _AttributeID_name = "AttributeIDInvalidAttributeIDNodeIDAttributeIDNodeCla
 var _AttributeID_index = [...]uint16{0, 18, 35, 55, 76, 98, 120, 140, 164, 185, 205, 227, 253, 277, 293, 312, 332, 358, 380, 406, 440, 462, 483, 508, 537, 563, 593, 622, 646}
 
 func (i AttributeID) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_AttributeID_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_AttributeID_index)-1) {
 		return "AttributeID(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _AttributeID_name[_AttributeID_index[idx]:_AttributeID_index[idx+1]]
 }
 func _() {
@@ -329,10 +329,10 @@ const _AxisScaleEnumeration_name = "AxisScaleEnumerationLinearAxisScaleEnumerati
 var _AxisScaleEnumeration_index = [...]uint8{0, 26, 49, 71}
 
 func (i AxisScaleEnumeration) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_AxisScaleEnumeration_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_AxisScaleEnumeration_index)-1) {
 		return "AxisScaleEnumeration(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _AxisScaleEnumeration_name[_AxisScaleEnumeration_index[idx]:_AxisScaleEnumeration_index[idx+1]]
 }
 func _() {
@@ -351,10 +351,10 @@ const _BrokerTransportQoS_name = "BrokerTransportQoSNotSpecifiedBrokerTransportQ
 var _BrokerTransportQoS_index = [...]uint8{0, 30, 58, 87, 115, 144}
 
 func (i BrokerTransportQoS) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_BrokerTransportQoS_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_BrokerTransportQoS_index)-1) {
 		return "BrokerTransportQoS(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _BrokerTransportQoS_name[_BrokerTransportQoS_index[idx]:_BrokerTransportQoS_index[idx+1]]
 }
 func _() {
@@ -372,10 +372,10 @@ const _BrowseDirection_name = "BrowseDirectionForwardBrowseDirectionInverseBrows
 var _BrowseDirection_index = [...]uint8{0, 22, 44, 63, 85}
 
 func (i BrowseDirection) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_BrowseDirection_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_BrowseDirection_index)-1) {
 		return "BrowseDirection(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _BrowseDirection_name[_BrowseDirection_index[idx]:_BrowseDirection_index[idx+1]]
 }
 func _() {
@@ -443,10 +443,10 @@ const _ChassisIDSubtype_name = "ChassisIDSubtypeChassisComponentChassisIDSubtype
 var _ChassisIDSubtype_index = [...]uint8{0, 32, 62, 91, 117, 147, 176, 197}
 
 func (i ChassisIDSubtype) String() string {
-	idx := int(i) - 1
-	if i < 1 || idx >= len(_ChassisIDSubtype_index)-1 {
+	if i < 1 || uint64(i)-1 >= uint64(len(_ChassisIDSubtype_index)-1) {
 		return "ChassisIDSubtype(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 1
 	return _ChassisIDSubtype_name[_ChassisIDSubtype_index[idx]:_ChassisIDSubtype_index[idx+1]]
 }
 func _() {
@@ -464,10 +464,10 @@ const _ConfigurationUpdateType_name = "ConfigurationUpdateTypeInsertConfiguratio
 var _ConfigurationUpdateType_index = [...]uint8{0, 29, 59, 97, 126}
 
 func (i ConfigurationUpdateType) String() string {
-	idx := int(i) - 1
-	if i < 1 || idx >= len(_ConfigurationUpdateType_index)-1 {
+	if i < 1 || uint64(i)-1 >= uint64(len(_ConfigurationUpdateType_index)-1) {
 		return "ConfigurationUpdateType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 1
 	return _ConfigurationUpdateType_name[_ConfigurationUpdateType_index[idx]:_ConfigurationUpdateType_index[idx+1]]
 }
 func _() {
@@ -484,10 +484,10 @@ const _ConversionLimitEnum_name = "ConversionLimitEnumNoConversionConversionLimi
 var _ConversionLimitEnum_index = [...]uint8{0, 31, 57, 85}
 
 func (i ConversionLimitEnum) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_ConversionLimitEnum_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_ConversionLimitEnum_index)-1) {
 		return "ConversionLimitEnum(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _ConversionLimitEnum_name[_ConversionLimitEnum_index[idx]:_ConversionLimitEnum_index[idx+1]]
 }
 func _() {
@@ -504,10 +504,10 @@ const _DataChangeTrigger_name = "DataChangeTriggerStatusDataChangeTriggerStatusV
 var _DataChangeTrigger_index = [...]uint8{0, 23, 51, 88}
 
 func (i DataChangeTrigger) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_DataChangeTrigger_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_DataChangeTrigger_index)-1) {
 		return "DataChangeTrigger(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _DataChangeTrigger_name[_DataChangeTrigger_index[idx]:_DataChangeTrigger_index[idx+1]]
 }
 func _() {
@@ -564,10 +564,10 @@ const _DataSetFieldFlags_name = "DataSetFieldFlagsNoneDataSetFieldFlagsPromotedF
 var _DataSetFieldFlags_index = [...]uint8{0, 21, 51}
 
 func (i DataSetFieldFlags) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_DataSetFieldFlags_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_DataSetFieldFlags_index)-1) {
 		return "DataSetFieldFlags(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _DataSetFieldFlags_name[_DataSetFieldFlags_index[idx]:_DataSetFieldFlags_index[idx+1]]
 }
 func _() {
@@ -584,10 +584,10 @@ const _DataSetOrderingType_name = "DataSetOrderingTypeUndefinedDataSetOrderingTy
 var _DataSetOrderingType_index = [...]uint8{0, 28, 64, 106}
 
 func (i DataSetOrderingType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_DataSetOrderingType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_DataSetOrderingType_index)-1) {
 		return "DataSetOrderingType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _DataSetOrderingType_name[_DataSetOrderingType_index[idx]:_DataSetOrderingType_index[idx+1]]
 }
 func _() {
@@ -604,10 +604,10 @@ const _DeadbandType_name = "DeadbandTypeNoneDeadbandTypeAbsoluteDeadbandTypePerc
 var _DeadbandType_index = [...]uint8{0, 16, 36, 55}
 
 func (i DeadbandType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_DeadbandType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_DeadbandType_index)-1) {
 		return "DeadbandType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _DeadbandType_name[_DeadbandType_index[idx]:_DeadbandType_index[idx+1]]
 }
 func _() {
@@ -626,10 +626,10 @@ const _DiagnosticsLevel_name = "DiagnosticsLevelBasicDiagnosticsLevelAdvancedDia
 var _DiagnosticsLevel_index = [...]uint8{0, 21, 45, 65, 84, 105}
 
 func (i DiagnosticsLevel) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_DiagnosticsLevel_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_DiagnosticsLevel_index)-1) {
 		return "DiagnosticsLevel(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _DiagnosticsLevel_name[_DiagnosticsLevel_index[idx]:_DiagnosticsLevel_index[idx+1]]
 }
 func _() {
@@ -646,10 +646,10 @@ const _Duplex_name = "DuplexFullDuplexHalfDuplexUnknown"
 var _Duplex_index = [...]uint8{0, 10, 20, 33}
 
 func (i Duplex) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_Duplex_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_Duplex_index)-1) {
 		return "Duplex(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _Duplex_name[_Duplex_index[idx]:_Duplex_index[idx+1]]
 }
 func _() {
@@ -700,10 +700,10 @@ const _ExceptionDeviationFormat_name = "ExceptionDeviationFormatAbsoluteValueExc
 var _ExceptionDeviationFormat_index = [...]uint8{0, 37, 75, 113, 153, 184}
 
 func (i ExceptionDeviationFormat) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_ExceptionDeviationFormat_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_ExceptionDeviationFormat_index)-1) {
 		return "ExceptionDeviationFormat(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _ExceptionDeviationFormat_name[_ExceptionDeviationFormat_index[idx]:_ExceptionDeviationFormat_index[idx+1]]
 }
 func _() {
@@ -735,10 +735,10 @@ const _FilterOperator_name = "FilterOperatorEqualsFilterOperatorIsNullFilterOper
 var _FilterOperator_index = [...]uint16{0, 20, 40, 65, 87, 119, 148, 166, 183, 204, 224, 241, 257, 275, 295, 315, 338, 362, 385}
 
 func (i FilterOperator) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_FilterOperator_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_FilterOperator_index)-1) {
 		return "FilterOperator(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _FilterOperator_name[_FilterOperator_index[idx]:_FilterOperator_index[idx+1]]
 }
 func _() {
@@ -756,10 +756,10 @@ const _HistoryUpdateType_name = "HistoryUpdateTypeInsertHistoryUpdateTypeReplace
 var _HistoryUpdateType_index = [...]uint8{0, 23, 47, 70, 93}
 
 func (i HistoryUpdateType) String() string {
-	idx := int(i) - 1
-	if i < 1 || idx >= len(_HistoryUpdateType_index)-1 {
+	if i < 1 || uint64(i)-1 >= uint64(len(_HistoryUpdateType_index)-1) {
 		return "HistoryUpdateType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 1
 	return _HistoryUpdateType_name[_HistoryUpdateType_index[idx]:_HistoryUpdateType_index[idx+1]]
 }
 func _() {
@@ -777,10 +777,10 @@ const _IDType_name = "IDTypeNumericIDTypeStringIDTypeGUIDIDTypeOpaque"
 var _IDType_index = [...]uint8{0, 13, 25, 35, 47}
 
 func (i IDType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_IDType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_IDType_index)-1) {
 		return "IDType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _IDType_name[_IDType_index[idx]:_IDType_index[idx+1]]
 }
 func _() {
@@ -803,10 +803,10 @@ const _IdentityCriteriaType_name = "IdentityCriteriaTypeUserNameIdentityCriteria
 var _IdentityCriteriaType_index = [...]uint16{0, 28, 58, 82, 109, 138, 175, 206, 237, 275}
 
 func (i IdentityCriteriaType) String() string {
-	idx := int(i) - 1
-	if i < 1 || idx >= len(_IdentityCriteriaType_index)-1 {
+	if i < 1 || uint64(i)-1 >= uint64(len(_IdentityCriteriaType_index)-1) {
 		return "IdentityCriteriaType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 1
 	return _IdentityCriteriaType_name[_IdentityCriteriaType_index[idx]:_IdentityCriteriaType_index[idx+1]]
 }
 func _() {
@@ -823,10 +823,10 @@ const _InterfaceAdminStatus_name = "InterfaceAdminStatusUpInterfaceAdminStatusDo
 var _InterfaceAdminStatus_index = [...]uint8{0, 22, 46, 73}
 
 func (i InterfaceAdminStatus) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_InterfaceAdminStatus_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_InterfaceAdminStatus_index)-1) {
 		return "InterfaceAdminStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _InterfaceAdminStatus_name[_InterfaceAdminStatus_index[idx]:_InterfaceAdminStatus_index[idx+1]]
 }
 func _() {
@@ -847,10 +847,10 @@ const _InterfaceOperStatus_name = "InterfaceOperStatusUpInterfaceOperStatusDownI
 var _InterfaceOperStatus_index = [...]uint8{0, 21, 44, 70, 96, 122, 151, 184}
 
 func (i InterfaceOperStatus) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_InterfaceOperStatus_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_InterfaceOperStatus_index)-1) {
 		return "InterfaceOperStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _InterfaceOperStatus_name[_InterfaceOperStatus_index[idx]:_InterfaceOperStatus_index[idx+1]]
 }
 func _() {
@@ -1054,10 +1054,10 @@ const _ManAddrIfSubtype_name = "ManAddrIfSubtypeNoneManAddrIfSubtypeUnknownManAd
 var _ManAddrIfSubtype_index = [...]uint8{0, 20, 43, 66, 98}
 
 func (i ManAddrIfSubtype) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_ManAddrIfSubtype_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_ManAddrIfSubtype_index)-1) {
 		return "ManAddrIfSubtype(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _ManAddrIfSubtype_name[_ManAddrIfSubtype_index[idx]:_ManAddrIfSubtype_index[idx+1]]
 }
 func _() {
@@ -1075,10 +1075,10 @@ const _MessageSecurityMode_name = "MessageSecurityModeInvalidMessageSecurityMode
 var _MessageSecurityMode_index = [...]uint8{0, 26, 49, 72, 105}
 
 func (i MessageSecurityMode) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_MessageSecurityMode_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_MessageSecurityMode_index)-1) {
 		return "MessageSecurityMode(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _MessageSecurityMode_name[_MessageSecurityMode_index[idx]:_MessageSecurityMode_index[idx+1]]
 }
 func _() {
@@ -1132,10 +1132,10 @@ const _MonitoringMode_name = "MonitoringModeDisabledMonitoringModeSamplingMonito
 var _MonitoringMode_index = [...]uint8{0, 22, 44, 67}
 
 func (i MonitoringMode) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_MonitoringMode_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_MonitoringMode_index)-1) {
 		return "MonitoringMode(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _MonitoringMode_name[_MonitoringMode_index[idx]:_MonitoringMode_index[idx+1]]
 }
 func _() {
@@ -1152,10 +1152,10 @@ const _NamingRuleType_name = "NamingRuleTypeMandatoryNamingRuleTypeOptionalNamin
 var _NamingRuleType_index = [...]uint8{0, 23, 45, 69}
 
 func (i NamingRuleType) String() string {
-	idx := int(i) - 1
-	if i < 1 || idx >= len(_NamingRuleType_index)-1 {
+	if i < 1 || uint64(i)-1 >= uint64(len(_NamingRuleType_index)-1) {
 		return "NamingRuleType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 1
 	return _NamingRuleType_name[_NamingRuleType_index[idx]:_NamingRuleType_index[idx+1]]
 }
 func _() {
@@ -1174,10 +1174,10 @@ const _NegotiationStatus_name = "NegotiationStatusInProgressNegotiationStatusCom
 var _NegotiationStatus_index = [...]uint8{0, 27, 52, 75, 99, 129}
 
 func (i NegotiationStatus) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_NegotiationStatus_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_NegotiationStatus_index)-1) {
 		return "NegotiationStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _NegotiationStatus_name[_NegotiationStatus_index[idx]:_NegotiationStatus_index[idx+1]]
 }
 func _() {
@@ -1337,10 +1337,10 @@ const _NodeIDType_name = "NodeIDTypeTwoByteNodeIDTypeFourByteNodeIDTypeNumericNo
 var _NodeIDType_index = [...]uint8{0, 17, 35, 52, 68, 82, 102}
 
 func (i NodeIDType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_NodeIDType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_NodeIDType_index)-1) {
 		return "NodeIDType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _NodeIDType_name[_NodeIDType_index[idx]:_NodeIDType_index[idx+1]]
 }
 func _() {
@@ -1390,10 +1390,10 @@ const _OverrideValueHandling_name = "OverrideValueHandlingDisabledOverrideValueH
 var _OverrideValueHandling_index = [...]uint8{0, 29, 65, 99}
 
 func (i OverrideValueHandling) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_OverrideValueHandling_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_OverrideValueHandling_index)-1) {
 		return "OverrideValueHandling(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _OverrideValueHandling_name[_OverrideValueHandling_index[idx]:_OverrideValueHandling_index[idx+1]]
 }
 func _() {
@@ -1464,10 +1464,10 @@ const _PerformUpdateType_name = "PerformUpdateTypeInsertPerformUpdateTypeReplace
 var _PerformUpdateType_index = [...]uint8{0, 23, 47, 70, 93}
 
 func (i PerformUpdateType) String() string {
-	idx := int(i) - 1
-	if i < 1 || idx >= len(_PerformUpdateType_index)-1 {
+	if i < 1 || uint64(i)-1 >= uint64(len(_PerformUpdateType_index)-1) {
 		return "PerformUpdateType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 1
 	return _PerformUpdateType_name[_PerformUpdateType_index[idx]:_PerformUpdateType_index[idx+1]]
 }
 func _() {
@@ -1541,10 +1541,10 @@ const _PortIDSubtype_name = "PortIDSubtypeInterfaceAliasPortIDSubtypePortCompone
 var _PortIDSubtype_index = [...]uint8{0, 27, 53, 76, 103, 129, 156, 174}
 
 func (i PortIDSubtype) String() string {
-	idx := int(i) - 1
-	if i < 1 || idx >= len(_PortIDSubtype_index)-1 {
+	if i < 1 || uint64(i)-1 >= uint64(len(_PortIDSubtype_index)-1) {
 		return "PortIDSubtype(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 1
 	return _PortIDSubtype_name[_PortIDSubtype_index[idx]:_PortIDSubtype_index[idx+1]]
 }
 func _() {
@@ -1605,10 +1605,10 @@ const _PubSubDiagnosticsCounterClassification_name = "PubSubDiagnosticsCounterCl
 var _PubSubDiagnosticsCounterClassification_index = [...]uint8{0, 49, 92}
 
 func (i PubSubDiagnosticsCounterClassification) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_PubSubDiagnosticsCounterClassification_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_PubSubDiagnosticsCounterClassification_index)-1) {
 		return "PubSubDiagnosticsCounterClassification(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _PubSubDiagnosticsCounterClassification_name[_PubSubDiagnosticsCounterClassification_index[idx]:_PubSubDiagnosticsCounterClassification_index[idx+1]]
 }
 func _() {
@@ -1627,10 +1627,10 @@ const _PubSubState_name = "PubSubStateDisabledPubSubStatePausedPubSubStateOperat
 var _PubSubState_index = [...]uint8{0, 19, 36, 58, 74, 99}
 
 func (i PubSubState) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_PubSubState_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_PubSubState_index)-1) {
 		return "PubSubState(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _PubSubState_name[_PubSubState_index[idx]:_PubSubState_index[idx+1]]
 }
 func _() {
@@ -1650,10 +1650,10 @@ const _RedundancySupport_name = "RedundancySupportNoneRedundancySupportColdRedun
 var _RedundancySupport_index = [...]uint8{0, 21, 42, 63, 83, 111, 142}
 
 func (i RedundancySupport) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_RedundancySupport_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_RedundancySupport_index)-1) {
 		return "RedundancySupport(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _RedundancySupport_name[_RedundancySupport_index[idx]:_RedundancySupport_index[idx+1]]
 }
 func _() {
@@ -1671,10 +1671,10 @@ const _RedundantServerMode_name = "RedundantServerModePrimaryWithBackupRedundant
 var _RedundantServerMode_index = [...]uint8{0, 36, 66, 96, 129}
 
 func (i RedundantServerMode) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_RedundantServerMode_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_RedundantServerMode_index)-1) {
 		return "RedundantServerMode(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _RedundantServerMode_name[_RedundantServerMode_index[idx]:_RedundantServerMode_index[idx+1]]
 }
 func _() {
@@ -1690,10 +1690,10 @@ const _SecurityTokenRequestType_name = "SecurityTokenRequestTypeIssueSecurityTok
 var _SecurityTokenRequestType_index = [...]uint8{0, 29, 58}
 
 func (i SecurityTokenRequestType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_SecurityTokenRequestType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_SecurityTokenRequestType_index)-1) {
 		return "SecurityTokenRequestType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _SecurityTokenRequestType_name[_SecurityTokenRequestType_index[idx]:_SecurityTokenRequestType_index[idx+1]]
 }
 func _() {
@@ -1715,10 +1715,10 @@ const _ServerState_name = "ServerStateRunningServerStateFailedServerStateNoConfi
 var _ServerState_index = [...]uint8{0, 18, 35, 61, 81, 100, 115, 144, 162}
 
 func (i ServerState) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_ServerState_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_ServerState_index)-1) {
 		return "ServerState(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _ServerState_name[_ServerState_index[idx]:_ServerState_index[idx+1]]
 }
 func _() {
@@ -1734,10 +1734,10 @@ const _SortOrderType_name = "SortOrderTypeAscendingSortOrderTypeDescending"
 var _SortOrderType_index = [...]uint8{0, 22, 45}
 
 func (i SortOrderType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_SortOrderType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_SortOrderType_index)-1) {
 		return "SortOrderType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _SortOrderType_name[_SortOrderType_index[idx]:_SortOrderType_index[idx+1]]
 }
 func _() {
@@ -1756,10 +1756,10 @@ const _StructureType_name = "StructureTypeStructureStructureTypeStructureWithOpt
 var _StructureType_index = [...]uint8{0, 22, 62, 80, 120, 156}
 
 func (i StructureType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_StructureType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_StructureType_index)-1) {
 		return "StructureType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _StructureType_name[_StructureType_index[idx]:_StructureType_index[idx+1]]
 }
 func _() {
@@ -1778,10 +1778,10 @@ const _TimestampsToReturn_name = "TimestampsToReturnSourceTimestampsToReturnServ
 var _TimestampsToReturn_index = [...]uint8{0, 24, 48, 70, 95, 120}
 
 func (i TimestampsToReturn) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_TimestampsToReturn_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_TimestampsToReturn_index)-1) {
 		return "TimestampsToReturn(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _TimestampsToReturn_name[_TimestampsToReturn_index[idx]:_TimestampsToReturn_index[idx+1]]
 }
 func _() {
@@ -1903,10 +1903,10 @@ const _TsnFailureCode_name = "TsnFailureCodeNoFailureTsnFailureCodeInsufficientB
 var _TsnFailureCode_index = [...]uint16{0, 23, 58, 93, 140, 167, 210, 251, 282, 319, 363, 395, 427, 470, 507, 541, 580, 622, 655, 696, 733, 767, 799, 842, 883, 921, 954}
 
 func (i TsnFailureCode) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_TsnFailureCode_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_TsnFailureCode_index)-1) {
 		return "TsnFailureCode(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _TsnFailureCode_name[_TsnFailureCode_index[idx]:_TsnFailureCode_index[idx+1]]
 }
 func _() {
@@ -1924,10 +1924,10 @@ const _TsnListenerStatus_name = "TsnListenerStatusNoneTsnListenerStatusReadyTsnL
 var _TsnListenerStatus_index = [...]uint8{0, 21, 43, 73, 96}
 
 func (i TsnListenerStatus) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_TsnListenerStatus_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_TsnListenerStatus_index)-1) {
 		return "TsnListenerStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _TsnListenerStatus_name[_TsnListenerStatus_index[idx]:_TsnListenerStatus_index[idx+1]]
 }
 func _() {
@@ -1946,10 +1946,10 @@ const _TsnStreamState_name = "TsnStreamStateDisabledTsnStreamStateConfiguringTsn
 var _TsnStreamState_index = [...]uint8{0, 22, 47, 66, 91, 110}
 
 func (i TsnStreamState) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_TsnStreamState_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_TsnStreamState_index)-1) {
 		return "TsnStreamState(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _TsnStreamState_name[_TsnStreamState_index[idx]:_TsnStreamState_index[idx+1]]
 }
 func _() {
@@ -1966,10 +1966,10 @@ const _TsnTalkerStatus_name = "TsnTalkerStatusNoneTsnTalkerStatusReadyTsnTalkerS
 var _TsnTalkerStatus_index = [...]uint8{0, 19, 39, 60}
 
 func (i TsnTalkerStatus) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_TsnTalkerStatus_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_TsnTalkerStatus_index)-1) {
 		return "TsnTalkerStatus(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _TsnTalkerStatus_name[_TsnTalkerStatus_index[idx]:_TsnTalkerStatus_index[idx+1]]
 }
 func _() {
@@ -2009,10 +2009,10 @@ const _TypeID_name = "TypeIDNullTypeIDBooleanTypeIDSByteTypeIDByteTypeIDInt16Typ
 var _TypeID_index = [...]uint16{0, 10, 23, 34, 44, 55, 67, 78, 90, 101, 113, 124, 136, 148, 162, 172, 188, 204, 216, 236, 252, 271, 290, 311, 326, 339, 359}
 
 func (i TypeID) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_TypeID_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_TypeID_index)-1) {
 		return "TypeID(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _TypeID_name[_TypeID_index[idx]:_TypeID_index[idx+1]]
 }
 func _() {
@@ -2165,9 +2165,9 @@ const _UserTokenType_name = "UserTokenTypeAnonymousUserTokenTypeUserNameUserToke
 var _UserTokenType_index = [...]uint8{0, 22, 43, 67, 91}
 
 func (i UserTokenType) String() string {
-	idx := int(i) - 0
-	if i < 0 || idx >= len(_UserTokenType_index)-1 {
+	if i < 0 || uint64(i)-0 >= uint64(len(_UserTokenType_index)-1) {
 		return "UserTokenType(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
+	idx := int(i) - 0
 	return _UserTokenType_name[_UserTokenType_index[idx]:_UserTokenType_index[idx+1]]
 }

@@ -86,6 +86,9 @@ type SecurityKeyService struct {
 // KeyLifetime, SecurityPolicyUri, MaxFutureKeyCount and MaxPastKeyCount;
 // nodes follow groups added or removed later through ks.
 //
+// AddSecurityGroup refuses a MaxPastKeyCount + MaxFutureKeyCount above
+// 65534 with Bad_InvalidArgument (see pubsubsec.SecurityGroupConfig).
+//
 // The methods only run over a SignAndEncrypt secure channel
 // (Bad_SecurityModeInsufficient) and for callers the Authorizer of ks
 // allows (Bad_UserAccessDenied). Call it once, before Start.

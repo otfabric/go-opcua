@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -1253,7 +1254,7 @@ func (s *Subscription) run() {
 			var events []*ua.EventFieldList
 			if maxNotif == 0 {
 				events, moreEvents = s.takeEvents(0, true)
-			} else if left := int(maxNotif) - len(finalItems); left > 0 {
+			} else if left := intOfUint32(maxNotif) - len(finalItems); left > 0 {
 				events, moreEvents = s.takeEvents(left, false)
 			} else {
 				moreEvents = s.pendingEvents()
@@ -1344,4 +1345,14 @@ func (s *Subscription) drainEvents() {
 			return
 		}
 	}
+}
+
+// intOfUint32 converts a UInt32 count or limit of a request to an int.
+// Where int has 32 bits, a value above math.MaxInt32 has no int value and
+// becomes math.MaxInt, which no count of the server reaches.
+func intOfUint32(n uint32) int {
+	if uint64(n) > uint64(math.MaxInt) {
+		return math.MaxInt
+	}
+	return int(n)
 }

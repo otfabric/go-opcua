@@ -358,8 +358,13 @@ func newQuery(name, uri, product string, caps []string) (*query, ua.StatusCode) 
 		if x.src == "" {
 			continue
 		}
+		// The length is checked first: a pattern is compiled only when
+		// it is within the limit of a string argument.
+		if !validString(x.src) {
+			return nil, ua.StatusBadInvalidArgument
+		}
 		p, err := compileLike(x.src)
-		if err != nil || !validString(x.src) {
+		if err != nil {
 			return nil, ua.StatusBadInvalidArgument
 		}
 		*x.p = p

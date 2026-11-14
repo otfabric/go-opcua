@@ -81,7 +81,7 @@ func (e *ExtensionObject) decodeDepth(b []byte, depth int) (int, error) {
 		return buf.Pos(), buf.Error()
 	}
 
-	body := NewBuffer(buf.ReadN(int(length)))
+	body := NewBuffer(buf.readLen(length))
 	body.depth = buf.depth
 	if buf.Error() != nil {
 		return buf.Pos(), buf.Error()

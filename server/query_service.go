@@ -124,7 +124,9 @@ func (s *QueryService) QueryFirst(ctx context.Context, sc *uasc.SecureChannel, r
 	}
 
 	// Apply MaxDataSetsToReturn and spill the overflow into a continuation.
-	max := int(req.MaxDataSetsToReturn)
+	// A limit above the largest int is no limit, where int has 32 bits
+	// too.
+	max := intOfUint32(req.MaxDataSetsToReturn)
 	if max > 0 && len(sets) > max {
 		cp, ok := s.storeContinuation(sess, sets[max:])
 		if !ok {

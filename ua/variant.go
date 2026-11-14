@@ -5,6 +5,7 @@ package ua
 import (
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math"
 	"reflect"
 	"strings"
@@ -177,6 +178,13 @@ func (m *Variant) decodeDepth(b []byte, depth int) (int, error) {
 	if n < -1 || n > MaxVariantArrayLength {
 		return buf.Pos(), StatusBadEncodingLimitsExceeded
 	}
+	// An element of every built-in type takes at least one byte, so an
+	// array is never longer than the bytes that follow its length. A
+	// length the remaining input cannot hold is refused before the array
+	// is allocated.
+	if n > buf.Len() {
+		return buf.Pos(), io.ErrUnexpectedEOF
+	}
 
 	// get the type for the slice
 	sliceType := reflect.SliceOf(typ)
@@ -196,6 +204,11 @@ func (m *Variant) decodeDepth(b []byte, depth int) (int, error) {
 		vals = reflect.MakeSlice(sliceType, n, n)
 		for i := 0; i < n; i++ {
 			vals.Index(i).Set(reflect.ValueOf(m.decodeValue(buf)))
+			// The first element that does not decode ends the array:
+			// nothing is decoded or allocated for the elements after it.
+			if buf.Error() != nil {
+				return buf.Pos(), buf.Error()
+			}
 		}
 	}
 
@@ -208,6 +221,9 @@ func (m *Variant) decodeDepth(b []byte, depth int) (int, error) {
 		m.arrayDimensions = make([]int32, m.arrayDimensionsLength)
 		for i := 0; i < int(m.arrayDimensionsLength); i++ {
 			m.arrayDimensions[i] = buf.ReadInt32()
+			if buf.Error() != nil {
+				return buf.Pos(), buf.Error()
+			}
 			if m.arrayDimensions[i] < 1 {
 				return buf.Pos(), StatusBadEncodingLimitsExceeded
 			}

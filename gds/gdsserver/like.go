@@ -26,6 +26,11 @@ func compileLike(pattern string) (*likePattern, error) {
 	for i := 0; i < len(r); i++ {
 		switch c := r[i]; c {
 		case '%':
+			// Consecutive % match what a single one matches: they are
+			// compiled as one.
+			for i+1 < len(r) && r[i+1] == '%' {
+				i++
+			}
 			b.WriteString(`.*`)
 		case '_':
 			b.WriteString(`.`)

@@ -156,7 +156,9 @@ type WriteMask uint32
 type EventNotifier uint8
 
 // ValueRank ...
-type ValueRank int
+//
+// EDIT: int64, not int, as the ValueRank attributes below.
+type ValueRank int64
 
 // AccessRestriction ...
 type AccessRestriction uint16
@@ -250,10 +252,12 @@ type Value struct {
 // UAVariable ...
 //
 // EDIT: ValueRank, AccessLevel and UserAccessLevel are pointers so that an
-// absent attribute can be told from an explicit 0.
+// absent attribute can be told from an explicit 0. ValueRank is an int64,
+// not an int, so that a file reads the same where int has 32 bits; the
+// importer checks its range.
 type UAVariable struct {
 	DataTypeAttr                string             `xml:"DataType,attr,omitempty"`
-	ValueRankAttr               *int               `xml:"ValueRank,attr,omitempty"`
+	ValueRankAttr               *int64             `xml:"ValueRank,attr,omitempty"`
 	ArrayDimensionsAttr         string             `xml:"ArrayDimensions,attr,omitempty"`
 	AccessLevelAttr             *uint32            `xml:"AccessLevel,attr,omitempty"`
 	UserAccessLevelAttr         *uint32            `xml:"UserAccessLevel,attr,omitempty"`
@@ -310,9 +314,11 @@ type UAObjectType struct {
 }
 
 // UAVariableType ...
+//
+// EDIT: ValueRank is an int64, not an int, as in UAVariable.
 type UAVariableType struct {
 	DataTypeAttr        string `xml:"DataType,attr,omitempty"`
-	ValueRankAttr       int    `xml:"ValueRank,attr,omitempty"`
+	ValueRankAttr       int64  `xml:"ValueRank,attr,omitempty"`
 	ArrayDimensionsAttr string `xml:"ArrayDimensions,attr,omitempty"`
 	Value               *Value `xml:"Value"`
 	*UAType
@@ -339,14 +345,16 @@ type DataTypeDefinition struct {
 }
 
 // DataTypeField ...
+//
+// EDIT: ValueRank and Value are int64, not int, as in UAVariable.
 type DataTypeField struct {
 	NameAttr            string           `xml:"Name,attr"`
 	SymbolicNameAttr    string           `xml:"SymbolicName,attr,omitempty"`
 	DataTypeAttr        string           `xml:"DataType,attr,omitempty"`
-	ValueRankAttr       int              `xml:"ValueRank,attr,omitempty"`
+	ValueRankAttr       int64            `xml:"ValueRank,attr,omitempty"`
 	ArrayDimensionsAttr string           `xml:"ArrayDimensions,attr,omitempty"`
 	MaxStringLengthAttr uint32           `xml:"MaxStringLength,attr,omitempty"`
-	ValueAttr           int              `xml:"Value,attr,omitempty"`
+	ValueAttr           int64            `xml:"Value,attr,omitempty"`
 	IsOptionalAttr      bool             `xml:"IsOptional,attr,omitempty"`
 	AllowSubTypesAttr   bool             `xml:"AllowSubTypes,attr,omitempty"`
 	DisplayName         []*LocalizedText `xml:"DisplayName"`

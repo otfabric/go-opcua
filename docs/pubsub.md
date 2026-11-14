@@ -105,7 +105,12 @@ more away, are counted in `SequenceDiscards` and ignored), merges delta frames o
 last key frame (`ReceivedDataSet.Fields` always holds every field, `Changed`
 lists the ones the message carried) and drops messages with a different
 MajorVersion. With the JSON mapping the field names travel in the message and
-the metadata can also arrive as a `ua-metadata` message on the broker.
+the metadata can also arrive as a `ua-metadata` message on the broker. A
+reader takes a DataSetMetaData from the network (`ua-metadata`, or a UADP
+discovery announcement) with at most 65535 fields, the most a DataSetMessage
+carries; a larger one counts as a decode error. JSON field names are looked
+up in an index of the reader's DataSetMetaData, built once for each
+DataSetMetaData.
 
 A reader keeps the sequence number of a writer until it took no message of
 it for two MessageReceiveTimeouts (§7.2.3); the reader goes to Error after
@@ -502,6 +507,9 @@ A go-opcua server becomes a Security Key Service with
 `srv.EnableSecurityKeyService(ks)` (GetSecurityKeys, Add/Remove/GetSecurityGroup;
 keys are only handed out over SignAndEncrypt channels and, by default, not to
 anonymous users) and accepts pushed keys with `srv.EnableSecurityKeyPush`.
+The past, current and future keys of a SecurityGroup fit the Keys array of
+one GetSecurityKeys result (65535): `AddSecurityGroup` refuses a
+`MaxPastKeyCount` + `MaxFutureKeyCount` above 65534 with `Bad_InvalidArgument`.
 
 ## Chunked NetworkMessages
 
@@ -528,7 +536,12 @@ input, so the reassembly is strict and bounded; set the limits with
 | `MaxPublisherMessages` / `MaxPublisherBytes`: incomplete messages of one PublisherId | 64 / 8 MiB |
 | `Timeout`: wait for the missing chunks of a message | 5 s |
 
-Every chunk is charged with its size plus 64 bytes. A chunk that lies outside
+Every chunk is charged with its size plus 64 bytes, and the first chunk of a
+message also with its String PublisherId, String RequestorId and
+CorrelationData, which the message keeps until it is complete, dropped or
+expired. The decoder takes a String PublisherId and a CorrelationData of at
+most 4096 bytes, as it does a ResponseAddress and a String RequestorId; the
+JSON mapping bounds the CorrelationData the same way. A chunk that lies outside
 its message, overlaps or repeats one already received, disagrees with the
 TotalSize or the chunk size of its message, or does not fit the limits is
 rejected. Chunks that cannot be of one message discard the message: a chunk

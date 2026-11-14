@@ -194,7 +194,8 @@ func TestEncodePFX_Errors(t *testing.T) {
 	require.ErrorIs(t, err, errors.ErrInvalidPrivateKey)
 }
 
-// TestPBES2Schemes encrypts with every PRF and cipher and decrypts again.
+// TestPBES2Schemes encrypts with every PRF and cipher and decrypts again,
+// charging the work of the key derivation per block of PRF output.
 func TestPBES2Schemes(t *testing.T) {
 	plain := []byte("PKCS #12 test plaintext of some length")
 	for _, prf := range pfxHashes {
@@ -206,7 +207,9 @@ func TestPBES2Schemes(t *testing.T) {
 			got, err := d.decrypt(algorithmContents(t, algo), ciphertext)
 			require.NoError(t, err, "%s %s", prf.hmac, c.oid)
 			require.Equal(t, plain, got)
-			require.Equal(t, 97, work)
+			// 3 iterations for each block of the PRF's output in the key.
+			blocks := (c.keySize + prf.new().Size() - 1) / prf.new().Size()
+			require.Equal(t, 100-3*blocks, work, "%s %s", prf.hmac, c.oid)
 
 			d = &pfxDecoder{password: pfxPassword{utf8: []byte("wrong")}, work: &work}
 			got, err = d.decrypt(algorithmContents(t, algo), ciphertext)

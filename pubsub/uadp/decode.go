@@ -134,6 +134,9 @@ func decodeHeaders(data []byte) (*message.NetworkMessage, int, error) {
 			nm.PublisherID.Num = b.ReadUint64()
 		case message.PublisherIDString:
 			nm.PublisherID.Str = b.ReadString()
+			if len(nm.PublisherID.Str) > maxKeyString {
+				return nil, 0, malformed("String PublisherId of %d bytes", len(nm.PublisherID.Str))
+			}
 		default:
 			return nil, 0, malformed("PublisherId type %d", nm.PublisherID.Type)
 		}

@@ -94,6 +94,41 @@ type decoder struct {
 	// action is the DataSetMessage type of the messages of an action
 	// NetworkMessage, 0 for a ua-data message.
 	action message.DataSetMessageType
+	// names are the indexes of the field names of the DataSetMetaData the
+	// DataSetMessages of the message were matched to, built once per
+	// DataSetMetaData and message (see fieldNames); indexed is the number
+	// of fields they cover.
+	names   map[*ua.DataSetMetaDataType]map[string]int
+	indexed int
+}
+
+// maxIndexedFields bounds the fields the indexes of one message cover
+// together: a MetaData lookup that returns another DataSetMetaData for
+// every DataSetMessage does not make them hold all of them.
+const maxIndexedFields = 16 * DefaultMaxFields
+
+// fieldNames returns the position of every field name of md, the last
+// field of a name where several have it. The DataSetMessages of a
+// NetworkMessage share it: it is built once for each DataSetMetaData the
+// MetaData lookup returns, as long as the indexes cover at most
+// maxIndexedFields fields; beyond that the indexes built so far are
+// dropped.
+func (d *decoder) fieldNames(md *ua.DataSetMetaDataType) map[string]int {
+	if byName, ok := d.names[md]; ok {
+		return byName
+	}
+	byName := make(map[string]int, len(md.Fields))
+	for i, f := range md.Fields {
+		if f != nil {
+			byName[f.Name] = i
+		}
+	}
+	if d.names == nil || d.indexed+len(md.Fields) > maxIndexedFields {
+		d.names, d.indexed = map[*ua.DataSetMetaDataType]map[string]int{}, 0
+	}
+	d.names[md] = byName
+	d.indexed += len(md.Fields)
+	return byName
 }
 
 func (d *decoder) networkMessage(nm *message.NetworkMessage, ms []member) error {
@@ -327,12 +362,7 @@ func (d *decoder) payload(nm *message.NetworkMessage, dsm *message.DataSetMessag
 	}
 	var byName map[string]int
 	if md != nil {
-		byName = make(map[string]int, len(md.Fields))
-		for i, f := range md.Fields {
-			if f != nil {
-				byName[f.Name] = i
-			}
-		}
+		byName = d.fieldNames(md)
 	}
 	dsm.Fields = make([]*message.Field, 0, len(ms))
 	for i, m := range ms {

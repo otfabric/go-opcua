@@ -69,7 +69,9 @@ import (
 //
 // Everything is bounded: the size of the file, the number of bags, the
 // nesting of safeContentsBags and of BER elements, the iteration count of
-// each key derivation and the iterations of all key derivations together.
+// each key derivation, the key length of a PBMAC1 MAC (at most the block
+// size of its HMAC) and the work of all key derivations together, counted
+// as the iterations times the hash blocks of output of each derivation.
 
 // ErrPFXPassword reports a PKCS #12 file whose MAC does not verify or whose
 // contents do not decrypt: in practice, a wrong password. It also matches
@@ -97,8 +99,9 @@ const (
 var (
 	// pfxMaxIterations bounds the iteration count of one key derivation.
 	pfxMaxIterations = 10_000_000
-	// pfxMaxWork bounds the iterations of all key derivations of a ParsePFX
-	// call.
+	// pfxMaxWork bounds the work of all key derivations of a ParsePFX call:
+	// the sum of their iterations, each times the number of hash blocks it
+	// derives.
 	pfxMaxWork = 20_000_000
 )
 
@@ -288,15 +291,20 @@ func pfxError(format string, args ...any) error {
 	return fmt.Errorf("%w: "+format, append([]any{errors.ErrInvalidPrivateKey}, args...)...)
 }
 
-// spend takes iterations from the work budget.
-func (d *pfxDecoder) spend(iterations int) error {
+// spend takes the work of a key derivation of size bytes from the budget.
+// A derivation computes its output in blocks of the output size hLen of its
+// hash, each block of iterations rounds, so it costs iterations times
+// ceil(size/hLen). The product is compared by division: it is never
+// computed beyond the budget.
+func (d *pfxDecoder) spend(iterations, size, hLen int) error {
 	if iterations < 1 || iterations > pfxMaxIterations {
 		return pfxError("PFX iteration count %d out of range", iterations)
 	}
-	if iterations > *d.work {
+	blocks := (size + hLen - 1) / hLen
+	if blocks > *d.work/iterations {
 		return pfxError("PFX key derivations exceed the work limit")
 	}
-	*d.work -= iterations
+	*d.work -= iterations * blocks
 	return nil
 }
 
@@ -385,10 +393,11 @@ func (d *pfxDecoder) verifyMAC(p *pfx) (bool, error) {
 		if len(salt) > maxPFXSalt {
 			return false, pfxError("PFX MAC salt too long")
 		}
-		if err := d.spend(iterations); err != nil {
+		size := h.new().Size()
+		if err := d.spend(iterations, size, size); err != nil {
 			return false, err
 		}
-		key = pkcs12KDF(h, d.password.bmp, salt, 3, iterations, h.new().Size())
+		key = pkcs12KDF(h, d.password.bmp, salt, 3, iterations, size)
 	}
 	mac := hmac.New(h.new, key)
 	mac.Write(p.authSafe)
@@ -415,7 +424,9 @@ func (d *pfxDecoder) pbmac1Key(algo cryptobyte.String) (*pfxHash, []byte, error)
 	if h == nil {
 		return nil, nil, pfxError("unsupported PBMAC1 MAC %s", schemeOID)
 	}
-	key, keyLength, err := d.pbkdf2(kdf, 0)
+	// A key longer than the block size of the HMAC is hashed to the output
+	// size before use, so the key length is at most the block size.
+	key, keyLength, err := d.pbkdf2(kdf, 0, h.new().BlockSize())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -434,9 +445,9 @@ func emptyOrNULL(params cryptobyte.String) bool {
 
 // pbkdf2 derives a key with the PBKDF2 parameters (RFC 8018 Appendix A.2)
 // in params. size is the key size of the cipher, or 0 for the key length of
-// the parameters; the key length of the parameters is returned (0 if
-// absent).
-func (d *pfxDecoder) pbkdf2(params cryptobyte.String, size int) ([]byte, int, error) {
+// the parameters, which is then at most maxLength; the key length of the
+// parameters is returned (0 if absent).
+func (d *pfxDecoder) pbkdf2(params cryptobyte.String, size, maxLength int) ([]byte, int, error) {
 	var (
 		seq, salt  cryptobyte.String
 		iterations int
@@ -470,6 +481,8 @@ func (d *pfxDecoder) pbkdf2(params cryptobyte.String, size int) ([]byte, int, er
 		return nil, 0, pfxError("PBKDF2 salt too long")
 	}
 	switch {
+	case size == 0 && keyLength > maxLength:
+		return nil, 0, pfxError("PBKDF2 key length %d longer than %d", keyLength, maxLength)
 	case size == 0:
 		size = keyLength
 	case keyLength != 0 && keyLength != size:
@@ -478,7 +491,7 @@ func (d *pfxDecoder) pbkdf2(params cryptobyte.String, size int) ([]byte, int, er
 	if size == 0 {
 		return nil, 0, nil
 	}
-	if err := d.spend(iterations); err != nil {
+	if err := d.spend(iterations, size, h.new().Size()); err != nil {
 		return nil, 0, err
 	}
 	key, err := pbkdf2.Key(h.new, string(d.password.utf8), salt, iterations, size)
@@ -532,7 +545,7 @@ func (d *pfxDecoder) decryptPBES2(params cryptobyte.String, data []byte) ([]byte
 	if !scheme.ReadASN1(&iv, cbasn1.OCTET_STRING) || !scheme.Empty() {
 		return nil, pfxError("malformed PBES2 IV")
 	}
-	key, _, err := d.pbkdf2(kdf, c.keySize)
+	key, _, err := d.pbkdf2(kdf, c.keySize, c.keySize)
 	if err != nil {
 		return nil, err
 	}
@@ -568,11 +581,11 @@ func (d *pfxDecoder) decryptPKCS12PBE(oid asn1.ObjectIdentifier, params cryptoby
 	if len(salt) > maxPFXSalt {
 		return nil, pfxError("PKCS #12 PBE salt too long")
 	}
-	// Key and IV are two derivations.
-	if err := d.spend(iterations); err != nil {
+	// Key and IV are two derivations with SHA-1.
+	if err := d.spend(iterations, keySize, sha1.Size); err != nil {
 		return nil, err
 	}
-	if err := d.spend(iterations); err != nil {
+	if err := d.spend(iterations, 8, sha1.Size); err != nil {
 		return nil, err
 	}
 	key := pkcs12KDF(pfxSHA1, d.password.bmp, salt, 1, iterations, keySize)
