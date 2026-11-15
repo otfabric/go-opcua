@@ -13,6 +13,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
 )
 
@@ -135,5 +136,23 @@ func TestDecodeKeyStringBounds(t *testing.T) {
 			}
 			require.ErrorIs(t, err, ErrMalformed, "%s of declared length %#x", name, n)
 		}
+	}
+}
+
+// TestKeyStringBoundIsTheJSONBound: UADP and the JSON mapping accept the
+// same String PublisherIds, at most jsonmsg.MaxCorrelationData bytes.
+func TestKeyStringBoundIsTheJSONBound(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, jsonmsg.MaxCorrelationData, maxKeyString)
+	for _, n := range []int{jsonmsg.MaxCorrelationData - 1, jsonmsg.MaxCorrelationData, jsonmsg.MaxCorrelationData + 1} {
+		s := strings.Repeat("p", n)
+		nm := actionRequestNM()
+		nm.PublisherID = message.StringPublisherID(s)
+		b, err := Encode(nm, nil)
+		require.NoError(t, err)
+		_, uadpErr := Decode(b, nil)
+		_, jsonErr := jsonmsg.Decode(fmt.Appendf(nil, `{"MessageType":"ua-data","PublisherId":%q,"Messages":[]}`, s), nil)
+		require.Equal(t, jsonErr == nil, uadpErr == nil, "String PublisherId of %d bytes: UADP %v, JSON %v", n, uadpErr, jsonErr)
+		require.Equal(t, n <= jsonmsg.MaxCorrelationData, uadpErr == nil, "String PublisherId of %d bytes", n)
 	}
 }

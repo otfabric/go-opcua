@@ -143,7 +143,7 @@ func (d *decoder) networkMessage(nm *message.NetworkMessage, ms []member) error 
 			if isNull(m.val) {
 				continue
 			}
-			nm.PublisherID, err = publisherIDValue(m.val)
+			nm.PublisherID, err = publisherIDValue(m.val, "PublisherId")
 			nm.JSONMask |= ua.JSONNetworkMessageContentMaskPublisherID
 		case "WriterGroupName":
 			nm.WriterGroupName, err = stringValue(m.val, "WriterGroupName")
@@ -274,7 +274,7 @@ func (d *decoder) dataSetMessage(nm *message.NetworkMessage, ms []member) (*mess
 				continue
 			}
 			var p message.PublisherID
-			p, err = publisherIDValue(m.val)
+			p, err = publisherIDValue(m.val, "PublisherId")
 			dsm.PublisherID = &p
 			dsm.JSONMask |= ua.JSONDataSetMessageContentMaskPublisherID
 		case "WriterGroupName":
@@ -606,13 +606,17 @@ func inferArray(v []interface{}) interface{} {
 	return nil
 }
 
-// publisherIDValue decodes a PublisherId: a string (Part 14 1.05, open62541)
-// or a number (1.04 implementations).
-func publisherIDValue(raw json.RawMessage) (message.PublisherID, error) {
+// publisherIDValue decodes a PublisherId, the field name: a string (Part 14
+// 1.05, open62541) or a number (1.04 implementations). A string is at most
+// MaxCorrelationData bytes long, as in UADP.
+func publisherIDValue(raw json.RawMessage, name string) (message.PublisherID, error) {
 	if kind(raw) == '"' {
-		s, err := stringValue(raw, "PublisherId")
+		s, err := stringValue(raw, name)
 		if err != nil {
 			return message.PublisherID{}, err
+		}
+		if len(s) > MaxCorrelationData {
+			return message.PublisherID{}, errorf("String %s of %d bytes", name, len(s))
 		}
 		if isDecimal(s) {
 			if n, err := strconv.ParseUint(s, 10, 64); err == nil {
@@ -621,7 +625,7 @@ func publisherIDValue(raw json.RawMessage) (message.PublisherID, error) {
 		}
 		return message.StringPublisherID(s), nil
 	}
-	n, err := uintValue(raw, "PublisherId", math.MaxUint64)
+	n, err := uintValue(raw, name, math.MaxUint64)
 	if err != nil {
 		return message.PublisherID{}, err
 	}

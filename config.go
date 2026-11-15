@@ -107,6 +107,11 @@ type Config struct {
 	// CreateSession compares it with the server's endpoints (Part 4
 	// §5.7.2).
 	discoveredEndpoint *ua.EndpointDescription
+
+	// discoveredEndpoints is the list given to DiscoveredEndpoints, and
+	// skipDiscoveredEndpoints is set by InsecureSkipDiscoveredEndpointsCheck.
+	discoveredEndpoints     endpointList
+	skipDiscoveredEndpoints bool
 }
 
 func DefaultDialer() *uacp.Dialer {
@@ -480,6 +485,12 @@ func setCertificate(cert []byte, cfg *Config) error {
 // fails with StatusBadSecurityChecksFailed when they differ in the security
 // policy, mode, level, transport profile, application URI or user token
 // policies (Part 4 §5.7.2). The endpoint URL is not compared.
+//
+// When ep is one of the endpoints [GetEndpoints] or [Client.GetEndpoints]
+// returned (the same pointer, not a copy), CreateSession also compares the
+// whole list ep came in with the endpoints of its response, as for
+// [DiscoveredEndpoints]. [InsecureSkipDiscoveredEndpointsCheck] turns that
+// comparison off.
 func SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType) Option {
 	return func(cfg *Config) error {
 		cfg.discoveredEndpoint = ep
@@ -525,6 +536,60 @@ func SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType)
 			cfg.session.UserIdentityToken = &ua.AnonymousIdentityToken{PolicyID: defaultAnonymousPolicyID}
 			cfg.session.AuthPolicyURI = ua.SecurityPolicyURINone
 		}
+		return nil
+	}
+}
+
+// DiscoveredEndpoints gives the client the endpoint list it selected its
+// endpoint from, the answer of GetEndpoints. That answer comes over a
+// channel without security; CreateSession returns the server's endpoints
+// again, over the SecureChannel, and the client verifies the one list with
+// the other (Part 4 §5.6.2, serverEndpoints). When they differ, the client
+// closes the session before ActivateSession and Connect fails with an error
+// matching ua.StatusBadSecurityChecksFailed.
+//
+// The lists differ when an endpoint of one has no endpoint in the other with
+// the same security policy, security mode, security level, transport
+// profile and user token policies (in any order), the same application URI
+// when both name their application, and the same server certificate,
+// compared as bytes, when both carry one. The order of the lists does not
+// matter, nor does the endpoint URL: the client may reach the server under
+// another name than the one the server uses.
+//
+// The client keeps a copy of the compared fields; endpoints that are nil
+// are left out. A list without endpoints is an error. The list applies to
+// every CreateSession of the client, also when it reconnects; when the
+// client fetches the endpoints again after a server certificate change (see
+// [AutoReconnect]), it compares with those.
+//
+// Without this option the client compares the list when the endpoint given
+// to [SecurityFromEndpoint] came from [GetEndpoints] (see there). The option
+// takes precedence over that list.
+func DiscoveredEndpoints(endpoints []*ua.EndpointDescription) Option {
+	return func(cfg *Config) error {
+		l := newEndpointList(endpoints)
+		if l == nil {
+			return fmt.Errorf("opcua: DiscoveredEndpoints: no endpoints")
+		}
+		cfg.discoveredEndpoints = l
+		return nil
+	}
+}
+
+// InsecureSkipDiscoveredEndpointsCheck turns off the comparison of the
+// discovered endpoint list with the endpoints of the CreateSession response
+// (see [DiscoveredEndpoints]), wherever the list comes from and in whatever
+// order the options are given. This is the behaviour of v1.32.1 and earlier.
+// The comparison of the endpoint given to [SecurityFromEndpoint] with the
+// response stays.
+//
+// Without the comparison, a client that selects its endpoint from the
+// GetEndpoints answer (as [SelectEndpoint] does) cannot tell whether that
+// answer, which comes over a channel without security, lists the endpoints
+// the server offers.
+func InsecureSkipDiscoveredEndpointsCheck() Option {
+	return func(cfg *Config) error {
+		cfg.skipDiscoveredEndpoints = true
 		return nil
 	}
 }

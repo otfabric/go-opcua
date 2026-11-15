@@ -297,6 +297,12 @@ srv, err := server.New(
   (415); bodies must arrive within 10 s and headers are limited to 64 KiB.
   A Publish request is answered when a notification is due (long poll); one
   whose HTTP request has ended is dropped and not answered.
+- **Endpoint URLs.** `GetEndpoints` and CreateSession answer with the
+  endpoints of the URL the client named, or with all endpoints when none has
+  that URL (Part 4 §5.4.4, §5.6.2). Both compare the URL in the same way: the
+  scheme and the host without regard to letter case, one trailing slash
+  ignored, the path as it is. A client gets the same list from both services,
+  which it compares (docs/security.md).
 - **Ports.** Port 0 picks a free port; `Server.URLs()` lists the bound URLs
   and `Server.WebSocketAddr()` / `Server.HTTPSAddr()` the listener addresses.
   `ListenWebSocketOn` / `ListenHTTPSOn` bind elsewhere than the advertised

@@ -109,6 +109,14 @@ c, _ := opcua.NewClient(ep.EndpointURL,
 )
 ```
 
+The `GetEndpoints` answer comes over a channel without security. Because `ep`
+is one of its endpoints, CreateSession compares the whole answer with the
+endpoints the server returns over the secure channel, and Connect fails with
+`ua.StatusBadSecurityChecksFailed` when they differ. For an endpoint that is
+a copy, give the list with `opcua.DiscoveredEndpoints(endpoints)`. See the
+[security guide](security.md#auto-detection) for what is compared and for
+`InsecureSkipDiscoveredEndpointsCheck`.
+
 ### HTTPS and WebSocket endpoints
 
 Besides `opc.tcp`, the client dials `opc.wss://` (OPC UA Secure Conversation
@@ -433,6 +441,8 @@ if _, err := c.Read(ctx, req); err != nil {
 | `ApplicationName(name)` | Application name |
 | `WithConnStateHandler(fn)` | Connection state change callback |
 | `SecurityFromEndpoint(ep, auth)` | Auto-configure from discovered endpoint |
+| `DiscoveredEndpoints(eps)` | The endpoint list the endpoint was selected from, compared with the CreateSession response ([security guide](security.md#auto-detection)) |
+| `InsecureSkipDiscoveredEndpointsCheck()` | Do not compare the discovered endpoint list with the CreateSession response |
 | `InsecureNoSecurity()` | Connect without message security; required for policy None over opc.tcp (INSECURE) |
 | `InsecureSkipVerify()` | Skip server certificate validation (INSECURE, dev only) |
 | `TrustedCertificates(certs...)` | Add CA/self-signed certs to trust pool |
@@ -476,7 +486,7 @@ for _, dv := range dvs {
 
 ### Batch read (ReadMulti)
 
-For many node/attribute pairs (e.g. whole subtrees or bulk export), use `ReadMulti`. It chunks requests by server limits (default 32 items per request) and returns results in the same order as the input. Each result includes `DataValue` and `StatusCode`.
+For many node/attribute pairs (e.g. whole subtrees or bulk export), use `ReadMulti`. It chunks requests by server limits (default 32 items per request) and returns results in the same order as the input. Each result includes `DataValue` and `StatusCode`. A Read response without one result per item of its chunk fails the batch with `ua.StatusBadUnknownResponse`, as it does `ReadValues` and `WriteValues`.
 
 ```go
 items := []opcua.ReadItem{

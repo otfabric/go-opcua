@@ -192,6 +192,8 @@ Package documentation: [`errors/doc.go`](errors/doc.go).
 | `ua.StatusBadTimeout` | Operation timed out (server-side status) |
 | `ua.StatusBadSessionIDInvalid` | Session expired or invalid |
 | `ua.StatusBadSecureChannelIDInvalid` | Channel needs renewal |
+| `ua.StatusBadUnknownResponse` | Returned by the client: a response that is not an answer to its request, for example one whose number of results differs from the operations of a `ReadMulti`, `ReadValues`, `WriteValues` or `Node.Attributes` request |
+| `ua.StatusBadSecurityChecksFailed` | Returned by `Connect`: among others, the endpoints of the CreateSession response differ from the selected endpoint or from the endpoint list it was selected from ([docs/security.md](docs/security.md#auto-detection)) |
 
 Multi-item operations (for example `Read` with several nodes) can return a nil Go `error` with per-item statuses. Always inspect each result’s status.
 

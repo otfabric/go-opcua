@@ -91,7 +91,7 @@ func DecodeMetaData(b []byte, opts *DecodeOptions) (*MetaDataMessage, error) {
 			out.MessageID, err = stringValue(m.val, "MessageId")
 		case "PublisherId":
 			if !isNull(m.val) {
-				out.PublisherID, err = publisherIDValue(m.val)
+				out.PublisherID, err = publisherIDValue(m.val, "PublisherId")
 			}
 		case "DataSetWriterId":
 			n, err = uintValue(m.val, "DataSetWriterId", math.MaxUint16)
@@ -178,7 +178,7 @@ func DecodeStatus(b []byte, opts *DecodeOptions) (*StatusMessage, error) {
 			out.MessageID, err = stringValue(m.val, "MessageId")
 		case "PublisherId":
 			if !isNull(m.val) {
-				out.PublisherID, err = publisherIDValue(m.val)
+				out.PublisherID, err = publisherIDValue(m.val, "PublisherId")
 			}
 		case "Timestamp":
 			out.Timestamp, err = timeValue(m.val, "Timestamp", d.co)
@@ -364,7 +364,7 @@ func DecodeActionMetaData(b []byte, opts *DecodeOptions) (*ActionMetaDataMessage
 			out.MessageID, err = stringValue(m.val, "MessageId")
 		case "PublisherId":
 			if !isNull(m.val) {
-				out.PublisherID, err = publisherIDValue(m.val)
+				out.PublisherID, err = publisherIDValue(m.val, "PublisherId")
 			}
 		case "DataSetWriterId":
 			n, err = uintValue(m.val, "DataSetWriterId", math.MaxUint16)
@@ -456,7 +456,7 @@ func DecodeActionResponder(b []byte, opts *DecodeOptions) (*ActionResponderMessa
 			out.MessageID, err = stringValue(m.val, "MessageId")
 		case "PublisherId":
 			if !isNull(m.val) {
-				out.PublisherID, err = publisherIDValue(m.val)
+				out.PublisherID, err = publisherIDValue(m.val, "PublisherId")
 			}
 		case "Timestamp":
 			out.Timestamp, err = timeValue(m.val, "Timestamp", d.co)

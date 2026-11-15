@@ -21,8 +21,11 @@ import (
 // The JSON messages of PubSub Actions (Part 14 §7.2.5.6 in 1.05); the
 // layout is described in the package documentation.
 
-// maxCorrelationData bounds the CorrelationData the decoder accepts.
-const maxCorrelationData = 4096
+// MaxCorrelationData is the largest CorrelationData, in bytes, that Decode
+// accepts in an action message. A String PublisherId or RequestorId has the
+// same bound, and the UADP decoder (pubsub/uadp) applies it to the same
+// fields.
+const MaxCorrelationData = 4096
 
 // actionTypeName is the MessageType of the action DataSetMessages of type t,
 // empty for other types.
@@ -205,7 +208,7 @@ func (d *decoder) actionNetworkMessage(nm *message.NetworkMessage, ms []member, 
 			if isNull(m.val) {
 				continue
 			}
-			nm.PublisherID, err = publisherIDValue(m.val)
+			nm.PublisherID, err = publisherIDValue(m.val, "PublisherId")
 			nm.JSONMask |= ua.JSONNetworkMessageContentMaskPublisherID
 		case "Timestamp":
 			nm.Timestamp, err = timeValue(m.val, "Timestamp", d.co)
@@ -218,7 +221,7 @@ func (d *decoder) actionNetworkMessage(nm *message.NetworkMessage, ms []member, 
 				continue
 			}
 			var p message.PublisherID
-			p, err = publisherIDValue(m.val)
+			p, err = publisherIDValue(m.val, "RequestorId")
 			a.RequestorID = &p
 		case "TimeoutHint":
 			a.TimeoutHint, err = durationValue(m.val, "TimeoutHint")
@@ -322,8 +325,8 @@ func correlationValue(raw json.RawMessage) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	if base64.StdEncoding.DecodedLen(len(s)) > maxCorrelationData {
-		return nil, errorf("CorrelationData of more than %d bytes", maxCorrelationData)
+	if base64.StdEncoding.DecodedLen(len(s)) > MaxCorrelationData {
+		return nil, errorf("CorrelationData of more than %d bytes", MaxCorrelationData)
 	}
 	b, err := base64.StdEncoding.DecodeString(s)
 	if err != nil {

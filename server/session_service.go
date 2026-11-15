@@ -9,7 +9,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -118,7 +117,9 @@ func (s *SessionService) CreateSession(ctx context.Context, sc *uasc.SecureChann
 		return nil, ua.StatusBadInternalError
 	}
 
-	matchingEndpoints := createSessionEndpoints(s.srv.endpoints, req.EndpointURL)
+	// The endpoints of the URL the client used, as GetEndpoints returns
+	// them for that URL (Part 4 §5.6.2, serverEndpoints).
+	matchingEndpoints := endpointsForURL(s.srv.endpoints, req.EndpointURL)
 
 	hdr := responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK)
 	if st := s.issueEphemeralKey(sc, sess, req.RequestHeader, hdr, true); st != ua.StatusOK {
@@ -770,29 +771,6 @@ func (s *SessionService) decryptEccSecret(sc *uasc.SecureChannel, sess *session,
 		return nil, ua.StatusBadIdentityTokenInvalid
 	}
 	return secret, ua.StatusOK
-}
-
-// createSessionEndpoints returns the CreateSession serverEndpoints: the
-// server's endpoints whose URL is the one the client used, or all of them
-// when none is. Part 4 §5.7.2 asks for the endpoints of the server, not of
-// the URL; the URL only narrows the list. A client that reached the server
-// under another name (a container gateway such as host.docker.internal, a
-// NAT, an IP address) must still find the endpoint of its SecureChannel in
-// the list: UA-.NETStandard closes the session with BadSecurityChecksFailed
-// when it does not.
-func createSessionEndpoints(endpoints []*ua.EndpointDescription, requestURL string) []*ua.EndpointDescription {
-	matching := make([]*ua.EndpointDescription, 0, len(endpoints))
-	reqTrimmedURL, _ := strings.CutSuffix(requestURL, "/")
-	for _, ep := range endpoints {
-		epTrimmedURL, _ := strings.CutSuffix(ep.EndpointURL, "/")
-		if epTrimmedURL == reqTrimmedURL {
-			matching = append(matching, ep)
-		}
-	}
-	if len(matching) == 0 {
-		return append(matching, endpoints...)
-	}
-	return matching
 }
 
 // tokenTypeOf returns the type of a user identity token.

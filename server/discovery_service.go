@@ -5,7 +5,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -69,24 +68,11 @@ func (s *DiscoveryService) GetEndpoints(ctx context.Context, sc *uasc.SecureChan
 		return nil, err
 	}
 
-	requrl := strings.ToLower(req.EndpointURL)
-	matchingEndpoints := make([]*ua.EndpointDescription, 0)
-	for i := range s.srv.endpoints {
-		ep := s.srv.endpoints[i]
-		if strings.ToLower(ep.EndpointURL) == requrl {
-			matchingEndpoints = append(matchingEndpoints, ep)
-		}
-	}
-	// OPC UA Part 4 §5.4.4: if no endpoints match the requested URL (or the
-	// URL is empty), return all available endpoints. Many clients send a URL
-	// that differs in path or hostname from the registered endpoint URLs.
-	if len(matchingEndpoints) == 0 {
-		matchingEndpoints = s.srv.endpoints
-	}
-
+	// The endpoints of the requested URL, or all of them when none is
+	// (Part 4 §5.4.4): the same list CreateSession returns for that URL.
 	response := &ua.GetEndpointsResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
-		Endpoints:      matchingEndpoints,
+		Endpoints:      endpointsForURL(s.srv.endpoints, req.EndpointURL),
 	}
 
 	return response, nil

@@ -1,5 +1,30 @@
 # go-opcua Releases
 
+## v1.33.0
+
+**Date:** 2026-11-15
+**Previous release:** v1.32.1
+
+The client verifies the endpoint list it selected its endpoint from with the ServerEndpoints of CreateSession (Part 4 §5.6.2), the server answers GetEndpoints and CreateSession with the same endpoints for the same URL, the batch helpers take a response only with one result per operation, and the PubSub JSON mapping bounds a String PublisherId as UADP does. Changes that need attention when upgrading: a client whose endpoint came from `GetEndpoints` refuses a server whose CreateSession endpoints differ from that answer (see Breaking).
+
+### Breaking
+
+- **A client compares the `GetEndpoints` answer it selected its endpoint from with the ServerEndpoints of the CreateSession response** (Part 4 §5.6.2), when the endpoint given to `SecurityFromEndpoint` is one of the endpoints `opcua.GetEndpoints` or `Client.GetEndpoints` returned. The lists differ when an endpoint of one has no endpoint in the other with the same security policy, mode and level, transport profile, user token policies, application URI (when both name it) and certificate (as bytes, when both carry one); their order and the endpoint URLs are not compared. On a difference, Connect closes the session before ActivateSession and fails with an error matching `ua.StatusBadSecurityChecksFailed`. A server that returns other endpoints in CreateSession than in GetEndpoints is refused, and so is, on a reconnect, a server whose endpoints changed since the client discovered them. `opcua.InsecureSkipDiscoveredEndpointsCheck()` restores the behaviour of v1.32.1.
+
+### Added
+
+- `opcua.DiscoveredEndpoints(endpoints)`: the endpoint list the client selected its endpoint from, compared with the ServerEndpoints of every CreateSession as above. It takes precedence over the `GetEndpoints` answer and serves endpoints that are copies or come from elsewhere. After a server certificate change the client compares with the endpoints it fetches again.
+- `opcua.InsecureSkipDiscoveredEndpointsCheck()`: turns the comparison of the list off, wherever the list comes from. The comparison of the endpoint given to `SecurityFromEndpoint` stays.
+- `jsonmsg.MaxCorrelationData` (4096): the longest CorrelationData, String PublisherId and String RequestorId the JSON decoder accepts. The UADP decoder uses the same bound.
+
+### Fixed
+
+- client: `ReadMulti`, `ReadValues`, `WriteValues` and `Node.Attributes` (and so `Node.Summary`) take a response only when it holds one result per operation of the request, in every chunk of a `ReadMulti`; a response with another number of results fails with an error matching `ua.StatusBadUnknownResponse`.
+- server: GetEndpoints (Part 4 §5.4.4) and CreateSession (§5.6.2) select the endpoints of the URL the client named in the same way: the scheme and the host compared without regard to letter case, one trailing slash ignored, the path compared as it is; when no endpoint has that URL, both return all endpoints. A client that names a server with opc.wss or opc.https endpoints next to opc.tcp with another letter case for the host or with a trailing slash gets the same endpoints from both services, and so connects with the comparison above.
+- pubsub JSON: a String PublisherId (of a NetworkMessage, a DataSetMessage, a metadata, status or action message) or a String RequestorId of more than 4096 bytes is a decode error, as in UADP.
+
+---
+
 ## v1.32.1
 
 **Date:** 2026-11-14

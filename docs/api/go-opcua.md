@@ -139,6 +139,8 @@ func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.E
 
 GetEndpoints returns the available endpoint descriptions for the server.
 
+A client configured with [SecurityFromEndpoint](#func-securityfromendpoint) from one of the returned endpoints compares the whole list with the endpoints of its CreateSession response (see [DiscoveredEndpoints](#func-discoveredendpoints)).
+
 ### func NewAuditConditionEventFilter
 
 ```go
@@ -386,6 +388,12 @@ type Client struct {
 	// []string
 
 	// monitorOnce ensures only one connection monitor is running
+
+	// discoveredEndpoints is the endpoint list the client selected its
+	// endpoint from (DiscoveredEndpoints, or the GetEndpoints response of
+	// the endpoint given to SecurityFromEndpoint); CreateSession compares it
+	// with the endpoints of its response. Nil when the client does not know
+	// the list or InsecureSkipDiscoveredEndpointsCheck is set.
 
 }
 ```
@@ -685,6 +693,8 @@ func (c *Client) GetEndpoints(ctx context.Context) (*ua.GetEndpointsResponse, er
 
 GetEndpoints returns the list of available endpoints of the server.
 
+A client configured with [SecurityFromEndpoint](#func-securityfromendpoint) from one of the returned endpoints compares the whole list with the endpoints of its CreateSession response (see [DiscoveredEndpoints](#func-discoveredendpoints)).
+
 #### func (Client) GetGroupMemberships
 
 ```go
@@ -983,7 +993,7 @@ When the consumer stops early, or ctx is done, while the server holds a continua
 func (c *Client) ReadMulti(ctx context.Context, items []ReadItem, opts ...ReadMultiOption) ([]ReadResult, error)
 ```
 
-ReadMulti performs a batch read of N nodes × attributes in one or more OPC UA Read calls, chunking by DefaultReadMultiChunkSize (or chunkSize if provided via [ReadMultiWithChunkSize](#func-readmultiwithchunksize)). Results are in the same order as items. Each result's StatusCode reflects the server's status for that item; a failed overall request returns (nil, err).
+ReadMulti performs a batch read of N nodes × attributes in one or more OPC UA Read calls, chunking by DefaultReadMultiChunkSize (or chunkSize if provided via [ReadMultiWithChunkSize](#func-readmultiwithchunksize)). Results are in the same order as items. Each result's StatusCode reflects the server's status for that item; a failed overall request returns (nil, err). A Read response that does not hold one result per item of its chunk fails the batch with an error matching [ua.StatusBadUnknownResponse](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusBadUnknownResponse).
 
 #### func (Client) ReadValue
 
@@ -1005,7 +1015,7 @@ func (c *Client) ReadValues(ctx context.Context, nodeIDs ...*ua.NodeID) ([]*ua.D
 
 ReadValues reads the Value attribute of multiple nodes in a single request.
 
-This is more efficient than calling [Client.ReadValue](#func-client-readvalue) in a loop because all nodes are read in a single OPC-UA Read service call. Results are returned in the same order as the input node IDs.
+This is more efficient than calling [Client.ReadValue](#func-client-readvalue) in a loop because all nodes are read in a single OPC-UA Read service call. Results are returned in the same order as the input node IDs, one per node: a response with another number of results fails with [ua.StatusBadUnknownResponse](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusBadUnknownResponse).
 
 #### func (Client) RegisterNodes
 
@@ -1416,7 +1426,7 @@ Returns the status code from the server indicating success or failure. For writi
 func (c *Client) WriteValues(ctx context.Context, writes ...*ua.WriteValue) ([]ua.StatusCode, error)
 ```
 
-WriteValues writes multiple values in a single request.
+WriteValues writes multiple values in a single request. The status codes are in the order of writes, one per write: a response with another number of results fails with [ua.StatusBadUnknownResponse](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusBadUnknownResponse).
 
 ### type ClientMetrics
 
@@ -1547,6 +1557,9 @@ type Config struct {
 	// discoveredEndpoint is the endpoint given to SecurityFromEndpoint.
 	// CreateSession compares it with the server's endpoints (Part 4
 	// §5.7.2).
+
+	// discoveredEndpoints is the list given to DiscoveredEndpoints, and
+	// skipDiscoveredEndpoints is set by InsecureSkipDiscoveredEndpointsCheck.
 
 }
 ```
@@ -1697,7 +1710,7 @@ Attribute returns the attribute of the node. with the given id.
 func (n *Node) Attributes(ctx context.Context, attrID ...ua.AttributeID) ([]*ua.DataValue, error)
 ```
 
-Attributes returns the given node attributes.
+Attributes returns the given node attributes, one DataValue per attribute in the order of attrID. A response with another number of results fails with [ua.StatusBadUnknownResponse](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusBadUnknownResponse).
 
 #### func (Node) BrowseAll
 
@@ -2044,6 +2057,20 @@ func Dialer(d *uacp.Dialer) Option
 
 Dialer sets the uacp.Dialer to establish the connection to the server.
 
+#### func DiscoveredEndpoints
+
+```go
+func DiscoveredEndpoints(endpoints []*ua.EndpointDescription) Option
+```
+
+DiscoveredEndpoints gives the client the endpoint list it selected its endpoint from, the answer of GetEndpoints. That answer comes over a channel without security; CreateSession returns the server's endpoints again, over the SecureChannel, and the client verifies the one list with the other (Part 4 §5.6.2, serverEndpoints). When they differ, the client closes the session before ActivateSession and Connect fails with an error matching ua.StatusBadSecurityChecksFailed.
+
+The lists differ when an endpoint of one has no endpoint in the other with the same security policy, security mode, security level, transport profile and user token policies (in any order), the same application URI when both name their application, and the same server certificate, compared as bytes, when both carry one. The order of the lists does not matter, nor does the endpoint URL: the client may reach the server under another name than the one the server uses.
+
+The client keeps a copy of the compared fields; endpoints that are nil are left out. A list without endpoints is an error. The list applies to every CreateSession of the client, also when it reconnects; when the client fetches the endpoints again after a server certificate change (see [AutoReconnect](#func-autoreconnect)), it compares with those.
+
+Without this option the client compares the list when the endpoint given to [SecurityFromEndpoint](#func-securityfromendpoint) came from [GetEndpoints](#func-getendpoints) (see there). The option takes precedence over that list.
+
 #### func HTTPClient
 
 ```go
@@ -2069,6 +2096,16 @@ func InsecureNoSecurity() Option
 InsecureNoSecurity connects without message security: security policy None and security mode None. Messages are neither signed nor encrypted and the server is not authenticated, so anyone on the network path can read and change them, and any password sent is exposed.
 
 A client refuses to run this way unless this option is given (errors.ErrInsecureNotAllowed), also when policy None comes from [SecurityPolicy](#func-securitypolicy), [SecurityMode](#func-securitymode) or an endpoint given to [SecurityFromEndpoint](#func-securityfromendpoint). Not needed for the discovery services [GetEndpoints](#func-getendpoints), [FindServers](#func-findservers) and [FindServersOnNetwork](#func-findserversonnetwork), which the specification defines without security, or for transports secured by TLS (opc.https, opc.wss).
+
+#### func InsecureSkipDiscoveredEndpointsCheck
+
+```go
+func InsecureSkipDiscoveredEndpointsCheck() Option
+```
+
+InsecureSkipDiscoveredEndpointsCheck turns off the comparison of the discovered endpoint list with the endpoints of the CreateSession response (see [DiscoveredEndpoints](#func-discoveredendpoints)), wherever the list comes from and in whatever order the options are given. This is the behaviour of v1.32.1 and earlier. The comparison of the endpoint given to [SecurityFromEndpoint](#func-securityfromendpoint) with the response stays.
+
+Without the comparison, a client that selects its endpoint from the GetEndpoints answer (as [SelectEndpoint](#func-selectendpoint) does) cannot tell whether that answer, which comes over a channel without security, lists the endpoints the server offers.
 
 #### func InsecureSkipVerify
 
@@ -2250,6 +2287,8 @@ func SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType)
 SecurityFromEndpoint sets the server-related security parameters from a chosen endpoint (received from GetEndpoints()).
 
 CreateSession compares the endpoint with the one the server returns in the CreateSession response, which arrives over the SecureChannel, and fails with StatusBadSecurityChecksFailed when they differ in the security policy, mode, level, transport profile, application URI or user token policies (Part 4 §5.7.2). The endpoint URL is not compared.
+
+When ep is one of the endpoints [GetEndpoints](#func-getendpoints) or [Client.GetEndpoints](#func-client-getendpoints) returned (the same pointer, not a copy), CreateSession also compares the whole list ep came in with the endpoints of its response, as for [DiscoveredEndpoints](#func-discoveredendpoints). [InsecureSkipDiscoveredEndpointsCheck](#func-insecureskipdiscoveredendpointscheck) turns that comparison off.
 
 #### func SecurityMode
 

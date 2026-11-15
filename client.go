@@ -64,6 +64,10 @@ func FindServersOnNetwork(ctx context.Context, endpoint string, opts ...Option) 
 }
 
 // GetEndpoints returns the available endpoint descriptions for the server.
+//
+// A client configured with [SecurityFromEndpoint] from one of the returned
+// endpoints compares the whole list with the endpoints of its CreateSession
+// response (see [DiscoveredEndpoints]).
 func GetEndpoints(ctx context.Context, endpoint string, opts ...Option) ([]*ua.EndpointDescription, error) {
 	opts = append(opts, AutoReconnect(false), discoveryNoSecurity())
 	c, err := NewClient(endpoint, opts...)
@@ -216,6 +220,13 @@ type Client struct {
 
 	// monitorOnce ensures only one connection monitor is running
 	monitorOnce sync.Once
+
+	// discoveredEndpoints is the endpoint list the client selected its
+	// endpoint from (DiscoveredEndpoints, or the GetEndpoints response of
+	// the endpoint given to SecurityFromEndpoint); CreateSession compares it
+	// with the endpoints of its response. Nil when the client does not know
+	// the list or InsecureSkipDiscoveredEndpointsCheck is set.
+	discoveredEndpoints atomic.Pointer[endpointList]
 }
 
 // NewClient creates a new Client.
@@ -265,6 +276,15 @@ func NewClient(endpoint string, opts ...Option) (*Client, error) {
 	c.setSecureChannel(nil)
 	c.setSession(nil)
 	c.setNamespaces([]string{})
+	if !cfg.skipDiscoveredEndpoints {
+		l := cfg.discoveredEndpoints
+		if l == nil {
+			l = discoveredList(cfg.discoveredEndpoint)
+		}
+		if l != nil {
+			c.discoveredEndpoints.Store(&l)
+		}
+	}
 	return &c, nil
 }
 
@@ -480,6 +500,7 @@ func (c *Client) monitor(ctx context.Context) {
 				// endpoints to obtain the current certificate before
 				// reconnecting.
 				if eps, epErr := c.refetchEndpoints(ctx); epErr == nil {
+					c.useRefetchedEndpoints(eps)
 					for _, ep := range eps {
 						if ep.SecurityPolicyURI == c.cfg.sechan.SecurityPolicyURI &&
 							ep.SecurityMode == c.cfg.sechan.SecurityMode {
@@ -958,6 +979,16 @@ func (c *Client) useDirectChannel(sc *uasc.SecureChannel, errCh chan error) erro
 	return nil
 }
 
+// useRefetchedEndpoints makes eps, the endpoints the client fetched again
+// after a server certificate change, the list the next CreateSession is
+// compared with, if the client compares one: they carry the server's new
+// certificate. An empty answer keeps the list.
+func (c *Client) useRefetchedEndpoints(eps []*ua.EndpointDescription) {
+	if l := newEndpointList(eps); l != nil && c.discoveredEndpoints.Load() != nil {
+		c.discoveredEndpoints.Store(&l)
+	}
+}
+
 // refetchEndpoints asks the server for its endpoints on a connection of its
 // own, the way the client itself connects.
 func (c *Client) refetchEndpoints(ctx context.Context) ([]*ua.EndpointDescription, error) {
@@ -1388,6 +1419,14 @@ func (c *Client) CreateSession(ctx context.Context, cfg *uasc.SessionConfig) (*S
 		if err := verifyServerEndpoints(c.cfg.discoveredEndpoint, sc, res.ServerEndpoints); err != nil {
 			mismatch = res.AuthenticationToken
 			return err
+		}
+		// The same for the whole list the endpoint was selected from, when
+		// the client knows it.
+		if l := c.discoveredEndpoints.Load(); l != nil {
+			if err := verifyEndpointList(*l, res.ServerEndpoints); err != nil {
+				mismatch = res.AuthenticationToken
+				return err
+			}
 		}
 
 		// Ensure we have a valid identity token that the server will accept before trying to activate a session
@@ -1970,13 +2009,21 @@ func (c *Client) FindServersOnNetwork(ctx context.Context) (*ua.FindServersOnNet
 }
 
 // GetEndpoints returns the list of available endpoints of the server.
+//
+// A client configured with [SecurityFromEndpoint] from one of the returned
+// endpoints compares the whole list with the endpoints of its CreateSession
+// response (see [DiscoveredEndpoints]).
 func (c *Client) GetEndpoints(ctx context.Context) (*ua.GetEndpointsResponse, error) {
 	stats.Client().Add("GetEndpoints", 1)
 
 	req := &ua.GetEndpointsRequest{
 		EndpointURL: c.endpoint(),
 	}
-	return send[ua.GetEndpointsResponse](ctx, c, req)
+	res, err := send[ua.GetEndpointsResponse](ctx, c, req)
+	if err == nil && res != nil {
+		rememberEndpoints(res.Endpoints)
+	}
+	return res, err
 }
 
 func cloneReadRequest(req *ua.ReadRequest) *ua.ReadRequest {
@@ -2475,7 +2522,9 @@ func (c *Client) ReadValue(ctx context.Context, nodeID *ua.NodeID) (*ua.DataValu
 //
 // This is more efficient than calling [Client.ReadValue] in a loop because
 // all nodes are read in a single OPC-UA Read service call.
-// Results are returned in the same order as the input node IDs.
+// Results are returned in the same order as the input node IDs, one per
+// node: a response with another number of results fails with
+// [ua.StatusBadUnknownResponse].
 func (c *Client) ReadValues(ctx context.Context, nodeIDs ...*ua.NodeID) ([]*ua.DataValue, error) {
 	items := make([]*ua.ReadValueID, len(nodeIDs))
 	for i, nid := range nodeIDs {
@@ -2488,7 +2537,21 @@ func (c *Client) ReadValues(ctx context.Context, nodeIDs ...*ua.NodeID) ([]*ua.D
 	if err != nil {
 		return nil, err
 	}
+	if err := resultCount(len(resp.Results), len(items), "nodes to read"); err != nil {
+		return nil, err
+	}
 	return resp.Results, nil
+}
+
+// resultCount checks that a response holds one result per operation of its
+// request: the size and order of the results of Read and Write match those
+// of the operations of the request (Part 4 §5.10.2, §5.10.4). It returns an
+// error matching [ua.StatusBadUnknownResponse] otherwise.
+func resultCount(got, want int, what string) error {
+	if got != want {
+		return fmt.Errorf("opcua: %d results for %d %s: %w", got, want, what, ua.StatusBadUnknownResponse)
+	}
+	return nil
 }
 
 // ReadItem specifies one node/attribute to read in a batch.
@@ -2513,7 +2576,9 @@ const DefaultReadMultiChunkSize = 32
 // OPC UA Read calls, chunking by DefaultReadMultiChunkSize (or chunkSize if
 // provided via [ReadMultiWithChunkSize]). Results are in the same order as
 // items. Each result's StatusCode reflects the server's status for that
-// item; a failed overall request returns (nil, err).
+// item; a failed overall request returns (nil, err). A Read response that
+// does not hold one result per item of its chunk fails the batch with an
+// error matching [ua.StatusBadUnknownResponse].
 func (c *Client) ReadMulti(ctx context.Context, items []ReadItem, opts ...ReadMultiOption) ([]ReadResult, error) {
 	if len(items) == 0 {
 		return nil, nil
@@ -2549,6 +2614,9 @@ func (c *Client) ReadMulti(ctx context.Context, items []ReadItem, opts ...ReadMu
 		}
 		resp, err := c.Read(ctx, req)
 		if err != nil {
+			return nil, err
+		}
+		if err := resultCount(len(resp.Results), len(chunk), "nodes to read"); err != nil {
 			return nil, err
 		}
 		for k, dv := range resp.Results {
@@ -2591,12 +2659,17 @@ func (c *Client) WriteValue(ctx context.Context, nodeID *ua.NodeID, value *ua.Da
 	return resp.Results[0], nil
 }
 
-// WriteValues writes multiple values in a single request.
+// WriteValues writes multiple values in a single request. The status codes
+// are in the order of writes, one per write: a response with another number
+// of results fails with [ua.StatusBadUnknownResponse].
 func (c *Client) WriteValues(ctx context.Context, writes ...*ua.WriteValue) ([]ua.StatusCode, error) {
 	resp, err := c.Write(ctx, &ua.WriteRequest{
 		NodesToWrite: writes,
 	})
 	if err != nil {
+		return nil, err
+	}
+	if err := resultCount(len(resp.Results), len(writes), "nodes to write"); err != nil {
 		return nil, err
 	}
 	return resp.Results, nil

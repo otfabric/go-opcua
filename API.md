@@ -227,6 +227,8 @@ func (c *Client) ReadMulti(ctx context.Context, items []ReadItem, opts ...ReadMu
 
 `ReadMulti` performs a batch read of N node/attribute pairs in one or more Read calls, chunking by `DefaultReadMultiChunkSize` (32) or by the size given via `ReadMultiWithChunkSize`. Results are in the same order as `items`; each result has `DataValue` and `StatusCode`. Use for large subtrees or bulk export to minimize round-trips. Empty or nil `items` returns `(nil, nil)` without a request.
 
+`ReadMulti`, `ReadValues`, `WriteValues` and `Node.Attributes` (which `Node.Summary` uses) return one result per operation, in the order of the request: a response with another number of results, in any chunk of a `ReadMulti`, fails with an error matching `ua.StatusBadUnknownResponse`. `Read` and `Write` return the response as the server sent it.
+
 ```go
 type ReadItem struct {
     NodeID      *ua.NodeID
@@ -867,7 +869,9 @@ All option functions return `Option` and are passed to `NewClient`:
 | `SecurityMode(m ua.MessageSecurityMode)` | Security mode |
 | `SecurityModeString(s string)` | Security mode by name |
 | `SecurityPolicy(s string)` | Security policy URI |
-| `SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType)` | Derive security mode, policy, and auth token type from a discovered endpoint |
+| `SecurityFromEndpoint(ep *ua.EndpointDescription, authType ua.UserTokenType)` | Derive security mode, policy, and auth token type from a discovered endpoint. CreateSession compares the endpoint with the server's endpoints, and, when `ep` is one of the endpoints `GetEndpoints` returned, the whole answer it came in (see `DiscoveredEndpoints`) |
+| `DiscoveredEndpoints(endpoints []*ua.EndpointDescription)` | The endpoint list the endpoint was selected from; CreateSession compares it with the ServerEndpoints of its response (Part 4 §5.6.2) and Connect fails with `ua.StatusBadSecurityChecksFailed` when they differ. See [docs/security.md](docs/security.md#auto-detection) |
+| `InsecureSkipDiscoveredEndpointsCheck()` | Turn the comparison of the discovered endpoint list off (the behaviour of v1.32.1) |
 | `SessionName(s string)` | Session name |
 | `SessionTimeout(d time.Duration)` | Session timeout |
 | `SkipNamespaceUpdate()` | Skip automatic namespace table update on connect |
@@ -2783,7 +2787,7 @@ configuration (`*ConfigError`), `NewMemoryDataSource` holds values to publish.
 |---------|----------|
 | `pubsub/message` | `NetworkMessage`, `DataSetMessage`, `Field`, `PublisherID`, `MetaDataLookup` |
 | `pubsub/uadp` | `Encode(nm, *EncodeOptions)`, `Decode(b, *DecodeOptions)`; errors `ErrFiltered`, `ErrMalformed`, `ErrUnsupported`, `ErrSecurityMode`, `ErrSecurityChecksFailed`, `ErrNoMetaData` |
-| `pubsub/jsonmsg` | `Encode`, `Decode`, `DecodeAny`, `EncodeMetaData` / `DecodeMetaData`, `EncodeStatus` / `DecodeStatus`, `MessageType` |
+| `pubsub/jsonmsg` | `Encode`, `Decode`, `DecodeAny`, `EncodeMetaData` / `DecodeMetaData`, `EncodeStatus` / `DecodeStatus`, `MessageType`, `MaxCorrelationData` (4096: CorrelationData, String PublisherId and RequestorId, also in UADP) |
 | `pubsub/transport` | `Open(ctx, Config)`, `Connection`, `Register`; `udp` registers `opc.udp`, `eth` registers `opc.eth` (`ParseURL`, `Address`, `EtherType`, `MaxPayload`, `ErrNotSupported`, `Supported`), `mqtt` registers `mqtt` and `mqtts`, `amqp` registers `amqp` and `amqps` |
 | `pubsub/security` | `Aes128CTR()`, `Aes256CTR()`, `PolicyByURI`, `KeyRing`, `KeyRings`, `KeyService` (`AddSecurityGroup`, `GetSecurityKeys`, `KeySource`) |
 | `pubsub/sks` | `GetSecurityKeys`, `SetSecurityKeys`, `Push`, `NewKeySource(ctx, Config)` |

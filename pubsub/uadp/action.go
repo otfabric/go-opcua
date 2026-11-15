@@ -5,6 +5,7 @@ package uadp
 import (
 	"math"
 
+	"github.com/otfabric/go-opcua/pubsub/jsonmsg"
 	"github.com/otfabric/go-opcua/pubsub/message"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -43,10 +44,10 @@ const maxActionString = 4096
 
 // maxKeyString bounds a String PublisherId and the CorrelationData of an
 // ActionHeader the decoder accepts: 4096 bytes, the bound the JSON mapping
-// puts on the CorrelationData. With a String RequestorId they tell the
-// chunks of a message apart, and a Reassembler keeps them while chunks are
-// missing.
-const maxKeyString = 4096
+// puts on the same fields (jsonmsg.MaxCorrelationData). With a String
+// RequestorId they tell the chunks of a message apart, and a Reassembler
+// keeps them while chunks are missing.
+const maxKeyString = jsonmsg.MaxCorrelationData
 
 // checkAction validates an action NetworkMessage for Encode.
 func checkAction(nm *message.NetworkMessage) error {

@@ -435,7 +435,9 @@ func (n *Node) Attribute(ctx context.Context, attrID ua.AttributeID) (*ua.Varian
 	return value, nil
 }
 
-// Attributes returns the given node attributes.
+// Attributes returns the given node attributes, one DataValue per attribute
+// in the order of attrID. A response with another number of results fails
+// with [ua.StatusBadUnknownResponse].
 func (n *Node) Attributes(ctx context.Context, attrID ...ua.AttributeID) ([]*ua.DataValue, error) {
 	req := &ua.ReadRequest{}
 	for _, id := range attrID {
@@ -444,6 +446,9 @@ func (n *Node) Attributes(ctx context.Context, attrID ...ua.AttributeID) ([]*ua.
 	}
 	res, err := n.c.Read(ctx, req)
 	if err != nil {
+		return nil, err
+	}
+	if err := resultCount(len(res.Results), len(req.NodesToRead), "attributes to read"); err != nil {
 		return nil, err
 	}
 	return res.Results, nil

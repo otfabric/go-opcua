@@ -94,6 +94,12 @@ const (
 
 Default limits of the decoder.
 
+```go
+const MaxCorrelationData = 4096
+```
+
+MaxCorrelationData is the largest CorrelationData, in bytes, that Decode accepts in an action message. A String PublisherId or RequestorId has the same bound, and the UADP decoder (pubsub/uadp) applies it to the same fields.
+
 ## Variables
 
 ```go

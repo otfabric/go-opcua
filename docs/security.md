@@ -23,6 +23,7 @@ A client refuses to run without message security unless asked to, and trusts onl
 - **A server offers no security only when asked to.** `Server.Start` returns `errors.ErrInsecureNotAllowed` for a server with no security configured, or with `EnableSecurity("None", …)`; `server.InsecureNoSecurity()` opts in. A secure-only server still answers the discovery services.
 - **Exceptions defined by the specification:** the discovery helpers `GetEndpoints`, `FindServers`, `FindServersOnNetwork` and `DiscoverServers` need no opt-in, and neither do `opc.https` and `opc.wss`, which TLS secures.
 - **A missing server certificate is an error.** With Sign or SignAndEncrypt, a server that presents no certificate is refused (`errors.ErrNoCertificate`).
+- **The discovery answer is verified.** A client whose endpoint was selected from a `GetEndpoints` answer compares that answer with the endpoints of the CreateSession response and refuses the connection when they differ (`ua.StatusBadSecurityChecksFailed`, see [Auto-Detection](#auto-detection)); `InsecureSkipDiscoveredEndpointsCheck()` turns this off.
 - **Trust comes from your trust list only.** Server certificates are validated against `TrustedCertificates`. The system CA pool is not used, because it serves web PKI names, not OPC UA application instance certificates (Part 4 §6.1.3). TLS for `opc.https` and `opc.wss` keeps its own roots (`TLSConfig`).
 
 ---
@@ -606,7 +607,45 @@ opts := []opcua.Option{
 }
 ```
 
-The endpoints of `GetEndpoints` come over a channel without security. CreateSession therefore compares the endpoint given to `SecurityFromEndpoint` with the endpoints the server returns in the CreateSession response, which the secure channel protects (Part 4 §5.7.2): when no endpoint there has the same application URI, security policy, mode and level, transport profile and user token policies (the URL is not compared), the client closes the session before ActivateSession and Connect fails with `StatusBadSecurityChecksFailed`. The comparison is skipped when other options changed the security policy or mode after `SecurityFromEndpoint`.
+The endpoints of `GetEndpoints` come over a channel without security. The CreateSession response returns the server's endpoints again, over the secure channel, and Part 4 §5.6.2 (serverEndpoints) has the client verify that list with the list it got from discovery. The client makes two comparisons, and when either finds a difference it closes the session before ActivateSession and Connect fails with an error matching `ua.StatusBadSecurityChecksFailed`:
+
+- **The selected endpoint.** CreateSession compares the endpoint given to `SecurityFromEndpoint` with the endpoints of the response: when no endpoint there has the same application URI, security policy, mode and level, transport profile and user token policies (the URL is not compared), the connection is refused. This comparison is skipped when other options changed the security policy or mode after `SecurityFromEndpoint`.
+- **The list the endpoint was selected from.** The client compares that list with the endpoints of the response whenever it knows the list:
+  - when it is given with `opcua.DiscoveredEndpoints(endpoints)`;
+  - by default, when the endpoint given to `SecurityFromEndpoint` is one of the endpoints `opcua.GetEndpoints` or `Client.GetEndpoints` returned (the same pointer, as `SelectEndpoint` returns it, not a copy): the client then compares the whole answer it came in. `DiscoveredEndpoints` takes precedence over that answer.
+
+The two lists differ when an endpoint of one has no endpoint in the other with
+
+| Field | Compared |
+|-------|----------|
+| `SecurityPolicyUri`, `SecurityMode`, `SecurityLevel`, `TransportProfileUri` | always, as values |
+| `UserIdentityTokens` | always, as a set of user token policies (PolicyId, TokenType, IssuedTokenType, IssuerEndpointUrl, SecurityPolicyUri); their order does not matter |
+| `ApplicationUri` of `Server` | when both endpoints carry an `ApplicationDescription` |
+| `ServerCertificate` | as bytes, when both endpoints carry one |
+| `EndpointUrl` | never: the client may reach the server under another name than the one the server uses |
+
+The order of the lists does not matter, nor does an endpoint that occurs more than once (for example under two URLs). So a list in another order is the same; a missing endpoint, an extra endpoint, or an endpoint with another security mode, policy, level or certificate is a difference. Part 4 §5.6.2 recommends that servers return only the application URI, endpoint URL, security mode and policy, user token policies, transport profile and security level in the CreateSession response, and names these as the parameters the client verifies. The certificate goes beyond them; a server that follows the recommendation leaves it out of the response, and it is then not compared.
+
+The list applies to every CreateSession of the client, also those of a reconnect. When the client fetches the endpoints again after the server certificate changed (with `AutoReconnect`), it compares the following CreateSession with that new list. A server whose endpoints changed since the client discovered them is refused until the client is created again from a new `GetEndpoints`.
+
+A go-opcua server answers `GetEndpoints` (Part 4 §5.4.4) and CreateSession (§5.6.2) with the same endpoints for the same URL: those whose URL is the one the client named, with the scheme and the host compared without regard to letter case, one trailing slash ignored and the path compared as it is, or all its endpoints when none has that URL. So a client that names the server with another letter case for the host, or with a trailing slash, gets the same list from both services, also from a server with opc.wss or opc.https endpoints next to opc.tcp.
+
+`opcua.InsecureSkipDiscoveredEndpointsCheck()` turns the comparison of the list off, wherever the list comes from: the behaviour of v1.32.1 and earlier. Without it, the client cannot tell whether the `GetEndpoints` answer it selected from lists the endpoints the server offers, so use it only for a server whose two lists are known to differ. The comparison of the selected endpoint stays.
+
+```go
+endpoints, _ := opcua.GetEndpoints(ctx, "opc.tcp://server:4840")
+ep, _ := opcua.SelectEndpoint(endpoints, "", ua.MessageSecurityModeInvalid, cert)
+
+// ep came from GetEndpoints: the client compares endpoints with the
+// CreateSession response. With a copy of ep, or endpoints from elsewhere,
+// give the list explicitly:
+opts := []opcua.Option{
+    opcua.SecurityFromEndpoint(ep, authType),
+    opcua.DiscoveredEndpoints(endpoints),
+    opcua.Certificate(cert),
+    opcua.PrivateKeySigner(key),
+}
+```
 
 `opcua.SelectEndpoint` ranks by the server's `SecurityLevel` like `ua.SelectEndpoint`, but only among the endpoints the client can use: it leaves out policies this library does not implement and secured endpoints whose policy does not fit the key type of the certificate. That matters with servers that offer RSA and ECC endpoints, where the highest ranked endpoint is an ECC one that a client with an RSA certificate cannot open.
 
@@ -983,6 +1022,7 @@ The Query service set is off by default (`Bad_ServiceUnsupported`): a QueryFirst
 - [ ] Always pair username/password auth with encryption
 - [ ] Set file permissions on private keys (`0600`)
 - [ ] Validate server certificates with `TrustedCertificates()` or use `InsecureSkipVerify()` explicitly
+- [ ] Select endpoints from the `GetEndpoints` answer by pointer, or give the list with `DiscoveredEndpoints`, so that the client compares it with the CreateSession response; keep `InsecureSkipDiscoveredEndpointsCheck()` for servers whose lists are known to differ
 - [ ] On servers, configure `WithClientCertificateTrustList` (or the trust list of `WithPushManagement`, which replaces it) when accepting encrypted client connections
 - [ ] For `opc.wss` / `opc.https`, give the listeners a TLS certificate the clients trust (`server.TLSConfig`) and require TLS client certificates where the network calls for it
 - [ ] Enable `server.EnableUAJSON` only where TLS alone is acceptable protection: wss-uajson always runs at security policy None

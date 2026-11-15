@@ -541,7 +541,8 @@ message also with its String PublisherId, String RequestorId and
 CorrelationData, which the message keeps until it is complete, dropped or
 expired. The decoder takes a String PublisherId and a CorrelationData of at
 most 4096 bytes, as it does a ResponseAddress and a String RequestorId; the
-JSON mapping bounds the CorrelationData the same way. A chunk that lies outside
+JSON mapping bounds the CorrelationData, a String PublisherId and a String
+RequestorId the same way (`jsonmsg.MaxCorrelationData`). A chunk that lies outside
 its message, overlaps or repeats one already received, disagrees with the
 TotalSize or the chunk size of its message, or does not fit the limits is
 rejected. Chunks that cannot be of one message discard the message: a chunk
