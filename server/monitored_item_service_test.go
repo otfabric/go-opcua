@@ -270,3 +270,37 @@ func TestDeleteMonitoredItems_UnknownItemID(t *testing.T) {
 		require.Equal(t, ua.StatusBadMonitoredItemIDInvalid, r.Results[0])
 	})
 }
+
+// SetTriggering wakes Publish when the triggering item already holds a
+// notification, and does not block when the wake-up channel is full.
+func TestMonitoredItemService_SetTriggering_WakesPublish(t *testing.T) {
+	svc, sub, hdr, itemID := setupMonitoredItemTest(t)
+	linkedID := svc.NextID()
+	svc.Mu.Lock()
+	svc.Items[linkedID] = &MonitoredItem{ID: linkedID, Sub: sub, Mode: ua.MonitoringModeSampling}
+	trigger := svc.Items[itemID]
+	trigger.Mode = ua.MonitoringModeReporting
+	trigger.queue = []*ua.MonitoredItemNotification{{ClientHandle: 1}}
+	svc.Mu.Unlock()
+	for len(sub.NotifyChannel) > 0 {
+		<-sub.NotifyChannel
+	}
+
+	setTriggering := func(handle uint32, add, remove []uint32) {
+		t.Helper()
+		resp, err := svc.SetTriggering(context.Background(), nil, &ua.SetTriggeringRequest{
+			RequestHeader: hdr, SubscriptionID: sub.ID, TriggeringItemID: itemID,
+			LinksToAdd: add, LinksToRemove: remove,
+		}, handle)
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusOK, resp.(*ua.SetTriggeringResponse).ResponseHeader.ServiceResult)
+	}
+	setTriggering(1, []uint32{linkedID}, nil)
+	require.Len(t, sub.NotifyChannel, 1, "Publish is woken")
+
+	for len(sub.NotifyChannel) < cap(sub.NotifyChannel) {
+		sub.NotifyChannel <- &ua.MonitoredItemNotification{}
+	}
+	setTriggering(2, nil, []uint32{linkedID})
+	require.Len(t, sub.NotifyChannel, cap(sub.NotifyChannel), "a full channel does not block")
+}

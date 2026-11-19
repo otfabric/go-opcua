@@ -103,3 +103,27 @@ func TestDrainQueuedNotifications_MaxAndMode(t *testing.T) {
 	require.True(t, svc.PendingQueuedNotifications(1))
 	require.False(t, svc.PendingReportableNotifications(1))
 }
+
+// The Sampling-mode items a reporting item triggers are drained with it, in
+// the order of their ids, and the limit applies to them too: a linked item
+// cut off by it leaves more to report.
+func TestDrainQueuedNotifications_TriggeredItems(t *testing.T) {
+	sub := &Subscription{ID: 1}
+	trigger := &MonitoredItem{ID: 1, Sub: sub, Mode: ua.MonitoringModeReporting, queueSize: 10,
+		queue: []*ua.MonitoredItemNotification{notif(1)}, triggers: map[uint32]struct{}{3: {}, 2: {}, 4: {}, 9: {}}}
+	linked := &MonitoredItem{ID: 2, Sub: sub, Mode: ua.MonitoringModeSampling, queueSize: 10,
+		queue: []*ua.MonitoredItemNotification{notif(20), notif(21)}}
+	reporting := &MonitoredItem{ID: 3, Sub: sub, Mode: ua.MonitoringModeReporting, queueSize: 10}
+	other := &MonitoredItem{ID: 4, Sub: &Subscription{ID: 2}, Mode: ua.MonitoringModeSampling, queueSize: 10,
+		queue: []*ua.MonitoredItemNotification{notif(40)}}
+	svc := &MonitoredItemService{
+		Subs:  map[uint32][]*MonitoredItem{1: {trigger, linked, reporting}},
+		Items: map[uint32]*MonitoredItem{1: trigger, 2: linked, 3: reporting, 4: other},
+	}
+
+	out, more := svc.DrainQueuedNotifications(1, 2)
+	require.Equal(t, []int32{1, 20}, valuesOf(out))
+	require.True(t, more, "the linked item still holds a sample")
+	require.Len(t, linked.queue, 1)
+	require.Len(t, other.queue, 1, "an item of another subscription is not drained")
+}

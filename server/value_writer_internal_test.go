@@ -130,3 +130,46 @@ func TestWrite_ValueWriterWithoutDispatcher(t *testing.T) {
 	require.Equal(t, []ua.StatusCode{ua.StatusBadOutOfRange}, resp.(*ua.WriteResponse).Results)
 	require.Equal(t, int32(9), got)
 }
+
+// A ValueWriter gets the current value with the IndexRange replaced; a Write
+// without a Value to a Variable with a writer is Bad_TypeMismatch and does not
+// reach the writer.
+func TestWrite_ValueWriterIndexRangeAndNoValue(t *testing.T) {
+	s := newTestServer()
+	ns := NewNodeNameSpace(s, "urn:test:range")
+	n := NewVariableNode(ua.NewStringNodeID(ns.ID(), "A"), "A", []int32{1, 2, 3})
+	ns.AddNode(n)
+	var got []*ua.DataValue
+	n.SetValueWriter(func(_ context.Context, w *ValueWrite) ua.StatusCode {
+		got = append(got, w.Value)
+		return ua.StatusOK
+	})
+	sess := s.sb.NewSession()
+	hdr := &ua.RequestHeader{AuthenticationToken: sess.AuthTokenID, Timestamp: time.Now()}
+	svc := &AttributeService{srv: s}
+	resp, err := svc.Write(context.Background(), nil, &ua.WriteRequest{RequestHeader: hdr, NodesToWrite: []*ua.WriteValue{
+		{NodeID: n.ID(), AttributeID: ua.AttributeIDValue, IndexRange: "1",
+			Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant([]int32{9})}},
+		{NodeID: n.ID(), AttributeID: ua.AttributeIDValue},
+	}}, 1)
+	require.NoError(t, err)
+	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadTypeMismatch}, resp.(*ua.WriteResponse).Results)
+	require.Len(t, got, 1)
+	require.Equal(t, []int32{1, 9, 3}, got[0].Value.Value())
+	require.Equal(t, byte(ua.DataValueValue), got[0].EncodingMask, "no status or timestamps")
+	require.Equal(t, []int32{1, 2, 3}, n.Value().Value.Value(), "the server does not store the value")
+}
+
+// A request answered later on a channel without a channel writer (the
+// dispatcher of an HTTPS request) is sent on the channel itself; a channel
+// that cannot send drops the response.
+func TestAnswerLater_DirectChannel(t *testing.T) {
+	s := newTestServer()
+	l := &later{srv: s, sc: scNone(), reqID: 7}
+	reply := answerLater(context.WithValue(context.Background(), laterKey{}, l))
+	require.NotNil(t, reply)
+	require.True(t, l.kept)
+	req := &ua.WriteRequest{RequestHeader: reqHeader()}
+	require.NotPanics(t, func() { reply(req, writeResponse(req, nil)) })
+	require.Nil(t, answerLater(context.Background()), "no dispatcher: answered now")
+}
