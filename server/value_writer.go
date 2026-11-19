@@ -134,7 +134,16 @@ func (s *Server) runValueWriters(ctx context.Context, sess *session, hdr *ua.Req
 	go func() {
 		defer s.writers.Done()
 		defer cancel()
-		defer close(done)
+		// The next Write of the session waits for this one and so for the
+		// earlier ones: one that gave up waiting (its TimeoutHint elapsed)
+		// still lets the next run only after the writer it waited for
+		// returned, so no two writers of a session run at once.
+		defer func() {
+			if prev != nil {
+				<-prev
+			}
+			close(done)
+		}()
 		if prev != nil {
 			select {
 			case <-prev:

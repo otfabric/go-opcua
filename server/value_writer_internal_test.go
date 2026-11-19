@@ -69,6 +69,44 @@ func TestRunValueWriters_TimeoutHint(t *testing.T) {
 	require.False(t, called)
 }
 
+// TestRunValueWriters_TimeoutKeepsOrder: a Write that timed out waiting for
+// the session's earlier Write does not let the next one overtake: the third
+// writer runs only after the first returned.
+func TestRunValueWriters_TimeoutKeepsOrder(t *testing.T) {
+	s := newTestServer()
+	sess := &session{}
+	release := make(chan struct{})
+	order := make(chan string, 2)
+	slow := []valueWriteJob{{write: &ValueWrite{}, writer: func(context.Context, *ValueWrite) ua.StatusCode {
+		<-release
+		order <- "first"
+		return ua.StatusOK
+	}}}
+	never := []valueWriteJob{{write: &ValueWrite{}, writer: func(context.Context, *ValueWrite) ua.StatusCode {
+		order <- "timed out"
+		return ua.StatusOK
+	}}}
+	third := []valueWriteJob{{write: &ValueWrite{}, writer: func(context.Context, *ValueWrite) ua.StatusCode {
+		order <- "third"
+		return ua.StatusOK
+	}}}
+	timedOut := make(chan []ua.StatusCode, 1)
+
+	s.runValueWriters(context.Background(), sess, nil, slow, make([]ua.StatusCode, 1), func([]ua.StatusCode) {})
+	s.runValueWriters(context.Background(), sess, &ua.RequestHeader{TimeoutHint: 20}, never, make([]ua.StatusCode, 1), func(r []ua.StatusCode) { timedOut <- r })
+	s.runValueWriters(context.Background(), sess, nil, third, make([]ua.StatusCode, 1), func([]ua.StatusCode) {})
+	require.Equal(t, []ua.StatusCode{ua.StatusBadTimeout}, <-timedOut, "answered without waiting for the first")
+	select {
+	case got := <-order:
+		t.Fatalf("%s ran while the first writer was still running", got)
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(release)
+	require.Equal(t, "first", <-order)
+	require.Equal(t, "third", <-order)
+	s.writers.Wait()
+}
+
 // TestWrite_ValueWriterWithoutDispatcher: called directly (no dispatcher to
 // answer later), the Write service runs the writer before it returns.
 func TestWrite_ValueWriterWithoutDispatcher(t *testing.T) {
