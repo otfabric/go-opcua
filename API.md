@@ -1674,7 +1674,15 @@ func New(opts ...Option) (*Server, error)
 ```go
 func (s *Server) Start(ctx context.Context) error
 func (s *Server) Close() error
+func (s *Server) CloseSession(sessionID *ua.NodeID) error
 ```
+
+`CloseSession` ends a session on the application's behalf (a user disabled or
+given another role): its subscriptions are deleted, its queued Publish
+requests answered with `Bad_SessionClosed`, its continuation points released,
+and the `SessionObserver` is told `SessionClosedByServer`. The client's next
+request of the session fails with `Bad_SessionIdInvalid`. Unknown or nil
+SessionId: `ua.StatusBadSessionIDInvalid`.
 
 #### Namespace management
 
@@ -1763,6 +1771,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithX509UserValidator(v X509UserValidator)` | Callback `func(certDER []byte) error` called during `ActivateSession` for `X509IdentityToken`; must also call `EnableAuthMode(ua.UserTokenTypeCertificate)`; without one, X.509 user tokens are rejected |
 | `WithIssuedTokenValidator(v IssuedTokenValidator)` | Callback `func(tok *ua.IssuedIdentityToken) error` called during `ActivateSession` for `IssuedIdentityToken` (token data decrypted where the policy encrypts it); must also call `EnableAuthMode(ua.UserTokenTypeIssuedToken)`; without one, issued tokens are rejected with `BadIdentityTokenRejected` |
 | `WithClientCertificateTrustList(caCertDER ...[]byte)` | Verify the client application certificate (DER) at `OpenSecureChannel` (and again at `CreateSession`) against the provided CA pool; rejects untrusted certs with `BadCertificateUntrusted` |
+| `WithClientCertificateValidator(v ClientCertificateValidator)` | The application's own validator of client application certificates, called at the same points (a trust list it changes while the server runs, a rejected list for an administrator); replaces the one of `WithClientCertificateTrustList`, refused with `WithPushManagement` |
 | `ServerName(name string)` | Application name |
 | `ManufacturerName(s string)` | Manufacturer name |
 | `ProductName(s string)` | Product name |
@@ -1987,6 +1996,8 @@ func (n *Node) AddObject(o *Node) *Node
 func (n *Node) AddVariable(o *Node) *Node
 func (n *Node) AddRef(o *Node, rt RefType, forward bool)
 func (n *Node) SetMethodArguments(in, out []*ua.Argument) error
+func (n *Node) SetValueWriter(fn ValueWriter)
+func (n *Node) ValueWriter() ValueWriter
 func (n *Node) Access(flag ua.AccessLevelType) bool
 ```
 
@@ -2089,9 +2100,34 @@ type X509UserValidator func(certDER []byte) error
 // during CreateSession) to verify the client's application certificate
 // against the server's trust store.
 // Return nil to accept, or ua.StatusBadCertificateUntrusted to reject.
-// Configured via WithClientCertificateTrustList.
+// Configured via WithClientCertificateTrustList or WithClientCertificateValidator.
 type ClientCertificateValidator func(certDER []byte) error
 ```
+
+#### Value writers
+
+```go
+type ValueWrite struct {
+    Session *Session
+    NodeID  *ua.NodeID
+    Value   *ua.DataValue // as the client wrote it (StatusCode, timestamps); an IndexRange already merged
+}
+
+type ValueWriter func(ctx context.Context, w *ValueWrite) ua.StatusCode
+```
+
+A Variable with a `ValueWriter` (`Node.SetValueWriter`) hands clients' Writes
+of its Value to the application instead of storing them: the writer's status
+is the result of the operation, and the writer updates the Variable itself
+(`Node.SetAttribute`, `Server.ChangeNotification`). A StatusCode or
+timestamps in the written DataValue, which the server refuses for a stored
+value (`Bad_WriteNotSupported`), reach the writer to take or refuse. AccessLevel,
+UserAccessLevel, AccessRestrictions and the `AccessController` are applied
+first. Writers run off the request dispatcher: a slow one (a device write and
+read-back) holds up only its own Write request, which keeps its in-flight slot
+until every writer of the request returned; the writes of one session reach
+the writers in order. `ctx` ends at `Close` or when the request's TimeoutHint
+elapses; a panic fails the operation with `Bad_InternalError`.
 
 ---
 

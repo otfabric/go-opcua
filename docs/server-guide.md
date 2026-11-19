@@ -552,6 +552,41 @@ ns.AddNode(folder)
 ns.Objects().AddRef(folder, id.HasComponent, true)
 ```
 
+### Variables Whose Writes the Application Takes
+
+A Variable that stands for something outside the server (a device register,
+a value in another system) should not just store what a client writes: the
+application writes it on, and the client's Write succeeds or fails with it.
+Give such a Variable a `ValueWriter`:
+
+```go
+node.SetValueWriter(func(ctx context.Context, w *server.ValueWrite) ua.StatusCode {
+    v, err := device.Write(ctx, w.Value.Value.Value()) // may take a while
+    if err != nil {
+        return ua.StatusBadCommunicationError
+    }
+    node.SetAttribute(ua.AttributeIDValue, server.DataValueFromValue(v))
+    srv.ChangeNotification(node.ID())
+    return ua.StatusOK
+})
+```
+
+The writer gets the session (`w.Session`: its user identity, roles and
+certificate), the Variable and the DataValue as the client wrote it; its
+status is the result of the operation. The server does not store the value.
+A StatusCode or timestamps in the DataValue, which the server refuses for a
+value it stores (`Bad_WriteNotSupported`, Part 4 §5.10.4), are the writer's
+to take or refuse: some clients (asyncua) send a Good StatusCode with every
+write. AccessLevel, UserAccessLevel, AccessRestrictions and the
+`AccessController` are applied before the writer is called.
+
+Writers run off the goroutine that handles the requests of every client, so a
+slow writer holds up only the Write request it serves; that request keeps its
+in-flight slot until every writer in it returned. The writes of one session
+reach the writers in the order the session sent them. `ctx` ends when the
+server closes or the request's TimeoutHint elapses; `Close` waits for the
+writers to return.
+
 ### Dynamic Node Management
 
 Add and remove nodes at runtime via OPC-UA service calls:
@@ -1355,6 +1390,29 @@ server and a client.
 ---
 
 ## Access Control
+
+### Ending a session from the application
+
+When the user a session was activated for is disabled or loses a role,
+`Server.CloseSession(sessionID)` ends that session as a CloseSession with
+DeleteSubscriptions would (Part 4 §5.6.4): its subscriptions go, its queued
+Publish requests are answered with `Bad_SessionClosed`, and the client's next
+request fails with `Bad_SessionIdInvalid`, so it signs in again with
+credentials the server checks again. A `SessionObserver` learns the SessionId
+and user of each session (`OnSessionActivated`) and is told
+`SessionClosedByServer`.
+
+### Client application certificates
+
+`WithClientCertificateTrustList` trusts a fixed set of certificates or CAs.
+An application that keeps its own trust list, changes it while the server
+runs or records refused certificates for an administrator sets its own
+validator with `WithClientCertificateValidator(func(certDER []byte) error)`;
+return `ua.StatusBadCertificateUntrusted` to refuse a client. The server calls
+it at OpenSecureChannel and again at CreateSession. `WithPushManagement`
+validates against its own trust lists and cannot be combined with either.
+
+### Authorization
 
 Implement fine-grained authorization by providing a custom `AccessController`:
 

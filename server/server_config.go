@@ -448,6 +448,24 @@ func WithClientCertificateTrustList(caCertDER ...[]byte) Option {
 	}
 }
 
+// WithClientCertificateValidator sets the validator of the application
+// certificates of connecting clients (see [ClientCertificateValidator]): the
+// application decides which clients it trusts, e.g. from a trust list it
+// keeps and changes while the server runs, and records the certificates it
+// refuses for an administrator to review (Part 12 §7.8.2.2 calls them the
+// rejected list). The certificate the validator gets is the one the client
+// sent, which may be followed by its issuers (Part 6 §6.7.2).
+//
+// It replaces the validator of [WithClientCertificateTrustList] (the option
+// given last applies) and cannot be combined with [WithPushManagement], which
+// validates against its own trust list.
+func WithClientCertificateValidator(v ClientCertificateValidator) Option {
+	return func(s *serverConfig) error {
+		s.clientCertificateValidator = v
+		return nil
+	}
+}
+
 // AllowUsernameOnNone permits the server to advertise UserName token policies
 // on None/None (unencrypted) endpoints.  The OPC UA specification permits this
 // for test deployments (Part 4 §5.6.3.2).  By default, non-anonymous tokens

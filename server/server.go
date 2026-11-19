@@ -85,6 +85,8 @@ type Server struct {
 	methods map[string]MethodHandler
 
 	cancelMonitor context.CancelFunc
+	// writers counts the ValueWriter goroutines; Close waits for them.
+	writers sync.WaitGroup
 
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
@@ -308,7 +310,7 @@ func New(opts ...Option) (*Server, error) {
 	var push *pushManager
 	if cfg.push != nil {
 		if cfg.clientCertificateValidator != nil {
-			return nil, fmt.Errorf("server: WithPushManagement validates client certificates against its trust list; pass the trusted certificates in PushManagement.TrustList instead of WithClientCertificateTrustList")
+			return nil, fmt.Errorf("server: WithPushManagement validates client certificates against its trust list; pass the trusted certificates in PushManagement.TrustList instead of WithClientCertificateTrustList or WithClientCertificateValidator")
 		}
 		push = newPushManager(cfg.push, cfg)
 		cfg.clientCertificateValidator = push.validateClient
@@ -789,6 +791,10 @@ func (s *Server) Close() error {
 	// Shut down all secure channels and UACP connections
 	err := s.cb.Close(context.Background())
 
+	// The ValueWriters still running were told by their context (the
+	// monitor's); their answers go nowhere now.
+	s.writers.Wait()
+
 	// Stop connecting to reverse connect clients and wait for what was
 	// started for them.
 	s.closeReverseConnects()
@@ -908,8 +914,15 @@ func (s *Server) monitorConnections(ctx context.Context) {
 		// Write and the data change it triggers, for example, are applied
 		// in request order). What must not happen here is waiting for a
 		// client, so the response is only queued on the channel's writer.
-		resp := s.serve(context.WithValue(ctx, secureChannelIDKey{}, in.secureChannelID), in.sc, in.reqID, in.req)
+		l := &later{srv: s, sc: in.sc, w: in.w, reqID: in.reqID}
+		rctx := context.WithValue(context.WithValue(ctx, secureChannelIDKey{}, in.secureChannelID), laterKey{}, l)
+		resp := s.serve(rctx, in.sc, in.reqID, in.req)
 		if resp == nil {
+			if l.kept {
+				// answered later by the handler (a Write a ValueWriter
+				// takes): the request keeps its slot until then
+				continue
+			}
 			// answered later (Publish): the request is no longer in flight
 			in.w.release()
 			continue

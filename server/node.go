@@ -87,6 +87,10 @@ type Node struct {
 
 	rolePermissions []*ua.RolePermissionType
 
+	// writer takes clients' Writes of the Value instead of the node
+	// (SetValueWriter). Guarded by mu.
+	writer ValueWriter
+
 	ns NameSpace
 }
 

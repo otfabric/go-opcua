@@ -2170,6 +2170,9 @@ type Node struct {
 	// set. Appends to refs call noteRefAppended, every other change calls
 	// invalidateTypeDef. Guarded by mu.
 
+	// writer takes clients' Writes of the Value instead of the node
+	// (SetValueWriter). Guarded by mu.
+
 }
 ```
 
@@ -2365,11 +2368,27 @@ func (n *Node) SetValueFunc(f ValueFunc)
 
 SetValueFunc makes the node serve its Value attribute from f, whatever its access level: the way a server publishes values of nodes that clients may only read, for example the properties of a NodeSet it imported. A nil f removes the value.
 
+#### func (Node) SetValueWriter
+
+```go
+func (n *Node) SetValueWriter(fn ValueWriter)
+```
+
+SetValueWriter sets the writer that takes clients' Writes of the Value of this Variable (nil: the server stores a written value, the default). The AccessLevel, UserAccessLevel, AccessRestrictions and the AccessController are applied before the writer is called, as for a stored value.
+
 #### func (Node) Value
 
 ```go
 func (n *Node) Value() *ua.DataValue
 ```
+
+#### func (Node) ValueWriter
+
+```go
+func (n *Node) ValueWriter() ValueWriter
+```
+
+ValueWriter returns the writer set with SetValueWriter, nil if there is none.
 
 ### type NodeManagementAccessController
 
@@ -2826,6 +2845,16 @@ func WithClientCertificateTrustList(caCertDER ...[]byte) Option
 WithClientCertificateTrustList configures the server to verify connecting clients' application certificates against the provided CA certificate pool. Clients that present a certificate not signed by one of the provided CA certificates are rejected with BadCertificateUntrusted at OpenSecureChannel (CreateSession retains the same check as defense-in-depth).
 
 Each caCertDER is a DER-encoded X.509 CA certificate (or a trusted self-signed application instance certificate). Brainpool and Ed448 keys are supported; see uapolicy.VerifyCertificate. Passing an empty list configures a server that rejects all client certificates.
+
+#### func WithClientCertificateValidator
+
+```go
+func WithClientCertificateValidator(v ClientCertificateValidator) Option
+```
+
+WithClientCertificateValidator sets the validator of the application certificates of connecting clients (see [ClientCertificateValidator](#type-clientcertificatevalidator)): the application decides which clients it trusts, e.g. from a trust list it keeps and changes while the server runs, and records the certificates it refuses for an administrator to review (Part 12 §7.8.2.2 calls them the rejected list). The certificate the validator gets is the one the client sent, which may be followed by its issuers (Part 6 §6.7.2).
+
+It replaces the validator of [WithClientCertificateTrustList](#func-withclientcertificatetrustlist) (the option given last applies) and cannot be combined with [WithPushManagement](#func-withpushmanagement), which validates against its own trust list.
 
 #### func WithDiscoveryRegistration
 
@@ -3754,6 +3783,8 @@ type Server struct {
 
 	// methods stores registered server-side method handlers keyed by "objectID\x00methodID".
 
+	// writers counts the ValueWriter goroutines; Close waits for them.
+
 	SubscriptionService  *SubscriptionService
 	MonitoredItemService *MonitoredItemService
 
@@ -3904,6 +3935,16 @@ func (s *Server) Close() error
 ```
 
 Close gracefully shuts the server down by closing all open connections, and stops listening on all endpoints.
+
+#### func (Server) CloseSession
+
+```go
+func (s *Server) CloseSession(sessionID *ua.NodeID) error
+```
+
+CloseSession ends a session on the application's behalf, e.g. when the user it was activated for has been disabled or has lost a role. The session is closed as a CloseSession with DeleteSubscriptions would close it (Part 4 §5.6.4): its subscriptions are deleted, its queued Publish requests are answered with Bad\_SessionClosed and its continuation points released. The client's next request of the session fails with Bad\_SessionIdInvalid, so it has to create and activate a new one, with credentials the server checks again. The [SessionObserver](#type-sessionobserver) is told SessionClosedByServer.
+
+sessionID is the SessionId (SessionInfo.ID, [Session.ID](#func-session-id)). CloseSession returns ua.StatusBadSessionIDInvalid if the server has no such session.
 
 #### func (Server) Condition
 
@@ -4715,6 +4756,37 @@ UsernameValidator is a function that validates a username and password. Return n
 ```go
 type ValueFunc func() *ua.DataValue
 ```
+
+### type ValueWrite
+
+```go
+type ValueWrite struct {
+	// Session is the session the Write arrived in.
+	Session *Session
+	// NodeID is the Variable written.
+	NodeID *ua.NodeID
+	// Value is the DataValue as the client wrote it. Its StatusCode and
+	// timestamps, which the server refuses for a value it stores
+	// (Bad_WriteNotSupported, Part 4 §5.10.4), are the writer's to take or
+	// refuse. With an IndexRange it is the current value with the range
+	// replaced, without status or timestamps.
+	Value *ua.DataValue
+}
+```
+
+ValueWrite is a client's Write of the Value Attribute of a Variable that has a [ValueWriter](#type-valuewriter) (Part 4 §5.10.4).
+
+### type ValueWriter
+
+```go
+type ValueWriter func(ctx context.Context, w *ValueWrite) ua.StatusCode
+```
+
+ValueWriter takes a client's Write of the Value of a Variable in place of the server. It returns the status of the operation: StatusOK when the value was taken, a Bad code otherwise (Bad\_OutOfRange, Bad\_TypeMismatch, Bad\_CommunicationError, Bad\_UserAccessDenied…).
+
+The server does not store the value: the writer decides what the Variable holds afterwards, typically by updating it with [Node.SetAttribute](#func-node-setattribute) or its value function and calling [Server.ChangeNotification](#func-server-changenotification).
+
+A writer may take as long as the application needs, e.g. to write a device and read the value back. It runs off the goroutine that handles the requests of every client, so a slow writer holds up only the Write request it serves. The writes of one session reach the writers in the order the session sent them. ctx ends when the server closes or when the TimeoutHint of the request elapsed.
 
 ### type ViewService
 
