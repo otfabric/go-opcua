@@ -985,6 +985,7 @@ _ = s.EmitBaseEvent(pumpID, &server.BaseEvent{ /* ... */ })
 - `QueueSize` is revised to `max(1, requested)` (cap 100); Overflow InfoBit `0x480` when `QueueSize > 1` and the queue overflows.
 - `DiscardOldest=true` keeps the newest `QueueSize` samples; `false` keeps the oldest `QueueSize-1` plus the newest (e.g. writes `1..5` / QS=3 → `[1,2,5]`).
 - `SetMonitoringMode`: Disabled = no enqueue; Sampling = enqueue only; Reporting = enqueue + Publish.
+- `SetTriggering` (Part 4 §5.12.1.6): an item in Sampling mode linked to a triggering item is published with it — the samples it queued go out when the triggering item's notifications do. A link is to an item of the same subscription and goes when either item is deleted.
 - Subscription `TimestampsToReturn` filters DataChange timestamps the same way as Read.
 - A new monitored item reports its current value once; items that already exist on the same node are not notified again.
 

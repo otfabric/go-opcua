@@ -1922,6 +1922,10 @@ type MonitoredItem struct {
 
 	// non-zero while a postponed sample is pending
 
+	// triggers are the ids of the items this item triggers (SetTriggering,
+	// Part 4 §5.12.1.6): when this item's notifications are reported, the
+	// queued notifications of those in Sampling mode are reported with them.
+
 }
 ```
 
