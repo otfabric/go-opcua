@@ -64,7 +64,7 @@ func TestGoServer_DotnetClient_Alarms105Timing(t *testing.T) {
 // 0.15.0): s=Alarms.ExtAlarm with the optional states and methods,
 // s=Alarms.Dialog, s=Alarms.Group and the fixture methods ResetExt,
 // Deactivate and Branch. Every condition method is the stack's own handler.
-// Where UA-.NETStandard 2.0.1 has no handler (TimedShelve2, Respond2) the
+// Where UA-.NETStandard 2.0.2 has no handler (TimedShelve2, Respond2) the
 // fixture has no such method and the test records the refusal.
 func TestDotnetServer_Alarms105(t *testing.T) {
 	requireServerFeature(t, dotnetEnv, defaultDotnetImage, "alarms-105")
@@ -80,7 +80,7 @@ func TestDotnetServer_Alarms105(t *testing.T) {
 // UA-.NETStandard server started with --auditing (serverFeatures "auditing",
 // adapter 0.15.0); the stack delivers audit events to SignAndEncrypt sessions
 // only. Its events carry the condition's own method as MethodId, and the
-// Acknowledge / Confirm events leave ConditionEventId and Comment out (2.0.1
+// Acknowledge / Confirm events leave ConditionEventId and Comment out (2.0.2
 // sets them with SetChildValue on children its audit event states do not
 // create): the EventId and the Comment are in InputArguments only.
 func TestDotnetServer_AlarmAudit(t *testing.T) {
@@ -218,13 +218,13 @@ func (p *dotnetAlarm105) assertStateMethods(t *testing.T) {
 	if p.state(t, ext, "LatchedState") || p.comment(t, ext) != "reset" {
 		t.Fatalf("Reset2: latched=%v comment=%q", p.state(t, ext, "LatchedState"), p.comment(t, ext))
 	}
-	// TimedShelve2 has no handler in UA-.NETStandard 2.0.1: the fixture's
+	// TimedShelve2 has no handler in UA-.NETStandard 2.0.2: the fixture's
 	// ShelvingState has TimedShelve, OneShotShelve and Unshelve only.
 	err := p.c.TimedShelve2(ctx, ext, time.Hour, "shelved")
 	if !refusal(err) {
 		t.Fatalf("TimedShelve2 = %v, want the refusal of a method the server does not have", err)
 	}
-	t.Logf("TimedShelve2 (not served by UA-.NETStandard 2.0.1): %v", err)
+	t.Logf("TimedShelve2 (not served by UA-.NETStandard 2.0.2): %v", err)
 	wantStatus(t, "TimedShelve", p.c.TimedShelve(ctx, ext, time.Hour), ua.StatusOK)
 	cur, _ := p.value(t, ext, "ShelvingState", "CurrentState", "Id").(*ua.NodeID)
 	if cur == nil || cur.IntID() != id.ShelvedStateMachineTypeTimedShelved {
@@ -243,13 +243,13 @@ func (p *dotnetAlarm105) assertDialog(t *testing.T) {
 	if !p.state(t, dlg, "DialogState") {
 		t.Fatal("the dialog is not active after ResetExt")
 	}
-	// Respond2 has no handler in UA-.NETStandard 2.0.1: the fixture
+	// Respond2 has no handler in UA-.NETStandard 2.0.2: the fixture
 	// dialog has Respond only.
 	err := p.c.Respond2(ctx, dlg, 1, "no")
 	if !refusal(err) {
 		t.Fatalf("Respond2 = %v, want the refusal of a method the server does not have", err)
 	}
-	t.Logf("Respond2 (not served by UA-.NETStandard 2.0.1): %v", err)
+	t.Logf("Respond2 (not served by UA-.NETStandard 2.0.2): %v", err)
 	// Option 2 does not exist (ResponseOptionSet [Yes, No]).
 	wantStatus(t, "Respond 2", p.c.Respond(ctx, dlg, 2), ua.StatusBadDialogResponseInvalid)
 	wantStatus(t, "Respond 1", p.c.Respond(ctx, dlg, 1), ua.StatusOK)

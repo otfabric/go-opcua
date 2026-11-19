@@ -720,7 +720,7 @@ func TestNodeOpcuaServer_EventQueueOverflow(t *testing.T) {
 		h := startNodeOpcuaServer(t)
 		requirePeerNode(t, h.endpoint, "Events.Source")
 		if revised := nodeOpcuaRevisedEventQueueSize(t, h.endpoint, 2); revised != 2 {
-			// node-opcua 2.187.12 (monitored_item.js _adjust_event_queue_size)
+			// node-opcua 2.187.31 (monitored_item.js _adjust_event_queue_size)
 			// raises every event queue to at least 100, although its own
 			// comment (and Part 4 v1.05.07 §7.21) says a size between 1 and
 			// MaxUInt32 is honoured as asked. With one fixture event every
@@ -1136,7 +1136,7 @@ func TestPubSub_NodeOpcuaHasNoPubSub(t *testing.T) {
 }
 
 // TestNodeOpcuaServer_EccUnsupported pins the ledger rows of the ECC
-// capabilities: node-opcua 2.187.12 implements no ECC SecurityPolicy, so the
+// capabilities: node-opcua 2.187.31 implements no ECC SecurityPolicy, so the
 // server offers no ECC endpoint even with --ecc-dir, and the adapter client
 // refuses an ECC policy with exit 2 / "input" instead of falling back.
 func TestNodeOpcuaServer_EccUnsupported(t *testing.T) {

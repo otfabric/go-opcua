@@ -2,7 +2,7 @@
 
 // SPDX-License-Identifier: MIT
 
-// PubSub (Part 14) against UA-.NETStandard 2.0.1 (Opc.Ua.PubSub): the
+// PubSub (Part 14) against UA-.NETStandard 2.0.2 (Opc.Ua.PubSub): the
 // opcua-interop dotnet adapter as publisher and subscriber (server
 // --pubsub-config), its codec pubsub-* operations and its UADP discovery
 // (client pubsub-discover); opcua-interop docs/CONTAINER_CONTRACT.md §14.13.
@@ -175,7 +175,7 @@ func TestPubSubRuntime_DotnetPublishes_GoTargetVariables(t *testing.T) {
 // sends UADP to a multicast group, the go-opcua runtime joins it. Host
 // networking (Linux only), see pubsub_multicast_peer_test.go.
 //
-// UA-.NETStandard 2.0.1 turns IP_MULTICAST_LOOP off by default
+// UA-.NETStandard 2.0.2 turns IP_MULTICAST_LOOP off by default
 // (UdpTransportOptions.MulticastLoopback), so its multicast does not reach a
 // subscriber on the same host; the adapter turns it on from opcua-interop
 // v0.15.0 (serverFeatures "pubsub-multicast-loopback").

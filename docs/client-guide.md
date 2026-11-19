@@ -194,7 +194,7 @@ JSON profile whose scheme is not that of the URL fails `Connect` with
   connecting.
 - A message is limited to `uasc.MaxWebSocketJSONMessageSize`; a larger one
   ends the WebSocket with status 1009 (Part 6 §7.5.2).
-- UA-.NETStandard 2.0.1 takes JSON over HTTPS only with the (non-standard)
+- UA-.NETStandard 2.0.2 takes JSON over HTTPS only with the (non-standard)
   Content-Type `application/opcua+uajson`. To talk to it, set that one with
   `HTTPSJSONContentType`:
 
@@ -1401,7 +1401,7 @@ A server application asks for a TLS certificate in the DefaultHttpsGroup
 (`CertificateGroup` of the request, the group's NodeId from
 `GetCertificateGroups`) and reads the issuers of user certificates from the
 trust list of the DefaultUserTokenGroup. The pull model is verified against
-the Global Discovery Server of UA-.NETStandard 2.0.1.
+the Global Discovery Server of UA-.NETStandard 2.0.2.
 
 ---
 

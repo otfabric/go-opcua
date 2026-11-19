@@ -364,7 +364,7 @@ type Config struct {
 	// HTTPSJSONContentType is the Content-Type of the requests of an
 	// https-uajson channel (NewHTTPSJSONChannel). Empty means
 	// HTTPSJSONContentType (Part 6 §7.4.2); HTTPSJSONContentTypeLegacy
-	// reaches servers that take only that one (UA-.NETStandard 2.0.1).
+	// reaches servers that take only that one (UA-.NETStandard 2.0.2).
 	HTTPSJSONContentType string
 }
 ```

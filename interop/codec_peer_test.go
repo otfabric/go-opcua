@@ -10,7 +10,7 @@
 //
 // The Verbose form (OPC UA 1.05.04, --json-mode verbose; Milo and dotnet) is
 // run on the JSON half of the same tests. For the fixture's values Milo 1.1.8
-// and UA-.NETStandard 2.0.1 write exactly their compact documents (no
+// and UA-.NETStandard 2.0.2 write exactly their compact documents (no
 // StatusCode Symbol either, also not for an Uncertain status), so the
 // go-opcua → peer direction adds a Bad StatusCode and an Uncertain DataValue,
 // which go-opcua's Verbose form writes with their Symbol.

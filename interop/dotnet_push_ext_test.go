@@ -7,7 +7,7 @@
 // (unreleased when these tests were written; built from the opcua-interop
 // branch feat/dotnet-push). The push client is plain Calls on the
 // ServerConfiguration NodeIds over the adapter's one session (the
-// ServerPushConfigurationClient of Opc.Ua.Gds.Client 2.0.1 opens a session
+// ServerPushConfigurationClient of Opc.Ua.Gds.Client 2.0.2 opens a session
 // of its own and has no Part 12 1.05 methods); the pull client is the
 // stack's GlobalDiscoveryServerClient, as in the dotnet-gds adapter:
 //

@@ -6,7 +6,7 @@
 // COVERAGE.md: pubsub / pubsub.actions
 //
 // No other stack implements PubSub Actions (open62541 1.5.9 and
-// Opc.Ua.PubSub 2.0.1 have none, the other peers no PubSub), so this is
+// Opc.Ua.PubSub 2.0.2 have none, the other peers no PubSub), so this is
 // go-opcua to go-opcua through Eclipse Mosquitto: a client configures a
 // PublishedAction with its connection, group and writer on a go-opcua server
 // through the PubSubConfiguration file (ReserveIds, CloseAndUpdate,

@@ -260,7 +260,7 @@ The complete list, with one test case per finding, is `corpusDivergences` in
 `ua/open62541_corpus_test.go`.
 
 The interop suite also exchanges encoded values live with the adapters of
-open62541, Eclipse Milo 1.1.8 and UA-.NETStandard 2.0.1, in both directions
+open62541, Eclipse Milo 1.1.8 and UA-.NETStandard 2.0.2, in both directions
 (go-opcua encodes and the peer decodes, and the reverse; ledger rows
 `encoding.json.*` and `encoding.xml.*`, see [INTEROP.md](../INTEROP.md)):
 
@@ -268,7 +268,7 @@ open62541, Eclipse Milo 1.1.8 and UA-.NETStandard 2.0.1, in both directions
 |------|:---:|:---:|:---:|:---:|
 | open62541 1.5.9 | ✅ | ✅ | ✅ | — open62541 has no XML DataValue |
 | Eclipse Milo 1.1.8 | ✅ | go-opcua → Milo: — ¹ | ✅ | ✅ |
-| UA-.NETStandard 2.0.1 | ✅ | ✅ | ✅ | ✅ |
+| UA-.NETStandard 2.0.2 | ✅ | ✅ | ✅ | ✅ |
 
 ¹ Milo decodes a JSON DataValue only in its own form, with the Variant nested
 in `"Value"`; Part 6 1.05 inlines the Variant members. go-opcua reads Milo's
