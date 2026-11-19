@@ -467,20 +467,27 @@ func TestPubSubChunk_GoPublishes_DotnetReassembles(t *testing.T) {
 
 // TestPubSubDiscovery_GoProbes_DotnetAnswers: go-opcua sends DataSetMetaData
 // and DataSetWriterConfiguration probes in the .NET layout to the dotnet
-// publisher's connection (opc.udp://0.0.0.0:<port>) and decodes the
-// announcements it answers with.
+// publisher's connection and decodes the announcements it answers with.
+//
+// The connection address is the prober, opc.udp://host.docker.internal:<port>
+// with the Go socket on host port <port>: UA-.NETStandard 2.0.2 sends these
+// answers to the connection's address (UdpDatagramTransport.BindForUnicast),
+// while 2.0.1 sent them to the last peer it received from. An empty
+// ReaderGroup makes the connection receive: the container binds
+// 0.0.0.0:<port> for the probes, published on another host port.
 func TestPubSubDiscovery_GoProbes_DotnetAnswers(t *testing.T) {
 	psDotnet.requireServer(t)
 	c := psLiveCase{name: "discovery", vars: psVars}
-	port := freeUDPPort(t)
-	pub := startPubSubServer(t, pubsubServerOpts{peer: psDotnet, udpPorts: []int{port},
-		config: psPublisherConfig(c, psProfileUDP, fmt.Sprintf("opc.udp://0.0.0.0:%d", port), nil, false)})
-
 	sock, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = sock.Close() })
+	port := sock.LocalAddr().(*net.UDPAddr).Port
+	config := psPublisherConfig(c, psProfileUDP, fmt.Sprintf("opc.udp://host.docker.internal:%d", port), nil, false)
+	config["configuration"].(jobj)["Connections"].([]jobj)[0]["ReaderGroups"] = []jobj{{"Name": "InteropProbes", "Enabled": true}}
+	pub := startPubSubServer(t, pubsubServerOpts{peer: psDotnet, udpPorts: []int{port},
+		udpHostPorts: map[int]int{port: freeUDPPort(t)}, config: config})
 	dest := &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: pub.udpPort(t, port)}
 
 	// probe sends req until an announcement of want arrives.
