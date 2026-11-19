@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 // The GDS pull model (Part 12 §6, §7.9) against UA-.NETStandard: the
-// opcua-interop adapter dotnet-gds (opcua-interop v0.19.0, CONTAINER_CONTRACT
+// opcua-interop adapter dotnet-gds (opcua-interop v0.19.2, CONTAINER_CONTRACT
 // §16) runs the stack's Global Discovery Server and GDS client on
-// OPCFoundation.NetStandard.Opc.Ua.Gds.Server / .Gds.Client 2.0.1.
+// OPCFoundation.NetStandard.Opc.Ua.Gds.Server / .Gds.Client 2.0.2.
 //
 //	go-client-to-dotnet-server   gds.PullClient → GlobalDiscoverySampleServer
 //	dotnet-client-to-go-server   GlobalDiscoveryServerClient (`client gds-pull`) → gdsserver
@@ -42,8 +42,8 @@ import (
 const (
 	dotnetGDSEnv = "DOTNET_GDS_IMAGE"
 	// defaultDotnetGDSImage is the dotnet-gds adapter of opcua-interop
-	// v0.19.0, by digest; an opt-in peer until it moves to the pinned peers.
-	defaultDotnetGDSImage = "ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:f8b1cff268b650a192bf33616d66e56c988546dd6a2fecc9f189535fe0596ebd"
+	// v0.19.2, by digest; an opt-in peer until it moves to the pinned peers.
+	defaultDotnetGDSImage = "ghcr.io/otfabric/opcua-interop-dotnet-gds@sha256:dba53df19f05ae27733d4b4d275238ac5b7c8a345fb5760ee7aa9a49a383bb08"
 
 	// The GDS administrator of the fixture (opcua-interop
 	// fixtures/gds/fixture.json) and of the go GDS.
@@ -53,7 +53,7 @@ const (
 
 func init() {
 	optionalPeerImageEnv[dotnetGDSEnv] = true
-	peerInteropVersion[dotnetGDSEnv] = "v0.19.0"
+	peerInteropVersion[dotnetGDSEnv] = "v0.19.2"
 }
 
 // requireDotnetGDS skips (or fails with OPCUA_INTEROP_REQUIRE_CAPABILITIES=1)
@@ -68,12 +68,12 @@ func requireDotnetGDS(t *testing.T, list string) {
 		have = caps.ClientOperations
 	}
 	if !slices.Contains(have, "gds-pull") {
-		capabilityUnavailable(t, "adapter %s (version %s) has no %s gds-pull (opcua-interop v0.19.0 dotnet-gds)", image, caps.Adapter.Version, list)
+		capabilityUnavailable(t, "adapter %s (version %s) has no %s gds-pull (opcua-interop v0.19.2 dotnet-gds)", image, caps.Adapter.Version, list)
 	}
 }
 
 // TestDotnetGDSPull_GoClient_DotnetServer: gds.PullClient against the
-// Global Discovery Server of UA-.NETStandard 2.0.1.
+// Global Discovery Server of UA-.NETStandard 2.0.2.
 func TestDotnetGDSPull_GoClient_DotnetServer(t *testing.T) {
 	requireDotnetGDS(t, "serverFeatures")
 	testGDSPullPeerServer(t, dotnetGDSEnv, defaultDotnetGDSImage, "dotnet-server", dirGoClientToDotnetServer)
@@ -242,7 +242,7 @@ func testGDSPullPeerServer(t *testing.T, env, image, pki, dir string) {
 		if !crlsRevoke(tl.TrustedCrls, cert) {
 			t.Fatalf("no CRL of the trust list revokes the certificate of %s serial %x", cert.Issuer, cert.SerialNumber)
 		}
-		// UA-.NETStandard 2.0.1 reads its CRL (1.5.378 checked online only and
+		// UA-.NETStandard 2.0.2 reads its CRL (1.5.378 checked online only and
 		// answered BadCertificateRevocationUnknown).
 		status, _, err := p.CheckRevocationStatus(ctx, issued)
 		if err != nil {
@@ -411,7 +411,7 @@ func decodeB64(t *testing.T, s string) []byte {
 }
 
 // TestDotnetGDSPull_DotnetClient_GoServer: GlobalDiscoveryServerClient of
-// UA-.NETStandard 2.0.1 against gdsserver.
+// UA-.NETStandard 2.0.2 against gdsserver.
 func TestDotnetGDSPull_DotnetClient_GoServer(t *testing.T) {
 	requireDotnetGDS(t, "clientOperations")
 	testGDSPullGoServer(t, dotnetGDSPullClient)

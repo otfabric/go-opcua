@@ -807,7 +807,7 @@ func TransportProfile(uri string) Option {
 // https-uajson (TransportProfile ua.TransportProfileHTTPSJSON). The default
 // is uasc.HTTPSJSONContentType, application/json (Part 6 §7.4.2);
 // uasc.HTTPSJSONContentTypeLegacy, application/opcua+uajson, reaches
-// servers that take only that one, such as UA-.NETStandard 2.0.1.
+// servers that take only that one, such as UA-.NETStandard 2.0.2.
 func HTTPSJSONContentType(contentType string) Option {
 	return func(cfg *Config) error {
 		cfg.sechan.HTTPSJSONContentType = contentType

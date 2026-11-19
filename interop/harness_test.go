@@ -18,7 +18,7 @@
 //	MILO_IMAGE                 Docker image for the Milo adapter      (default: digest pin below)
 //	OPCUA_INTEROP_FIXTURE_DIR  Directory containing baseline.json     (default: testdata)
 //	OPCUA_INTEROP_PKI_DIR      Root of the test PKI tree, with the ECC certificates of
-//	                           opcua-interop v0.19.0 certs/generate.sh (default: ../../opcua-interop/certs/test-pki)
+//	                           opcua-interop v0.19.2 certs/generate.sh (default: ../../opcua-interop/certs/test-pki)
 //	OPCUA_INTEROP_REQUIRE_CAPABILITIES=1
 //	                           Fail instead of skip when the image lacks an operation or
 //	                           feature the suite has evidence for, or the PKI is missing.
@@ -68,18 +68,18 @@ const (
 	// opcua-interop tags are immutable: on a new release update the version
 	// and the digests below in lockstep (harness defaults, interop.yml,
 	// INTEROP.md, coverage.json, render-interop-coverage).
-	interopVersion = "v0.19.0"
+	interopVersion = "v0.19.2"
 
-	// Digests are the GHCR multi-arch indexes of the v0.19.0 publication
+	// Digests are the GHCR multi-arch indexes of the v0.19.2 publication
 	// (the async-opcua, dotnet, node-opcua and asyncua defaults are in their
 	// *_harness_test.go files):
-	// https://github.com/otfabric/opcua-interop/releases/tag/v0.19.0
+	// https://github.com/otfabric/opcua-interop/releases/tag/v0.19.2
 	// https://github.com/otfabric/opcua-interop/actions/runs/40237547159
 	// A capability-gated test fails (it does not skip) when a default image
 	// is not the release named by interopVersion: see requirePinnedVersion.
 
-	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:6e87e0a33ed42450b923eb5576f5e3b730c3c3cdd1c489ea7da9f197631a2441"
-	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:068a7936824407d1559ed9a54b45e5499323f0f8a4ac3263bcff9b6f295f72de"
+	defaultOpen62541Image = "ghcr.io/otfabric/opcua-interop-open62541@sha256:85d993ee94836091c3c6e9f24067e9509ada3e093003d09557fa6816a83d4a00"
+	defaultMiloImage      = "ghcr.io/otfabric/opcua-interop-milo@sha256:9156ceb07cd5992eea7e7c655a509e680bc70e4c91efbc214c5aa42454528e80"
 	defaultFixtureDir     = "testdata"
 
 	interopNamespaceURI = "urn:otfabric:opcua-interop:model"

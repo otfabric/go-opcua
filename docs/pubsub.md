@@ -25,7 +25,7 @@ to variables.
 | Not implemented | AMQP over WebSockets (`wss://`) |
 
 Interoperability is tested in both directions against open62541 v1.5.9 and
-the Opc.Ua.PubSub runtime of UA-.NETStandard 2.0.1 (see the interop ledger,
+the Opc.Ua.PubSub runtime of UA-.NETStandard 2.0.2 (see the interop ledger,
 profile `pubsub`); the AMQP transport is tested through RabbitMQ 4 and ActiveMQ
 Artemis. Eclipse Milo 1.1.8, async-opcua 0.19 and opcua-asyncio have no PubSub
 in the interop suite (PubSub is a commercial add-on for node-opcua).

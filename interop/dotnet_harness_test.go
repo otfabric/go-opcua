@@ -4,7 +4,7 @@
 
 // Harness for the third reference stack: the opcua-interop "dotnet" adapter,
 // built on the OPC Foundation UA-.NETStandard stack (NuGet
-// OPCFoundation.NetStandard.Opc.Ua.* 2.0.1, .NET 10).
+// OPCFoundation.NetStandard.Opc.Ua.* 2.0.2, .NET 10).
 //
 //	DOTNET_IMAGE   Docker image of the dotnet adapter (default: defaultDotnetImage)
 //
@@ -24,7 +24,7 @@
 //	dotnet-client-to-go-lds      dotnet client registers a server with a go-opcua LDS
 //
 // The secure tests use the dotnet-server / dotnet-client identities of the
-// test PKI (opcua-interop v0.19.0 certs/generate.sh, or --add-dotnet on an
+// test PKI (opcua-interop v0.19.2 certs/generate.sh, or --add-dotnet on an
 // older PKI): a PKI without them skips.
 
 package interop
@@ -35,7 +35,7 @@ import (
 
 // defaultDotnetImage is the dotnet adapter of the opcua-interop release
 // named by interopVersion (multi-arch index digest; see harness_test.go).
-const defaultDotnetImage = "ghcr.io/otfabric/opcua-interop-dotnet@sha256:8af83163505066b5920d79a2b86cab45bc4946f482a3c85c814de7168d2706f8"
+const defaultDotnetImage = "ghcr.io/otfabric/opcua-interop-dotnet@sha256:18d54bfc788999215fef5da599140bc891309d7779c746743a7c5e89f6c4cfdb"
 
 // dotnetEnv is the image env variable of the dotnet peer, see harness_test.go.
 const dotnetEnv = "DOTNET_IMAGE"

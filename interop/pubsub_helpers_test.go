@@ -399,6 +399,9 @@ type pubsubServerOpts struct {
 	// udpPorts are published as <p>:<p>/udp, or on another host port
 	// when <p> is taken: pubsubServer.udpPort.
 	udpPorts []int
+	// udpHostPorts publishes a container UDP port of udpPorts on another
+	// host port, for a port the Go side itself listens on.
+	udpHostPorts map[int]int
 	// secure starts the server with the <peer>-server certificate of
 	// the test PKI (needed for sksClient, serveSks and SetSecurityKeys).
 	secure bool
@@ -452,6 +455,9 @@ func startPubSubServer(t *testing.T, o pubsubServerOpts) *pubsubServer {
 	udpHost := map[int]int{}
 	for _, up := range o.udpPorts {
 		udpHost[up] = up
+		if hp, ok := o.udpHostPorts[up]; ok {
+			udpHost[up] = hp
+		}
 	}
 	for attempt := 1; ; attempt++ {
 		port := freePort(t)

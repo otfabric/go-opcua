@@ -2085,7 +2085,7 @@ HTTPClient sets the HTTP client that posts the requests to an opc.https endpoint
 func HTTPSJSONContentType(contentType string) Option
 ```
 
-HTTPSJSONContentType sets the Content-Type of the requests over https-uajson (TransportProfile ua.TransportProfileHTTPSJSON). The default is uasc.HTTPSJSONContentType, application/json (Part 6 §7.4.2); uasc.HTTPSJSONContentTypeLegacy, application/opcua+uajson, reaches servers that take only that one, such as UA-.NETStandard 2.0.1.
+HTTPSJSONContentType sets the Content-Type of the requests over https-uajson (TransportProfile ua.TransportProfileHTTPSJSON). The default is uasc.HTTPSJSONContentType, application/json (Part 6 §7.4.2); uasc.HTTPSJSONContentTypeLegacy, application/opcua+uajson, reaches servers that take only that one, such as UA-.NETStandard 2.0.2.
 
 #### func InsecureNoSecurity
 

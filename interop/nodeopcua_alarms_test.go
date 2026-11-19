@@ -18,7 +18,7 @@ func TestNodeOpcuaServer_Alarms(t *testing.T) {
 	t.Run("coverage/alarms.acknowledgeable/go-client-to-node-opcua-server", s.assertActions)
 }
 
-// TestNodeOpcuaServer_AlarmAudit: node-opcua 2.187.12 raises the condition
+// TestNodeOpcuaServer_AlarmAudit: node-opcua 2.187.31 raises the condition
 // audit events of Acknowledge, Confirm and AddComment without an auditing
 // switch (node-opcua-address-space ua_condition_impl,
 // ua_acknowledgeable_condition_impl) and delivers them to SecurityAdmin

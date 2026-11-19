@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 // Historical events (Part 11 §6.5.2, §6.9.4, §6.9.7; CONTAINER_CONTRACT §17)
-// with UA-.NETStandard 2.0.1: the dotnet client against the go-opcua fixture
+// with UA-.NETStandard 2.0.2: the dotnet client against the go-opcua fixture
 // s=History.Events, the go-opcua client against the dotnet fixture (read and
 // update, §17.2).
 // The assertions are in history_events_test.go.

@@ -1796,7 +1796,7 @@ func TestNodeOpcuaServer_IndexRange(t *testing.T) {
 	}
 	st := resp.Results[0].Status
 	if st == ua.StatusOK {
-		// node-opcua 2.187.12 deviation (Part 4 §7.27: an IndexRange on a
+		// node-opcua 2.187.31 deviation (Part 4 §7.27: an IndexRange on a
 		// scalar Value is Bad_IndexRangeNoData): the server ignores the range
 		// and returns the scalar with Good. Pinned here; the array subset
 		// claim (read.index-range) is carried by TestNodeOpcuaServer_IndexRangeSubset.

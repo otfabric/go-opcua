@@ -9,8 +9,8 @@ ledger row says `unsupported` with the same reason.
 
 Versions: go-opcua v1.31.0 (checked 2026-11-12; the interop suite last passed
 on main on 2026-11-07, after v1.31.0); open62541 1.5.9, Eclipse Milo 1.1.8, async-opcua
-0.19.0, UA-.NETStandard 2.0.1, node-opcua 2.187.12 and opcua-asyncio
-(`asyncua`) 2.1.0, as packaged by opcua-interop v0.19.0.
+0.19.0, UA-.NETStandard 2.0.2, node-opcua 2.187.31 and opcua-asyncio
+(`asyncua`) 2.1.0, as packaged by opcua-interop v0.19.2.
 
 ## What go-opcua does not implement
 
@@ -33,7 +33,7 @@ on main on 2026-11-07, after v1.31.0); open62541 1.5.9, Eclipse Milo 1.1.8, asyn
 | Raw history deletes (DeleteRawModified) remove the sample at the end time, while a raw read excludes it. | Known limitation of the built-in historian. | Pass an end time just past the last sample to delete. |
 | Triggering links (SetTriggering) are not restored when the client re-creates a subscription after a reconnect. | Recovery re-creates subscriptions and monitored items only. | Call `Subscription.SetTriggering` again after recovery. |
 | mDNS has no probing or conflict resolution, and real multicast is verified on Linux only. | Scope of the built-in responder. | Prefer the LDS registry over mDNS on untrusted networks. |
-| PubSub: chunked NetworkMessages and UADP discovery use the layout of the OPC Foundation .NET stack 2.x where the specification is ambiguous. They interoperate with UA-.NETStandard 2.0.1; open62541 1.5.9 sends and accepts neither. | open62541 drops chunks and ignores discovery probes. | Keep MaxNetworkMessageSize large enough to avoid chunks towards open62541; configure DataSetMetaData on readers instead of relying on discovery. |
+| PubSub: chunked NetworkMessages and UADP discovery use the layout of the OPC Foundation .NET stack 2.x where the specification is ambiguous. They interoperate with UA-.NETStandard 2.0.2; open62541 1.5.9 sends and accepts neither. | open62541 drops chunks and ignores discovery probes. | Keep MaxNetworkMessageSize large enough to avoid chunks towards open62541; configure DataSetMetaData on readers instead of relying on discovery. |
 | PubSub over MQTT: go-opcua speaks MQTT 3.1.1 unless `SetMQTTVersion` asks for 5.0; only 5.0 carries the content type and UAMessageType of a message, a 3.1.1 subscriber tells the mapping from the payload. | Part 14 §7.3.4.4 leaves the default to the implementation; open62541 1.5.9 speaks 3.1.1. | Use `MQTTVersionBestAvailable` with brokers that speak 5.0. |
 | PubSub over AMQP: ExactlyOnce is sent as AtLeastOnce, and DataSetMetaData is not retained (AMQP has no retained messages). | AMQP 1.0 settlement has no exactly-once in practice; Part 14 B.3. | Put the metadata on a queue address so late subscribers still get it. |
 | ECC: where open62541 1.5.9 and Part 6 1.05.07 differ (curve25519 key material, Sign-mode key derivation, ChannelThumbprint), go-opcua follows open62541. | open62541 is the only ECC peer that can be tested. | Prefer SignAndEncrypt with ECC_nistP256 / P384 or the AEAD policies with other stacks. See [Security](security.md). |
@@ -75,7 +75,7 @@ on the side of the application that talks to the peer.
 - MaxByteStringLength is 65535.
 - JSON is the 1.04 `{"Type":..,"Body":..}` form (go-opcua reads it with `ua.WithJSONForm`); no ECC, LDS, mDNS or PubSub.
 
-### UA-.NETStandard 2.0.1
+### UA-.NETStandard 2.0.2
 
 - The client refuses to send a UserName token over SecurityPolicy None: offer username on a secured endpoint or with a token policy that has its own SecurityPolicyUri.
 - The end time of a raw HistoryRead is exclusive, and releasing a continuation point answers with a null HistoryData.
@@ -85,18 +85,18 @@ on the side of the application that talks to the peer.
 - The OPC Foundation LDS is a separate product; there is no multicast discovery.
 - Push management: CreateSelfSignedCertificate refuses a certificate slot that holds a certificate (`Bad_InvalidState`) until DeleteCertificate empties it, and DeleteCertificate refuses the only application certificate at once (`Bad_InvalidState`), so with one application certificate there is no slot to create one for; no ResetToServerDefaults. GetCertificates, the TransactionDiagnostics, the HTTPS and UserToken trust lists, PFX keys and the alarms work.
 - Alarms & Conditions: a repeated Acknowledge with the same EventId answers `Bad_ConditionBranchAlreadyAcked`; every method call reports an event with a new Time.
-- PubSub (Opc.Ua.PubSub 2.0.1): an MQTT publisher needs MQTT 5.0 (it sets the MQTT 5 content type on every publication); subscribing works on 3.1.1 too. Its UDP transport sends with TTL 1 unless configured, which also limits unicast, and with IP_MULTICAST_LOOP off (`UdpTransportOptions.MulticastLoopback`): a subscriber on the publisher's host receives none of its multicast unless loopback is turned on. The encoder writes an empty String with length 0 (go-opcua: the null String, length -1), always sets MessageIsValid and drops a DataSetMessage without it; the JSON encoder leaves out the `UaType` the DataSetMetaData implies (go-opcua decodes it since v1.9.0). Discovery answers DataSetMetaData and DataSetWriterConfiguration probes only. No SKS, no PublishSubscribe information model, no Ethernet, no AMQP.
+- PubSub (Opc.Ua.PubSub 2.0.2): an MQTT publisher needs MQTT 5.0 (it sets the MQTT 5 content type on every publication); subscribing works on 3.1.1 too. Its UDP transport sends with TTL 1 unless configured, which also limits unicast, and with IP_MULTICAST_LOOP off (`UdpTransportOptions.MulticastLoopback`): a subscriber on the publisher's host receives none of its multicast unless loopback is turned on. The encoder writes an empty String with length 0 (go-opcua: the null String, length -1), always sets MessageIsValid and drops a DataSetMessage without it; the JSON encoder leaves out the `UaType` the DataSetMetaData implies (go-opcua decodes it since v1.9.0). Discovery answers DataSetMetaData and DataSetWriterConfiguration probes only. No SKS, no PublishSubscribe information model, no Ethernet, no AMQP.
 
-### UA-.NETStandard 2.0.1 (GDS)
+### UA-.NETStandard 2.0.2 (GDS)
 
-The Global Discovery Server and GDS client (Opc.Ua.Gds.Server / .Gds.Client 2.0.1, opcua-interop adapter dotnet-gds; 1.5.378 until opcua-interop v0.15.0):
+The Global Discovery Server and GDS client (Opc.Ua.Gds.Server / .Gds.Client 2.0.2, opcua-interop adapter dotnet-gds; 1.5.378 until opcua-interop v0.15.0):
 
 - The server sends its certificate with its issuer (SendCertificateChain defaults to true), which Part 6 allows; the go-opcua client signs over the leaf and accepts the chain. open62541 1.5.9 and async-opcua 0.19.0 clients cannot connect to such a server (CONTAINER_CONTRACT §16.3).
 - StartSigningRequest, StartNewKeyPairRequest and FinishRequest need a SignAndEncrypt session, CheckRevocationStatus at least Sign; GetCertificateStatus needs a CA, self or application admin role. FindApplications is open to Anonymous.
 - UnregisterApplication revokes the application's certificates, and CheckRevocationStatus reads the GDS CRL (`Bad_CertificateRevoked`). The ECC CA's CRL is well formed (1.5.378 named sha256WithRSAEncryption inside the TBSCertList).
 - The client reads a TrustList with the MethodIds of FileType (Part 4 §5.11.2.2), which the go-opcua server resolves since v1.22.0.
 
-### node-opcua 2.187.12
+### node-opcua 2.187.31
 
 - After a SecureChannel renewal the server answers a request under the token the request used. The go-opcua client copes; open62541's client stalls.
 - A Read with an IndexRange on a scalar returns `Good` (want `BadIndexRangeNoData`).
