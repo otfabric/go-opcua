@@ -324,6 +324,7 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 	sess := s.srv.sb.Session(req.RequestHeader.AuthenticationToken)
 
 	status := make([]ua.StatusCode, len(req.NodesToWrite))
+	var jobs []valueWriteJob
 
 	for i := range req.NodesToWrite {
 		n := req.NodesToWrite[i]
@@ -344,16 +345,39 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 			continue
 		}
 
-		if n.Value != nil && n.Value.EncodingMask&unsupportedWriteMask != 0 {
-			status[i] = ua.StatusBadWriteNotSupported
-			continue
-		}
-
-		if node := ns.Node(n.NodeID); node != nil {
+		// Whether the Value may be written at all comes before what the
+		// DataValue carries: a Variable whose AccessLevel has no CurrentWrite
+		// is Bad_NotWritable, and one whose UserAccessLevel has none is
+		// Bad_UserAccessDenied (Part 3 §5.6.2, Part 4 §5.10.4), whatever
+		// StatusCode or timestamps the client sent with the value. A Value a
+		// ValueWriter takes is checked the same way.
+		node := ns.Node(n.NodeID)
+		if node != nil {
 			if st := checkAccessRestrictions(sc, node); st != ua.StatusOK {
 				status[i] = st
 				continue
 			}
+			if n.AttributeID == ua.AttributeIDValue {
+				if st := node.AccessStatus(ua.AccessLevelTypeCurrentWrite); st != ua.StatusOK {
+					status[i] = st
+					continue
+				}
+			}
+		}
+		// A Value a ValueWriter takes is written by the writer after the loop.
+		var writer ValueWriter
+		if node != nil && n.AttributeID == ua.AttributeIDValue && sess != nil {
+			writer = node.ValueWriter()
+		}
+		deferWrite := func(dv *ua.DataValue) {
+			jobs = append(jobs, valueWriteJob{index: i, writer: writer, write: &ValueWrite{Session: sess.handle(), NodeID: n.NodeID, Value: dv}})
+		}
+		// The server stores no StatusCode or timestamps a client writes
+		// (Part 4 §5.10.4: Bad_WriteNotSupported); a writer gets them and
+		// decides.
+		if writer == nil && n.Value != nil && n.Value.EncodingMask&unsupportedWriteMask != 0 {
+			status[i] = ua.StatusBadWriteNotSupported
+			continue
 		}
 
 		if n.IndexRange != "" {
@@ -374,10 +398,15 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 				status[i] = st
 				continue
 			}
-			status[i] = ns.SetAttribute(n.NodeID, n.AttributeID, stampWritten(&ua.DataValue{
+			if writer != nil {
+				deferWrite(&ua.DataValue{EncodingMask: ua.DataValueValue, Value: merged})
+				continue
+			}
+			dv := stampWritten(&ua.DataValue{
 				EncodingMask: ua.DataValueValue,
 				Value:        merged,
-			}, time.Now()))
+			}, time.Now())
+			status[i] = ns.SetAttribute(n.NodeID, n.AttributeID, dv)
 			continue
 		}
 
@@ -388,6 +417,14 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 			}
 		}
 
+		if writer != nil {
+			if n.Value == nil {
+				status[i] = ua.StatusBadTypeMismatch
+				continue
+			}
+			deferWrite(n.Value)
+			continue
+		}
 		val := n.Value
 		if n.AttributeID == ua.AttributeIDValue && val != nil {
 			val = stampWritten(val, time.Now())
@@ -395,7 +432,24 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 		status[i] = ns.SetAttribute(n.NodeID, n.AttributeID, val)
 
 	}
-	response := &ua.WriteResponse{
+	if len(jobs) > 0 {
+		if reply := answerLater(ctx); reply != nil {
+			s.srv.runValueWriters(ctx, sess, req.RequestHeader, jobs, status, func(results []ua.StatusCode) {
+				reply(req, writeResponse(req, results))
+			})
+			return nil, nil
+		}
+		// Called outside the dispatcher: the writers run now.
+		for _, j := range jobs {
+			status[j.index] = s.srv.callValueWriter(ctx, j)
+		}
+	}
+	return writeResponse(req, status), nil
+}
+
+// writeResponse is the response to a Write request with its results.
+func writeResponse(req *ua.WriteRequest, status []ua.StatusCode) *ua.WriteResponse {
+	return &ua.WriteResponse{
 		ResponseHeader: &ua.ResponseHeader{
 			Timestamp:          time.Now(),
 			RequestHandle:      req.RequestHeader.RequestHandle,
@@ -407,9 +461,6 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 		Results:         status,
 		DiagnosticInfos: []*ua.DiagnosticInfo{},
 	}
-
-	return response, nil
-
 }
 
 // attributeWriteBits is the AttributeWriteMask bit (Part 3 §8.60) that makes

@@ -494,6 +494,22 @@ func (s *SubscriptionService) releasePublishRequests(sess *session, status ua.St
 	}
 }
 
+// deleteSessionSubscriptions deletes the subscriptions of the session with
+// the given authentication token.
+func (s *SubscriptionService) deleteSessionSubscriptions(authToken *ua.NodeID) {
+	s.Mu.Lock()
+	var toDelete []uint32
+	for id, sub := range s.Subs {
+		if own, _ := sub.sessionChannel(); own != nil && own.AuthTokenID.Equal(authToken) {
+			toDelete = append(toDelete, id)
+		}
+	}
+	s.Mu.Unlock()
+	for _, id := range toDelete {
+		s.DeleteSubscription(id)
+	}
+}
+
 // sessionHasSubscriptions reports whether at least one subscription is
 // currently assigned to sess.
 func (s *SubscriptionService) sessionHasSubscriptions(sess *session) bool {

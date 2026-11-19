@@ -568,24 +568,10 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 	// Per Part 4 §5.6.4, if DeleteSubscriptions is true the server should
 	// delete all subscriptions associated with the session.
 	if req.DeleteSubscriptions {
-		ss := s.srv.SubscriptionService
-		if ss == nil {
-			// Service not yet initialized (server not yet started).
-			goto respond
-		}
-		ss.Mu.Lock()
-		var toDelete []uint32
-		for id, sub := range ss.Subs {
-			if own, _ := sub.sessionChannel(); own != nil && own.AuthTokenID.Equal(req.RequestHeader.AuthenticationToken) {
-				toDelete = append(toDelete, id)
-			}
-		}
-		ss.Mu.Unlock()
-		for _, id := range toDelete {
-			ss.DeleteSubscription(id)
+		if ss := s.srv.SubscriptionService; ss != nil {
+			ss.deleteSessionSubscriptions(req.RequestHeader.AuthenticationToken)
 		}
 	}
-respond:
 
 	response := &ua.CloseSessionResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),

@@ -46,6 +46,9 @@ type session struct {
 
 	PublishRequests chan PubReq
 
+	// writes orders the Writes of the session that a ValueWriter takes.
+	writes writeQueue
+
 	// statusChanges holds the StatusChangeNotifications of subscriptions that
 	// ended while no Publish request was available to announce it. They are
 	// delivered with the next Publish request of the session.
@@ -347,6 +350,20 @@ func (sb *sessionBroker) Close(authToken *ua.NodeID) error {
 
 	if s != nil && sb.removed != nil {
 		sb.removed(s, SessionClosedByClient)
+	}
+	return nil
+}
+
+// closeID forgets the session with the given SessionId and returns it, nil if
+// the broker keeps none. The caller reports it removed.
+func (sb *sessionBroker) closeID(sessionID *ua.NodeID) *session {
+	sb.mu.Lock()
+	defer sb.mu.Unlock()
+	for k, s := range sb.s {
+		if s.ID.Equal(sessionID) {
+			delete(sb.s, k)
+			return s
+		}
 	}
 	return nil
 }

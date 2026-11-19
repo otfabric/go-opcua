@@ -93,6 +93,18 @@ func (s *MonitoredItemService) removeItemsNeedsLock(items []*MonitoredItem) {
 	if len(gone) == 0 {
 		return
 	}
+	// The links of a deleted item go with it, and so do the links of other
+	// items to it (Part 4 §5.12.6: deleting an item deletes its links).
+	for k := range subs {
+		for _, m := range s.Subs[k] {
+			if m == nil || len(m.triggers) == 0 {
+				continue
+			}
+			for g := range gone {
+				delete(m.triggers, g.ID)
+			}
+		}
+	}
 	isGone := func(m *MonitoredItem) bool {
 		_, ok := gone[m]
 		return m == nil || ok
@@ -179,20 +191,48 @@ func (s *MonitoredItemService) DrainQueuedNotifications(subID uint32, max uint32
 	items := s.Subs[subID]
 	limit := intOfUint32(max)
 	unlimited := max == 0
-	for _, item := range items {
-		if item == nil || item.Mode != ua.MonitoringModeReporting || len(item.queue) == 0 {
-			continue
-		}
+	drain := func(item *MonitoredItem) bool {
 		for len(item.queue) > 0 {
 			if !unlimited && len(out) >= limit {
-				more = true
-				return out, more
+				return false
 			}
 			out = append(out, item.queue[0])
 			item.queue = item.queue[1:]
 		}
+		return true
+	}
+	for _, item := range items {
+		if item == nil || item.Mode != ua.MonitoringModeReporting || len(item.queue) == 0 {
+			continue
+		}
+		if !drain(item) {
+			return out, true
+		}
+		// The triggering item reported: the items it triggers that are in
+		// Sampling mode report what they queued (Part 4 §5.12.1.6). One in
+		// Reporting mode reports by itself, a Disabled one has nothing.
+		for _, id := range sortedIDs(item.triggers) {
+			linked := s.Items[id]
+			if linked == nil || linked.Sub != item.Sub || linked.Mode != ua.MonitoringModeSampling {
+				continue
+			}
+			if !drain(linked) {
+				return out, true
+			}
+		}
 	}
 	return out, false
+}
+
+// sortedIDs returns the ids of a set in increasing order: the triggered
+// items report in the order they were created.
+func sortedIDs(set map[uint32]struct{}) []uint32 {
+	ids := make([]uint32, 0, len(set))
+	for id := range set {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // PendingQueuedNotifications reports whether any monitored item for subID
@@ -329,6 +369,10 @@ type MonitoredItem struct {
 	sampleDue        time.Time // non-zero while a postponed sample is pending
 	last             sampleState
 	hasLast          bool
+	// triggers are the ids of the items this item triggers (SetTriggering,
+	// Part 4 §5.12.1.6): when this item's notifications are reported, the
+	// queued notifications of those in Sampling mode are reported with them.
+	triggers map[uint32]struct{}
 }
 
 // CreateMonitoredItems implements the OPC UA CreateMonitoredItems service.
@@ -781,24 +825,53 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadSessionIDInvalid),
 		}, nil
 	}
-
-	// Process links to add — validate each linked item exists.
-	addResults := make([]ua.StatusCode, len(req.LinksToAdd))
-	for i, linkID := range req.LinksToAdd {
-		if _, exists := s.Items[linkID]; !exists {
-			addResults[i] = ua.StatusBadMonitoredItemIDInvalid
-		} else {
-			addResults[i] = ua.StatusOK
-		}
+	// Part 4 §5.12.5.4: nothing to add or remove is Bad_NothingToDo.
+	if len(req.LinksToAdd) == 0 && len(req.LinksToRemove) == 0 {
+		return &ua.SetTriggeringResponse{
+			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadNothingToDo),
+		}, nil
+	}
+	// The triggering item is one of the subscription the request names.
+	if triggerItem.Sub == nil || triggerItem.Sub.ID != req.SubscriptionID {
+		return &ua.SetTriggeringResponse{
+			ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusBadMonitoredItemIDInvalid),
+		}, nil
 	}
 
-	// Process links to remove — validate each linked item exists.
+	// A linked item must be one of the same subscription (Part 4 §5.12.5.2:
+	// Bad_MonitoredItemIdInvalid otherwise). Additions are processed before
+	// removals, so a link named in both lists is gone afterwards.
+	linked := func(id uint32) bool {
+		it, exists := s.Items[id]
+		return exists && it.Sub == triggerItem.Sub
+	}
+	addResults := make([]ua.StatusCode, len(req.LinksToAdd))
+	for i, linkID := range req.LinksToAdd {
+		if !linked(linkID) {
+			addResults[i] = ua.StatusBadMonitoredItemIDInvalid
+			continue
+		}
+		if triggerItem.triggers == nil {
+			triggerItem.triggers = make(map[uint32]struct{})
+		}
+		triggerItem.triggers[linkID] = struct{}{}
+		addResults[i] = ua.StatusOK
+	}
 	removeResults := make([]ua.StatusCode, len(req.LinksToRemove))
 	for i, linkID := range req.LinksToRemove {
-		if _, exists := s.Items[linkID]; !exists {
+		if _, ok := triggerItem.triggers[linkID]; !ok || !linked(linkID) {
 			removeResults[i] = ua.StatusBadMonitoredItemIDInvalid
-		} else {
-			removeResults[i] = ua.StatusOK
+			continue
+		}
+		delete(triggerItem.triggers, linkID)
+		removeResults[i] = ua.StatusOK
+	}
+	// A triggered item that already holds samples is reported with the next
+	// notification of its trigger: wake Publish if the trigger has one queued.
+	if len(triggerItem.queue) > 0 && triggerItem.Mode == ua.MonitoringModeReporting && triggerItem.Sub != nil {
+		select {
+		case triggerItem.Sub.NotifyChannel <- &ua.MonitoredItemNotification{}:
+		default:
 		}
 	}
 

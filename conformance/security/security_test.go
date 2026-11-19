@@ -235,6 +235,41 @@ func TestSecurity_ClientCertificateTrustList(t *testing.T) {
 	})
 }
 
+// TestSecurity_ClientCertificateValidator covers an application's own
+// validator of client application certificates: it sees the certificate a
+// client presents and decides, and a decision it changes applies to the next
+// secure channel.
+func TestSecurity_ClientCertificateValidator(t *testing.T) {
+	p := pki(t)
+	var mu sync.Mutex
+	trusted := map[string]bool{}
+	var seen [][]byte
+	f, url := secureServer(t, server.WithClientCertificateValidator(func(der []byte) error {
+		mu.Lock()
+		defer mu.Unlock()
+		seen = append(seen, der)
+		if !trusted[string(der)] {
+			return ua.StatusBadCertificateUntrusted
+		}
+		return nil
+	}))
+	ctx := context.Background()
+	ep := endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt)
+
+	_, err := dialClient(t, url, secureClientOpts(t, ep, ua.UserTokenTypeAnonymous)...)
+	require.ErrorIs(t, err, ua.StatusBadCertificateUntrusted)
+	mu.Lock()
+	require.NotEmpty(t, seen)
+	require.Equal(t, p.ClientCert, seen[0])
+	trusted[string(p.ClientCert)] = true
+	mu.Unlock()
+
+	c := newClient(t, url, secureClientOpts(t, ep, ua.UserTokenTypeAnonymous)...)
+	dv, err := c.ReadValue(ctx, f.Int32)
+	require.NoError(t, err)
+	require.Equal(t, int32(42), dv.Value.Value())
+}
+
 // TestSecurity_EmptyTrustListRejectsAll verifies that a server configured with
 // an empty client trust list accepts no client certificate at all.
 func TestSecurity_EmptyTrustListRejectsAll(t *testing.T) {

@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -555,6 +556,42 @@ func TestAttributeService_Write_IndexRangeAndEncodingMask(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, ua.StatusBadWriteNotSupported, resp.(*ua.WriteResponse).Results[0])
 	})
+
+	// The AccessLevel decides before the DataValue's content: a read-only
+	// Variable is Bad_NotWritable (Part 4 §5.10.4) also when the client sends
+	// a StatusCode or a timestamp with the value (asyncua sends a Good
+	// StatusCode with every write), and Bad_UserAccessDenied when only the
+	// UserAccessLevel rules the write out.
+	for _, tc := range []struct {
+		name         string
+		access, user uint8
+		want         ua.StatusCode
+	}{
+		{"read-only", uint8(ua.AccessLevelTypeCurrentRead), uint8(ua.AccessLevelTypeCurrentRead), ua.StatusBadNotWritable},
+		{"read-only for the user", uint8(ua.AccessLevelTypeCurrentRead | ua.AccessLevelTypeCurrentWrite), uint8(ua.AccessLevelTypeCurrentRead), ua.StatusBadUserAccessDenied},
+	} {
+		t.Run(tc.name+" with a StatusCode and a timestamp", func(t *testing.T) {
+			name := "ro_" + strings.ReplaceAll(tc.name, " ", "_")
+			v := ns.AddNewVariableStringNode(name, int32(5))
+			require.NoError(t, v.SetAttribute(ua.AttributeIDAccessLevel, DataValueFromValue(tc.access)))
+			require.NoError(t, v.SetAttribute(ua.AttributeIDUserAccessLevel, DataValueFromValue(tc.user)))
+			obj.AddRef(v, id.HasComponent, true)
+			for _, mask := range []byte{ua.DataValueValue, ua.DataValueValue | ua.DataValueStatusCode, ua.DataValueValue | ua.DataValueSourceTimestamp} {
+				req := &ua.WriteRequest{
+					RequestHeader: reqHeader(),
+					NodesToWrite: []*ua.WriteValue{{
+						NodeID:      ua.NewStringNodeID(ns.ID(), name),
+						AttributeID: ua.AttributeIDValue,
+						Value:       &ua.DataValue{EncodingMask: mask, Value: ua.MustVariant(int32(1)), Status: ua.StatusOK, SourceTimestamp: time.Now()},
+					}},
+				}
+				resp, err := svc.Write(context.Background(), nil, req, 5)
+				require.NoError(t, err)
+				assert.Equal(t, tc.want, resp.(*ua.WriteResponse).Results[0], "encoding mask %#x", mask)
+			}
+			assert.Equal(t, int32(5), v.Value().Value.Value(), "the value is not written")
+		})
+	}
 
 	t.Run("index range without value", func(t *testing.T) {
 		req := &ua.WriteRequest{
