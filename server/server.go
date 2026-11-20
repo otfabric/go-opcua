@@ -180,6 +180,7 @@ type serverConfig struct {
 	issuedTokenValidator       IssuedTokenValidator
 	clientCertificateValidator ClientCertificateValidator
 	allowUsernameOnNone        bool
+	eccSignLegacyKeyLength     bool
 	uajson                     bool
 	metrics                    ServerMetrics
 	sessionObserver            SessionObserver
@@ -332,7 +333,7 @@ func New(opts ...Option) (*Server, error) {
 	s := &Server{
 		url:        listenURL,
 		cfg:        cfg,
-		cb:         newChannelBroker(cfg.logger, listenURL, cfg.clientCertificateValidator),
+		cb:         newServerChannelBroker(cfg, listenURL),
 		sb:         newSessionBroker(cfg.logger),
 		handlers:   make(map[uint16]Handler),
 		methods:    make(map[string]MethodHandler),
@@ -460,7 +461,7 @@ func newServerNoNS(opts ...Option) (*Server, error) {
 	s := &Server{
 		url:        listenURL,
 		cfg:        cfg,
-		cb:         newChannelBroker(cfg.logger, listenURL, cfg.clientCertificateValidator),
+		cb:         newServerChannelBroker(cfg, listenURL),
 		sb:         newSessionBroker(cfg.logger),
 		handlers:   make(map[uint16]Handler),
 		methods:    make(map[string]MethodHandler),
@@ -706,7 +707,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.setServerState(ua.ServerStateRunning)
 
 	if s.cb == nil {
-		s.cb = newChannelBroker(s.cfg.logger, s.url, s.cfg.clientCertificateValidator)
+		s.cb = newServerChannelBroker(s.cfg, s.url)
 	} else {
 		s.cb.endpointURL = s.url
 	}

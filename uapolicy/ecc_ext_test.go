@@ -112,7 +112,7 @@ func TestBrainpoolKeyDerivation_KnownAnswer(t *testing.T) {
 			secret, client, server := unhex(t, k.z), unhex(t, k.qA), unhex(t, k.qB)
 			sig, enc := p.symmetric.signingKeyLength(), p.symmetric.encryptingKeyLength()
 
-			ck, err := p.channelKeys(secret, eccLabelClient, client, server)
+			ck, err := p.channelKeys(secret, eccLabelClient, client, server, false)
 			require.NoError(t, err)
 			want := unhex(t, k.clientKeys)
 			require.Len(t, want, sig+enc+16)
@@ -120,7 +120,7 @@ func TestBrainpoolKeyDerivation_KnownAnswer(t *testing.T) {
 			require.Equal(t, want[sig:sig+enc], ck.encryption)
 			require.Equal(t, want[sig+enc:], ck.iv)
 
-			sk, err := p.channelKeys(secret, eccLabelServer, server, client)
+			sk, err := p.channelKeys(secret, eccLabelServer, server, client, false)
 			require.NoError(t, err)
 			require.Equal(t, unhex(t, k.serverKeys), append(append(append([]byte{}, sk.signing...), sk.encryption...), sk.iv...))
 
@@ -131,9 +131,9 @@ func TestBrainpoolKeyDerivation_KnownAnswer(t *testing.T) {
 			// The whole exchange: both sides agree on the keys.
 			a := &EphemeralKey{policy: p, key: brainpoolEphemeralKey{key: brainpoolKey(t, k.curve, k.dA)}, public: client}
 			b := &EphemeralKey{policy: p, key: brainpoolEphemeralKey{key: brainpoolKey(t, k.curve, k.dB)}, public: server}
-			calgo, _, err := p.symmetricKeys(a, server, RoleClient, nil)
+			calgo, _, err := p.symmetricKeys(a, server, RoleClient, nil, false)
 			require.NoError(t, err)
-			salgo, _, err := p.symmetricKeys(b, client, RoleServer, nil)
+			salgo, _, err := p.symmetricKeys(b, client, RoleServer, nil, false)
 			require.NoError(t, err)
 			msg := bytes.Repeat([]byte("brainpool"), 16)[:128]
 			enc1, err := calgo.Encrypt(msg)

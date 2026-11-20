@@ -290,6 +290,17 @@ func TestOptions(t *testing.T) {
 			},
 		},
 		{
+			name: `ECCSignLegacyKeyLength()`,
+			opt:  ECCSignLegacyKeyLength(),
+			cfg: &Config{
+				sechan: func() *uasc.Config {
+					c := DefaultClientConfig()
+					c.ECCSignLegacyKeyLength = true
+					return c
+				}(),
+			},
+		},
+		{
 			name: `Certificate`,
 			opt:  Certificate(certDER),
 			cfg: &Config{

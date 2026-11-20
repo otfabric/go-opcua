@@ -103,14 +103,14 @@ func TestECCKeyDerivation_KnownAnswer(t *testing.T) {
 	secret := unhex(t, rfc5903girx)
 	client, server := unhex(t, rfc5903gi), unhex(t, rfc5903gr)
 
-	ck, err := p.channelKeys(secret, eccLabelClient, client, server)
+	ck, err := p.channelKeys(secret, eccLabelClient, client, server, false)
 	require.NoError(t, err)
 	want := unhex(t, katP256ClientKeys)
 	require.Equal(t, want[:32], ck.signing, "ClientSigningKey: offset 0, DerivedSignatureKeyLength")
 	require.Equal(t, want[32:48], ck.encryption, "ClientEncryptingKey: follows the signing key")
 	require.Equal(t, want[48:], ck.iv, "ClientInitializationVector: follows the encrypting key")
 
-	sk, err := p.channelKeys(secret, eccLabelServer, server, client)
+	sk, err := p.channelKeys(secret, eccLabelServer, server, client, false)
 	require.NoError(t, err)
 	want = unhex(t, katP256ServerKeys)
 	require.Equal(t, want[:32], sk.signing)
@@ -118,7 +118,7 @@ func TestECCKeyDerivation_KnownAnswer(t *testing.T) {
 	require.Equal(t, want[48:], sk.iv)
 
 	// The label and the order of the nonces are part of the salt.
-	other, err := p.channelKeys(secret, eccLabelClient, server, client)
+	other, err := p.channelKeys(secret, eccLabelClient, server, client, false)
 	require.NoError(t, err)
 	require.NotEqual(t, ck.signing, other.signing)
 
@@ -132,10 +132,10 @@ func TestECCSymmetric_KnownAnswer(t *testing.T) {
 	client := fixedEphemeralKey(t, rfc5903i)
 	server := fixedEphemeralKey(t, rfc5903r)
 
-	calgo, chain, err := p.symmetricKeys(client, server.PublicKey(), RoleClient, nil)
+	calgo, chain, err := p.symmetricKeys(client, server.PublicKey(), RoleClient, nil, false)
 	require.NoError(t, err)
 	require.Nil(t, chain, "no key chaining without SecureChannelEnhancements")
-	salgo, _, err := p.symmetricKeys(server, client.PublicKey(), RoleServer, nil)
+	salgo, _, err := p.symmetricKeys(server, client.PublicKey(), RoleServer, nil, false)
 	require.NoError(t, err)
 	require.False(t, calgo.AEAD())
 
@@ -383,9 +383,9 @@ func TestEphemeralKey(t *testing.T) {
 
 	// A key of one policy cannot be used with another.
 	p256 := eccPolicies[ua.SecurityPolicyURIECCNistP256]
-	_, _, err = p256.symmetricKeys(k, make([]byte, 64), RoleClient, nil)
+	_, _, err = p256.symmetricKeys(k, make([]byte, 64), RoleClient, nil, false)
 	require.ErrorIs(t, err, errors.ErrInvalidSecurityConfig)
-	_, _, err = p256.symmetricKeys(nil, make([]byte, 64), RoleClient, nil)
+	_, _, err = p256.symmetricKeys(nil, make([]byte, 64), RoleClient, nil, false)
 	require.ErrorIs(t, err, errors.ErrInvalidSecurityConfig)
 }
 

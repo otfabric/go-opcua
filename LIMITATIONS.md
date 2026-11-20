@@ -36,8 +36,8 @@ behaviour you may notice, and the deviations of peers are in
 
 ## Known deviations
 
-- ECC follows open62541, not Part 6 1.05.07, for curve25519 key material,
-  Sign-mode key derivation and ChannelThumbprint
+- ECC follows open62541, not Part 6 1.05.07, for curve25519 key material
+  and ChannelThumbprint
   ([docs/interop-gaps.md](docs/interop-gaps.md)).
 - PubSub chunked NetworkMessages and UADP discovery use the layout of the OPC
   Foundation .NET stack 2.x where the specification is ambiguous; open62541

@@ -2071,6 +2071,14 @@ The client keeps a copy of the compared fields; endpoints that are nil are left 
 
 Without this option the client compares the list when the endpoint given to [SecurityFromEndpoint](#func-securityfromendpoint) came from [GetEndpoints](#func-getendpoints) (see there). The option takes precedence over that list.
 
+#### func ECCSignLegacyKeyLength
+
+```go
+func ECCSignLegacyKeyLength() Option
+```
+
+ECCSignLegacyKeyLength derives the keys of a SecureChannel in the SecurityMode Sign with ECC\_nistP256, ECC\_nistP384, ECC\_brainpoolP256r1 or ECC\_brainpoolP384r1 as open62541 v1.5.9 and earlier do, for a server that derives them that way (see uasc.Config.ECCSignLegacyKeyLength). By default the client follows Part 6 §6.8.1 Step 1 and open62541 since v1.5.10.
+
 #### func HTTPClient
 
 ```go

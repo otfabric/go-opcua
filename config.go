@@ -803,6 +803,18 @@ func TransportProfile(uri string) Option {
 	}
 }
 
+// ECCSignLegacyKeyLength derives the keys of a SecureChannel in the
+// SecurityMode Sign with ECC_nistP256, ECC_nistP384, ECC_brainpoolP256r1 or
+// ECC_brainpoolP384r1 as open62541 v1.5.9 and earlier do, for a server that
+// derives them that way (see uasc.Config.ECCSignLegacyKeyLength). By default
+// the client follows Part 6 §6.8.1 Step 1 and open62541 since v1.5.10.
+func ECCSignLegacyKeyLength() Option {
+	return func(cfg *Config) error {
+		cfg.sechan.ECCSignLegacyKeyLength = true
+		return nil
+	}
+}
+
 // HTTPSJSONContentType sets the Content-Type of the requests over
 // https-uajson (TransportProfile ua.TransportProfileHTTPSJSON). The default
 // is uasc.HTTPSJSONContentType, application/json (Part 6 §7.4.2);

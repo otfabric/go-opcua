@@ -1,5 +1,27 @@
 # go-opcua Releases
 
+## v1.35.0
+
+**Date:** 2026-11-20
+**Previous release:** v1.34.0
+
+SecureChannels in the SecurityMode Sign with the ECC policies without authenticated encryption derive their keys as Part 6 §6.8.1 asks and as open62541 does since v1.5.10, and the interop suite is pinned to opcua-interop v0.20.0 (open62541 v1.5.10, node-opcua 2.187.32). Changes that need attention when upgrading: such a channel to a peer that derives the keys the old way, open62541 v1.5.9 or earlier or go-opcua v1.34.0 or earlier, fails (see Breaking).
+
+### Breaking
+
+- **`Sign` mode key derivation of `ECC_nistP256`, `ECC_nistP384`, `ECC_brainpoolP256r1` and `ECC_brainpoolP384r1`** (client and server). Part 6 §6.8.1 Step 1: "When not using AuthenticatedEncryption with Sign only, the EncryptionKeyLength and InitializationVectorLength are set to 0" in the calculation of L, which is part of the HKDF salt and the length of the derived key material. The signing keys of a Sign-only channel are now derived with L = the signing key length; they were derived with L covering the signing key, the encrypting key and the IV, as open62541 v1.5.9 and earlier do. open62541 v1.5.10 follows the specification (open62541 commit 1e4eff47c8), and its client and server no longer open such a channel with go-opcua v1.34.0. A peer that derives the keys the old way cannot use a Sign channel with this version: its first symmetric message fails the signature check. `opcua.ECCSignLegacyKeyLength()` and `server.ECCSignLegacyKeyLength()` restore the old derivation. `SignAndEncrypt`, the RSA policies and the policies with authenticated encryption (`ECC_nistP256_AesGcm`, `ECC_nistP256_ChaChaPoly`, `ECC_curve25519`, `ECC_curve448`) are not affected.
+
+### Added
+
+- `opcua.ECCSignLegacyKeyLength()`, `server.ECCSignLegacyKeyLength()` and `uasc.Config.ECCSignLegacyKeyLength`: derive the keys of Sign-only channels of the four policies above as open62541 v1.5.9 and earlier. On the server it applies to the channels it accepts and to its registration with a discovery server.
+- `uapolicy.KeyExchange.SetSecurityMode(mode)`: the MessageSecurityMode of the channel the keys are for. With `MessageSecurityModeSign` the four policies above derive the signing keys alone. Without a call the keys are derived as before, so direct users of `uapolicy` see no change.
+
+### Changed
+
+- Interop: opcua-interop v0.20.0 (open62541 v1.5.10, node-opcua 2.187.32). open62541 v1.5.10 serves RegisterServer and RegisterServer2 only on a channel with a client certificate whose application URI is the registered serverUri (advisory open62541-SA-2026-0051). `TestOpen62541LDS_GoServerRegisters` registers the go-opcua server with its certificate, over the most secure endpoint the certificate fits, which `WithDiscoveryRegistration` picks without `RegisterInsecure`. The `Sign` rows of `ECC_nistP256` and `ECC_nistP384` against open62541 pass in both directions, directly and over reverse connect.
+
+---
+
 ## v1.34.0
 
 **Date:** 2026-11-19

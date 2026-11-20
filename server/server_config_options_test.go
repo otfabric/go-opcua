@@ -179,3 +179,15 @@ func TestServerOption_WithClientCertificateTrustList_Chain(t *testing.T) {
 	require.ErrorIs(t, validate(untrusted), ua.StatusBadCertificateUntrusted, "a CA sent along is not trusted")
 	require.ErrorIs(t, validate(append(append([]byte{}, leaf...), 0x30, 0x01)), ua.StatusBadCertificateInvalid, "trailing garbage")
 }
+
+func TestServerOption_ECCSignLegacyKeyLength(t *testing.T) {
+	srv, err := New(InsecureNoSecurity())
+	require.NoError(t, err)
+	require.False(t, srv.cfg.eccSignLegacyKeyLength)
+	require.False(t, newServerChannelBroker(srv.cfg, "").eccSignLegacyKeyLength)
+
+	srv, err = New(InsecureNoSecurity(), ECCSignLegacyKeyLength())
+	require.NoError(t, err)
+	require.True(t, srv.cfg.eccSignLegacyKeyLength)
+	require.True(t, srv.cb.eccSignLegacyKeyLength, "the channel broker copies it onto each SecureChannel")
+}

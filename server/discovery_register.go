@@ -471,6 +471,8 @@ func (s *Server) registrationChannelConfig(ctx context.Context, rc *registration
 		Lifetime:          uint32(time.Hour / time.Millisecond),
 		RequestTimeout:    rc.timeout(),
 		Logger:            s.cfg.logger,
+
+		ECCSignLegacyKeyLength: s.cfg.eccSignLegacyKeyLength,
 	}
 	canSecure := s.cfg.canSecure()
 	if rc.policy == ua.SecurityPolicyURINone || (!canSecure && rc.insecure) {

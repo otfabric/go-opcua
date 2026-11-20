@@ -423,19 +423,30 @@ const (
 
 // channelKeys derives the keys one side of a SecureChannel sends with.
 // nonce is the ephemeral public key of that side, peerNonce the other one.
-func (p *eccPolicy) channelKeys(secret []byte, label string, nonce, peerNonce []byte) (*derivedKeys, error) {
-	// L always covers all three keys, also on a Sign-only channel that uses
-	// the signing key alone. That is what open62541 v1.5.9 does and what
-	// interoperates with it. OPC UA 1.05.07 (Part 6 §6.8.1) sets the
-	// encrypting key and IV lengths to zero in L for Sign-only channels of
-	// policies without authenticated encryption; since L is part of the salt,
-	// a peer following that rule ends up with other signing keys in Sign
-	// mode. SignAndEncrypt is the same under both readings.
-	//
-	// The policies with authenticated encryption have no signing key: the
-	// tag is made with the encrypting key. (ECC_curve25519 is the exception,
-	// see its table entry.)
+//
+// signOnly is set for a channel in the SecurityMode Sign. OPC UA 1.05.07
+// (Part 6 §6.8.1 Step 1): "When not using AuthenticatedEncryption with Sign
+// only, the EncryptionKeyLength and InitializationVectorLength are set to 0 in
+// the calculation of L". L is part of the salt and the length of the derived
+// key material, so the policies without authenticated encryption
+// (cbcHMACSuite) then derive the signing key alone; the encrypting key and IV
+// are not used in that mode and stay zero. open62541 does the same since
+// v1.5.10; v1.5.9 and earlier derive all three keys in every mode (see
+// uasc.Config.ECCSignLegacyKeyLength). SignAndEncrypt is the same under both
+// readings.
+//
+// The policies with authenticated encryption have no signing key: the tag is
+// made with the encrypting key, and L always covers it. (ECC_curve25519 is
+// the exception, see its table entry.)
+func (p *eccPolicy) channelKeys(secret []byte, label string, nonce, peerNonce []byte, signOnly bool) (*derivedKeys, error) {
 	sig, enc, iv := p.symmetric.signingKeyLength(), p.symmetric.encryptingKeyLength(), p.symmetric.ivLength()
+	if _, cbc := p.symmetric.(cbcHMACSuite); cbc && signOnly {
+		okm, err := p.deriveKeys(secret, label, nonce, peerNonce, sig)
+		if err != nil {
+			return nil, err
+		}
+		return &derivedKeys{signing: okm, encryption: make([]byte, enc), iv: make([]byte, iv)}, nil
+	}
 	okm, err := p.deriveKeys(secret, label, nonce, peerNonce, sig+enc+iv)
 	if err != nil {
 		return nil, err
@@ -458,7 +469,7 @@ func (p *eccPolicy) channelKeys(secret []byte, label string, nonce, peerNonce []
 // someone who joins the conversation later cannot take it over. The IKM used
 // is returned and has to be passed to the next renewal; it is nil for policies
 // that do not chain.
-func (p *eccPolicy) symmetricKeys(local *EphemeralKey, remoteNonce []byte, role Role, previousIKM []byte) (*EncryptionAlgorithm, []byte, error) {
+func (p *eccPolicy) symmetricKeys(local *EphemeralKey, remoteNonce []byte, role Role, previousIKM []byte, signOnly bool) (*EncryptionAlgorithm, []byte, error) {
 	if local == nil || local.policy != p {
 		return nil, nil, fmt.Errorf("%w: ephemeral key does not belong to %s", errors.ErrInvalidSecurityConfig, p.uri)
 	}
@@ -483,11 +494,11 @@ func (p *eccPolicy) symmetricKeys(local *EphemeralKey, remoteNonce []byte, role 
 	if role == RoleServer {
 		clientNonce, serverNonce = remoteNonce, local.public
 	}
-	clientKeys, err := p.channelKeys(ikm, eccLabelClient, clientNonce, serverNonce)
+	clientKeys, err := p.channelKeys(ikm, eccLabelClient, clientNonce, serverNonce, signOnly)
 	if err != nil {
 		return nil, nil, err
 	}
-	serverKeys, err := p.channelKeys(ikm, eccLabelServer, serverNonce, clientNonce)
+	serverKeys, err := p.channelKeys(ikm, eccLabelServer, serverNonce, clientNonce, signOnly)
 	if err != nil {
 		return nil, nil, err
 	}
