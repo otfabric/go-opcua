@@ -13,7 +13,7 @@
 // (SAN localhost) serves TLS for the adapter, the go-server identity (SAN
 // host.docker.internal) for go-opcua; both are issued by the test CA.
 //
-// open62541 1.5.9 has no WebSocket or HTTPS transport (the libwebsockets
+// open62541 1.5.10 has no WebSocket or HTTPS transport (the libwebsockets
 // provider UA_ENABLE_LWS exists on master only); its rows are unsupported.
 
 package interop

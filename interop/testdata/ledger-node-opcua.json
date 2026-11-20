@@ -1,8 +1,8 @@
 {
-  "interopVersion": "v0.19.2",
+  "interopVersion": "v0.20.0",
   "peer": {
     "stack": "node-opcua",
-    "version": "2.187.31"
+    "version": "2.187.32"
   },
   "entries": [
     {
@@ -68,7 +68,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_DiscoveryServerUnsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
       "fixture": "baseline"
     },
     {
@@ -83,7 +83,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_DiscoveryServerUnsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
       "fixture": "baseline"
     },
     {
@@ -797,7 +797,7 @@
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_EventQueueOverflow",
       "case": "coverage/event.queue-overflow/go-client-to-node-opcua-server",
-      "nextAction": "node-opcua 2.187.31 generates no EventQueueOverflowEventType event: node-opcua-server monitored_item raises every event queue to at least 100 (_adjust_event_queue_size, minimumEventQueueSize) and on overflow only sets the overflow bit of DataChange notifications (_setOverflowBit, 'to do: eventQueueOverflowCount'); a burst fixture would not change that",
+      "nextAction": "node-opcua 2.187.32 generates no EventQueueOverflowEventType event: node-opcua-server monitored_item raises every event queue to at least 100 (_adjust_event_queue_size, minimumEventQueueSize) and on overflow only sets the overflow bit of DataChange notifications (_setOverflowBit, 'to do: eventQueueOverflowCount'); a burst fixture would not change that",
       "fixture": "baseline"
     },
     {
@@ -879,7 +879,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.31 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.32 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.read.events",
@@ -894,7 +894,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.31 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.32 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.read.events.continuation",
@@ -909,7 +909,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.31 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.32 historizes variables only: a HistoryRead with ReadEventDetails makes its address-space engine throw and the server answers the request with the service fault BadHistoryOperationInvalid (node-opcua-server opcua_server.js); the opcua-interop node-opcua server has no s=History.Events and declares no history-events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.read.events.filter",
@@ -923,7 +923,7 @@
       "capability": "history.update.data",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate)",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate)",
       "fixture": "baseline"
     },
     {
@@ -937,7 +937,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CONTAINER_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.update.events",
@@ -951,7 +951,7 @@
       "capability": "history.delete",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate)",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate)",
       "fixture": "baseline"
     },
     {
@@ -965,7 +965,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "fixture": "baseline",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CONTAINER_CONTRACT §17.3)"
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers HistoryUpdate with BadServiceUnsupported (opcua_server.js _on_HistoryUpdate); the opcua-interop node-opcua server has no s=History.Events (CONTAINER_CONTRACT §17.3)"
     },
     {
       "capability": "history.delete.events",
@@ -1144,7 +1144,7 @@
       "capability": "query.first",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers QueryFirst / QueryNext with BadServiceUnsupported (opcua_server.js _on_QueryFirst / _on_QueryNext)",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers QueryFirst / QueryNext with BadServiceUnsupported (opcua_server.js _on_QueryFirst / _on_QueryNext)",
       "fixture": "baseline"
     },
     {
@@ -1159,7 +1159,7 @@
       "capability": "query.next",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers QueryFirst / QueryNext with BadServiceUnsupported (opcua_server.js _on_QueryFirst / _on_QueryNext)",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers QueryFirst / QueryNext with BadServiceUnsupported (opcua_server.js _on_QueryFirst / _on_QueryNext)",
       "fixture": "baseline"
     },
     {
@@ -1175,7 +1175,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_NodeManagementUnsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers AddNodes / DeleteNodes with BadServiceUnsupported (pinned by TestNodeOpcuaServer_NodeManagementUnsupported); the adapter does not declare the node-management server feature, so the generic test skips",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers AddNodes / DeleteNodes with BadServiceUnsupported (pinned by TestNodeOpcuaServer_NodeManagementUnsupported); the adapter does not declare the node-management server feature, so the generic test skips",
       "fixture": "baseline"
     },
     {
@@ -1191,7 +1191,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_NodeManagementUnsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers AddNodes / DeleteNodes with BadServiceUnsupported (pinned by TestNodeOpcuaServer_NodeManagementUnsupported); the adapter does not declare the node-management server feature, so the generic test skips",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers AddNodes / DeleteNodes with BadServiceUnsupported (pinned by TestNodeOpcuaServer_NodeManagementUnsupported); the adapter does not declare the node-management server feature, so the generic test skips",
       "fixture": "baseline"
     },
     {
@@ -1207,7 +1207,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_ReferencesUnsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers AddReferences / DeleteReferences with BadServiceUnsupported, as AddNodes / DeleteNodes (pinned by TestNodeOpcuaServer_ReferencesUnsupported)",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers AddReferences / DeleteReferences with BadServiceUnsupported, as AddNodes / DeleteNodes (pinned by TestNodeOpcuaServer_ReferencesUnsupported)",
       "fixture": "baseline"
     },
     {
@@ -1221,7 +1221,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_ReferencesUnsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer answers AddReferences / DeleteReferences with BadServiceUnsupported, as AddNodes / DeleteNodes (pinned by TestNodeOpcuaServer_ReferencesUnsupported)",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer answers AddReferences / DeleteReferences with BadServiceUnsupported, as AddNodes / DeleteNodes (pinned by TestNodeOpcuaServer_ReferencesUnsupported)",
       "fixture": "baseline"
     },
     {
@@ -1284,7 +1284,7 @@
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_Diagnostics",
       "case": "coverage/diagnostics.return-diagnostics/go-client-to-node-opcua-server",
-      "nextAction": "node-opcua 2.187.31 returns no DiagnosticInfos for a failed Read operation with ReturnDiagnostics set; the test skips",
+      "nextAction": "node-opcua 2.187.32 returns no DiagnosticInfos for a failed Read operation with ReturnDiagnostics set; the test skips",
       "fixture": "baseline"
     },
     {
@@ -1353,7 +1353,7 @@
       "capability": "alarms.alarm-state-methods",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 binds no Suppress / Suppress2 / Unsuppress / Silence / RemoveFromService / PlaceInService / Reset / Reset2 handler (node-opcua-address-space alarms_and_conditions) and only the v1.04 TimedShelve / OneShotShelve / Unshelve of the ShelvingState, no TimedShelve2; the 1.05 method nodes of its nodeset answer Bad_InternalError (UAMethod 'has not been bound'); revisit when a pinned node-opcua release serves them",
+      "nextAction": "node-opcua 2.187.32 binds no Suppress / Suppress2 / Unsuppress / Silence / RemoveFromService / PlaceInService / Reset / Reset2 handler (node-opcua-address-space alarms_and_conditions) and only the v1.04 TimedShelve / OneShotShelve / Unshelve of the ShelvingState, no TimedShelve2; the 1.05 method nodes of its nodeset answer Bad_InternalError (UAMethod 'has not been bound'); revisit when a pinned node-opcua release serves them",
       "fixture": "baseline"
     },
     {
@@ -1368,7 +1368,7 @@
       "capability": "alarms.dialog",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no DialogConditionType implementation (no Respond / Respond2 handler in node-opcua-address-space); revisit when a pinned node-opcua release serves it",
+      "nextAction": "node-opcua 2.187.32 has no DialogConditionType implementation (no Respond / Respond2 handler in node-opcua-address-space); revisit when a pinned node-opcua release serves it",
       "fixture": "baseline"
     },
     {
@@ -1399,7 +1399,7 @@
       "capability": "alarms.alarm-groups",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no AlarmGroupType support and no GetGroupMemberships handler (node-opcua-address-space); revisit when a pinned node-opcua release serves them",
+      "nextAction": "node-opcua 2.187.32 has no AlarmGroupType support and no GetGroupMemberships handler (node-opcua-address-space); revisit when a pinned node-opcua release serves them",
       "fixture": "baseline"
     },
     {
@@ -1430,7 +1430,7 @@
       "capability": "alarms.alarm-timing",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 implements no OnDelay / OffDelay / ReAlarmTime / ReAlarmRepeatCount behaviour (no reference in node-opcua-address-space; the Properties exist only in its 1.05 nodeset)",
+      "nextAction": "node-opcua 2.187.32 implements no OnDelay / OffDelay / ReAlarmTime / ReAlarmRepeatCount behaviour (no reference in node-opcua-address-space; the Properties exist only in its 1.05 nodeset)",
       "fixture": "baseline"
     },
     {
@@ -1461,7 +1461,7 @@
       "capability": "alarms.first-in-group",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 does not maintain FirstInGroupFlag / FirstInGroup (no reference in node-opcua-address-space; nodeset declarations only)",
+      "nextAction": "node-opcua 2.187.32 does not maintain FirstInGroupFlag / FirstInGroup (no reference in node-opcua-address-space; nodeset declarations only)",
       "fixture": "baseline"
     },
     {
@@ -1476,7 +1476,7 @@
       "capability": "alarms.alarm-metrics",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no AlarmMetricsType implementation (no AlarmCount maintenance, no Reset handler in node-opcua-address-space)",
+      "nextAction": "node-opcua 2.187.32 has no AlarmMetricsType implementation (no AlarmCount maintenance, no Reset handler in node-opcua-address-space)",
       "fixture": "baseline"
     },
     {
@@ -1564,672 +1564,672 @@
       "capability": "security.ecc-nistp256.sign",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.sign",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp384.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.write",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.write",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-aesgcm.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.write",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.write",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-nistp256-chachapoly.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.write",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.write",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve25519.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.write",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.write",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp256r1.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.write",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.write",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-brainpoolp384r1.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.sign-encrypt",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.sign-encrypt",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.write",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.write",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.subscription",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.subscription",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.username.valid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.username.valid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.username.invalid",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.username.invalid",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.renewal",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "security.ecc-curve448.renewal",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
+      "nextAction": "node-opcua 2.187.32 has no ECC SecurityPolicy (RSA policies only); print-capabilities declares no ECC profile, the server skips the fixture's ECC profiles and the adapter client refuses an ECC_* policy as an input error (pinned by TestNodeOpcuaServer_EccUnsupported)",
       "fixture": "baseline"
     },
     {
@@ -2296,140 +2296,140 @@
       "capability": "transport.wss",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only: node-opcua-client-browser (opc.ws / opc.wss) is a scaffold without a transport and there is no HTTPS binding; opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss-uajson",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.wss-uajson",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https-uajson",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "transport.https-uajson",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.19.2 accepts opc.tcp endpoints only",
+      "nextAction": "node-opcua 2.187.32 serves and dials opc.tcp only (the https-uajson and wss-uajson profile URIs are commented out in server_engine.ts); opcua-interop node-opcua v0.20.0 accepts opc.tcp endpoints only",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json.variant",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json.variant",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json.datavalue",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json.datavalue",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json-verbose.variant",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json-verbose.variant",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json-verbose.datavalue",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.json-verbose.datavalue",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.xml.variant",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.xml.variant",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.xml.datavalue",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
       "capability": "encoding.xml.datavalue",
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
-      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.31 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
+      "nextAction": "The node-opcua adapter has no codec operation: node-opcua 2.187.32 has no Part 6 XML encoding of a Variant / DataValue, and its 1.05 JSON encoder (node-opcua-json) is not wired into the adapter; codec is not in clientOperations and is refused with exit 2 (pinned by TestNodeOpcuaAdapter_CodecUnsupported)",
       "fixture": "baseline"
     },
     {
@@ -2451,7 +2451,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestNodeOpcuaServer_DiscoveryServerUnsupported",
-      "nextAction": "node-opcua 2.187.31's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
+      "nextAction": "node-opcua 2.187.32's OPCUAServer is no discovery server: it answers RegisterServer, RegisterServer2 and FindServersOnNetwork with BadServiceUnsupported (pinned by TestNodeOpcuaServer_DiscoveryServerUnsupported). node-opcua's LDS is the separate OPCUADiscoveryServer without the fixture address space, so the adapter refuses --lds / --mdns-name / --mdns-capability with exit 2",
       "fixture": "baseline"
     },
     {
@@ -2480,7 +2480,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2488,7 +2488,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2496,7 +2496,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2504,7 +2504,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2512,7 +2512,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2520,7 +2520,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2528,7 +2528,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2536,7 +2536,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2544,7 +2544,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2552,7 +2552,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2560,7 +2560,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2568,7 +2568,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2576,7 +2576,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2584,7 +2584,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2592,7 +2592,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2600,7 +2600,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2608,7 +2608,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2616,7 +2616,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2624,7 +2624,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2632,7 +2632,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2640,7 +2640,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2648,7 +2648,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2656,7 +2656,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2664,7 +2664,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2672,7 +2672,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2680,7 +2680,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2688,7 +2688,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2696,7 +2696,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2704,7 +2704,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2712,7 +2712,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2720,7 +2720,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2728,7 +2728,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2736,7 +2736,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2744,7 +2744,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2752,7 +2752,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2760,7 +2760,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2768,7 +2768,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2776,7 +2776,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2784,7 +2784,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2792,7 +2792,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2800,7 +2800,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2808,7 +2808,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2816,7 +2816,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2824,7 +2824,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2832,7 +2832,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2840,7 +2840,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2848,7 +2848,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2856,7 +2856,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2864,7 +2864,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2872,7 +2872,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2880,7 +2880,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2888,7 +2888,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2896,7 +2896,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2904,7 +2904,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2912,7 +2912,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2920,7 +2920,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2928,7 +2928,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2936,7 +2936,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2944,7 +2944,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2952,7 +2952,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2960,7 +2960,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2968,7 +2968,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2976,7 +2976,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2984,7 +2984,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -2992,7 +2992,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -3000,7 +3000,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -3008,7 +3008,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -3016,7 +3016,7 @@
       "direction": "node-opcua-client-to-go-server",
       "status": "unsupported",
       "test": "TestPubSub_NodeOpcuaHasNoPubSub",
-      "nextAction": "node-opcua 2.187.31 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
+      "nextAction": "node-opcua 2.187.32 has no open-source PubSub (Part 14; PubSub is a commercial add-on): print-capabilities declares pubsub.supported false and the adapter refuses --pubsub-config and codec pubsub-* with exit 2 (pinned by TestPubSub_NodeOpcuaHasNoPubSub)",
       "fixture": "baseline"
     },
     {
@@ -3080,7 +3080,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
-      "nextAction": "node-opcua 2.187.31 has no GetCertificates method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "nextAction": "node-opcua 2.187.32 has no GetCertificates method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
       "fixture": "baseline"
     },
     {
@@ -3095,7 +3095,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
-      "nextAction": "node-opcua 2.187.31 has no CreateSelfSignedCertificate method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "nextAction": "node-opcua 2.187.32 has no CreateSelfSignedCertificate method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
       "fixture": "baseline"
     },
     {
@@ -3111,7 +3111,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
-      "nextAction": "node-opcua 2.187.31 has no DeleteCertificate method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
+      "nextAction": "node-opcua 2.187.32 has no DeleteCertificate method on ServerConfiguration (Bad_MethodInvalid; the test skips)",
       "fixture": "baseline"
     },
     {
@@ -3126,7 +3126,7 @@
       "capability": "certmgmt.push.reset-to-defaults",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua-server-configuration 2.187.31 binds only CreateSigningRequest, GetRejectedList, UpdateCertificate and ApplyChanges (push_certificate_manager_helpers); its unbound ResetToServerDefaults answers Bad_InternalError (UAMethod 'has not been bound')",
+      "nextAction": "node-opcua-server-configuration 2.187.32 binds only CreateSigningRequest, GetRejectedList, UpdateCertificate and ApplyChanges (push_certificate_manager_helpers); its unbound ResetToServerDefaults answers Bad_InternalError (UAMethod 'has not been bound')",
       "fixture": "baseline"
     },
     {
@@ -3141,7 +3141,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
-      "nextAction": "node-opcua 2.187.31 serves the TrustList of the DefaultHttpsGroup as an empty file, no TrustListDataType (the test skips)",
+      "nextAction": "node-opcua 2.187.32 serves the TrustList of the DefaultHttpsGroup as an empty file, no TrustListDataType (the test skips)",
       "fixture": "baseline"
     },
     {
@@ -3172,7 +3172,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
-      "nextAction": "node-opcua 2.187.31 publishes SupportedPrivateKeyFormats [PEM], no PFX (the test skips)",
+      "nextAction": "node-opcua 2.187.32 publishes SupportedPrivateKeyFormats [PEM], no PFX (the test skips)",
       "fixture": "baseline"
     },
     {
@@ -3188,7 +3188,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
-      "nextAction": "node-opcua 2.187.31 cannot encode a variable of its TransactionDiagnostics (Bad_DataTypeIdUnknown; the test skips)",
+      "nextAction": "node-opcua 2.187.32 cannot encode a variable of its TransactionDiagnostics (Bad_DataTypeIdUnknown; the test skips)",
       "fixture": "baseline"
     },
     {
@@ -3204,7 +3204,7 @@
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
       "test": "TestCertMgmtPushGroups_GoClient_PeerServers",
-      "nextAction": "node-opcua 2.187.31 has no CertificateExpired / TrustListOutOfDate alarms under its certificate groups (Bad_NoMatch; the test skips)",
+      "nextAction": "node-opcua 2.187.32 has no CertificateExpired / TrustListOutOfDate alarms under its certificate groups (Bad_NoMatch; the test skips)",
       "fixture": "baseline"
     },
     {
@@ -3218,7 +3218,7 @@
       "capability": "gds.pull.directory",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
+      "nextAction": "node-opcua 2.187.32 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {
@@ -3233,7 +3233,7 @@
       "capability": "gds.pull.certificate-request",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
+      "nextAction": "node-opcua 2.187.32 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {
@@ -3248,7 +3248,7 @@
       "capability": "gds.pull.trust-list",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
+      "nextAction": "node-opcua 2.187.32 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {
@@ -3263,7 +3263,7 @@
       "capability": "gds.pull.revocation",
       "direction": "go-client-to-node-opcua-server",
       "status": "unsupported",
-      "nextAction": "node-opcua 2.187.31 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
+      "nextAction": "node-opcua 2.187.32 ships no Global Discovery Server: no Directory / CertificateManager implementation in node-opcua-server or node-opcua-server-configuration (push model of Part 12 §7 only) and no node-opcua GDS package on npm; nothing to test against until it has one",
       "fixture": "baseline"
     },
     {

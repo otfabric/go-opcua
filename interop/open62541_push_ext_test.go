@@ -5,7 +5,7 @@
 // The open62541 adapter's `client push` (CONTAINER_CONTRACT §1 "push flags",
 // §15) and `client gds-pull` (§16.2) of opcua-interop v0.15.0 (unreleased
 // when these tests were written; built from the opcua-interop branch
-// feat/open62541-push). open62541 v1.5.9 has neither a push nor a GDS client
+// feat/open62541-push). open62541 v1.5.10 has neither a push nor a GDS client
 // API, so the adapter builds both on UA_Client_call:
 //
 //	open62541-client-to-go-server   `client push` (all the v0.15.0 flags)

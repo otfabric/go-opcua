@@ -115,10 +115,10 @@ type pushPeer struct {
 	pki       string // test PKI identity of the server
 	direction string
 	// roles: the peer grants SecurityAdmin by the fixture roles and refuses
-	// the methods to others; open62541 v1.5.9 has no roles and serves any
+	// the methods to others; open62541 v1.5.10 has no roles and serves any
 	// session on a SignAndEncrypt channel.
 	roles bool
-	// closesChannels: ApplyChanges closes the channels (open62541 v1.5.9
+	// closesChannels: ApplyChanges closes the channels (open62541 v1.5.10
 	// shuts them down after the response), so the test reconnects.
 	closesChannels bool
 	// applyIdle: the status of ApplyChanges without a pending change.

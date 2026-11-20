@@ -1342,7 +1342,7 @@ selects another certificate group's TrustList. `EncodeTrustList` / `DecodeTrustL
 `Thumbprint` is the upper-case hexadecimal SHA-1 that every tested server
 accepts (UA-.NETStandard compares the case).
 
-Peers differ in details: open62541 1.5.9 serves the methods to any session on a
+Peers differ in details: open62541 1.5.10 serves the methods to any session on a
 SignAndEncrypt channel and answers ApplyChanges without a pending change with
 `Bad_NothingToDo` (as node-opcua), and the endpoints of UA-.NETStandard and
 node-opcua carry the issuer chain after the certificate. Of the Part 12 1.05
@@ -1352,7 +1352,7 @@ CreateSelfSignedCertificate for an occupied slot (`Bad_InvalidState`: it wants
 DeleteCertificate first). It serves DeleteCertificate but refuses to delete
 its only application certificate, at once, with `Bad_InvalidState`; this
 library's server accepts the deletion and refuses it at ApplyChanges.
-open62541 1.5.9 and node-opcua serve the UserToken trust list only. See the interop ledgers.
+open62541 1.5.10 and node-opcua serve the UserToken trust list only. See the interop ledgers.
 
 The pull model is described in the next section.
 

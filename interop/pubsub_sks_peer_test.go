@@ -98,12 +98,12 @@ func TestPubSubSKS_GoClient_Open62541SKS(t *testing.T) {
 		if one.SecurityPolicyURI != security.PolicyURIAes256CTR {
 			t.Errorf("SecurityPolicyUri %q", one.SecurityPolicyURI)
 		}
-		// open62541 1.5.9 returns a bogus negative TimeToNextKey
+		// open62541 1.5.10 returns a bogus negative TimeToNextKey
 		// (contract §14.6); KeyLifetime is right.
 		if one.KeyLifetime != psSKSKeyLifetime {
 			t.Errorf("KeyLifetime %v, want %v", one.KeyLifetime, psSKSKeyLifetime)
 		}
-		t.Logf("FirstTokenId %d, TimeToNextKey %v (open62541 1.5.9 bug: not usable), KeyLifetime %v", one.FirstTokenID, one.TimeToNextKey, one.KeyLifetime)
+		t.Logf("FirstTokenId %d, TimeToNextKey %v (open62541 1.5.10 bug: not usable), KeyLifetime %v", one.FirstTokenID, one.TimeToNextKey, one.KeyLifetime)
 		if len(one.Keys) != 2 {
 			t.Fatalf("RequestedKeyCount 1: %d keys, want the current and one future key", len(one.Keys))
 		}

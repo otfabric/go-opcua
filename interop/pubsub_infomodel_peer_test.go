@@ -16,7 +16,7 @@
 //     RemoveConnection, browsing the PublishSubscribe tree; the connection
 //     built this way publishes to go-opcua.
 //
-// Method argument conventions of open62541 1.5.9: opcua-interop
+// Method argument conventions of open62541 1.5.10: opcua-interop
 // docs/CONTAINER_CONTRACT.md §14.6.
 
 package interop
@@ -113,7 +113,7 @@ func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 
 	// open62541 creates the connection and the writer disabled.
 	if st := mustOK[ua.PubSubState](t)(r.State(ctx, conn)); st != ua.PubSubStateDisabled {
-		t.Errorf("new connection: %v, want Disabled (open62541 1.5.9)", st)
+		t.Errorf("new connection: %v, want Disabled (open62541 1.5.10)", st)
 	}
 	for _, n := range []*ua.NodeID{conn, writer} {
 		if err := r.Enable(ctx, n); err != nil {
@@ -142,7 +142,7 @@ func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 	}
 
 	// AddReaderGroup / AddDataSetReader: a reader of go-opcua messages with
-	// a TargetVariable. open62541 1.5.9 adds every TargetNodeId as a new
+	// a TargetVariable. open62541 1.5.10 adds every TargetNodeId as a new
 	// Variable (BrowseName = field name) below a folder named after the
 	// DataSetMetaData and writes to it; an existing node (a fixture
 	// variable) cannot be the target: the add fails and every write fails
@@ -170,7 +170,7 @@ func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 			}
 		}
 	}
-	// open62541 1.5.9 opens the receive socket of a connection when the
+	// open62541 1.5.10 opens the receive socket of a connection when the
 	// connection is enabled and it has a ReaderGroup: a ReaderGroup added to
 	// a running connection receives nothing until the connection is
 	// disabled and enabled again.
@@ -190,7 +190,7 @@ func TestPubSubInfoModel_GoClient_Open62541(t *testing.T) {
 		name string
 		do   func() error
 	}{
-		// open62541 1.5.9 removes a DataSetReader only from a disabled
+		// open62541 1.5.10 removes a DataSetReader only from a disabled
 		// ReaderGroup (else Bad_InternalError, "Removal of the
 		// DataSetReader not possible while the ReaderGroup is enabled").
 		{"Disable (reader group)", func() error { return r.Disable(ctx, rg) }},

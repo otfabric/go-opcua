@@ -24,7 +24,7 @@
 //	dotnet-client-to-go-lds      dotnet client registers a server with a go-opcua LDS
 //
 // The secure tests use the dotnet-server / dotnet-client identities of the
-// test PKI (opcua-interop v0.19.2 certs/generate.sh, or --add-dotnet on an
+// test PKI (opcua-interop v0.20.0 certs/generate.sh, or --add-dotnet on an
 // older PKI): a PKI without them skips.
 
 package interop
@@ -35,7 +35,7 @@ import (
 
 // defaultDotnetImage is the dotnet adapter of the opcua-interop release
 // named by interopVersion (multi-arch index digest; see harness_test.go).
-const defaultDotnetImage = "ghcr.io/otfabric/opcua-interop-dotnet@sha256:18d54bfc788999215fef5da599140bc891309d7779c746743a7c5e89f6c4cfdb"
+const defaultDotnetImage = "ghcr.io/otfabric/opcua-interop-dotnet@sha256:08b769572dd513122b9ce9c9093203ae346802f42cdd83478439d2c0911e5b48"
 
 // dotnetEnv is the image env variable of the dotnet peer, see harness_test.go.
 const dotnetEnv = "DOTNET_IMAGE"

@@ -24,7 +24,7 @@ to variables.
 | Actions | PubSub Actions (request / response, Part 14 §6.2.11.2): Responder and Requestor over UDP, MQTT and AMQP, UADP (secured) and JSON (see below) |
 | Not implemented | AMQP over WebSockets (`wss://`) |
 
-Interoperability is tested in both directions against open62541 v1.5.9 and
+Interoperability is tested in both directions against open62541 v1.5.10 and
 the Opc.Ua.PubSub runtime of UA-.NETStandard 2.0.2 (see the interop ledger,
 profile `pubsub`); the AMQP transport is tested through RabbitMQ 4 and ActiveMQ
 Artemis. Eclipse Milo 1.1.8, async-opcua 0.19 and opcua-asyncio have no PubSub
@@ -730,7 +730,7 @@ object: the nodeset has no PublishedActionType.
 
 - UADP PublisherIds are matched with the same integer width: configure the
   same type (e.g. UInt16) on both sides.
-- open62541 1.5.9's JSON subscriber accepts only key frames and sequence
+- open62541 1.5.10's JSON subscriber accepts only key frames and sequence
   numbers up to 65535 (go-opcua wraps JSON sequence numbers at 16 bits).
 - open62541's MQTT client uses QoS 0, no TLS, and messages must stay small
   (about 1000 bytes).
