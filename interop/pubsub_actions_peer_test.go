@@ -5,7 +5,7 @@
 // PubSub Actions (Part 14 §5.4.2) through a real broker.
 // COVERAGE.md: pubsub / pubsub.actions
 //
-// No other stack implements PubSub Actions (open62541 1.5.9 and
+// No other stack implements PubSub Actions (open62541 1.5.10 and
 // Opc.Ua.PubSub 2.0.2 have none, the other peers no PubSub), so this is
 // go-opcua to go-opcua through Eclipse Mosquitto: a client configures a
 // PublishedAction with its connection, group and writer on a go-opcua server

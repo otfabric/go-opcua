@@ -145,6 +145,7 @@ type KeyExchange struct {
 	role      Role
 	nonce     []byte
 	ephemeral *EphemeralKey
+	mode      ua.MessageSecurityMode
 }
 
 // NewKeyExchange starts the key negotiation for the security policy.
@@ -174,6 +175,20 @@ func NewKeyExchange(uri string, role Role) (*KeyExchange, error) {
 		return nil, err
 	}
 	return k, nil
+}
+
+// SetSecurityMode sets the MessageSecurityMode of the SecureChannel the keys
+// are for; call it before Symmetric or SymmetricChained. It matters only to
+// the ECC policies without authenticated encryption (ECC_nistP256,
+// ECC_nistP384, ECC_brainpoolP256r1, ECC_brainpoolP384r1): with
+// MessageSecurityModeSign they derive the signing keys alone, as Part 6
+// §6.8.1 Step 1 asks (EncryptionKeyLength and InitializationVectorLength are
+// 0 in the calculation of L, which is part of the salt), and open62541 does
+// since v1.5.10. Without a call, or with another mode, L covers the signing
+// key, the encrypting key and the IV, which is how open62541 v1.5.9 and
+// earlier derive the keys in every mode.
+func (k *KeyExchange) SetSecurityMode(mode ua.MessageSecurityMode) {
+	k.mode = mode
 }
 
 // Nonce returns the nonce to send to the peer: the ClientNonce of the
@@ -208,7 +223,7 @@ func (k *KeyExchange) Symmetric(remoteNonce []byte) (*EncryptionAlgorithm, error
 // is nil.
 func (k *KeyExchange) SymmetricChained(remoteNonce, chain []byte) (algo *EncryptionAlgorithm, next []byte, err error) {
 	if k.policy.ecc != nil {
-		return k.policy.ecc.symmetricKeys(k.ephemeral, remoteNonce, k.role, chain)
+		return k.policy.ecc.symmetricKeys(k.ephemeral, remoteNonce, k.role, chain, k.mode == ua.MessageSecurityModeSign)
 	}
 	if k.uri != ua.SecurityPolicyURINone && (k.nonce == nil || remoteNonce == nil) {
 		return nil, nil, fmt.Errorf("%w: both nonces required", errors.ErrInvalidSecurityConfig)

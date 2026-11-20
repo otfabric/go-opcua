@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	interopVersionPin = "v0.19.2"
+	interopVersionPin = "v0.20.0"
 )
 
 var allowedStatuses = map[string]string{

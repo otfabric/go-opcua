@@ -466,6 +466,22 @@ func WithClientCertificateValidator(v ClientCertificateValidator) Option {
 	}
 }
 
+// ECCSignLegacyKeyLength derives the keys of SecureChannels in the
+// SecurityMode Sign with ECC_nistP256, ECC_nistP384, ECC_brainpoolP256r1 or
+// ECC_brainpoolP384r1 as open62541 v1.5.9 and earlier do: L covers the
+// signing key, the encrypting key and the IV. By default the server follows
+// Part 6 §6.8.1 Step 1, where L covers the signing key alone, as open62541
+// does since v1.5.10. The two give different signing keys, so a client using
+// the other derivation cannot use such a channel; SignAndEncrypt and the
+// other policies are not affected. It applies to the channels the server
+// accepts and to its registration with a discovery server.
+func ECCSignLegacyKeyLength() Option {
+	return func(s *serverConfig) error {
+		s.eccSignLegacyKeyLength = true
+		return nil
+	}
+}
+
 // AllowUsernameOnNone permits the server to advertise UserName token policies
 // on None/None (unencrypted) endpoints.  The OPC UA specification permits this
 // for test deployments (Part 4 §5.6.3.2).  By default, non-anonymous tokens

@@ -166,9 +166,9 @@ func (k aeadKAT) fixedExchange(t *testing.T, chain []byte) (client, server *Encr
 	t.Helper()
 	p := eccPolicies[k.uri]
 	ck, sk := fixedEphemeralKeyFor(t, k.uri, k.client), fixedEphemeralKeyFor(t, k.uri, k.server)
-	client, next, err := p.symmetricKeys(ck, sk.PublicKey(), RoleClient, chain)
+	client, next, err := p.symmetricKeys(ck, sk.PublicKey(), RoleClient, chain, false)
 	require.NoError(t, err)
-	server, next2, err := p.symmetricKeys(sk, ck.PublicKey(), RoleServer, chain)
+	server, next2, err := p.symmetricKeys(sk, ck.PublicKey(), RoleServer, chain, false)
 	require.NoError(t, err)
 	require.Equal(t, next, next2)
 	return client, server, next
@@ -437,7 +437,7 @@ func TestAEADKeyDerivation_KnownAnswer(t *testing.T) {
 			secret := unhex(t, k.secret)
 			client, server := unhex(t, k.clientPublic), unhex(t, k.serverPublic)
 
-			ck, err := p.channelKeys(secret, eccLabelClient, client, server)
+			ck, err := p.channelKeys(secret, eccLabelClient, client, server, false)
 			require.NoError(t, err)
 			want := unhex(t, k.clientKeys)
 			require.Len(t, want, k.signKey+k.encKey+12)
@@ -445,7 +445,7 @@ func TestAEADKeyDerivation_KnownAnswer(t *testing.T) {
 			require.Equal(t, want[k.signKey:k.signKey+k.encKey], ck.encryption, "encrypting key: follows the signing key")
 			require.Equal(t, want[k.signKey+k.encKey:], ck.iv, "IV: 12 bytes, follows the encrypting key")
 
-			sk, err := p.channelKeys(secret, eccLabelServer, server, client)
+			sk, err := p.channelKeys(secret, eccLabelServer, server, client, false)
 			require.NoError(t, err)
 			want = unhex(t, k.serverKeys)
 			require.Equal(t, want[:k.signKey], sk.signing)

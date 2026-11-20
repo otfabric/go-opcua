@@ -32,7 +32,7 @@
 //	"json" / "xml"                    the Variant documents
 //	"dataValueJson" / "dataValueXml"  the DataValue documents
 //
-// each null when the stack cannot produce the document (open62541 1.5.9 has
+// each null when the stack cannot produce the document (open62541 1.5.10 has
 // no XML matrix and no XML DataValue).
 //
 //	client codec --decode <json|xml> --type <Variant|DataValue>   (document on stdin)
@@ -119,16 +119,16 @@ var codecOpen62541 = codecPeer{
 	name: "open62541", imageEnv: "OPEN62541_IMAGE", defaultImage: defaultOpen62541Image,
 	run: runOpen62541Client,
 	encodeGaps: map[string]string{
-		"Array.Matrix2D/xml": "open62541 1.5.9 does not implement encoding of a matrix to XML",
-		"*/dataValueXml":     "open62541 1.5.9 does not implement DataValue in XML",
+		"Array.Matrix2D/xml": "open62541 1.5.10 does not implement encoding of a matrix to XML",
+		"*/dataValueXml":     "open62541 1.5.10 does not implement DataValue in XML",
 	},
 	// See corpusDivergences in ua/open62541_corpus_test.go for the same
 	// finding against the recorded corpus.
 	decodeGaps: map[string]string{
-		"Scalar.XmlElement/xml": "open62541 1.5.9 does not implement decoding of XmlElement from XML",
+		"Scalar.XmlElement/xml": "open62541 1.5.10 does not implement decoding of XmlElement from XML",
 	},
 	dataValueDecodeGaps: map[string]string{
-		"xml": "open62541 1.5.9 does not implement DataValue in XML",
+		"xml": "open62541 1.5.10 does not implement DataValue in XML",
 	},
 }
 

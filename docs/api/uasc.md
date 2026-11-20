@@ -366,6 +366,16 @@ type Config struct {
 	// HTTPSJSONContentType (Part 6 §7.4.2); HTTPSJSONContentTypeLegacy
 	// reaches servers that take only that one (UA-.NETStandard 2.0.2).
 	HTTPSJSONContentType string
+
+	// ECCSignLegacyKeyLength derives the keys of a SecureChannel in the
+	// SecurityMode Sign with ECC_nistP256, ECC_nistP384, ECC_brainpoolP256r1
+	// or ECC_brainpoolP384r1 as open62541 v1.5.9 and earlier do: L covers
+	// the signing key, the encrypting key and the IV. By default L covers the
+	// signing key alone (Part 6 §6.8.1 Step 1), as open62541 since v1.5.10
+	// derives it. The two readings give different signing keys, so a peer
+	// using the other one cannot open the channel; SignAndEncrypt and the
+	// other policies are not affected.
+	ECCSignLegacyKeyLength bool
 }
 ```
 

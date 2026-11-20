@@ -80,6 +80,10 @@ type channelBroker struct {
 	// so untrusted client certs can be rejected at OpenSecureChannel.
 	clientCertificateValidator ClientCertificateValidator
 
+	// eccSignLegacyKeyLength is copied onto each new SecureChannel Config
+	// (ECCSignLegacyKeyLength).
+	eccSignLegacyKeyLength bool
+
 	// localIdentity selects the application instance certificate and key of
 	// a new channel from the security policy the client opens it with. Nil
 	// means every channel uses the certificate passed to RegisterConn.
@@ -131,6 +135,14 @@ func newChannelBroker(l *slog.Logger, endpointURL string, clientCertValidator Cl
 	}
 }
 
+// newServerChannelBroker returns the channel broker of a server with its
+// SecureChannel settings.
+func newServerChannelBroker(cfg *serverConfig, endpointURL string) *channelBroker {
+	cb := newChannelBroker(cfg.logger, endpointURL, cfg.clientCertificateValidator)
+	cb.eccSignLegacyKeyLength = cfg.eccSignLegacyKeyLength
+	return cb
+}
+
 // sequenceNumberSeed returns the sequence number a new server channel starts
 // from. The channel increments it before the first chunk, and with the
 // legacy (RSA) security policies the first SequenceNumber must be below 1024
@@ -151,6 +163,7 @@ func (c *channelBroker) RegisterConn(ctx context.Context, conn *uacp.Conn, local
 	cfg.LocalIdentity = c.localIdentity
 	cfg.Logger = c.logger
 	cfg.ClientCertificateValidator = c.clientCertificateValidator
+	cfg.ECCSignLegacyKeyLength = c.eccSignLegacyKeyLength
 
 	c.mu.Lock()
 	c.secureChannelID++

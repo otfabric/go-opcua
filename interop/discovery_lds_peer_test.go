@@ -199,23 +199,35 @@ func serversOnNetwork(endpoint string) []*ua.ServerOnNetwork {
 
 // TestOpen62541LDS_GoServerRegisters: a go-opcua server registers with the
 // open62541 LDS, is found there with FindServers, and unregisters on Close.
+//
+// open62541 since v1.5.10 serves RegisterServer(2) only on a channel with a
+// client certificate whose application URI is the registered ServerUri
+// (advisory open62541-SA-2026-0051): the LDS runs with the open62541-server
+// identity of the test PKI, and the go-opcua server registers with the
+// go-server identity, whose URI is its ApplicationURI, over the most secure
+// endpoint the LDS offers.
 func TestOpen62541LDS_GoServerRegisters(t *testing.T) {
 	t.Run("coverage/discovery.lds-registration/go-server-to-open62541-lds", func(t *testing.T) {
 		requireServerFeature(t, "OPEN62541_IMAGE", defaultOpen62541Image, "lds")
-		lds, _ := startAdapterServerWith(t, "OPEN62541_IMAGE", defaultOpen62541Image, nil, []string{"--lds"})
+		fixtureDir, err := filepath.Abs(getEnvOr("OPCUA_INTEROP_FIXTURE_DIR", defaultFixtureDir))
+		if err != nil {
+			t.Fatal(err)
+		}
+		lds := startSecureAdapterServerIn(t, "OPEN62541_IMAGE", defaultOpen62541Image, "open62541-server", fixtureDir, "--lds")
 
-		const uri = "urn:otfabric:go-opcua:interop:registrant"
+		const uri = "urn:otfabric:opcua-interop:server:go-opcua" // the URI of the go-server certificate
 		var mu sync.Mutex
 		var events []server.RegistrationEvent
 		srv, err := server.New(
 			server.ListenOn("0.0.0.0:0"),
 			server.EndPoint("host.docker.internal", 0),
+			server.Certificate(loadGoServerCert(t)),
+			server.PrivateKey(loadGoServerKey(t)),
 			server.InsecureNoSecurity(),
 			server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 			server.ApplicationURI(uri),
 			server.ServerName("go-opcua registrant"),
 			server.WithDiscoveryRegistration(lds.endpoint,
-				server.RegisterInsecure(),
 				server.RegisterMdnsServerName("GoRegistrant"),
 				server.RegisterServerCapabilities("DA"),
 				server.RegisterEventHandler(func(e server.RegistrationEvent) {
@@ -261,7 +273,11 @@ func TestOpen62541LDS_GoServerRegisters(t *testing.T) {
 		if accepted.Service != "RegisterServer2" {
 			t.Errorf("registered with %s, want RegisterServer2 (open62541 implements it)", accepted.Service)
 		}
-		t.Logf("registered with %s, configuration results %v", accepted.Service, accepted.ConfigurationResults)
+		if accepted.SecurityMode == ua.MessageSecurityModeNone {
+			t.Errorf("registered over SecurityMode None (%s)", accepted.SecurityPolicyURI)
+		}
+		t.Logf("registered with %s over %s %v, configuration results %v", accepted.Service,
+			accepted.SecurityPolicyURI, accepted.SecurityMode, accepted.ConfigurationResults)
 		// The MdnsDiscoveryConfiguration of RegisterServer2 was accepted and
 		// took effect: the LDS serves a FindServersOnNetwork record under the
 		// requested mDNS server name with the registered capabilities.

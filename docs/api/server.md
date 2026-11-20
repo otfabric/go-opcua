@@ -2658,6 +2658,14 @@ func Certificate(cert []byte) Option
 
 Certificate sets the client X509 certificate in the secure channel configuration and also detects and sets the ApplicationURI from the URI within the certificate.
 
+#### func ECCSignLegacyKeyLength
+
+```go
+func ECCSignLegacyKeyLength() Option
+```
+
+ECCSignLegacyKeyLength derives the keys of SecureChannels in the SecurityMode Sign with ECC\_nistP256, ECC\_nistP384, ECC\_brainpoolP256r1 or ECC\_brainpoolP384r1 as open62541 v1.5.9 and earlier do: L covers the signing key, the encrypting key and the IV. By default the server follows Part 6 §6.8.1 Step 1, where L covers the signing key alone, as open62541 does since v1.5.10. The two give different signing keys, so a client using the other derivation cannot use such a channel; SignAndEncrypt and the other policies are not affected. It applies to the channels the server accepts and to its registration with a discovery server.
+
 #### func EnableAuthMode
 
 ```go

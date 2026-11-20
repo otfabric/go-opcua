@@ -39,8 +39,8 @@ func TestCoverageManifestValid(t *testing.T) {
 		} `json:"entries"`
 	}](t, covPath)
 
-	if cov.InteropVersion != "v0.19.2" {
-		t.Fatalf("interopVersion = %q, want v0.19.2", cov.InteropVersion)
+	if cov.InteropVersion != "v0.20.0" {
+		t.Fatalf("interopVersion = %q, want v0.20.0", cov.InteropVersion)
 	}
 
 	allowedUnverifiedReasons := map[string]bool{

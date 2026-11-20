@@ -1018,6 +1018,9 @@ func (s *SecureChannel) open(ctx context.Context, instance *channelInstance, req
 	if err != nil {
 		return err
 	}
+	if !s.cfg.ECCSignLegacyKeyLength {
+		kx.SetSecurityMode(s.cfg.SecurityMode)
+	}
 
 	opening := newChannelInstance(s)
 	opening.zeroBasedSeq = !uapolicy.LegacySequenceNumbers(s.cfg.SecurityPolicyURI)
@@ -1215,6 +1218,9 @@ func (s *SecureChannel) handleOpenSecureChannelRequest(reqID uint32, svc ua.Requ
 	kx, err := uapolicy.NewKeyExchange(s.cfg.SecurityPolicyURI, uapolicy.RoleServer)
 	if err != nil {
 		return err
+	}
+	if !s.cfg.ECCSignLegacyKeyLength {
+		kx.SetSecurityMode(s.cfg.SecurityMode)
 	}
 	symmetric, keyChain, err := kx.SymmetricChained(req.ClientNonce, s.keyChain)
 	if err != nil {

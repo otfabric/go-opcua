@@ -394,3 +394,29 @@ func TestSecureChannel_EndToEnd(t *testing.T) {
 		})
 	}
 }
+
+// ECCSignLegacyKeyLength: two sides with the same derivation open a Sign-only
+// ECC channel and exchange messages; with different derivations the signing
+// keys differ and no symmetric message gets through.
+func TestSecureChannel_ECCSignLegacyKeyLength(t *testing.T) {
+	legacy := func(c *Config) { c.ECCSignLegacyKeyLength = true }
+	pol := covPolicy{"ECC_nistP384/Sign", ua.SecurityPolicyURIECCNistP384, ua.MessageSecurityModeSign, testpki.CurveP384}
+
+	t.Run("both legacy", func(t *testing.T) {
+		p := newCovPair(t, pol, covOpts{tweakClient: legacy, tweakServer: legacy})
+		p.read(t, 3)
+		require.NoError(t, p.client.Renew(context.Background()))
+		p.read(t, 3)
+	})
+	t.Run("client legacy", func(t *testing.T) {
+		p := newCovPair(t, pol, covOpts{tweakClient: legacy})
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		require.Error(t, p.tryRead(ctx, 1))
+	})
+	t.Run("SignAndEncrypt ignores it", func(t *testing.T) {
+		pol := covPolicy{"ECC_nistP384/SignAndEncrypt", ua.SecurityPolicyURIECCNistP384, ua.MessageSecurityModeSignAndEncrypt, testpki.CurveP384}
+		p := newCovPair(t, pol, covOpts{tweakClient: legacy})
+		p.read(t, 3)
+	})
+}

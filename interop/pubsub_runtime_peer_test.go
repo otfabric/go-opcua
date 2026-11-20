@@ -321,7 +321,7 @@ func (d *psDataSets) wait(t *testing.T, vars []psVar, values []any, timeout time
 
 // psRuntimeReader is the go-opcua reader of the adapter's writer.
 func psRuntimeReader(c psRuntimeCase, topic string, timeout time.Duration) *ua.ReaderGroupDataType {
-	// open62541 1.5.9 ignores the configured ConfigurationVersion of a
+	// open62541 1.5.10 ignores the configured ConfigurationVersion of a
 	// PublishedDataSet and sends one it generates (contract §14.3), so the
 	// reader cannot know the MajorVersion: without one (0) the go-opcua
 	// reader does not compare it. With the configured 1.1 every message
@@ -778,7 +778,7 @@ func adapterWriterGroup(t *testing.T, ctx context.Context, r *remote.Client) *ua
 // PreOperational for Operational, which it does only for a message of its
 // writer.
 //
-// open62541 1.5.9 then discards the KeepAlive DataSetMessage ("Only
+// open62541 1.5.10 then discards the KeepAlive DataSetMessage ("Only
 // keyframes are supported") and does not arm or refresh its
 // MessageReceiveTimeout with it: whether keep-alive messages keep an idle
 // reader out of Error cannot be observed on this peer.

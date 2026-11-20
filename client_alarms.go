@@ -246,7 +246,7 @@ func (c *Client) eventMethod(ctx context.Context, method uint32, conditionID *ua
 }
 
 // commentArg is a Comment argument. A non-empty comment carries the first
-// session locale (Locales; "en-us" by default): open62541 1.5.9 ignores a
+// session locale (Locales; "en-us" by default): open62541 1.5.10 ignores a
 // Comment without a locale.
 func (c *Client) commentArg(comment string) *ua.Variant {
 	locale := ""

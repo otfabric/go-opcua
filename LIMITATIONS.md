@@ -30,18 +30,18 @@ behaviour you may notice, and the deviations of peers are in
   `deferred` rows are not verified, and the totals per peer are in the
   [README](README.md#interop-evidence).
 - Real mDNS multicast is verified on Linux only.
-- ECC has one testable peer: where open62541 1.5.9 and Part 6 1.05.07 differ,
+- ECC has one testable peer: where open62541 1.5.10 and Part 6 1.05.07 differ,
   go-opcua follows open62541.
 - Certification: none. OPC Foundation certification has not been attempted.
 
 ## Known deviations
 
-- ECC follows open62541, not Part 6 1.05.07, for curve25519 key material,
-  Sign-mode key derivation and ChannelThumbprint
+- ECC follows open62541, not Part 6 1.05.07, for curve25519 key material
+  and ChannelThumbprint
   ([docs/interop-gaps.md](docs/interop-gaps.md)).
 - PubSub chunked NetworkMessages and UADP discovery use the layout of the OPC
   Foundation .NET stack 2.x where the specification is ambiguous; open62541
-  1.5.9 sends and accepts neither.
+  1.5.10 sends and accepts neither.
 - Raw history deletes (DeleteRawModified) of the built-in historian remove the
   sample at the end time, while a raw read excludes it.
 - PubSub over AMQP sends ExactlyOnce as AtLeastOnce.

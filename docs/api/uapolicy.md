@@ -709,6 +709,14 @@ func (k *KeyExchange) Nonce() []byte
 
 Nonce returns the nonce to send to the peer: the ClientNonce of the OpenSecureChannel request or the ServerNonce of the response.
 
+#### func (KeyExchange) SetSecurityMode
+
+```go
+func (k *KeyExchange) SetSecurityMode(mode ua.MessageSecurityMode)
+```
+
+SetSecurityMode sets the MessageSecurityMode of the SecureChannel the keys are for; call it before Symmetric or SymmetricChained. It matters only to the ECC policies without authenticated encryption (ECC\_nistP256, ECC\_nistP384, ECC\_brainpoolP256r1, ECC\_brainpoolP384r1): with MessageSecurityModeSign they derive the signing keys alone, as Part 6 §6.8.1 Step 1 asks (EncryptionKeyLength and InitializationVectorLength are 0 in the calculation of L, which is part of the salt), and open62541 does since v1.5.10. Without a call, or with another mode, L covers the signing key, the encrypting key and the IV, which is how open62541 v1.5.9 and earlier derive the keys in every mode.
+
 #### func (KeyExchange) Symmetric
 
 ```go

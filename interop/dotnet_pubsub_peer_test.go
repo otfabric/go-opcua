@@ -10,7 +10,7 @@
 //
 // The transport, codec and runtime tests are those of open62541
 // (pubsub_*_peer_test.go) run with the dotnet peer. Chunked NetworkMessages
-// and discovery, which open62541 1.5.9 does not implement, are here:
+// and discovery, which open62541 1.5.10 does not implement, are here:
 //
 //   - chunks: the dotnet publisher's WriterGroup has a MaxNetworkMessageSize
 //     far below its NetworkMessages, go-opcua reassembles the chunks

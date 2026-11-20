@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -178,4 +179,24 @@ func TestServerOption_WithClientCertificateTrustList_Chain(t *testing.T) {
 	untrusted := append(leafOf(otherKey, other), other.Raw...)
 	require.ErrorIs(t, validate(untrusted), ua.StatusBadCertificateUntrusted, "a CA sent along is not trusted")
 	require.ErrorIs(t, validate(append(append([]byte{}, leaf...), 0x30, 0x01)), ua.StatusBadCertificateInvalid, "trailing garbage")
+}
+
+func TestServerOption_ECCSignLegacyKeyLength(t *testing.T) {
+	srv, err := New(InsecureNoSecurity())
+	require.NoError(t, err)
+	require.False(t, srv.cfg.eccSignLegacyKeyLength)
+	require.False(t, newServerChannelBroker(srv.cfg, "").eccSignLegacyKeyLength)
+
+	srv, err = New(InsecureNoSecurity(), ECCSignLegacyKeyLength())
+	require.NoError(t, err)
+	require.True(t, srv.cfg.eccSignLegacyKeyLength)
+	require.True(t, srv.cb.eccSignLegacyKeyLength, "the channel broker copies it onto each SecureChannel")
+
+	// Start builds the channel broker when the server has none.
+	srv, err = New(InsecureNoSecurity(), EndPoint("localhost", 0), ECCSignLegacyKeyLength())
+	require.NoError(t, err)
+	srv.cb = nil
+	require.NoError(t, srv.Start(context.Background()))
+	t.Cleanup(func() { _ = srv.Close() })
+	require.True(t, srv.cb.eccSignLegacyKeyLength)
 }

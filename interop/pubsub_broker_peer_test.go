@@ -12,7 +12,7 @@
 // MQTT 5.0 listener; open62541's 3.1.1 messages carry neither and go-opcua
 // decodes them by their payload.
 //
-// AMQP 1.0: open62541 1.5.9 has no AMQP transport, so a go-opcua publisher
+// AMQP 1.0: open62541 1.5.10 has no AMQP transport, so a go-opcua publisher
 // and a go-opcua subscriber exchange UADP (unsecured and SignAndEncrypt) and
 // JSON NetworkMessages and DataSetMetaData through RabbitMQ 4 and ActiveMQ
 // Artemis, the brokers the transport is written for. This checks the
