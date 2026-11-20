@@ -440,16 +440,18 @@ const (
 // the exception, see its table entry.)
 func (p *eccPolicy) channelKeys(secret []byte, label string, nonce, peerNonce []byte, signOnly bool) (*derivedKeys, error) {
 	sig, enc, iv := p.symmetric.signingKeyLength(), p.symmetric.encryptingKeyLength(), p.symmetric.ivLength()
-	if _, cbc := p.symmetric.(cbcHMACSuite); cbc && signOnly {
-		okm, err := p.deriveKeys(secret, label, nonce, peerNonce, sig)
-		if err != nil {
-			return nil, err
-		}
-		return &derivedKeys{signing: okm, encryption: make([]byte, enc), iv: make([]byte, iv)}, nil
+	_, cbc := p.symmetric.(cbcHMACSuite)
+	length := sig + enc + iv
+	if cbc && signOnly {
+		length = sig
 	}
-	okm, err := p.deriveKeys(secret, label, nonce, peerNonce, sig+enc+iv)
+	okm, err := p.deriveKeys(secret, label, nonce, peerNonce, length)
 	if err != nil {
 		return nil, err
+	}
+	if length == sig {
+		// Sign only: the encrypting key and IV are not derived.
+		okm = append(okm, make([]byte, enc+iv)...)
 	}
 	return &derivedKeys{
 		signing:    okm[:sig],

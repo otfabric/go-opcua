@@ -3,6 +3,7 @@
 package server
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -190,4 +191,12 @@ func TestServerOption_ECCSignLegacyKeyLength(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, srv.cfg.eccSignLegacyKeyLength)
 	require.True(t, srv.cb.eccSignLegacyKeyLength, "the channel broker copies it onto each SecureChannel")
+
+	// Start builds the channel broker when the server has none.
+	srv, err = New(InsecureNoSecurity(), EndPoint("localhost", 0), ECCSignLegacyKeyLength())
+	require.NoError(t, err)
+	srv.cb = nil
+	require.NoError(t, srv.Start(context.Background()))
+	t.Cleanup(func() { _ = srv.Close() })
+	require.True(t, srv.cb.eccSignLegacyKeyLength)
 }
