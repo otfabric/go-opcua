@@ -176,6 +176,7 @@ func (c *Connections) monitor() {
 		case <-t.C:
 			c.refresh(false)
 			c.expireDue()
+			c.tickLocks()
 		}
 	}
 }
@@ -532,6 +533,7 @@ func nonNil(s []*ua.NodeID) []*ua.NodeID {
 // The endpoint leaves the connections after its nodes: who sees it gone
 // sees its nodes gone.
 func (c *Connections) deleteEndpoint(e *endpoint) {
+	c.releaseEndpoint(e)
 	if e.created {
 		if f := c.node(e.folder); f != nil {
 			f.RemoveRef(ua.NewExpandedNodeID(e.id, "", 0), ua.NewNumericNodeID(c.ns.AC, fxacid.HasConnectionEndpoint), true)

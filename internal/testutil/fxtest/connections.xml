@@ -351,4 +351,387 @@
     </References>
     <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
   </UAVariable>
+  <!-- ControlGroups (Part 81 §6.5) with the Locks of OPC 10000-100 §7:
+       Control blocks Table and restricts Gain and the Method Reset; Monitor
+       blocks Limit and restricts Gain, with a MaxInactiveLockTime of 300 ms
+       on its ListToRestrict. -->
+  <UAMethod NodeId="ns=1;i=1297" BrowseName="1:Reset">
+    <DisplayName>Reset</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAMethod>
+  <UAObject NodeId="ns=1;i=1400" BrowseName="1:Control">
+    <DisplayName>Control</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=15</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1250</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1401" BrowseName="3:ListToBlock">
+    <DisplayName>ListToBlock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=1011</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1400</Reference>
+      <Reference ReferenceType="Organizes">ns=1;i=1243</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1402" BrowseName="4:Lock">
+    <DisplayName>Lock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=4;i=6388</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1401</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1403" BrowseName="4:Locked" DataType="i=1" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Locked</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1404" BrowseName="4:LockingClient" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingClient</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1405" BrowseName="4:LockingUser" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingUser</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1406" BrowseName="4:RemainingLockTime" DataType="i=290" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>RemainingLockTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=1407" BrowseName="4:InitLock" MethodDeclarationId="ns=4;i=6393">
+    <DisplayName>InitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1408" BrowseName="4:RenewLock" MethodDeclarationId="ns=4;i=6396">
+    <DisplayName>RenewLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1409" BrowseName="4:ExitLock" MethodDeclarationId="ns=4;i=6398">
+    <DisplayName>ExitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1410" BrowseName="4:BreakLock" MethodDeclarationId="ns=4;i=6400">
+    <DisplayName>BreakLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1402</Reference>
+    </References>
+  </UAMethod>
+  <UAObject NodeId="ns=1;i=1411" BrowseName="3:ListToRestrict">
+    <DisplayName>ListToRestrict</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=1011</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1400</Reference>
+      <Reference ReferenceType="Organizes">ns=1;i=1241</Reference>
+      <Reference ReferenceType="Organizes">ns=1;i=1297</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1412" BrowseName="4:Lock">
+    <DisplayName>Lock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=4;i=6388</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1411</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1413" BrowseName="4:Locked" DataType="i=1" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Locked</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1414" BrowseName="4:LockingClient" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingClient</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1415" BrowseName="4:LockingUser" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingUser</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1416" BrowseName="4:RemainingLockTime" DataType="i=290" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>RemainingLockTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=1417" BrowseName="4:InitLock" MethodDeclarationId="ns=4;i=6393">
+    <DisplayName>InitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1418" BrowseName="4:RenewLock" MethodDeclarationId="ns=4;i=6396">
+    <DisplayName>RenewLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1419" BrowseName="4:ExitLock" MethodDeclarationId="ns=4;i=6398">
+    <DisplayName>ExitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1420" BrowseName="4:BreakLock" MethodDeclarationId="ns=4;i=6400">
+    <DisplayName>BreakLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1412</Reference>
+    </References>
+  </UAMethod>
+  <UAObject NodeId="ns=1;i=1422" BrowseName="3:ListOfRelated">
+    <DisplayName>ListOfRelated</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1400</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1423" BrowseName="3:IsControlled" DataType="i=1" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>IsControlled</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1400</Reference>
+    </References>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=1424" BrowseName="3:EstablishControl" MethodDeclarationId="ns=3;i=290">
+    <DisplayName>EstablishControl</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1400</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1425" BrowseName="3:ReleaseControl" MethodDeclarationId="ns=3;i=1493">
+    <DisplayName>ReleaseControl</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1400</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1426" BrowseName="3:ReassignControl" MethodDeclarationId="ns=3;i=7011">
+    <DisplayName>ReassignControl</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1400</Reference>
+    </References>
+  </UAMethod>
+  <UAObject NodeId="ns=1;i=1440" BrowseName="1:Monitor">
+    <DisplayName>Monitor</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=15</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1250</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1441" BrowseName="3:ListToBlock">
+    <DisplayName>ListToBlock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=1011</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1440</Reference>
+      <Reference ReferenceType="Organizes">ns=1;i=1222</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1442" BrowseName="4:Lock">
+    <DisplayName>Lock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=4;i=6388</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1441</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1443" BrowseName="4:Locked" DataType="i=1" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Locked</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1444" BrowseName="4:LockingClient" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingClient</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1445" BrowseName="4:LockingUser" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingUser</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1446" BrowseName="4:RemainingLockTime" DataType="i=290" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>RemainingLockTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=1447" BrowseName="4:InitLock" MethodDeclarationId="ns=4;i=6393">
+    <DisplayName>InitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1448" BrowseName="4:RenewLock" MethodDeclarationId="ns=4;i=6396">
+    <DisplayName>RenewLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1449" BrowseName="4:ExitLock" MethodDeclarationId="ns=4;i=6398">
+    <DisplayName>ExitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1450" BrowseName="4:BreakLock" MethodDeclarationId="ns=4;i=6400">
+    <DisplayName>BreakLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1442</Reference>
+    </References>
+  </UAMethod>
+  <UAObject NodeId="ns=1;i=1451" BrowseName="3:ListToRestrict">
+    <DisplayName>ListToRestrict</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=1011</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1440</Reference>
+      <Reference ReferenceType="Organizes">ns=1;i=1241</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1452" BrowseName="4:Lock">
+    <DisplayName>Lock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=4;i=6388</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1451</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1453" BrowseName="4:Locked" DataType="i=1" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Locked</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1454" BrowseName="4:LockingClient" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingClient</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1455" BrowseName="4:LockingUser" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>LockingUser</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"></String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1456" BrowseName="4:RemainingLockTime" DataType="i=290" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>RemainingLockTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=1457" BrowseName="4:InitLock" MethodDeclarationId="ns=4;i=6393">
+    <DisplayName>InitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1458" BrowseName="4:RenewLock" MethodDeclarationId="ns=4;i=6396">
+    <DisplayName>RenewLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1459" BrowseName="4:ExitLock" MethodDeclarationId="ns=4;i=6398">
+    <DisplayName>ExitLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1460" BrowseName="4:BreakLock" MethodDeclarationId="ns=4;i=6400">
+    <DisplayName>BreakLock</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1452</Reference>
+    </References>
+  </UAMethod>
+  <UAVariable NodeId="ns=1;i=1461" BrowseName="4:MaxInactiveLockTime" DataType="i=290" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>MaxInactiveLockTime</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1451</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">300</Double></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1462" BrowseName="3:ListOfRelated">
+    <DisplayName>ListOfRelated</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1440</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1463" BrowseName="3:IsControlled" DataType="i=1" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>IsControlled</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1440</Reference>
+    </References>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=1464" BrowseName="3:EstablishControl" MethodDeclarationId="ns=3;i=290">
+    <DisplayName>EstablishControl</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1440</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1465" BrowseName="3:ReleaseControl" MethodDeclarationId="ns=3;i=1493">
+    <DisplayName>ReleaseControl</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1440</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1466" BrowseName="3:ReassignControl" MethodDeclarationId="ns=3;i=7011">
+    <DisplayName>ReassignControl</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1440</Reference>
+    </References>
+  </UAMethod>
 </UANodeSet>

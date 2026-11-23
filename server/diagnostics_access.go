@@ -170,7 +170,10 @@ func (s *Server) checkWrite(ctx context.Context, sess *session, nid *ua.NodeID) 
 	if st := s.diag.checkWrite(sess, nid); st != ua.StatusOK {
 		return st
 	}
-	return s.cfg.accessController.CheckWrite(ctx, sess.handle(), nid)
+	if st := s.cfg.accessController.CheckWrite(ctx, sess.handle(), nid); st != ua.StatusOK {
+		return st
+	}
+	return s.guardWrite(ctx, sess, nid)
 }
 
 // checkBrowse is checkRead for browsing a node.

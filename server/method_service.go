@@ -55,6 +55,10 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 					continue
 				}
 			}
+			if st := s.srv.guardCall(ctx, sess, m.ObjectID, m.MethodID); st != ua.StatusOK {
+				results[i] = &ua.CallMethodResult{StatusCode: st}
+				continue
+			}
 		}
 		mctx := withMethodCaller(ctx, sess, sc)
 		if caller, ok := MethodCallerFromContext(mctx); ok && req.RequestHeader != nil {

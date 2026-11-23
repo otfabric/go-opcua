@@ -17,8 +17,8 @@ behaviour you may notice, and the deviations of peers are in
   unknown structures stay ExtensionObject bodies.
 - OPC UA FX (UAFX, OPC 10000-81): the information model, and non-persistent
   connections with PubSub (EstablishConnections and CloseConnections, served
-  by `uafx/fxserver` and called by `uafx`). ControlGroups (`Bad_NotSupported`),
-  persistent connections, the ConnectionManager and the other Methods of
+  by `uafx/fxserver` and called by `uafx`), with ControlGroups.
+  Persistent connections, the ConnectionManager and the other Methods of
   Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop
   implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
 - Time-scheduled Ethernet (TSN), AMQP over WebSockets, and PubSub Actions bound

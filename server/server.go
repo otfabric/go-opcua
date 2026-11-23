@@ -83,6 +83,10 @@ type Server struct {
 
 	// methods stores registered server-side method handlers keyed by "objectID\x00methodID".
 	methods map[string]MethodHandler
+	// guards are the Guards of AddGuard: a slice AddGuard replaces, never
+	// changes in place, so that requests read it without a lock.
+	guards  atomic.Pointer[[]Guard]
+	guardMu sync.Mutex
 
 	cancelMonitor context.CancelFunc
 	// writers counts the ValueWriter goroutines; Close waits for them.
@@ -830,6 +834,7 @@ func (s *Server) sessionRemoved(sess *session, reason SessionCloseReason) {
 	}
 	s.diag.sessionRemoved(sess, reason == SessionTimedOut)
 	s.observeSessionClosed(sess, reason)
+	s.guardSessionEnded(sess)
 	s.auditSessionEnd(sess, reason)
 }
 

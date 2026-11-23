@@ -238,7 +238,7 @@ func TestEstablishControlGroups(t *testing.T) {
 		groups []*ua.NodeID
 		want   ua.StatusCode
 	}{
-		"exists":       {[]*ua.NodeID{f.id(groupID)}, ua.StatusBadNotSupported},
+		"no Locks":     {[]*ua.NodeID{f.id(groupID)}, ua.StatusBadInvalidState},
 		"unknown":      {[]*ua.NodeID{f.id(9999)}, ua.StatusBadNodeIDUnknown},
 		"other FE":     {[]*ua.NodeID{f.id(remoteID)}, ua.StatusBadNodeIDUnknown},
 		"null":         {[]*ua.NodeID{ua.NewNumericNodeID(0, 0)}, ua.StatusBadNodeIDInvalid},

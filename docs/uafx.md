@@ -4,8 +4,8 @@ go-opcua reads and serves the information model of OPC UA FX, OPC 10000-81
 version 1.00.04 (Connecting Devices and Information Model), and it
 establishes and closes non-persistent UAFX connections with PubSub: a
 server answers EstablishConnections and CloseConnections (Part 81 §6.2.4,
-§6.2.5), and a client calls them. ControlGroups, persistent connections
-and the ConnectionManager are not implemented, and none of the profiles of
+§6.2.5), and a client calls them, with the ControlGroups of §6.5.
+Persistent connections and the ConnectionManager are not implemented, and none of the profiles of
 Part 84 is claimed. What is missing is listed under [Limits](#limits).
 
 | Package | What it holds |
@@ -316,19 +316,64 @@ restrict.
 
 ### ControlGroups
 
-ControlGroups are not implemented. Part 81 Table 8 requires at least one
-ConnectionEndpointConfiguration with ControlGroups when EstablishControlCmd
-or ReassignControlCmd is set, so:
+A ControlGroup (Part 81 §6.5) restricts Variables and Methods of a
+FunctionalEntity with the LockingServices of OPC 10000-100 §7. Its
+ControlItemFolders ListToBlock and ListToRestrict each have a Lock and
+organize the Variables and Methods they cover. `EnableConnections` serves
+the ControlGroups in the ControlGroups folders of the FunctionalEntities:
 
-| Request | Result |
+| While the Lock of… | is held | Others get |
+|---|---|---|
+| ListToBlock | no one writes its Variables or calls its Methods, the owner neither | `Bad_Locked` |
+| ListToRestrict | only the owner writes its Variables and calls its Methods | `Bad_Locked` |
+
+The check applies to the Write service, `server.WriteValue` and the Call
+service, after the `AccessController` (a `server.Guard`, see below). An
+owner's write or call renews its Lock. The owner is a client application,
+known by the ApplicationUri it sent with CreateSession (the LockingClient;
+the LockingUser is the user name, the subject of an X.509 identity,
+`Issued` or `Anonymous`), or a ConnectionEndpoint, whose Locks have the
+LockingClient of its NodeId and the LockingUser `UAFX` (§6.5.2).
+
+| Method | What the server does |
 |---|---|
-| Neither command | The ControlGroup results are empty |
-| EstablishControlCmd or ReassignControlCmd, no element of the call with ControlGroups | `Bad_InvalidArgument` (the call, Table 8) |
-| An element with an empty ControlGroups list, another element with ControlGroups | No-op for that element, empty results |
-| A ControlGroup that does not exist in the FunctionalEntity | `Bad_NodeIdUnknown`, the call is aborted |
-| A ControlGroup that exists | `Bad_NotSupported`, the call is aborted |
+| EstablishControl(LockContext) | Takes both Locks for the owner, all or none: the caller for a null LockContext, the client of that ApplicationUri otherwise, a ConnectionEndpoint of the server for its NodeId (§6.5.3). LockStatus -1 when a Lock, or a Lock of another ControlGroup on the same item, is held by another owner; -2 for a NodeId that is not a ConnectionEndpoint. Sets IsControlled |
+| ReleaseControl() | Releases both Locks and clears IsControlled (§6.5.4); the controller only, else `Bad_UserAccessDenied` |
+| ReassignControl(LockContext) | Gives the held Locks to another owner (§6.5.5); the controller only. LockStatus -1 when no Lock is held, -2 when the new owner holds another item of the group through another ControlGroup; a null LockContext or a NodeId that is not a ConnectionEndpoint is `Bad_InvalidArgument` |
+| InitLock, RenewLock, ExitLock, BreakLock of each Lock | As OPC 10000-100 §7.5 to §7.8: E_AlreadyLocked and E_NotLocked are -1. RenewLock and ExitLock are the owner's (`Bad_UserAccessDenied`); InitLock on the Lock of a group controlled by someone else is `Bad_UserAccessDenied`. BreakLock is the `AccessController`'s to restrict. ExitLock, BreakLock and a timeout leave IsControlled as it is |
 
-A call is not refused only because it sets EstablishControlCmd.
+A Lock without activity of its owner goes after the MaxInactiveLockTime of
+its ControlItemFolder (§6.5.6), else that of the ServerCapabilities (OPC
+10000-100 §7.4). `ConnectionOptions.MaxInactiveLockTime` sets the latter
+and writes it to the ServerCapabilities; without it the value of the
+property counts, else one minute. The Locks a client session took go when
+the session ends (OPC 10000-100 §7.2). The Locks of a ConnectionEndpoint
+are renewed while its Status is not Error, and its ControlGroups have a
+Controls Reference from the endpoint.
+
+In EstablishConnections:
+
+| Command | What the server does |
+|---|---|
+| EstablishControlCmd | EstablishControl for the caller on each ControlGroup of the element (§6.2.4.3.6). LockStatus -1 is `Bad_Locked`, -2 `Bad_InvalidState` |
+| SetConfigurationDataCmd | Writes as the ConnectionEndpoint of the element: a Variable it may not write because of a Lock is `Bad_UserAccessDenied` (Table 14) |
+| ReassignControlCmd | ReassignControl to the ConnectionEndpoint (§6.2.4.3.8), from the caller or from that endpoint; a ControlGroup controlled by someone else is `Bad_UserAccessDenied`, one that is not controlled `Bad_InvalidState` |
+
+Table 8 requires at least one ConnectionEndpointConfiguration with
+ControlGroups when EstablishControlCmd or ReassignControlCmd is set; an
+element with an empty list is a no-op, and a ControlGroup the
+FunctionalEntity does not have is `Bad_NodeIdUnknown`. When the call
+aborts, the ControlGroups its EstablishControlCmd controlled are released;
+ReassignControlCmd is not undone (Table 21). The ControlGroups a
+ConnectionEndpoint controls are changed only through EstablishConnections
+and CloseConnections: their Methods answer `Bad_UserAccessDenied` to
+clients. CloseConnections with Remove releases them (§6.2.5.2), also when
+the CleanupTimeout closes the endpoint; without Remove they stay.
+
+The checks run in a `server.Guard`, which the server consults after the
+`AccessController` for every write and call; `server.SessionEndGuard`
+learns when sessions end. An application can add its own with
+`Server.AddGuard`.
 
 ### Persistence
 
@@ -455,8 +500,8 @@ The test address space is `internal/testutil/fxtest`.
   PubSub communication model only. Verify and VerifyAsset called on their
   own and the Methods of the ConnectionManager answer `Bad_MethodInvalid`
   on a go-opcua server; VerifyAssetCmd needs an `AssetVerifier`.
-- No ControlGroups ([ControlGroups](#controlgroups)), no persistent
-  connections ([Persistence](#persistence)), no ConnectionManager behaviour
+- ControlGroups keep their Locks in memory; ListOfRelated is not
+  interpreted. No persistent connections ([Persistence](#persistence)), no ConnectionManager behaviour
   (§6.7: no ConnectionConfigurationSets are established), no
   AutomationComponent log.
 - CloseConnections with Remove removes the DataSetReaders and

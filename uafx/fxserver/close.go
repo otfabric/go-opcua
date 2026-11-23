@@ -151,8 +151,10 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 		c.deleteEndpoint(e)
 	case remove:
 		// A preconfigured endpoint stays; the RelatedEndpoint the call set
-		// goes, so that it is no longer in use (Part 81 Table 12).
+		// goes, so that it is no longer in use (Part 81 Table 12), and so
+		// do its ControlGroups (§6.2.5.2).
 		c.write(c.childID(e.id, "RelatedEndpoint"), &ua.Variant{})
+		c.releaseEndpoint(e)
 	}
 	return ua.StatusOK
 }
