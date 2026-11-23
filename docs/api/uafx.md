@@ -352,13 +352,21 @@ func Inspect(ctx context.Context, c *opcua.Client, limits Limits) (*Report, erro
 
 Inspect reads the UAFX model of the server c is connected to: the namespaces, FxRoot, the AutomationComponents with their Assets, FunctionalEntities and ConnectionEndpoints, and the ConnectionManagers. A node that is missing or cannot be read is left out of the report or becomes a Finding; Inspect returns an error only when a service call fails. Its Browse and Read requests ask for one node at a time, or as many as the MaxNodesPerRead of the server allows (Part 5 §6.3.11).
 
+#### func (Report) HasFXNamespaces
+
+```go
+func (r *Report) HasFXNamespaces() bool
+```
+
+HasFXNamespaces reports whether the server has the namespaces Part 81 §14.2 (Table 260) makes mandatory for a UAFX server: DI, the UAFX Data namespace and at least one of AC and CM. It says nothing about the model in them.
+
 #### func (Report) IsFXServer
 
 ```go
 func (r *Report) IsFXServer() bool
 ```
 
-IsFXServer reports whether the server has the namespaces a UAFX server has: the Data namespace and at least one of AC and CM (Part 81 §14.2).
+IsFXServer reports whether the server has the structure of a UAFX server: the namespaces of HasFXNamespaces and FxRoot, which every server that exposes the UAFX model has (Part 81 §12.2). It is not a conformance statement: Findings lists what Inspect saw deviate from Part 81, and the behaviour of the model is not inspected at all.
 
 #### func (Report) Namespace
 

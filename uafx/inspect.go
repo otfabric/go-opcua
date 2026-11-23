@@ -67,13 +67,25 @@ func (r *Report) Namespace(uri string) (Namespace, bool) {
 	return Namespace{}, false
 }
 
-// IsFXServer reports whether the server has the namespaces a UAFX server
-// has: the Data namespace and at least one of AC and CM (Part 81 §14.2).
-func (r *Report) IsFXServer() bool {
+// HasFXNamespaces reports whether the server has the namespaces Part 81
+// §14.2 (Table 260) makes mandatory for a UAFX server: DI, the UAFX Data
+// namespace and at least one of AC and CM. It says nothing about the
+// model in them.
+func (r *Report) HasFXNamespaces() bool {
+	_, di := r.Namespace(diid.NamespaceURI)
 	_, data := r.Namespace(fxdataid.NamespaceURI)
 	_, ac := r.Namespace(fxacid.NamespaceURI)
 	_, cm := r.Namespace(fxcmid.NamespaceURI)
-	return data && (ac || cm)
+	return di && data && (ac || cm)
+}
+
+// IsFXServer reports whether the server has the structure of a UAFX
+// server: the namespaces of HasFXNamespaces and FxRoot, which every server
+// that exposes the UAFX model has (Part 81 §12.2). It is not a conformance
+// statement: Findings lists what Inspect saw deviate from Part 81, and the
+// behaviour of the model is not inspected at all.
+func (r *Report) IsFXServer() bool {
+	return r.HasFXNamespaces() && r.FxRoot != nil
 }
 
 // Finding is a deviation from Part 81 that Inspect found.
@@ -343,6 +355,9 @@ func (in *inspector) run(ctx context.Context) (*Report, error) {
 	if in.ns.ac == 0 && in.ns.cm == 0 {
 		in.find(nil, "", "14.2", "the server has the UAFX Data namespace but neither the AC nor the CM namespace")
 	}
+	if in.ns.di == 0 {
+		in.find(nil, "", "14.2", "the server has the UAFX Data namespace but not the mandatory DI namespace")
+	}
 	if err := in.readFxRoot(ctx); err != nil {
 		return nil, err
 	}
@@ -364,7 +379,7 @@ func (in *inspector) readNamespaceMetadata(ctx context.Context) error {
 		if ref.NodeClass != ua.NodeClassObject {
 			continue
 		}
-		props, err := in.readChildren(ctx, ref.NodeID.NodeID, "NamespaceUri", "NamespaceVersion", "NamespacePublicationDate")
+		props, err := in.readChildren(ctx, ref.NodeID.NodeID, 0, "NamespaceUri", "NamespaceVersion", "NamespacePublicationDate")
 		if err != nil {
 			return err
 		}
@@ -426,8 +441,17 @@ func (in *inspector) readFxRoot(ctx context.Context) error {
 			break
 		}
 		node := nodeOf(ref)
-		isAC := in.ns.ac != 0 && in.isSubtype(ctx, node.TypeDefinition, acType)
-		isCM := !isAC && in.ns.cm != 0 && in.isSubtype(ctx, node.TypeDefinition, cmType)
+		var isAC, isCM bool
+		if in.ns.ac != 0 {
+			if isAC, err = in.isSubtype(ctx, node.TypeDefinition, acType); err != nil {
+				return err
+			}
+		}
+		if !isAC && in.ns.cm != 0 {
+			if isCM, err = in.isSubtype(ctx, node.TypeDefinition, cmType); err != nil {
+				return err
+			}
+		}
 		if (!isAC && !isCM) || !in.visit(node.NodeID) {
 			continue
 		}
@@ -462,9 +486,9 @@ func (in *inspector) readAC(ctx context.Context, ac Node) (AutomationComponent, 
 		return out, err
 	}
 	byName := index(members)
-	in.checkMandatory(ac.NodeID, path, "6.2.2", "AutomationComponent", byName, mandatoryAC)
+	in.checkMandatory(ac.NodeID, path, "6.2.2", "AutomationComponent", byName, in.ns.ac, mandatoryAC)
 
-	vals, err := in.readRefs(ctx, byName, "ConformanceName", "AggregatedHealth")
+	vals, err := in.readRefs(ctx, byName, in.ns.ac, "ConformanceName", "AggregatedHealth")
 	if err != nil {
 		return out, err
 	}
@@ -472,13 +496,13 @@ func (in *inspector) readAC(ctx context.Context, ac Node) (AutomationComponent, 
 	if v := vals["AggregatedHealth"]; val(v) != nil {
 		h, err := decodeAggregatedHealth(v, in.ns.ac)
 		if err != nil {
-			in.find(byName["AggregatedHealth"].NodeID.NodeID, path+"/AggregatedHealth", "10.1", "%v", err)
+			in.find(byName.get(in.ns.ac, "AggregatedHealth").NodeID.NodeID, path+"/AggregatedHealth", "10.1", "%v", err)
 		} else {
 			out.AggregatedHealth = h
 		}
 	}
 
-	if ref := byName["Assets"]; ref != nil {
+	if ref := byName.get(in.ns.ac, "Assets"); ref != nil {
 		assetType := ua.NewNumericNodeID(in.ns.ac, fxacid.FxAssetType)
 		assets, err := in.typedChildren(ctx, ref.NodeID.NodeID, assetType)
 		if err != nil {
@@ -492,14 +516,14 @@ func (in *inspector) readAC(ctx context.Context, ac Node) (AutomationComponent, 
 			out.Assets = append(out.Assets, asset)
 		}
 	}
-	if ref := byName["FunctionalEntities"]; ref != nil {
+	if ref := byName.get(in.ns.ac, "FunctionalEntities"); ref != nil {
 		fes, err := in.readFunctionalEntities(ctx, ref.NodeID.NodeID, path+"/FunctionalEntities", 0)
 		if err != nil {
 			return out, err
 		}
 		out.FunctionalEntities = fes
 	}
-	if ref := byName["Descriptors"]; ref != nil {
+	if ref := byName.get(in.ns.ac, "Descriptors"); ref != nil {
 		descType := ua.NewNumericNodeID(in.ns.ac, fxacid.AcDescriptorType)
 		descs, err := in.typedChildren(ctx, ref.NodeID.NodeID, descType)
 		if err != nil {
@@ -516,7 +540,12 @@ func (in *inspector) readAsset(ctx context.Context, a Node) (Asset, error) {
 	if err != nil {
 		return out, err
 	}
-	vals, err := in.readRefs(ctx, index(members),
+	// The nameplate of an asset is that of the interfaces of DI it has
+	// (Part 81 §6.3.2): its BrowseNames are in the DI namespace.
+	if in.ns.di == 0 {
+		return out, nil
+	}
+	vals, err := in.readRefs(ctx, index(members), in.ns.di,
 		"Manufacturer", "ManufacturerUri", "Model", "ProductCode", "HardwareRevision", "SoftwareRevision",
 		"DeviceRevision", "SerialNumber", "ProductInstanceUri", "AssetId", "ComponentName", "DeviceClass")
 	if err != nil {
@@ -564,7 +593,7 @@ func (in *inspector) readFunctionalEntity(ctx context.Context, n Node, path stri
 		return out, err
 	}
 	byName := index(members)
-	vals, err := in.readRefs(ctx, byName, "AuthorUri", "AuthorAssignedIdentifier", "AuthorAssignedVersion", "OperationalHealth")
+	vals, err := in.readRefs(ctx, byName, in.ns.ac, "AuthorUri", "AuthorAssignedIdentifier", "AuthorAssignedVersion", "OperationalHealth")
 	if err != nil {
 		return out, err
 	}
@@ -584,7 +613,7 @@ func (in *inspector) readFunctionalEntity(ctx context.Context, n Node, path stri
 			out.OperationalHealth = &oh
 		}
 	}
-	if ref := byName["ConnectionEndpoints"]; ref != nil {
+	if ref := byName.get(in.ns.ac, "ConnectionEndpoints"); ref != nil {
 		ceType := ua.NewNumericNodeID(in.ns.ac, fxacid.ConnectionEndpointType)
 		ces, err := in.typedChildren(ctx, ref.NodeID.NodeID, ceType)
 		if err != nil {
@@ -623,11 +652,15 @@ func (in *inspector) readEndpoint(ctx context.Context, n Node, path string) (Con
 		return out, err
 	}
 	byName := index(members)
-	in.checkMandatory(n.NodeID, path, "6.6.2", "ConnectionEndpoint", byName, mandatoryEndpoint)
-	if in.isSubtype(ctx, n.TypeDefinition, ua.NewNumericNodeID(in.ns.ac, fxacid.PubSubConnectionEndpointType)) {
-		in.checkMandatory(n.NodeID, path, "6.6.3", "PubSubConnectionEndpoint", byName, mandatoryPubSubEndpoint)
+	in.checkMandatory(n.NodeID, path, "6.6.2", "ConnectionEndpoint", byName, in.ns.ac, mandatoryEndpoint)
+	pubSub, err := in.isSubtype(ctx, n.TypeDefinition, ua.NewNumericNodeID(in.ns.ac, fxacid.PubSubConnectionEndpointType))
+	if err != nil {
+		return out, err
 	}
-	vals, err := in.readRefs(ctx, byName, "Status", "IsPersistent", "CleanupTimeout", "ConnectionManagerApplicationUri")
+	if pubSub {
+		in.checkMandatory(n.NodeID, path, "6.6.3", "PubSubConnectionEndpoint", byName, in.ns.ac, mandatoryPubSubEndpoint)
+	}
+	vals, err := in.readRefs(ctx, byName, in.ns.ac, "Status", "IsPersistent", "CleanupTimeout", "ConnectionManagerApplicationUri")
 	if err != nil {
 		return out, err
 	}
@@ -653,8 +686,8 @@ func (in *inspector) readCM(ctx context.Context, n Node) (ConnectionManager, err
 		return out, err
 	}
 	byName := index(members)
-	in.checkMandatory(n.NodeID, path, "6.7.2", "ConnectionManager", byName, mandatoryCM)
-	if ref := byName["ConnectionConfigurationSets"]; ref != nil {
+	in.checkMandatory(n.NodeID, path, "6.7.2", "ConnectionManager", byName, in.ns.cm, mandatoryCM)
+	if ref := byName.get(in.ns.cm, "ConnectionConfigurationSets"); ref != nil {
 		sets, err := in.children(ctx, ref.NodeID.NodeID)
 		if err != nil {
 			return out, err
@@ -668,10 +701,11 @@ func (in *inspector) readCM(ctx context.Context, n Node) (ConnectionManager, err
 	return out, nil
 }
 
-// checkMandatory adds a Finding for each name of want that has is missing.
-func (in *inspector) checkMandatory(node *ua.NodeID, path, clause, what string, has map[string]*ua.ReferenceDescription, want []string) {
+// checkMandatory adds a Finding for each name of want, in the namespace
+// ns, that has is missing.
+func (in *inspector) checkMandatory(node *ua.NodeID, path, clause, what string, has members, ns uint16, want []string) {
 	for _, m := range want {
-		if has[m] == nil {
+		if has.get(ns, m) == nil {
 			in.find(node, path, clause, "%s has no mandatory %s", what, m)
 		}
 	}
@@ -690,7 +724,11 @@ func (in *inspector) typedChildren(ctx context.Context, parent *ua.NodeID, typ *
 			continue
 		}
 		n := nodeOf(ref)
-		if !in.isSubtype(ctx, n.TypeDefinition, typ) {
+		ok, err := in.isSubtype(ctx, n.TypeDefinition, typ)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
 			continue
 		}
 		if len(out) >= in.lim.MaxChildren {
@@ -746,12 +784,20 @@ func (in *inspector) browse(ctx context.Context, n *ua.NodeID, refType uint32, m
 	// used up or released (Part 4 §5.8.3): release it on every way out.
 	defer func() {
 		if len(cp) > 0 {
-			_, _ = in.c.BrowseNext(ctx, &ua.BrowseNextRequest{ReleaseContinuationPoints: true, ContinuationPoints: [][]byte{cp}})
+			in.release(ctx, cp)
 		}
 	}()
 	limit := in.lim.MaxChildren * 4 // members of a node besides its typed children
-	for len(cp) > 0 {
-		if len(refs) >= limit {
+	for {
+		if len(refs) > limit {
+			refs = refs[:limit]
+			in.r.Truncated = true
+			break
+		}
+		if len(cp) == 0 {
+			break
+		}
+		if len(refs) == limit {
 			in.r.Truncated = true
 			break
 		}
@@ -789,13 +835,26 @@ func (in *inspector) browse(ctx context.Context, n *ua.NodeID, refType uint32, m
 	return out, nil
 }
 
-// readRefs reads the Value of the children of names that byName has, in
-// one Read. A child the server cannot read has no entry.
-func (in *inspector) readRefs(ctx context.Context, byName map[string]*ua.ReferenceDescription, names ...string) (map[string]*ua.Variant, error) {
+// releaseTimeout bounds the BrowseNext that releases a continuation point.
+const releaseTimeout = 5 * time.Second
+
+// release releases the continuation point cp. It runs also when ctx is
+// done, the reason Inspect returns early, so it has a context of its own
+// that keeps the values of ctx.
+func (in *inspector) release(ctx context.Context, cp []byte) {
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseTimeout)
+	defer cancel()
+	_, _ = in.c.BrowseNext(ctx, &ua.BrowseNextRequest{ReleaseContinuationPoints: true, ContinuationPoints: [][]byte{cp}})
+}
+
+// readRefs reads the Value of the children byName has with the names in
+// the namespace ns, in one Read. A child the server cannot read has no
+// entry.
+func (in *inspector) readRefs(ctx context.Context, byName members, ns uint16, names ...string) (map[string]*ua.Variant, error) {
 	var ids []*ua.NodeID
 	var have []string
 	for _, n := range names {
-		if ref := byName[n]; ref != nil && ref.NodeClass == ua.NodeClassVariable {
+		if ref := byName.get(ns, n); ref != nil && ref.NodeClass == ua.NodeClassVariable {
 			ids = append(ids, ref.NodeID.NodeID)
 			have = append(have, n)
 		}
@@ -817,13 +876,13 @@ func (in *inspector) readRefs(ctx context.Context, byName map[string]*ua.Referen
 }
 
 // readChildren reads the Values of the children of n with the given
-// browse names.
-func (in *inspector) readChildren(ctx context.Context, n *ua.NodeID, names ...string) (map[string]*ua.Variant, error) {
+// browse names in the namespace ns.
+func (in *inspector) readChildren(ctx context.Context, n *ua.NodeID, ns uint16, names ...string) (map[string]*ua.Variant, error) {
 	refs, err := in.children(ctx, n)
 	if err != nil {
 		return nil, err
 	}
-	return in.readRefs(ctx, index(refs), names...)
+	return in.readRefs(ctx, index(refs), ns, names...)
 }
 
 // read reads the Value attribute of ids. The value of a node the server
@@ -878,38 +937,45 @@ func (in *inspector) readBatch(ctx context.Context, ids []*ua.NodeID) ([]*ua.Var
 }
 
 // isSubtype reports whether typ is base or one of its subtypes, by the
-// inverse HasSubtype references of typ and its supertypes.
-func (in *inspector) isSubtype(ctx context.Context, typ, base *ua.NodeID) bool {
+// inverse HasSubtype references of typ and its supertypes. A type whose
+// supertype the server cannot tell is an ErrInspect, not "no subtype": a
+// component of a vendor type must not drop out of the report unnoticed. A
+// chain longer than maxSubtypeDepth, or more types than
+// maxSupertypeLookups, truncates the report.
+func (in *inspector) isSubtype(ctx context.Context, typ, base *ua.NodeID) (bool, error) {
 	for range maxSubtypeDepth {
 		if typ == nil {
-			return false
+			return false, nil
 		}
 		if typ.Equal(base) {
-			return true
+			return true, nil
 		}
 		if typ.Namespace() == 0 {
 			// The UAFX types derive from types of namespace 0, never
 			// the other way around.
-			return false
+			return false, nil
 		}
 		key := typ.String()
 		super, ok := in.supertypes[key]
 		if !ok {
 			if len(in.supertypes) >= maxSupertypeLookups {
 				in.r.Truncated = true
-				return false
+				return false, nil
 			}
-			super = in.supertype(ctx, typ)
+			var err error
+			if super, err = in.supertype(ctx, typ); err != nil {
+				return false, err
+			}
 			in.supertypes[key] = super
 		}
 		typ = super
 	}
-	return false
+	in.r.Truncated = true
+	return false, nil
 }
 
-// supertype returns the supertype of typ, nil if it has none or the
-// server cannot tell.
-func (in *inspector) supertype(ctx context.Context, typ *ua.NodeID) *ua.NodeID {
+// supertype returns the supertype of typ, nil if it has none.
+func (in *inspector) supertype(ctx context.Context, typ *ua.NodeID) (*ua.NodeID, error) {
 	req := &ua.BrowseRequest{
 		View: &ua.ViewDescription{ViewID: ua.NewTwoByteNodeID(0)},
 		NodesToBrowse: []*ua.BrowseDescription{{
@@ -921,14 +987,25 @@ func (in *inspector) supertype(ctx context.Context, typ *ua.NodeID) *ua.NodeID {
 		}},
 	}
 	resp, err := in.c.Browse(ctx, req)
-	if err != nil || len(resp.Results) != 1 || len(resp.Results[0].References) == 0 {
-		return nil
+	if err != nil {
+		return nil, fmt.Errorf("%w: supertype of %v: %w", ErrInspect, typ, err)
 	}
-	ref := resp.Results[0].References[0]
-	if ref.NodeID == nil {
-		return nil
+	if len(resp.Results) != 1 {
+		return nil, fmt.Errorf("%w: supertype of %v: %d results for 1 node", ErrInspect, typ, len(resp.Results))
 	}
-	return ref.NodeID.NodeID
+	res := resp.Results[0]
+	if res.StatusCode != ua.StatusOK {
+		return nil, fmt.Errorf("%w: supertype of %v: %w", ErrInspect, typ, res.StatusCode)
+	}
+	if len(res.ContinuationPoint) > 0 {
+		in.release(ctx, res.ContinuationPoint)
+	}
+	for _, ref := range res.References {
+		if ref != nil && ref.NodeID != nil && ref.NodeID.NodeID != nil {
+			return ref.NodeID.NodeID, nil
+		}
+	}
+	return nil, nil
 }
 
 func nodeOf(ref *ua.ReferenceDescription) Node {
@@ -945,16 +1022,28 @@ func nodeOf(ref *ua.ReferenceDescription) Node {
 	return n
 }
 
+// members are the children of a node by their BrowseName: namespace index
+// and name. A member of a standard type has the BrowseName the standard
+// gives it, in the namespace of the standard (Part 81 §14.2), so a vendor
+// child of the same name in another namespace is a different member.
+type members map[ua.QualifiedName]*ua.ReferenceDescription
+
+// get returns the member with the name in the namespace ns, nil if there
+// is none.
+func (m members) get(ns uint16, name string) *ua.ReferenceDescription {
+	return m[ua.QualifiedName{NamespaceIndex: ns, Name: name}]
+}
+
 // index maps the browse names of refs to the references. The first of two
-// references with the same name wins.
-func index(refs []*ua.ReferenceDescription) map[string]*ua.ReferenceDescription {
-	m := make(map[string]*ua.ReferenceDescription, len(refs))
+// references with the same BrowseName wins.
+func index(refs []*ua.ReferenceDescription) members {
+	m := make(members, len(refs))
 	for _, r := range refs {
 		if r.BrowseName == nil || r.NodeID == nil {
 			continue
 		}
-		if _, ok := m[r.BrowseName.Name]; !ok {
-			m[r.BrowseName.Name] = r
+		if _, ok := m[*r.BrowseName]; !ok {
+			m[*r.BrowseName] = r
 		}
 	}
 	return m

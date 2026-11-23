@@ -1748,6 +1748,7 @@ func (s *Server) Status() *ua.ServerStatusDataType
 func (s *Server) Node(nid *ua.NodeID) *Node
 func (s *Server) ChangeNotification(n *ua.NodeID)
 func (s *Server) Port() int
+func (s *Server) ApplicationURI() string // the ApplicationURI option or the URI of the certificate
 func (s *Server) RegisteredServers() []*ua.RegisteredServer // Local Discovery Server: the registered servers
 func (s *Server) ServersOnNetwork() []*ua.ServerOnNetwork   // multicast discovery: the ServerOnNetwork table
 func (s *Server) ServerDiagnosticsSummary() *ua.ServerDiagnosticsSummaryDataType
@@ -2969,7 +2970,8 @@ type Report struct {
 	Truncated            bool      // a Limit was reached
 }
 func (r *Report) Namespace(uri string) (Namespace, bool)
-func (r *Report) IsFXServer() bool // Data and AC or CM (Part 81 §14.2)
+func (r *Report) HasFXNamespaces() bool // DI, Data, and AC or CM (Part 81 §14.2)
+func (r *Report) IsFXServer() bool      // HasFXNamespaces and FxRoot (§12.2); not a conformance statement
 ```
 
 `AutomationComponent` (ConformanceName, AggregatedHealth, Assets, FunctionalEntities,
@@ -2984,7 +2986,7 @@ NodeIds: packages `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid` and `di/diid`, e
 ## Package `uafx/fxserver`
 
 ```go
-func AddModel(srv *server.Server, models ...Model) (Namespaces, error) // ModelAC, ModelCM; both when none; ErrModel
+func AddModel(srv *server.Server, models ...Model) (Namespaces, error) // ModelAC, ModelCM; both when none; namespace 1 first; ErrModel
 func ImportNodeSet(srv *server.Server, data []byte) error             // maps the namespace table of the document (Part 6 §F.2)
 type Namespaces struct{ DI, Data, AC, CM uint16 }
 ```

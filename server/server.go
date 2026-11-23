@@ -600,6 +600,13 @@ func (s *Server) URLs() []string {
 	return append(urls, s.cfg.https.endpoints...)
 }
 
+// ApplicationURI returns the ApplicationUri of the server, from the
+// [ApplicationURI] option or the URI of its certificate; "" when neither
+// gives one.
+func (s *Server) ApplicationURI() string {
+	return s.cfg.applicationURI
+}
+
 // Port returns the TCP port the server is bound to after [Server.Start], or 0
 // if the server is not listening. Useful when ListenOn used port 0.
 func (s *Server) Port() int {

@@ -75,4 +75,8 @@ Namespaces are the namespace indexes of the UAFX model on a server. An index of 
 func AddModel(srv *server.Server, models ...Model) (Namespaces, error)
 ```
 
-AddModel imports the UAFX model into srv: the Data namespace, which a UAFX server must have, and the AC and CM models selected by models, both when models is empty (Part 81 §14.2: a UAFX server has at least one of them). DI is imported unless the server has the DI namespace already, for example from an application that imported it before. A UAFX namespace the server has already is an error.
+AddModel imports the UAFX model into srv: the Data namespace, which a UAFX server must have, and the AC and CM models selected by models, both when models is empty (Part 81 §14.2: a UAFX server has at least one of them).
+
+Namespace index 1 is the namespace of the local server (Part 81 §14.2, Table 260). A server that has no namespace besides namespace 0 gets one named by its ApplicationUri ([server.ApplicationURI](https://pkg.go.dev/github.com/otfabric/go-opcua/server#ApplicationURI) or the URI of its certificate) before the model; without an ApplicationUri that is an error. A server whose namespace 1 is the DI namespace is an error too.
+
+DI is imported unless the server has the DI namespace already, for example from an application that imported it before. The DI nodes the UAFX model refers to must then be on the server with the NodeClass the DI NodeSet gives them, or AddModel fails without importing anything. A UAFX namespace the server has already is an error.

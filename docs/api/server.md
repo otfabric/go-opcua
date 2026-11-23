@@ -3914,6 +3914,14 @@ func (s *Server) AlarmMetrics(metricsID *ua.NodeID) (*AlarmMetrics, bool)
 
 AlarmMetrics returns the AlarmMetrics object with the given NodeId.
 
+#### func (Server) ApplicationURI
+
+```go
+func (s *Server) ApplicationURI() string
+```
+
+ApplicationURI returns the ApplicationUri of the server, from the [ApplicationURI](#func-applicationuri) option or the URI of its certificate; "" when neither gives one.
+
 #### func (Server) Auditing
 
 ```go

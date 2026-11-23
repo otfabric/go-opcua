@@ -23,6 +23,14 @@ func TestServer(t *testing.T) {
 	t.Cleanup(func() { _ = srv.Close() })
 	c := testutil.NewTestClient(t, fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()))
 
+	arr, err := c.NamespaceArray(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if arr[1] != applicationURI {
+		t.Fatalf("namespace 1 is %s, want %s (Part 81 §14.2)", arr[1], applicationURI)
+	}
+
 	r, err := uafx.Inspect(ctx, c, uafx.Limits{})
 	if err != nil {
 		t.Fatal(err)

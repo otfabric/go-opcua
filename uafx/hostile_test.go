@@ -98,7 +98,7 @@ func (h *hostile) refs() []*ua.ReferenceDescription {
 	for range n {
 		r := &ua.ReferenceDescription{
 			NodeID:         &ua.ExpandedNodeID{NodeID: h.nodeID()},
-			BrowseName:     &ua.QualifiedName{Name: hostileNames[int(h.next())%len(hostileNames)]},
+			BrowseName:     &ua.QualifiedName{NamespaceIndex: uint16(h.next() % 6), Name: hostileNames[int(h.next())%len(hostileNames)]},
 			DisplayName:    ua.NewLocalizedText("d"),
 			NodeClass:      []ua.NodeClass{ua.NodeClassObject, ua.NodeClassVariable, ua.NodeClassMethod}[h.next()%3],
 			TypeDefinition: h.typeDef(),
@@ -276,7 +276,7 @@ func (c *cyclic) Browse(_ context.Context, req *ua.BrowseRequest) (*ua.BrowseRes
 	ref := func(id uint32, name string, typ uint32, ns uint16) {
 		refs = append(refs, &ua.ReferenceDescription{
 			NodeID:         ua.NewNumericExpandedNodeID(5, id),
-			BrowseName:     &ua.QualifiedName{Name: name},
+			BrowseName:     &ua.QualifiedName{NamespaceIndex: 3, Name: name}, // the AC namespace
 			NodeClass:      ua.NodeClassObject,
 			TypeDefinition: ua.NewNumericExpandedNodeID(ns, typ),
 		})
@@ -337,7 +337,9 @@ func TestInspectSupertypeBudget(t *testing.T) {
 	in := &inspector{c: &chain{}, lim: Limits{}.withDefaults(), r: &Report{}, supertypes: map[string]*ua.NodeID{}, visited: map[string]bool{}}
 	base := ua.NewNumericNodeID(3, fxacid.AutomationComponentType)
 	for i := range uint32(maxSupertypeLookups + 10) {
-		assert.False(t, in.isSubtype(context.Background(), ua.NewNumericNodeID(7, i), base))
+		ok, err := in.isSubtype(context.Background(), ua.NewNumericNodeID(7, i), base)
+		require.NoError(t, err)
+		assert.False(t, ok)
 	}
 	assert.True(t, in.r.Truncated)
 	assert.LessOrEqual(t, len(in.supertypes), maxSupertypeLookups)

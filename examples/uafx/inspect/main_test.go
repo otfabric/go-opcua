@@ -12,13 +12,14 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 )
 
 func TestRun(t *testing.T) {
 	ctx := context.Background()
-	srv, url := testutil.NewTestServer(t)
+	srv, url := testutil.NewTestServer(t, server.ApplicationURI("urn:example:uafx:server"))
 	if _, err := fxserver.AddModel(srv); err != nil {
 		t.Fatal(err)
 	}

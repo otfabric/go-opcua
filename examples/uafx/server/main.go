@@ -34,6 +34,10 @@ import (
 //go:embed controller.xml
 var controller []byte
 
+// applicationURI is the ApplicationUri of the server, and the name of
+// namespace 1, the namespace of the local server (Part 81 §14.2).
+const applicationURI = "urn:example:uafx:server"
+
 // controllerNS is the namespace of controller.xml.
 const controllerNS = "urn:example:uafx:controller"
 
@@ -84,6 +88,7 @@ func newServer(host string, port int) (*server.Server, error) {
 		server.EndPoint(host, port),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		server.ApplicationURI(applicationURI),
 	)
 	if err != nil {
 		return nil, err

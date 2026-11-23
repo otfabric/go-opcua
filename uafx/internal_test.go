@@ -7,13 +7,14 @@ import (
 	"math"
 	"slices"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/di/diid"
+	"github.com/otfabric/go-opcua/internal/nodeset"
 	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
@@ -21,10 +22,26 @@ import (
 	"github.com/otfabric/go-opcua/uafx/internal/model"
 )
 
-// mandatoryOf returns the browse names, without prefix, of the members of
-// the type typeID of the NodeSet doc with the ModellingRule Mandatory
-// (i=78), sorted.
+// mandatoryOf returns the browse names, with their namespace prefix, of
+// the members of the type typeID of the NodeSet doc with the ModellingRule
+// Mandatory (i=78), sorted.
 func mandatoryOf(t *testing.T, doc []byte, typeID uint32) []string {
+	t.Helper()
+	all, rules := membersOf(t, doc, typeID)
+	var out []string
+	for _, bn := range all {
+		if rules[bn] == "i=78" {
+			out = append(out, bn)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
+// membersOf returns the browse names, with their namespace prefix, of the
+// forward members of the type typeID of the NodeSet doc, and their
+// ModellingRules.
+func membersOf(t *testing.T, doc []byte, typeID uint32) ([]string, map[string]string) {
 	t.Helper()
 	var ns schema.UANodeSet
 	require.NoError(t, xml.Unmarshal(doc, &ns))
@@ -53,6 +70,7 @@ func mandatoryOf(t *testing.T, doc []byte, typeID uint32) []string {
 	typ, ok := nodes["ns=1;i="+strconv.FormatUint(uint64(typeID), 10)]
 	require.True(t, ok, "type %d", typeID)
 	var out []string
+	rules := map[string]string{}
 	for _, r := range typ.refs {
 		if r.IsForwardAttr != nil && !*r.IsForwardAttr {
 			continue
@@ -61,14 +79,22 @@ func mandatoryOf(t *testing.T, doc []byte, typeID uint32) []string {
 		if !ok {
 			continue
 		}
+		out = append(out, m.browseName)
 		for _, mr := range m.refs {
-			if mr.ReferenceTypeAttr == "HasModellingRule" && mr.Value == "i=78" {
-				_, name, _ := strings.Cut(m.browseName, ":")
-				out = append(out, name)
+			if mr.ReferenceTypeAttr == "HasModellingRule" {
+				rules[m.browseName] = mr.Value
 			}
 		}
 	}
-	slices.Sort(out)
+	return out, rules
+}
+
+// prefixed returns names with the namespace prefix p.
+func prefixed(p string, names []string) []string {
+	out := make([]string, len(names))
+	for i, n := range names {
+		out[i] = p + ":" + n
+	}
 	return out
 }
 
@@ -87,9 +113,34 @@ func TestMandatoryMatchesModel(t *testing.T) {
 		{"ConnectionManagerType", model.CM, fxcmid.ConnectionManagerType, mandatoryCM},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			want := slices.Sorted(slices.Values(tc.want))
-			assert.Equal(t, mandatoryOf(t, tc.doc, tc.typ), want)
+			// Members of the type itself are in its namespace, 1 of its
+			// document; Inspect matches them there (Part 81 §14.2).
+			want := slices.Sorted(slices.Values(prefixed("1", tc.want)))
+			assert.Equal(t, want, mandatoryOf(t, tc.doc, tc.typ))
 		})
+	}
+}
+
+// TestMembersNamespaces checks the namespace in which Inspect looks for
+// every member it reads against the BrowseNames of the embedded NodeSets:
+// the own namespace of the type (1 of the document), or DI (2 of the AC
+// document) for the nameplate of an asset.
+func TestMembersNamespaces(t *testing.T) {
+	uris, err := nodeset.URIs(model.AC)
+	require.NoError(t, err)
+	require.Equal(t, diid.NamespaceURI, uris[1], "namespace 2 of the AC document is DI")
+	for _, tc := range []struct {
+		typ   uint32
+		ns    string
+		names []string
+	}{
+		{fxacid.AutomationComponentType, "1", []string{"ConformanceName", "AggregatedHealth", "Assets", "FunctionalEntities", "Descriptors"}},
+		{fxacid.FunctionalEntityType, "1", []string{"AuthorUri", "AuthorAssignedIdentifier", "AuthorAssignedVersion", "OperationalHealth", "ConnectionEndpoints"}},
+		{fxacid.ConnectionEndpointType, "1", []string{"Status", "IsPersistent", "CleanupTimeout", "ConnectionManagerApplicationUri"}},
+		{fxacid.FxAssetType, "2", []string{"Manufacturer", "ManufacturerUri", "Model", "ProductCode", "HardwareRevision", "SoftwareRevision", "DeviceRevision", "SerialNumber", "ProductInstanceUri", "AssetId", "ComponentName", "DeviceClass"}},
+	} {
+		all, _ := membersOf(t, model.AC, tc.typ)
+		assert.Subset(t, all, prefixed(tc.ns, tc.names), "type %d", tc.typ)
 	}
 }
 
@@ -201,10 +252,13 @@ func TestIndexAndNodeOf(t *testing.T) {
 		{BrowseName: &ua.QualifiedName{Name: "A"}, NodeID: ua.NewNumericExpandedNodeID(1, 2)},
 		{BrowseName: nil, NodeID: ua.NewNumericExpandedNodeID(1, 3)},
 		{BrowseName: &ua.QualifiedName{Name: "B"}},
+		{BrowseName: &ua.QualifiedName{NamespaceIndex: 7, Name: "A"}, NodeID: ua.NewNumericExpandedNodeID(1, 4)},
 	}
 	m := index(refs)
-	require.Len(t, m, 1)
-	assert.Equal(t, uint32(1), m["A"].NodeID.NodeID.IntID())
+	require.Len(t, m, 2)
+	assert.Equal(t, uint32(1), m.get(0, "A").NodeID.NodeID.IntID())
+	assert.Equal(t, uint32(4), m.get(7, "A").NodeID.NodeID.IntID(), "the same name in another namespace")
+	assert.Nil(t, m.get(3, "A"))
 	n := nodeOf(&ua.ReferenceDescription{NodeID: ua.NewNumericExpandedNodeID(1, 5)})
 	assert.NotNil(t, n.BrowseName)
 	assert.Equal(t, "", n.DisplayName)

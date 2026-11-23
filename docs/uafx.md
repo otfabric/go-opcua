@@ -27,7 +27,7 @@ r, err := uafx.Inspect(ctx, client, uafx.Limits{})
 if err != nil {
 	return err // a service call failed
 }
-fmt.Println("UAFX server:", r.IsFXServer())
+fmt.Println("UAFX namespaces:", r.HasFXNamespaces(), "UAFX server:", r.IsFXServer())
 for _, ac := range r.AutomationComponents {
 	if h := ac.AggregatedHealth; h != nil {
 		fmt.Println(ac.BrowseName.Name, h.AggregatedDeviceHealth, h.AggregatedOperationalHealth)
@@ -57,7 +57,12 @@ for _, f := range r.Findings {
 | The ConnectionManager organized by FxRoot and its ConnectionConfigurationSets | §6.7.2, §12.3 |
 
 A type is recognised by the HasSubtype chain of the server, so vendor
-subtypes count. The structures AggregatedHealthDataType and FxVersion are
+subtypes count; a supertype the server cannot tell ends the inspection
+with `ErrInspect` instead of leaving the node out. A member of a type is
+matched by its BrowseName in the namespace of the standard that defines it
+(Part 81 §14.2): the members of the UAFX types in AC or CM, the nameplate
+of an asset in DI. A vendor child with the same name in another namespace
+is not taken for it. The structures AggregatedHealthDataType and FxVersion are
 decoded with the namespace index the server has for AC: their encoding
 NodeIds differ from server to server, so they are not registered with
 package `ua`, and other UAFX structures stay undecoded ExtensionObjects.
@@ -66,7 +71,8 @@ package `ua`, and other UAFX structures stay undecoded ExtensionObjects.
 
 A Finding is a deviation from Part 81 that the address space shows:
 
-- the UAFX Data namespace without AC and CM, or AC or CM without Data (§14.2);
+- the UAFX Data namespace without AC and CM or without DI, or AC or CM
+  without Data (§14.2);
 - the Data namespace without FxRoot (§12.2);
 - more than one ConnectionManager under FxRoot (§12.3);
 - an AutomationComponent, ConnectionEndpoint, PubSubConnectionEndpoint or
@@ -81,6 +87,10 @@ scripts check far more, including behaviour.
 
 ### Limits
 
+`HasFXNamespaces` tells whether the server has the namespaces Part 81
+§14.2 requires (DI, Data, and AC or CM); `IsFXServer` whether it also has
+FxRoot (§12.2). Neither is a conformance statement.
+
 `Limits` bounds what `Inspect` reads from a large or hostile server:
 `MaxComponents` (AutomationComponents and ConnectionManagers, default
 256), `MaxChildren` (children of one node, default 1024), `MaxDepth`
@@ -88,7 +98,9 @@ scripts check far more, including behaviour.
 the report, default 10000). `Report.Truncated` tells that a limit was
 reached. A node the server shows in two places, or in a cycle, is
 reported once; the HasSubtype chain is followed for at most 32 levels.
-Continuation points of Browse are always released, and a server that
+Every page of a Browse counts against the limits, the first one
+included. Continuation points are always released, with a context of
+their own when the context of `Inspect` is done, and a server that
 returns an empty page with a continuation point ends the paging. No
 Read asks for more nodes than the MaxNodesPerRead of the server
 (Part 5 §6.3.11).
@@ -96,8 +108,8 @@ Read asks for more nodes than the MaxNodesPerRead of the server
 ## Adding the model to a server
 
 ```go
-srv, _ := server.New(opts...)
-ns, err := fxserver.AddModel(srv) // DI, Data, AC and CM
+srv, _ := server.New(server.EndPoint("localhost", 4840), server.ApplicationURI("urn:example:my-device"))
+ns, err := fxserver.AddModel(srv) // namespace 1, DI, Data, AC and CM
 if err != nil {
 	return err
 }
@@ -111,12 +123,29 @@ _ = srv.Start(ctx)
 
 `AddModel(srv, fxserver.ModelAC)` or `fxserver.ModelCM` adds only one of the
 two optional namespaces (Part 81 §14.2); the CM model brings the
-ConnectionManager instance of §12.3. A DI namespace the server has already
-is used as it is.
+ConnectionManager instance of §12.3.
+
+Namespace index 1 is the namespace of the local server (Part 81 §14.2,
+Table 260). On a server with no namespace besides namespace 0, `AddModel`
+adds it first, named by the ApplicationUri of the server
+(`server.ApplicationURI` or the URI of its certificate), and fails
+without one. A server whose namespace 1 is DI is refused.
+
+A DI namespace the server has already is used if it holds the DI nodes
+the UAFX model refers to (the ObjectTypes FunctionalGroupType,
+LockingServicesType, SoftwareUpdateType, the nameplate and health
+interfaces, and the Methods of LockingServicesType), each with the
+NodeClass of the DI NodeSet; otherwise `AddModel` fails with `ErrModel`
+before it imports anything.
 
 `ImportNodeSet` maps the namespace table of a NodeSet document to the
 namespace indexes of the server (Part 6 §F.2): a namespace the server has
-keeps its index, a new one is added. `server.ImportNodeSetXML` does not map
+keeps its index, a new one is added. Only the places where Part 6 Annex F
+puts a NodeId or a QualifiedName are rewritten: NodeId attributes,
+reference targets, aliases, the Identifier of a NodeId value, BrowseName
+prefixes and the NamespaceIndex of a QualifiedName value. Descriptions,
+strings, comments and Extensions are copied as they are, whatever they
+hold. `server.ImportNodeSetXML` does not map
 indexes; it adds every namespace of the document and takes the NodeIds as
 they are.
 

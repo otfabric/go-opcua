@@ -10,8 +10,9 @@
 // The model is the address space only. The Methods of the model
 // (EstablishConnections, CloseConnections, Verify, VerifyAsset and the
 // Methods of the ConnectionManager) have no implementation: the server
-// answers a call with Bad_MethodInvalid, as for any Method without a handler. A server becomes an AutomationComponent with the
-// instances an application imports with ImportNodeSet.
+// answers a call with Bad_MethodInvalid, as for any Method without a
+// handler. A server becomes an AutomationComponent with the instances an
+// application imports with ImportNodeSet.
 //
 //	srv := server.New(opts...)
 //	ns, err := fxserver.AddModel(srv)
@@ -24,10 +25,14 @@ package fxserver
 import (
 	"errors"
 	"fmt"
+	"slices"
+	"strings"
+	"sync"
 
 	"github.com/otfabric/go-opcua/di/diid"
 	"github.com/otfabric/go-opcua/internal/nodeset"
 	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
 	"github.com/otfabric/go-opcua/uafx/fxcmid"
 	"github.com/otfabric/go-opcua/uafx/fxdataid"
@@ -61,9 +66,18 @@ var ErrModel = errors.New("fxserver: UAFX model")
 // AddModel imports the UAFX model into srv: the Data namespace, which a UAFX
 // server must have, and the AC and CM models selected by models, both when
 // models is empty (Part 81 §14.2: a UAFX server has at least one of them).
+//
+// Namespace index 1 is the namespace of the local server (Part 81 §14.2,
+// Table 260). A server that has no namespace besides namespace 0 gets one
+// named by its ApplicationUri ([server.ApplicationURI] or the URI of its
+// certificate) before the model; without an ApplicationUri that is an
+// error. A server whose namespace 1 is the DI namespace is an error too.
+//
 // DI is imported unless the server has the DI namespace already, for
-// example from an application that imported it before. A UAFX namespace the
-// server has already is an error.
+// example from an application that imported it before. The DI nodes the
+// UAFX model refers to must then be on the server with the NodeClass the DI
+// NodeSet gives them, or AddModel fails without importing anything. A UAFX
+// namespace the server has already is an error.
 func AddModel(srv *server.Server, models ...Model) (Namespaces, error) {
 	var want Model
 	for _, m := range models {
@@ -88,17 +102,23 @@ func AddModel(srv *server.Server, models ...Model) (Namespaces, error) {
 		idx  *uint16
 	}
 	parts := []part{{fxdataid.NamespaceURI, model.Data, &ns.Data}}
-	di, haveDI := lookup(srv, diid.NamespaceURI)
-	if !haveDI {
-		parts = append([]part{{diid.NamespaceURI, model.DI, &ns.DI}}, parts...)
-	} else {
-		ns.DI = di
-	}
 	if want&ModelAC != 0 {
 		parts = append(parts, part{fxacid.NamespaceURI, model.AC, &ns.AC})
 	}
 	if want&ModelCM != 0 {
 		parts = append(parts, part{fxcmid.NamespaceURI, model.CM, &ns.CM})
+	}
+	di, haveDI := lookup(srv, diid.NamespaceURI)
+	if haveDI {
+		if err := checkDI(srv, di, want); err != nil {
+			return ns, err
+		}
+		ns.DI = di
+	} else {
+		parts = append([]part{{diid.NamespaceURI, model.DI, &ns.DI}}, parts...)
+	}
+	if err := localNamespace(srv); err != nil {
+		return ns, err
 	}
 	for _, p := range parts {
 		if err := ImportNodeSet(srv, p.data); err != nil {
@@ -107,6 +127,105 @@ func AddModel(srv *server.Server, models ...Model) (Namespaces, error) {
 		*p.idx, _ = lookup(srv, p.uri)
 	}
 	return ns, nil
+}
+
+// localNamespace makes sure namespace 1 of srv is the namespace of the
+// local server (Part 81 §14.2).
+func localNamespace(srv *server.Server) error {
+	nss := srv.Namespaces()
+	if len(nss) > 1 {
+		if uri := nss[1].Name(); uri == diid.NamespaceURI {
+			return fmt.Errorf("%w: namespace 1 of the server is %s; it must be the namespace of the local server (Part 81 §14.2)", ErrModel, uri)
+		}
+		return nil
+	}
+	uri := srv.ApplicationURI()
+	if uri == "" {
+		return fmt.Errorf("%w: the server has no namespace 1, the namespace of the local server (Part 81 §14.2), and no ApplicationUri to name it: set server.ApplicationURI or add the namespace first", ErrModel)
+	}
+	// The server has namespace 0 only: the new namespace gets index 1.
+	server.NewNodeNameSpace(srv, uri)
+	return nil
+}
+
+// diNode is a node of the DI model that the UAFX model refers to.
+type diNode struct {
+	id    uint32
+	class ua.NodeClass
+}
+
+// diNeeds lists the DI nodes the Data, AC and CM models refer to, by the
+// NodeSets embedded in package model.
+var diNeeds = sync.OnceValues(func() (map[Model][]diNode, error) {
+	classes, err := nodeset.Nodes(model.DI)
+	if err != nil {
+		return nil, err
+	}
+	out := map[Model][]diNode{}
+	for m, doc := range map[Model][]byte{0: model.Data, ModelAC: model.AC, ModelCM: model.CM} {
+		uris, err := nodeset.URIs(doc)
+		if err != nil {
+			return nil, err
+		}
+		idx := slices.Index(uris, diid.NamespaceURI) + 1
+		if idx == 0 {
+			continue
+		}
+		ids, err := nodeset.NodeIDs(doc)
+		if err != nil {
+			return nil, err
+		}
+		for _, s := range ids {
+			n, err := ua.ParseNodeID(s)
+			if err != nil || int(n.Namespace()) != idx || n.Type() != ua.NodeIDTypeNumeric && n.Type() != ua.NodeIDTypeFourByte && n.Type() != ua.NodeIDTypeTwoByte {
+				continue
+			}
+			el := classes[fmt.Sprintf("ns=1;i=%d", n.IntID())]
+			if el == "" {
+				return nil, fmt.Errorf("fxserver: the DI NodeSet has no node i=%d", n.IntID())
+			}
+			out[m] = append(out[m], diNode{n.IntID(), nodeClasses[el]})
+		}
+	}
+	return out, nil
+})
+
+// nodeClasses maps the elements of a NodeSet to the NodeClass of the node
+// they define (Part 6 §F.1).
+var nodeClasses = map[string]ua.NodeClass{
+	"UAObject": ua.NodeClassObject, "UAVariable": ua.NodeClassVariable, "UAMethod": ua.NodeClassMethod,
+	"UAView": ua.NodeClassView, "UAObjectType": ua.NodeClassObjectType, "UAVariableType": ua.NodeClassVariableType,
+	"UAReferenceType": ua.NodeClassReferenceType, "UADataType": ua.NodeClassDataType,
+}
+
+// checkDI reports an ErrModel unless the DI namespace di of srv has the DI
+// nodes the models of want refer to.
+func checkDI(srv *server.Server, di uint16, want Model) error {
+	needs, err := diNeeds()
+	if err != nil {
+		return fmt.Errorf("%w: %w", ErrModel, err)
+	}
+	var missing []string
+	for _, m := range []Model{0, ModelAC, ModelCM} {
+		if m != 0 && want&m == 0 {
+			continue
+		}
+		for _, n := range needs[m] {
+			node := srv.Node(ua.NewNumericNodeID(di, n.id))
+			switch {
+			case node == nil:
+				missing = append(missing, fmt.Sprintf("i=%d", n.id))
+			case node.NodeClass() != n.class:
+				missing = append(missing, fmt.Sprintf("i=%d (a %v, not a %v)", n.id, node.NodeClass(), n.class))
+			}
+		}
+	}
+	if len(missing) > 0 {
+		slices.Sort(missing)
+		missing = slices.Compact(missing)
+		return fmt.Errorf("%w: the DI namespace of the server lacks nodes the UAFX model refers to: %s", ErrModel, strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // ImportNodeSet imports the NodeSet2 document data into srv with the

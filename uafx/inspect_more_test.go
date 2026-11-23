@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/di/diid"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
@@ -67,9 +68,10 @@ func TestInspectDataOnly(t *testing.T) {
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
 	assert.False(t, r.IsFXServer())
-	require.Len(t, r.Findings, 1)
-	assert.Equal(t, "14.2", r.Findings[0].Clause)
+	assert.False(t, r.HasFXNamespaces())
+	require.Len(t, r.Findings, 2)
 	assert.Equal(t, "the server has the UAFX Data namespace but neither the AC nor the CM namespace (Part 81 §14.2)", r.Findings[0].String())
+	assert.Equal(t, "the server has the UAFX Data namespace but not the mandatory DI namespace (Part 81 §14.2)", r.Findings[1].String())
 }
 
 func TestInspectNoData(t *testing.T) {
@@ -83,17 +85,37 @@ func TestInspectNoData(t *testing.T) {
 	assert.Equal(t, "14.2", r.Findings[0].Clause)
 }
 
+// TestInspectNoFxRoot checks a server with the namespaces of a UAFX server
+// but no model in them: it has the namespaces, but not the structure.
 func TestInspectNoFxRoot(t *testing.T) {
 	srv := uafx.NewTestServer(t)
+	server.NewNodeNameSpace(srv, diid.NamespaceURI)
 	server.NewNodeNameSpace(srv, fxdataid.NamespaceURI)
 	server.NewNodeNameSpace(srv, fxacid.NamespaceURI)
 	c := uafx.StartTestServer(t, srv)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
-	assert.True(t, r.IsFXServer())
+	assert.True(t, r.HasFXNamespaces())
+	assert.False(t, r.IsFXServer(), "no FxRoot (Part 81 §12.2)")
 	assert.Nil(t, r.FxRoot)
 	require.Len(t, r.Findings, 1)
 	assert.Equal(t, "12.2", r.Findings[0].Clause)
+}
+
+// TestInspectNoDI checks a server with the UAFX model but without the
+// mandatory DI namespace (Part 81 §14.2).
+func TestInspectNoDI(t *testing.T) {
+	srv := uafx.NewTestServer(t)
+	require.NoError(t, fxserver.ImportNodeSet(srv, model.Data))
+	server.NewNodeNameSpace(srv, fxacid.NamespaceURI)
+	c := uafx.StartTestServer(t, srv)
+	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
+	require.NoError(t, err)
+	assert.False(t, r.HasFXNamespaces())
+	assert.False(t, r.IsFXServer())
+	assert.NotNil(t, r.FxRoot)
+	require.Len(t, r.Findings, 1)
+	assert.Equal(t, "the server has the UAFX Data namespace but not the mandatory DI namespace (Part 81 §14.2)", r.Findings[0].String())
 }
 
 func TestInspectLimits(t *testing.T) {

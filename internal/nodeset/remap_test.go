@@ -102,6 +102,83 @@ func TestRemapNoTable(t *testing.T) {
 	assert.Equal(t, `<UAObject NodeId="ns=0;i=1" BrowseName="0:X"/>`, string(out))
 }
 
+// TestRemapLeavesText checks that NodeId-like text outside the places of
+// Part 6 Annex F is copied as it is: descriptions, display names, string
+// values, comments and Extensions.
+func TestRemapLeavesText(t *testing.T) {
+	src := `<UANodeSet>
+  <NamespaceUris><Uri>urn:a</Uri></NamespaceUris>
+  <!-- see ns=1;i=7 -->
+  <UAVariable NodeId="ns=1;i=1" BrowseName="1:V" DataType="String">
+    <DisplayName>ns=1;i=7</DisplayName>
+    <Description>Example NodeId: ns=1;i=7</Description>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">ns=1;i=7</String></Value>
+  </UAVariable>
+  <Extensions><Extension><Vendor Ref="ns=1;i=7">ns=1;i=7</Vendor></Extension></Extensions>
+</UANodeSet>`
+	out, err := Remap([]byte(src), table(map[string]uint16{"urn:a": 5}))
+	require.NoError(t, err)
+	s := string(out)
+	assert.Contains(t, s, `NodeId="ns=5;i=1" BrowseName="5:V"`)
+	assert.Equal(t, 6, strings.Count(s, "ns=1;i=7"), s)
+	assert.Contains(t, s, "<!-- see ns=1;i=7 -->")
+	assert.Contains(t, s, "<Description>Example NodeId: ns=1;i=7</Description>")
+	assert.Contains(t, s, `<Vendor Ref="ns=1;i=7">ns=1;i=7</Vendor>`)
+}
+
+// TestRemapForms checks the forms XML allows for the places that are
+// rewritten: single quotes, white space around "=", prefixed element
+// names, NodeIds in values, CDATA.
+func TestRemapForms(t *testing.T) {
+	src := `<UANodeSet>
+  <NamespaceUris><Uri>urn:a</Uri></NamespaceUris>
+  <UAObject NodeId = 'ns=1;i=1' BrowseName	=	"1:O" ParentNodeId='ns=1;i=2'>
+    <References><Reference ReferenceType='ns=1;i=9' IsForward="false"><![CDATA[ns=1;i=3]]></Reference></References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=4" BrowseName="1:V" DataType="NodeId">
+    <Value><uax:NodeId xmlns:uax="http://opcfoundation.org/UA/2008/02/Types.xsd"><uax:Identifier>ns=1;i=5</uax:Identifier></uax:NodeId></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=6" BrowseName="1:Q" DataType="QualifiedName">
+    <Value><QualifiedName><NamespaceIndex> 1 </NamespaceIndex><Name>ns=1;i=8</Name></QualifiedName></Value>
+  </UAVariable>
+</UANodeSet>`
+	out, err := Remap([]byte(src), table(map[string]uint16{"urn:a": 5}))
+	require.NoError(t, err)
+	s := string(out)
+	assert.Contains(t, s, `<UAObject NodeId = 'ns=5;i=1' BrowseName	=	"5:O" ParentNodeId='ns=5;i=2'>`)
+	assert.Contains(t, s, `<Reference ReferenceType='ns=5;i=9' IsForward="false"><![CDATA[ns=5;i=3]]></Reference>`)
+	assert.Contains(t, s, `<uax:Identifier>ns=5;i=5</uax:Identifier>`)
+	assert.Contains(t, s, `<NamespaceIndex> 5 </NamespaceIndex><Name>ns=1;i=8</Name>`)
+}
+
+func TestRemapMalformed(t *testing.T) {
+	for _, bad := range []string{
+		`<UAObject NodeId="ns=1;i=1"`,
+		`<NamespaceUris><Uri>a</Uri><Other/></NamespaceUris>`,
+		`<A>&unknown;</A>`,
+	} {
+		_, err := Remap([]byte(bad), table(map[string]uint16{"a": 1}))
+		assert.Error(t, err, bad)
+	}
+	// An empty table element is cut out as well.
+	out, err := Remap([]byte(`<UANodeSet><NamespaceUris/><UAObject NodeId="i=1" BrowseName="X"/></UANodeSet>`), table(nil))
+	require.NoError(t, err)
+	assert.Equal(t, `<UANodeSet><UAObject NodeId="i=1" BrowseName="0:X"/></UANodeSet>`, string(out))
+}
+
+func TestNodeIDsAndNodes(t *testing.T) {
+	ids, err := NodeIDs([]byte(doc))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"ns=2;i=7", "ns=1;i=1", "ns=2;s=x", "HasTypeDefinition", "ns=2;i=5", "ns=1;i=2", "i=12", "ns=1;i=3", "ns=1;i=4", "ns=0;i=1"}, ids)
+	nodes, err := Nodes([]byte(doc))
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"ns=1;i=1": "UAObject", "ns=1;i=2": "UAVariable", "ns=1;i=3": "UAVariable", "ns=1;i=4": "UADataType"}, nodes)
+	_, err = NodeIDs([]byte(`<A`))
+	assert.Error(t, err)
+	_, err = Nodes([]byte(`<A`))
+	assert.Error(t, err)
+}
+
 // FuzzRemap feeds arbitrary documents, which come from the application or
 // a file, to Remap: it never panics, and a document it returns has no
 // namespace table of its own.
