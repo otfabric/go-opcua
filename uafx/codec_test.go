@@ -214,7 +214,7 @@ func TestEstablishConnectionsResultRoundTrip(t *testing.T) {
 }
 
 func TestReserveV1(t *testing.T) {
-	c := codec{testData}
+	c := dataCodec(testData)
 	eo, err := c.eo(fxdataid.PubSubReserveCommunicationIDsDataTypeEncodingDefaultBinary, &reserveV1{TransportProfileURI: "u", NumReqWriterGroupIDs: 3})
 	if err != nil {
 		t.Fatal(err)
@@ -234,7 +234,7 @@ func TestReserveV1(t *testing.T) {
 }
 
 func TestCodecErrors(t *testing.T) {
-	c := codec{testData}
+	c := dataCodec(testData)
 	good, err := EncodeEstablishConnectionsRequest(fullRequest(), testData)
 	if err != nil {
 		t.Fatal(err)
@@ -244,7 +244,7 @@ func TestCodecErrors(t *testing.T) {
 		out[i] = v
 		return out
 	}
-	other, _ := codec{testData}.eo(fxdataid.AssetVerificationDataTypeEncodingDefaultBinary, &AssetVerification{})
+	other, _ := dataCodec(testData).eo(fxdataid.AssetVerificationDataTypeEncodingDefaultBinary, &AssetVerification{})
 	trunc := &ua.ExtensionObject{EncodingMask: ua.ExtensionObjectBinary, TypeID: ua.NewNumericExpandedNodeID(testData, fxdataid.ConnectionEndpointConfigurationDataTypeEncodingDefaultBinary), Value: []byte{1, 2}}
 	badSwitch, _ := c.eo(fxdataid.ConnectionEndpointConfigurationDataTypeEncodingDefaultBinary, &struct {
 		F *ua.NodeID

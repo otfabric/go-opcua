@@ -129,3 +129,21 @@ func TestNewVariant_ArrayLengthLimit(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, (1<<15-1)*(1<<16), v.ArrayLength())
 }
+
+// TestVariantScalarDimensionsBit: a scalar with the ArrayDimensions bit of
+// the mask set decodes without dimensions (Part 6 §5.2.2.16 defines them
+// only for arrays). The decoder used to keep the bit, and Encode then wrote
+// a dimension count that was not in the input: the re-encoded Variant was
+// four bytes longer and the next field of a structure moved.
+func TestVariantScalarDimensionsBit(t *testing.T) {
+	in := []byte{byte(TypeIDBoolean) | VariantArrayDimensions, 1}
+	var v Variant
+	n, err := v.Decode(in)
+	require.NoError(t, err)
+	require.Equal(t, len(in), n)
+	require.Equal(t, true, v.Value())
+	require.Nil(t, v.ArrayDimensions())
+	out, err := v.Encode()
+	require.NoError(t, err)
+	require.Equal(t, []byte{byte(TypeIDBoolean), 1}, out)
+}
