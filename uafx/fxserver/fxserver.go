@@ -7,19 +7,21 @@
 // (Part 81 §12.2) and the NamespaceMetadata objects of the three UAFX
 // namespaces (§14.1).
 //
-// The model is the address space only. The Methods of the model
-// (EstablishConnections, CloseConnections, Verify, VerifyAsset and the
-// Methods of the ConnectionManager) have no implementation: the server
-// answers a call with Bad_MethodInvalid, as for any Method without a
-// handler. A server becomes an AutomationComponent with the instances an
-// application imports with ImportNodeSet.
+// A server becomes an AutomationComponent with the instances an
+// application imports with ImportNodeSet. EnableConnections serves the
+// EstablishConnections and CloseConnections Methods of its
+// AutomationComponents (§6.2.4, §6.2.5) with PubSub. The other Methods of
+// the model (Verify and VerifyAsset called on their own, and the Methods
+// of the ConnectionManager) have no implementation: the server answers a
+// call with Bad_MethodInvalid, as for any Method without a handler.
 //
 //	srv := server.New(opts...)
 //	ns, err := fxserver.AddModel(srv)
 //	...
 //	err = fxserver.ImportNodeSet(srv, myAutomationComponentNodeSet)
+//	conns, err := fxserver.EnableConnections(srv, ns, fxserver.ConnectionOptions{})
 //
-// Import the model before the server starts.
+// Import the model and enable the connections before the server starts.
 package fxserver
 
 import (
