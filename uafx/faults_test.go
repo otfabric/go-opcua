@@ -5,11 +5,14 @@ package uafx
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -107,4 +110,45 @@ func TestInspectFaults(t *testing.T) {
 		}
 	}
 	assert.Greater(t, failed, total, "most faults end the inspection")
+}
+
+// readSizes passes the calls of Inspect to a client and records the
+// number of nodes of every Read.
+type readSizes struct {
+	client
+	sizes []int
+}
+
+func (r *readSizes) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadResponse, error) {
+	r.sizes = append(r.sizes, len(req.NodesToRead))
+	return r.client.Read(ctx, req)
+}
+
+// TestInspectMaxNodesPerRead checks that Inspect splits its Reads by the
+// MaxNodesPerRead of the server (Part 5 §6.3.11).
+func TestInspectMaxNodesPerRead(t *testing.T) {
+	_, c, _ := FXTestServer(t, false)
+	ctx := context.Background()
+	want, err := inspect(ctx, c, Limits{}, 0)
+	require.NoError(t, err)
+	unlimited := &readSizes{client: c}
+	_, err = inspect(ctx, unlimited, Limits{}, 0)
+	require.NoError(t, err)
+	require.Greater(t, slices.Max(unlimited.sizes), 2, "the test needs Reads of more than 2 nodes")
+
+	srv, err := server.New(
+		server.EndPoint("localhost", 0),
+		server.InsecureNoSecurity(),
+		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		server.WithOperationLimits(server.OperationalLimits{MaxNodesPerRead: 2, MaxNodesPerBrowse: 1}),
+	)
+	require.NoError(t, err)
+	server.NewNodeNameSpace(srv, fxtest.AppNS)
+	_, err = fxtest.Prepare(srv, false)
+	require.NoError(t, err)
+	limited := &readSizes{client: StartTestServer(t, srv)}
+	got, err := inspect(ctx, limited, Limits{}, 0)
+	require.NoError(t, err)
+	assert.LessOrEqual(t, slices.Max(limited.sizes), 2)
+	assert.Equal(t, want, got)
 }

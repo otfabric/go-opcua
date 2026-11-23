@@ -87,6 +87,9 @@
 //     under datagram faults, broker outages, attacks on the message
 //     security, key rotation storms, SKS outages, runtime and information
 //     model churn, and fuzzed messages through the real transports.
+//   - chaos/uafx: uafx.Inspect of the OPC UA FX model through connection
+//     faults over a secured channel, while the server changes the values
+//     of UAFX structures and the FunctionalEntities, and while it closes.
 //
 // # Invariants
 //

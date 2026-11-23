@@ -194,6 +194,10 @@ type Limits struct {
 	// MaxDepth bounds the nesting of SubFunctionalEntities read.
 	// Default 8.
 	MaxDepth int
+	// MaxNodes bounds the nodes the report holds in all: components,
+	// Assets, FunctionalEntities, ConnectionEndpoints, Descriptors and
+	// ConnectionConfigurationSets. Default 10000.
+	MaxNodes int
 }
 
 func (l Limits) withDefaults() Limits {
@@ -206,11 +210,19 @@ func (l Limits) withDefaults() Limits {
 	if l.MaxDepth <= 0 {
 		l.MaxDepth = 8
 	}
+	if l.MaxNodes <= 0 {
+		l.MaxNodes = 10000
+	}
 	return l
 }
 
-// maxSubtypeDepth bounds the walk from a type to its supertypes.
-const maxSubtypeDepth = 32
+// maxSubtypeDepth bounds the walk from a type to its supertypes, and
+// maxSupertypeLookups the types whose supertype Inspect asks the server
+// for: a server with a type per node cannot make it browse without end.
+const (
+	maxSubtypeDepth     = 32
+	maxSupertypeLookups = 4096
+)
 
 // The mandatory members of the UAFX ObjectTypes by browse name, as the
 // ModellingRule Mandatory of the NodeSets of Part 81 version 1.00.04 marks
@@ -252,17 +264,39 @@ var _ client = (*opcua.Client)(nil)
 // inspect is Inspect with refsPerNode, the RequestedMaxReferencesPerNode
 // of a Browse (0: as many as the server returns).
 func inspect(ctx context.Context, c client, limits Limits, refsPerNode uint32) (*Report, error) {
-	in := &inspector{c: c, lim: limits.withDefaults(), refsPerNode: refsPerNode, supertypes: map[string]*ua.NodeID{}}
+	in := &inspector{
+		c: c, lim: limits.withDefaults(), refsPerNode: refsPerNode,
+		supertypes: map[string]*ua.NodeID{}, visited: map[string]bool{},
+	}
 	return in.run(ctx)
 }
 
 type inspector struct {
 	c           client
 	refsPerNode uint32
+	maxRead     int // nodes per Read the server accepts, 0: no limit
 	lim         Limits
 	r           *Report
 	ns          struct{ di, data, ac, cm uint16 }
 	supertypes  map[string]*ua.NodeID // type → its supertype, nil at the root
+	// visited holds the nodes the report holds. A node a server shows in
+	// two places, or in a cycle, is reported once.
+	visited map[string]bool
+}
+
+// visit reports whether the node n goes into the report: not yet in it,
+// and within MaxNodes.
+func (in *inspector) visit(n *ua.NodeID) bool {
+	key := n.String()
+	if in.visited[key] {
+		return false
+	}
+	if len(in.visited) >= in.lim.MaxNodes {
+		in.r.Truncated = true
+		return false
+	}
+	in.visited[key] = true
+	return true
 }
 
 func (in *inspector) run(ctx context.Context) (*Report, error) {
@@ -289,6 +323,9 @@ func (in *inspector) run(ctx context.Context) (*Report, error) {
 		}
 		*x.idx = n.Index
 		in.r.Namespaces = append(in.r.Namespaces, n)
+	}
+	if err := in.readOperationLimits(ctx); err != nil {
+		return nil, err
 	}
 	if err := in.readNamespaceMetadata(ctx); err != nil {
 		return nil, err
@@ -343,6 +380,20 @@ func (in *inspector) readNamespaceMetadata(ctx context.Context) error {
 	return nil
 }
 
+// readOperationLimits reads MaxNodesPerRead of the OperationLimits of the
+// server (Part 5 §6.3.11), so that no Read asks for more nodes than the
+// server accepts. A server without the value, or with 0, has no limit.
+func (in *inspector) readOperationLimits(ctx context.Context) error {
+	vals, err := in.read(ctx, ua.NewNumericNodeID(0, id.ServerServerCapabilitiesOperationLimitsMaxNodesPerRead))
+	if err != nil {
+		return err
+	}
+	if n, ok := val(vals[0]).(uint32); ok && uint64(n) < math.MaxInt32 {
+		in.maxRead = int(n)
+	}
+	return nil
+}
+
 // readCapabilities reads ServerConfiguration/ServerCapabilities, which a
 // server need not have.
 func (in *inspector) readCapabilities(ctx context.Context) error {
@@ -374,15 +425,20 @@ func (in *inspector) readFxRoot(ctx context.Context) error {
 			break
 		}
 		node := nodeOf(ref)
+		isAC := in.ns.ac != 0 && in.isSubtype(ctx, node.TypeDefinition, acType)
+		isCM := !isAC && in.ns.cm != 0 && in.isSubtype(ctx, node.TypeDefinition, cmType)
+		if (!isAC && !isCM) || !in.visit(node.NodeID) {
+			continue
+		}
 		switch {
-		case in.ns.ac != 0 && in.isSubtype(ctx, node.TypeDefinition, acType):
+		case isAC:
 			n++
 			ac, err := in.readAC(ctx, node)
 			if err != nil {
 				return err
 			}
 			in.r.AutomationComponents = append(in.r.AutomationComponents, ac)
-		case in.ns.cm != 0 && in.isSubtype(ctx, node.TypeDefinition, cmType):
+		default:
 			n++
 			cm, err := in.readCM(ctx, node)
 			if err != nil {
@@ -603,7 +659,7 @@ func (in *inspector) readCM(ctx context.Context, n Node) (ConnectionManager, err
 			return out, err
 		}
 		for _, s := range sets {
-			if s.NodeClass == ua.NodeClassObject {
+			if s.NodeClass == ua.NodeClassObject && s.NodeID != nil && in.visit(s.NodeID.NodeID) {
 				out.ConnectionConfigurationSets = append(out.ConnectionConfigurationSets, nodeOf(s))
 			}
 		}
@@ -640,7 +696,9 @@ func (in *inspector) typedChildren(ctx context.Context, parent *ua.NodeID, typ *
 			in.r.Truncated = true
 			break
 		}
-		out = append(out, n)
+		if in.visit(n.NodeID) {
+			out = append(out, n)
+		}
 	}
 	return out, nil
 }
@@ -709,10 +767,25 @@ func (in *inspector) browse(ctx context.Context, n *ua.NodeID, refType uint32, m
 			in.r.Truncated = true
 			break
 		}
-		refs = append(refs, next.Results[0].References...)
+		page := next.Results[0].References
 		cp = next.Results[0].ContinuationPoint
+		if len(page) == 0 {
+			// A page without references that continues: a server that
+			// would keep Inspect browsing without end.
+			in.r.Truncated = true
+			break
+		}
+		refs = append(refs, page...)
 	}
-	return refs, nil
+	// A reference without a target is of no use and would have to be
+	// checked everywhere.
+	out := refs[:0:0]
+	for _, r := range refs {
+		if r != nil && r.NodeID != nil && r.NodeID.NodeID != nil {
+			out = append(out, r)
+		}
+	}
+	return out, nil
 }
 
 // readRefs reads the Value of the children of names that byName has, in
@@ -755,6 +828,24 @@ func (in *inspector) readChildren(ctx context.Context, n *ua.NodeID, names ...st
 // read reads the Value attribute of ids. The value of a node the server
 // cannot read is nil.
 func (in *inspector) read(ctx context.Context, ids ...*ua.NodeID) ([]*ua.Variant, error) {
+	out := make([]*ua.Variant, 0, len(ids))
+	for len(ids) > 0 {
+		n := len(ids)
+		if in.maxRead > 0 && n > in.maxRead {
+			n = in.maxRead
+		}
+		vals, err := in.readBatch(ctx, ids[:n])
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, vals...)
+		ids = ids[n:]
+	}
+	return out, nil
+}
+
+// readBatch reads the Value attribute of ids in one Read.
+func (in *inspector) readBatch(ctx context.Context, ids []*ua.NodeID) ([]*ua.Variant, error) {
 	req := &ua.ReadRequest{TimestampsToReturn: ua.TimestampsToReturnNeither}
 	for _, n := range ids {
 		req.NodesToRead = append(req.NodesToRead, &ua.ReadValueID{NodeID: n, AttributeID: ua.AttributeIDValue})
@@ -803,6 +894,10 @@ func (in *inspector) isSubtype(ctx context.Context, typ, base *ua.NodeID) bool {
 		key := typ.String()
 		super, ok := in.supertypes[key]
 		if !ok {
+			if len(in.supertypes) >= maxSupertypeLookups {
+				in.r.Truncated = true
+				return false
+			}
 			super = in.supertype(ctx, typ)
 			in.supertypes[key] = super
 		}

@@ -81,7 +81,7 @@ interop-shard: ## Run shard SHARD of SHARDS of the interop tests (e.g. SHARD=2 S
 	go test -v -count=1 -tags=interop -timeout 45m -run "^($$tests)$$" ./interop/
 
 # Chaos-monkey and parallelism suites: chaos/ and its sub-packages secure,
-# datachange, reverse, discovery, codec, pubsub, certmgmt and gdspull (see chaos/doc.go). They also run, with a
+# datachange, reverse, discovery, codec, pubsub, certmgmt, gdspull and uafx (see chaos/doc.go). They also run, with a
 # short fault-injection phase, as part of `make test`. Override the knobs on
 # the command line, e.g. `make chaos CHAOS_DURATION=10m CHAOS_SEED=42`.
 CHAOS_DURATION ?= 30s

@@ -115,6 +115,21 @@ keeps its index, a new one is added. `server.ImportNodeSetXML` does not map
 indexes; it adds every namespace of the document and takes the NodeIds as
 they are.
 
+## Examples
+
+[`examples/uafx/server`](../examples/uafx/server) runs a server with the
+UAFX model and one AutomationComponent, a controller with a drive as its
+Asset and a Motion FunctionalEntity with a PubSubConnectionEndpoint
+(`controller.xml`); every few seconds the AggregatedHealth changes.
+[`examples/uafx/inspect`](../examples/uafx/inspect) prints the report of
+`Inspect`:
+
+```sh
+go run ./examples/uafx/server -port 4855 &
+go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855
+go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855 -json
+```
+
 ## Limits
 
 - No Method of Part 81 is implemented: EstablishConnections,

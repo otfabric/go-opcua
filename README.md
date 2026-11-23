@@ -536,6 +536,8 @@ The `examples/` directory contains runnable programs:
 | `server/map_server` | Run a server using a Go map-backed namespace |
 | `server/NodeSet2_server` | Run a server that imports a NodeSet2 XML information model |
 | `server/method_server` | Register a server-side method and call it from a client |
+| `uafx/server` | Run a server with the OPC UA FX model and one AutomationComponent (`fxserver.AddModel`, `fxserver.ImportNodeSet`) |
+| `uafx/inspect` | Print the OPC UA FX model of a server with `uafx.Inspect` (`-json` for the report as JSON) |
 
 > Note: `examples/server/server.go` is a minimal low-level `uacp` transport
 > stub (TCP listener only), not a full OPC-UA server. For a runnable server,

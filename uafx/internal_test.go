@@ -191,8 +191,8 @@ func TestText(t *testing.T) {
 
 func TestLimitsDefaults(t *testing.T) {
 	l := Limits{}.withDefaults()
-	assert.Equal(t, Limits{MaxComponents: 256, MaxChildren: 1024, MaxDepth: 8}, l)
-	assert.Equal(t, Limits{MaxComponents: 1, MaxChildren: 2, MaxDepth: 3}, Limits{1, 2, 3}.withDefaults())
+	assert.Equal(t, Limits{MaxComponents: 256, MaxChildren: 1024, MaxDepth: 8, MaxNodes: 10000}, l)
+	assert.Equal(t, Limits{MaxComponents: 1, MaxChildren: 2, MaxDepth: 3, MaxNodes: 4}, Limits{1, 2, 3, 4}.withDefaults())
 }
 
 func TestIndexAndNodeOf(t *testing.T) {
