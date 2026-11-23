@@ -97,6 +97,11 @@ func TestApplicationURIOption(t *testing.T) {
 	s, err := newServerNoNS(ApplicationURI("urn:explicit"))
 	require.NoError(t, err)
 	require.Equal(t, "urn:explicit", s.cfg.applicationURI)
+	require.Equal(t, "urn:explicit", s.ApplicationURI())
+
+	s, err = newServerNoNS()
+	require.NoError(t, err)
+	require.Empty(t, s.ApplicationURI())
 }
 
 // A target can be added, inspected and removed before the server is started;

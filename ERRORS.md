@@ -152,6 +152,8 @@ Definitions live in [`errors/sentinel.go`](errors/sentinel.go). Match with `erro
 | `pubsub/uadp.ErrSecurityMode` | Message security weaker than required, or a secured message with no keys to verify it |
 | `pubsub/uadp.ErrSecurityChecksFailed` | Invalid security header, bad signature or failed decryption; or `Encode` could not sign or encrypt |
 | `pubsub/uadp.ErrNoMetaData` | RawData DataSetMessage whose DataSetMetaData the MetaData callback does not supply |
+| `uafx.ErrInspect` | `Inspect` ended because a service call failed, or a node it must browse has a bad status; wraps the error or the status. Deviations of the model are `Report.Findings`, not errors |
+| `uafx/fxserver.ErrModel` | `AddModel` cannot add the UAFX model: a UAFX namespace the server has already, an unknown `Model`, no ApplicationUri, a namespace 1 that is not the ApplicationUri, a DI namespace without the nodes the model refers to, or a NodeSet the server refuses (wrapped) |
 
 Further API errors: package
 `server` the condition errors (`ErrConditionRemoved`, `ErrConditionNotAlarm`,

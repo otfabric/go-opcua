@@ -13,6 +13,7 @@ The library follows a layered architecture aligned with the OPC-UA specification
 │              Application Layer                    │
 │   opcua (client) │ server/ │ monitor/ │ gds/      │
 │   pubsub/ (Part 14, beside the client/server)     │
+│   uafx/ (UAFX model, on the client and server)    │
 ├──────────────────────────────────────────────────┤
 │           Service Layer (ua/)                     │
 │   Request/Response types, encoding/decoding       │
@@ -60,6 +61,8 @@ Packages are tiered by intended audience and stability commitment:
 | `schema/` | OPC-UA schema input files (CSVs, BSD, XSD) for code generators |
 | `server/attrs/` | Server attribute helpers |
 | `server/refs/` | Server reference helpers |
+| `uafx/`, `uafx/fxserver/` | OPC UA FX information model (Part 81): inspection by a client, the model on a server; new, more likely to change than the rest of this tier |
+| `uafx/fxdataid/`, `uafx/fxacid/`, `uafx/fxcmid/`, `di/diid/` | NodeIds of the UAFX namespaces and of the DI model |
 
 **Tier 3 — Internal.** Not part of the supported public API. May change without notice.
 
@@ -72,6 +75,7 @@ Packages are tiered by intended audience and stability commitment:
 | `internal/websocket/` | RFC 6455 framing, messages and handshake of the `opc.wss` transport |
 | `internal/mqtt/`, `internal/amqp/`, `internal/mdns/` | MQTT 3.1.1 / 5.0 and AMQP 1.0 clients of the PubSub transports; the mDNS responder of multicast discovery |
 | `internal/cmd/gen/` | Go-based code generation driver |
+| `internal/nodeset/` | Maps the namespace indexes of a NodeSet2 document to those of a server |
 
 ---
 
