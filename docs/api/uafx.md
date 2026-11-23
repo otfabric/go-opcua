@@ -248,6 +248,10 @@ type Limits struct {
 	// MaxDepth bounds the nesting of SubFunctionalEntities read.
 	// Default 8.
 	MaxDepth int
+	// MaxNodes bounds the nodes the report holds in all: components,
+	// Assets, FunctionalEntities, ConnectionEndpoints, Descriptors and
+	// ConnectionConfigurationSets. Default 10000.
+	MaxNodes int
 }
 ```
 
@@ -346,7 +350,7 @@ Report is what Inspect found on a server.
 func Inspect(ctx context.Context, c *opcua.Client, limits Limits) (*Report, error)
 ```
 
-Inspect reads the UAFX model of the server c is connected to: the namespaces, FxRoot, the AutomationComponents with their Assets, FunctionalEntities and ConnectionEndpoints, and the ConnectionManagers. A node that is missing or cannot be read is left out of the report or becomes a Finding; Inspect returns an error only when a service call fails.
+Inspect reads the UAFX model of the server c is connected to: the namespaces, FxRoot, the AutomationComponents with their Assets, FunctionalEntities and ConnectionEndpoints, and the ConnectionManagers. A node that is missing or cannot be read is left out of the report or becomes a Finding; Inspect returns an error only when a service call fails. Its Browse and Read requests ask for one node at a time, or as many as the MaxNodesPerRead of the server allows (Part 5 §6.3.11).
 
 #### func (Report) IsFXServer
 

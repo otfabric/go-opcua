@@ -83,10 +83,15 @@ scripts check far more, including behaviour.
 
 `Limits` bounds what `Inspect` reads from a large or hostile server:
 `MaxComponents` (AutomationComponents and ConnectionManagers, default
-256), `MaxChildren` (children of one node, default 1024) and `MaxDepth`
-(nesting of SubFunctionalEntities, default 8). `Report.Truncated` tells
-that a limit was reached. Continuation points of Browse are always
-released.
+256), `MaxChildren` (children of one node, default 1024), `MaxDepth`
+(nesting of SubFunctionalEntities, default 8) and `MaxNodes` (nodes in
+the report, default 10000). `Report.Truncated` tells that a limit was
+reached. A node the server shows in two places, or in a cycle, is
+reported once; the HasSubtype chain is followed for at most 32 levels.
+Continuation points of Browse are always released, and a server that
+returns an empty page with a continuation point ends the paging. No
+Read asks for more nodes than the MaxNodesPerRead of the server
+(Part 5 §6.3.11).
 
 ## Adding the model to a server
 
@@ -129,6 +134,18 @@ go run ./examples/uafx/server -port 4855 &
 go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855
 go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855 -json
 ```
+
+## Tests
+
+| What | Where |
+|---|---|
+| Unit tests, the findings of a broken model, faults of every service call, Browse paging | `uafx`, `uafx/fxserver`, `internal/nodeset` |
+| The mandatory members of the inspector against the ModellingRules of the embedded NodeSets | `uafx` (`TestMandatoryMatchesModel`) |
+| Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`), the namespace mapping of NodeSet documents (`FuzzRemap`) | `uafx`, `internal/nodeset` |
+| End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
+| Chaos: connection faults over SignAndEncrypt, values and FunctionalEntities changing during `Inspect`, a server closing | [`chaos/uafx`](../chaos/uafx) |
+
+The test address space is `internal/testutil/fxtest`.
 
 ## Limits
 

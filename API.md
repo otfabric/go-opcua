@@ -2958,7 +2958,7 @@ Reads the OPC UA FX information model (OPC 10000-81 v1.00.04) of a server.
 
 ```go
 func Inspect(ctx context.Context, c *opcua.Client, limits Limits) (*Report, error) // ErrInspect when a service call fails
-type Limits struct{ MaxComponents, MaxChildren, MaxDepth int }                       // defaults 256, 1024, 8
+type Limits struct{ MaxComponents, MaxChildren, MaxDepth, MaxNodes int }             // defaults 256, 1024, 8, 10000
 type Report struct {
 	Namespaces           []Namespace // DI, Data, AC, CM: URI, Index, Present, Version, PublicationDate
 	ServerCapabilities   []string
@@ -2978,7 +2978,8 @@ OperationalHealth, ConnectionEndpoints, SubFunctionalEntities), `ConnectionEndpo
 (Status, IsPersistent, CleanupTimeout), `ConnectionManager` (ConnectionConfigurationSets);
 `ConnectionEndpointStatus`, `DeviceHealth`, `OperationalHealth`, `AggregatedHealth`, `FxVersion`.
 NodeIds: packages `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid` and `di/diid`, each with
-`NamespaceURI`. See [docs/uafx.md](docs/uafx.md).
+`NamespaceURI`. Reads stay within the MaxNodesPerRead of the server. See
+[docs/uafx.md](docs/uafx.md); examples in `examples/uafx`.
 
 ## Package `uafx/fxserver`
 

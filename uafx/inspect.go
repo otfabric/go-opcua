@@ -246,7 +246,8 @@ var ErrInspect = errors.New("uafx: inspect")
 // FunctionalEntities and ConnectionEndpoints, and the ConnectionManagers.
 // A node that is missing or cannot be read is left out of the report or
 // becomes a Finding; Inspect returns an error only when a service call
-// fails.
+// fails. Its Browse and Read requests ask for one node at a time, or as
+// many as the MaxNodesPerRead of the server allows (Part 5 §6.3.11).
 func Inspect(ctx context.Context, c *opcua.Client, limits Limits) (*Report, error) {
 	return inspect(ctx, c, limits, 0)
 }

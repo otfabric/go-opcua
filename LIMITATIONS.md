@@ -18,8 +18,8 @@ behaviour you may notice, and the deviations of peers are in
 - OPC UA FX (UAFX, OPC 10000-81): the information model only. `uafx.Inspect`
   reads it and `uafx/fxserver` serves it; no Method of Part 81 is implemented
   (no connection can be established, verified or closed), and Parts 82 to 84
-  are not implemented. No interop peer implements UAFX, so it is tested
-  against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
+  are not implemented. None of the pinned references of opcua-interop
+  implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
 - Time-scheduled Ethernet (TSN), AMQP over WebSockets, and PubSub Actions bound
   to server Methods (go-opcua runs Go handlers).
 - Triggering links are not restored when the client re-creates a subscription
