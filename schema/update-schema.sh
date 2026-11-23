@@ -44,3 +44,15 @@ wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/GDS/O
 
 echo "Downloading Opc.Ua.Gds.NodeSet2.xml"
 wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/GDS/Opc.Ua.Gds.NodeSet2.xml -O "${repo_dir}/internal/schema/Opc.Ua.Gds.NodeSet2.xml"
+
+echo "Downloading Opc.Ua.Di.NodeIds.csv"
+wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/DI/Opc.Ua.Di.NodeIds.csv -O "${script_dir}/Opc.Ua.Di.NodeIds.csv"
+
+echo "Downloading Opc.Ua.Di.NodeSet2.xml"
+wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/DI/Opc.Ua.Di.NodeSet2.xml -O "${repo_dir}/uafx/internal/model/Opc.Ua.Di.NodeSet2.xml"
+
+for part in data ac cm; do
+	echo "Downloading opc.ua.fx.${part}.nodeset2.csv and .xml"
+	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.csv" -O "${script_dir}/opc.ua.fx.${part}.nodeset2.csv"
+	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.xml" -O "${repo_dir}/uafx/internal/model/opc.ua.fx.${part}.nodeset2.xml"
+done

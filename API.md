@@ -92,6 +92,8 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [Server integration](#server-integration)
 - [Package `gds`](#package-gds)
 - [Package `gds/gdsserver`](#package-gdsgdsserver)
+- [Package `uafx`](#package-uafx)
+- [Package `uafx/fxserver`](#package-uafxfxserver)
 - [Package `monitor`](#package-monitor)
   - [NodeMonitor](#nodemonitor)
   - [Subscription (monitor)](#subscription-monitor)
@@ -2949,6 +2951,44 @@ the audit events of the GDS NodeSet with `server.WithAuditing`.
 
 `Config{Store, CertificateTypes, Issuers, CAName, CALifetime, CertificateLifetime, CRLLifetime, RSAKeySize, AutoApprove, RequestLifetime, MaxRequests, MaxApplications, SelfAdmin, Now, Logger}`.
 See [docs/server-guide.md](docs/server-guide.md#global-discovery-server-pull-model).
+
+## Package `uafx`
+
+Reads the OPC UA FX information model (OPC 10000-81 v1.00.04) of a server.
+
+```go
+func Inspect(ctx context.Context, c *opcua.Client, limits Limits) (*Report, error) // ErrInspect when a service call fails
+type Limits struct{ MaxComponents, MaxChildren, MaxDepth int }                       // defaults 256, 1024, 8
+type Report struct {
+	Namespaces           []Namespace // DI, Data, AC, CM: URI, Index, Present, Version, PublicationDate
+	ServerCapabilities   []string
+	FxRoot               *ua.NodeID
+	AutomationComponents []AutomationComponent
+	ConnectionManagers   []ConnectionManager
+	Findings             []Finding // deviations from Part 81, with the clause
+	Truncated            bool      // a Limit was reached
+}
+func (r *Report) Namespace(uri string) (Namespace, bool)
+func (r *Report) IsFXServer() bool // Data and AC or CM (Part 81 §14.2)
+```
+
+`AutomationComponent` (ConformanceName, AggregatedHealth, Assets, FunctionalEntities,
+Descriptors), `Asset` (the nameplate), `FunctionalEntity` (author, FxVersion,
+OperationalHealth, ConnectionEndpoints, SubFunctionalEntities), `ConnectionEndpoint`
+(Status, IsPersistent, CleanupTimeout), `ConnectionManager` (ConnectionConfigurationSets);
+`ConnectionEndpointStatus`, `DeviceHealth`, `OperationalHealth`, `AggregatedHealth`, `FxVersion`.
+NodeIds: packages `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid` and `di/diid`, each with
+`NamespaceURI`. See [docs/uafx.md](docs/uafx.md).
+
+## Package `uafx/fxserver`
+
+```go
+func AddModel(srv *server.Server, models ...Model) (Namespaces, error) // ModelAC, ModelCM; both when none; ErrModel
+func ImportNodeSet(srv *server.Server, data []byte) error             // maps the namespace table of the document (Part 6 §F.2)
+type Namespaces struct{ DI, Data, AC, CM uint16 }
+```
+
+The model only: the Methods of Part 81 have no handler and answer `Bad_MethodInvalid`.
 
 ## Package `monitor`
 

@@ -94,6 +94,7 @@ For full API details see [API.md](API.md).
 | [Security Guide](docs/security.md) | Certificates, RSA and ECC security policies (incl. Brainpool and Curve448), TLS for `opc.wss` / `opc.https`, push certificate management, authentication, security checklist |
 | [Architecture](docs/architecture.md) | Package layering, message flow, concurrency patterns, internals |
 | [PubSub](docs/pubsub.md) | Publishers and subscribers over UDP, Ethernet, MQTT 3.1.1 / 5.0 and AMQP 1.0, UADP and JSON, message security, Security Key Service, chunks, discovery, Actions, diagnostics, PublishSubscribe information model |
+| [OPC UA FX](docs/uafx.md) | The UAFX information model (Part 81): inspecting AutomationComponents with `uafx.Inspect`, adding the model to a server; what is not implemented |
 | [JSON and XML Data Encodings](docs/encodings.md) | `ua.EncodeJSON` / `ua.EncodeXML`: supported forms, namespace tables, custom structures, open62541 interoperability |
 | [Errors](ERRORS.md) | Go sentinels vs wire `ua.StatusCode` |
 | [Observability](OBSERVABILITY.md) | Silent slog default and metrics callbacks |
@@ -484,6 +485,9 @@ Per-area verification status: [docs/FEATURE-STATUS.md](docs/FEATURE-STATUS.md).
 | `gds` | Certificate management clients of Part 12: push (`Client`: trust lists of every group, signing requests, certificate updates (PEM, PFX), self-signed certificates, transaction diagnostics) and pull (`PullClient`: application directory, certificate requests, `Enroll`) |
 | `gds/gdsserver` | Global Discovery Server (Part 12 pull model): application directory, CA issuing certificates and CRLs, TrustList, pluggable `Store`, DiscoveryAdmin / CertificateAuthorityAdmin / SecurityAdmin roles |
 | `gds/gdsid` | NodeIds of the GDS information model (namespace `http://opcfoundation.org/UA/GDS/`) |
+| `uafx` | OPC UA FX (OPC 10000-81) information model: `Inspect` reads the AutomationComponents, Assets, FunctionalEntities, ConnectionEndpoints and ConnectionManager of a server ([docs/uafx.md](docs/uafx.md)) |
+| `uafx/fxserver` | Adds the UAFX model (with DI) to a server; imports NodeSets with the namespace indexes of the server |
+| `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid`, `di/diid` | NodeIds of the UAFX Data, AC and CM namespaces and of the DI model |
 | `errors` | Sentinel errors for `errors.Is()` checking |
 | `id` | Well-known NodeID constants (generated from OPC-UA schema) |
 | `uacp` | OPC-UA Connection Protocol over TCP and TLS WebSockets; `ParseEndpoint`, `DialWithTimeout`, `ListenWebSocket` |
