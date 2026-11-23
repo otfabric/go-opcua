@@ -154,10 +154,6 @@ func (e *emitter) enum(t *dataType) {
 		e.p("// %s is the %s %s of %s.", t.goName, t.name, what, clause(t))
 	}
 	e.p("type %s %s\n", t.goName, under)
-	pre := t.goName
-	if t.cfg.Prefix != nil {
-		pre = *t.cfg.Prefix
-	}
 	if t.kind == kOptionSet {
 		e.p("// The bits of %s (%s).", t.name, clause(t))
 	} else {
@@ -166,9 +162,9 @@ func (e *emitter) enum(t *dataType) {
 	e.p("const (")
 	for _, v := range t.values {
 		if t.kind == kOptionSet {
-			e.p("%s%s %s = 1 << %d", pre, goname.Format(v.name), t.goName, v.v)
+			e.p("%s %s = 1 << %d", constName(t, v), t.goName, v.v)
 		} else {
-			e.p("%s%s %s = %d", pre, goname.Format(v.name), t.goName, v.v)
+			e.p("%s %s = %d", constName(t, v), t.goName, v.v)
 		}
 	}
 	e.p(")\n")
@@ -189,9 +185,18 @@ func (e *emitter) enum(t *dataType) {
 	e.p("// String returns the name of the value, or its number if it has none.")
 	e.p("func (v %s) String() string {\nswitch v {", t.goName)
 	for _, v := range t.values {
-		e.p("case %s%s: return %q", pre, goname.Format(v.name), v.name)
+		e.p("case %s: return %q", constName(t, v), v.name)
 	}
 	e.p("}\nreturn %q + strconv.FormatInt(int64(v), 10) + \")\"\n}\n", t.goName+"(")
+}
+
+// constName is the Go name of the value v of the enumeration or OptionSet t.
+func constName(t *dataType, v value) string {
+	pre := t.goName
+	if t.cfg.Prefix != nil {
+		pre = *t.cfg.Prefix
+	}
+	return pre + goname.Format(v.name)
 }
 
 func (e *emitter) iface(t *dataType) {
@@ -299,7 +304,7 @@ func (e *emitter) structCodec(t *dataType) {
 			x := "v." + fieldName(f)
 			if f.optional {
 				e.p("if mask&(1<<%d) != 0 {", bit)
-				e.decodeValue(t, f, x, !e.canBeNil(f), false)
+				e.decodeValue(t, f, x, !e.canBeNil(f), true)
 				e.p("}")
 				bit++
 				continue
@@ -411,20 +416,28 @@ func (e *emitter) encodeArray(f *field, x string) {
 }
 
 // decodeValue reads the value of f into x; alloc when x is a pointer to the
-// value; option when f is the selected field of a union.
-func (e *emitter) decodeValue(owner *dataType, f *field, x string, alloc, option bool) {
+// value; present when f is an optional field whose EncodingMask bit is set
+// or the selected field of a union. A present field stays non-nil, so that
+// encoding it again sets the bit or the SwitchField again: a null array is
+// an empty slice (Part 6 §5.2.5 does not tell null and empty arrays apart),
+// a null union a value without a field set; a null ExtensionObject cannot be
+// told from an absent field and is an error.
+func (e *emitter) decodeValue(owner *dataType, f *field, x string, alloc, present bool) {
 	if f.array {
 		e.decodeArray(owner, f, x)
+		if present {
+			e.p("if %s == nil { %s = %s{} }", x, x, e.goType(f, false))
+		}
 		return
 	}
 	if alloc {
 		e.p("%s = new(%s)", x, e.elemType(f))
 		x = "*" + x
 	}
-	e.decodeScalar(owner, f, x, option)
+	e.decodeScalar(owner, f, x, present)
 }
 
-func (e *emitter) decodeScalar(owner *dataType, f *field, x string, option bool) {
+func (e *emitter) decodeScalar(owner *dataType, f *field, x string, present bool) {
 	t := e.fx(f)
 	switch {
 	case t == nil:
@@ -456,9 +469,11 @@ func (e *emitter) decodeScalar(owner *dataType, f *field, x string, option bool)
 	case e.isEO(f):
 		goT, _ := e.eoType(f)
 		e.p("if s := r.extensionObject(func(s Structure) bool { _, ok := s.(%s); return ok }); s != nil { %s = s.(%s) }", goT, x, goT)
-		if option {
+		if present {
 			e.p("if %s == nil && r.Error() == nil { r.fail(%q) }", x, owner.name+"."+f.name+": a null ExtensionObject")
 		}
+	case t.kind == kUnion && present:
+		e.p("%s = new(%s)\n%s.decode(r)", x, t.goName, x)
 	case t.kind == kUnion:
 		e.p("{\nu := new(%s)\nu.decode(r)\nif !u.isNull() { %s = u }\n}", t.goName, x)
 	default:
@@ -488,7 +503,11 @@ func (e *emitter) schema() {
 	e.p("var generatedSchema = []schemaType{")
 	for _, t := range e.m.order {
 		if t.kind == kEnum || t.kind == kOptionSet {
-			e.p("{ns: %q, name: %q, enum: true, values: %d},", t.ns, t.name, len(t.values))
+			e.p("{ns: %q, name: %q, enum: true, optionSet: %v, zero: %s(0), values: []schemaValue{", t.ns, t.name, t.kind == kOptionSet, t.goName)
+			for _, v := range t.values {
+				e.p("{%q, int64(%s)},", v.name, constName(t, v))
+			}
+			e.p("}},")
 			continue
 		}
 		enc := "0"

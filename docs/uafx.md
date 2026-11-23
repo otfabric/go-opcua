@@ -372,7 +372,13 @@ in `uafx/internal/model`, with their binary encoding (Part 6 §5.2.6 to
 - A structure is a pointer to a Go struct. The fields of a supertype come
   first, as in the encoding.
 - An optional field is a pointer, a slice or an interface, nil when it is
-  absent; the EncodingMask is written from the fields that are set.
+  absent; the EncodingMask is written from the fields that are set. An
+  optional array that is present but null (length -1) decodes as an empty
+  slice, so it stays present when it is encoded again, with the length 0:
+  Part 6 §5.2.5 does not tell null and empty arrays apart, but an absent
+  field differs from a present one. An optional structure of an abstract
+  DataType that is present but a null ExtensionObject is `ErrCodec`, as a
+  union option is; there is none in the NodeSets of version 1.00.04.
 - A union is a struct with one field per option, all pointers, slices or
   interfaces: at most one is set, none for the null union. Encoding a
   union with two set is an error.
@@ -407,8 +413,9 @@ nesting is bounded by the DataTypes, which do not contain themselves.
 The generated code is checked against sources it is not generated from:
 the Binary Schemas of the same NodeSets (`schema/opc.ua.fx.*.nodeset2.bsd`,
 `TestSchemaMatchesBinarySchema`: every DataType, the order of the fields,
-the EncodingMask bits, the SwitchValues and which fields are
-ExtensionObjects), byte fixtures written by hand from Part 6
+the EncodingMask bits, the SwitchValues, which fields are ExtensionObjects,
+and the names and values of the enumerations and the bits and width of the
+OptionSets against the Go constants), byte fixtures written by hand from Part 6
 (`TestStructureFixtures`), and the bytes of the EstablishConnections
 arguments of v1.37.0 (`TestGoldenReleaseB`).
 

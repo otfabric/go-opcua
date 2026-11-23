@@ -762,6 +762,9 @@ func (v *AssetVerificationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<0) != 0 {
 		r.ReadStruct(&v.AssetProperties)
+		if v.AssetProperties == nil {
+			v.AssetProperties = []*ua.KeyValuePair{}
+		}
 	}
 }
 
@@ -1012,6 +1015,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 	v.BrowseName = r.ReadString()
 	if mask&(1<<0) != 0 {
 		r.ReadStruct(&v.FlowProperties)
+		if v.FlowProperties == nil {
+			v.FlowProperties = []*ua.KeyValuePair{}
+		}
 	}
 	if mask&(1<<1) != 0 {
 		v.Address = new(AddressSelection)
@@ -1023,6 +1029,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<3) != 0 {
 		r.ReadStruct(&v.TransportProfileURISelection)
+		if v.TransportProfileURISelection == nil {
+			v.TransportProfileURISelection = []string{}
+		}
 	}
 	if mask&(1<<4) != 0 {
 		v.TransportProfileURIModify = new(bool)
@@ -1034,6 +1043,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<6) != 0 {
 		r.ReadStruct(&v.HeaderLayoutURISelection)
+		if v.HeaderLayoutURISelection == nil {
+			v.HeaderLayoutURISelection = []string{}
+		}
 	}
 	if mask&(1<<7) != 0 {
 		v.HeaderLayoutURIModify = new(bool)
@@ -1045,6 +1057,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<9) != 0 {
 		r.ReadStruct(&v.PublishingIntervalSelection)
+		if v.PublishingIntervalSelection == nil {
+			v.PublishingIntervalSelection = []float64{}
+		}
 	}
 	if mask&(1<<10) != 0 {
 		v.PublishingIntervalModify = new(bool)
@@ -1065,6 +1080,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 				}
 			}
 		}
+		if v.QosSelection == nil {
+			v.QosSelection = []*CommunicationFlowQos{}
+		}
 	}
 	if mask&(1<<13) != 0 {
 		v.QosModify = new(bool)
@@ -1076,6 +1094,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<15) != 0 {
 		r.ReadStruct(&v.SecurityModeSelection)
+		if v.SecurityModeSelection == nil {
+			v.SecurityModeSelection = []ua.MessageSecurityMode{}
+		}
 	}
 	if mask&(1<<16) != 0 {
 		v.SecurityModeModify = new(bool)
@@ -1087,6 +1108,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<18) != 0 {
 		r.ReadStruct(&v.SecurityGroupIDSelection)
+		if v.SecurityGroupIDSelection == nil {
+			v.SecurityGroupIDSelection = []string{}
+		}
 	}
 	if mask&(1<<19) != 0 {
 		v.SecurityGroupIDModify = new(bool)
@@ -1102,6 +1126,9 @@ func (v *PubSubCommunicationFlowConfigurationConf) decode(r *rbuf) {
 					return
 				}
 			}
+		}
+		if v.SubscriberConfigurations == nil {
+			v.SubscriberConfigurations = []*SubscriberConfigurationConf{}
 		}
 	}
 }
@@ -1201,6 +1228,9 @@ func (v *ConnectionConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<1) != 0 {
 		r.ReadStruct(&v.ConnectionProperties)
+		if v.ConnectionProperties == nil {
+			v.ConnectionProperties = []*ua.KeyValuePair{}
+		}
 	}
 }
 
@@ -1527,6 +1557,9 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 				}
 			}
 		}
+		if v.FunctionalEntityNodeSelection == nil {
+			v.FunctionalEntityNodeSelection = []*NodeIdentifier{}
+		}
 	}
 	if mask&(1<<1) != 0 {
 		v.FunctionalEntityNodeModify = new(bool)
@@ -1535,6 +1568,9 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 	v.Name = r.ReadString()
 	if mask&(1<<2) != 0 {
 		r.ReadStruct(&v.NameSelection)
+		if v.NameSelection == nil {
+			v.NameSelection = []string{}
+		}
 	}
 	if mask&(1<<3) != 0 {
 		v.NameModify = new(bool)
@@ -1558,6 +1594,9 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 				}
 			}
 		}
+		if v.InputVariableIDs == nil {
+			v.InputVariableIDs = []*NodeIdentifier{}
+		}
 	}
 	if mask&(1<<5) != 0 {
 		if n, ok := r.length(); ok {
@@ -1574,6 +1613,9 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 					return
 				}
 			}
+		}
+		if v.OutputVariableIDs == nil {
+			v.OutputVariableIDs = []*NodeIdentifier{}
 		}
 	}
 	v.IsPersistent = r.ReadBool()
@@ -1610,6 +1652,9 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 				}
 			}
 		}
+		if v.ExpectedVerificationVariables == nil {
+			v.ExpectedVerificationVariables = []*NodeIdentifierValuePair{}
+		}
 	}
 	if mask&(1<<12) != 0 {
 		if n, ok := r.length(); ok {
@@ -1627,6 +1672,9 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 				}
 			}
 		}
+		if v.ControlGroups == nil {
+			v.ControlGroups = []*NodeIdentifier{}
+		}
 	}
 	if mask&(1<<13) != 0 {
 		if n, ok := r.length(); ok {
@@ -1639,9 +1687,15 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 				}
 			}
 		}
+		if v.ConfigurationData == nil {
+			v.ConfigurationData = []*NodeIdentifierValuePair{}
+		}
 	}
 	if mask&(1<<14) != 0 {
 		r.ReadStruct(&v.EndpointProperties)
+		if v.EndpointProperties == nil {
+			v.EndpointProperties = []*ua.KeyValuePair{}
+		}
 	}
 	v.AutomationComponentIndex = r.ReadInt32()
 	if mask&(1<<15) != 0 {
@@ -1650,6 +1704,9 @@ func (v *ConnectionEndpointConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<16) != 0 {
 		r.ReadStruct(&v.InboundFlowIndex)
+		if v.InboundFlowIndex == nil {
+			v.InboundFlowIndex = []int32{}
+		}
 	}
 }
 
@@ -1914,6 +1971,9 @@ func (v *SecurityKeyServerAddressConf) decode(r *rbuf) {
 	v.Address = r.ReadString()
 	if mask&(1<<0) != 0 {
 		r.ReadStruct(&v.AddressSelection)
+		if v.AddressSelection == nil {
+			v.AddressSelection = []string{}
+		}
 	}
 	if mask&(1<<1) != 0 {
 		v.AddressModify = new(bool)
@@ -1922,6 +1982,9 @@ func (v *SecurityKeyServerAddressConf) decode(r *rbuf) {
 	v.SecurityPolicyURI = r.ReadString()
 	if mask&(1<<2) != 0 {
 		r.ReadStruct(&v.SecurityPolicyURISelection)
+		if v.SecurityPolicyURISelection == nil {
+			v.SecurityPolicyURISelection = []string{}
+		}
 	}
 	if mask&(1<<3) != 0 {
 		v.SecurityPolicyURIModify = new(bool)
@@ -1930,6 +1993,9 @@ func (v *SecurityKeyServerAddressConf) decode(r *rbuf) {
 	v.ServerURI = r.ReadString()
 	if mask&(1<<4) != 0 {
 		r.ReadStruct(&v.ServerURISelection)
+		if v.ServerURISelection == nil {
+			v.ServerURISelection = []string{}
+		}
 	}
 	if mask&(1<<5) != 0 {
 		v.ServerURIModify = new(bool)
@@ -1938,12 +2004,21 @@ func (v *SecurityKeyServerAddressConf) decode(r *rbuf) {
 	v.UsePushModel = r.ReadBool()
 	if mask&(1<<6) != 0 {
 		r.ReadStruct(&v.SecurityGroups)
+		if v.SecurityGroups == nil {
+			v.SecurityGroups = []*ua.SecurityGroupDataType{}
+		}
 	}
 	if mask&(1<<7) != 0 {
 		r.ReadStruct(&v.PubSubKeyPushTargets)
+		if v.PubSubKeyPushTargets == nil {
+			v.PubSubKeyPushTargets = []*ua.PubSubKeyPushTargetDataType{}
+		}
 	}
 	if mask&(1<<8) != 0 {
 		r.ReadStruct(&v.SksProperties)
+		if v.SksProperties == nil {
+			v.SksProperties = []*ua.KeyValuePair{}
+		}
 	}
 }
 
@@ -2043,6 +2118,9 @@ func (v *ServerAddressConf) decode(r *rbuf) {
 	v.Address = r.ReadString()
 	if mask&(1<<0) != 0 {
 		r.ReadStruct(&v.AddressSelection)
+		if v.AddressSelection == nil {
+			v.AddressSelection = []string{}
+		}
 	}
 	if mask&(1<<1) != 0 {
 		v.AddressModify = new(bool)
@@ -2051,6 +2129,9 @@ func (v *ServerAddressConf) decode(r *rbuf) {
 	r.ReadStruct(&v.SecurityMode)
 	if mask&(1<<2) != 0 {
 		r.ReadStruct(&v.SecurityModeSelection)
+		if v.SecurityModeSelection == nil {
+			v.SecurityModeSelection = []ua.MessageSecurityMode{}
+		}
 	}
 	if mask&(1<<3) != 0 {
 		v.SecurityModeModify = new(bool)
@@ -2059,6 +2140,9 @@ func (v *ServerAddressConf) decode(r *rbuf) {
 	v.SecurityPolicyURI = r.ReadString()
 	if mask&(1<<4) != 0 {
 		r.ReadStruct(&v.SecurityPolicyURISelection)
+		if v.SecurityPolicyURISelection == nil {
+			v.SecurityPolicyURISelection = []string{}
+		}
 	}
 	if mask&(1<<5) != 0 {
 		v.SecurityPolicyURIModify = new(bool)
@@ -2067,6 +2151,9 @@ func (v *ServerAddressConf) decode(r *rbuf) {
 	v.ServerURI = r.ReadString()
 	if mask&(1<<6) != 0 {
 		r.ReadStruct(&v.ServerURISelection)
+		if v.ServerURISelection == nil {
+			v.ServerURISelection = []string{}
+		}
 	}
 	if mask&(1<<7) != 0 {
 		v.ServerURIModify = new(bool)
@@ -2074,6 +2161,9 @@ func (v *ServerAddressConf) decode(r *rbuf) {
 	}
 	if mask&(1<<8) != 0 {
 		r.ReadStruct(&v.ServerProperties)
+		if v.ServerProperties == nil {
+			v.ServerProperties = []*ua.KeyValuePair{}
+		}
 	}
 	r.ReadStruct(&v.Namespaces)
 }
@@ -2158,6 +2248,9 @@ func (v *SubscriberConfigurationConf) decode(r *rbuf) {
 	v.MessageReceiveTimeout = r.ReadFloat64()
 	if mask&(1<<1) != 0 {
 		r.ReadStruct(&v.MessageReceiveTimeoutSelection)
+		if v.MessageReceiveTimeoutSelection == nil {
+			v.MessageReceiveTimeoutSelection = []float64{}
+		}
 	}
 	if mask&(1<<2) != 0 {
 		v.MessageReceiveTimeoutModify = new(bool)
@@ -2169,6 +2262,9 @@ func (v *SubscriberConfigurationConf) decode(r *rbuf) {
 	}
 	if mask&(1<<4) != 0 {
 		r.ReadStruct(&v.SubscriberProperties)
+		if v.SubscriberProperties == nil {
+			v.SubscriberProperties = []*ua.KeyValuePair{}
+		}
 	}
 }
 

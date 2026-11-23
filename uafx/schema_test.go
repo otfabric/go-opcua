@@ -5,6 +5,7 @@ package uafx
 import (
 	"encoding/xml"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -17,13 +18,20 @@ import (
 type schemaType struct {
 	ns, name      string
 	enum          bool
-	values        int
+	optionSet     bool
+	zero          any           // the zero value of the Go type of an enumeration
+	values        []schemaValue // the values of an enumeration, the bits of an OptionSet
 	union         bool
 	abstract      bool
 	binary        uint32 // the Default Binary encoding in the NodeSet
 	encodingConst uint32 // the same from package fx*id
 	value         Structure
 	fields        []schemaField
+}
+
+type schemaValue struct {
+	name  string
+	value int64 // the Go constant
 }
 
 type schemaField struct {
@@ -53,9 +61,12 @@ type bsdField struct {
 }
 
 type bsdEnum struct {
-	Name   string `xml:"Name,attr"`
-	Values []struct {
-		Name string `xml:"Name,attr"`
+	Name         string `xml:"Name,attr"`
+	LengthInBits int    `xml:"LengthInBits,attr"`
+	IsOptionSet  bool   `xml:"IsOptionSet,attr"`
+	Values       []struct {
+		Name  string `xml:"Name,attr"`
+		Value int64  `xml:"Value,attr"`
 	} `xml:"EnumeratedValue"`
 }
 
@@ -67,7 +78,7 @@ type wireField struct {
 	switchValue     string // the SwitchValue of a union field
 }
 
-func loadBSD(t *testing.T, ns string) (map[string][]wireField, map[string]bool, map[string]int) {
+func loadBSD(t *testing.T, ns string) (map[string][]wireField, map[string]bool, map[string]bsdEnum) {
 	t.Helper()
 	raw, err := os.ReadFile("../schema/opc.ua.fx." + ns + ".nodeset2.bsd")
 	require.NoError(t, err)
@@ -107,9 +118,9 @@ func loadBSD(t *testing.T, ns string) (map[string][]wireField, map[string]bool, 
 		}
 		structs[s.Name] = out
 	}
-	enums := map[string]int{}
+	enums := map[string]bsdEnum{}
 	for _, e := range d.Enums {
-		enums[e.Name] = len(e.Values)
+		enums[e.Name] = e
 	}
 	return structs, unions, enums
 }
@@ -136,12 +147,12 @@ func TestSchemaMatchesBinarySchema(t *testing.T) {
 	}
 	for _, ns := range []string{"data", "ac", "cm"} {
 		structs, unions, enums := loadBSD(t, ns)
-		for name, n := range enums {
+		for name, want := range enums {
 			g, ok := generated[ns+":"+name]
-			if assert.True(t, ok, "%s:%s is not generated", ns, name) {
-				assert.True(t, g.enum, name)
-				assert.Equal(t, n, g.values, name)
+			if !assert.True(t, ok, "%s:%s is not generated", ns, name) || !assert.True(t, g.enum, name) {
+				continue
 			}
+			checkEnum(t, name, want, g)
 		}
 		for name, want := range structs {
 			g, ok := generated[ns+":"+name]
@@ -187,6 +198,28 @@ func TestSchemaMatchesBinarySchema(t *testing.T) {
 			_, isStruct := structs[g.name]
 			_, isEnum := enums[g.name]
 			assert.True(t, isStruct || isEnum, "%s is generated but not in the Binary Schema", key)
+		}
+	}
+}
+
+// checkEnum compares the Go constants of an enumeration or OptionSet with
+// its definition in the Binary Schema: the names and values in order, a bit
+// number for an OptionSet (where the Binary Schema gives the number of the bit), and the width
+// of the Go type with LengthInBits.
+func checkEnum(t *testing.T, name string, want bsdEnum, g schemaType) {
+	t.Helper()
+	assert.Equal(t, want.IsOptionSet, g.optionSet, "%s IsOptionSet", name)
+	assert.Equal(t, want.LengthInBits, reflect.TypeOf(g.zero).Bits(), "%s LengthInBits", name)
+	if !assert.Len(t, g.values, len(want.Values), "%s values", name) {
+		return
+	}
+	for i, w := range want.Values {
+		v := g.values[i]
+		assert.Equal(t, w.Name, v.name, "%s value %d", name, i)
+		if want.IsOptionSet {
+			assert.Equal(t, int64(1)<<w.Value, v.value, "%s.%s bit", name, w.Name)
+		} else {
+			assert.Equal(t, w.Value, v.value, "%s.%s", name, w.Name)
 		}
 	}
 }

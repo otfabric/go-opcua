@@ -56,6 +56,12 @@ func TestStructureFixtures(t *testing.T) {
 		// absent optional fields take no bytes.
 		"SecurityKeyServerAddressConfDataType": {&SecurityKeyServerAddressConf{Address: "a", AddressModify: &yes, SecurityPolicyURI: "p", ServerURI: "s", UsePushModel: true}, testNS.CM, 5050,
 			"02000000" + "0100000061" + "01" + "0100000070" + "0100000073" + "01"},
+		// An optional array that is present and empty: bit 0 of the
+		// EncodingMask (AddressSelection), then Address "a", the
+		// AddressSelection of length 0, SecurityPolicyUri "p", ServerUri "s"
+		// and UsePushModel false.
+		"SecurityKeyServerAddressConfDataType/empty array": {&SecurityKeyServerAddressConf{Address: "a", AddressSelection: []string{}, SecurityPolicyURI: "p", ServerURI: "s"}, testNS.CM, 5050,
+			"01000000" + "0100000061" + "00000000" + "0100000070" + "0100000073" + "00"},
 		// A subtype: the fields of PubSubReserveCommunicationIdsDataType
 		// first (TransportProfileUri "t", 1, 2), then its own
 		// RequestTransportSpecificInfo.
@@ -82,6 +88,31 @@ func TestStructureFixtures(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestOptionalNullArray: an optional field is present when its bit of the
+// EncodingMask is set, whatever its value (Part 6 §5.2.7). A present array
+// of length -1, the null array, decodes as an empty slice, not as nil, which
+// is an absent field: encoded again, the bit stays set, with the length 0
+// (Part 6 §5.2.5 does not tell null and empty arrays apart).
+func TestOptionalNullArray(t *testing.T) {
+	c := codec{testNS}
+	// Bit 0 (AddressSelection) and bit 2 (SecurityPolicyUriSelection), both
+	// null; Address "a", SecurityPolicyUri "p", ServerUri "s", UsePushModel
+	// false.
+	body := "05000000" + "0100000061" + "ffffffff" + "0100000070" + "ffffffff" + "0100000073" + "00"
+	raw, _ := hex.DecodeString(body)
+	v, err := DecodeStructure(&ua.ExtensionObject{EncodingMask: ua.ExtensionObjectBinary, TypeID: ua.NewNumericExpandedNodeID(c.index(nsCM), 5050), Value: raw}, testNS)
+	require.NoError(t, err)
+	got := v.(*SecurityKeyServerAddressConf)
+	require.NotNil(t, got.AddressSelection)
+	require.NotNil(t, got.SecurityPolicyURISelection)
+	assert.Empty(t, got.AddressSelection)
+	assert.Nil(t, got.ServerURISelection, "bit 4 is not set")
+
+	eo, err := EncodeStructure(got, testNS)
+	require.NoError(t, err)
+	assert.Equal(t, "05000000"+"0100000061"+"00000000"+"0100000070"+"00000000"+"0100000073"+"00", hex.EncodeToString(eo.Value.([]byte)))
 }
 
 func ptr[T any](v T) *T { return &v }
@@ -120,7 +151,10 @@ var structureType = reflect.TypeOf((*Structure)(nil)).Elem()
 type filler struct {
 	schema   map[reflect.Type]schemaType
 	optional bool
-	pick     int
+	// empty sets the optional arrays present and empty, the state between
+	// absent (nil) and filled.
+	empty bool
+	pick  int
 }
 
 func (f filler) fill(v reflect.Value) {
@@ -160,6 +194,10 @@ func (f filler) fill(v reflect.Value) {
 		}
 		for i := range v.NumField() {
 			if g.fields[i].optional && !f.optional {
+				continue
+			}
+			if g.fields[i].optional && f.empty && v.Field(i).Kind() == reflect.Slice {
+				v.Field(i).Set(reflect.MakeSlice(v.Field(i).Type(), 0, 0))
 				continue
 			}
 			f.fill(v.Field(i))
@@ -219,9 +257,10 @@ func TestStructuresRoundTrip(t *testing.T) {
 		t.Run(g.name, func(t *testing.T) {
 			structureRoundTrip(t, reflect.New(reflect.TypeOf(g.value).Elem()).Interface().(Structure))
 			for pick := range 4 {
-				for _, optional := range []bool{false, true} {
+				for _, f := range []filler{{optional: false}, {optional: true}, {optional: true, empty: true}} {
+					f.schema, f.pick = schema, pick
 					v := reflect.New(reflect.TypeOf(g.value).Elem())
-					filler{schema: schema, optional: optional, pick: pick}.fill(v.Elem())
+					f.fill(v.Elem())
 					structureRoundTrip(t, v.Interface().(Structure))
 				}
 			}
