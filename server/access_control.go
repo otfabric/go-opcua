@@ -65,6 +65,16 @@ func WithAccessController(ac AccessController) Option {
 //   - EncryptionRequired (2): the channel must use MessageSecurityModeSignAndEncrypt.
 //   - SessionRequired (4): a session must be active (currently always true for us).
 func checkAccessRestrictions(sc *uasc.SecureChannel, n *Node) ua.StatusCode {
+	mode := ua.MessageSecurityModeNone
+	if sc != nil {
+		mode = sc.SecurityMode()
+	}
+	return accessRestrictionsFor(mode, n)
+}
+
+// accessRestrictionsFor is checkAccessRestrictions for a channel with the
+// security mode mode.
+func accessRestrictionsFor(mode ua.MessageSecurityMode, n *Node) ua.StatusCode {
 	av, err := n.Attribute(ua.AttributeIDAccessRestrictions)
 	if err != nil || av == nil || av.Value == nil || av.Value.Value == nil {
 		return ua.StatusOK
@@ -77,10 +87,12 @@ func checkAccessRestrictions(sc *uasc.SecureChannel, n *Node) ua.StatusCode {
 	if ar == ua.AccessRestrictionTypeNone {
 		return ua.StatusOK
 	}
-	mode := ua.MessageSecurityModeNone
-	if sc != nil {
-		mode = sc.SecurityMode()
-	}
+	return restrictionsMet(ar, mode)
+}
+
+// restrictionsMet checks the AccessRestrictions ar against a channel with
+// the security mode mode.
+func restrictionsMet(ar ua.AccessRestrictionType, mode ua.MessageSecurityMode) ua.StatusCode {
 	if ar&ua.AccessRestrictionTypeEncryptionRequired != 0 && mode != ua.MessageSecurityModeSignAndEncrypt {
 		return ua.StatusBadSecurityModeInsufficient
 	}

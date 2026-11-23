@@ -40,7 +40,7 @@ func TestInspectNoFX(t *testing.T) {
 }
 
 func TestInspectACOnly(t *testing.T) {
-	_, c, ns := uafx.FXTestServer(t, true, fxserver.ModelAC)
+	_, c, ns := FXTestServer(t, true, fxserver.ModelAC)
 	assert.Zero(t, ns.CM)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
@@ -51,7 +51,7 @@ func TestInspectACOnly(t *testing.T) {
 }
 
 func TestInspectCMOnly(t *testing.T) {
-	_, c, ns := uafx.FXTestServer(t, true, fxserver.ModelCM)
+	_, c, ns := FXTestServer(t, true, fxserver.ModelCM)
 	assert.Zero(t, ns.AC)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
@@ -62,9 +62,9 @@ func TestInspectCMOnly(t *testing.T) {
 }
 
 func TestInspectDataOnly(t *testing.T) {
-	srv := uafx.NewTestServer(t)
+	srv := NewTestServer(t)
 	require.NoError(t, fxserver.ImportNodeSet(srv, model.Data))
-	c := uafx.StartTestServer(t, srv)
+	c := StartTestServer(t, srv)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
 	assert.False(t, r.IsFXServer())
@@ -75,9 +75,9 @@ func TestInspectDataOnly(t *testing.T) {
 }
 
 func TestInspectNoData(t *testing.T) {
-	srv := uafx.NewTestServer(t)
+	srv := NewTestServer(t)
 	server.NewNodeNameSpace(srv, fxacid.NamespaceURI)
-	c := uafx.StartTestServer(t, srv)
+	c := StartTestServer(t, srv)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
 	assert.False(t, r.IsFXServer())
@@ -88,11 +88,11 @@ func TestInspectNoData(t *testing.T) {
 // TestInspectNoFxRoot checks a server with the namespaces of a UAFX server
 // but no model in them: it has the namespaces, but not the structure.
 func TestInspectNoFxRoot(t *testing.T) {
-	srv := uafx.NewTestServer(t)
+	srv := NewTestServer(t)
 	server.NewNodeNameSpace(srv, diid.NamespaceURI)
 	server.NewNodeNameSpace(srv, fxdataid.NamespaceURI)
 	server.NewNodeNameSpace(srv, fxacid.NamespaceURI)
-	c := uafx.StartTestServer(t, srv)
+	c := StartTestServer(t, srv)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
 	assert.True(t, r.HasFXNamespaces())
@@ -105,10 +105,10 @@ func TestInspectNoFxRoot(t *testing.T) {
 // TestInspectNoDI checks a server with the UAFX model but without the
 // mandatory DI namespace (Part 81 §14.2).
 func TestInspectNoDI(t *testing.T) {
-	srv := uafx.NewTestServer(t)
+	srv := NewTestServer(t)
 	require.NoError(t, fxserver.ImportNodeSet(srv, model.Data))
 	server.NewNodeNameSpace(srv, fxacid.NamespaceURI)
-	c := uafx.StartTestServer(t, srv)
+	c := StartTestServer(t, srv)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
 	assert.False(t, r.HasFXNamespaces())
@@ -119,7 +119,7 @@ func TestInspectNoDI(t *testing.T) {
 }
 
 func TestInspectLimits(t *testing.T) {
-	_, c, _ := uafx.FXTestServer(t, false)
+	_, c, _ := FXTestServer(t, false)
 	ctx := context.Background()
 
 	r, err := uafx.Inspect(ctx, c, uafx.Limits{MaxComponents: 1})
@@ -144,24 +144,24 @@ func TestInspectLimits(t *testing.T) {
 // TestInspectBadStructures checks that a structure value of the wrong
 // encoding becomes a Finding, not a value.
 func TestInspectBadStructures(t *testing.T) {
-	srv := uafx.NewTestServer(t)
+	srv := NewTestServer(t)
 	ns, err := fxserver.AddModel(srv)
 	require.NoError(t, err)
-	doc := uafx.ReadFixture(t)
+	doc := ReadFixture(t)
 	require.NoError(t, fxserver.ImportNodeSet(srv, doc))
-	test := uafx.NSIndex(t, srv, uafx.TestNS)
+	test := NSIndex(t, srv, TestNS)
 	// AggregatedHealth with the encoding of FxVersion, FxVersion too short.
-	uafx.SetValue(t, srv, ua.NewNumericNodeID(test, 1004), &ua.ExtensionObject{
+	SetValue(t, srv, ua.NewNumericNodeID(test, 1004), &ua.ExtensionObject{
 		TypeID:       ua.NewNumericExpandedNodeID(ns.AC, fxacid.FxVersionEncodingDefaultBinary),
 		EncodingMask: ua.ExtensionObjectBinary,
 		Value:        []byte{1, 0, 2, 0, 3, 0, 4, 0},
 	})
-	uafx.SetValue(t, srv, ua.NewNumericNodeID(test, 1203), &ua.ExtensionObject{
+	SetValue(t, srv, ua.NewNumericNodeID(test, 1203), &ua.ExtensionObject{
 		TypeID:       ua.NewNumericExpandedNodeID(ns.AC, fxacid.FxVersionEncodingDefaultBinary),
 		EncodingMask: ua.ExtensionObjectBinary,
 		Value:        []byte{1, 0},
 	})
-	c := uafx.StartTestServer(t, srv)
+	c := StartTestServer(t, srv)
 	r, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.NoError(t, err)
 	clauses := map[string]bool{}
@@ -179,7 +179,7 @@ func TestInspectBadStructures(t *testing.T) {
 }
 
 func TestInspectClosedClient(t *testing.T) {
-	_, c, _ := uafx.FXTestServer(t, true)
+	_, c, _ := FXTestServer(t, true)
 	require.NoError(t, c.Close(context.Background()))
 	_, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.ErrorIs(t, err, uafx.ErrInspect)

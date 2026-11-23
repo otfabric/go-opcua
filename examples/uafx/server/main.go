@@ -2,12 +2,15 @@
 
 // Example uafx/server runs an OPC UA server with the OPC UA FX information
 // model (OPC 10000-81) and one AutomationComponent: a controller with a
-// drive as its Asset and a Motion FunctionalEntity with a PubSub
-// ConnectionEndpoint (controller.xml). Every few seconds the drive reports
-// another health, which the AggregatedHealth of the controller shows.
+// drive as its Asset and a Motion FunctionalEntity with input, output and
+// configuration data and a preconfigured PubSub ConnectionEndpoint
+// (controller.xml). Every few seconds the drive reports another health,
+// which the AggregatedHealth of the controller shows.
 //
-// The server serves the model only: the Methods of Part 81
-// (EstablishConnections, CloseConnections, ...) answer Bad_MethodInvalid.
+// The controller serves EstablishConnections and CloseConnections
+// (fxserver.EnableConnections): a client (uafx.EstablishConnections) can
+// connect Motion over PubSub. The other Methods of Part 81 answer
+// Bad_MethodInvalid.
 //
 // Usage:
 //
@@ -42,10 +45,12 @@ const applicationURI = "urn:example:uafx:server"
 const controllerNS = "urn:example:uafx:controller"
 
 // NodeIds in controllerNS: the AggregatedHealth of the controller and the
-// AuthorAssignedVersion of its Motion FunctionalEntity.
+// AuthorAssignedVersion and OperationalHealth of its Motion
+// FunctionalEntity.
 const (
-	aggregatedHealthID      = 1004
-	authorAssignedVersionID = 1203
+	aggregatedHealthID        = 1004
+	authorAssignedVersionID   = 1203
+	motionOperationalHealthID = 1204
 )
 
 func main() {
@@ -57,15 +62,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	srv, err := newServer(*host, *port)
+	a, err := newApp(*host, *port)
 	if err != nil {
 		log.Fatal(err)
 	}
-	if err := srv.Start(ctx); err != nil {
+	if err := a.srv.Start(ctx); err != nil {
 		log.Fatal(err)
 	}
-	defer func() { _ = srv.Close() }()
-	log.Printf("UAFX server on opc.tcp://%s:%d", *host, srv.Port())
+	defer a.close()
+	log.Printf("UAFX server on opc.tcp://%s:%d", *host, a.srv.Port())
 
 	tick := time.NewTicker(*interval)
 	defer tick.Stop()
@@ -74,26 +79,41 @@ func main() {
 		case <-ctx.Done():
 			return
 		case <-tick.C:
-			if err := setHealth(srv, healthSequence[i%len(healthSequence)]); err != nil {
+			if err := a.setHealth(healthSequence[i%len(healthSequence)]); err != nil {
 				log.Print(err)
 			}
 		}
 	}
 }
 
-// newServer returns a server, not started, with the UAFX model, the
-// controller and its initial health.
-func newServer(host string, port int) (*server.Server, error) {
+// app is the server and the connections of its controller.
+type app struct {
+	srv   *server.Server
+	conns *fxserver.Connections
+}
+
+func (a *app) close() {
+	_ = a.conns.Close()
+	_ = a.srv.Close()
+}
+
+// newApp returns a server, not started, with the UAFX model, PubSub, the
+// controller with its connection Methods and its initial health.
+func newApp(host string, port int) (*app, error) {
 	srv, err := server.New(
 		server.EndPoint(host, port),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI(applicationURI),
+		// The connections configure PubSub through the PubSub information
+		// model (Part 14 §9.1.3.7.4).
+		server.WithPubSub(nil),
 	)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := fxserver.AddModel(srv); err != nil {
+	ns, err := fxserver.AddModel(srv)
+	if err != nil {
 		return nil, err
 	}
 	if err := fxserver.ImportNodeSet(srv, controller); err != nil {
@@ -104,10 +124,16 @@ func newServer(host string, port int) (*server.Server, error) {
 		&struct{ Major, Minor, Build, SubBuild uint16 }{1, 2, 0, 0}); err != nil {
 		return nil, err
 	}
-	if err := setHealth(srv, healthSequence[0]); err != nil {
+	conns, err := fxserver.EnableConnections(srv, ns, fxserver.ConnectionOptions{})
+	if err != nil {
 		return nil, err
 	}
-	return srv, nil
+	a := &app{srv: srv, conns: conns}
+	if err := a.setHealth(healthSequence[0]); err != nil {
+		_ = conns.Close()
+		return nil, err
+	}
+	return a, nil
 }
 
 // health is an AggregatedHealthDataType value (Part 81 §10.1):
@@ -124,9 +150,27 @@ var healthSequence = []health{
 	{1 << 0, 0},  // DeviceFailure
 }
 
-// setHealth writes h to the AggregatedHealth of the controller.
-func setHealth(srv *server.Server, h health) error {
-	return setStructure(srv, aggregatedHealthID, fxacid.AggregatedHealthDataTypeEncodingDefaultBinary, &h)
+// setHealth reports h: the device health in the AggregatedHealth of the
+// controller, the operational health in the vendor bits (16 to 31) of the
+// OperationalHealth of Motion. The connections own bits 0 to 15, the
+// health of its ConnectionEndpoints, and aggregate the OperationalHealth
+// of the FunctionalEntities (Part 81 §9.1.2, §10.34).
+func (a *app) setHealth(h health) error {
+	if err := setStructure(a.srv, aggregatedHealthID, fxacid.AggregatedHealthDataTypeEncodingDefaultBinary, &health{Device: h.Device}); err != nil {
+		return err
+	}
+	ctl, _ := index(a.srv, controllerNS)
+	n := a.srv.Node(ua.NewNumericNodeID(ctl, motionOperationalHealthID))
+	if n == nil {
+		return fmt.Errorf("no OperationalHealth of Motion")
+	}
+	cur, _ := n.Value().Value.Value().(uint32)
+	if err := n.SetAttribute(ua.AttributeIDValue, server.DataValueFromValue(cur&0xffff|h.Operational&^0xffff)); err != nil {
+		return err
+	}
+	a.srv.ChangeNotification(n.ID())
+	a.conns.RefreshHealth()
+	return nil
 }
 
 // setStructure writes v, a UAFX structure, to the variable node of

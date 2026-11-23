@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: MIT
 
-// Package fxtest holds the OPC UA FX test address space shared by the tests
-// of uafx, conformance/uafx and chaos/uafx: automation_component.xml, a
+// Package fxtest holds the OPC UA FX test address spaces shared by the
+// tests of uafx, uafx/fxserver, conformance/uafx and chaos/uafx:
+// connections.xml (see ConnectionsNodeSet) and automation_component.xml, a
 // NodeSet with AutomationComponents that conform to Part 81 (Controller),
 // break it (Broken, Bare) or are not of AutomationComponentType (Other),
 // plus the values of the UAFX structures that a NodeSet cannot hold.
@@ -44,6 +45,67 @@ var nodeSet []byte
 
 // NodeSet returns automation_component.xml.
 func NodeSet() []byte { return append([]byte(nil), nodeSet...) }
+
+// ConnNS is the namespace of connections.xml.
+const ConnNS = "urn:go-opcua:fxserver:connections"
+
+//go:embed connections.xml
+var connectionsNodeSet []byte
+
+// ConnectionsNodeSet returns connections.xml: AutomationComponents for the
+// tests of EstablishConnections and CloseConnections (fxserver
+// EnableConnections). Ctl has the FunctionalEntity Motion with InputData,
+// OutputData, ConfigurationData, ControlGroups, a SubFunctionalEntity Axis
+// and a preconfigured PubSubConnectionEndpoint Preset; Peer is a second
+// AutomationComponent. The constants Conn* are its NodeIds.
+func ConnectionsNodeSet() []byte { return append([]byte(nil), connectionsNodeSet...) }
+
+// NodeIds, in ConnNS, of connections.xml.
+const (
+	ConnCtl       = 1000 // the AutomationComponent Ctl
+	ConnCtlHealth = 1004 // Ctl/AggregatedHealth
+	ConnPump      = 1010 // Ctl/Assets/Pump
+	ConnMotion    = 1200 // Ctl/FunctionalEntities/Motion
+	ConnMotionOH  = 1204 // Motion/OperationalHealth
+	ConnAppID     = 1206 // Motion/ApplicationIdentifier, ApplicationIdentifierDataType[], no value
+	ConnSetpoint  = 1221 // Motion/InputData/Setpoint, Double
+	ConnLimit     = 1222 // Motion/InputData/Limit, Double
+	ConnActual    = 1231 // Motion/OutputData/Actual, Double 42.5
+	ConnGain      = 1241 // Motion/ConfigurationData/Gain, Double 1, writable
+	ConnFixed     = 1242 // Motion/ConfigurationData/Fixed, Double 7, read-only
+	ConnTable     = 1243 // Motion/ConfigurationData/Table, Double[] {1, 2, 3}
+	ConnLabel     = 1244 // Motion/ConfigurationData/Label, String "  pump-1 ", read-only
+	ConnLabels    = 1245 // Motion/ConfigurationData/Labels, String[] {" a ", "b"}, read-only
+	ConnGroup     = 1251 // Motion/ControlGroups/Group, a ControlGroup
+	ConnNotAGroup = 1252 // Motion/ControlGroups/NotAGroup
+	ConnAxis      = 1260 // Motion/Axis, a SubFunctionalEntity
+	ConnAxisIn    = 1262 // Axis/InputData/AxisIn, Double
+	ConnPreset    = 1300 // Motion/ConnectionEndpoints/Preset, Subscriber of Setpoint
+	ConnPeer      = 3000 // the AutomationComponent Peer
+	ConnRemote    = 3200 // Peer/FunctionalEntities/Remote
+)
+
+// PrepareConnections adds the AC model and connections.xml to srv, which
+// must not be started yet, have an ApplicationUri and PubSub, and sets the
+// InputVariables and OutputVariables of Preset, which a NodeSet cannot
+// hold here: InputVariables is Setpoint.
+func PrepareConnections(srv *server.Server) (fxserver.Namespaces, uint16, error) {
+	ns, err := fxserver.AddModel(srv, fxserver.ModelAC)
+	if err != nil {
+		return ns, 0, err
+	}
+	if err := fxserver.ImportNodeSet(srv, connectionsNodeSet); err != nil {
+		return ns, 0, err
+	}
+	idx, ok := Index(srv, ConnNS)
+	if !ok {
+		return ns, 0, fmt.Errorf("fxtest: no namespace %s", ConnNS)
+	}
+	if err := SetValue(srv, ua.NewNumericNodeID(idx, ConnPreset+6), []*ua.NodeID{ua.NewNumericNodeID(idx, ConnSetpoint)}); err != nil {
+		return ns, 0, err
+	}
+	return ns, idx, SetValue(srv, ua.NewNumericNodeID(idx, ConnPreset+7), []*ua.NodeID{})
+}
 
 // Prepare adds the UAFX model of models to srv, which must not be started
 // yet and must have an ApplicationUri, and unless bare the test AutomationComponents with their structure

@@ -16,10 +16,12 @@
 //		fmt.Println(ac.BrowseName.Name, ac.AggregatedHealth)
 //	}
 //
-// Inspect only reads: it does not establish, verify or close connections.
-// The Methods of Part 81 (EstablishConnections, CloseConnections, Verify,
-// VerifyAsset and those of the ConnectionManager) are not implemented by
-// this package or by package fxserver.
+// EstablishConnections and CloseConnections call the Methods of an
+// AutomationComponent that establish and close connections (§6.2.4,
+// §6.2.5); package fxserver serves them. The structures of their arguments
+// and the codecs that encode them with the namespace index of the server
+// are in this package. Verify, VerifyAsset and the Methods of the
+// ConnectionManager have no client functions.
 //
 // The NodeIds of the UAFX namespaces are in packages fxdataid, fxacid and
 // fxcmid, those of the DI model (OPC 10000-100) the UAFX model builds on in

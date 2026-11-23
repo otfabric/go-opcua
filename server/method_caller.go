@@ -32,6 +32,10 @@ type MethodCaller struct {
 	// channel with; nil on a channel without security. The channel
 	// handshake proved that the client holds its key.
 	ClientCertificate []byte
+	// ClientApplicationURI is the ApplicationUri of the ApplicationDescription
+	// the client sent with CreateSession (Part 4 §5.6.2); "" without a
+	// session.
+	ClientApplicationURI string
 }
 
 type methodCallerKey struct{}
@@ -56,6 +60,11 @@ func withMethodCaller(ctx context.Context, sess *session, sc *uasc.SecureChannel
 		c.SessionID = sess.ID
 		c.Identity = sess.identityToken
 		c.Roles = slices.Clone(sess.roles)
+		sess.diag.mu.Lock()
+		if d := sess.diag.client; d != nil {
+			c.ClientApplicationURI = d.ApplicationURI
+		}
+		sess.diag.mu.Unlock()
 	}
 	return context.WithValue(ctx, methodCallerKey{}, c)
 }

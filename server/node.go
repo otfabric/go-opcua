@@ -495,6 +495,12 @@ func (n *Node) AddRef(o *Node, rt RefType, forward bool) {
 	n.addRef(o, ua.NewNumericNodeID(0, uint32(rt)), forward)
 }
 
+// AddReference adds a reference of the ReferenceType refType, of any
+// namespace, between n and o as AddRef does.
+func (n *Node) AddReference(o *Node, refType *ua.NodeID, forward bool) {
+	n.addRef(o, refType, forward)
+}
+
 // addRef is AddRef for a ReferenceType of any namespace. It reports whether
 // it added the reference (false if both ends held it already).
 func (n *Node) addRef(o *Node, typ *ua.NodeID, forward bool) bool {

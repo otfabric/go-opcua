@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- SPDX-License-Identifier: MIT -->
+<!-- AutomationComponents for the connection tests of package fxserver: Ctl,
+     whose FunctionalEntity Motion has InputData, OutputData,
+     ConfigurationData, ControlGroups, a SubFunctionalEntity (Axis) and a
+     preconfigured PubSubConnectionEndpoint (Preset), and Peer, a second
+     AutomationComponent. -->
+<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
+  <NamespaceUris>
+    <Uri>urn:go-opcua:fxserver:connections</Uri>
+    <Uri>http://opcfoundation.org/UA/FX/Data/</Uri>
+    <Uri>http://opcfoundation.org/UA/FX/AC/</Uri>
+    <Uri>http://opcfoundation.org/UA/DI/</Uri>
+  </NamespaceUris>
+  <Aliases>
+    <Alias Alias="Organizes">i=35</Alias>
+    <Alias Alias="HasTypeDefinition">i=40</Alias>
+    <Alias Alias="HasProperty">i=46</Alias>
+    <Alias Alias="HasComponent">i=47</Alias>
+  </Aliases>
+  <UAObject NodeId="ns=1;i=1000" BrowseName="1:Ctl">
+    <DisplayName>Ctl</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=2</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=2;i=71</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1001" BrowseName="3:FunctionalEntities">
+    <DisplayName>FunctionalEntities</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1002" BrowseName="3:Assets">
+    <DisplayName>Assets</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1004" BrowseName="3:AggregatedHealth" DataType="ns=3;i=3003" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>AggregatedHealth</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=2001</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=1006" BrowseName="3:EstablishConnections" MethodDeclarationId="ns=3;i=292">
+    <DisplayName>EstablishConnections</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=1007" BrowseName="3:CloseConnections" MethodDeclarationId="ns=3;i=293">
+    <DisplayName>CloseConnections</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1000</Reference>
+    </References>
+  </UAMethod>
+  <UAObject NodeId="ns=1;i=1010" BrowseName="1:Pump">
+    <DisplayName>Pump</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=58</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1002</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1200" BrowseName="1:Motion">
+    <DisplayName>Motion</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=4</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1001</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1204" BrowseName="3:OperationalHealth" DataType="ns=3;i=3010" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>OperationalHealth</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+    <Value><UInt32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">65536</UInt32></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1205" BrowseName="3:ConnectionEndpoints">
+    <DisplayName>ConnectionEndpoints</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=20</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1220" BrowseName="3:InputData">
+    <DisplayName>InputData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1221" BrowseName="1:Setpoint" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Setpoint</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1220</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1222" BrowseName="1:Limit" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Limit</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1220</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1230" BrowseName="3:OutputData">
+    <DisplayName>OutputData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1231" BrowseName="1:Actual" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Actual</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1230</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">42.5</Double></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1240" BrowseName="3:ConfigurationData">
+    <DisplayName>ConfigurationData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1241" BrowseName="1:Gain" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>Gain</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1</Double></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1242" BrowseName="1:Fixed" DataType="i=11" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Fixed</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">7</Double></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1244" BrowseName="1:Label" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Label</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">  pump-1 </String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1245" BrowseName="1:Labels" DataType="i=12" AccessLevel="1" UserAccessLevel="1" ValueRank="1">
+    <DisplayName>Labels</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><ListOfString xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"><String> a </String><String>b</String></ListOfString></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1206" BrowseName="3:ApplicationIdentifier" DataType="ns=3;i=28" AccessLevel="1" UserAccessLevel="1" ValueRank="1">
+    <DisplayName>ApplicationIdentifier</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1243" BrowseName="1:Table" DataType="i=11" AccessLevel="3" UserAccessLevel="3" ValueRank="1">
+    <DisplayName>Table</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><ListOfDouble xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"><Double>1</Double><Double>2</Double><Double>3</Double></ListOfDouble></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1250" BrowseName="3:ControlGroups">
+    <DisplayName>ControlGroups</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1251" BrowseName="1:Group">
+    <DisplayName>Group</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=15</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1250</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1252" BrowseName="1:NotAGroup">
+    <DisplayName>NotAGroup</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=58</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1250</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1260" BrowseName="1:Axis">
+    <DisplayName>Axis</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=4</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=1261" BrowseName="3:InputData">
+    <DisplayName>InputData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1260</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1262" BrowseName="1:AxisIn" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>AxisIn</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1261</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1300" BrowseName="1:Preset">
+    <DisplayName>Preset</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=1005</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1205</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1301" BrowseName="3:Status" DataType="ns=3;i=3007" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Status</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1300</Reference>
+    </References>
+    <Value><Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Int32></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1302" BrowseName="3:IsPersistent" DataType="i=1" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>IsPersistent</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1300</Reference>
+    </References>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1303" BrowseName="3:CleanupTimeout" DataType="i=290" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>CleanupTimeout</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1300</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">-1</Double></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1304" BrowseName="3:RelatedEndpoint" DataType="ns=2;i=3003" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>RelatedEndpoint</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1300</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1305" BrowseName="3:Mode" DataType="ns=2;i=31" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Mode</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1300</Reference>
+    </References>
+    <Value><Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">3</Int32></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1306" BrowseName="3:InputVariables" DataType="i=17" AccessLevel="1" UserAccessLevel="1" ValueRank="1">
+    <DisplayName>InputVariables</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1300</Reference>
+    </References>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1307" BrowseName="3:OutputVariables" DataType="i=17" AccessLevel="1" UserAccessLevel="1" ValueRank="1">
+    <DisplayName>OutputVariables</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1300</Reference>
+    </References>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=3000" BrowseName="1:Peer">
+    <DisplayName>Peer</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=2</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=2;i=71</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=3001" BrowseName="3:FunctionalEntities">
+    <DisplayName>FunctionalEntities</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=3000</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=3002" BrowseName="3:Assets">
+    <DisplayName>Assets</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=3000</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=3004" BrowseName="3:AggregatedHealth" DataType="ns=3;i=3003" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>AggregatedHealth</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=2001</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=3000</Reference>
+    </References>
+  </UAVariable>
+  <UAMethod NodeId="ns=1;i=3006" BrowseName="3:EstablishConnections" MethodDeclarationId="ns=3;i=292">
+    <DisplayName>EstablishConnections</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=3000</Reference>
+    </References>
+  </UAMethod>
+  <UAMethod NodeId="ns=1;i=3007" BrowseName="3:CloseConnections" MethodDeclarationId="ns=3;i=293">
+    <DisplayName>CloseConnections</DisplayName>
+    <References>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=3000</Reference>
+    </References>
+  </UAMethod>
+  <UAObject NodeId="ns=1;i=3200" BrowseName="1:Remote">
+    <DisplayName>Remote</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=4</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=3001</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=3205" BrowseName="3:ConnectionEndpoints">
+    <DisplayName>ConnectionEndpoints</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">ns=3;i=20</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=3200</Reference>
+    </References>
+  </UAObject>
+  <UAObject NodeId="ns=1;i=3220" BrowseName="3:InputData">
+    <DisplayName>InputData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=3200</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=3221" BrowseName="1:RemoteIn" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>RemoteIn</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=3220</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+</UANodeSet>

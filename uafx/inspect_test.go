@@ -18,7 +18,7 @@ import (
 )
 
 func TestInspect(t *testing.T) {
-	_, c, ns := uafx.FXTestServer(t, false)
+	_, c, ns := FXTestServer(t, false)
 	ctx := context.Background()
 	r, err := uafx.Inspect(ctx, c, uafx.Limits{})
 	require.NoError(t, err)

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package uafx
+package uafx_test
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 )
 
-// The helpers of this file are exported to the tests of package uafx_test.
+// The helpers of this file serve the tests of package uafx_test.
 
 // TestNS is the namespace of the test NodeSet (internal/testutil/fxtest).
 const TestNS = fxtest.NS

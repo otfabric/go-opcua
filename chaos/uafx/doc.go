@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 
-// Package uafx holds the chaos and parallelism suite of uafx.Inspect and of
-// the OPC UA FX model that uafx/fxserver adds to a server (OPC 10000-81).
+// Package uafx holds the chaos and parallelism suite of uafx.Inspect, of
+// the OPC UA FX model that uafx/fxserver adds to a server and of its
+// connection Methods, EstablishConnections and CloseConnections (OPC
+// 10000-81).
 //
 // The package contains only tests. They are meant to be run with the race
 // detector:
@@ -23,6 +25,15 @@
 //   - TestInspectWhileModelChanges: clients inspect the server while it
 //     adds and removes a SubFunctionalEntity.
 //   - TestInspectServerClose: the server closes with inspections in flight.
+//   - TestConnectionsParallel: clients establish and close connections at
+//     once while another closes endpoints at random and the Status monitor
+//     runs. Every call returns Good or Uncertain.
+//   - TestConnectionsUnderFaults: clients establish and close connections
+//     through the chaos proxy over Basic256Sha256 SignAndEncrypt.
+//
+// After the connection tests, closing what is left with Remove brings the
+// server back to where it started: only the preconfigured endpoint, no
+// DataSetReader or DataSetWriter, the health of that endpoint alone.
 //
 // # Invariants
 //

@@ -16,17 +16,55 @@ Inspect reports the UAFX namespaces of a server with their versions, the FxRoot 
 		fmt.Println(ac.BrowseName.Name, ac.AggregatedHealth)
 	}
 
-Inspect only reads: it does not establish, verify or close connections. The Methods of Part 81 (EstablishConnections, CloseConnections, Verify, VerifyAsset and those of the ConnectionManager) are not implemented by this package or by package fxserver.
+EstablishConnections and CloseConnections call the Methods of an AutomationComponent that establish and close connections (§6.2.4, §6.2.5); package fxserver serves them. The structures of their arguments and the codecs that encode them with the namespace index of the server are in this package. Verify, VerifyAsset and the Methods of the ConnectionManager have no client functions.
 
 The NodeIds of the UAFX namespaces are in packages fxdataid, fxacid and fxcmid, those of the DI model (OPC 10000-100) the UAFX model builds on in package di/diid. Package fxserver adds the UAFX model to a server.
 
 ## Variables
 
 ```go
+var ErrCall = errors.New("uafx: call")
+```
+
+ErrCall reports that a call of EstablishConnections or CloseConnections failed: the server has no UAFX namespaces, the AutomationComponent no such Method, or the call returned a Bad status or a result that does not decode. A Bad status of the call is in the chain: errors.As with a ua.StatusCode finds it.
+
+```go
+var ErrCodec = errors.New("uafx: codec")
+```
+
+ErrCodec reports a UAFX structure that cannot be encoded or decoded.
+
+```go
 var ErrInspect = errors.New("uafx: inspect")
 ```
 
 ErrInspect wraps the errors of Inspect that end the inspection: a failed service call, not a deviation of the model, which is a Finding.
+
+## Functions
+
+### func CloseConnections
+
+```go
+func CloseConnections(ctx context.Context, c *opcua.Client, ac *ua.NodeID, endpoints []*ua.NodeID, remove bool) (ua.StatusCode, []ua.StatusCode, error)
+```
+
+CloseConnections calls the CloseConnections Method of the AutomationComponent ac (Part 81 §6.2.5) for the ConnectionEndpoints endpoints, with remove to remove what EstablishConnections created for them. It returns the status of the call, Good or Uncertain (Table 23), and one result per endpoint (Table 24).
+
+### func EncodeEstablishConnectionsRequest
+
+```go
+func EncodeEstablishConnectionsRequest(r *EstablishConnectionsRequest, data uint16) ([]*ua.Variant, error)
+```
+
+EncodeEstablishConnectionsRequest returns the input arguments of EstablishConnections for the UAFX Data namespace index data.
+
+### func EncodeEstablishConnectionsResult
+
+```go
+func EncodeEstablishConnectionsResult(r *EstablishConnectionsResult, data uint16) ([]*ua.Variant, error)
+```
+
+EncodeEstablishConnectionsResult returns the output arguments of EstablishConnections for the UAFX Data namespace index data. The Status of r is the status of the call, not an argument.
 
 ## Types
 
@@ -67,6 +105,70 @@ type Asset struct {
 
 Asset is an instance of FxAssetType (Part 81 §6.3.2) or of a subtype, with the nameplate the asset has. A field the asset does not have is empty.
 
+### type AssetVerification
+
+```go
+type AssetVerification struct {
+	AssetToVerify                           *ua.NodeID
+	VerificationMode                        AssetVerificationMode
+	ExpectedVerificationResult              AssetVerificationResult
+	ExpectedVerificationVariables           []*ua.KeyValuePair
+	ExpectedAdditionalVerificationVariables []*NodeIDValuePair
+}
+```
+
+AssetVerification is the AssetVerificationDataType of Part 81 §10.5.
+
+### type AssetVerificationMode
+
+```go
+type AssetVerificationMode int32
+```
+
+AssetVerificationMode is the AssetVerificationModeEnum of Part 81 §10.4.
+
+```go
+const (
+	AssetCompatibility            AssetVerificationMode = 0
+	AssetIdentity                 AssetVerificationMode = 1
+	AssetIdentityAndCompatibility AssetVerificationMode = 2
+)
+```
+
+The values of AssetVerificationModeEnum.
+
+### type AssetVerificationResult
+
+```go
+type AssetVerificationResult int32
+```
+
+AssetVerificationResult is the AssetVerificationResultEnum of Part 81 §10.7.
+
+```go
+const (
+	AssetVerificationNotSet     AssetVerificationResult = 0
+	AssetVerificationMatch      AssetVerificationResult = 1
+	AssetVerificationCompatible AssetVerificationResult = 2
+	AssetVerificationMismatch   AssetVerificationResult = 3
+)
+```
+
+The values of AssetVerificationResultEnum.
+
+### type AssetVerificationResultData
+
+```go
+type AssetVerificationResultData struct {
+	VerificationStatus                    ua.StatusCode
+	VerificationResult                    AssetVerificationResult
+	VerificationVariablesErrors           []ua.StatusCode
+	VerificationAdditionalVariablesErrors []ua.StatusCode
+}
+```
+
+AssetVerificationResultData is the AssetVerificationResultDataType of Part 81 §10.6.
+
 ### type AutomationComponent
 
 ```go
@@ -102,6 +204,54 @@ type ConnectionEndpoint struct {
 ```
 
 ConnectionEndpoint is an instance of ConnectionEndpointType (Part 81 §6.6.2) or of a subtype such as PubSubConnectionEndpointType (§6.6.3).
+
+### type ConnectionEndpointConfiguration
+
+```go
+type ConnectionEndpointConfiguration struct {
+	FunctionalEntityNode          *ua.NodeID
+	ConnectionEndpoint            *ConnectionEndpointDefinition
+	ExpectedVerificationVariables []*NodeIDValuePair
+	ControlGroups                 []*ua.NodeID
+	ConfigurationData             []*NodeIDValuePair
+	// CommunicationLinks is nil when the call has no
+	// SetCommunicationConfigurationCmd.
+	CommunicationLinks *PubSubCommunicationLinkConfiguration
+}
+```
+
+ConnectionEndpointConfiguration is the ConnectionEndpointConfigurationDataType of Part 81 §10.14.
+
+### type ConnectionEndpointConfigurationResult
+
+```go
+type ConnectionEndpointConfigurationResult struct {
+	ConnectionEndpointID        *ua.NodeID
+	FunctionalEntityNodeResult  ua.StatusCode
+	ConnectionEndpointResult    ua.StatusCode
+	VerificationResult          FunctionalEntityVerificationResult
+	VerificationStatus          ua.StatusCode
+	VerificationVariablesErrors []ua.StatusCode
+	EstablishControlResult      []ua.StatusCode
+	ConfigurationDataResult     []ua.StatusCode
+	ReassignControlResult       []ua.StatusCode
+	CommunicationLinksResult    ua.StatusCode
+	EnableCommunicationResult   ua.StatusCode
+}
+```
+
+ConnectionEndpointConfigurationResult is the ConnectionEndpointConfigurationResultDataType of Part 81 §10.15.
+
+### type ConnectionEndpointDefinition
+
+```go
+type ConnectionEndpointDefinition struct {
+	Parameter *PubSubConnectionEndpointParameter
+	Node      *ua.NodeID
+}
+```
+
+ConnectionEndpointDefinition is the ConnectionEndpointDefinitionDataType union of Part 81 §10.16: the parameters of a ConnectionEndpoint to create, or the NodeId of an existing one. Exactly one field is set.
 
 ### type ConnectionEndpointStatus
 
@@ -171,6 +321,60 @@ func (h DeviceHealth) String() string
 
 String returns the names of the bits that are set, separated by "|", or "OK" when none is.
 
+### type EstablishConnectionsRequest
+
+```go
+type EstablishConnectionsRequest struct {
+	CommandMask                      FxCommandMask
+	AssetVerifications               []*AssetVerification
+	ConnectionEndpointConfigurations []*ConnectionEndpointConfiguration
+	ReserveCommunicationIDs          []*PubSubReserveCommunicationIDs
+	// CommunicationConfigurations has one element with
+	// SetCommunicationConfigurationCmd, none otherwise.
+	CommunicationConfigurations []*PubSubCommunicationConfiguration
+}
+```
+
+EstablishConnectionsRequest are the input arguments of the EstablishConnections Method (Part 81 §6.2.4.2). A slice must be empty unless CommandMask has its command (Table 8).
+
+#### func DecodeEstablishConnectionsRequest
+
+```go
+func DecodeEstablishConnectionsRequest(args []*ua.Variant, data uint16) (*EstablishConnectionsRequest, error)
+```
+
+DecodeEstablishConnectionsRequest decodes the input arguments of EstablishConnections for the UAFX Data namespace index data.
+
+### type EstablishConnectionsResult
+
+```go
+type EstablishConnectionsResult struct {
+	Status                                 ua.StatusCode
+	AssetVerificationResults               []*AssetVerificationResultData
+	ConnectionEndpointConfigurationResults []*ConnectionEndpointConfigurationResult
+	ReserveCommunicationIDsResults         []*PubSubReserveCommunicationIDsResult
+	CommunicationConfigurationResults      []*PubSubCommunicationConfigurationResult
+}
+```
+
+EstablishConnectionsResult are the output arguments of the EstablishConnections Method (Part 81 §6.2.4.2) and the status of the call: Good, or Uncertain when a command failed and the call was aborted (Table 9), with the details in the results.
+
+#### func DecodeEstablishConnectionsResult
+
+```go
+func DecodeEstablishConnectionsResult(out []*ua.Variant, data uint16) (*EstablishConnectionsResult, error)
+```
+
+DecodeEstablishConnectionsResult decodes the output arguments of EstablishConnections for the UAFX Data namespace index data. It leaves Status, the status of the call, to the caller.
+
+#### func EstablishConnections
+
+```go
+func EstablishConnections(ctx context.Context, c *opcua.Client, ac *ua.NodeID, req *EstablishConnectionsRequest) (*EstablishConnectionsResult, error)
+```
+
+EstablishConnections calls the EstablishConnections Method of the AutomationComponent ac (Part 81 §6.2.4). It resolves the index of the UAFX Data namespace from the NamespaceArray of the server. A call the server aborted returns a result with Status Uncertain and the per-command results that tell what failed (§6.2.4.3.11); a Bad status of the call (Table 9) is an error.
+
 ### type Finding
 
 ```go
@@ -213,6 +417,67 @@ type FunctionalEntity struct {
 ```
 
 FunctionalEntity is an instance of FunctionalEntityType (Part 81 §6.4.2) or of a subtype.
+
+### type FunctionalEntityVerificationResult
+
+```go
+type FunctionalEntityVerificationResult int32
+```
+
+FunctionalEntityVerificationResult is the FunctionalEntityVerificationResultEnum of Part 81 §10.22.
+
+```go
+const (
+	FunctionalEntityVerificationNotSet   FunctionalEntityVerificationResult = 0
+	FunctionalEntityVerificationMatch    FunctionalEntityVerificationResult = 1
+	FunctionalEntityVerificationMismatch FunctionalEntityVerificationResult = 2
+)
+```
+
+The values of FunctionalEntityVerificationResultEnum.
+
+### type FxCommandMask
+
+```go
+type FxCommandMask uint32
+```
+
+FxCommandMask is the FxCommandMask OptionSet of Part 81 §10.23: the commands an EstablishConnections call runs. The bit number is not the order the commands run in; see [FxCommandMask.Order](#func-fxcommandmask-order).
+
+```go
+const (
+	VerifyAssetCmd                   FxCommandMask = 1 << 0
+	VerifyFunctionalEntityCmd        FxCommandMask = 1 << 1
+	CreateConnectionEndpointCmd      FxCommandMask = 1 << 2
+	EstablishControlCmd              FxCommandMask = 1 << 3
+	SetConfigurationDataCmd          FxCommandMask = 1 << 4
+	ReassignControlCmd               FxCommandMask = 1 << 5
+	ReserveCommunicationIDsCmd       FxCommandMask = 1 << 6
+	SetCommunicationConfigurationCmd FxCommandMask = 1 << 7
+	EnableCommunicationCmd           FxCommandMask = 1 << 8
+
+	// AllFxCommands are the bits Part 81 defines.
+	AllFxCommands FxCommandMask = 1<<9 - 1
+)
+```
+
+The bits of FxCommandMask (Part 81 §10.23, Table 172). Bits 9 to 31 are reserved.
+
+#### func (FxCommandMask) Order
+
+```go
+func (m FxCommandMask) Order() []FxCommandMask
+```
+
+Order returns the commands of m in the order EstablishConnections runs them (Part 81 §6.2.4.3.1): VerifyAsset, VerifyFunctionalEntity, ReserveCommunicationIds, CreateConnectionEndpoint, EstablishControl, SetConfigurationData, ReassignControl, SetCommunicationConfiguration, EnableCommunication.
+
+#### func (FxCommandMask) String
+
+```go
+func (m FxCommandMask) String() string
+```
+
+String returns the names of the commands that are set, separated by "|", or "OK" when none is.
 
 ### type FxVersion
 
@@ -289,6 +554,28 @@ type Node struct {
 
 Node is what a report holds of every node.
 
+### type NodeIDArray
+
+```go
+type NodeIDArray struct {
+	Node       *ua.NodeID
+	ArrayIndex []uint32
+}
+```
+
+NodeIDArray is the NodeIdArray structure of Part 81 §10.31: a Variable, or elements of an array Variable.
+
+### type NodeIDValuePair
+
+```go
+type NodeIDValuePair struct {
+	Key   *NodeIDArray
+	Value *ua.Variant
+}
+```
+
+NodeIDValuePair is the NodeIdValuePair structure of Part 81 §10.32.
+
 ### type OperationalHealth
 
 ```go
@@ -315,6 +602,151 @@ func (h OperationalHealth) String() string
 ```
 
 String returns the names of the bits that are set, separated by "|", or "OK" when none is.
+
+### type PubSubCommunicationConfiguration
+
+```go
+type PubSubCommunicationConfiguration struct {
+	PubSubConfiguration     *ua.PubSubConfiguration2DataType
+	RequireCompleteUpdate   bool
+	ConfigurationReferences []*ua.PubSubConfigurationRefDataType
+}
+```
+
+PubSubCommunicationConfiguration is the PubSubCommunicationConfigurationDataType of Part 81 §10.10.3: what SetCommunicationConfigurationCmd applies, as the CloseAndUpdate Method of Part 14 §9.1.3.7.4 does.
+
+### type PubSubCommunicationConfigurationResult
+
+```go
+type PubSubCommunicationConfigurationResult struct {
+	Result               ua.StatusCode
+	ChangesApplied       bool
+	ReferenceResults     []ua.StatusCode
+	ConfigurationValues  []*ua.PubSubConfigurationValueDataType
+	ConfigurationObjects []*ua.NodeID
+}
+```
+
+PubSubCommunicationConfigurationResult is the PubSubCommunicationConfigurationResultDataType of Part 81 §10.11.3.
+
+### type PubSubCommunicationLinkConfiguration
+
+```go
+type PubSubCommunicationLinkConfiguration struct {
+	DataSetReaderRef                 *ua.PubSubConfigurationRefDataType
+	ExpectedSubscribedDataSetVersion *ua.ConfigurationVersionDataType
+	DataSetWriterRef                 *ua.PubSubConfigurationRefDataType
+	ExpectedPublishedDataSetVersion  *ua.ConfigurationVersionDataType
+}
+```
+
+PubSubCommunicationLinkConfiguration is the PubSubCommunicationLinkConfigurationDataType of Part 81 §10.13.3: the DataSetReader and DataSetWriter of a ConnectionEndpoint, as references into the PubSubConfiguration of the same EstablishConnections call.
+
+### type PubSubConnectionEndpointMode
+
+```go
+type PubSubConnectionEndpointMode int32
+```
+
+PubSubConnectionEndpointMode is the PubSubConnectionEndpointModeEnum of Part 81 §10.41. It has no value 0.
+
+```go
+const (
+	PubSubPublisherSubscriber PubSubConnectionEndpointMode = 1
+	PubSubPublisher           PubSubConnectionEndpointMode = 2
+	PubSubSubscriber          PubSubConnectionEndpointMode = 3
+)
+```
+
+The values of PubSubConnectionEndpointModeEnum.
+
+#### func (PubSubConnectionEndpointMode) Publishes
+
+```go
+func (m PubSubConnectionEndpointMode) Publishes() bool
+```
+
+Publishes reports whether an endpoint of mode m has a DataSetWriter (Part 81 §6.6.3).
+
+#### func (PubSubConnectionEndpointMode) Subscribes
+
+```go
+func (m PubSubConnectionEndpointMode) Subscribes() bool
+```
+
+Subscribes reports whether an endpoint of mode m has a DataSetReader (Part 81 §6.6.3).
+
+### type PubSubConnectionEndpointParameter
+
+```go
+type PubSubConnectionEndpointParameter struct {
+	Name                     string
+	ConnectionEndpointTypeID *ua.NodeID
+	InputVariableIDs         []*ua.NodeID
+	OutputVariableIDs        []*ua.NodeID
+	IsPersistent             bool
+	// CleanupTimeout is a Duration in milliseconds; negative disables the
+	// cleanup (Part 81 §6.6.2).
+	CleanupTimeout  float64
+	RelatedEndpoint *RelatedEndpoint
+	IsPreconfigured bool
+	Mode            PubSubConnectionEndpointMode
+}
+```
+
+PubSubConnectionEndpointParameter is the PubSubConnectionEndpointParameterDataType of Part 81 §10.18.3: the parameters of a PubSubConnectionEndpoint that EstablishConnections creates. The fields up to IsPreconfigured are those of its abstract supertype ConnectionEndpointParameterDataType (§10.18.2), the only other subtype of which (Client-Server) Part 81 leaves to a future version.
+
+#### func (PubSubConnectionEndpointParameter) CleanupTimeoutDuration
+
+```go
+func (p *PubSubConnectionEndpointParameter) CleanupTimeoutDuration() (time.Duration, bool)
+```
+
+CleanupTimeoutDuration returns CleanupTimeout as a time.Duration, and false when it is negative (no cleanup).
+
+### type PubSubReserveCommunicationIDs
+
+```go
+type PubSubReserveCommunicationIDs struct {
+	TransportProfileURI          string
+	NumReqWriterGroupIDs         uint16
+	NumReqDataSetWriterIDs       uint16
+	RequestTransportSpecificInfo bool
+}
+```
+
+PubSubReserveCommunicationIDs is the PubSubReserveCommunicationIds2DataType of Part 81 §10.44.2, which EstablishConnections requires (§6.2.4.3.4.2). It decodes the older PubSubReserveCommunicationIdsDataType (§10.44.1) as well, with RequestTransportSpecificInfo false.
+
+### type PubSubReserveCommunicationIDsResult
+
+```go
+type PubSubReserveCommunicationIDsResult struct {
+	Result             ua.StatusCode
+	DefaultPublisherID *ua.Variant
+	WriterGroupIDs     []uint16
+	DataSetWriterIDs   []uint16
+	// TransportSpecificInfo is, for UDP-UADP, the UDP port of unicast
+	// reception as a UInt16; nil otherwise.
+	TransportSpecificInfo *ua.Variant
+}
+```
+
+PubSubReserveCommunicationIDsResult is the PubSubReserveCommunicationIdsResult2DataType of Part 81 §10.43.4.
+
+### type RelatedEndpoint
+
+```go
+type RelatedEndpoint struct {
+	// Address is the DiscoveryUrl of the server of the other end.
+	Address string
+	// ConnectionEndpointPath is the path from FxRoot to the
+	// FunctionalEntity of the other end.
+	ConnectionEndpointPath []*ua.PortableQualifiedName
+	ConnectionEndpointName string
+}
+```
+
+RelatedEndpoint is the RelatedEndpointDataType of Part 81 §10.42: the ConnectionEndpoint at the other end of a connection.
 
 ### type Report
 

@@ -24,7 +24,7 @@ jobs:
       # per-package gate of the coverage-gate job stays.
       coverage-min: "94"
       fuzz-time: 10s
-      # The fuzz job runs all 67 targets in turn: about 16 minutes on a laptop, over
+      # The fuzz job runs all 69 targets in turn: about 16 minutes on a laptop, over
       # the default of 15.
       timeout-minutes: 30
       # The default exclusions plus chaos/..., which runs in the chaos job.
