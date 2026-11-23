@@ -78,7 +78,8 @@ const (
 	ConnLabels    = 1245 // Motion/ConfigurationData/Labels, String[] {" a ", "b"}, read-only
 	ConnGroup     = 1251 // Motion/ControlGroups/Group, a ControlGroup
 	ConnNotAGroup = 1252 // Motion/ControlGroups/NotAGroup
-	// ConnControl is Motion/ControlGroups/Control, a ControlGroup that
+	// ConnControl is Motion/ControlGroups/Control of control_groups.xml
+	// (PrepareControlGroups), a ControlGroup that
 	// blocks Table and restricts Gain and ConnReset; ConnMonitor blocks
 	// Limit and restricts Gain, with a MaxInactiveLockTime of 300 ms on
 	// its ListToRestrict. Each has ListToBlock at +1 (its Lock at +2, the
@@ -89,13 +90,27 @@ const (
 	// ReleaseControl, ReassignControl at +24 to +26.
 	ConnControl = 1400
 	ConnMonitor = 1440
-	ConnReset   = 1297 // Motion/Reset, a Method
+	ConnReset   = 1297 // Motion/Reset, a Method of control_groups.xml
 	ConnAxis    = 1260 // Motion/Axis, a SubFunctionalEntity
 	ConnAxisIn  = 1262 // Axis/InputData/AxisIn, Double
 	ConnPreset  = 1300 // Motion/ConnectionEndpoints/Preset, Subscriber of Setpoint
 	ConnPeer    = 3000 // the AutomationComponent Peer
 	ConnRemote  = 3200 // Peer/FunctionalEntities/Remote
 )
+
+//go:embed control_groups.xml
+var controlGroupsNodeSet []byte
+
+// PrepareControlGroups is PrepareConnections with control_groups.xml: the
+// ControlGroups ConnControl and ConnMonitor of Motion and the Method
+// ConnReset. Call it before fxserver.EnableConnections.
+func PrepareControlGroups(srv *server.Server) (fxserver.Namespaces, uint16, error) {
+	ns, idx, err := PrepareConnections(srv)
+	if err != nil {
+		return ns, idx, err
+	}
+	return ns, idx, fxserver.ImportNodeSet(srv, controlGroupsNodeSet)
+}
 
 // PrepareConnections adds the AC model and connections.xml to srv, which
 // must not be started yet, have an ApplicationUri and PubSub, and sets the

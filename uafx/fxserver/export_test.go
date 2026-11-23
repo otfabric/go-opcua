@@ -47,3 +47,9 @@ func SetRetryCleanup(c *Connections, d time.Duration) {
 	defer c.mu.Unlock()
 	c.retryCleanup = d
 }
+
+// SetLockClock replaces the clock of the Locks of the ControlGroups.
+func SetLockClock(c *Connections, now func() time.Time) { c.ctl.clock.Store(&now) }
+
+// TickLocks runs one tick of the Locks as the monitor does.
+func TickLocks(c *Connections) { c.tickLocks() }

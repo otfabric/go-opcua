@@ -58,8 +58,19 @@ func (f *fx) id(n uint32) *ua.NodeID { return ua.NewNumericNodeID(f.test, n) }
 
 func newFX(t *testing.T, opts fxserver.ConnectionOptions, srvOpts ...server.Option) *fx {
 	t.Helper()
+	return newFXWith(t, fxtest.PrepareConnections, opts, srvOpts...)
+}
+
+// newControlFX is newFX with the ControlGroups of fxtest.PrepareControlGroups.
+func newControlFX(t *testing.T, opts fxserver.ConnectionOptions) *fx {
+	t.Helper()
+	return newFXWith(t, fxtest.PrepareControlGroups, opts)
+}
+
+func newFXWith(t *testing.T, prepare func(*server.Server) (fxserver.Namespaces, uint16, error), opts fxserver.ConnectionOptions, srvOpts ...server.Option) *fx {
+	t.Helper()
 	srv := newServer(t, append([]server.Option{server.WithPubSub(nil)}, srvOpts...)...)
-	ns, test, err := fxtest.PrepareConnections(srv)
+	ns, test, err := prepare(srv)
 	require.NoError(t, err)
 	f := &fx{srv: srv, ns: ns, test: test, udp: fmt.Sprintf("opc.udp://127.0.0.1:%d", testport.UDP(t))}
 	if opts.Logger == nil {

@@ -8,6 +8,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/di/diid"
@@ -121,6 +122,16 @@ type controls struct {
 	locks       map[string]*itemLock
 	byItem      map[string][]*itemLock
 	maxInactive time.Duration
+	// clock replaces time.Now for the Locks in tests; nil is time.Now.
+	clock atomic.Pointer[func() time.Time]
+}
+
+// now is the time of the Locks.
+func (c *Connections) now() time.Time {
+	if f := c.ctl.clock.Load(); f != nil {
+		return (*f)()
+	}
+	return time.Now()
 }
 
 // actingKey marks the context of an EstablishConnections or
@@ -316,7 +327,7 @@ func (c *Connections) check(ctx context.Context, sess *server.Session, n *ua.Nod
 			renew = append(renew, l)
 		}
 	}
-	now := time.Now()
+	now := c.now()
 	for _, l := range renew {
 		l.deadline = now.Add(c.timeout(l))
 	}
@@ -408,7 +419,7 @@ func (c *Connections) acquire(g *controlGroup, o *lockOwner) int32 {
 			return lockBusy
 		}
 	}
-	now := time.Now()
+	now := c.now()
 	for _, l := range ls {
 		l.owner, l.deadline = o, now.Add(c.timeout(l))
 	}
@@ -423,7 +434,7 @@ func (c *Connections) showLock(ls ...*itemLock) {
 		client, user string
 		remaining    float64
 	}
-	now := time.Now()
+	now := c.now()
 	var ps []props
 	c.ctl.mu.Lock()
 	for _, l := range ls {
@@ -458,7 +469,7 @@ func (c *Connections) showLock(ls ...*itemLock) {
 func (c *Connections) tickLocks() {
 	c.call.Lock()
 	defer c.call.Unlock()
-	now := time.Now()
+	now := c.now()
 	var changed []*itemLock
 	c.ctl.mu.Lock()
 	for _, l := range c.ctl.locks {
@@ -516,7 +527,7 @@ func (c *Connections) initLock(ctx context.Context, l *itemLock) (int32, ua.Stat
 	if l.owner != nil || c.conflict(l, o) {
 		return lockBusy, ua.StatusOK
 	}
-	l.owner, l.deadline = o, time.Now().Add(c.timeout(l))
+	l.owner, l.deadline = o, c.now().Add(c.timeout(l))
 	return lockOK, ua.StatusOK
 }
 
@@ -530,7 +541,7 @@ func (c *Connections) renewLock(ctx context.Context, l *itemLock) (int32, ua.Sta
 	case !callerOwns(ctx, l.owner):
 		return 0, ua.StatusBadUserAccessDenied
 	}
-	l.deadline = time.Now().Add(c.timeout(l))
+	l.deadline = c.now().Add(c.timeout(l))
 	return lockOK, ua.StatusOK
 }
 
@@ -733,7 +744,7 @@ func (c *Connections) reassign(g *controlGroup, o *lockOwner) int32 {
 		}
 	}
 	if st == lockOK {
-		now := time.Now()
+		now := c.now()
 		for _, l := range held {
 			l.owner, l.deadline = o, now.Add(c.timeout(l))
 		}
