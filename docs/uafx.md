@@ -205,7 +205,7 @@ EstablishConnections runs the commands of its CommandMask in the order of
 | Command | What the server does |
 |---|---|
 | VerifyAssetCmd | Calls `ConnectionOptions.AssetVerifier` for each Asset (§6.3.3); without one `Bad_NotSupported` |
-| VerifyFunctionalEntityCmd | Compares the expected values with those of the FunctionalEntity, as its Verify Method does (§6.4.3, Table 45) |
+| VerifyFunctionalEntityCmd | Compares the expected values with those of the FunctionalEntity, as its Verify Method does (§6.4.3, Table 45); see [Verification](#verification) |
 | ReserveCommunicationIdsCmd | Reserves WriterGroupIds and DataSetWriterIds as ReserveIds does (Part 14 §9.1.3.7.5); the TransportSpecificInfo of UDP-UADP is `ConnectionOptions.UDPPort` |
 | CreateConnectionEndpointCmd | Creates a PubSubConnectionEndpoint in the ConnectionEndpoints folder of the FunctionalEntity, or takes the preconfigured one of that name when it is not in use (§6.2.4.3.5, Table 12) |
 | EstablishControlCmd | See [ControlGroups](#controlgroups) |
@@ -243,6 +243,16 @@ The groups, PubSubConnections and PublishedDataSets stay. An endpoint of
 another AutomationComponent is `Bad_NodeIdUnknown`, a node that is not a
 ConnectionEndpoint `Bad_InvalidArgument` (Table 24).
 
+When a PubSub operation of the close fails, the result of that endpoint is
+the StatusCode of the runtime's error, or `Bad_InternalError` when it has
+none, and the call returns Uncertain (Table 23). Table 24 has no code for
+a failed close. The endpoint is then not deleted and keeps its References
+to the reader and writer that are left, and a preconfigured one keeps its
+RelatedEndpoint, so that the caller can see the endpoint and close it
+again. A reader or writer that is disabled already, or gone, is not a
+failure, and a removal that succeeds after a failed disable stops the
+component as well.
+
 ### Status, health and cleanup
 
 Every `ConnectionOptions.Interval` (100 ms by default) the Status of each
@@ -253,18 +263,56 @@ of the ConnectionEndpoints folders (§6.4.8, §10.9), bits 0 to 15 of the
 OperationalHealth of the FunctionalEntities (§10.34) and the
 AggregatedOperationalHealth of the AutomationComponents (§9.1.2) follow.
 Bits 16 to 31 of an OperationalHealth are the application's; call
-`Connections.RefreshHealth` after changing them.
+`Connections.RefreshHealth` after changing them or the FunctionalEntities:
+between calls of the Methods the health is recomputed when the Status of
+an endpoint changes.
 
 The CleanupTimeout of an endpoint starts when its Status leaves
 Operational (§6.6.2); when it expires before the endpoint is Operational
 again, the server closes the endpoint as CloseConnections with Remove
 does, and reports an AuditConnectionCleanupEventType event (§8.3) when it
 audits. An endpoint that was never Operational is not cleaned up, nor one
-whose CleanupTimeout is negative. The expiry is checked every Interval.
+whose CleanupTimeout is negative. The expiry is checked every Interval,
+and decided while no EstablishConnections or CloseConnections runs: an
+endpoint a CloseConnections closed after the CleanupTimeout expired, or
+one that is Operational again, is not removed. When the close of the
+cleanup fails, the event has Status false, the endpoint stays, and the
+cleanup is tried again after another CleanupTimeout, one second at the
+earliest.
 
 A server that audits reports an AuditUpdateMethodResultEventType event for
 each call of EstablishConnections and CloseConnections (§6.2.4.2, §6.2.5.1, §8.4), with the
 AutomationComponent as its SourceNode.
+
+### Verification
+
+VerifyFunctionalEntityCmd compares each NodeIdValuePair with the value of
+its Variable (§6.4.3, Table 45). It reads the value with the rights of the
+caller (`server.ReadValue`): the `AccessController` (CheckRead), the
+AccessRestrictions and the UserAccessLevel apply as for a Read by that
+session. A Variable the caller may not read fails with the status the Read
+service would return, such as `Bad_UserAccessDenied`, whether the expected
+value is right or not, so that verification does not tell a value the
+caller cannot read. Table 45 has no code for this. A pair with a null
+value checks that the node exists and needs no read.
+
+String values, and the elements of String arrays, are compared without
+their leading and trailing whitespace. An ApplicationIdentifier of a
+FunctionalEntity (a Variable with the BrowseName ApplicationIdentifier of
+the AC namespace) is compared by the UniqueIdentifier of each element
+alone; its Name is ignored. This needs the binary encoding of
+ApplicationIdentifierDataType (§10.3), which a client sends; a value the
+server holds in another encoding is compared as a whole. An
+ExtensionObject of a structure package `ua` does not know (the UAFX and
+other companion structures) is compared by its TypeID and binary body.
+Other values are compared as they are, with the ArrayIndex of §10.31.
+
+The server does its own comparison: a handler an application registers on
+the Verify Method of a FunctionalEntity is not called by
+VerifyFunctionalEntityCmd, and Verify called on its own is not
+implemented. VerifyAssetCmd calls `ConnectionOptions.AssetVerifier`,
+which is given the context of the call and is the application's to
+restrict.
 
 ### ControlGroups
 
@@ -339,7 +387,7 @@ go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855 -json
 | Unit tests, the findings of a broken model, faults of every service call, Browse paging | `uafx`, `uafx/fxserver`, `internal/nodeset` |
 | Connections end to end with UDP PubSub: data flowing between two endpoints, Status and health, a failure injected at every command with the state after the abort checked, preconfigured and shared readers and writers surviving CloseConnections, CleanupTimeout, ControlGroups, access control, audit events | `uafx/fxserver` |
 | The mandatory members of the inspector against the ModellingRules of the embedded NodeSets | `uafx` (`TestMandatoryMatchesModel`) |
-| Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`) | `uafx`, `internal/nodeset` |
+| Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace) | `uafx`, `internal/nodeset` |
 | End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
 | Chaos: connection faults over SignAndEncrypt, values and FunctionalEntities changing during `Inspect`, a server closing; parallel EstablishConnections and CloseConnections, and both under connection faults, leaving the server as it was | [`chaos/uafx`](../chaos/uafx) |
 

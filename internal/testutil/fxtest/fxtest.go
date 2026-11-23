@@ -67,12 +67,15 @@ const (
 	ConnPump      = 1010 // Ctl/Assets/Pump
 	ConnMotion    = 1200 // Ctl/FunctionalEntities/Motion
 	ConnMotionOH  = 1204 // Motion/OperationalHealth
+	ConnAppID     = 1206 // Motion/ApplicationIdentifier, ApplicationIdentifierDataType[], no value
 	ConnSetpoint  = 1221 // Motion/InputData/Setpoint, Double
 	ConnLimit     = 1222 // Motion/InputData/Limit, Double
 	ConnActual    = 1231 // Motion/OutputData/Actual, Double 42.5
 	ConnGain      = 1241 // Motion/ConfigurationData/Gain, Double 1, writable
 	ConnFixed     = 1242 // Motion/ConfigurationData/Fixed, Double 7, read-only
 	ConnTable     = 1243 // Motion/ConfigurationData/Table, Double[] {1, 2, 3}
+	ConnLabel     = 1244 // Motion/ConfigurationData/Label, String "  pump-1 ", read-only
+	ConnLabels    = 1245 // Motion/ConfigurationData/Labels, String[] {" a ", "b"}, read-only
 	ConnGroup     = 1251 // Motion/ControlGroups/Group, a ControlGroup
 	ConnNotAGroup = 1252 // Motion/ControlGroups/NotAGroup
 	ConnAxis      = 1260 // Motion/Axis, a SubFunctionalEntity

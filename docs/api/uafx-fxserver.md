@@ -95,6 +95,12 @@ type Connections struct {
 
 	// by NodeId
 
+	// beforeExpire, when set by a test, runs after the monitor found an
+	// expired CleanupTimeout and before it takes c.call; guarded by mu.
+
+	// retryCleanup is the shortest time after which a failed cleanup is
+	// tried again; guarded by mu.
+
 }
 ```
 
@@ -134,7 +140,7 @@ Endpoints returns the NodeIds of the ConnectionEndpoints the connections manage.
 func (c *Connections) RefreshHealth()
 ```
 
-RefreshHealth recomputes the AggregatedOperationalHealth of every AutomationComponent (Part 81 §9.1.2) from the OperationalHealth of its top-level FunctionalEntities. Call it after changing the bits of an OperationalHealth the connections do not own (16 to 31).
+RefreshHealth recomputes the AggregatedOperationalHealth of every AutomationComponent (Part 81 §9.1.2) from the OperationalHealth of its top-level FunctionalEntities. Call it after changing the bits of an OperationalHealth the connections do not own (16 to 31), or the FunctionalEntities: between calls of the Methods the health follows changes of the Status of the endpoints only.
 
 #### func (Connections) Status
 

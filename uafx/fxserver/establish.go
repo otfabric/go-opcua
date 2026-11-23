@@ -3,6 +3,7 @@
 package fxserver
 
 import (
+	"bytes"
 	"context"
 	"reflect"
 	"slices"
@@ -325,7 +326,7 @@ func (x *call) verifyFunctionalEntities() bool {
 			ok = false
 			continue
 		}
-		r.VerificationResult, r.VerificationVariablesErrors, r.VerificationStatus = x.c.verify(el.cfg.ExpectedVerificationVariables)
+		r.VerificationResult, r.VerificationVariablesErrors, r.VerificationStatus = x.c.verify(x.ctx, el.cfg.ExpectedVerificationVariables)
 		if r.VerificationResult == uafx.FunctionalEntityVerificationMismatch ||
 			r.VerificationResult == uafx.FunctionalEntityVerificationNotSet && len(r.VerificationVariablesErrors) > 0 ||
 			r.VerificationStatus.Uint32()&0x80000000 != 0 {
@@ -337,14 +338,15 @@ func (x *call) verifyFunctionalEntities() bool {
 
 // verify runs the Verify Method of a FunctionalEntity (Part 81 §6.4.3): it
 // compares each expected value with the value of its Variable (Table 45).
-func (c *Connections) verify(pairs []*uafx.NodeIDValuePair) (uafx.FunctionalEntityVerificationResult, []ua.StatusCode, ua.StatusCode) {
+// The values are read with the rights of the caller in ctx.
+func (c *Connections) verify(ctx context.Context, pairs []*uafx.NodeIDValuePair) (uafx.FunctionalEntityVerificationResult, []ua.StatusCode, ua.StatusCode) {
 	if len(pairs) == 0 {
 		return uafx.FunctionalEntityVerificationNotSet, nil, ua.StatusBadInvalidArgument
 	}
 	errs := make([]ua.StatusCode, len(pairs))
 	match := true
 	for i, p := range pairs {
-		errs[i] = c.verifyOne(p)
+		errs[i] = c.verifyOne(ctx, p)
 		match = match && errs[i] == ua.StatusOK
 	}
 	if match {
@@ -353,7 +355,13 @@ func (c *Connections) verify(pairs []*uafx.NodeIDValuePair) (uafx.FunctionalEnti
 	return uafx.FunctionalEntityVerificationMismatch, errs, ua.StatusUncertain
 }
 
-func (c *Connections) verifyOne(p *uafx.NodeIDValuePair) ua.StatusCode {
+// verifyOne verifies one NodeIdValuePair (Part 81 §6.4.3, Table 45). The
+// value is read as the caller could read it with the Read service
+// (server.ReadValue): a read the caller may not make fails the element with
+// the status of the refused read, whatever the expected value, so that
+// verification tells nothing about a value the caller cannot read. Table 45
+// has no code for this; it is the status the Read service would return.
+func (c *Connections) verifyOne(ctx context.Context, p *uafx.NodeIDValuePair) ua.StatusCode {
 	if p == nil || p.Key == nil || isNull(p.Key.Node) {
 		return ua.StatusBadNodeIDInvalid
 	}
@@ -369,19 +377,161 @@ func (c *Connections) verifyOne(p *uafx.NodeIDValuePair) ua.StatusCode {
 		return ua.StatusOK
 	}
 	if want == nil {
-		return ua.StatusOK
+		return ua.StatusOK // "it shall be verified that NodeId exists"
 	}
-	got, sc := arrayElement(c.value(p.Key.Node), p.Key.ArrayIndex)
+	dv, sc := c.srv.ReadValue(ctx, p.Key.Node)
+	if sc != ua.StatusOK {
+		return sc
+	}
+	got, sc := arrayElement(dv.Value, p.Key.ArrayIndex)
 	if sc != ua.StatusOK {
 		return sc
 	}
 	if got == nil || reflect.TypeOf(got) != reflect.TypeOf(want) {
 		return ua.StatusBadTypeMismatch
 	}
-	if !reflect.DeepEqual(got, want) {
+	if c.isApplicationIdentifier(n) {
+		if eq, ok := c.sameApplicationIDs(got, want); ok {
+			if !eq {
+				return ua.StatusBadOutOfRange
+			}
+			return ua.StatusOK
+		}
+	}
+	if !sameValue(trimStrings(got), trimStrings(want)) {
 		return ua.StatusBadOutOfRange
 	}
 	return ua.StatusOK
+}
+
+// sameValue compares two values of one type. An ExtensionObject is compared
+// by its TypeID and its binary body when it has one: the server holds the
+// body of a type package ua does not know as Value ([]byte), a decoded
+// request as RawBody, which are the same structure.
+func sameValue(got, want any) bool {
+	switch g := got.(type) {
+	case *ua.ExtensionObject:
+		return sameExtensionObject(g, want.(*ua.ExtensionObject))
+	case []*ua.ExtensionObject:
+		w := want.([]*ua.ExtensionObject)
+		if len(g) != len(w) {
+			return false
+		}
+		for i := range g {
+			if !sameExtensionObject(g[i], w[i]) {
+				return false
+			}
+		}
+		return true
+	}
+	return reflect.DeepEqual(got, want)
+}
+
+func sameExtensionObject(a, b *ua.ExtensionObject) bool {
+	ab, bb := binaryBody(a), binaryBody(b)
+	if ab == nil || bb == nil {
+		return reflect.DeepEqual(a, b)
+	}
+	return a.TypeID != nil && b.TypeID != nil && a.TypeID.NodeID.Equal(b.TypeID.NodeID) && bytes.Equal(ab, bb)
+}
+
+// binaryBody returns the binary body of an ExtensionObject whose type
+// package ua does not know, nil for any other.
+func binaryBody(eo *ua.ExtensionObject) []byte {
+	if eo == nil || eo.EncodingMask != ua.ExtensionObjectBinary {
+		return nil
+	}
+	if eo.RawBody != nil {
+		return eo.RawBody
+	}
+	b, _ := eo.Value.([]byte)
+	return b
+}
+
+// trimStrings strips the leading and trailing whitespace of a String value
+// or of the elements of a String array: "All string-type variables shall be
+// stripped of leading and trailing whitespaces before processing" (Part 81
+// §6.4.3).
+func trimStrings(v any) any {
+	switch x := v.(type) {
+	case string:
+		return strings.TrimSpace(x)
+	case []string:
+		out := make([]string, len(x))
+		for i, s := range x {
+			out[i] = strings.TrimSpace(s)
+		}
+		return out
+	}
+	return v
+}
+
+// isApplicationIdentifier reports whether n is the ApplicationIdentifier
+// Property of a FunctionalEntity (Part 81 §6.4.2), which the AC namespace
+// defines.
+func (c *Connections) isApplicationIdentifier(n *server.Node) bool {
+	bn := n.BrowseName()
+	return bn != nil && bn.NamespaceIndex == c.ns.AC && bn.Name == "ApplicationIdentifier"
+}
+
+// sameApplicationIDs compares ApplicationIdentifierDataType values, one or
+// an array, by their UniqueIdentifier alone: "its Name sub-element shall
+// always be ignored; only its UniqueIdentifier shall be used" (Part 81
+// §6.4.3). ok is false when a value is not a binary
+// ApplicationIdentifierDataType body (§10.3), which is then compared as a
+// whole.
+func (c *Connections) sameApplicationIDs(got, want any) (eq, ok bool) {
+	switch g := got.(type) {
+	case *ua.ExtensionObject:
+		w, _ := want.(*ua.ExtensionObject)
+		gi, ok1 := c.uniqueIdentifier(g)
+		wi, ok2 := c.uniqueIdentifier(w)
+		if !ok1 || !ok2 {
+			return false, false
+		}
+		return bytes.Equal(gi, wi), true
+	case []*ua.ExtensionObject:
+		w, _ := want.([]*ua.ExtensionObject)
+		if len(g) != len(w) {
+			// Arrays of different lengths differ, if both are of the type.
+			for _, x := range append(slices.Clone(g), w...) {
+				if _, ok := c.uniqueIdentifier(x); !ok {
+					return false, false
+				}
+			}
+			return false, true
+		}
+		eq = true
+		for i := range g {
+			e, ok := c.sameApplicationIDs(g[i], w[i])
+			if !ok {
+				return false, false
+			}
+			eq = eq && e
+		}
+		return eq, true
+	}
+	return false, false
+}
+
+// uniqueIdentifier returns the encoded UniqueIdentifier (an ApplicationId
+// union, §10.2) of the binary ApplicationIdentifierDataType body of eo: what
+// follows its Name.
+func (c *Connections) uniqueIdentifier(eo *ua.ExtensionObject) ([]byte, bool) {
+	if eo == nil || eo.TypeID == nil || eo.TypeID.NodeID == nil ||
+		eo.TypeID.NodeID.Namespace() != c.ns.AC || eo.TypeID.NodeID.IntID() != fxacid.ApplicationIdentifierDataTypeEncodingDefaultBinary {
+		return nil, false
+	}
+	body := binaryBody(eo)
+	if body == nil {
+		return nil, false
+	}
+	var name ua.LocalizedText
+	n, err := name.Decode(body)
+	if err != nil || n > len(body) {
+		return nil, false
+	}
+	return body[n:], true
 }
 
 // arrayElement returns the value of v, or with an ArrayIndex of one dimension

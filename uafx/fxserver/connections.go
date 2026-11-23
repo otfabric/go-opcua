@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
@@ -83,6 +84,20 @@ type Connections struct {
 	stop chan struct{}
 	done chan struct{}
 	once sync.Once
+
+	ops pubsubOps
+	// beforeExpire, when set by a test, runs after the monitor found an
+	// expired CleanupTimeout and before it takes c.call; guarded by mu.
+	beforeExpire func()
+	// retryCleanup is the shortest time after which a failed cleanup is
+	// tried again; guarded by mu.
+	retryCleanup time.Duration
+}
+
+// pubsubOps are the operations of the PubSub runtime that close
+// ConnectionEndpoints; tests replace them to inject failures.
+type pubsubOps struct {
+	disable, removeReader, removeWriter func(pubsub.ComponentID) error
 }
 
 // automationComponent is an AutomationComponent of the server.
@@ -121,6 +136,9 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	if c.log == nil {
 		c.log = slog.Default()
 	}
+	c.retryCleanup = time.Second
+	rt := srv.PubSub()
+	c.ops = pubsubOps{disable: rt.Disable, removeReader: rt.RemoveDataSetReader, removeWriter: rt.RemoveDataSetWriter}
 	for _, ref := range c.children(ua.NewNumericNodeID(ns.Data, fxRootID), id.Organizes) {
 		n := ref.NodeID.NodeID
 		if !c.isA(n, fxacid.AutomationComponentType) {
@@ -241,7 +259,9 @@ func (c *Connections) Status(endpoint *ua.NodeID) (uafx.ConnectionEndpointStatus
 // RefreshHealth recomputes the AggregatedOperationalHealth of every
 // AutomationComponent (Part 81 §9.1.2) from the OperationalHealth of its
 // top-level FunctionalEntities. Call it after changing the bits of an
-// OperationalHealth the connections do not own (16 to 31).
+// OperationalHealth the connections do not own (16 to 31), or the
+// FunctionalEntities: between calls of the Methods the health follows
+// changes of the Status of the endpoints only.
 func (c *Connections) RefreshHealth() { c.refreshAll() }
 
 // --- address space -------------------------------------------------------

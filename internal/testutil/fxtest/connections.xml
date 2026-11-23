@@ -148,6 +148,29 @@
     </References>
     <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">7</Double></Value>
   </UAVariable>
+  <UAVariable NodeId="ns=1;i=1244" BrowseName="1:Label" DataType="i=12" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>Label</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">  pump-1 </String></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1245" BrowseName="1:Labels" DataType="i=12" AccessLevel="1" UserAccessLevel="1" ValueRank="1">
+    <DisplayName>Labels</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><ListOfString xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd"><String> a </String><String>b</String></ListOfString></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=1206" BrowseName="3:ApplicationIdentifier" DataType="ns=3;i=28" AccessLevel="1" UserAccessLevel="1" ValueRank="1">
+    <DisplayName>ApplicationIdentifier</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
+      <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAVariable>
   <UAVariable NodeId="ns=1;i=1243" BrowseName="1:Table" DataType="i=11" AccessLevel="3" UserAccessLevel="3" ValueRank="1">
     <DisplayName>Table</DisplayName>
     <References>

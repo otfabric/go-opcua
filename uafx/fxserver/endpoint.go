@@ -174,17 +174,22 @@ func (c *Connections) monitor() {
 		case <-c.stop:
 			return
 		case <-t.C:
-			c.refreshAll()
+			c.refresh(false)
+			c.expireDue()
 		}
 	}
 }
 
-// refreshAll updates the Status of every endpoint, runs the CleanupTimeouts
-// and updates the health.
-func (c *Connections) refreshAll() {
+// refreshAll updates the Status of every endpoint, starts and stops their
+// CleanupTimeouts and updates the health. It does not close endpoints, so
+// that it can run while a call holds c.call; expireDue does.
+func (c *Connections) refreshAll() { c.refresh(true) }
+
+// refresh is refreshAll; without health it updates the health only when a
+// Status changed, which is all the monitor needs between calls.
+func (c *Connections) refresh(health bool) {
 	now := time.Now()
 	var changed []*ua.NodeID
-	var expired []*endpoint
 	c.mu.Lock()
 	eps := make([]*endpoint, 0, len(c.endpoints))
 	for _, e := range c.endpoints {
@@ -208,39 +213,81 @@ func (c *Connections) refreshAll() {
 				e.deadline = now.Add(e.cleanup)
 			}
 		}
-		if !e.deadline.IsZero() && !now.Before(e.deadline) {
-			e.deadline = time.Time{}
-			expired = append(expired, e)
-		}
 		c.mu.Unlock()
 	}
 	for _, n := range changed {
 		c.srv.ChangeNotification(n)
 	}
-	for _, e := range expired {
+	if health || len(changed) > 0 {
+		c.refreshHealth()
+	}
+}
+
+// due returns the endpoints whose CleanupTimeout has expired.
+func (c *Connections) due(now time.Time) []*endpoint {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	var out []*endpoint
+	for _, e := range c.endpoints {
+		if !e.cleanupOff && !e.deadline.IsZero() && !now.Before(e.deadline) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+// expireDue closes the endpoints whose CleanupTimeout has expired. It
+// decides under c.call, after the calls that ran before it: an endpoint a
+// CloseConnections closed meanwhile has its cleanup off, one an
+// EstablishConnections took again has a new deadline or none, and one that
+// is Operational again is not closed (Part 81 §6.2.5.2, §6.6.2).
+func (c *Connections) expireDue() {
+	if len(c.due(time.Now())) == 0 {
+		return
+	}
+	c.mu.Lock()
+	hook := c.beforeExpire
+	c.mu.Unlock()
+	if hook != nil {
+		hook()
+	}
+	c.call.Lock()
+	defer c.call.Unlock()
+	// due reads the endpoints again: one a call removed is not there.
+	for _, e := range c.due(time.Now()) {
+		if c.derive(e) == uafx.ConnectionEndpointOperational {
+			c.mu.Lock()
+			e.deadline = timeZero
+			c.mu.Unlock()
+			continue
+		}
 		c.expire(e)
 	}
-	c.refreshHealth()
 }
 
 // expire closes e as CloseConnections with Remove does when its
 // CleanupTimeout expires, and reports an AuditConnectionCleanupEventType
-// event when the server audits (Part 81 §6.6.2, §8.3).
+// event when the server audits (Part 81 §6.6.2, §8.3), with Status false
+// when the close failed; the close is then tried again after another
+// CleanupTimeout, c.retryCleanup at the earliest.
+//
+// The caller holds c.call.
 func (c *Connections) expire(e *endpoint) {
-	c.call.Lock()
-	defer c.call.Unlock()
-	c.mu.Lock()
-	cur := c.endpoints[e.id.String()]
-	c.mu.Unlock()
-	if cur != e {
-		return
-	}
 	c.log.Info("uafx: CleanupTimeout of a ConnectionEndpoint expired", "endpoint", e.id, "timeout", e.cleanup)
 	rel := c.value(c.childID(e.id, "RelatedEndpoint"))
 	if rel == nil {
 		rel = &ua.Variant{}
 	}
-	c.closeEndpoint(e, true)
+	ok := c.closeEndpoint(e, true) == ua.StatusOK
+	if !ok {
+		// The endpoint stays with what could not be removed; try again
+		// after another CleanupTimeout, at the earliest after a second.
+		c.log.Warn("uafx: the cleanup of a ConnectionEndpoint failed; it is retried", "endpoint", e.id)
+		c.mu.Lock()
+		e.cleanupOff = false
+		e.deadline = time.Now().Add(max(e.cleanup, c.retryCleanup))
+		c.mu.Unlock()
+	}
 	if c.srv.Auditing() {
 		// The server's own action: no Method call, so no caller in the
 		// context. SourceNode is the FunctionalEntity (Part 81 §8.3).
@@ -251,7 +298,7 @@ func (c *Connections) expire(e *endpoint) {
 			Message:    ua.NewLocalizedText("CleanupTimeout of the ConnectionEndpoint " + e.name + " expired"),
 			Severity:   500,
 			Fields: map[string]*ua.Variant{
-				"Status":          ua.MustVariant(true),
+				"Status":          ua.MustVariant(ok),
 				"RemovedEndpoint": ua.MustVariant(e.name),
 				"RelatedEndpoint": rel,
 			},

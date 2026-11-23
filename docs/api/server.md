@@ -4182,6 +4182,16 @@ func (s *Server) PubSubNodeID(c pubsub.ComponentID) (*ua.NodeID, bool)
 
 PubSubNodeID returns the NodeId of the object of a PubSub component in the information model.
 
+#### func (Server) ReadValue
+
+```go
+func (s *Server) ReadValue(ctx context.Context, nodeID *ua.NodeID) (*ua.DataValue, ua.StatusCode)
+```
+
+ReadValue reads the Value of the Variable nodeID for the session of the Method call in ctx, with the checks the Read service makes for that session (Part 4 §5.10.2): the AccessController (CheckRead) and the access rules of the diagnostics and certificate nodes, the AccessRestrictions of the node, and the CurrentRead bit of AccessLevel and UserAccessLevel (Part 3 §5.6.2). It lets a Method of a companion specification compare what its caller supplies with a value, such as the Verify of OPC 10000-81 §6.4.3, with the caller's rights instead of those of the server, so that a caller cannot learn a value it may not read.
+
+It returns the DataValue and Good, or a Bad status: Bad\_SessionIDInvalid outside a Method call with a session, Bad\_NodeIDUnknown for a node the server does not have, or the status of the refused read.
+
 #### func (Server) RegisterHandler
 
 ```go

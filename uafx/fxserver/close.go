@@ -4,7 +4,9 @@ package fxserver
 
 import (
 	"context"
+	"errors"
 
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
@@ -67,8 +69,7 @@ func (c *Connections) closeOne(n *ua.NodeID, remove bool, scope map[string]bool)
 	c.mu.Unlock()
 	switch {
 	case e != nil && scope[e.fe.String()]:
-		c.closeEndpoint(e, remove)
-		return ua.StatusOK
+		return c.closeEndpoint(e, remove)
 	case e != nil || c.isA(n, fxacid.ConnectionEndpointType):
 		// A ConnectionEndpoint of another AutomationComponent.
 		return ua.StatusBadNodeIDUnknown
@@ -84,13 +85,26 @@ func (c *Connections) closeOne(n *ua.NodeID, remove bool, scope map[string]bool)
 // keeps its nodes, loses its References to the removed reader and writer
 // and its RelatedEndpoint, and can be used again. The groups and
 // connections stay.
-func (c *Connections) closeEndpoint(e *endpoint, remove bool) {
-	rt := c.srv.PubSub()
+//
+// It returns Good, or the status of the first PubSub operation that failed:
+// Table 24 has no code for that, so it is the StatusCode the runtime gives,
+// or Bad_InternalError. A failure leaves e and its References to what is
+// left in place, so that the caller sees the endpoint and can close it
+// again. A reader or writer that is disabled already, or no longer exists,
+// is not a failure.
+func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 	c.mu.Lock()
 	e.cleanupOff = true
 	e.deadline = timeZero
 	reader, writer, ownReader, ownWriter := e.reader, e.writer, e.ownReader, e.ownWriter
 	c.mu.Unlock()
+	status := ua.StatusOK
+	fail := func(op string, cid pubsub.ComponentID, err error) {
+		c.log.Warn("uafx: CloseConnections: "+op, "endpoint", e.id, "component", cid, "error", err)
+		if status == ua.StatusOK {
+			status = badStatusOf(err)
+		}
+	}
 	for _, x := range []struct {
 		n      *ua.NodeID
 		own    bool
@@ -101,25 +115,36 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) {
 		}
 		cid, ok := c.componentOf(x.n)
 		if !ok {
+			// Gone already: nothing to disable or remove.
+			if remove && x.own {
+				c.setLinkLocked(e, x.reader, nil, false)
+			}
 			continue
 		}
-		if err := rt.Disable(cid); err != nil {
-			c.log.Debug("uafx: CloseConnections: disable", "component", cid, "error", err)
+		derr := c.ops.disable(cid)
+		if errors.Is(derr, ua.StatusBadInvalidState) {
+			derr = nil // disabled already
 		}
 		if !remove || !x.own {
+			if derr != nil {
+				fail("disable", cid, derr)
+			}
 			continue
 		}
-		var err error
+		// Removing stops the component as well: a failed disable matters
+		// only if the removal fails too.
+		remover := c.ops.removeWriter
 		if x.reader {
-			err = rt.RemoveDataSetReader(cid)
-		} else {
-			err = rt.RemoveDataSetWriter(cid)
+			remover = c.ops.removeReader
 		}
-		if err != nil {
-			c.log.Warn("uafx: CloseConnections: remove", "component", cid, "error", err)
+		if err := remover(cid); err != nil && !errors.Is(err, ua.StatusBadNotFound) {
+			fail("remove", cid, errors.Join(derr, err))
 			continue
 		}
 		c.setLinkLocked(e, x.reader, nil, false)
+	}
+	if status != ua.StatusOK {
+		return status
 	}
 	switch {
 	case remove && e.created:
@@ -129,4 +154,13 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) {
 		// goes, so that it is no longer in use (Part 81 Table 12).
 		c.write(c.childID(e.id, "RelatedEndpoint"), &ua.Variant{})
 	}
+	return ua.StatusOK
+}
+
+// badStatusOf returns the Bad StatusCode err carries, or Bad_InternalError.
+func badStatusOf(err error) ua.StatusCode {
+	if sc := pubsub.StatusCodeOf(err); sc.Uint32()&0x80000000 != 0 {
+		return sc
+	}
+	return ua.StatusBadInternalError
 }
