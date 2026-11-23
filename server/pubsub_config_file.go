@@ -412,6 +412,16 @@ func (f *configFile) reserveIDs(ctx context.Context, _ *ua.NodeID, args []*ua.Va
 	if !ok1 || !ok2 {
 		return nil, ua.StatusBadTypeMismatch
 	}
+	r, sc := f.reserve(ctx, ng, nw)
+	if sc != ua.StatusOK {
+		return nil, sc
+	}
+	return []*ua.Variant{r.DefaultPublisherID, ua.MustVariant(r.WriterGroupIDs), ua.MustVariant(r.DataSetWriterIDs)}, ua.StatusOK
+}
+
+// reserve reserves ng WriterGroupIds and nw DataSetWriterIds for the
+// session of ctx (Part 14 §9.1.3.7.5).
+func (f *configFile) reserve(ctx context.Context, ng, nw uint16) (*PubSubIDReservation, ua.StatusCode) {
 	sess := sessionOf(ctx)
 	if sess == nil {
 		return nil, ua.StatusBadSessionIDInvalid
@@ -451,7 +461,7 @@ func (f *configFile) reserveIDs(ctx context.Context, _ *ua.NodeID, args []*ua.Va
 		r.writers[x] = true
 	}
 	f.reserved[sess.String()] = r
-	return []*ua.Variant{f.defaultPublisherID(cfg.Connections), ua.MustVariant(gs), ua.MustVariant(ws)}, ua.StatusOK
+	return &PubSubIDReservation{DefaultPublisherID: f.defaultPublisherID(cfg.Connections), WriterGroupIDs: gs, DataSetWriterIDs: ws}, ua.StatusOK
 }
 
 // releaseUsedLocked ends the reservations of the ids a configuration uses.
@@ -501,6 +511,23 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 	}
 	f.closeLocked(h)
 	f.mu.Unlock()
+	u, sc := f.applyLocked(ctx, file, require, refs)
+	if sc != ua.StatusOK {
+		return nil, sc
+	}
+	values := make([]*ua.ExtensionObject, len(u.ConfigurationValues))
+	for i, v := range u.ConfigurationValues {
+		values[i] = ua.NewExtensionObject(v)
+	}
+	if !u.ChangesApplied {
+		values = nil
+	}
+	return []*ua.Variant{ua.MustVariant(u.ChangesApplied), ua.MustVariant(u.ReferenceResults), ua.MustVariant(values), ua.MustVariant(u.ConfigurationObjects)}, ua.StatusOK
+}
+
+// applyLocked applies file as CloseAndUpdate does (Part 14 §9.1.3.7.4).
+// The caller holds f.update.
+func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfiguration2DataType, require bool, refs []*ua.PubSubConfigurationRefDataType) (*PubSubConfigurationUpdate, ua.StatusCode) {
 	if st := f.m.checkConnectionTargets(ctx, file.Connections...); st != ua.StatusOK {
 		return nil, st
 	}
@@ -530,14 +557,12 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 	for _, p := range u.paths {
 		objs = append(objs, f.nodeOfPath(applied, p))
 	}
-	values := make([]*ua.ExtensionObject, len(u.values))
-	for i, v := range u.values {
-		values[i] = ua.NewExtensionObject(v)
+	r := &PubSubConfigurationUpdate{ChangesApplied: applied, ReferenceResults: results, ConfigurationObjects: objs, f: f}
+	if applied {
+		r.ConfigurationValues = u.values
+		r.before, r.after = old, f.m.rt.Configuration()
 	}
-	if !applied {
-		values = nil
-	}
-	return []*ua.Variant{ua.MustVariant(applied), ua.MustVariant(results), ua.MustVariant(values), ua.MustVariant(objs)}, ua.StatusOK
+	return r, ua.StatusOK
 }
 
 // decodeConfigFile decodes what a client wrote.
