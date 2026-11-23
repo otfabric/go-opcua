@@ -20,9 +20,9 @@ import (
 // NS is the namespace of automation_component.xml.
 const NS = "urn:go-opcua:uafx:test"
 
-// AppNS is the application namespace Prepare adds before the UAFX
-// namespaces, so that their indexes differ from those of the NodeSet
-// documents.
+// AppNS is an ApplicationUri for test servers. AddModel names namespace 1
+// after the ApplicationUri, so the UAFX namespaces follow it and their
+// indexes differ from those of the NodeSet documents.
 const AppNS = "urn:go-opcua:uafx:application"
 
 // NodeIds, in NS, of the nodes whose values Prepare sets.
@@ -46,12 +46,9 @@ var nodeSet []byte
 func NodeSet() []byte { return append([]byte(nil), nodeSet...) }
 
 // Prepare adds the UAFX model of models to srv, which must not be started
-// yet, and unless bare the test AutomationComponents with their structure
+// yet and must have an ApplicationUri, and unless bare the test AutomationComponents with their structure
 // values.
 func Prepare(srv *server.Server, bare bool, models ...fxserver.Model) (fxserver.Namespaces, error) {
-	if _, ok := Index(srv, AppNS); !ok {
-		server.NewNodeNameSpace(srv, AppNS)
-	}
 	ns, err := fxserver.AddModel(srv, models...)
 	if err != nil || bare {
 		return ns, err

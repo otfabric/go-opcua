@@ -68,10 +68,11 @@ var ErrModel = errors.New("fxserver: UAFX model")
 // models is empty (Part 81 §14.2: a UAFX server has at least one of them).
 //
 // Namespace index 1 is the namespace of the local server (Part 81 §14.2,
-// Table 260). A server that has no namespace besides namespace 0 gets one
-// named by its ApplicationUri ([server.ApplicationURI] or the URI of its
-// certificate) before the model; without an ApplicationUri that is an
-// error. A server whose namespace 1 is the DI namespace is an error too.
+// Table 260), whose URI is the ApplicationUri of the server (Part 5
+// §6.3.1). A server that has no namespace besides namespace 0 gets it
+// before the model, named by its ApplicationUri ([server.ApplicationURI]
+// or the URI of its certificate). A server without an ApplicationUri, or
+// whose namespace 1 has another URI, is an error.
 //
 // DI is imported unless the server has the DI namespace already, for
 // example from an application that imported it before. The DI nodes the
@@ -130,18 +131,19 @@ func AddModel(srv *server.Server, models ...Model) (Namespaces, error) {
 }
 
 // localNamespace makes sure namespace 1 of srv is the namespace of the
-// local server (Part 81 §14.2).
+// local server (Part 81 §14.2): the ApplicationUri of the server, which
+// Part 5 §6.3.1 requires NamespaceArray[1] to be.
 func localNamespace(srv *server.Server) error {
-	nss := srv.Namespaces()
-	if len(nss) > 1 {
-		if uri := nss[1].Name(); uri == diid.NamespaceURI {
-			return fmt.Errorf("%w: namespace 1 of the server is %s; it must be the namespace of the local server (Part 81 §14.2)", ErrModel, uri)
-		}
-		return nil
-	}
 	uri := srv.ApplicationURI()
 	if uri == "" {
-		return fmt.Errorf("%w: the server has no namespace 1, the namespace of the local server (Part 81 §14.2), and no ApplicationUri to name it: set server.ApplicationURI or add the namespace first", ErrModel)
+		return fmt.Errorf("%w: the server has no ApplicationUri to name namespace 1, the namespace of the local server (Part 81 §14.2, Part 5 §6.3.1): set server.ApplicationURI", ErrModel)
+	}
+	nss := srv.Namespaces()
+	if len(nss) > 1 {
+		if got := nss[1].Name(); got != uri {
+			return fmt.Errorf("%w: namespace 1 of the server is %s, not its ApplicationUri %s (Part 81 §14.2, Part 5 §6.3.1)", ErrModel, got, uri)
+		}
+		return nil
 	}
 	// The server has namespace 0 only: the new namespace gets index 1.
 	server.NewNodeNameSpace(srv, uri)

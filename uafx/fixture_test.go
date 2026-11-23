@@ -23,17 +23,18 @@ import (
 const TestNS = fxtest.NS
 
 // NewTestServer returns a server, not started, with a None endpoint and the
-// application namespace of fxtest, so that the UAFX namespaces added after
-// it have indexes that differ from those of the NodeSet documents.
+// ApplicationUri of fxtest, which AddModel makes namespace 1, so that the
+// UAFX namespaces added after it have indexes that differ from those of the
+// NodeSet documents.
 func NewTestServer(t *testing.T) *server.Server {
 	t.Helper()
 	srv, err := server.New(
 		server.EndPoint("localhost", 0),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		server.ApplicationURI(fxtest.AppNS),
 	)
 	require.NoError(t, err)
-	server.NewNodeNameSpace(srv, fxtest.AppNS)
 	return srv
 }
 

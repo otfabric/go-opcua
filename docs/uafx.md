@@ -126,10 +126,11 @@ two optional namespaces (Part 81 §14.2); the CM model brings the
 ConnectionManager instance of §12.3.
 
 Namespace index 1 is the namespace of the local server (Part 81 §14.2,
-Table 260). On a server with no namespace besides namespace 0, `AddModel`
-adds it first, named by the ApplicationUri of the server
-(`server.ApplicationURI` or the URI of its certificate), and fails
-without one. A server whose namespace 1 is DI is refused.
+Table 260), and its URI is the ApplicationUri of the server (Part 5
+§6.3.1). On a server with no namespace besides namespace 0, `AddModel`
+adds it first, named by the ApplicationUri (`server.ApplicationURI` or the
+URI of its certificate). A server without an ApplicationUri, or whose
+namespace 1 has another URI, is refused with `ErrModel`.
 
 A DI namespace the server has already is used if it holds the DI nodes
 the UAFX model refers to (the ObjectTypes FunctionalGroupType,
@@ -140,10 +141,16 @@ before it imports anything.
 
 `ImportNodeSet` maps the namespace table of a NodeSet document to the
 namespace indexes of the server (Part 6 §F.2): a namespace the server has
-keeps its index, a new one is added. Only the places where Part 6 Annex F
+keeps its index, a new one is added. The table is the one NamespaceUris
+element of the document element; a document with two is refused. Only the places where Part 6 Annex F
 puts a NodeId or a QualifiedName are rewritten: NodeId attributes,
-reference targets, aliases, the Identifier of a NodeId value, BrowseName
-prefixes and the NamespaceIndex of a QualifiedName value. Descriptions,
+reference targets, aliases, BrowseName prefixes, the NamespaceIndex of a
+QualifiedName value, and the Identifier of a NodeId in a value: of a
+NodeId or ExpandedNodeId value, of the TypeId of an ExtensionObject, and
+of the NodeId fields of Argument, StructureField, StructureDefinition and
+RolePermissionType bodies. The body of any other structure is copied as
+it is, since the document does not give the types of its fields: a NodeId
+field of a vendor structure keeps the index of the document. Descriptions,
 strings, comments and Extensions are copied as they are, whatever they
 hold. `server.ImportNodeSetXML` does not map
 indexes; it adds every namespace of the document and takes the NodeIds as

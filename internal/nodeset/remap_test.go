@@ -3,7 +3,6 @@
 package nodeset
 
 import (
-	"bytes"
 	"errors"
 	"strings"
 	"testing"
@@ -126,6 +125,65 @@ func TestRemapLeavesText(t *testing.T) {
 	assert.Contains(t, s, `<Vendor Ref="ns=1;i=7">ns=1;i=7</Vendor>`)
 }
 
+// TestRemapValueNodeIDs checks which Identifiers in values are NodeIds:
+// those of NodeId and ExpandedNodeId elements, of the TypeId of an
+// ExtensionObject and of the NodeId fields of standard structures, but no
+// field of a structure the document does not define, whatever its name.
+func TestRemapValueNodeIDs(t *testing.T) {
+	src := `<UANodeSet>
+  <NamespaceUris><Uri>urn:a</Uri></NamespaceUris>
+  <UAVariable NodeId="ns=1;i=1" BrowseName="1:V" DataType="ns=1;i=2">
+    <Value>
+      <ExtensionObject>
+        <TypeId><Identifier>ns=1;i=3</Identifier></TypeId>
+        <Body><Custom>
+          <Identifier>ns=1;i=7</Identifier>
+          <NodeId><Identifier>ns=1;i=7</Identifier></NodeId>
+          <DataType><Identifier>ns=1;i=7</Identifier></DataType>
+          <Inner><Identifier>ns=1;i=7</Identifier></Inner>
+        </Custom></Body>
+      </ExtensionObject>
+    </Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=4" BrowseName="0:InputArguments" DataType="i=296" ValueRank="1">
+    <Value><ListOfExtensionObject><ExtensionObject>
+      <TypeId><Identifier>i=297</Identifier></TypeId>
+      <Body><Argument><Name>ns=1;i=7</Name><DataType><Identifier>ns=1;i=5</Identifier></DataType></Argument></Body>
+    </ExtensionObject></ListOfExtensionObject></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=6" BrowseName="1:S" DataType="i=99">
+    <Value><ExtensionObject>
+      <TypeId><Identifier>i=99</Identifier></TypeId>
+      <Body><StructureDefinition><DefaultEncodingId><Identifier>ns=1;i=8</Identifier></DefaultEncodingId><BaseDataType><Identifier>ns=1;i=9</Identifier></BaseDataType></StructureDefinition></Body>
+    </ExtensionObject></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=10" BrowseName="1:E" DataType="ExpandedNodeId">
+    <Value><ExpandedNodeId><Identifier>ns=1;i=11</Identifier></ExpandedNodeId></Value>
+  </UAVariable>
+  <UAVariable NodeId="ns=1;i=12" BrowseName="1:T" DataType="String">
+    <Value><String>x</String></Value>
+    <Identifier>ns=1;i=7</Identifier>
+  </UAVariable>
+</UANodeSet>`
+	out, err := Remap([]byte(src), table(map[string]uint16{"urn:a": 5}))
+	require.NoError(t, err)
+	s := string(out)
+	assert.Equal(t, 6, strings.Count(s, "ns=1;i=7"), s)
+	for _, want := range []string{
+		`<TypeId><Identifier>ns=5;i=3</Identifier></TypeId>`,
+		`<DataType><Identifier>ns=5;i=5</Identifier></DataType>`,
+		`<DefaultEncodingId><Identifier>ns=5;i=8</Identifier></DefaultEncodingId>`,
+		`<BaseDataType><Identifier>ns=5;i=9</Identifier></BaseDataType>`,
+		`<ExpandedNodeId><Identifier>ns=5;i=11</Identifier></ExpandedNodeId>`,
+	} {
+		assert.Contains(t, s, want)
+	}
+	ids, err := NodeIDs([]byte(src))
+	require.NoError(t, err)
+	assert.NotContains(t, ids, "ns=1;i=7")
+	assert.Subset(t, ids, []string{"ns=1;i=3", "ns=1;i=5", "ns=1;i=8", "ns=1;i=9", "ns=1;i=11"})
+}
+
 // TestRemapForms checks the forms XML allows for the places that are
 // rewritten: single quotes, white space around "=", prefixed element
 // names, NodeIds in values, CDATA.
@@ -149,6 +207,23 @@ func TestRemapForms(t *testing.T) {
 	assert.Contains(t, s, `<Reference ReferenceType='ns=5;i=9' IsForward="false"><![CDATA[ns=5;i=3]]></Reference>`)
 	assert.Contains(t, s, `<uax:Identifier>ns=5;i=5</uax:Identifier>`)
 	assert.Contains(t, s, `<NamespaceIndex> 5 </NamespaceIndex><Name>ns=1;i=8</Name>`)
+}
+
+// TestRemapOneTable checks that the namespace table is the NamespaceUris of
+// the document element, and that a document has one.
+func TestRemapOneTable(t *testing.T) {
+	_, err := Remap([]byte(`<UANodeSet><NamespaceUris/><NamespaceUris><Uri>urn:a</Uri></NamespaceUris></UANodeSet>`), table(nil))
+	assert.ErrorContains(t, err, "more than one NamespaceUris")
+	src := `<UANodeSet><Extensions><Extension><NamespaceUris><Uri>urn:x</Uri></NamespaceUris></Extension></Extensions>` +
+		`<NamespaceUris><Uri>urn:a</Uri></NamespaceUris><UAObject NodeId="ns=1;i=1" BrowseName="1:O"/></UANodeSet>`
+	uris, err := URIs([]byte(src))
+	require.NoError(t, err)
+	assert.Equal(t, []string{"urn:a"}, uris)
+	out, err := Remap([]byte(src), table(map[string]uint16{"urn:a": 5}))
+	require.NoError(t, err)
+	assert.Contains(t, string(out), `<Extension><NamespaceUris><Uri>urn:x</Uri></NamespaceUris></Extension>`)
+	assert.Contains(t, string(out), `NodeId="ns=5;i=1"`)
+	assert.NotContains(t, string(out), "urn:a")
 }
 
 func TestRemapMalformed(t *testing.T) {
@@ -193,8 +268,8 @@ func FuzzRemap(f *testing.F) {
 		}
 		// The namespace table of the document is gone, and a rewrite adds
 		// at most "0:" to a BrowseName and a few digits to an index.
-		if bytes.Count(out, []byte("<NamespaceUris>")) != max(0, bytes.Count(b, []byte("<NamespaceUris>"))-1) {
-			t.Fatalf("the namespace table is left in %q", out)
+		if uris, err := URIs(out); err != nil || len(uris) > 0 {
+			t.Fatalf("the namespace table is left in %q: %v %v", out, uris, err)
 		}
 		if len(out) > 3*len(b)+16 {
 			t.Fatalf("%d bytes became %d", len(b), len(out))

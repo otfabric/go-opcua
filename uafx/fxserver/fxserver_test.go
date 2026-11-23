@@ -57,7 +57,7 @@ func index(srv *server.Server, uri string) int {
 
 func TestAddModel(t *testing.T) {
 	srv := newServer(t)
-	server.NewNodeNameSpace(srv, "urn:app")
+	server.NewNodeNameSpace(srv, appURI) // namespace 1 added by the application
 	ns, err := fxserver.AddModel(srv)
 	require.NoError(t, err)
 	assert.Equal(t, fxserver.Namespaces{DI: 2, Data: 3, AC: 4, CM: 5}, ns)
@@ -148,6 +148,30 @@ func TestAddModelLocalNamespace(t *testing.T) {
 	assert.ErrorIs(t, err, fxserver.ErrModel)
 	assert.ErrorContains(t, err, "namespace 1")
 	assert.Equal(t, -1, index(srv, fxdataid.NamespaceURI))
+
+	// A namespace 1 that is not the ApplicationUri (Part 5 §6.3.1).
+	srv = newServer(t)
+	server.NewNodeNameSpace(srv, "urn:app")
+	_, err = fxserver.AddModel(srv)
+	assert.ErrorIs(t, err, fxserver.ErrModel)
+	assert.ErrorContains(t, err, "urn:app")
+	assert.Equal(t, -1, index(srv, diid.NamespaceURI))
+
+	// A namespace 1 that is the ApplicationUri is kept.
+	srv = newServer(t)
+	server.NewNodeNameSpace(srv, appURI)
+	_, err = fxserver.AddModel(srv)
+	require.NoError(t, err)
+	assert.Equal(t, appURI, srv.Namespaces()[1].Name())
+	assert.Equal(t, 2, index(srv, diid.NamespaceURI))
+
+	// Namespace 1 exists but the server has no ApplicationUri.
+	srv, err = server.New(server.EndPoint("localhost", 0), server.InsecureNoSecurity())
+	require.NoError(t, err)
+	server.NewNodeNameSpace(srv, "urn:app")
+	_, err = fxserver.AddModel(srv)
+	assert.ErrorIs(t, err, fxserver.ErrModel)
+	assert.Len(t, srv.Namespaces(), 2)
 }
 
 // TestAddModelDI checks that a complete DI namespace the server has

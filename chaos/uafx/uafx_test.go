@@ -22,6 +22,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/testutil/chaoskit"
 	"github.com/otfabric/go-opcua/internal/testutil/conformkit"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
+	"github.com/otfabric/go-opcua/internal/testutil/testpki"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
@@ -49,7 +50,11 @@ func newEnv(t *testing.T, opts ...server.Option) *env {
 		var err error
 		e.ns, err = fxtest.Prepare(srv, false)
 		require.NoError(t, err)
-	}, opts...)
+	}, append([]server.Option{
+		// The ApplicationUri of the test certificates: AddModel names
+		// namespace 1 after it (Part 5 §6.3.1).
+		server.ApplicationURI(testpki.ServerAppURI),
+	}, opts...)...)
 	return e
 }
 

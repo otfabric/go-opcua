@@ -140,10 +140,10 @@ func TestInspectMaxNodesPerRead(t *testing.T) {
 		server.EndPoint("localhost", 0),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
+		server.ApplicationURI(fxtest.AppNS),
 		server.WithOperationLimits(server.OperationalLimits{MaxNodesPerRead: 2, MaxNodesPerBrowse: 1}),
 	)
 	require.NoError(t, err)
-	server.NewNodeNameSpace(srv, fxtest.AppNS)
 	_, err = fxtest.Prepare(srv, false)
 	require.NoError(t, err)
 	limited := &readSizes{client: StartTestServer(t, srv)}

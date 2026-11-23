@@ -40,11 +40,52 @@ var (
 	// (Part 6 §F.3 to §F.11).
 	nodeIDAttrs = map[string]bool{"NodeId": true, "ParentNodeId": true, "DataType": true, "ReferenceType": true, "MethodDeclarationId": true}
 	// nodeIDText are the elements whose text is a NodeId: an alias, the
-	// target of a reference, the role of a RolePermission (§F.3, §F.4),
-	// and the Identifier of a NodeId, ExpandedNodeId or TypeId in a
-	// value (§5.3.1.10, §5.3.1.11, §5.3.1.16).
-	nodeIDText = map[string]bool{"Alias": true, "Reference": true, "RolePermission": true, "Identifier": true}
+	// target of a reference, the role of a RolePermission (§F.3, §F.4).
+	// The Identifier of a NodeId in a value is placed by [valueNodeID].
+	nodeIDText = map[string]bool{"Alias": true, "Reference": true, "RolePermission": true}
+	// nodeIDFields are the fields of type NodeId of the standard structures
+	// a NodeSet holds as ExtensionObject bodies: Argument (Part 3 §8.6),
+	// StructureField (§8.51), StructureDefinition (§8.48) and
+	// RolePermissionType (§8.55). A field of type NodeId is an element
+	// named after the field that holds an Identifier (Part 6 §5.3.1.10).
+	nodeIDFields = map[string]map[string]bool{
+		"Argument":            {"DataType": true},
+		"StructureField":      {"DataType": true},
+		"StructureDefinition": {"DefaultEncodingId": true, "BaseDataType": true},
+		"RolePermissionType":  {"RoleId": true},
+	}
 )
+
+// valueNodeID tells whether the text of the last element of stack, the
+// elements around a text, is the Identifier of a NodeId in a value
+// (Part 6 §5.3.1.10, §5.3.1.11, §5.3.1.16): of a NodeId or ExpandedNodeId
+// element of a Variant, of the TypeId of an ExtensionObject, or of a NodeId
+// field of a standard structure ([nodeIDFields]). Inside the Body of any
+// other structure nothing is a NodeId: the document does not say the types
+// of its fields, and a field may be named Identifier, NodeId or TypeId
+// whatever its type.
+func valueNodeID(stack []string) bool {
+	n := len(stack)
+	if n < 2 || stack[n-1] != "Identifier" {
+		return false
+	}
+	parent := stack[n-2]
+	if parent == "TypeId" && n >= 3 && stack[n-3] == "ExtensionObject" {
+		return true
+	}
+	body := -1
+	for i := n - 1; i >= 0; i-- {
+		if stack[i] == "Body" && i > 0 && stack[i-1] == "ExtensionObject" {
+			body = i
+			break
+		}
+	}
+	if body < 0 {
+		return parent == "NodeId" || parent == "ExpandedNodeId"
+	}
+	// Body / structure / field / Identifier
+	return n == body+4 && nodeIDFields[stack[body+1]][parent]
+}
 
 var (
 	// nodeIDIndex matches the namespace index of a NodeId in the string
@@ -95,22 +136,33 @@ func walk(src []byte, f func(t token, stack []string) error) error {
 	}
 }
 
+// isTable tells whether the start tag el, inside the elements stack, is the
+// namespace table of the document: a NamespaceUris child of the document
+// element (Part 6 §F.1), or the document element itself.
+func isTable(el xml.StartElement, stack []string) bool {
+	return el.Name.Local == "NamespaceUris" && len(stack) <= 1
+}
+
 // URIs returns the namespace table of the document src, in order: the
-// namespace of index 1 first. The table is the first NamespaceUris element
-// of the document.
+// namespace of index 1 first. The table is the NamespaceUris element of
+// the document element; a document with two is an error.
 func URIs(src []byte) ([]string, error) {
 	var (
-		uris    []string
-		in, uri bool
-		done    = errors.New("done")
-		text    []byte
+		uris          []string
+		in, uri, seen bool
+		text          []byte
 	)
-	err := walk(src, func(t token, _ []string) error {
+	err := walk(src, func(t token, stack []string) error {
 		switch tok := t.tok.(type) {
 		case xml.StartElement:
 			switch {
-			case tok.Name.Local == "NamespaceUris" && !in:
-				in = true
+			case isTable(tok, stack) && seen:
+				return fmt.Errorf("nodeset: the document has more than one NamespaceUris")
+			case isTable(tok, stack) && !in:
+				in, seen = true, true
+				if bytes.HasSuffix(t.raw, []byte("/>")) {
+					in = false // <NamespaceUris/>: no end tag follows
+				}
 			case in && tok.Name.Local == "Uri" && !uri:
 				uri, text = true, text[:0]
 			case in:
@@ -131,20 +183,18 @@ func URIs(src []byte) ([]string, error) {
 			case uri:
 				return fmt.Errorf("nodeset: Uri is not closed")
 			case in && tok.Name.Local == "NamespaceUris":
-				return done
+				in = false
 			}
 		}
 		return nil
 	})
 	switch {
-	case errors.Is(err, done):
-		return uris, nil
 	case err != nil:
 		return nil, err
 	case in:
 		return nil, fmt.Errorf("nodeset: NamespaceUris is not closed")
 	}
-	return nil, nil
+	return uris, nil
 }
 
 // Remap returns a copy of the NodeSet2 document src in which every
@@ -154,7 +204,10 @@ func URIs(src []byte) ([]string, error) {
 //
 // Rewritten are the NodeIds of the attributes NodeId, ParentNodeId,
 // DataType, ReferenceType and MethodDeclarationId; of the text of Alias,
-// Reference, RolePermission and of the Identifier of a NodeId in a value;
+// Reference, RolePermission and of the Identifier of a NodeId in a value
+// (NodeId and ExpandedNodeId elements, the TypeId of an ExtensionObject and
+// the NodeId fields of Argument, StructureField, StructureDefinition and
+// RolePermissionType; nothing else in an ExtensionObject Body);
 // the prefix of BrowseName attributes and of the Name of a DataType
 // Definition; and the NamespaceIndex of a QualifiedName value. A
 // BrowseName without a prefix is a name in namespace 0 (Part 6 §F.3) and
@@ -216,7 +269,7 @@ func Remap(src []byte, resolve Resolver) ([]byte, error) {
 		}
 		switch tok := t.tok.(type) {
 		case xml.StartElement:
-			if tok.Name.Local == "NamespaceUris" && !cut {
+			if isTable(tok, stack) && !cut {
 				cutting, cut, depth = true, true, 1
 				if len(t.raw) >= 2 && bytes.HasSuffix(t.raw, []byte("/>")) {
 					// <NamespaceUris/>: no end tag follows.
@@ -231,7 +284,7 @@ func Remap(src []byte, resolve Resolver) ([]byte, error) {
 				break
 			}
 			switch el := stack[len(stack)-1]; {
-			case nodeIDText[el]:
+			case nodeIDText[el] || valueNodeID(stack):
 				out = append(out, mapNodeID(t.raw)...)
 			case el == "NamespaceIndex":
 				if m := number.FindSubmatch(t.raw); m != nil {
@@ -333,7 +386,7 @@ func NodeIDs(src []byte) ([]string, error) {
 				}
 			}
 		case xml.CharData:
-			if len(stack) > 0 && nodeIDText[stack[len(stack)-1]] {
+			if len(stack) > 0 && (nodeIDText[stack[len(stack)-1]] || valueNodeID(stack)) {
 				add(tok)
 			}
 		}

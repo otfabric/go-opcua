@@ -36,7 +36,11 @@ func fxServer(t *testing.T, opts ...server.Option) string {
 	_, url := conformkit.NewServerPrepared(t, func(srv *server.Server) {
 		_, err := fxtest.Prepare(srv, false)
 		require.NoError(t, err)
-	}, opts...)
+	}, append([]server.Option{
+		// The ApplicationUri of the test certificates: AddModel names
+		// namespace 1 after it (Part 5 §6.3.1).
+		server.ApplicationURI(testpki.ServerAppURI),
+	}, opts...)...)
 	return url
 }
 
