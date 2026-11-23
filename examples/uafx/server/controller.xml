@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- SPDX-License-Identifier: MIT -->
 <!-- The AutomationComponent of the uafx/server example: a controller with
-     one Asset (a drive), one FunctionalEntity (Motion) with a sub-entity and
-     a PubSub ConnectionEndpoint. The NodeIds of namespace 1 are the
+     one Asset (a drive), one FunctionalEntity (Motion) with a sub-entity,
+     input, output and configuration data and a preconfigured PubSub
+     ConnectionEndpoint. The NodeIds of namespace 1 are the
      example's own; namespaces 2 to 5 are the UAFX Data, AC, DI and CM
      models that fxserver.AddModel adds. -->
 <UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">
@@ -256,7 +257,7 @@
       <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
       <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1300</Reference>
     </References>
-    <Value><Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">3</Int32></Value>
+    <Value><Int32 xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Int32></Value>
   </UAVariable>
   <UAVariable NodeId="ns=1;i=1302" BrowseName="3:IsPersistent" DataType="i=1" AccessLevel="1">
     <DisplayName>IsPersistent</DisplayName>
@@ -264,7 +265,7 @@
       <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
       <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1300</Reference>
     </References>
-    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">true</Boolean></Value>
+    <Value><Boolean xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">false</Boolean></Value>
   </UAVariable>
   <UAVariable NodeId="ns=1;i=1303" BrowseName="3:CleanupTimeout" DataType="i=290" AccessLevel="1">
     <DisplayName>CleanupTimeout</DisplayName>
@@ -272,7 +273,7 @@
       <Reference ReferenceType="HasTypeDefinition">i=68</Reference>
       <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1300</Reference>
     </References>
-    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">1500</Double></Value>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">-1</Double></Value>
   </UAVariable>
   <UAVariable NodeId="ns=1;i=1304" BrowseName="3:RelatedEndpoint" DataType="ns=2;i=3003" AccessLevel="1">
     <DisplayName>RelatedEndpoint</DisplayName>
@@ -296,5 +297,53 @@
       <Reference ReferenceType="HasProperty" IsForward="false">ns=1;i=1300</Reference>
     </References>
     <Value><String xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">urn:example:cm</String></Value>
+  </UAVariable>
+  <!-- The data of Motion that connections exchange and configure (Part 81
+       §6.4): EstablishConnections links InputData and OutputData variables
+       to DataSetReaders and DataSetWriters and writes ConfigurationData. -->
+  <UAObject NodeId="ns=1;i=1220" BrowseName="3:InputData">
+    <DisplayName>InputData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1221" BrowseName="1:TargetSpeed" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>TargetSpeed</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1220</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1230" BrowseName="3:OutputData">
+    <DisplayName>OutputData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1231" BrowseName="1:ActualSpeed" DataType="i=11" AccessLevel="1" UserAccessLevel="1">
+    <DisplayName>ActualSpeed</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1230</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">0</Double></Value>
+  </UAVariable>
+  <UAObject NodeId="ns=1;i=1240" BrowseName="3:ConfigurationData">
+    <DisplayName>ConfigurationData</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=61</Reference>
+      <Reference ReferenceType="HasComponent" IsForward="false">ns=1;i=1200</Reference>
+    </References>
+  </UAObject>
+  <UAVariable NodeId="ns=1;i=1241" BrowseName="1:MaxAcceleration" DataType="i=11" AccessLevel="3" UserAccessLevel="3">
+    <DisplayName>MaxAcceleration</DisplayName>
+    <References>
+      <Reference ReferenceType="HasTypeDefinition">i=63</Reference>
+      <Reference ReferenceType="Organizes" IsForward="false">ns=1;i=1240</Reference>
+    </References>
+    <Value><Double xmlns="http://opcfoundation.org/UA/2008/02/Types.xsd">10</Double></Value>
   </UAVariable>
 </UANodeSet>

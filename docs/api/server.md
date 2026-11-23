@@ -114,6 +114,12 @@ var AcknowledgeableConditionTypeNodeID = ua.NewNumericNodeID(0, id.Acknowledgeab
 
 AcknowledgeableConditionTypeNodeID is the well-known ObjectType NodeId for AcknowledgeableConditionType (Part 9 §5.7.2).
 
+```go
+var ErrPubSubChanged = errors.New("server: the PubSub configuration changed after the update")
+```
+
+ErrPubSubChanged reports that the PubSub configuration changed after an update, which Revert therefore does not undo.
+
 ## Functions
 
 ### func AlarmsConditionsSupported
@@ -1846,6 +1852,10 @@ type MethodCaller struct {
 	// channel with; nil on a channel without security. The channel
 	// handshake proved that the client holds its key.
 	ClientCertificate []byte
+	// ClientApplicationURI is the ApplicationUri of the ApplicationDescription
+	// the client sent with CreateSession (Part 4 §5.6.2); "" without a
+	// session.
+	ClientApplicationURI string
 }
 ```
 
@@ -2261,6 +2271,14 @@ func (n *Node) AddRef(o *Node, rt RefType, forward bool)
 ```
 
 AddRef adds a reference of type rt between n and o: n -rt-> o when forward, o -rt-> n otherwise. A Reference has a forward and an inverse direction and Browse returns either (Part 3 §7.1, Part 4 §5.8.2), so both ends record it: n gets the reference to o and o the opposite direction to n. Adding a reference both ends already hold (also from the other end, as parent.AddRef(child, rt, true) followed by child.AddRef(parent, rt, false)) does not add it again.
+
+#### func (Node) AddReference
+
+```go
+func (n *Node) AddReference(o *Node, refType *ua.NodeID, forward bool)
+```
+
+AddReference adds a reference of the ReferenceType refType, of any namespace, between n and o as AddRef does.
 
 #### func (Node) AddVariable
 
@@ -3182,6 +3200,41 @@ type PubSubAuthorizer func(ctx context.Context, caller *MethodCaller, method str
 ```
 
 PubSubAuthorizer decides whether the caller of a PubSub configuration method (AddConnection, RemoveGroup, Enable, ...) may call it. method is the BrowseName of the method. It returns Good to allow the call or the Bad status to answer it with.
+
+### type PubSubConfigurationUpdate
+
+```go
+type PubSubConfigurationUpdate struct {
+	ChangesApplied       bool
+	ReferenceResults     []ua.StatusCode
+	ConfigurationValues  []*ua.PubSubConfigurationValueDataType
+	ConfigurationObjects []*ua.NodeID
+	// contains filtered or unexported fields
+}
+```
+
+PubSubConfigurationUpdate is the result of [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration): the output arguments of CloseAndUpdate (Part 14 §9.1.3.7.4).
+
+#### func (PubSubConfigurationUpdate) Revert
+
+```go
+func (u *PubSubConfigurationUpdate) Revert() error
+```
+
+Revert restores the configuration the update replaced, provided the configuration is still the one the update applied: else it changes nothing and returns ErrPubSubChanged. It does nothing for an update that applied no changes. The ids the update used stay released.
+
+### type PubSubIDReservation
+
+```go
+type PubSubIDReservation struct {
+	// DefaultPublisherID is the PublisherId of the server.
+	DefaultPublisherID *ua.Variant
+	WriterGroupIDs     []uint16
+	DataSetWriterIDs   []uint16
+}
+```
+
+PubSubIDReservation is what [Server.ReservePubSubIDs](#func-server-reservepubsubids) reserved.
 
 ### type PushAuthorizer
 
@@ -4195,6 +4248,16 @@ ReportAuditEvent reports an audit event (Part 5 §6.4.3) of an application metho
 
 The event goes to the event items of the Server object and of the notifiers given. Like the audit events of the server itself, only the sessions an [EventAccessController](#type-eventaccesscontroller) allows receive it. ReportAuditEvent sets what ev leaves unset: the EventId, the Time, the Severity (100) and the AuditEventType fields ActionTimeStamp, ServerId, ClientAuditEntryId and ClientUserId, the last two from the [MethodCaller](#type-methodcaller) of ctx. ev.Fields should carry Status and the fields of the event type. A subscription whose event queue is full is waited for a while (as for the events of conditions), so do not call it with a lock held that other calls need.
 
+#### func (Server) ReservePubSubIDs
+
+```go
+func (s *Server) ReservePubSubIDs(ctx context.Context, writerGroups, dataSetWriters uint16) (*PubSubIDReservation, ua.StatusCode)
+```
+
+ReservePubSubIDs reserves WriterGroupIds and DataSetWriterIds for the session of the Method call in ctx, as the ReserveIds Method of PublishSubscribe.PubSubConfiguration (Part 14 §9.1.3.7.5) does. The transport profile does not matter: the server has one id space.
+
+It returns Bad\_NotSupported when the server has no PubSub information model ([WithPubSub](#func-withpubsub)) and Bad\_SessionIDInvalid without a session.
+
 #### func (Server) ReverseConnects
 
 ```go
@@ -4303,6 +4366,16 @@ URLs returns opc endpoint that the server is listening on.
 
 The opc.tcp endpoints come first, then the opc.wss and the opc.https ones.
 
+#### func (Server) UpdatePubSubConfiguration
+
+```go
+func (s *Server) UpdatePubSubConfiguration(ctx context.Context, cfg *ua.PubSubConfiguration2DataType, requireCompleteUpdate bool, refs []*ua.PubSubConfigurationRefDataType) (*PubSubConfigurationUpdate, ua.StatusCode)
+```
+
+UpdatePubSubConfiguration applies cfg to the PubSub configuration of the server for the session of the Method call in ctx, as the CloseAndUpdate Method of PublishSubscribe.PubSubConfiguration (Part 14 §9.1.3.7.4) does with a file holding cfg: requireCompleteUpdate and refs have the meaning of its arguments of the same name.
+
+It returns Bad\_NotSupported when the server has no PubSub information model ([WithPubSub](#func-withpubsub)), Bad\_NothingToDo without refs, and Bad\_TypeMismatch without cfg.
+
 #### func (Server) VerifyGroupCertificate
 
 ```go
@@ -4318,6 +4391,16 @@ func (s *Server) WebSocketAddr() net.Addr
 ```
 
 WebSocketAddr returns the address the opc.wss listener is bound to, nil before Start or without a WebSocket endpoint.
+
+#### func (Server) WriteValue
+
+```go
+func (s *Server) WriteValue(ctx context.Context, nodeID *ua.NodeID, value *ua.Variant) ua.StatusCode
+```
+
+WriteValue writes value to the Value of the Variable nodeID for the session of the Method call in ctx, with the checks the Write service makes for that session (Part 4 §5.10.4): the AccessController (CheckWrite), the AccessRestrictions of the node, and the CurrentWrite bit of AccessLevel and UserAccessLevel (Part 3 §5.6.2). A ValueWriter of the node takes the value as with Write. It lets a Method of a companion specification write what its caller asks for, such as the ConfigurationData of EstablishConnections (OPC 10000-81 §6.2.4.3.7), with the caller's rights instead of those of the server.
+
+It returns Bad\_SessionIDInvalid outside a Method call with a session and Bad\_NodeIDUnknown for a node the server does not have.
 
 ### type ServerCapabilities
 

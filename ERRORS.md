@@ -153,6 +153,10 @@ Definitions live in [`errors/sentinel.go`](errors/sentinel.go). Match with `erro
 | `pubsub/uadp.ErrSecurityChecksFailed` | Invalid security header, bad signature or failed decryption; or `Encode` could not sign or encrypt |
 | `pubsub/uadp.ErrNoMetaData` | RawData DataSetMessage whose DataSetMetaData the MetaData callback does not supply |
 | `uafx.ErrInspect` | `Inspect` ended because a service call failed, or a node it must browse has a bad status; wraps the error or the status. Deviations of the model are `Report.Findings`, not errors |
+| `uafx.ErrCall` | `EstablishConnections` or `CloseConnections` failed: no UAFX Data and AC namespaces, no such Method on the AutomationComponent, a failed service call, a Bad status of the call (wrapped: `errors.As` with a `ua.StatusCode` finds it), or output arguments that do not decode |
+| `uafx.ErrCodec` | The arguments of EstablishConnections do not encode or decode: a wrong number or type of arguments, an ExtensionObject of another type, or a body that does not decode |
+| `uafx/fxserver.ErrConnections` | `EnableConnections` cannot serve the connection Methods: no AC model, no PubSub runtime, no AutomationComponent below FxRoot, or an AutomationComponent without the Methods or their argument declarations |
+| `server.ErrPubSubChanged` | `PubSubConfigurationUpdate.Revert`: the PubSub configuration changed after the update, which is therefore not undone |
 | `uafx/fxserver.ErrModel` | `AddModel` cannot add the UAFX model: a UAFX namespace the server has already, an unknown `Model`, no ApplicationUri, a namespace 1 that is not the ApplicationUri, a DI namespace without the nodes the model refers to, or a NodeSet the server refuses (wrapped) |
 
 Further API errors: package

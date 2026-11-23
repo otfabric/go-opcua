@@ -8,16 +8,23 @@ import "github.com/otfabric/go-opcua/uafx/fxserver"
 
 Package fxserver adds the information model of OPC UA FX (UAFX, OPC 10000-81 version 1.00.04) to a server.Server: the types of the UAFX Data, AutomationComponent (AC) and ConnectionManager (CM) namespaces, the Devices (DI) model of OPC 10000-100 they build on, the FxRoot object (Part 81 §12.2) and the NamespaceMetadata objects of the three UAFX namespaces (§14.1).
 
-The model is the address space only. The Methods of the model (EstablishConnections, CloseConnections, Verify, VerifyAsset and the Methods of the ConnectionManager) have no implementation: the server answers a call with Bad\_MethodInvalid, as for any Method without a handler. A server becomes an AutomationComponent with the instances an application imports with ImportNodeSet.
+A server becomes an AutomationComponent with the instances an application imports with ImportNodeSet. EnableConnections serves the EstablishConnections and CloseConnections Methods of its AutomationComponents (§6.2.4, §6.2.5) with PubSub. The other Methods of the model (Verify and VerifyAsset called on their own, and the Methods of the ConnectionManager) have no implementation: the server answers a call with Bad\_MethodInvalid, as for any Method without a handler.
 
 	srv := server.New(opts...)
 	ns, err := fxserver.AddModel(srv)
 	...
 	err = fxserver.ImportNodeSet(srv, myAutomationComponentNodeSet)
+	conns, err := fxserver.EnableConnections(srv, ns, fxserver.ConnectionOptions{})
 
-Import the model before the server starts.
+Import the model and enable the connections before the server starts.
 
 ## Variables
+
+```go
+var ErrConnections = errors.New("fxserver: connections")
+```
+
+ErrConnections reports that the connection Methods cannot be served.
 
 ```go
 var ErrModel = errors.New("fxserver: UAFX model")
@@ -36,6 +43,106 @@ func ImportNodeSet(srv *server.Server, data []byte) error
 ImportNodeSet imports the NodeSet2 document data into srv with the namespace indexes of the server: each namespace of the NamespaceUris of the document gets the index the server has for it, or a new namespace on the server (Part 6 §F.2). Use it for the instances of an AutomationComponent, which a NodeSet describes in a namespace of its own with references to the UAFX types.
 
 ## Types
+
+### type AssetVerifier
+
+```go
+type AssetVerifier func(ctx context.Context, asset *ua.NodeID, mode uafx.AssetVerificationMode, expected []*ua.KeyValuePair, additional []*uafx.NodeIDValuePair) (uafx.AssetVerificationResult, []ua.StatusCode, []ua.StatusCode, ua.StatusCode)
+```
+
+AssetVerifier verifies an Asset as its VerifyAsset Method does (Part 81 §6.3.3): it compares the expected values with those of the Asset in the verification mode and returns the VerificationResult, the errors of the two lists (one StatusCode per element, Tables 33 and 34) and the status of the call (Good, Uncertain, Bad\_InvalidArgument or Bad\_NotSupported, Table 32). Which values make an Asset compatible is the Asset's to say.
+
+### type ConnectionOptions
+
+```go
+type ConnectionOptions struct {
+	// AssetVerifier runs the VerifyAssetCmd of EstablishConnections. Without
+	// it the command fails with Bad_NotSupported.
+	AssetVerifier AssetVerifier
+	// MaxConnections limits the ConnectionEndpoints of the server; 0 is no
+	// limit. A ConnectionEndpoint over the limit fails with
+	// Bad_ResourceUnavailable (Part 81 Table 12).
+	MaxConnections uint32
+	// MaxConnectionsPerCall limits the ConnectionEndpointConfigurations of
+	// one EstablishConnections call; 0 is no limit. A call over the limit
+	// fails with Bad_TooManyOperations (Part 81 Table 9).
+	MaxConnectionsPerCall uint32
+	// CommandBundleRequired makes EstablishConnections require the bundled
+	// commands of Part 81 §6.2.4.3.1 in one call.
+	CommandBundleRequired bool
+	// UDPPort is the UDP port of unicast PubSub reception, which
+	// ReserveCommunicationIds returns as TransportSpecificInfo for
+	// UDP-UADP (Part 81 §6.2.4.3.4.2); 0 is 4840, the default port of
+	// UADP (Part 14 §7.3.2.2).
+	UDPPort uint16
+	// Interval is how often the Status of the ConnectionEndpoints follows
+	// their DataSetReaders and DataSetWriters; 0 is 100 ms.
+	Interval time.Duration
+	// Logger logs what the connections do; nil is slog.Default().
+	Logger *slog.Logger
+}
+```
+
+ConnectionOptions configure [EnableConnections](#func-enableconnections).
+
+### type Connections
+
+```go
+type Connections struct {
+
+	// call serializes EstablishConnections and CloseConnections, which Part
+	// 81 makes atomic (§6.2.4.3.9.1, §6.2.4.3.10.1, §6.2.5.2).
+
+	// by NodeId
+
+}
+```
+
+Connections serves the connection Methods of the AutomationComponents of a server: EstablishConnections (Part 81 §6.2.4) and CloseConnections (§6.2.5) with the PubSub communication model, the Status of the PubSubConnectionEndpoints (§6.6.3) and the CommHealth and OperationalHealth they make up (§6.4.8, §10.34, §9.1.2).
+
+Persistent ConnectionEndpoints (IsPersistent, SupportsPersistence) and ControlGroups (EstablishControlCmd and ReassignControlCmd on a ControlGroup) are not supported: they fail with Bad\_NotSupported.
+
+#### func EnableConnections
+
+```go
+func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions) (*Connections, error)
+```
+
+EnableConnections makes srv serve EstablishConnections and CloseConnections on every AutomationComponent below FxRoot. It needs the AC and Data models (ns, from AddModel), the instances of the AutomationComponents (ImportNodeSet) and a PubSub runtime with its information model ([server.WithPubSub](https://pkg.go.dev/github.com/otfabric/go-opcua/server#WithPubSub)). It adopts the PubSubConnectionEndpoints the AutomationComponents have already: their Status follows the DataSetReader and DataSetWriter their ToDataSetReader and ToDataSetWriter References point to.
+
+Call it before the server starts; Close stops the Status updates.
+
+#### func (Connections) Close
+
+```go
+func (c *Connections) Close() error
+```
+
+Close stops the Status updates. The Methods stay registered.
+
+#### func (Connections) Endpoints
+
+```go
+func (c *Connections) Endpoints() []*ua.NodeID
+```
+
+Endpoints returns the NodeIds of the ConnectionEndpoints the connections manage.
+
+#### func (Connections) RefreshHealth
+
+```go
+func (c *Connections) RefreshHealth()
+```
+
+RefreshHealth recomputes the AggregatedOperationalHealth of every AutomationComponent (Part 81 §9.1.2) from the OperationalHealth of its top-level FunctionalEntities. Call it after changing the bits of an OperationalHealth the connections do not own (16 to 31).
+
+#### func (Connections) Status
+
+```go
+func (c *Connections) Status(endpoint *ua.NodeID) (uafx.ConnectionEndpointStatus, bool)
+```
+
+Status returns the Status of the ConnectionEndpoint endpoint, and false if the connections do not manage it.
 
 ### type Model
 
