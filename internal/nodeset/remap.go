@@ -22,7 +22,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"regexp"
 	"strconv"
 )
 
@@ -86,20 +85,6 @@ func valueNodeID(stack []string) bool {
 	// Body / structure / field / Identifier
 	return n == body+4 && nodeIDFields[stack[body+1]][parent]
 }
-
-var (
-	// nodeIDIndex matches the namespace index of a NodeId in the string
-	// form of Part 6 §5.3.1.10 ("ns=1;i=5"). The character before "ns"
-	// must not be a letter, so that "nsu=" is left alone.
-	nodeIDIndex = regexp.MustCompile(`(^|[^A-Za-z])ns=(\d+);`)
-	// attr matches an attribute of a start tag: its name, the "=" with
-	// the white space around it, and its quoted value.
-	attr = regexp.MustCompile(`(\s)([A-Za-z_][\w.:-]*)(\s*=\s*)("[^"]*"|'[^']*')`)
-	// prefix matches the namespace prefix of a QualifiedName ("1:Name").
-	prefix = regexp.MustCompile(`^(\d+):`)
-	// number matches the NamespaceIndex of a QualifiedName value.
-	number = regexp.MustCompile(`^(\s*)(\d+)(\s*)$`)
-)
 
 // token is a token of a document with the bytes it was read from.
 type token struct {
@@ -240,10 +225,7 @@ func Remap(src []byte, resolve Resolver) ([]byte, error) {
 		return strconv.AppendUint(nil, uint64(table[n]), 10)
 	}
 	mapNodeID := func(s []byte) []byte {
-		return nodeIDIndex.ReplaceAllFunc(s, func(m []byte) []byte {
-			sub := nodeIDIndex.FindSubmatch(m)
-			return concat(sub[1], []byte("ns="), mapIndex(sub[2]), []byte(";"))
-		})
+		return replaceNodeIDIndexes(s, mapIndex)
 	}
 
 	out := make([]byte, 0, len(src))
@@ -287,8 +269,8 @@ func Remap(src []byte, resolve Resolver) ([]byte, error) {
 			case nodeIDText[el] || valueNodeID(stack):
 				out = append(out, mapNodeID(t.raw)...)
 			case el == "NamespaceIndex":
-				if m := number.FindSubmatch(t.raw); m != nil {
-					out = append(out, concat(m[1], mapIndex(m[2]), m[3])...)
+				if lead, digits, trail, ok := numberParts(t.raw); ok {
+					out = append(out, concat(lead, mapIndex(digits), trail)...)
 				} else {
 					out = append(out, t.raw...)
 				}
@@ -311,27 +293,26 @@ func Remap(src []byte, resolve Resolver) ([]byte, error) {
 
 // remapTag rewrites the attributes of the start tag raw of the element el.
 func remapTag(raw []byte, el string, mapIndex, mapNodeID func([]byte) []byte) []byte {
-	return attr.ReplaceAllFunc(raw, func(m []byte) []byte {
-		sub := attr.FindSubmatch(m)
-		name, value := local(sub[2]), sub[4]
+	return replaceAttrs(raw, func(m, space, rawName, eq, value []byte) []byte {
+		name := local(rawName)
 		q, v := value[:1], value[1:len(value)-1]
 		switch {
 		case nodeIDAttrs[name]:
 			v = mapNodeID(v)
 		case name == "BrowseName":
-			if p := prefix.FindSubmatch(v); p != nil {
-				v = concat(mapIndex(p[1]), []byte(":"), v[len(p[0]):])
+			if idx, n, ok := qualifiedPrefix(v); ok {
+				v = concat(mapIndex(idx), []byte(":"), v[n:])
 			} else {
 				v = concat([]byte("0:"), v)
 			}
 		case name == "Name" && el == "Definition":
-			if p := prefix.FindSubmatch(v); p != nil {
-				v = concat(mapIndex(p[1]), []byte(":"), v[len(p[0]):])
+			if idx, n, ok := qualifiedPrefix(v); ok {
+				v = concat(mapIndex(idx), []byte(":"), v[n:])
 			}
 		default:
 			return m
 		}
-		return concat(sub[1], sub[2], sub[3], q, v, q)
+		return concat(space, rawName, eq, q, v, q)
 	})
 }
 
