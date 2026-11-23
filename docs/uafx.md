@@ -375,7 +375,7 @@ in `uafx/internal/model`, with their binary encoding (Part 6 §5.2.6 to
   absent; the EncodingMask is written from the fields that are set. An
   optional array that is present but null (length -1) decodes as an empty
   slice, so it stays present when it is encoded again, with the length 0:
-  Part 6 §5.2.5 does not tell null and empty arrays apart, but an absent
+  Part 6 §5.1.11 makes null and empty arrays semantically the same, but an absent
   field differs from a present one. An optional structure of an abstract
   DataType that is present but a null ExtensionObject is `ErrCodec`, as a
   union option is; there is none in the NodeSets of version 1.00.04.

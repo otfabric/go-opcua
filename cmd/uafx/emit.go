@@ -419,7 +419,7 @@ func (e *emitter) encodeArray(f *field, x string) {
 // value; present when f is an optional field whose EncodingMask bit is set
 // or the selected field of a union. A present field stays non-nil, so that
 // encoding it again sets the bit or the SwitchField again: a null array is
-// an empty slice (Part 6 §5.2.5 does not tell null and empty arrays apart),
+// an empty slice (Part 6 §5.1.11 makes null and empty arrays semantically the same),
 // a null union a value without a field set; a null ExtensionObject cannot be
 // told from an absent field and is an error.
 func (e *emitter) decodeValue(owner *dataType, f *field, x string, alloc, present bool) {

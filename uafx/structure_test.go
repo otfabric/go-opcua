@@ -94,7 +94,7 @@ func TestStructureFixtures(t *testing.T) {
 // EncodingMask is set, whatever its value (Part 6 §5.2.7). A present array
 // of length -1, the null array, decodes as an empty slice, not as nil, which
 // is an absent field: encoded again, the bit stays set, with the length 0
-// (Part 6 §5.2.5 does not tell null and empty arrays apart).
+// (Part 6 §5.1.11 makes null and empty arrays semantically the same).
 func TestOptionalNullArray(t *testing.T) {
 	c := codec{testNS}
 	// Bit 0 (AddressSelection) and bit 2 (SecurityPolicyUriSelection), both
