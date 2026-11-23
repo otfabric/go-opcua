@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package uafx
+package uafx_test
 
 import (
 	"context"
@@ -14,12 +14,13 @@ import (
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uafx"
 )
 
 // faulty passes the calls of Inspect to a client and spoils the call
 // number fail: with an error, or with a response of the wrong length.
 type faulty struct {
-	client
+	uafx.InspectClient
 	calls, fail int
 	short       bool // return a response without results instead of an error
 }
@@ -32,7 +33,7 @@ func (f *faulty) NamespaceArray(ctx context.Context) ([]string, error) {
 	if f.hit() {
 		return nil, errFault
 	}
-	return f.client.NamespaceArray(ctx)
+	return f.InspectClient.NamespaceArray(ctx)
 }
 
 func (f *faulty) Browse(ctx context.Context, req *ua.BrowseRequest) (*ua.BrowseResponse, error) {
@@ -42,7 +43,7 @@ func (f *faulty) Browse(ctx context.Context, req *ua.BrowseRequest) (*ua.BrowseR
 		}
 		return nil, errFault
 	}
-	return f.client.Browse(ctx, req)
+	return f.InspectClient.Browse(ctx, req)
 }
 
 func (f *faulty) BrowseNext(ctx context.Context, req *ua.BrowseNextRequest) (*ua.BrowseNextResponse, error) {
@@ -52,7 +53,7 @@ func (f *faulty) BrowseNext(ctx context.Context, req *ua.BrowseNextRequest) (*ua
 		}
 		return nil, errFault
 	}
-	return f.client.BrowseNext(ctx, req)
+	return f.InspectClient.BrowseNext(ctx, req)
 }
 
 func (f *faulty) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadResponse, error) {
@@ -62,7 +63,7 @@ func (f *faulty) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadRespons
 		}
 		return nil, errFault
 	}
-	return f.client.Read(ctx, req)
+	return f.InspectClient.Read(ctx, req)
 }
 
 // TestInspectPaged checks that a server returning one reference per
@@ -70,27 +71,27 @@ func (f *faulty) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadRespons
 func TestInspectPaged(t *testing.T) {
 	_, c, _ := FXTestServer(t, false)
 	ctx := context.Background()
-	want, err := inspect(ctx, c, Limits{}, 0)
+	want, err := uafx.InspectWith(ctx, c, uafx.Limits{}, 0)
 	require.NoError(t, err)
-	got, err := inspect(ctx, c, Limits{}, 1)
+	got, err := uafx.InspectWith(ctx, c, uafx.Limits{}, 1)
 	require.NoError(t, err)
 	assert.Equal(t, want, got)
 
 	// MaxChildren 1 reads at most 4 references of a node: the rest is
 	// left with its continuation point released.
-	got, err = inspect(ctx, c, Limits{MaxChildren: 1}, 1)
+	got, err = uafx.InspectWith(ctx, c, uafx.Limits{MaxChildren: 1}, 1)
 	require.NoError(t, err)
 	assert.True(t, got.Truncated)
 }
 
 // TestInspectFaults fails each service call of an inspection in turn,
-// paged so that BrowseNext is among them: Inspect returns ErrInspect or,
+// paged so that BrowseNext is among them: Inspect returns uafx.ErrInspect or,
 // for a call whose failure it tolerates, a report; it never panics.
 func TestInspectFaults(t *testing.T) {
 	_, c, _ := FXTestServer(t, false)
 	ctx := context.Background()
-	count := &faulty{client: c, fail: -1}
-	_, err := inspect(ctx, count, Limits{}, 2)
+	count := &faulty{InspectClient: c, fail: -1}
+	_, err := uafx.InspectWith(ctx, count, uafx.Limits{}, 2)
 	require.NoError(t, err)
 	total := count.calls
 	require.Greater(t, total, 20)
@@ -98,10 +99,10 @@ func TestInspectFaults(t *testing.T) {
 	failed := 0
 	for _, short := range []bool{false, true} {
 		for k := 1; k <= total; k++ {
-			f := &faulty{client: c, fail: k, short: short}
-			r, err := inspect(ctx, f, Limits{}, 2)
+			f := &faulty{InspectClient: c, fail: k, short: short}
+			r, err := uafx.InspectWith(ctx, f, uafx.Limits{}, 2)
 			if err != nil {
-				require.ErrorIs(t, err, ErrInspect, "call %d", k)
+				require.ErrorIs(t, err, uafx.ErrInspect, "call %d", k)
 				require.Nil(t, r)
 				failed++
 				continue
@@ -115,13 +116,13 @@ func TestInspectFaults(t *testing.T) {
 // readSizes passes the calls of Inspect to a client and records the
 // number of nodes of every Read.
 type readSizes struct {
-	client
+	uafx.InspectClient
 	sizes []int
 }
 
 func (r *readSizes) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadResponse, error) {
 	r.sizes = append(r.sizes, len(req.NodesToRead))
-	return r.client.Read(ctx, req)
+	return r.InspectClient.Read(ctx, req)
 }
 
 // TestInspectMaxNodesPerRead checks that Inspect splits its Reads by the
@@ -129,10 +130,10 @@ func (r *readSizes) Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadResp
 func TestInspectMaxNodesPerRead(t *testing.T) {
 	_, c, _ := FXTestServer(t, false)
 	ctx := context.Background()
-	want, err := inspect(ctx, c, Limits{}, 0)
+	want, err := uafx.InspectWith(ctx, c, uafx.Limits{}, 0)
 	require.NoError(t, err)
-	unlimited := &readSizes{client: c}
-	_, err = inspect(ctx, unlimited, Limits{}, 0)
+	unlimited := &readSizes{InspectClient: c}
+	_, err = uafx.InspectWith(ctx, unlimited, uafx.Limits{}, 0)
 	require.NoError(t, err)
 	require.Greater(t, slices.Max(unlimited.sizes), 2, "the test needs Reads of more than 2 nodes")
 
@@ -146,8 +147,8 @@ func TestInspectMaxNodesPerRead(t *testing.T) {
 	require.NoError(t, err)
 	_, err = fxtest.Prepare(srv, false)
 	require.NoError(t, err)
-	limited := &readSizes{client: StartTestServer(t, srv)}
-	got, err := inspect(ctx, limited, Limits{}, 0)
+	limited := &readSizes{InspectClient: StartTestServer(t, srv)}
+	got, err := uafx.InspectWith(ctx, limited, uafx.Limits{}, 0)
 	require.NoError(t, err)
 	assert.LessOrEqual(t, slices.Max(limited.sizes), 2)
 	assert.Equal(t, want, got)
