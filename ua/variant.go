@@ -162,8 +162,12 @@ func (m *Variant) decodeDepth(b []byte, depth int) (int, error) {
 		return buf.Pos(), fmt.Errorf("%w: id=%d", errors.ErrUnsupportedType, m.Type())
 	}
 
-	// read single value and return
+	// read single value and return. ArrayDimensions are only encoded for
+	// an array (Part 6 §5.2.2.16): a scalar does not read them, so its mask
+	// does not keep the bit either, or Encode would write dimensions that
+	// were never read.
 	if !m.Has(VariantArrayValues) {
+		m.mask &^= VariantArrayDimensions
 		m.value = m.decodeValue(buf)
 		return buf.Pos(), buf.Error()
 	}

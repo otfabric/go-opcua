@@ -72,8 +72,15 @@ func (e *ExtensionObject) decodeDepth(b []byte, depth int) (int, error) {
 	buf.ReadStruct(e.TypeID)
 
 	e.EncodingMask = buf.ReadUint8()
-	if e.EncodingMask == ExtensionObjectEmpty {
+	switch {
+	case buf.Error() != nil:
 		return buf.Pos(), buf.Error()
+	case e.EncodingMask == ExtensionObjectEmpty:
+		return buf.Pos(), nil
+	case e.EncodingMask != ExtensionObjectBinary && e.EncodingMask != ExtensionObjectXML:
+		// Part 6 §5.2.2.15 defines no body, a ByteString and an
+		// XmlElement; any other encoding byte is malformed.
+		return buf.Pos(), fmt.Errorf("%w: extension object encoding 0x%02x", StatusBadDecodingError, e.EncodingMask)
 	}
 
 	length := buf.ReadUint32()

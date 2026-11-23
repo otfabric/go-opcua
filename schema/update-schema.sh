@@ -52,7 +52,10 @@ echo "Downloading Opc.Ua.Di.NodeSet2.xml"
 wget -nv https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/DI/Opc.Ua.Di.NodeSet2.xml -O "${repo_dir}/uafx/internal/model/Opc.Ua.Di.NodeSet2.xml"
 
 for part in data ac cm; do
-	echo "Downloading opc.ua.fx.${part}.nodeset2.csv and .xml"
+	echo "Downloading opc.ua.fx.${part}.nodeset2.csv, .xml and .bsd"
 	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.csv" -O "${script_dir}/opc.ua.fx.${part}.nodeset2.csv"
 	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.xml" -O "${repo_dir}/uafx/internal/model/opc.ua.fx.${part}.nodeset2.xml"
+	# The Binary Schema is not an input of the generator (cmd/uafx reads the
+	# NodeSet); uafx/schema_test.go compares the generated encoding with it.
+	wget -nv "https://raw.githubusercontent.com/OPCFoundation/UA-Nodeset/latest/UAFX/opc.ua.fx.${part}.nodeset2.bsd" -O "${script_dir}/opc.ua.fx.${part}.nodeset2.bsd"
 done

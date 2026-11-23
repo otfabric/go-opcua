@@ -112,3 +112,14 @@ func TestExtensionObject_EncodeEdgeCases(t *testing.T) {
 		RegisterExtensionObject(NewFourByteNodeID(0, 321), new(UserNameIdentityToken))
 	})
 }
+
+// TestExtensionObject_UndefinedEncoding: an encoding byte other than the
+// three of Part 6 §5.2.2.15 is malformed. It used to be read as a binary
+// body and encoded again as an object without one.
+func TestExtensionObject_UndefinedEncoding(t *testing.T) {
+	for _, mask := range []byte{0x03, 0x30, 0xff} {
+		var got ExtensionObject
+		_, err := got.Decode([]byte{0x00, 0x00, mask, 0x01, 0x00, 0x00, 0x00, 0x00})
+		require.ErrorIs(t, err, StatusBadDecodingError, "0x%02x", mask)
+	}
+}
