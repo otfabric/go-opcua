@@ -245,15 +245,21 @@ func TestRegressionSignedReplayRejected(t *testing.T) {
 // it until the sequence record expires, two MessageReceiveTimeouts without
 // a message it took (Part 14 §7.2.3); with WithNonceSequencePerToken until
 // the publisher uses the next token.
+//
+// The record expires on the real clock, so the restarted publisher must
+// start well within two MessageReceiveTimeouts of the last message the
+// reader took, also on a slow race runner: the timeout is 500 ms, and the
+// first publisher sends once more just before the restart.
 func TestNonceSequenceRestartedPublisher(t *testing.T) {
 	t.Parallel()
+	const timeout = 500 * time.Millisecond
 	for _, perToken := range []bool{false, true} {
 		t.Run(map[bool]string{false: "default", true: "per-token"}[perToken], func(t *testing.T) {
 			t.Parallel()
 			url := memURL(t)
 			ks := regressKeys(t, "sg")
 			src := regressSource(t, ks, "sg")
-			sub, cid, _, rec := signedSubscriber(t, url, 50, WithKeySource("sg", src), WithNonceSequencePerToken(perToken))
+			sub, cid, _, rec := signedSubscriber(t, url, float64(timeout/time.Millisecond), WithKeySource("sg", src), WithNonceSequencePerToken(perToken))
 			s := &signedSender{t: t, keys: src}
 			// Far more messages than the restarted publisher sends in
 			// the test.
@@ -261,23 +267,28 @@ func TestNonceSequenceRestartedPublisher(t *testing.T) {
 				bus.inject(url, "", s.encode(i+1, 1))
 			}
 			require.Eventually(t, func() bool { return len(rec.dataSets()) == 1000 }, 5*time.Second, time.Millisecond)
+			// The record is fresh when the restarted publisher starts.
+			bus.inject(url, "", s.encode(1001, 1))
+			require.Eventually(t, func() bool { return len(rec.dataSets()) == 1001 }, 5*time.Second, time.Millisecond)
 
 			restarted := &signedSender{t: t, keys: src}
-			deadline := time.Now().Add(time.Second)
+			// Past the expiry of the record, so that per-token shows the
+			// restarted publisher is not taken after it either.
+			deadline := time.Now().Add(2*timeout + time.Second)
 			for seq := uint16(1); time.Now().Before(deadline); seq++ {
 				bus.inject(url, "", restarted.encode(seq, 2))
 				time.Sleep(5 * time.Millisecond)
-				if len(rec.dataSets()) > 1000 {
+				if len(rec.dataSets()) > 1001 {
 					break
 				}
 			}
-			require.NotZero(t, nonceDiscards(t, sub, cid))
+			require.NotZero(t, nonceDiscards(t, sub, cid), "the restarted publisher was taken before its sequence record expired")
 			if perToken {
-				require.Len(t, rec.dataSets(), 1000, "a restarted publisher on the same token was taken")
+				require.Len(t, rec.dataSets(), 1001, "a restarted publisher on the same token was taken")
 				return
 			}
-			require.Greater(t, len(rec.dataSets()), 1000, "the restarted publisher was not taken after two MessageReceiveTimeouts")
-			require.Equal(t, []int32{2}, int32Values(rec.dataSets()[1000]))
+			require.Greater(t, len(rec.dataSets()), 1001, "the restarted publisher was not taken after two MessageReceiveTimeouts")
+			require.Equal(t, []int32{2}, int32Values(rec.dataSets()[1001]))
 		})
 	}
 }
