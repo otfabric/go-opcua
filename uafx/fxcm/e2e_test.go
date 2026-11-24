@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package fxcm
+package fxcm_test
 
 import (
 	"context"
@@ -21,9 +21,19 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
+	"github.com/otfabric/go-opcua/uafx/fxcm"
 	"github.com/otfabric/go-opcua/uafx/fxdataid"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 )
+
+// uaNamespace is the NamespaceUri of OPC UA (Part 3 §8.2.2).
+const uaNamespace = "http://opcfoundation.org/UA/"
+
+func ptr[T any](v T) *T { return &v }
+
+func urlAddress(u string) *ua.ExtensionObject {
+	return ua.NewExtensionObject(&ua.NetworkAddressURLDataType{URL: u})
+}
 
 // cmURI is the ApplicationUri of the ConnectionManagers of the tests.
 const cmURI = "urn:go-opcua:fxcm:test"
@@ -222,19 +232,19 @@ func e2eConf(t *testing.T, name string, a, b *ac) *uafx.ConnectionConfigurationS
 // eventLog is an Observer that keeps the Events.
 type eventLog struct {
 	mu     sync.Mutex
-	events []Event
+	events []fxcm.Event
 }
 
-func (l *eventLog) Observe(e Event) {
+func (l *eventLog) Observe(e fxcm.Event) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.events = append(l.events, e)
 }
 
-func (l *eventLog) of(k EventKind) []Event {
+func (l *eventLog) of(k fxcm.EventKind) []fxcm.Event {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	var out []Event
+	var out []fxcm.Event
 	for _, e := range l.events {
 		if e.Kind == k {
 			out = append(out, e)
@@ -244,20 +254,20 @@ func (l *eventLog) of(k EventKind) []Event {
 }
 
 // transitions are the transitions that ended runs (2 and 3, §6.9.2).
-func (l *eventLog) transitions() []Transition {
-	var out []Transition
-	for _, e := range l.of(EventTransition) {
-		if e.Transition == ProcessingToReady || e.Transition == ProcessingToError {
+func (l *eventLog) transitions() []fxcm.Transition {
+	var out []fxcm.Transition
+	for _, e := range l.of(fxcm.EventTransition) {
+		if e.Transition == fxcm.ProcessingToReady || e.Transition == fxcm.ProcessingToError {
 			out = append(out, e.Transition)
 		}
 	}
 	return out
 }
 
-func newManager(t *testing.T, opts Options) *Manager {
+func newManager(t *testing.T, opts fxcm.Options) *fxcm.Manager {
 	t.Helper()
 	if opts.Dialer == nil {
-		opts.Dialer = &ClientDialer{Options: []opcua.Option{opcua.ApplicationURI(cmURI), opcua.AutoReconnect(false), opcua.InsecureNoSecurity()}}
+		opts.Dialer = &fxcm.ClientDialer{Options: []opcua.Option{opcua.ApplicationURI(cmURI), opcua.AutoReconnect(false), opcua.InsecureNoSecurity()}}
 	}
 	if opts.ApplicationURI == "" {
 		opts.ApplicationURI = cmURI
@@ -268,13 +278,13 @@ func newManager(t *testing.T, opts Options) *Manager {
 	if opts.CallTimeout == 0 {
 		opts.CallTimeout = 10 * time.Second
 	}
-	m, err := New(opts)
+	m, err := fxcm.New(opts)
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = m.Close() })
 	return m
 }
 
-func process(t *testing.T, m *Manager, action uafx.FxProcess, k SetKey) *RunResult {
+func process(t *testing.T, m *fxcm.Manager, action uafx.FxProcess, k fxcm.SetKey) *fxcm.RunResult {
 	t.Helper()
 	st := m.Process(action, k)
 	require.Len(t, st, 1)
@@ -295,13 +305,13 @@ func TestEstablishE2E(t *testing.T) {
 	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
 	require.NoError(t, fxtest.SetValue(b.srv, b.id(fxtest.ConnActual), 17.0))
 	events := &eventLog{}
-	m := newManager(t, Options{Observer: events, Monitor: &MonitorOptions{Interval: 20 * time.Millisecond}})
+	m := newManager(t, fxcm.Options{Observer: events, Monitor: &fxcm.MonitorOptions{Interval: 20 * time.Millisecond}})
 	cfg, err := m.Add(e2eConf(t, "E2E", a, b))
 	require.NoError(t, err)
 	k := cfg.Key()
 
 	res := process(t, m, uafx.ActionEstablishConnectionsEnabled, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.Len(t, res.Created, 2)
 	assert.Equal(t, []string{"ToB"}, a.endpoints())
 	assert.Equal(t, []string{"ToA"}, b.endpoints())
@@ -315,20 +325,20 @@ func TestEstablishE2E(t *testing.T) {
 
 	// A set in Ready cannot be established twice: the Names are ours.
 	res = process(t, m, uafx.ActionDisableConnections, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.Len(t, res.Closed, 2)
 	assert.Equal(t, []string{"ToB"}, a.endpoints())
 	res = process(t, m, uafx.ActionEnableConnections, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	res = process(t, m, uafx.ActionRemoveConnections, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.Empty(t, a.endpoints())
 	assert.Empty(t, b.endpoints())
 	c := m.Counters()
 	assert.Equal(t, uint32(0), c.EstablishCallFailedCount)
 	assert.Positive(t, c.EstablishCallCount)
 	assert.Positive(t, c.CloseCallCount)
-	assert.Equal(t, []Transition{ProcessingToReady, ProcessingToReady, ProcessingToReady, ProcessingToReady}, events.transitions())
+	assert.Equal(t, []fxcm.Transition{fxcm.ProcessingToReady, fxcm.ProcessingToReady, fxcm.ProcessingToReady, fxcm.ProcessingToReady}, events.transitions())
 }
 
 // TestClientDialer: the default Dialer connects to the endpoint of the
@@ -336,19 +346,19 @@ func TestEstablishE2E(t *testing.T) {
 func TestClientDialer(t *testing.T) {
 	t.Parallel()
 	a := newAC(t, "dialer", fxserver.ConnectionOptions{})
-	d := &ClientDialer{Options: []opcua.Option{opcua.ApplicationURI(cmURI), opcua.AutoReconnect(false), opcua.InsecureNoSecurity()}}
+	d := &fxcm.ClientDialer{Options: []opcua.Option{opcua.ApplicationURI(cmURI), opcua.AutoReconnect(false), opcua.InsecureNoSecurity()}}
 	ctx := context.Background()
-	none := ServerAddress{Address: a.url, SecurityMode: ua.MessageSecurityModeNone, SecurityPolicyURI: ua.SecurityPolicyURINone}
+	none := fxcm.ServerAddress{Address: a.url, SecurityMode: ua.MessageSecurityModeNone, SecurityPolicyURI: ua.SecurityPolicyURINone}
 
-	s, err := d.Dial(ctx, ServerAddress{Address: a.url, ServerURI: a.uri, SecurityMode: none.SecurityMode, SecurityPolicyURI: none.SecurityPolicyURI})
+	s, err := d.Dial(ctx, fxcm.ServerAddress{Address: a.url, ServerURI: a.uri, SecurityMode: none.SecurityMode, SecurityPolicyURI: none.SecurityPolicyURI})
 	require.NoError(t, err)
 	nsa, err := s.NamespaceArray(ctx)
 	require.NoError(t, err)
 	assert.Contains(t, nsa, a.uri)
 	require.NoError(t, s.Close(ctx))
 
-	_, err = d.Dial(ctx, ServerAddress{Address: a.url, ServerURI: "urn:other", SecurityMode: none.SecurityMode, SecurityPolicyURI: none.SecurityPolicyURI})
+	_, err = d.Dial(ctx, fxcm.ServerAddress{Address: a.url, ServerURI: "urn:other", SecurityMode: none.SecurityMode, SecurityPolicyURI: none.SecurityPolicyURI})
 	assert.ErrorIs(t, err, ua.StatusBadServerURIInvalid)
-	_, err = d.Dial(ctx, ServerAddress{Address: a.url, SecurityMode: ua.MessageSecurityModeSignAndEncrypt, SecurityPolicyURI: ua.SecurityPolicyURIBasic256Sha256})
+	_, err = d.Dial(ctx, fxcm.ServerAddress{Address: a.url, SecurityMode: ua.MessageSecurityModeSignAndEncrypt, SecurityPolicyURI: ua.SecurityPolicyURIBasic256Sha256})
 	assert.ErrorIs(t, err, ua.StatusBadSecurityPolicyRejected)
 }

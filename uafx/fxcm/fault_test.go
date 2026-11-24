@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package fxcm
+package fxcm_test
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
+	"github.com/otfabric/go-opcua/uafx/fxcm"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 )
 
@@ -29,7 +30,7 @@ type faults struct {
 	hit    bool
 }
 
-func (f *faults) fault(method string, _ ServerAddress) error {
+func (f *faults) fault(method string, _ fxcm.ServerAddress) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.counts[method]++
@@ -71,10 +72,10 @@ func TestFaults(t *testing.T) {
 	b := newACWith(t, "b", fxserver.ConnectionOptions{MaxConnectionsPerCall: 1, CommandBundleRequired: true}, capabilitiesNodeSet)
 	conf := pathsConf(t, a, b)
 
-	run := func(f *faults, action uafx.FxProcess) (*RunResult, *Manager, SetKey) {
+	run := func(f *faults, action uafx.FxProcess) (*fxcm.RunResult, *fxcm.Manager, fxcm.SetKey) {
 		d := newHookDialer()
 		d.fault = f.fault
-		m := newManager(t, Options{Dialer: d, ExclusiveApplicationURI: true})
+		m := newManager(t, fxcm.Options{Dialer: d, ExclusiveApplicationURI: true})
 		cfg, err := m.Add(conf)
 		require.NoError(t, err)
 		return process(t, m, action, cfg.Key()), m, cfg.Key()
@@ -82,9 +83,9 @@ func TestFaults(t *testing.T) {
 	// The baseline: how often a good establish and remove use each service.
 	base := &faults{counts: map[string]int{}}
 	res, m, k := run(base, uafx.ActionEstablishConnectionsEnabled)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	res = process(t, m, uafx.ActionRemoveConnections, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	require.NoError(t, m.Close())
 	counts := base.counts
 	t.Logf("services: %v", counts)
@@ -95,7 +96,7 @@ func TestFaults(t *testing.T) {
 			res, m, k := run(f, uafx.ActionEstablishConnectionsEnabled)
 			name := fmt.Sprintf("%s#%d", method, n)
 			switch res.State {
-			case StateError:
+			case fxcm.StateError:
 				assert.NotEmpty(t, res.Failures, name)
 				for _, fl := range res.Failures {
 					assert.NotEqual(t, ua.StatusGood, fl.Status, name)
@@ -106,18 +107,18 @@ func TestFaults(t *testing.T) {
 					assert.Empty(t, a.endpoints(), name)
 					assert.Empty(t, b.endpoints(), name)
 				}
-			case StateReady:
+			case fxcm.StateReady:
 				// The fault may hit the remove: its closes stay pending, and
 				// the next remove closes them.
 				res = process(t, m, uafx.ActionRemoveConnections, k)
-				if res.State == StateError {
+				if res.State == fxcm.StateError {
 					assert.True(t, f.hit, name)
 					for _, fl := range res.Failures {
 						assert.Equal(t, uafx.FxErrorCloseConnectionError, fl.FxError, name)
 					}
 					res = process(t, m, uafx.ActionRemoveConnections, k)
 				}
-				assert.Equal(t, StateReady, res.State, "%s: remove: %+v", name, res.Failures)
+				assert.Equal(t, fxcm.StateReady, res.State, "%s: remove: %+v", name, res.Failures)
 				assert.Empty(t, a.endpoints(), name)
 				assert.Empty(t, b.endpoints(), name)
 			default:
@@ -143,31 +144,31 @@ func TestLostResponses(t *testing.T) {
 			name := fmt.Sprintf("%v call %d", action, n)
 			d := newHookDialer()
 			var calls atomic.Int32
-			d.hook = func(addr ServerAddress, req *ua.CallMethodRequest) (bool, error) {
+			d.hook = func(addr fxcm.ServerAddress, req *ua.CallMethodRequest) (bool, error) {
 				if int(calls.Add(1)) == n {
 					return true, ua.StatusBadTimeout
 				}
 				return false, nil
 			}
-			m := newManager(t, Options{Dialer: d, ExclusiveApplicationURI: true})
+			m := newManager(t, fxcm.Options{Dialer: d, ExclusiveApplicationURI: true})
 			cfg, err := m.Add(conf)
 			require.NoError(t, err)
 			k := cfg.Key()
 			res := process(t, m, action, k)
-			if res.State == StateReady {
+			if res.State == fxcm.StateReady {
 				// The lost call was a close of a later run, or none.
 				res = process(t, m, uafx.ActionRemoveConnections, k)
-				if res.State == StateError {
+				if res.State == fxcm.StateError {
 					res = process(t, m, uafx.ActionRemoveConnections, k)
 				}
-				require.Equal(t, StateReady, res.State, "%s: %+v", name, res.Failures)
+				require.Equal(t, fxcm.StateReady, res.State, "%s: %+v", name, res.Failures)
 			} else {
 				assert.Empty(t, res.Unresolved, name)
 				st := m.Reconcile(k)
 				require.NoError(t, st.Err, name)
 				r, err := st.Run.Wait(context.Background())
 				require.NoError(t, err)
-				assert.Equal(t, StateReady, r.State, "%s: reconcile: %+v", name, r.Failures)
+				assert.Equal(t, fxcm.StateReady, r.State, "%s: reconcile: %+v", name, r.Failures)
 			}
 			assert.Empty(t, a.endpoints(), name)
 			assert.Empty(t, b.endpoints(), name)
@@ -190,34 +191,26 @@ func TestEnableFaults(t *testing.T) {
 		f := &faults{counts: map[string]int{}}
 		d := newHookDialer()
 		d.fault = f.fault
-		m := newManager(t, Options{Dialer: d})
+		m := newManager(t, fxcm.Options{Dialer: d})
 		cfg, err := m.Add(conf)
 		require.NoError(t, err)
 		k := cfg.Key()
 		res := process(t, m, uafx.ActionEstablishConnectionsDisabled, k)
-		require.Equal(t, StateReady, res.State, "%s: %+v", method, res.Failures)
+		require.Equal(t, fxcm.StateReady, res.State, "%s: %+v", method, res.Failures)
 		// Drop the sessions so the Enable run dials again.
-		m.pool.mu.Lock()
-		open := map[ServerAddress]Session{}
-		for addr, e := range m.pool.sessions {
-			open[addr] = e.s
-		}
-		m.pool.mu.Unlock()
-		for addr, s := range open {
-			m.pool.drop(context.Background(), addr, s)
-		}
+		fxcm.DropSessions(m)
 		f.mu.Lock()
 		f.counts, f.method, f.n = map[string]int{}, method, 1
 		f.mu.Unlock()
 		res = process(t, m, uafx.ActionEnableConnections, k)
 		switch res.State {
-		case StateError:
+		case fxcm.StateError:
 			assert.True(t, f.hit, method)
 			require.NotEmpty(t, res.Failures, method)
 			for _, fl := range res.Failures {
 				assert.Contains(t, []uafx.FxError{uafx.FxErrorTargetServerConnectionError, uafx.FxErrorResolvingNamespacesError, uafx.FxErrorEnableCommunicationError}, fl.FxError, method)
 			}
-		case StateReady:
+		case fxcm.StateReady:
 			// Only the NamespacePublicationDates may fail without failing
 			// the run (they are read with Browse, TranslateBrowsePaths and Read).
 			if f.hit {
@@ -227,7 +220,7 @@ func TestEnableFaults(t *testing.T) {
 			t.Fatalf("%s: state %v", method, res.State)
 		}
 		res = process(t, m, uafx.ActionRemoveConnections, k)
-		assert.Equal(t, StateReady, res.State, "%s: remove: %+v", method, res.Failures)
+		assert.Equal(t, fxcm.StateReady, res.State, "%s: remove: %+v", method, res.Failures)
 		require.NoError(t, m.Close())
 		cleanAC(t, a)
 		cleanAC(t, b)

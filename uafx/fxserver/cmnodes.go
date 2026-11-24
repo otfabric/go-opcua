@@ -272,9 +272,7 @@ func (c *ConnectionManager) dropSetLocked(s *cmSet) {
 		p.RemoveRef(ua.NewExpandedNodeID(s.id, "", 0), dt0(id.Organizes), true)
 	}
 	for i := len(s.nodes) - 1; i >= 0; i-- {
-		if ns, err := c.srv.Namespace(int(s.nodes[i].Namespace())); err == nil {
-			ns.DeleteNode(s.nodes[i])
-		}
+		c.deleteNode(s.nodes[i])
 	}
 	delete(c.sets, s.key.String())
 	delete(c.byNode, s.id.String())
@@ -304,9 +302,7 @@ func (c *ConnectionManager) buildSetLocked(k fxcm.SetKey, conf *uafx.ConnectionC
 	defer func() {
 		if !ok {
 			for i := len(s.nodes) - 1; i >= 0; i-- {
-				if ns, err := c.srv.Namespace(int(s.nodes[i].Namespace())); err == nil {
-					ns.DeleteNode(s.nodes[i])
-				}
+				c.deleteNode(s.nodes[i])
 			}
 		}
 	}()

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package fxcm
+package fxcm_test
 
 import (
 	"context"
@@ -14,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
+	"github.com/otfabric/go-opcua/uafx/fxcm"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 )
 
@@ -58,27 +59,27 @@ func TestPreconfigured(t *testing.T) {
 	t.Parallel()
 	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
 	conf := presetConf(t, a, b)
-	m := newManager(t, Options{})
+	m := newManager(t, fxcm.Options{})
 	cfg, err := m.Add(conf)
 	require.NoError(t, err)
 	k := cfg.Key()
 	res := process(t, m, uafx.ActionEstablishConnectionsEnabled, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	require.Len(t, res.Created, 2)
-	classes := map[string]Ownership{}
+	classes := map[string]fxcm.Ownership{}
 	for _, r := range res.Created {
 		classes[r.Name] = r.Class
 	}
-	assert.Equal(t, TakenPreconfigured, classes["Preset"])
-	assert.Equal(t, KnownOwned, classes["ToPreset"])
+	assert.Equal(t, fxcm.TakenPreconfigured, classes["Preset"])
+	assert.Equal(t, fxcm.KnownOwned, classes["ToPreset"])
 	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 42.5 }, 10*time.Second, 10*time.Millisecond)
 	assert.Equal(t, 5000.0, b.value(t, fxtest.ConnPreset+3))
 
 	// Establishing again closes the take first and takes it again.
 	res = process(t, m, uafx.ActionEstablishConnectionsDisabled, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	res = process(t, m, uafx.ActionRemoveConnections, k)
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.NotNil(t, b.srv.Node(b.id(fxtest.ConnPreset)), "a preconfigured endpoint stays")
 	assert.Empty(t, a.endpoints())
 	require.NoError(t, m.Close())
@@ -86,25 +87,25 @@ func TestPreconfigured(t *testing.T) {
 	// The response of the take is lost.
 	d := newHookDialer()
 	var lost atomic.Bool
-	d.hook = func(addr ServerAddress, req *ua.CallMethodRequest) (bool, error) {
+	d.hook = func(addr fxcm.ServerAddress, req *ua.CallMethodRequest) (bool, error) {
 		if addr.Address == b.url && commandMask(req)&uafx.CreateConnectionEndpointCmd != 0 && lost.CompareAndSwap(false, true) {
 			return true, ua.StatusBadCommunicationError
 		}
 		return false, nil
 	}
-	m = newManager(t, Options{Dialer: d})
+	m = newManager(t, fxcm.Options{Dialer: d})
 	cfg, err = m.Add(conf)
 	require.NoError(t, err)
 	res = process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
-	require.Equal(t, StateError, res.State)
+	require.Equal(t, fxcm.StateError, res.State)
 	assert.Empty(t, res.Unresolved)
 	assert.True(t, res.RolledBack)
 	assert.True(t, res.RollbackComplete, "%+v", res.Failures)
 	assert.Empty(t, a.endpoints())
 	res = process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	res = process(t, m, uafx.ActionRemoveConnections, cfg.Key())
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 }
 
 // TestReconcileUnresolved: Reconcile checks Unresolved endpoints again: one
@@ -113,19 +114,19 @@ func TestReconcileUnresolved(t *testing.T) {
 	t.Parallel()
 	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
 	conf := e2eConf(t, "Recheck", a, b)
-	m1 := newManager(t, Options{})
+	m1 := newManager(t, fxcm.Options{})
 	cfg, err := m1.Add(conf)
 	require.NoError(t, err)
 	res := process(t, m1, uafx.ActionEstablishConnectionsDisabled, cfg.Key())
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 
-	m2 := newManager(t, Options{})
+	m2 := newManager(t, fxcm.Options{})
 	_, err = m2.Add(conf)
 	require.NoError(t, err)
 	res = process(t, m2, uafx.ActionEstablishConnectionsDisabled, cfg.Key())
-	require.Equal(t, StateError, res.State)
+	require.Equal(t, fxcm.StateError, res.State)
 	require.Len(t, res.Unresolved, 2)
-	reconcile := func() *RunResult {
+	reconcile := func() *fxcm.RunResult {
 		st := m2.Reconcile(cfg.Key())
 		require.NoError(t, st.Err)
 		r, err := st.Run.Wait(context.Background())
@@ -134,17 +135,17 @@ func TestReconcileUnresolved(t *testing.T) {
 	}
 	r := reconcile()
 	assert.Len(t, r.Unresolved, 2)
-	assert.Equal(t, StateReady, r.State, "%+v", r.Failures)
+	assert.Equal(t, fxcm.StateReady, r.State, "%+v", r.Failures)
 
 	// The first Manager removes its Connection: the second forgets them.
 	res = process(t, m1, uafx.ActionRemoveConnections, cfg.Key())
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	r = reconcile()
 	assert.Empty(t, r.Unresolved)
 	st, _ := m2.Status(cfg.Key())
 	assert.Empty(t, st.Endpoints)
 	res = process(t, m2, uafx.ActionEstablishConnectionsDisabled, cfg.Key())
-	assert.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	assert.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 }
 
 // TestEndpointGone: an endpoint the AC removed by itself (a restart, a
@@ -152,23 +153,23 @@ func TestReconcileUnresolved(t *testing.T) {
 func TestEndpointGone(t *testing.T) {
 	t.Parallel()
 	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
-	m := newManager(t, Options{})
+	m := newManager(t, fxcm.Options{})
 	cfg, err := m.Add(e2eConf(t, "Gone", a, b))
 	require.NoError(t, err)
 	res := process(t, m, uafx.ActionEstablishConnectionsDisabled, cfg.Key())
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	cleanAC(t, a)
 	res = process(t, m, uafx.ActionEstablishConnectionsDisabled, cfg.Key())
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.Len(t, res.Closed, 1, "only the endpoint of b was closed first")
 	assert.Equal(t, []string{"ToB"}, a.endpoints())
 
 	// Enable and Disable of an endpoint that went: Bad_NodeIdUnknown.
 	cleanAC(t, a)
 	res = process(t, m, uafx.ActionEnableConnections, cfg.Key())
-	assert.Equal(t, StateError, res.State)
+	assert.Equal(t, fxcm.StateError, res.State)
 	res = process(t, m, uafx.ActionDisableConnections, cfg.Key())
-	assert.Equal(t, StateReady, res.State, "a close of an endpoint that is gone succeeds: %+v", res.Failures)
+	assert.Equal(t, fxcm.StateReady, res.State, "a close of an endpoint that is gone succeeds: %+v", res.Failures)
 	st, _ := m.Status(cfg.Key())
 	assert.Len(t, st.Endpoints, 1)
 }

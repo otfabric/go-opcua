@@ -64,3 +64,16 @@ func WithMaxControlled(o ConnectionOptions, n int) ConnectionOptions {
 
 // SessionEnded tells the Guard of the Locks that the session s ended.
 func SessionEnded(c *Connections, s *server.Session) { lockGuard{c}.SessionEnded(s) }
+
+// SetCMClock replaces the clock of the set Locks of c.
+func SetCMClock(c *ConnectionManager, now func() time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.clock = now
+}
+
+// TickCMLocks runs one tick of the set Locks.
+func TickCMLocks(c *ConnectionManager) { c.tickLocks() }
+
+// CMSessionEnded tells the Guard of the ConnectionManager that s ended.
+func CMSessionEnded(c *ConnectionManager, s *server.Session) { cmGuard{c}.SessionEnded(s) }

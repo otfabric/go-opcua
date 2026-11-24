@@ -101,9 +101,9 @@ func optSel[T comparable](get func(c *conf) (**T, []T, *bool), conv func(any) (T
 	}
 }
 
-func asString(v any) (string, bool)   { s, ok := v.(string); return s, ok }
-func asFloat(v any) (float64, bool)   { f, ok := v.(float64); return f, ok }
-func asBool(v any) (bool, bool)       { b, ok := v.(bool); return b, ok }
+func asString(v any) (string, bool) { s, ok := v.(string); return s, ok }
+func asFloat(v any) (float64, bool) { f, ok := v.(float64); return f, ok }
+func asBool(v any) (bool, bool)     { b, ok := v.(bool); return b, ok }
 func asMode(v any) (ua.MessageSecurityMode, bool) {
 	switch x := v.(type) {
 	case int32:

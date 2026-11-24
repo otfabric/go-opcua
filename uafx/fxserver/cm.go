@@ -742,11 +742,18 @@ func (c *ConnectionManager) dropAll() {
 		if cm != nil {
 			cm.RemoveRef(ua.NewExpandedNodeID(n, "", 0), dt0(id.HasComponent), true)
 		}
-		if ns, err := c.srv.Namespace(int(n.Namespace())); err == nil {
-			ns.DeleteNode(n)
-		}
+		c.deleteNode(n)
 	}
 	c.nodes = nil
+}
+
+// deleteNode deletes the node n the ConnectionManager added.
+func (c *ConnectionManager) deleteNode(n *ua.NodeID) {
+	if ns, err := c.srv.Namespace(int(n.Namespace())); err == nil {
+		if sc := ns.DeleteNode(n); sc != ua.StatusOK {
+			c.log.Debug("uafx: node not deleted", "node", n, "status", sc)
+		}
+	}
 }
 
 // The DI nodes of the ConnectionManager.
