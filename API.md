@@ -2996,8 +2996,9 @@ The model only: the Methods of Part 81 have no handler and answer `Bad_MethodInv
 
 ## Package `uafx/fxcm`
 
-The configuration model of a UAFX ConnectionManager (Part 81 §6.7 to §6.16,
-Annex F); no calls to a server.
+A UAFX ConnectionManager (Part 81 §6.7 to §6.16, §13, Annex F): the
+configuration model, and a `Manager` that processes the sets against the
+AutomationComponents.
 
 ```go
 func NewConfig(conf *uafx.ConnectionConfigurationSetConf) (*Config, error) // Version 1; *ConfigError (ErrConfig, Bad_ConfigurationError)
@@ -3021,6 +3022,38 @@ func EncodeFile(sets []*uafx.ConnectionConfigurationSetConf) ([]byte, error)
 Diagnostics: `Activity`, `Outcome`, `OutcomeKind`, `FailedWith`,
 `Diagnose`, `ConnectionStateOf`. See
 [docs/uafx.md](docs/uafx.md#connectionmanager-configuration).
+
+```go
+func New(opts Options) (*Manager, error) // ErrManager: no Dialer or ApplicationURI
+func (m *Manager) Close() error
+func (m *Manager) Add(conf *uafx.ConnectionConfigurationSetConf) (*Config, error)
+func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfigurationSetConf) (*Config, error)
+func (m *Manager) Remove(ctx context.Context, key SetKey) error
+func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error) // F.3.3
+func (m *Manager) Process(action uafx.FxProcess, keys ...SetKey) []Started // returns at once
+func (m *Manager) Reconcile(key SetKey) Started
+func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error // SettleOwned, SettleForeign
+func (m *Manager) Status(key SetKey) (Status, bool)
+func (m *Manager) Config(key SetKey) (*Config, bool)
+func (m *Manager) Keys() []SetKey
+func (m *Manager) Counters() Counters // §6.7.2 Table 78
+func (m *Manager) StartEdit(key SetKey, owner LockOwner) (*Edit, error)
+func (m *Manager) CommitEdit(key SetKey, owner LockOwner) (*Config, bool, error)
+func (m *Manager) DiscardEdit(key SetKey, owner LockOwner) (bool, error)
+func (m *Manager) EditLockLost(key SetKey) bool
+func (r *Run) Wait(ctx context.Context) (*RunResult, error) // also ID, Key, Version, Action, Done
+func (d *ClientDialer) Dial(ctx context.Context, addr ServerAddress) (Session, error)
+```
+
+`Options` (`Dialer`, `ApplicationURI`, `ExclusiveApplicationURI`,
+`CallTimeout`, `RollbackTimeout`, `Parallelism`,
+`MaxConnectionConfigurationSets`, `Retry` with `RetryPolicy`, `Monitor`
+with `MonitorOptions`, `Observer`, `Logger`) and the `Default…` constants;
+`Dialer`, `Session`, `ServerAddress`, `ClientDialer`; `Started`, `Run`,
+`RunResult`, `Status`, `Operation`, `Verdict`, `Counters`;
+`ActionReconcile`, `ActionRemoveSet`; `Event`, `EventKind`, `Observer`,
+`ObserverFunc`; `TranslationNamespace`, `UDPUADP`. See
+[docs/uafx.md](docs/uafx.md#running-a-connectionmanager).
 
 ## Package `monitor`
 

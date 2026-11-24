@@ -29,10 +29,10 @@ jobs:
       # the default of 15.
       timeout-minutes: 30
       # The default exclusions plus chaos/..., which runs in the chaos job,
-      # and the server package, which runs in the server job. The shared
-      # workflow has one exclusion list for its test, race and coverage jobs,
-      # so the server job runs all three for the server package.
-      test-exclude-regex: "(/example(s)?($|/)|/cmd($|/)|/chaos($|/)|/server$)"
+      # and the server and uafx/fxcm packages, which run in the server job.
+      # The shared workflow has one exclusion list for its test, race and
+      # coverage jobs, so the server job runs all three for them.
+      test-exclude-regex: "(/example(s)?($|/)|/cmd($|/)|/chaos($|/)|/server$|/uafx/fxcm$)"
       # Match Makefile COVER_PKGS so Codecov uses the same merged metric as
       # `make coverage` (conformance hits count toward core packages).
       coverpkg: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
@@ -65,7 +65,10 @@ jobs:
   # The server package runs apart from the shared jobs: in the shared Race
   # job, next to every other package, it hit the 120 s package timeout
   # (#43, Go 1.26 and 1.27). The plain run keeps the shared 120 s timeout;
-  # the race run alone gets 5 minutes (about 80 s on a laptop).
+  # the race run alone gets 5 minutes (about 80 s on a laptop). uafx/fxcm
+  # runs here too for the same reason (#48): its tests start about thirty
+  # AutomationComponent servers, and importing the UAFX NodeSets takes
+  # about 1.2 s per server under the race detector (0.1 s without).
   server:
     name: ${{ matrix.race && 'Race' || 'Test' }} server (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
@@ -86,13 +89,13 @@ jobs:
         run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
       - name: Test
         if: ${{ !matrix.race }}
-        run: go test -count=1 -timeout=120s ./server
+        run: go test -count=1 -timeout=120s ./server ./uafx/fxcm
       - name: Race test
         if: ${{ matrix.race }}
-        run: go test -count=1 -timeout=5m -race ./server
+        run: go test -count=1 -timeout=5m -race ./server ./uafx/fxcm
 
-  # The shared coverage job no longer runs the server package's tests, so
-  # this job runs them with the same -coverpkg, merges the profile into the
+  # The shared coverage job no longer runs the tests of the server and
+  # uafx/fxcm packages, so this job runs them with the same -coverpkg, merges the profile into the
   # shared job's (go tool cover adds up blocks seen in both), gates the total
   # at the repository minimum and uploads the server profile to Codecov, which
   # merges uploads of one commit.
@@ -109,11 +112,11 @@ jobs:
         env:
           TOKEN: ${{ secrets.OTFABRIC_READ_TOKEN }}
         run: git config --global url."https://x-access-token:${TOKEN}@github.com/".insteadOf "https://github.com/"
-      - name: Server tests with coverage
+      - name: Server and uafx/fxcm tests with coverage
         env:
           # Must match coverpkg of the ci job.
           COVERPKG: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
-        run: go test -count=1 -timeout=120s -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=server.out ./server
+        run: go test -count=1 -timeout=120s -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=server.out ./server ./uafx/fxcm
       - name: Download the shared coverage profile
         uses: actions/download-artifact@v7
         with:

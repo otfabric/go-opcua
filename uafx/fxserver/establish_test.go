@@ -983,3 +983,77 @@ func TestEstablishAbortLate(t *testing.T) {
 	assert.Equal(t, 1.0, g.value(t, gainID))
 	assert.Len(t, g.conns.Endpoints(), 1)
 }
+
+// TestEstablishAssignedNames: CommunicationLinks refer to a group and
+// elements added with a null Name by the Names the server assigns (Part 81
+// §6.16.3).
+func TestEstablishAssignedNames(t *testing.T) {
+	t.Parallel()
+	f := newFX(t, fxserver.ConnectionOptions{})
+	req := f.fullRequest("Named")
+	cfg := req.CommunicationConfigurations[0].PubSubConfiguration
+	cfg.Connections[0].WriterGroups[0].Name = ""
+	cfg.Connections[0].WriterGroups[0].DataSetWriters[0].Name = ""
+	cfg.Connections[1].ReaderGroups[0].Name = ""
+	cfg.Connections[1].ReaderGroups[0].DataSetReaders[0].Name = ""
+	res := f.establish(t, req)
+	require.Equal(t, ua.StatusOK, res.Status, "%+v", res.ConnectionEndpointConfigurationResults[0])
+	er := res.ConnectionEndpointConfigurationResults[0]
+	assert.Equal(t, ua.StatusOK, er.CommunicationLinksResult)
+	names := map[string]bool{}
+	for _, v := range res.CommunicationConfigurationResults[0].ConfigurationValues {
+		names[v.Name] = true
+	}
+	assert.True(t, names["WriterGroup1"] && names["DataSetWriter1"] && names["DataSetReader1"], "%v", names)
+	require.Eventually(t, func() bool { return f.value(t, setpointID) == 42.5 }, 5*time.Second, 5*time.Millisecond)
+}
+
+// TestEstablishModifyKeepsOwnership: a later call that modifies the
+// DataSetReader of an endpoint (SetCommunicationConfigurationCmd on the
+// endpoint's Node with ElementModify, as a ConnectionManager adapts a
+// subscriber to a PublisherId, Part 81 §6.16.3) keeps it the endpoint's
+// own, so CloseConnections with Remove still removes it (§6.2.5.2), though
+// the runtime gives the modified reader a new node.
+func TestEstablishModifyKeepsOwnership(t *testing.T) {
+	t.Parallel()
+	f := newFX(t, fxserver.ConnectionOptions{})
+	res := f.establish(t, f.fullRequest("Mod"))
+	require.Equal(t, ua.StatusOK, res.Status, "%+v", res.ConnectionEndpointConfigurationResults[0])
+	ep := res.ConnectionEndpointConfigurationResults[0].ConnectionEndpointID
+	before := f.lookup(t, pubsub.KindDataSetReader, subConn, rgName, readerName)
+
+	cfg := f.pubsubConfig(0)
+	cfg.Connections[1].ReaderGroups[0].DataSetReaders[0].PublisherID = ua.MustVariant(uint16(78))
+	modify := &uafx.EstablishConnectionsRequest{
+		CommandMask: uafx.SetCommunicationConfigurationCmd,
+		ConnectionEndpointConfigurations: []*uafx.ConnectionEndpointConfiguration{{
+			FunctionalEntityNode: f.id(motionID),
+			ConnectionEndpoint:   &uafx.ConnectionEndpointDefinition{Node: ep},
+			CommunicationLinks: &uafx.PubSubCommunicationLinkConfiguration{
+				DataSetReaderRef: ref(refReader, 1, 0, 0),
+				DataSetWriterRef: ref(refWriter, 0, 0, 0),
+			},
+		}},
+		CommunicationConfigurations: []*uafx.PubSubCommunicationConfiguration{{
+			PubSubConfiguration: cfg, RequireCompleteUpdate: true,
+			ConfigurationReferences: []*ua.PubSubConfigurationRefDataType{ref(ua.PubSubConfigurationRefMaskElementModify|refReader, 1, 0, 0)},
+		}},
+	}
+	res = f.establish(t, modify)
+	require.Equal(t, ua.StatusOK, res.Status, "%+v", res.ConnectionEndpointConfigurationResults[0])
+	after := f.lookup(t, pubsub.KindDataSetReader, subConn, rgName, readerName)
+	dr, err := f.srv.PubSub().DataSetReaderConfig(after)
+	require.NoError(t, err)
+	assert.Equal(t, ua.MustVariant(uint16(78)), dr.PublisherID)
+	assert.NotEqual(t, before, after, "the runtime replaces the reader")
+
+	sc, results := f.close(t, true, ep)
+	require.Equal(t, ua.StatusOK, sc, "%v", results)
+	rt := f.srv.PubSub()
+	c, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
+	require.True(t, ok)
+	g, ok := rt.Lookup(pubsub.KindReaderGroup, c, rgName)
+	require.True(t, ok)
+	_, ok = rt.Lookup(pubsub.KindDataSetReader, g, readerName)
+	assert.False(t, ok, "the modified reader is removed with its endpoint")
+}
