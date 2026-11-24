@@ -277,7 +277,7 @@ AliasNameProcessingError), with a test for each.
 | Package | What it gets | Why there |
 |---|---|---|
 | `uafx/fxcm` (new) | The ConnectionManager engine: the configuration model of a set built from `uafx.ConnectionConfigurationSetConf`, validation, the §6.9 state machine, resolution (§13.3), planning (Table 79, ordering, bundling, splitting), execution against the AutomationComponents, rollback, diagnostics, the F.2 file codec. A client-side component: no `server` import | §4.7.1: a CM can be a standalone application, part of a vendor application, or exposed on a server. The engine must work without a server (an application that only wants "establish this set") and be what the server serves |
-| `uafx/fxserver` | `EnableConnectionManager`: exposes a `*fxcm.Manager` as the ConnectionManager of §6.7: the sets as ConnectionConfigurationSetType instances, the state machines, Edit and Process Methods, events, Diagnostics, Capabilities, AggregatedCurrentState, the F.3 file | Next to `EnableConnections`; reuses the LockingServices and Guard of C1 |
+| `uafx/fxserver` | `EnableConnectionManager`: exposes the Manager of package fxcm (C2.2) as the ConnectionManager of §6.7: the sets as ConnectionConfigurationSetType instances, the state machines, Edit and Process Methods, events, Diagnostics, Capabilities, AggregatedCurrentState, the F.3 file | Next to `EnableConnections`; reuses the LockingServices and Guard of C1 |
 | `uafx` | Client wrappers `EditConnectionConfigurationSets`, `ProcessConnectionConfigurationSets`, `ReadConnectionsDiagnostics`, like `EstablishConnections` | Same place as the AC client calls |
 
 `uafx` keeps its existing API unchanged (AGENTS.md rule 5). `fxcm` depends
