@@ -578,10 +578,13 @@ ConnectionConfigurationSetConfDataType. A defect in a file is `ErrConfig`
 with `ua.StatusBadTypeMismatch` (Table F.40). Part 5 §12.31 gives the
 first entry of the Namespaces of the file the index 1, and F.2 asks for the
 OPC UA and CM namespaces in it; `EncodeFile` writes the OPC UA, Data, AC
-and CM namespaces with the indexes 1 to 4. **Library interpretation**: a
-file written as a NamespaceArray (the OPC UA namespace with index 0) is
-read too, when its Body does not decode the other way. Files are limited to
-`MaxFileSize`, 16 MiB.
+and CM namespaces with the indexes 1 to 4. A compatibility tolerance, not
+a reading of F.2: a file written with the indexes of a NamespaceArray (the
+OPC UA namespace with index 0) is read too, when its Body does not decode
+the other way, and so is a file without the OPC UA namespace. Hand-written
+files of each layout are the fixtures of `TestFileFixtures`. `DecodeFile`
+reads and `EncodeFile` writes at most `MaxFileSize`, 16 MiB (larger is
+`Bad_EncodingLimitsExceeded` when encoding).
 
 An `EditSlot` is the edit of §6.7.4 without the address space: `Start`
 gives the Lock and a working copy to a `LockOwner` (StartEditing again by
@@ -609,7 +612,11 @@ functions (design §5.3 to §5.5):
   create, close first, take a free preconfigured endpoint, or fail the
   Connection with `Bad_BrowseNameDuplicated`. An endpoint with the
   ApplicationUri of this ConnectionManager that it has no record of is
-  Unresolved: §6.6.2 identifies an application, not a call.
+  Unresolved: §6.6.2 identifies an application, not a call. A preconfigured
+  endpoint this ConnectionManager took becomes Unresolved when it is in use
+  by another ConnectionManager or carries another
+  ConnectionManagerApplicationUri: §6.2.5.2 keeps preconfigured objects,
+  which does not make closing another ConnectionManager's Connection safe.
 - `ResolveLostResponse`: after a call whose response was lost, an endpoint
   is KnownOwned only when the Name was absent before, exactly one endpoint
   is there now, its ConnectionManagerApplicationUri is ours, the
@@ -621,7 +628,8 @@ functions (design §5.3 to §5.5):
   transient and the run left no Unresolved endpoint.
 
 `Diagnose` makes the ConnectionDiagnostics of a Connection after a
-processing by the rules of §10.19, and `ConnectionStateOf` its
+processing by the rules of §10.19, keeping the StatusCode of a failure as
+reported (Uncertain too; only a Good one becomes Bad), and `ConnectionStateOf` its
 ConnectionState from the Status of its endpoints (§10.20, Figures 58 and
 59).
 

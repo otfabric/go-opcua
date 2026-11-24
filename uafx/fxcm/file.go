@@ -10,9 +10,9 @@ import (
 	"github.com/otfabric/go-opcua/uafx/fxdataid"
 )
 
-// MaxFileSize is the largest file DecodeFile takes: 16 MiB. Library
-// interpretation: F.2 and F.3 set no limit; this one bounds the memory a
-// decode of untrusted input takes.
+// MaxFileSize is the largest file DecodeFile takes and EncodeFile writes:
+// 16 MiB. Library interpretation: F.2 and F.3 set no limit; this one
+// bounds the memory a decode of untrusted input takes.
 const MaxFileSize = 16 << 20
 
 // DecodeFile decodes the content of a ConnectionConfigurationSet file
@@ -22,13 +22,17 @@ const MaxFileSize = 16 << 20
 // is ErrConfig with ua.StatusBadTypeMismatch in the chain (Table F.40).
 // The sets are decoded, not validated: NewConfig does that.
 //
-// The Namespaces of the file name the namespaces of the NodeIds in it;
+// The Namespaces of the file name the namespaces of the structures in it;
 // Part 5 §12.31 maps its first entry to NamespaceIndex 1, and F.2 asks for
 // http://opcfoundation.org/UA/ and http://opcfoundation.org/UA/FX/CM/ in
-// it. Library interpretation: when the Body does not decode with the
-// indexes of Part 5 and the first entry is http://opcfoundation.org/UA/,
-// DecodeFile tries the indexes of a NamespaceArray (the first entry is
-// index 0), so that a file written either way is read.
+// it. DecodeFile requires the CM namespace and reads the Body with the
+// indexes of Part 5. A compatibility tolerance, not a reading of F.2: when
+// the Body does not decode that way and the first entry is
+// http://opcfoundation.org/UA/, DecodeFile tries the indexes of a
+// NamespaceArray (the first entry is index 0), as a writer that copies a
+// server's NamespaceArray produces. A file without the OPC UA namespace,
+// which F.2 asks for, is read too: index 0 is the OPC UA namespace either
+// way.
 func DecodeFile(b []byte) ([]*uafx.ConnectionConfigurationSetConf, error) {
 	if len(b) > MaxFileSize {
 		return nil, configError(ua.StatusBadTypeMismatch, "a file of %d bytes, more than %d", len(b), MaxFileSize)
@@ -121,7 +125,8 @@ var (
 // http://opcfoundation.org/UA/ and the Data, AC and CM namespaces of UAFX.
 // A NodeId in a set has the index of the Namespaces of its ServerAddress
 // (F.1.2.2), not of the file, and is written as it is. The sets are not
-// validated.
+// validated. Content larger than MaxFileSize is
+// ua.StatusBadEncodingLimitsExceeded: DecodeFile would refuse it.
 func EncodeFile(sets []*uafx.ConnectionConfigurationSetConf) ([]byte, error) {
 	eos := make([]*ua.ExtensionObject, len(sets))
 	for i, s := range sets {
@@ -135,8 +140,11 @@ func EncodeFile(sets []*uafx.ConnectionConfigurationSetConf) ([]byte, error) {
 		eos[i] = eo
 	}
 	b, err := ua.Encode(&ua.UABinaryFileDataType{Namespaces: fileURIs, Body: ua.MustVariant(eos)})
-	if err != nil {
+	switch {
+	case err != nil:
 		return nil, configError(ua.StatusBadInvalidArgument, "%v", err)
+	case len(b) > MaxFileSize:
+		return nil, configError(ua.StatusBadEncodingLimitsExceeded, "%d bytes, more than %d", len(b), MaxFileSize)
 	}
 	return b, nil
 }

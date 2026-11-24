@@ -52,7 +52,8 @@ func TestDiagnose(t *testing.T) {
 		{"stopped", Outcome{Kind: Stopped}, &Outcome{Kind: Stopped}, fields{est | errBit, uafx.FxErrorProcessingStopped, ua.StatusGood, uafx.FxErrorProcessingStopped, ua.StatusGood}},
 		{"rolled back", Outcome{Kind: RolledBack}, &failed, fields{est | errBit, uafx.FxErrorRollback, ua.StatusGood, uafx.FxErrorCreateConnectionEndpointError, ua.StatusBadBrowseNameDuplicated}},
 		{"failure without codes", FailedWith(uafx.FxErrorNoError, ua.StatusGood), nil, fields{est | errBit, uafx.FxErrorUnknownStatus, ua.StatusBad, uafx.FxErrorNoError, ua.StatusGood}},
-		{"failure with an uncertain code", FailedWith(uafx.FxErrorVerifyAssetError, ua.StatusUncertain), nil, fields{est | errBit, uafx.FxErrorVerifyAssetError, ua.StatusBad, uafx.FxErrorNoError, ua.StatusGood}},
+		{"failure with an uncertain code, kept", FailedWith(uafx.FxErrorVerifyAssetError, ua.StatusUncertain), nil, fields{est | errBit, uafx.FxErrorVerifyAssetError, ua.StatusUncertain, uafx.FxErrorNoError, ua.StatusGood}},
+		{"failure with a Good code with flags", FailedWith(uafx.FxErrorVerifyAssetError, ua.StatusCode(0x00000400)), nil, fields{est | errBit, uafx.FxErrorVerifyAssetError, ua.StatusBad, uafx.FxErrorNoError, ua.StatusGood}},
 	} {
 		d := Diagnose(name, uafx.ActionEstablishConnections, uafx.ConnectionNotMonitored, tc.ep1, tc.ep2)
 		got := fields{d.LastActivity, d.ErrorEndpoint1, d.Endpoint1Status, d.ErrorEndpoint2, d.Endpoint2Status}

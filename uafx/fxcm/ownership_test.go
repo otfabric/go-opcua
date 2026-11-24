@@ -50,7 +50,11 @@ func TestScan(t *testing.T) {
 		{"known-owned survivor", rec(KnownOwned), obs(n1, ptr(me)), false, KnownOwned, ScanCloseFirst},
 		{"known-owned survivor, AC without the URI", rec(KnownOwned), obs(n1, nil), false, KnownOwned, ScanCloseFirst},
 		{"known-owned, URI changed", rec(KnownOwned), obs(n1, ptr(other)), false, Unresolved, ScanBlocked},
-		{"taken preconfigured survivor", rec(TakenPreconfigured), pre(true), true, TakenPreconfigured, ScanCloseFirst},
+		{"taken preconfigured survivor", rec(TakenPreconfigured), pre(false), true, TakenPreconfigured, ScanCloseFirst},
+		{"taken preconfigured survivor with our URI", rec(TakenPreconfigured), &Observed{NodeID: n1, IsPreconfigured: true, CMApplicationURI: ptr(me)}, true, TakenPreconfigured, ScanCloseFirst},
+		// Another ConnectionManager took it since: never closed (review of #45).
+		{"taken preconfigured, now in use by another", rec(TakenPreconfigured), pre(true), true, Unresolved, ScanBlocked},
+		{"taken preconfigured, now another URI", rec(TakenPreconfigured), &Observed{NodeID: n1, IsPreconfigured: true, CMApplicationURI: ptr(other)}, true, Unresolved, ScanBlocked},
 		{"taken preconfigured, no longer preconfigured", rec(TakenPreconfigured), obs(n1, nil), true, Unresolved, ScanBlocked},
 		{"unresolved stays", rec(Unresolved), obs(n1, ptr(me)), false, Unresolved, ScanBlocked},
 		{"record of another node, our URI", rec(KnownOwned), obs(n2, ptr(me)), false, Unresolved, ScanBlocked},
@@ -98,6 +102,9 @@ func TestResolveLostResponse(t *testing.T) {
 		{"preconfigured taken", LostResponse{Preconfigured: true, RelatedEndpointOurs: true, Found: []Observed{{IsPreconfigured: true}}}, false, TakenPreconfigured, false},
 		{"preconfigured, related endpoint not ours", LostResponse{Preconfigured: true, Found: []Observed{{IsPreconfigured: true}}}, true, Unresolved, false},
 		{"preconfigured, not preconfigured now", LostResponse{Preconfigured: true, RelatedEndpointOurs: true, Found: []Observed{{}}}, true, Unresolved, false},
+		{"preconfigured, in use by another", LostResponse{Preconfigured: true, RelatedEndpointOurs: true, Found: []Observed{{IsPreconfigured: true, InUse: true}}}, true, Unresolved, false},
+		{"preconfigured, another URI", LostResponse{Preconfigured: true, RelatedEndpointOurs: true, Found: []Observed{{IsPreconfigured: true, CMApplicationURI: ptr("urn:x")}}}, true, Unresolved, false},
+		{"preconfigured taken, our URI", LostResponse{Preconfigured: true, RelatedEndpointOurs: true, Found: []Observed{{IsPreconfigured: true, CMApplicationURI: ptr(me)}}}, false, TakenPreconfigured, false},
 		{"preconfigured, two", LostResponse{Preconfigured: true, RelatedEndpointOurs: true, Found: []Observed{{IsPreconfigured: true}, {IsPreconfigured: true}}}, true, Unresolved, false},
 	} {
 		c, absent := ResolveLostResponse(tc.lr, me, tc.exclusive)

@@ -87,8 +87,9 @@ type Observed struct {
 	CMApplicationURI *string
 	// IsPreconfigured is the IsPreconfigured of the endpoint (§6.6.2).
 	IsPreconfigured bool
-	// InUse is set when the RelatedEndpoint of a preconfigured endpoint
-	// is set, by a ConnectionManager that is not this one.
+	// InUse is set when the endpoint is in use by a Connection this
+	// ConnectionManager did not make: for a preconfigured endpoint, a
+	// RelatedEndpoint that is not the one this ConnectionManager set.
 	InUse bool
 }
 
@@ -103,8 +104,13 @@ func (o *Observed) ours(appURI string) bool {
 //
 //   - With a record of the same NodeId, the class of the record, unless the
 //     endpoint no longer matches it: a KnownOwned endpoint whose
-//     ConnectionManagerApplicationUri is another, or a TakenPreconfigured
-//     one that is no longer preconfigured, is Unresolved.
+//     ConnectionManagerApplicationUri is another is Unresolved, and so is a
+//     TakenPreconfigured one that is no longer preconfigured, is in use by
+//     another ConnectionManager (InUse), or has another
+//     ConnectionManagerApplicationUri: another ConnectionManager may have
+//     taken it since, and §6.2.5.2 keeping preconfigured objects does not
+//     make closing its Connection safe. Unresolved is reported and never
+//     closed, so that a takeover is seen, not undone.
 //   - Without a matching record, an endpoint with this ConnectionManager's
 //     ApplicationUri is Unresolved (§6.6.2 names an application, not a
 //     call); anything else is Foreign.
@@ -117,7 +123,7 @@ func Classify(rec *EndpointRecord, obs *Observed, appURI string) Ownership {
 			}
 			return KnownOwned
 		case TakenPreconfigured:
-			if !obs.IsPreconfigured {
+			if !obs.IsPreconfigured || obs.InUse || obs.CMApplicationURI != nil && !obs.ours(appURI) {
 				return Unresolved
 			}
 			return TakenPreconfigured
@@ -213,15 +219,17 @@ type LostResponse struct {
 // run, and exclusive is true: the deployment asserts that no other
 // ConnectionManager uses appURI (§6.6.2 identifies an application, which a
 // redundant pair or a copied configuration may share). A preconfigured
-// endpoint is TakenPreconfigured when exactly one is found and its
-// RelatedEndpoint is the one the call set. Everything else is Unresolved:
+// endpoint is TakenPreconfigured when exactly one is found, its
+// RelatedEndpoint is the one the call set, and nothing says another
+// ConnectionManager uses it (InUse, another ConnectionManagerApplicationUri). Everything else is Unresolved:
 // fail closed.
 func ResolveLostResponse(lr LostResponse, appURI string, exclusive bool) (class Ownership, absent bool) {
 	if len(lr.Found) == 0 {
 		return Foreign, true
 	}
 	if lr.Preconfigured {
-		if len(lr.Found) == 1 && lr.Found[0].IsPreconfigured && lr.RelatedEndpointOurs {
+		if f := lr.Found; len(f) == 1 && f[0].IsPreconfigured && lr.RelatedEndpointOurs && !f[0].InUse &&
+			(f[0].CMApplicationURI == nil || f[0].ours(appURI)) {
 			return TakenPreconfigured, false
 		}
 		return Unresolved, false

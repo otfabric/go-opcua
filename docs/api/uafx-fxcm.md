@@ -20,7 +20,7 @@ The package makes no calls to a server. The design of the ConnectionManager, whi
 const MaxFileSize = 16 << 20
 ```
 
-MaxFileSize is the largest file DecodeFile takes: 16 MiB. Library interpretation: F.2 and F.3 set no limit; this one bounds the memory a decode of untrusted input takes.
+MaxFileSize is the largest file DecodeFile takes and EncodeFile writes: 16 MiB. Library interpretation: F.2 and F.3 set no limit; this one bounds the memory a decode of untrusted input takes.
 
 ## Variables
 
@@ -62,7 +62,7 @@ func DecodeFile(b []byte) ([]*uafx.ConnectionConfigurationSetConf, error)
 
 DecodeFile decodes the content of a ConnectionConfigurationSet file (F.2 Table F.37): a UABinaryFileDataType (Part 5 §12.31) whose Body is an array of ConnectionConfigurationSetConfDataType. The input is untrusted. An empty Body array returns no sets and no error. Any defect is ErrConfig with ua.StatusBadTypeMismatch in the chain (Table F.40). The sets are decoded, not validated: NewConfig does that.
 
-The Namespaces of the file name the namespaces of the NodeIds in it; Part 5 §12.31 maps its first entry to NamespaceIndex 1, and F.2 asks for [http://opcfoundation.org/UA/](http://opcfoundation.org/UA/) and [http://opcfoundation.org/UA/FX/CM/](http://opcfoundation.org/UA/FX/CM/) in it. Library interpretation: when the Body does not decode with the indexes of Part 5 and the first entry is [http://opcfoundation.org/UA/](http://opcfoundation.org/UA/), DecodeFile tries the indexes of a NamespaceArray (the first entry is index 0), so that a file written either way is read.
+The Namespaces of the file name the namespaces of the structures in it; Part 5 §12.31 maps its first entry to NamespaceIndex 1, and F.2 asks for [http://opcfoundation.org/UA/](http://opcfoundation.org/UA/) and [http://opcfoundation.org/UA/FX/CM/](http://opcfoundation.org/UA/FX/CM/) in it. DecodeFile requires the CM namespace and reads the Body with the indexes of Part 5. A compatibility tolerance, not a reading of F.2: when the Body does not decode that way and the first entry is [http://opcfoundation.org/UA/](http://opcfoundation.org/UA/), DecodeFile tries the indexes of a NamespaceArray (the first entry is index 0), as a writer that copies a server's NamespaceArray produces. A file without the OPC UA namespace, which F.2 asks for, is read too: index 0 is the OPC UA namespace either way.
 
 ### func Diagnose
 
@@ -78,7 +78,7 @@ Diagnose returns the ConnectionDiagnostics of a Connection after a processing of
 func EncodeFile(sets []*uafx.ConnectionConfigurationSetConf) ([]byte, error)
 ```
 
-EncodeFile returns the content of a ConnectionConfigurationSet file for sets (F.2), which DecodeFile reads. Its Namespaces are [http://opcfoundation.org/UA/](http://opcfoundation.org/UA/) and the Data, AC and CM namespaces of UAFX. A NodeId in a set has the index of the Namespaces of its ServerAddress (F.1.2.2), not of the file, and is written as it is. The sets are not validated.
+EncodeFile returns the content of a ConnectionConfigurationSet file for sets (F.2), which DecodeFile reads. Its Namespaces are [http://opcfoundation.org/UA/](http://opcfoundation.org/UA/) and the Data, AC and CM namespaces of UAFX. A NodeId in a set has the index of the Namespaces of its ServerAddress (F.1.2.2), not of the file, and is written as it is. The sets are not validated. Content larger than MaxFileSize is ua.StatusBadEncodingLimitsExceeded: DecodeFile would refuse it.
 
 ### func RetryAllowed
 
@@ -415,8 +415,9 @@ type Observed struct {
 	CMApplicationURI *string
 	// IsPreconfigured is the IsPreconfigured of the endpoint (§6.6.2).
 	IsPreconfigured bool
-	// InUse is set when the RelatedEndpoint of a preconfigured endpoint
-	// is set, by a ConnectionManager that is not this one.
+	// InUse is set when the endpoint is in use by a Connection this
+	// ConnectionManager did not make: for a preconfigured endpoint, a
+	// RelatedEndpoint that is not the one this ConnectionManager set.
 	InUse bool
 }
 ```
@@ -503,7 +504,7 @@ func Classify(rec *EndpointRecord, obs *Observed, appURI string) Ownership
 
 Classify returns the class of obs, found under the Name of an endpoint configuration of a set, given rec, the record of this ConnectionManager for that endpoint configuration (nil when it has none), and appURI, the ApplicationUri of this ConnectionManager.
 
-  - With a record of the same NodeId, the class of the record, unless the endpoint no longer matches it: a KnownOwned endpoint whose ConnectionManagerApplicationUri is another, or a TakenPreconfigured one that is no longer preconfigured, is Unresolved.
+  - With a record of the same NodeId, the class of the record, unless the endpoint no longer matches it: a KnownOwned endpoint whose ConnectionManagerApplicationUri is another is Unresolved, and so is a TakenPreconfigured one that is no longer preconfigured, is in use by another ConnectionManager (InUse), or has another ConnectionManagerApplicationUri: another ConnectionManager may have taken it since, and §6.2.5.2 keeping preconfigured objects does not make closing its Connection safe. Unresolved is reported and never closed, so that a takeover is seen, not undone.
   - Without a matching record, an endpoint with this ConnectionManager's ApplicationUri is Unresolved (§6.6.2 names an application, not a call); anything else is Foreign.
 
 #### func ResolveLostResponse
@@ -512,7 +513,7 @@ Classify returns the class of obs, found under the Name of an endpoint configura
 func ResolveLostResponse(lr LostResponse, appURI string, exclusive bool) (class Ownership, absent bool)
 ```
 
-ResolveLostResponse decides an endpoint after a lost response (design §5.4). absent is true when nothing was created or taken. Otherwise class is KnownOwned only when all hold: the Name was absent at step 0, the browse finds exactly one endpoint, its ConnectionManagerApplicationUri is exposed and is appURI, the (AC, FunctionalEntity) was serialized for the run, and exclusive is true: the deployment asserts that no other ConnectionManager uses appURI (§6.6.2 identifies an application, which a redundant pair or a copied configuration may share). A preconfigured endpoint is TakenPreconfigured when exactly one is found and its RelatedEndpoint is the one the call set. Everything else is Unresolved: fail closed.
+ResolveLostResponse decides an endpoint after a lost response (design §5.4). absent is true when nothing was created or taken. Otherwise class is KnownOwned only when all hold: the Name was absent at step 0, the browse finds exactly one endpoint, its ConnectionManagerApplicationUri is exposed and is appURI, the (AC, FunctionalEntity) was serialized for the run, and exclusive is true: the deployment asserts that no other ConnectionManager uses appURI (§6.6.2 identifies an application, which a redundant pair or a copied configuration may share). A preconfigured endpoint is TakenPreconfigured when exactly one is found, its RelatedEndpoint is the one the call set, and nothing says another ConnectionManager uses it (InUse, another ConnectionManagerApplicationUri). Everything else is Unresolved: fail closed.
 
 #### func (Ownership) MayClose
 

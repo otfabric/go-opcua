@@ -193,3 +193,104 @@ func FuzzDecodeFile(f *testing.F) {
 		}
 	})
 }
+
+// Hand-written bytes of a file (Part 5 §12.31, Part 6 §5.2), independent of
+// the generated codec and of EncodeFile: one ConnectionConfigurationSetConf
+// (Table F.1) with BrowseName "S", the Folder ["F"], empty arrays,
+// RollbackOnError TRUE, the null SecurityKeyServer (Table F.10, no optional
+// field), Version 7 and no properties.
+func handFile(uris []string, cmIndex byte) []byte {
+	var b []byte
+	i32 := func(v int32) { b = append(b, byte(v), byte(v>>8), byte(v>>16), byte(v>>24)) }
+	str := func(s string) { i32(int32(len(s))); b = append(b, s...) }
+	// Namespaces.
+	i32(int32(len(uris)))
+	for _, u := range uris {
+		str(u)
+	}
+	i32(-1)             // StructureDataTypes
+	i32(-1)             // EnumDataTypes
+	i32(-1)             // SimpleDataTypes
+	i32(-1)             // SchemaLocation
+	i32(-1)             // FileHeader
+	b = append(b, 0x96) // Body: Variant, array of ExtensionObject (22 | 0x80)
+	i32(1)
+	// The ExtensionObject: four-byte NodeId ns=cmIndex;i=5029 (the Default
+	// Binary encoding of ConnectionConfigurationSetConfDataType), binary
+	// body.
+	b = append(b, 0x01, cmIndex, 0xA5, 0x13, 0x01)
+	var body []byte
+	{
+		saved := b
+		b = nil
+		str("S")
+		i32(1)
+		str("F")
+		i32(0)              // Connections
+		i32(0)              // CommunicationFlows
+		i32(0)              // ServerAddresses
+		i32(0)              // AutomationComponentConfigurations
+		b = append(b, 0x01) // RollbackOnError
+		i32(0)              // SecurityKeyServer: EncodingMask
+		i32(-1)             // Address
+		i32(-1)             // SecurityPolicyUri
+		i32(-1)             // ServerUri
+		b = append(b, 0x00) // UsePushModel
+		i32(7)              // Version
+		i32(-1)             // ConnectionConfigurationSetProperties
+		body, b = b, saved
+	}
+	i32(int32(len(body)))
+	return append(b, body...)
+}
+
+// TestFileFixtures reads the hand-written files: the indexes of Part 5
+// with and without the OPC UA namespace, and the NamespaceArray indexes
+// DecodeFile tolerates.
+func TestFileFixtures(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		b    []byte
+	}{
+		{"Part 5, F.2 Namespaces", handFile([]string{uaNamespace, fxcmid.NamespaceURI}, 2)},
+		{"Part 5, no OPC UA namespace", handFile([]string{fxcmid.NamespaceURI}, 1)},
+		{"NamespaceArray indexes (tolerated)", handFile([]string{uaNamespace, fxcmid.NamespaceURI}, 1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sets, err := DecodeFile(tc.b)
+			if err != nil {
+				t.Fatal(err)
+			}
+			s := sets[0]
+			if len(sets) != 1 || s.BrowseName != "S" || len(s.ConnectionConfigurationSetFolder) != 1 || s.ConnectionConfigurationSetFolder[0] != "F" ||
+				!s.RollbackOnError || s.Version != 7 || !nullSKS(s.SecurityKeyServer) || len(s.Connections) != 0 {
+				t.Errorf("%+v", s)
+			}
+		})
+	}
+	// The CM namespace at an index the Body does not use.
+	if _, err := DecodeFile(handFile([]string{uaNamespace, fxcmid.NamespaceURI}, 3)); StatusOf(err) != ua.StatusBadTypeMismatch {
+		t.Errorf("wrong index: %v", err)
+	}
+	// EncodeFile writes the same set to bytes DecodeFile reads like the
+	// fixture.
+	want, _ := DecodeFile(handFile([]string{uaNamespace, fxcmid.NamespaceURI}, 2))
+	b, err := EncodeFile(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := DecodeFile(b)
+	if err != nil || got[0].BrowseName != "S" || got[0].Version != 7 {
+		t.Errorf("%v %v", got, err)
+	}
+}
+
+// TestEncodeFileLimit: EncodeFile does not write what DecodeFile refuses.
+func TestEncodeFileLimit(t *testing.T) {
+	c := validConf()
+	c.ConnectionConfigurationSetProperties = []*ua.KeyValuePair{{Key: &ua.QualifiedName{Name: "big"}, Value: ua.MustVariant(make([]byte, MaxFileSize))}}
+	_, err := EncodeFile([]*uafx.ConnectionConfigurationSetConf{c})
+	if StatusOf(err) != ua.StatusBadEncodingLimitsExceeded || !errors.Is(err, ErrConfig) {
+		t.Errorf("%v", err)
+	}
+}

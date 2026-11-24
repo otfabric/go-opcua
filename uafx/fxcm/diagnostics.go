@@ -57,10 +57,12 @@ func FailedWith(fx uafx.FxError, status ua.StatusCode) Outcome {
 	return Outcome{Kind: Failed, FxError: fx, Status: status}
 }
 
-// fields returns ErrorEndpoint and EndpointStatus of o (§10.19). A Failed
-// Outcome without an FxError is UnknownStatus, and one without a Bad
-// StatusCode is Bad: library interpretation, the fields of a failure are
-// never NoError and Good.
+// fields returns ErrorEndpoint and EndpointStatus of o (§10.19). The
+// StatusCode of a failure is kept as reported, Uncertain included (§10.19
+// allows a generic Bad, it does not ask for one). Library interpretation:
+// the fields of a failure are never NoError and Good, so a Failed Outcome
+// without an FxError is UnknownStatus and one with a Good StatusCode is
+// Bad.
 func (o Outcome) fields() (uafx.FxError, ua.StatusCode) {
 	switch o.Kind {
 	case Failed:
@@ -68,7 +70,7 @@ func (o Outcome) fields() (uafx.FxError, ua.StatusCode) {
 		if fx == uafx.FxErrorNoError {
 			fx = uafx.FxErrorUnknownStatus
 		}
-		if st&0xC0000000 != 0x80000000 { // Severity not Bad: the top two bits are not 10
+		if st&0xC0000000 == 0 { // Severity Good: the top two bits are 00
 			st = ua.StatusBad
 		}
 		return fx, st
