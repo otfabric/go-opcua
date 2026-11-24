@@ -127,6 +127,10 @@ type Event struct {
 	// Version is the Version of the set after EventSetAdded,
 	// EventSetReplaced and EventCommitted.
 	Version uint32
+	// Action is the action of the run of an EventTransition: the Action
+	// of the processing events (§8.6 Table 114). ActionRemoveSet and
+	// ActionReconcile are the runs of Remove and Reconcile.
+	Action uafx.FxProcess
 }
 
 // Observer receives the Events of a Manager: transitions, calls, endpoints,

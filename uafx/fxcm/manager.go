@@ -540,7 +540,7 @@ func (m *Manager) claim(key SetKey) (*set, State, error) {
 		s.retry = nil
 	}
 	s.mu.Unlock()
-	m.observe(Event{Kind: EventTransition, Set: key, Run: r.id, Transition: tr})
+	m.observe(Event{Kind: EventTransition, Set: key, Run: r.id, Transition: tr, Action: r.action})
 	return s, prev, nil
 }
 
@@ -765,7 +765,7 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 	s.state = StateProcessing
 	s.current = r
 	s.mu.Unlock()
-	m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr})
+	m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
 	go func() {
 		defer m.wg.Done()
 		m.execute(m.ctx, s, r, prev)

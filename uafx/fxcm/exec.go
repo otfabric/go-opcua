@@ -2359,7 +2359,7 @@ func (x *run) finish() *RunResult {
 	retry := x.scheduleRetryLocked(failed, unresolved)
 	s.mu.Unlock()
 	close(x.r.done)
-	x.m.observe(Event{Kind: EventTransition, Set: x.r.key, Run: x.r.id, Transition: tr})
+	x.m.observe(Event{Kind: EventTransition, Set: x.r.key, Run: x.r.id, Transition: tr, Action: x.r.action})
 	if retry > 0 {
 		x.m.observe(Event{Kind: EventRetry, Set: x.r.key, Run: x.r.id, Attempt: s.retries})
 	}
