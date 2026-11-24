@@ -227,13 +227,16 @@ func TestEstablishAbort(t *testing.T) {
 	})
 }
 
-// TestEstablishControlGroups: Release B has no ControlGroups; the control
-// commands follow the agreed table: no groups is nothing to do, an unknown
-// or invalid one its Table 13 code, an existing one Bad_NotSupported, and
-// any of these aborts the call.
+// TestEstablishControlGroups: the codes of the control commands for
+// ControlGroups that cannot be controlled: no groups is nothing to do, an
+// unknown or invalid one its Table 13 code, a ControlGroup without Locks
+// Bad_InvalidState, and any of these aborts the call. The ControlAuthorizer
+// allows all: these come after authorization (TestControlGroupMethods).
 func TestEstablishControlGroups(t *testing.T) {
 	t.Parallel()
-	f := newFX(t, fxserver.ConnectionOptions{})
+	f := newFX(t, fxserver.ConnectionOptions{ControlAuthorizer: func(context.Context, fxserver.ControlRequest) ua.StatusCode {
+		return ua.StatusOK
+	}})
 	for name, tc := range map[string]struct {
 		groups []*ua.NodeID
 		want   ua.StatusCode

@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -50,8 +51,9 @@ type fx struct {
 	c     *opcua.Client
 	conns *fxserver.Connections
 	ns    fxserver.Namespaces
-	test  uint16 // index of connNS
-	udp   string // a free opc.udp URL on the loopback
+	test  uint16        // index of connNS
+	udp   string        // a free opc.udp URL on the loopback
+	hooks *controlHooks // of newControlFX
 }
 
 func (f *fx) id(n uint32) *ua.NodeID { return ua.NewNumericNodeID(f.test, n) }
@@ -61,10 +63,48 @@ func newFX(t *testing.T, opts fxserver.ConnectionOptions, srvOpts ...server.Opti
 	return newFXWith(t, fxtest.PrepareConnections, opts, srvOpts...)
 }
 
+// controlHooks are the hooks of the server of newControlFX.
+type controlHooks struct {
+	admin   atomic.Pointer[ua.NodeID] // the Role ConnectionAdmin
+	noAdmin atomic.Bool               // sessions activated now do not get it
+	// onWrite is called by the AccessController for each write.
+	onWrite atomic.Pointer[func(*server.Session, *ua.NodeID)]
+}
+
+// hookAC is the AccessController of newControlFX: it allows everything and
+// calls onWrite.
+type hookAC struct {
+	server.DefaultAccessController
+	h *controlHooks
+}
+
+func (a hookAC) CheckWrite(_ context.Context, s *server.Session, n *ua.NodeID) ua.StatusCode {
+	if f := a.h.onWrite.Load(); f != nil {
+		(*f)(s, n)
+	}
+	return ua.StatusOK
+}
+
 // newControlFX is newFX with the ControlGroups of fxtest.PrepareControlGroups.
+// Its sessions have the Role ConnectionAdmin, but those of plainClient.
 func newControlFX(t *testing.T, opts fxserver.ConnectionOptions) *fx {
 	t.Helper()
-	return newFXWith(t, fxtest.PrepareControlGroups, opts)
+	h := &controlHooks{}
+	roles := func(tok ua.IdentityToken) []*ua.NodeID {
+		out := server.DefaultRoleMapper(tok)
+		if r := h.admin.Load(); r != nil && !h.noAdmin.Load() {
+			out = append(out, r)
+		}
+		return out
+	}
+	prepare := func(srv *server.Server) (fxserver.Namespaces, uint16, error) {
+		ns, idx, err := fxtest.PrepareControlGroups(srv)
+		h.admin.Store(ns.ConnectionAdmin())
+		return ns, idx, err
+	}
+	f := newFXWith(t, prepare, opts, server.WithRoleMapper(roles), server.WithAccessController(hookAC{h: h}))
+	f.hooks = h
+	return f
 }
 
 func newFXWith(t *testing.T, prepare func(*server.Server) (fxserver.Namespaces, uint16, error), opts fxserver.ConnectionOptions, srvOpts ...server.Option) *fx {

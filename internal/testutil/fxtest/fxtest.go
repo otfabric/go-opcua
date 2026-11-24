@@ -80,7 +80,8 @@ const (
 	ConnNotAGroup = 1252 // Motion/ControlGroups/NotAGroup
 	// ConnControl is Motion/ControlGroups/Control of control_groups.xml
 	// (PrepareControlGroups), a ControlGroup that
-	// blocks Table and restricts Gain and ConnReset; ConnMonitor blocks
+	// blocks Table and restricts Gain, ConnReset and the Object ConnAxis
+	// (with ConnAxisIn and ConnHome); ConnMonitor blocks
 	// Limit and restricts Gain, with a MaxInactiveLockTime of 300 ms on
 	// its ListToRestrict. Each has ListToBlock at +1 (its Lock at +2, the
 	// Lock's Properties Locked, LockingClient, LockingUser,
@@ -91,6 +92,7 @@ const (
 	ConnControl = 1400
 	ConnMonitor = 1440
 	ConnReset   = 1297 // Motion/Reset, a Method of control_groups.xml
+	ConnHome    = 1298 // Axis/Home, a Method of control_groups.xml
 	ConnAxis    = 1260 // Motion/Axis, a SubFunctionalEntity
 	ConnAxisIn  = 1262 // Axis/InputData/AxisIn, Double
 	ConnPreset  = 1300 // Motion/ConnectionEndpoints/Preset, Subscriber of Setpoint
@@ -102,8 +104,8 @@ const (
 var controlGroupsNodeSet []byte
 
 // PrepareControlGroups is PrepareConnections with control_groups.xml: the
-// ControlGroups ConnControl and ConnMonitor of Motion and the Method
-// ConnReset. Call it before fxserver.EnableConnections.
+// ControlGroups ConnControl and ConnMonitor of Motion and the Methods
+// ConnReset and ConnHome. Call it before fxserver.EnableConnections.
 func PrepareControlGroups(srv *server.Server) (fxserver.Namespaces, uint16, error) {
 	ns, idx, err := PrepareConnections(srv)
 	if err != nil {

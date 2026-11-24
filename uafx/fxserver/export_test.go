@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/pubsub"
+	"github.com/otfabric/go-opcua/server"
 )
 
 // SetPubSubOps replaces the runtime operations that close ConnectionEndpoints;
@@ -53,3 +54,6 @@ func SetLockClock(c *Connections, now func() time.Time) { c.ctl.clock.Store(&now
 
 // TickLocks runs one tick of the Locks as the monitor does.
 func TickLocks(c *Connections) { c.tickLocks() }
+
+// SessionEnded tells the Guard of the Locks that the session s ended.
+func SessionEnded(c *Connections, s *server.Session) { lockGuard{c}.SessionEnded(s) }

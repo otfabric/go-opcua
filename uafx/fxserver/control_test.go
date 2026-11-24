@@ -5,6 +5,7 @@ package fxserver_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/fakeclock"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
@@ -25,6 +27,7 @@ const (
 	controlID = fxtest.ConnControl
 	monitorID = fxtest.ConnMonitor
 	resetID   = fxtest.ConnReset
+	homeID    = fxtest.ConnHome
 )
 
 // Offsets of the members of a ControlGroup (fxtest.ConnControl).
@@ -56,6 +59,14 @@ func (f *fx) client(t *testing.T, uri string) *opcua.Client {
 	require.NoError(t, c.Connect(ctx))
 	t.Cleanup(func() { _ = c.Close(ctx) })
 	return c
+}
+
+// plainClient is client without the Role ConnectionAdmin.
+func (f *fx) plainClient(t *testing.T, uri string) *opcua.Client {
+	t.Helper()
+	f.hooks.noAdmin.Store(true)
+	defer f.hooks.noAdmin.Store(false)
+	return f.client(t, uri)
 }
 
 // call calls the Method method of obj and returns its first output
@@ -119,15 +130,18 @@ func (f *fx) controlledBy(t *testing.T, g uint32) []string {
 func TestControlGroupMethods(t *testing.T) {
 	t.Parallel()
 	f := newControlFX(t, fxserver.ConnectionOptions{})
-	f.srv.RegisterMethod(f.id(motionID), f.id(resetID), func(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	ok := func(context.Context, *ua.NodeID, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		return nil, ua.StatusOK
-	})
+	}
+	f.srv.RegisterMethod(f.id(motionID), f.id(resetID), ok)
+	f.srv.RegisterMethod(f.id(axisID), f.id(homeID), ok)
 	a, b := f.client(t, appA), f.client(t, appB)
-	callReset := func(c *opcua.Client) ua.StatusCode {
-		res, err := c.Call(context.Background(), &ua.CallMethodRequest{ObjectID: f.id(motionID), MethodID: f.id(resetID)})
+	callOn := func(c *opcua.Client, obj, method uint32) ua.StatusCode {
+		res, err := c.Call(context.Background(), &ua.CallMethodRequest{ObjectID: f.id(obj), MethodID: f.id(method)})
 		require.NoError(t, err)
 		return res.StatusCode
 	}
+	callReset := func(c *opcua.Client) ua.StatusCode { return callOn(c, motionID, resetID) }
 
 	// Nothing is locked yet.
 	assert.Equal(t, ua.StatusOK, f.writeValue(t, b, gainID, 1.5))
@@ -153,6 +167,13 @@ func TestControlGroupMethods(t *testing.T) {
 	assert.Equal(t, ua.StatusOK, f.writeValue(t, b, setpointID, 1.0), "not in a list")
 	assert.Equal(t, ua.StatusOK, callReset(a))
 	assert.Equal(t, ua.StatusBadLocked, callReset(b))
+
+	// The Object Axis in ListToRestrict: its Variable AxisIn and Method
+	// Home too.
+	assert.Equal(t, ua.StatusOK, f.writeValue(t, a, axisInID, 2.0))
+	assert.Equal(t, ua.StatusBadLocked, f.writeValue(t, b, axisInID, 3.0))
+	assert.Equal(t, ua.StatusOK, callOn(a, axisID, homeID))
+	assert.Equal(t, ua.StatusBadLocked, callOn(b, axisID, homeID))
 
 	// Monitor shares Gain: B cannot control it, A can.
 	assert.Equal(t, int32(-1), f.lockStatus(t, b, monitorID, monitorID+establishCtl, ""))
@@ -205,6 +226,42 @@ func TestControlGroupMethods(t *testing.T) {
 	assert.Equal(t, int32(0), f.lockStatus(t, a, controlID, controlID+establishCtl, appB))
 	assert.Equal(t, ua.StatusOK, f.writeValue(t, b, gainID, 6.0))
 	assert.Equal(t, ua.StatusBadLocked, f.writeValue(t, a, gainID, 6.0))
+
+	// Without the Role ConnectionAdmin a client neither controls, for
+	// itself or another, nor releases, reassigns or breaks (Part 81
+	// §6.5.3 to §6.5.5, OPC 10000-100 §7.8); the LockingServices of a free
+	// Lock are its own.
+	p := f.plainClient(t, appA)
+	for _, lc := range []string{"", appA, appB} {
+		_, sc = f.call(t, p, monitorID, monitorID+establishCtl, lc)
+		assert.Equal(t, ua.StatusBadUserAccessDenied, sc, lc)
+	}
+	_, sc = f.call(t, p, controlID, controlID+releaseCtl)
+	assert.Equal(t, ua.StatusBadUserAccessDenied, sc)
+	_, sc = f.call(t, p, controlID, controlID+reassignCtl, appA)
+	assert.Equal(t, ua.StatusBadUserAccessDenied, sc)
+	_, sc = f.call(t, p, controlID+blockLock, controlID+blockLock+lockBreak)
+	assert.Equal(t, ua.StatusBadUserAccessDenied, sc)
+	locked, client, _ = f.lockProps(t, controlID+blockLock)
+	assert.True(t, locked)
+	assert.Equal(t, appB, client)
+	assert.Equal(t, false, f.value(t, monitorID+isControlled))
+	l := uint32(monitorID + blockLock)
+	assert.Equal(t, int32(0), f.lockStatus(t, p, l, l+lockInit, ""))
+	assert.Equal(t, int32(0), f.lockStatus(t, p, l, l+lockExit))
+}
+
+func TestControlOperation(t *testing.T) {
+	t.Parallel()
+	for op, name := range map[fxserver.ControlOperation]string{
+		fxserver.ControlEstablish: "EstablishControl", fxserver.ControlRelease: "ReleaseControl",
+		fxserver.ControlReassign: "ReassignControl", fxserver.ControlBreakLock: "BreakLock",
+		0: "ControlOperation(0)",
+	} {
+		assert.Equal(t, name, op.String())
+	}
+	assert.Nil(t, fxserver.Namespaces{}.ConnectionAdmin())
+	assert.Equal(t, "ns=2;i=5019", fxserver.Namespaces{Data: 2}.ConnectionAdmin().String())
 }
 
 // TestLockingServices: InitLock, RenewLock, ExitLock and BreakLock of the
@@ -232,7 +289,7 @@ func TestLockingServices(t *testing.T) {
 	_, sc = f.call(t, b, l, l+lockExit)
 	assert.Equal(t, ua.StatusBadUserAccessDenied, sc)
 	assert.Equal(t, int32(0), f.lockStatus(t, a, l, l+lockRenew))
-	assert.Equal(t, int32(0), f.lockStatus(t, b, l, l+lockBreak), "BreakLock is the AccessController's to allow")
+	assert.Equal(t, int32(0), f.lockStatus(t, b, l, l+lockBreak), "a ConnectionAdmin breaks it")
 	locked, _, _ := f.lockProps(t, l)
 	assert.False(t, locked)
 
@@ -343,9 +400,30 @@ func (f *fx) controlRequest(name string) *uafx.EstablishConnectionsRequest {
 func TestEstablishConnectionsControl(t *testing.T) {
 	t.Parallel()
 	// One server: each case leaves it as it found it, which the next
-	// checks.
-	f := newControlFX(t, fxserver.ConnectionOptions{})
-	b := f.client(t, appB)
+	// checks. Its ControlAuthorizer records what it decides and allows
+	// all, unless deny.
+	var auth struct {
+		sync.Mutex
+		reqs []fxserver.ControlRequest
+		deny bool
+	}
+	f := newControlFX(t, fxserver.ConnectionOptions{ControlAuthorizer: func(_ context.Context, r fxserver.ControlRequest) ua.StatusCode {
+		auth.Lock()
+		defer auth.Unlock()
+		auth.reqs = append(auth.reqs, r)
+		if auth.deny {
+			return ua.StatusBadUserAccessDenied
+		}
+		return ua.StatusOK
+	}})
+	b := f.plainClient(t, appB)
+	requests := func() []fxserver.ControlRequest {
+		auth.Lock()
+		defer auth.Unlock()
+		out := auth.reqs
+		auth.reqs = nil
+		return out
+	}
 	release := func(t *testing.T, g uint32) {
 		t.Helper()
 		_, sc := f.call(t, b, g, g+releaseCtl)
@@ -361,6 +439,16 @@ func TestEstablishConnectionsControl(t *testing.T) {
 		assert.Equal(t, []ua.StatusCode{ua.StatusOK}, er.ConfigurationDataResult)
 		assert.Equal(t, 2.5, f.value(t, gainID))
 		ep := er.ConnectionEndpointID.String()
+
+		// The commands ask the ControlAuthorizer, with the caller.
+		reqs := requests()
+		require.Len(t, reqs, 2)
+		assert.Equal(t, fxserver.ControlEstablish, reqs[0].Operation)
+		assert.Equal(t, f.id(controlID).String(), reqs[0].Group.String())
+		require.NotNil(t, reqs[0].Caller)
+		assert.Equal(t, reqs[0].Caller.ClientApplicationURI, reqs[0].LockContext)
+		assert.Equal(t, fxserver.ControlReassign, reqs[1].Operation)
+		assert.Equal(t, ep, reqs[1].LockContext)
 
 		assert.Equal(t, true, f.value(t, controlID+isControlled))
 		locked, client, user := f.lockProps(t, controlID+restrictLock)
@@ -407,6 +495,75 @@ func TestEstablishConnectionsControl(t *testing.T) {
 		assert.Empty(t, client)
 		assert.Empty(t, f.controlledBy(t, controlID))
 		assert.Equal(t, ua.StatusOK, f.writeValue(t, f.c, gainID, 9.0))
+	})
+
+	t.Run("denied", func(t *testing.T) {
+		auth.Lock()
+		auth.deny = true
+		auth.Unlock()
+		defer func() {
+			auth.Lock()
+			auth.deny = false
+			auth.Unlock()
+		}()
+		res := f.establish(t, f.controlRequest("Denied"))
+		er := res.ConnectionEndpointConfigurationResults[0]
+		assert.Equal(t, ua.StatusUncertain, res.Status)
+		assert.Equal(t, []ua.StatusCode{ua.StatusBadUserAccessDenied}, er.EstablishControlResult)
+		assert.Equal(t, false, f.value(t, controlID+isControlled))
+		assert.Len(t, f.conns.Endpoints(), 1, "only Preset")
+		_, sc := f.call(t, b, controlID, controlID+establishCtl, "")
+		assert.Equal(t, ua.StatusBadUserAccessDenied, sc, "the Method too")
+		requests()
+	})
+
+	// A session that ends during its EstablishConnections: the end waits
+	// for the call, so ReassignControlCmd still finds the Locks of
+	// EstablishControlCmd. The end is told while SetConfigurationDataCmd
+	// writes Gain, between the two.
+	t.Run("session ends during the call", func(t *testing.T) {
+		ended := make(chan struct{})
+		var once sync.Once
+		hook := func(s *server.Session, n *ua.NodeID) {
+			if s == nil || n.String() != f.id(gainID).String() {
+				return
+			}
+			once.Do(func() {
+				go func() {
+					fxserver.SessionEnded(f.conns, s)
+					close(ended)
+				}()
+				// Without the wait SessionEnded would be done by now.
+				select {
+				case <-ended:
+				case <-time.After(200 * time.Millisecond):
+				}
+			})
+		}
+		f.hooks.onWrite.Store(&hook)
+		defer f.hooks.onWrite.Store(nil)
+		// Without the communication commands: "control and close" used
+		// the PubSub configuration of fullRequest.
+		r := f.controlRequest("Ending")
+		r.CommandMask &^= uafx.SetCommunicationConfigurationCmd | uafx.EnableCommunicationCmd
+		r.CommunicationConfigurations = nil
+		r.ConnectionEndpointConfigurations[0].CommunicationLinks = nil
+		res := f.establish(t, r)
+		select {
+		case <-ended:
+		case <-time.After(5 * time.Second):
+			t.Fatal("SessionEnded was not called")
+		}
+		er := res.ConnectionEndpointConfigurationResults[0]
+		require.Equal(t, ua.StatusOK, res.Status, "%+v", er)
+		assert.Equal(t, []ua.StatusCode{ua.StatusOK}, er.ReassignControlResult)
+		locked, client, _ := f.lockProps(t, controlID+restrictLock)
+		assert.True(t, locked)
+		assert.Equal(t, er.ConnectionEndpointID.String(), client)
+		sc, _ := f.close(t, true, er.ConnectionEndpointID)
+		require.Equal(t, ua.StatusOK, sc)
+		assert.Equal(t, false, f.value(t, controlID+isControlled))
+		requests()
 	})
 
 	t.Run("held by another client", func(t *testing.T) {

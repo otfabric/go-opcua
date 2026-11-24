@@ -907,7 +907,11 @@ func (x *call) controlOne(el *element, n *ua.NodeID, reassign bool) ua.StatusCod
 		return ua.StatusBadNotSupported
 	}
 	if !reassign {
-		switch c.control(g, callerOwner(x.ctx)) {
+		o := callerOwner(x.ctx)
+		if sc := c.authorize(x.ctx, ControlRequest{Operation: ControlEstablish, Group: g.id, LockContext: o.client}); sc != ua.StatusOK {
+			return sc
+		}
+		switch c.control(g, o) {
 		case lockOK:
 			x.controlled = append(x.controlled, g)
 			return ua.StatusOK
@@ -915,6 +919,9 @@ func (x *call) controlOne(el *element, n *ua.NodeID, reassign bool) ua.StatusCod
 			return ua.StatusBadLocked
 		}
 		return ua.StatusBadInvalidState
+	}
+	if sc := c.authorize(x.ctx, ControlRequest{Operation: ControlReassign, Group: g.id, LockContext: el.ep.id.String()}); sc != ua.StatusOK {
+		return sc
 	}
 	if sc := c.mayChange(actingAs(x.ctx, el.ep), g); sc != ua.StatusOK {
 		return sc

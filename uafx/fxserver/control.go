@@ -6,6 +6,8 @@ import (
 	"context"
 	"crypto/x509"
 	"math"
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -17,6 +19,7 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
+	"github.com/otfabric/go-opcua/uafx/fxdataid"
 )
 
 // ControlGroups (Part 81 §6.5) restrict the Variables and Methods of a
@@ -29,6 +32,103 @@ import (
 // application, identified by the ApplicationUri it sent with CreateSession
 // (the LockingClient, OPC 10000-100 §7.2), or a ConnectionEndpoint, as
 // which EstablishConnections and CloseConnections act (§6.5.2).
+//
+// An item of a list that is an Object stands for the nodes of its
+// hierarchy: §6.5.2 locks the "Variables or Methods in the hierarchical
+// structure of instances" and lets the lists include Objects, without
+// saying more. The Lock covers the Object, the nodes it reaches with
+// HierarchicalReferences (Part 3 §7.3) and the Methods called on them,
+// ControlGroups excepted.
+//
+// Establishing, releasing and reassigning control and breaking a Lock need
+// the ControlAuthorizer of ConnectionOptions; without one, the well-known
+// Role ConnectionAdmin (§5.9), as §6.5.3 to §6.5.5 recommend for the
+// ControlGroup Methods and OPC 10000-100 §7.8 for BreakLock.
+
+// ControlOperation is an operation of a ControlGroup a ControlAuthorizer
+// decides.
+type ControlOperation int
+
+const (
+	// ControlEstablish is EstablishControl (Part 81 §6.5.3) and
+	// EstablishControlCmd (§6.2.4.3.6).
+	ControlEstablish ControlOperation = iota + 1
+	// ControlRelease is ReleaseControl (§6.5.4).
+	ControlRelease
+	// ControlReassign is ReassignControl (§6.5.5) and ReassignControlCmd
+	// (§6.2.4.3.8).
+	ControlReassign
+	// ControlBreakLock is BreakLock of the Lock of a ControlItemFolder
+	// (OPC 10000-100 §7.8, Part 81 §6.5.2).
+	ControlBreakLock
+)
+
+// String returns the name of the Method.
+func (o ControlOperation) String() string {
+	switch o {
+	case ControlEstablish:
+		return "EstablishControl"
+	case ControlRelease:
+		return "ReleaseControl"
+	case ControlReassign:
+		return "ReassignControl"
+	case ControlBreakLock:
+		return "BreakLock"
+	}
+	return "ControlOperation(" + strconv.Itoa(int(o)) + ")"
+}
+
+// ControlRequest is an operation a ControlAuthorizer decides.
+type ControlRequest struct {
+	Operation ControlOperation
+	// Group is the ControlGroup.
+	Group *ua.NodeID
+	// Lock is the Lock of BreakLock; nil for the other operations.
+	Lock *ua.NodeID
+	// LockContext names the owner EstablishControl and ReassignControl
+	// give the ControlGroup to (Part 81 Table 64): an ApplicationUri, the
+	// NodeId of a ConnectionEndpoint in string form, or "" for the caller.
+	// EstablishControlCmd has the caller's ApplicationUri,
+	// ReassignControlCmd the NodeId of the ConnectionEndpoint.
+	LockContext string
+	// Caller is the caller of the Method, or of EstablishConnections for
+	// the commands; nil without one.
+	Caller *server.MethodCaller
+}
+
+// ControlAuthorizer decides a ControlRequest: [ua.StatusOK] allows it, any
+// other StatusCode is the result of the Method or command, usually
+// Bad_UserAccessDenied (Part 81 Tables 65, 67 and 70, OPC 10000-100 §7.2).
+// It runs before the operation, under the lock that serializes the
+// connection Methods: it must not call them.
+type ControlAuthorizer func(ctx context.Context, r ControlRequest) ua.StatusCode
+
+// ConnectionAdmin returns the NodeId of the well-known Role ConnectionAdmin
+// (Part 81 §5.9) in the Data namespace, which a [server.RoleMapper] grants
+// to the sessions that may establish, release and reassign control and
+// break Locks without a ControlAuthorizer; nil without a Data namespace.
+func (n Namespaces) ConnectionAdmin() *ua.NodeID {
+	if n.Data == 0 {
+		return nil
+	}
+	return ua.NewNumericNodeID(n.Data, fxdataid.ServerServerCapabilitiesRoleSetConnectionAdmin)
+}
+
+// authorize decides r with the ControlAuthorizer, or by the Role
+// ConnectionAdmin.
+func (c *Connections) authorize(ctx context.Context, r ControlRequest) ua.StatusCode {
+	if mc, ok := server.MethodCallerFromContext(ctx); ok {
+		r.Caller = mc
+	}
+	if a := c.opts.ControlAuthorizer; a != nil {
+		return a(ctx, r)
+	}
+	admin := c.ns.ConnectionAdmin()
+	if r.Caller != nil && admin != nil && slices.ContainsFunc(r.Caller.Roles, admin.Equal) {
+		return ua.StatusOK
+	}
+	return ua.StatusBadUserAccessDenied
+}
 
 // The LockStatus values of EstablishControl, ReassignControl and the
 // LockingServices Methods (Part 81 Tables 64 and 69, OPC 10000-100 Tables
@@ -239,10 +339,15 @@ func (c *Connections) setupGroup(n *ua.NodeID) error {
 			locked: c.diChild(lock, "Locked"), client: c.diChild(lock, "LockingClient"),
 			user: c.diChild(lock, "LockingUser"), remaining: c.diChild(lock, "RemainingLockTime"),
 			maxInactive: durationOf(c.value(c.diChild(folder, "MaxInactiveLockTime")))}
+		seen := map[string]bool{}
 		for _, r := range c.children(folder, id.Organizes) {
-			x := r.NodeID.NodeID
-			l.items = append(l.items, x)
-			c.ctl.byItem[x.String()] = append(c.ctl.byItem[x.String()], l)
+			for _, x := range c.controlled(r.NodeID.NodeID) {
+				if !seen[x.String()] {
+					seen[x.String()] = true
+					l.items = append(l.items, x)
+					c.ctl.byItem[x.String()] = append(c.ctl.byItem[x.String()], l)
+				}
+			}
 		}
 		*f.dst = l
 		c.ctl.locks[lock.String()] = l
@@ -291,6 +396,33 @@ func (c *Connections) setupGroup(n *ua.NodeID) error {
 	return nil
 }
 
+// maxControlled bounds the nodes an item of a ControlItemFolder stands for.
+const maxControlled = 4096
+
+// controlled returns the nodes the item n of a ControlItemFolder stands
+// for: n and the nodes of its hierarchy, without ControlGroups and their
+// members, whose Methods must stay callable.
+func (c *Connections) controlled(n *ua.NodeID) []*ua.NodeID {
+	if c.isA(n, fxacid.ControlGroupType) {
+		return nil
+	}
+	out := []*ua.NodeID{n}
+	seen := map[string]bool{n.String(): true}
+	for i := 0; i < len(out) && len(out) < maxControlled; i++ {
+		for _, r := range c.children(out[i], id.HierarchicalReferences) {
+			x := r.NodeID.NodeID
+			if seen[x.String()] {
+				continue
+			}
+			seen[x.String()] = true
+			if !c.isA(x, fxacid.ControlGroupType) {
+				out = append(out, x)
+			}
+		}
+	}
+	return out
+}
+
 // --- the Guard ----------------------------------------------------------------
 
 // lockGuard is the [server.SessionEndGuard] of the Locks.
@@ -304,19 +436,22 @@ func (g lockGuard) CheckWrite(ctx context.Context, sess *server.Session, n *ua.N
 	return g.c.check(ctx, sess, n)
 }
 
-// CheckCall implements [server.Guard] for the Methods of the Locks as
-// CheckWrite does for the Variables.
-func (g lockGuard) CheckCall(ctx context.Context, sess *server.Session, _, method *ua.NodeID) ua.StatusCode {
-	return g.c.check(ctx, sess, method)
+// CheckCall implements [server.Guard] for the Methods of the Locks, and
+// the Methods called on their Objects, as CheckWrite does for the
+// Variables.
+func (g lockGuard) CheckCall(ctx context.Context, sess *server.Session, object, method *ua.NodeID) ua.StatusCode {
+	return g.c.check(ctx, sess, method, object)
 }
 
-func (c *Connections) check(ctx context.Context, sess *server.Session, n *ua.NodeID) ua.StatusCode {
-	if n == nil {
-		return ua.StatusOK
-	}
+func (c *Connections) check(ctx context.Context, sess *server.Session, ns ...*ua.NodeID) ua.StatusCode {
 	c.ctl.mu.Lock()
 	defer c.ctl.mu.Unlock()
-	ls := c.ctl.byItem[n.String()]
+	var ls []*itemLock
+	for _, n := range ns {
+		if n != nil {
+			ls = append(ls, c.ctl.byItem[n.String()]...)
+		}
+	}
 	var renew []*itemLock
 	for _, l := range ls {
 		switch {
@@ -336,13 +471,18 @@ func (c *Connections) check(ctx context.Context, sess *server.Session, n *ua.Nod
 
 // SessionEnded implements [server.SessionEndGuard]: the Locks a session
 // took go with it (OPC 10000-100 §7.2). IsControlled stays (Part 81
-// §6.5.2).
+// §6.5.2). It waits for the EstablishConnections or CloseConnections call
+// in progress, as tickLocks does: a session that ends during its own
+// EstablishConnections does not take the Locks of EstablishControlCmd
+// before ReassignControlCmd gives them to the ConnectionEndpoint.
 func (g lockGuard) SessionEnded(sess *server.Session) {
 	c := g.c
 	sid := sess.ID()
 	if sid == nil {
 		return
 	}
+	c.call.Lock()
+	defer c.call.Unlock()
 	var changed []*itemLock
 	c.ctl.mu.Lock()
 	for _, l := range c.ctl.locks {
@@ -560,10 +700,12 @@ func (c *Connections) exitLock(ctx context.Context, l *itemLock) (int32, ua.Stat
 	return lockOK, ua.StatusOK
 }
 
-// breakLock is BreakLock (OPC 10000-100 §7.8): who may call it is the
-// AccessController's and the RolePermissions' to decide. IsControlled
-// stays.
-func (c *Connections) breakLock(_ context.Context, l *itemLock) (int32, ua.StatusCode) {
+// breakLock is BreakLock (OPC 10000-100 §7.8), for whom authorize allows.
+// IsControlled stays.
+func (c *Connections) breakLock(ctx context.Context, l *itemLock) (int32, ua.StatusCode) {
+	if sc := c.authorize(ctx, ControlRequest{Operation: ControlBreakLock, Group: l.group.id, Lock: l.id}); sc != ua.StatusOK {
+		return 0, sc
+	}
 	c.ctl.mu.Lock()
 	defer c.ctl.mu.Unlock()
 	if l.owner == nil {
@@ -640,6 +782,9 @@ func (c *Connections) establishControl(ctx context.Context, g *controlGroup, arg
 	if !ok {
 		return nil, ua.StatusBadInvalidArgument
 	}
+	if sc := c.authorize(ctx, ControlRequest{Operation: ControlEstablish, Group: g.id, LockContext: lc}); sc != ua.StatusOK {
+		return nil, sc
+	}
 	st := lockInvalid
 	if o := c.ownerOf(ctx, lc); o != nil {
 		st = c.control(g, o)
@@ -667,6 +812,9 @@ func (c *Connections) control(g *controlGroup, o *lockOwner) int32 {
 func (c *Connections) releaseControl(ctx context.Context, g *controlGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if len(args) != 0 {
 		return nil, ua.StatusBadInvalidArgument
+	}
+	if sc := c.authorize(ctx, ControlRequest{Operation: ControlRelease, Group: g.id}); sc != ua.StatusOK {
+		return nil, sc
 	}
 	if sc := c.mayChange(ctx, g); sc != ua.StatusOK {
 		return nil, sc
@@ -712,6 +860,9 @@ func (c *Connections) reassignControl(ctx context.Context, g *controlGroup, args
 	lc, ok := lockContext(args)
 	if !ok || lc == "" {
 		return nil, ua.StatusBadInvalidArgument
+	}
+	if sc := c.authorize(ctx, ControlRequest{Operation: ControlReassign, Group: g.id, LockContext: lc}); sc != ua.StatusOK {
+		return nil, sc
 	}
 	if sc := c.mayChange(ctx, g); sc != ua.StatusOK {
 		return nil, sc
@@ -759,8 +910,11 @@ func (c *Connections) reassign(g *controlGroup, o *lockOwner) int32 {
 }
 
 // setControlled sets IsControlled of g and its Controls Reference (Part 81
-// §6.5.2, OPC 10000-23): from the ConnectionEndpoint that controls it. A
-// client has no Object in the address space to be the SourceNode.
+// §6.5.2, OPC 10000-23): from the ConnectionEndpoint that controls it. For
+// a client, §6.5.2 wants it from "the Object associated with the Client
+// connection" of OPC 10000-100, which the server does not have: a
+// ControlGroup a client controls has no Controls Reference, its Locks name
+// the client in LockingClient.
 func (c *Connections) setControlled(g *controlGroup, o *lockOwner) {
 	controls := ua.NewNumericNodeID(0, id.Controls)
 	gn := c.node(g.id)
