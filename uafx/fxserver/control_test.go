@@ -408,23 +408,21 @@ func TestLockTime(t *testing.T) {
 
 // TestControlItemLimit: an item of a ControlItemFolder that stands for more
 // nodes than the limit fails EnableConnections instead of leaving the rest
-// unprotected. Axis stands for itself, InputData, AxisIn and Home.
+// unprotected. Axis stands for itself, InputData, AxisIn and Home: a limit
+// of 3 fails, 4 does not (on the same server, which a failed
+// EnableConnections leaves usable).
 func TestControlItemLimit(t *testing.T) {
 	t.Parallel()
-	for _, limit := range []int{3, 4} {
-		srv := newServer(t, server.WithPubSub(nil))
-		ns, _, err := fxtest.PrepareControlGroups(srv)
-		require.NoError(t, err)
-		opts := fxserver.WithMaxControlled(fxserver.ConnectionOptions{Logger: slog.New(slog.DiscardHandler)}, limit)
-		c, err := fxserver.EnableConnections(srv, ns, opts)
-		if limit == 3 {
-			require.ErrorIs(t, err, fxserver.ErrConnections)
-			assert.ErrorContains(t, err, "more than 3 nodes")
-			continue
-		}
-		require.NoError(t, err)
-		require.NoError(t, c.Close())
-	}
+	srv := newServer(t, server.WithPubSub(nil))
+	ns, _, err := fxtest.PrepareControlGroups(srv)
+	require.NoError(t, err)
+	opts := fxserver.ConnectionOptions{Logger: slog.New(slog.DiscardHandler)}
+	_, err = fxserver.EnableConnections(srv, ns, fxserver.WithMaxControlled(opts, 3))
+	require.ErrorIs(t, err, fxserver.ErrConnections)
+	assert.ErrorContains(t, err, "more than 3 nodes")
+	c, err := fxserver.EnableConnections(srv, ns, fxserver.WithMaxControlled(opts, 4))
+	require.NoError(t, err)
+	require.NoError(t, c.Close())
 }
 
 // configureAs runs SetConfigurationDataCmd for the existing
