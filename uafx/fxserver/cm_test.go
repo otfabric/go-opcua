@@ -440,13 +440,15 @@ func TestConnectionManagerLock(t *testing.T) {
 	assert.Equal(t, false, f.value(t, ".Edit"))
 
 	// Expiry.
-	now := time.Now()
-	fxserver.SetCMClock(f.cm, func() time.Time { return now })
+	// The clock is read by the loop of the ConnectionManager too.
+	var now atomic.Int64
+	now.Store(time.Now().UnixNano())
+	fxserver.SetCMClock(f.cm, func() time.Time { return time.Unix(0, now.Load()) })
 	_, _ = f.edit(t, f.c, uafx.StartEditing, f.set)
-	now = now.Add(30 * time.Second)
+	now.Add(int64(30 * time.Second))
 	fxserver.TickCMLocks(f.cm)
 	assert.Equal(t, true, f.value(t, ".Edit"))
-	now = now.Add(31 * time.Second)
+	now.Add(int64(31 * time.Second))
 	fxserver.TickCMLocks(f.cm)
 	assert.Equal(t, false, f.value(t, ".Edit"))
 
@@ -594,6 +596,24 @@ func TestConnectionManagerFollowsManager(t *testing.T) {
 	assert.ErrorIs(t, err, ua.StatusBadShutdown)
 }
 
+// TestConnectionManagerAudit: with auditing, a call of a Method reports an
+// AuditUpdateMethodResultEventType event and a write of a set an
+// AuditUpdateConnectionConfigurationSetEventType event (§6.7.4, §8.5).
+func TestConnectionManagerAudit(t *testing.T) {
+	t.Parallel()
+	f := newCMFX(t, fxserver.ConnectionManagerOptions{Editable: true}, server.WithAuditing(true))
+	events := watchEvents(t, f.c, ua.NewNumericNodeID(0, id.Server), "EventType", "SourceNode", "Status")
+	_, _ = f.edit(t, f.c, uafx.StartEditing, f.set)
+	call := nextEvent(t, events, ua.NewNumericNodeID(f.ns.Data, fxdataid.AuditUpdateMethodResultEventType))
+	assert.Equal(t, ua.NewNumericNodeID(f.ns.CM, fxcmid.FxRootConnectionManager).String(), call[1].Value().(*ua.NodeID).String())
+	assert.Equal(t, true, call[2].Value())
+	pi := f.node(".Flow[Flow1].PublishingInterval")
+	require.Equal(t, ua.StatusOK, f.write(t, f.c, pi, 20.0))
+	w := nextEvent(t, events, ua.NewNumericNodeID(f.ns.CM, fxcmid.AuditUpdateConnectionConfigurationSetEventType))
+	assert.Equal(t, pi.String(), w[1].Value().(*ua.NodeID).String())
+	assert.Equal(t, true, w[2].Value())
+}
+
 // TestEnableConnectionManagerErrors: the model and the Manager are needed.
 func TestEnableConnectionManagerErrors(t *testing.T) {
 	t.Parallel()
@@ -604,12 +624,11 @@ func TestEnableConnectionManagerErrors(t *testing.T) {
 	require.NoError(t, err)
 	_, err = fxserver.EnableConnectionManager(srv, ns, fxserver.ConnectionManagerOptions{})
 	assert.ErrorIs(t, err, fxserver.ErrConnectionManager)
-	_ = fxdataid.AuditUpdateMethodResultEventType
 
 	// A second ConnectionManager on the server finds its nodes taken.
 	f := newCMFX(t, fxserver.ConnectionManagerOptions{Editable: true})
 	_, err = fxserver.EnableConnectionManager(f.srv, f.ns, fxserver.ConnectionManagerOptions{Manager: f.m})
-	require.Error(t, err)
+	require.ErrorIs(t, err, fxserver.ErrConnectionManager)
 	_, ok := f.cm.SetNode(fxcm.SetKey{Folder: []string{"Plant"}, Name: "Line1"})
 	assert.True(t, ok, "the failed second one leaves the first one's nodes")
 

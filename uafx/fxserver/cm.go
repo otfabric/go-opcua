@@ -179,13 +179,13 @@ func EnableConnectionManager(srv *server.Server, ns Namespaces, opts ConnectionM
 	}
 	if err := c.addMembers(); err != nil {
 		c.dropAll()
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrConnectionManager, err)
 	}
 	if opts.File {
 		f, err := c.addFile()
 		if err != nil {
 			c.dropAll()
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", ErrConnectionManager, err)
 		}
 		c.file = f
 	}

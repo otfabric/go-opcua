@@ -21,8 +21,11 @@ behaviour you may notice, and the deviations of peers are in
   ControlGroup a client controls has no Controls Reference (Part 81
   §6.5.2 wants it from the Object of the client connection, which the
   server does not have).
-  The ConnectionManager (`uafx/fxcm`) is a Go library: a server has no
-  ConnectionManager Object or Methods; it configures no SecurityKeyServer,
+  The ConnectionManager (`uafx/fxcm`, served by
+  `fxserver.EnableConnectionManager`) keeps its sets and the records of its
+  endpoints in memory; it has no ConnectionManagerLog, lists no
+  GlobalDiscoveryServers, reflects no Qos or ReceiveQos of an edited flow
+  onto the PubSub configuration; it configures no SecurityKeyServer,
   asks no GDS, resolves no AliasNames, generates no PubSub configuration
   from the flows, and cannot adapt subscribers to the PublisherId of a
   matched PubSubConnection on AutomationComponents with

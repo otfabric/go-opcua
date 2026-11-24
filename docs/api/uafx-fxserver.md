@@ -21,6 +21,12 @@ Import the model and enable the connections before the server starts.
 ## Variables
 
 ```go
+var ErrConnectionManager = errors.New("fxserver: ConnectionManager")
+```
+
+ErrConnectionManager is the error of EnableConnectionManager.
+
+```go
 var ErrConnections = errors.New("fxserver: connections")
 ```
 
@@ -33,6 +39,14 @@ var ErrModel = errors.New("fxserver: UAFX model")
 ErrModel reports that the UAFX model cannot be added to the server.
 
 ## Functions
+
+### func ConfigureAdmin
+
+```go
+func ConfigureAdmin() *ua.NodeID
+```
+
+ConfigureAdmin returns the NodeId of the well-known Role ConfigureAdmin (Part 3 §4.9.2), which a [server.RoleMapper](https://pkg.go.dev/github.com/otfabric/go-opcua/server#RoleMapper) grants to the sessions that may configure sets without a CMAuthorizer (§6.8.2, F.3.2).
 
 ### func ImportNodeSet
 
@@ -51,6 +65,155 @@ type AssetVerifier func(ctx context.Context, asset *ua.NodeID, mode uafx.AssetVe
 ```
 
 AssetVerifier verifies an Asset as its VerifyAsset Method does (Part 81 §6.3.3): it compares the expected values with those of the Asset in the verification mode and returns the VerificationResult, the errors of the two lists (one StatusCode per element, Tables 33 and 34) and the status of the call (Good, Uncertain, Bad\_InvalidArgument or Bad\_NotSupported, Table 32). Which values make an Asset compatible is the Asset's to say.
+
+### type CMAuthorizer
+
+```go
+type CMAuthorizer func(ctx context.Context, r CMRequest) ua.StatusCode
+```
+
+CMAuthorizer decides a CMRequest: [ua.StatusOK](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusOK) allows it, any other StatusCode is the result for the set, the write or the Method, usually Bad\_UserAccessDenied (Part 81 Tables 82 and 86, F.40).
+
+### type CMOperation
+
+```go
+type CMOperation int
+```
+
+CMOperation is an operation on the ConnectionManager a CMAuthorizer decides.
+
+```go
+const (
+	// CMEdit is EditConnectionConfigurationSets on one set (§6.7.4).
+	CMEdit CMOperation = iota + 1
+	// CMProcess is ProcessConnectionConfigurationSets on one set (§6.7.5).
+	CMProcess
+	// CMWrite is a write of a SelectionList Variable of a set (§6.8.1).
+	CMWrite
+	// CMFileWrite is Open for writing of ConnectionManagerConfiguration
+	// (F.3.2).
+	CMFileWrite
+	// CMBreakLock is BreakLock of the Lock of a set (OPC 10000-100 §7.8).
+	CMBreakLock
+)
+```
+
+The operations of a CMAuthorizer.
+
+#### func (CMOperation) String
+
+```go
+func (o CMOperation) String() string
+```
+
+### type CMRequest
+
+```go
+type CMRequest struct {
+	Operation CMOperation
+	// Set is the ConnectionConfigurationSet Object; nil for CMFileWrite.
+	Set *ua.NodeID
+	// Key is the identity of the set; zero for CMFileWrite.
+	Key fxcm.SetKey
+	// Edit is the Action of CMEdit, Process that of CMProcess.
+	Edit    uafx.FxEdit
+	Process uafx.FxProcess
+	// Node is the Variable of CMWrite; nil for the other operations.
+	Node *ua.NodeID
+	// Caller is the caller of the Method; nil for CMWrite.
+	Caller *server.MethodCaller
+	// Session is the session of the write of CMWrite; nil for the other
+	// operations.
+	Session *server.Session
+}
+```
+
+CMRequest is an operation a CMAuthorizer decides.
+
+### type ConnectionManager
+
+```go
+type ConnectionManager struct {
+
+	// FxRoot.ConnectionManager
+	// its ConnectionConfigurationSets
+
+	// mu guards the projection: the sets, their nodes and the edits.
+
+	// by SetKey.String
+	// by the NodeId of the set Object
+
+	// the CM-level nodes it added
+
+	// nil is time.Now
+
+	// The events of the Manager, handled in order by loop.
+
+}
+```
+
+ConnectionManager exposes an fxcm.Manager as the ConnectionManager Object of a server (Part 81 §6.7, §12.3): its sets as ConnectionConfigurationSetType Objects, EditConnectionConfigurationSets, ProcessConnectionConfigurationSets, the events of the set state machines and, optionally, ConnectionManagerConfiguration (F.3).
+
+#### func EnableConnectionManager
+
+```go
+func EnableConnectionManager(srv *server.Server, ns Namespaces, opts ConnectionManagerOptions) (*ConnectionManager, error)
+```
+
+EnableConnectionManager exposes opts.Manager on srv, which must have the UAFX CM model (AddModel with ModelCM): the sets of the Manager below FxRoot.ConnectionManager.ConnectionConfigurationSets, the Methods EditConnectionConfigurationSets and ProcessConnectionConfigurationSets, AggregatedCurrentState, the Diagnostics counters and Capabilities (§6.7.2, §6.7.6), and with opts.File ConnectionManagerConfiguration (F.3). It adds a Guard to srv, which releases the Lock of a set in edit when its session ends (§6.7.4): call it before srv starts.
+
+#### func (ConnectionManager) Close
+
+```go
+func (c *ConnectionManager) Close() error
+```
+
+Close stops following the Manager. The nodes and Methods stay; the Methods fail with Bad\_Shutdown.
+
+#### func (ConnectionManager) Flush
+
+```go
+func (c *ConnectionManager) Flush()
+```
+
+Flush applies the events the Manager reported so far to the address space: a caller that changed the Manager directly sees the change in the nodes afterwards.
+
+#### func (ConnectionManager) SetNode
+
+```go
+func (c *ConnectionManager) SetNode(key fxcm.SetKey) (*ua.NodeID, bool)
+```
+
+SetNode returns the NodeId of the ConnectionConfigurationSet Object of key, false when the Manager has no such set.
+
+### type ConnectionManagerOptions
+
+```go
+type ConnectionManagerOptions struct {
+	// Manager is the engine whose sets the server exposes. It is not
+	// closed by Close.
+	Manager *fxcm.Manager
+	// Editable adds the Edit Property to every set, which
+	// EditConnectionConfigurationSets needs (§6.8.2, §6.7.4): a set without
+	// it is Bad_InvalidState.
+	Editable bool
+	// File adds ConnectionManagerConfiguration (Annex F.3).
+	File bool
+	// Authorizer decides Edit, Process, SelectionList writes, file writes
+	// and BreakLock. Nil: the sessions with the well-known Role
+	// ConfigureAdmin (Part 3 §4.9.2), which §6.8.2 and F.3.2 recommend.
+	Authorizer CMAuthorizer
+	// MaxInactiveLockTime is how long the Lock of a set in edit lasts
+	// without RenewLock or a write of the set (OPC 10000-100 §7.2). Zero:
+	// the MaxInactiveLockTime of the ServerCapabilities of DI, else one
+	// minute.
+	MaxInactiveLockTime time.Duration
+	// Logger receives debug messages; nil is slog.Default.
+	Logger *slog.Logger
+}
+```
+
+ConnectionManagerOptions configure EnableConnectionManager.
 
 ### type ConnectionOptions
 
