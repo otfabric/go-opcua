@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/pubsub"
+	"github.com/otfabric/go-opcua/server"
 )
 
 // SetPubSubOps replaces the runtime operations that close ConnectionEndpoints;
@@ -47,3 +48,19 @@ func SetRetryCleanup(c *Connections, d time.Duration) {
 	defer c.mu.Unlock()
 	c.retryCleanup = d
 }
+
+// SetLockClock replaces the clock of the Locks of the ControlGroups.
+func SetLockClock(c *Connections, now func() time.Time) { c.ctl.clock.Store(&now) }
+
+// TickLocks runs one tick of the Locks as the monitor does.
+func TickLocks(c *Connections) { c.tickLocks() }
+
+// WithMaxControlled sets the most nodes an item of a ControlItemFolder
+// stands for.
+func WithMaxControlled(o ConnectionOptions, n int) ConnectionOptions {
+	o.maxControlled = n
+	return o
+}
+
+// SessionEnded tells the Guard of the Locks that the session s ended.
+func SessionEnded(c *Connections, s *server.Session) { lockGuard{c}.SessionEnded(s) }

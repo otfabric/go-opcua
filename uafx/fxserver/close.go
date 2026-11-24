@@ -14,7 +14,7 @@ import (
 
 func (c *Connections) closeHandler(ac *automationComponent) server.MethodHandler {
 	return func(ctx context.Context, obj, method *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-		out, sc := c.closeCall(ac, args)
+		out, sc := c.closeCall(ctx, ac, args)
 		c.auditCall(ctx, ac, method, args, out, sc)
 		return out, sc
 	}
@@ -23,7 +23,7 @@ func (c *Connections) closeHandler(ac *automationComponent) server.MethodHandler
 // closeCall runs a CloseConnections call (Part 81 §6.2.5): it returns
 // Uncertain when an element fails (Table 23) and one StatusCode per element
 // (Table 24).
-func (c *Connections) closeCall(ac *automationComponent, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+func (c *Connections) closeCall(ctx context.Context, ac *automationComponent, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if len(args) != 2 || args[0] == nil || args[1] == nil {
 		return nil, ua.StatusBadArgumentsMissing
 	}
@@ -48,7 +48,7 @@ func (c *Connections) closeCall(ac *automationComponent, args []*ua.Variant) ([]
 	results := make([]ua.StatusCode, len(nodes))
 	status := ua.StatusOK
 	for i, n := range nodes {
-		results[i] = c.closeOne(n, remove, scope)
+		results[i] = c.closeOne(ctx, n, remove, scope)
 		if results[i] != ua.StatusOK {
 			status = ua.StatusUncertain
 		}
@@ -57,7 +57,7 @@ func (c *Connections) closeCall(ac *automationComponent, args []*ua.Variant) ([]
 	return []*ua.Variant{ua.MustVariant(results)}, status
 }
 
-func (c *Connections) closeOne(n *ua.NodeID, remove bool, scope map[string]bool) ua.StatusCode {
+func (c *Connections) closeOne(ctx context.Context, n *ua.NodeID, remove bool, scope map[string]bool) ua.StatusCode {
 	if isNull(n) {
 		return ua.StatusBadNodeIDInvalid
 	}
@@ -69,6 +69,15 @@ func (c *Connections) closeOne(n *ua.NodeID, remove bool, scope map[string]bool)
 	c.mu.Unlock()
 	switch {
 	case e != nil && scope[e.fe.String()]:
+		if remove {
+			// Remove releases the ControlGroups e controls (§6.2.5.2):
+			// the ControlAuthorizer decides, before anything changes.
+			for _, g := range c.endpointGroups(e) {
+				if sc := c.authorize(ctx, ControlRequest{Operation: ControlCloseRemove, Group: g, Endpoint: e.id}); sc != ua.StatusOK {
+					return sc
+				}
+			}
+		}
 		return c.closeEndpoint(e, remove)
 	case e != nil || c.isA(n, fxacid.ConnectionEndpointType):
 		// A ConnectionEndpoint of another AutomationComponent.
@@ -151,8 +160,10 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 		c.deleteEndpoint(e)
 	case remove:
 		// A preconfigured endpoint stays; the RelatedEndpoint the call set
-		// goes, so that it is no longer in use (Part 81 Table 12).
+		// goes, so that it is no longer in use (Part 81 Table 12), and so
+		// do its ControlGroups (§6.2.5.2).
 		c.write(c.childID(e.id, "RelatedEndpoint"), &ua.Variant{})
+		c.releaseEndpoint(e)
 	}
 	return ua.StatusOK
 }

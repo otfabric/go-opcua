@@ -78,12 +78,41 @@ const (
 	ConnLabels    = 1245 // Motion/ConfigurationData/Labels, String[] {" a ", "b"}, read-only
 	ConnGroup     = 1251 // Motion/ControlGroups/Group, a ControlGroup
 	ConnNotAGroup = 1252 // Motion/ControlGroups/NotAGroup
-	ConnAxis      = 1260 // Motion/Axis, a SubFunctionalEntity
-	ConnAxisIn    = 1262 // Axis/InputData/AxisIn, Double
-	ConnPreset    = 1300 // Motion/ConnectionEndpoints/Preset, Subscriber of Setpoint
-	ConnPeer      = 3000 // the AutomationComponent Peer
-	ConnRemote    = 3200 // Peer/FunctionalEntities/Remote
+	// ConnControl is Motion/ControlGroups/Control of control_groups.xml
+	// (PrepareControlGroups), a ControlGroup that
+	// blocks Table and restricts Gain, ConnReset and the Object ConnAxis
+	// (with ConnAxisIn and ConnHome); ConnMonitor blocks
+	// Limit and restricts Gain, with a MaxInactiveLockTime of 300 ms on
+	// its ListToRestrict. Each has ListToBlock at +1 (its Lock at +2, the
+	// Lock's Properties Locked, LockingClient, LockingUser,
+	// RemainingLockTime at +3 to +6 and Methods InitLock, RenewLock,
+	// ExitLock, BreakLock at +7 to +10), ListToRestrict at +11 (Lock at
+	// +12, ...), IsControlled at +23 and the Methods EstablishControl,
+	// ReleaseControl, ReassignControl at +24 to +26.
+	ConnControl = 1400
+	ConnMonitor = 1440
+	ConnReset   = 1297 // Motion/Reset, a Method of control_groups.xml
+	ConnHome    = 1298 // Axis/Home, a Method of control_groups.xml
+	ConnAxis    = 1260 // Motion/Axis, a SubFunctionalEntity
+	ConnAxisIn  = 1262 // Axis/InputData/AxisIn, Double
+	ConnPreset  = 1300 // Motion/ConnectionEndpoints/Preset, Subscriber of Setpoint
+	ConnPeer    = 3000 // the AutomationComponent Peer
+	ConnRemote  = 3200 // Peer/FunctionalEntities/Remote
 )
+
+//go:embed control_groups.xml
+var controlGroupsNodeSet []byte
+
+// PrepareControlGroups is PrepareConnections with control_groups.xml: the
+// ControlGroups ConnControl and ConnMonitor of Motion and the Methods
+// ConnReset and ConnHome. Call it before fxserver.EnableConnections.
+func PrepareControlGroups(srv *server.Server) (fxserver.Namespaces, uint16, error) {
+	ns, idx, err := PrepareConnections(srv)
+	if err != nil {
+		return ns, idx, err
+	}
+	return ns, idx, fxserver.ImportNodeSet(srv, controlGroupsNodeSet)
+}
 
 // PrepareConnections adds the AC model and connections.xml to srv, which
 // must not be started yet, have an ApplicationUri and PubSub, and sets the

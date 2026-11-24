@@ -169,7 +169,7 @@ func TestDiagnostics_Access(t *testing.T) {
 	require.Equal(t, ua.StatusOK, d.checkWrite(cfgAdmin, flag))
 	require.Equal(t, ua.StatusOK, d.checkWrite(me, ua.NewNumericNodeID(0, 1)))
 	ctx := context.Background()
-	require.Equal(t, ua.StatusBadUserAccessDenied, s.checkWrite(ctx, me, flag))
+	require.Equal(t, ua.StatusBadUserAccessDenied, s.checkWriteNow(ctx, me, flag))
 	require.Equal(t, ua.StatusBadUserAccessDenied, s.checkRead(ctx, other, obj))
 	require.Equal(t, ua.StatusBadUserAccessDenied, s.checkBrowse(ctx, other, obj))
 	require.Equal(t, ua.StatusOK, s.checkBrowse(ctx, me, obj))

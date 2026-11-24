@@ -53,6 +53,27 @@ type ConnectionOptions struct {
 	// Interval is how often the Status of the ConnectionEndpoints follows
 	// their DataSetReaders and DataSetWriters; 0 is 100 ms.
 	Interval time.Duration
+	// MaxInactiveLockTime is the MaxInactiveLockTime of the server (OPC
+	// 10000-100 §7.4), after which an inactive Lock of a ControlGroup is
+	// released; the Property of ServerCapabilities gets it. 0 takes the
+	// value of that Property, or one minute when it has none. A
+	// MaxInactiveLockTime of a ControlItemFolder has precedence (Part 81
+	// §6.5.6).
+	MaxInactiveLockTime time.Duration
+	// ControlAuthorizer decides who establishes, releases and reassigns
+	// the control of a ControlGroup, with its Methods or the commands of
+	// EstablishConnections, who breaks a Lock of one, who removes a
+	// ConnectionEndpoint that controls one with CloseConnections, and who
+	// writes through the Lock of a ConnectionEndpoint with
+	// SetConfigurationDataCmd (see ControlOperation). nil allows the
+	// sessions with the well-known Role ConnectionAdmin
+	// ([Namespaces.ConnectionAdmin]) only, as Part 81 §6.5.3 to §6.5.5
+	// recommend; the others get Bad_UserAccessDenied. InitLock, RenewLock
+	// and ExitLock are the owner's (OPC 10000-100 §7.5 to §7.7) and the
+	// AccessController's.
+	ControlAuthorizer ControlAuthorizer
+	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
+	maxControlled int
 	// Logger logs what the connections do; nil is slog.Default().
 	Logger *slog.Logger
 }
@@ -63,9 +84,15 @@ type ConnectionOptions struct {
 // PubSubConnectionEndpoints (§6.6.3) and the CommHealth and
 // OperationalHealth they make up (§6.4.8, §10.34, §9.1.2).
 //
-// Persistent ConnectionEndpoints (IsPersistent, SupportsPersistence) and
-// ControlGroups (EstablishControlCmd and ReassignControlCmd on a
-// ControlGroup) are not supported: they fail with Bad_NotSupported.
+// It serves the ControlGroups of the FunctionalEntities (§6.5): their
+// Methods EstablishControl, ReleaseControl and ReassignControl, the
+// LockingServices of their ListToBlock and ListToRestrict (OPC 10000-100
+// §7), EstablishControlCmd and ReassignControlCmd, and it rejects the
+// writes and calls the Locks forbid with Bad_Locked, with a [server.Guard]
+// that EnableConnections adds to the server when there are ControlGroups.
+//
+// Persistent ConnectionEndpoints (IsPersistent, SupportsPersistence) are
+// not supported: they fail with Bad_NotSupported.
 type Connections struct {
 	srv  *server.Server
 	ns   Namespaces
@@ -86,6 +113,7 @@ type Connections struct {
 	once sync.Once
 
 	ops pubsubOps
+	ctl controls
 	// beforeExpire, when set by a test, runs after the monitor found an
 	// expired CleanupTimeout and before it takes c.call; guarded by mu.
 	beforeExpire func()
@@ -174,6 +202,9 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 			c.adopt(fe)
 		}
 	}
+	if err := c.setupControls(); err != nil {
+		return nil, err
+	}
 	c.refreshAll()
 	go c.monitor()
 	return c, nil
@@ -185,6 +216,12 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 // Call service checks the arguments against them (Part 4 §5.11.2), but a
 // NodeSet may leave them to the type.
 func (c *Connections) ensureArguments(m *ua.NodeID, decl uint32) error {
+	return c.ensureArgumentsIn(m, ua.NewNumericNodeID(c.ns.AC, decl))
+}
+
+// ensureArgumentsIn is ensureArguments with the declaration decl in any
+// namespace.
+func (c *Connections) ensureArgumentsIn(m, decl *ua.NodeID) error {
 	mn := c.node(m)
 	ns, err := c.srv.Namespace(int(m.Namespace()))
 	if mn == nil || err != nil {
@@ -196,7 +233,7 @@ func (c *Connections) ensureArguments(m *ua.NodeID, decl uint32) error {
 			have[r.BrowseName.Name] = true
 		}
 	}
-	for _, r := range c.children(ua.NewNumericNodeID(c.ns.AC, decl), id.HasProperty) {
+	for _, r := range c.children(decl, id.HasProperty) {
 		name := r.BrowseName.Name
 		if have[name] || name != "InputArguments" && name != "OutputArguments" {
 			continue
@@ -299,10 +336,27 @@ func (c *Connections) browse(n, refType *ua.NodeID, dir ua.BrowseDirection) []*u
 // child returns the reference to the hierarchical child of n with the
 // BrowseName name in the AC namespace.
 func (c *Connections) child(n *ua.NodeID, name string) *ua.ReferenceDescription {
+	return c.childIn(n, c.ns.AC, name)
+}
+
+// childIn returns the reference to the hierarchical child of n with the
+// BrowseName name in the namespace ns.
+func (c *Connections) childIn(n *ua.NodeID, ns uint16, name string) *ua.ReferenceDescription {
 	for _, r := range c.children(n, id.HierarchicalReferences) {
-		if r.BrowseName != nil && r.BrowseName.Name == name && r.BrowseName.NamespaceIndex == c.ns.AC {
+		if r.BrowseName != nil && r.BrowseName.Name == name && r.BrowseName.NamespaceIndex == ns {
 			return r
 		}
+	}
+	return nil
+}
+
+// diChild is childID for a child with a BrowseName in the DI namespace.
+func (c *Connections) diChild(n *ua.NodeID, name string) *ua.NodeID {
+	if c.ns.DI == 0 {
+		return nil
+	}
+	if r := c.childIn(n, c.ns.DI, name); r != nil {
+		return r.NodeID.NodeID
 	}
 	return nil
 }

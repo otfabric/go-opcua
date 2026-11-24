@@ -1345,6 +1345,21 @@ type GroupCertificate struct {
 
 GroupCertificate is a certificate of a certificate group with its issuer chain and private key.
 
+### type Guard
+
+```go
+type Guard interface {
+	CheckWrite(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
+	CheckCall(ctx context.Context, session *Session, objectID, methodID *ua.NodeID) ua.StatusCode
+}
+```
+
+A Guard vets the changes clients make to the address space, after the [AccessController](#type-accesscontroller) allowed them. Where the AccessController decides who may do what, a Guard decides what the state of the server allows at the time, such as the locks of the LockingServices of OPC 10000-100 §7, which reject the modifications of a locked element by other applications with Bad\_Locked (§7.5).
+
+The server consults its Guards, in the order they were added, for every Variable value a client writes (the Write service and [Server.WriteValue](#func-server-writevalue)) and for every Method a client calls (the Call service). A Guard returns [ua.StatusOK](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusOK) to allow the change or the Bad StatusCode to reject it with. The [Session](#type-session) is that of the request (nil without one); ctx is that of the request, or of the Method call for [Server.WriteValue](#func-server-writevalue).
+
+A Guard is called on the goroutine of the request and must not block. A Guard that also implements [SessionEndGuard](#type-sessionendguard) learns when sessions end, one that implements [OperationGuard](#type-operationguard) when the operations it allowed are over.
+
 ### type HTTPSClientAuth
 
 ```go
@@ -2604,6 +2619,18 @@ type NonExclusiveLimits struct {
 
 NonExclusiveLimits are the states of a non-exclusive limit alarm (NonExclusiveLimitAlarmType, Part 9 §5.8.13): any combination may be active.
 
+### type OperationGuard
+
+```go
+type OperationGuard interface {
+	Guard
+	WriteDone(ctx context.Context, session *Session, nodeID *ua.NodeID)
+	CallDone(ctx context.Context, session *Session, objectID, methodID *ua.NodeID)
+}
+```
+
+OperationGuard is a [Guard](#type-guard) that is told when a write or call it allowed is over, so that it knows which operations are active: OPC 10000-100 §7.2 rejects a lock request while operations are active that the lock would prevent. The server calls WriteDone, with the arguments of CheckWrite, at the end of the Write request or of [Server.WriteValue](#func-server-writevalue), and CallDone when the Method returned; a Guard that allowed an operation another Guard rejected is told right away. They must not block.
+
 ### type OperationalLimits
 
 ```go
@@ -3844,6 +3871,9 @@ type Server struct {
 
 	// methods stores registered server-side method handlers keyed by "objectID\x00methodID".
 
+	// guards are the Guards of AddGuard: a slice AddGuard replaces, never
+	// changes in place, so that requests read it without a lock.
+
 	// writers counts the ValueWriter goroutines; Close waits for them.
 
 	SubscriptionService  *SubscriptionService
@@ -3928,6 +3958,14 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error)
 ```
 
 AddCondition creates a condition instance (Part 9 §5.5) with the components of its type and the options of cfg, attaches it to its source node and returns it. The condition reports an initial event.
+
+#### func (Server) AddGuard
+
+```go
+func (s *Server) AddGuard(g Guard)
+```
+
+AddGuard adds g to the Guards of the server. Add Guards before the server starts.
 
 #### func (Server) AddNamespace
 
@@ -4451,6 +4489,14 @@ type Session struct {
 
 Session is the session a request came in on, as an [AccessController](#type-accesscontroller) sees it. It is read-only: it reports who the session is, not the secrets of the session (the AuthenticationToken, the nonces). A nil \*Session is a request without a session; its methods return zero values.
 
+#### func (Session) ClientApplicationURI
+
+```go
+func (h *Session) ClientApplicationURI() string
+```
+
+ClientApplicationURI returns the ApplicationUri of the ApplicationDescription the client sent with CreateSession (Part 4 §5.6.2); "" for a nil Session or a client that sent none.
+
 #### func (Session) ClientCertificate
 
 ```go
@@ -4511,6 +4557,17 @@ const (
 ```go
 func (r SessionCloseReason) String() string
 ```
+
+### type SessionEndGuard
+
+```go
+type SessionEndGuard interface {
+	Guard
+	SessionEnded(session *Session)
+}
+```
+
+SessionEndGuard is a [Guard](#type-guard) that is told when a session ended, so that it can release what the session held (OPC 10000-100 §7.2: a lock is removed when its Session ends).
 
 ### type SessionInfo
 

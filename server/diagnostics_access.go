@@ -165,12 +165,24 @@ func (s *Server) checkRead(ctx context.Context, sess *session, nid *ua.NodeID) u
 	return s.cfg.accessController.CheckRead(ctx, sess.handle(), nid)
 }
 
-// checkWrite is checkRead for writing a node.
-func (s *Server) checkWrite(ctx context.Context, sess *session, nid *ua.NodeID) ua.StatusCode {
+// checkWrite is checkRead for writing a node. When it allows the write,
+// done tells the OperationGuards it is over; else it is a no-op.
+func (s *Server) checkWrite(ctx context.Context, sess *session, nid *ua.NodeID) (ua.StatusCode, func()) {
 	if st := s.diag.checkWrite(sess, nid); st != ua.StatusOK {
-		return st
+		return st, noDone
 	}
-	return s.cfg.accessController.CheckWrite(ctx, sess.handle(), nid)
+	if st := s.cfg.accessController.CheckWrite(ctx, sess.handle(), nid); st != ua.StatusOK {
+		return st, noDone
+	}
+	return s.guardWrite(ctx, sess, nid)
+}
+
+// checkWriteNow is checkWrite for a change that is over when it returns,
+// such as an update of history.
+func (s *Server) checkWriteNow(ctx context.Context, sess *session, nid *ua.NodeID) ua.StatusCode {
+	st, done := s.checkWrite(ctx, sess, nid)
+	done()
+	return st
 }
 
 // checkBrowse is checkRead for browsing a node.

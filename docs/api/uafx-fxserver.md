@@ -78,8 +78,30 @@ type ConnectionOptions struct {
 	// Interval is how often the Status of the ConnectionEndpoints follows
 	// their DataSetReaders and DataSetWriters; 0 is 100 ms.
 	Interval time.Duration
+	// MaxInactiveLockTime is the MaxInactiveLockTime of the server (OPC
+	// 10000-100 §7.4), after which an inactive Lock of a ControlGroup is
+	// released; the Property of ServerCapabilities gets it. 0 takes the
+	// value of that Property, or one minute when it has none. A
+	// MaxInactiveLockTime of a ControlItemFolder has precedence (Part 81
+	// §6.5.6).
+	MaxInactiveLockTime time.Duration
+	// ControlAuthorizer decides who establishes, releases and reassigns
+	// the control of a ControlGroup, with its Methods or the commands of
+	// EstablishConnections, who breaks a Lock of one, who removes a
+	// ConnectionEndpoint that controls one with CloseConnections, and who
+	// writes through the Lock of a ConnectionEndpoint with
+	// SetConfigurationDataCmd (see ControlOperation). nil allows the
+	// sessions with the well-known Role ConnectionAdmin
+	// ([Namespaces.ConnectionAdmin]) only, as Part 81 §6.5.3 to §6.5.5
+	// recommend; the others get Bad_UserAccessDenied. InitLock, RenewLock
+	// and ExitLock are the owner's (OPC 10000-100 §7.5 to §7.7) and the
+	// AccessController's.
+	ControlAuthorizer ControlAuthorizer
+	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
+
 	// Logger logs what the connections do; nil is slog.Default().
 	Logger *slog.Logger
+
 }
 ```
 
@@ -106,7 +128,9 @@ type Connections struct {
 
 Connections serves the connection Methods of the AutomationComponents of a server: EstablishConnections (Part 81 §6.2.4) and CloseConnections (§6.2.5) with the PubSub communication model, the Status of the PubSubConnectionEndpoints (§6.6.3) and the CommHealth and OperationalHealth they make up (§6.4.8, §10.34, §9.1.2).
 
-Persistent ConnectionEndpoints (IsPersistent, SupportsPersistence) and ControlGroups (EstablishControlCmd and ReassignControlCmd on a ControlGroup) are not supported: they fail with Bad\_NotSupported.
+It serves the ControlGroups of the FunctionalEntities (§6.5): their Methods EstablishControl, ReleaseControl and ReassignControl, the LockingServices of their ListToBlock and ListToRestrict (OPC 10000-100 §7), EstablishControlCmd and ReassignControlCmd, and it rejects the writes and calls the Locks forbid with Bad\_Locked, with a [server.Guard](https://pkg.go.dev/github.com/otfabric/go-opcua/server#Guard) that EnableConnections adds to the server when there are ControlGroups.
+
+Persistent ConnectionEndpoints (IsPersistent, SupportsPersistence) are not supported: they fail with Bad\_NotSupported.
 
 #### func EnableConnections
 
@@ -149,6 +173,84 @@ func (c *Connections) Status(endpoint *ua.NodeID) (uafx.ConnectionEndpointStatus
 ```
 
 Status returns the Status of the ConnectionEndpoint endpoint, and false if the connections do not manage it.
+
+### type ControlAuthorizer
+
+```go
+type ControlAuthorizer func(ctx context.Context, r ControlRequest) ua.StatusCode
+```
+
+ControlAuthorizer decides a ControlRequest: [ua.StatusOK](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusOK) allows it, any other StatusCode is the result of the Method or command, usually Bad\_UserAccessDenied (Part 81 Tables 65, 67 and 70, OPC 10000-100 §7.2). It runs before the operation, under the lock that serializes the connection Methods: it must not call them.
+
+### type ControlOperation
+
+```go
+type ControlOperation int
+```
+
+ControlOperation is an operation of a ControlGroup a ControlAuthorizer decides.
+
+```go
+const (
+	// ControlEstablish is EstablishControl (Part 81 §6.5.3) and
+	// EstablishControlCmd (§6.2.4.3.6).
+	ControlEstablish ControlOperation = iota + 1
+	// ControlRelease is ReleaseControl (§6.5.4).
+	ControlRelease
+	// ControlReassign is ReassignControl (§6.5.5) and ReassignControlCmd
+	// (§6.2.4.3.8).
+	ControlReassign
+	// ControlBreakLock is BreakLock of the Lock of a ControlItemFolder
+	// (OPC 10000-100 §7.8, Part 81 §6.5.2).
+	ControlBreakLock
+	// ControlCloseRemove is CloseConnections with Remove of a
+	// ConnectionEndpoint that controls the ControlGroup, which releases it
+	// (§6.2.5.2).
+	ControlCloseRemove
+	// ControlWriteAsEndpoint is SetConfigurationDataCmd writing, as a
+	// ConnectionEndpoint (§6.2.4.3.7), a Variable of a Lock that endpoint
+	// holds.
+	ControlWriteAsEndpoint
+)
+```
+
+#### func (ControlOperation) String
+
+```go
+func (o ControlOperation) String() string
+```
+
+String returns the name of the Method.
+
+### type ControlRequest
+
+```go
+type ControlRequest struct {
+	Operation ControlOperation
+	// Group is the ControlGroup.
+	Group *ua.NodeID
+	// Lock is the Lock of BreakLock and ControlWriteAsEndpoint; nil for
+	// the other operations.
+	Lock *ua.NodeID
+	// Endpoint is the ConnectionEndpoint of ControlCloseRemove and
+	// ControlWriteAsEndpoint; nil for the other operations.
+	Endpoint *ua.NodeID
+	// Node is the Variable of ControlWriteAsEndpoint; nil for the other
+	// operations.
+	Node *ua.NodeID
+	// LockContext names the owner EstablishControl and ReassignControl
+	// give the ControlGroup to (Part 81 Table 64): an ApplicationUri, the
+	// NodeId of a ConnectionEndpoint in string form, or "" for the caller.
+	// EstablishControlCmd has the caller's ApplicationUri,
+	// ReassignControlCmd the NodeId of the ConnectionEndpoint.
+	LockContext string
+	// Caller is the caller of the Method, or of EstablishConnections for
+	// the commands; nil without one.
+	Caller *server.MethodCaller
+}
+```
+
+ControlRequest is an operation a ControlAuthorizer decides.
 
 ### type Model
 
@@ -193,3 +295,11 @@ AddModel imports the UAFX model into srv: the Data namespace, which a UAFX serve
 Namespace index 1 is the namespace of the local server (Part 81 §14.2, Table 260), whose URI is the ApplicationUri of the server (Part 5 §6.3.1). A server that has no namespace besides namespace 0 gets it before the model, named by its ApplicationUri ([server.ApplicationURI](https://pkg.go.dev/github.com/otfabric/go-opcua/server#ApplicationURI) or the URI of its certificate). A server without an ApplicationUri, or whose namespace 1 has another URI, is an error.
 
 DI is imported unless the server has the DI namespace already, for example from an application that imported it before. The DI nodes the UAFX model refers to must then be on the server with the NodeClass the DI NodeSet gives them, or AddModel fails without importing anything. A UAFX namespace the server has already is an error.
+
+#### func (Namespaces) ConnectionAdmin
+
+```go
+func (n Namespaces) ConnectionAdmin() *ua.NodeID
+```
+
+ConnectionAdmin returns the NodeId of the well-known Role ConnectionAdmin (Part 81 §5.9) in the Data namespace, which a [server.RoleMapper](https://pkg.go.dev/github.com/otfabric/go-opcua/server#RoleMapper) grants to the sessions that may establish, release and reassign control and break Locks without a ControlAuthorizer; nil without a Data namespace.

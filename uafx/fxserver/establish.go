@@ -129,6 +129,7 @@ type call struct {
 	linkUndo   []func()             // SetCommunicationConfigurationCmd
 	enabled    []pubsub.ComponentID // EnableCommunicationCmd
 	cleanupsOn []*endpoint
+	controlled []*controlGroup // EstablishControlCmd
 }
 
 // element is one ConnectionEndpointConfiguration of the call.
@@ -221,9 +222,12 @@ func (x *call) run() ua.StatusCode {
 
 // rollback undoes what the call did (Part 81 Table 21): it disables what
 // EnableCommunicationCmd enabled, deletes the References and the PubSub
-// configuration SetCommunicationConfigurationCmd made and the
+// configuration SetCommunicationConfigurationCmd made, releases the
+// ControlGroups EstablishControlCmd controlled and deletes the
 // ConnectionEndpoints CreateConnectionEndpointCmd created. Verification,
-// reserved ids and ConfigurationData stay.
+// reserved ids, ConfigurationData and what ReassignControlCmd did stay
+// (Table 21), except where the release of a ControlGroup or the removal of
+// an endpoint undoes it.
 func (x *call) rollback() {
 	rt := x.c.srv.PubSub()
 	for i := len(x.enabled) - 1; i >= 0; i-- {
@@ -241,6 +245,9 @@ func (x *call) rollback() {
 	}
 	if err := x.update.Revert(); err != nil {
 		x.c.log.Warn("uafx: rollback: the PubSub configuration of the call stays", "error", err)
+	}
+	for i := len(x.controlled) - 1; i >= 0; i-- {
+		x.c.release(x.controlled[i])
 	}
 	for _, e := range x.created {
 		x.c.deleteEndpoint(e)
@@ -841,9 +848,17 @@ func (x *call) endpointOf(el *element) bool {
 // --- EstablishControlCmd, ReassignControlCmd ----------------------------
 
 // control runs EstablishControlCmd (Part 81 §6.2.4.3.6) or, with reassign,
-// ReassignControlCmd (§6.2.4.3.8). ControlGroups are not supported: an
-// existing ControlGroup fails with Bad_NotSupported; an element without
-// ControlGroups has nothing to do.
+// ReassignControlCmd (§6.2.4.3.8) on the ControlGroups of each element. An
+// element without ControlGroups has nothing to do.
+//
+// EstablishControlCmd controls a ControlGroup for the client of the
+// caller, whose ApplicationUri is the LockContext; ReassignControlCmd gives
+// it to the ConnectionEndpoint of the element, whose NodeId is the
+// LockContext. The LockStatus of the Method becomes a StatusCode: -1 (a
+// Lock held) is Bad_Locked for EstablishControl, -1 (not locked) and -2
+// (cannot be locked or reassigned) Bad_InvalidState. A ControlGroup another
+// client or ConnectionEndpoint controls is not reassigned:
+// Bad_UserAccessDenied (Tables 65 and 70).
 func (x *call) control(reassign bool) bool {
 	for _, el := range x.els {
 		if len(el.cfg.ControlGroups) == 0 {
@@ -871,12 +886,51 @@ func (x *call) control(reassign bool) bool {
 			case !x.c.isA(g, fxacid.ControlGroupType):
 				res[i] = ua.StatusBadInvalidArgument
 			default:
-				res[i] = ua.StatusBadNotSupported
+				res[i] = x.controlOne(el, g, reassign)
 			}
-			return false
+			if res[i] != ua.StatusOK {
+				return false
+			}
 		}
 	}
 	return true
+}
+
+// controlOne runs EstablishControl or ReassignControl on the ControlGroup g
+// for the element el.
+func (x *call) controlOne(el *element, n *ua.NodeID, reassign bool) ua.StatusCode {
+	c := x.c
+	c.ctl.mu.Lock()
+	g := c.ctl.groups[n.String()]
+	c.ctl.mu.Unlock()
+	if g == nil {
+		return ua.StatusBadNotSupported
+	}
+	if !reassign {
+		o := callerOwner(x.ctx)
+		if sc := c.authorize(x.ctx, ControlRequest{Operation: ControlEstablish, Group: g.id, LockContext: o.client}); sc != ua.StatusOK {
+			return sc
+		}
+		switch c.control(g, o) {
+		case lockOK:
+			x.controlled = append(x.controlled, g)
+			return ua.StatusOK
+		case lockBusy:
+			return ua.StatusBadLocked
+		}
+		return ua.StatusBadInvalidState
+	}
+	if sc := c.authorize(x.ctx, ControlRequest{Operation: ControlReassign, Group: g.id, LockContext: el.ep.id.String()}); sc != ua.StatusOK {
+		return sc
+	}
+	if sc := c.mayChange(actingAs(x.ctx, el.ep), g); sc != ua.StatusOK {
+		return sc
+	}
+	o := &lockOwner{client: el.ep.id.String(), user: endpointLockingUser, endpoint: el.ep}
+	if c.reassign(g, o) != lockOK {
+		return ua.StatusBadInvalidState
+	}
+	return ua.StatusOK
 }
 
 // --- SetConfigurationDataCmd ---------------------------------------------
@@ -893,7 +947,7 @@ func (x *call) configure() bool {
 		}
 		vars := x.c.folderVariables(el.fe, "ConfigurationData")
 		for i, p := range el.cfg.ConfigurationData {
-			sc := x.configureOne(p, vars)
+			sc := x.configureOne(el, p, vars)
 			el.res.ConfigurationDataResult[i] = sc
 			if sc != ua.StatusOK {
 				return false
@@ -903,7 +957,7 @@ func (x *call) configure() bool {
 	return true
 }
 
-func (x *call) configureOne(p *uafx.NodeIDValuePair, vars map[string]bool) ua.StatusCode {
+func (x *call) configureOne(el *element, p *uafx.NodeIDValuePair, vars map[string]bool) ua.StatusCode {
 	if p == nil || p.Key == nil || isNull(p.Key.Node) {
 		return ua.StatusBadNodeIDInvalid
 	}
@@ -932,10 +986,20 @@ func (x *call) configureOne(p *uafx.NodeIDValuePair, vars map[string]bool) ua.St
 	} else if cur != nil && val(cur) != nil && (v == nil || reflect.TypeOf(val(v)) != reflect.TypeOf(val(cur))) {
 		return ua.StatusBadTypeMismatch
 	}
-	switch sc := x.c.srv.WriteValue(x.ctx, n, v); sc {
+	// The command acts as the ConnectionEndpoint, which may own the Locks
+	// of a ControlGroup (Part 81 §6.5.2); a Lock that rejects the write is
+	// Bad_UserAccessDenied (Table 14). Writing through the endpoint's own
+	// Lock needs the ControlAuthorizer.
+	if l := x.c.endpointLock(el.ep, n); l != nil {
+		if sc := x.c.authorize(x.ctx, ControlRequest{Operation: ControlWriteAsEndpoint, Group: l.group.id, Lock: l.id,
+			Endpoint: el.ep.id, Node: n}); sc != ua.StatusOK {
+			return ua.StatusBadUserAccessDenied
+		}
+	}
+	switch sc := x.c.srv.WriteValue(actingAs(x.ctx, el.ep), n, v); sc {
 	case ua.StatusOK:
 		return ua.StatusOK
-	case ua.StatusBadNotWritable, ua.StatusBadUserAccessDenied, ua.StatusBadSecurityModeInsufficient:
+	case ua.StatusBadNotWritable, ua.StatusBadUserAccessDenied, ua.StatusBadSecurityModeInsufficient, ua.StatusBadLocked:
 		return ua.StatusBadUserAccessDenied
 	case ua.StatusBadTypeMismatch:
 		return ua.StatusBadTypeMismatch

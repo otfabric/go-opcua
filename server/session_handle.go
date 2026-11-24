@@ -64,3 +64,18 @@ func (h *Session) ClientCertificate() []byte {
 	}
 	return slices.Clone(h.s.remoteCertificate)
 }
+
+// ClientApplicationURI returns the ApplicationUri of the ApplicationDescription
+// the client sent with CreateSession (Part 4 §5.6.2); "" for a nil Session or
+// a client that sent none.
+func (h *Session) ClientApplicationURI() string {
+	if h == nil {
+		return ""
+	}
+	h.s.diag.mu.Lock()
+	defer h.s.diag.mu.Unlock()
+	if d := h.s.diag.client; d != nil {
+		return d.ApplicationURI
+	}
+	return ""
+}

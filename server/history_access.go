@@ -31,7 +31,7 @@ func (s *Server) checkDataHistory(ctx context.Context, sc *uasc.SecureChannel, s
 	}
 	check := s.checkRead
 	if write {
-		check = s.checkWrite
+		check = s.checkWriteNow
 	}
 	if st := check(ctx, sess, nodeID); st != ua.StatusOK {
 		return st
