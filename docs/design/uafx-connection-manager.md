@@ -1,10 +1,11 @@
 # Design: UAFX ConnectionManager (C2)
 
-Status: **proposal, revised after the maintainer's review of 2026-11-24**
-(PR #44: architecture approved; rollback scope, endpoint ownership,
-reprocessing, run identity, multicast, branch mechanics and F.3 Replace
-revised; see §10). No runtime code is written until this revision is
-approved. Target release: v1.39.0.
+Status: **approved 2026-11-24** after two reviews on PR #44 (the
+first approved the architecture and asked for the revisions of rollback
+scope, endpoint ownership, reprocessing, run identity, multicast, branch
+mechanics and F.3 Replace; the second accepted them and Q1 to Q4, with the
+ownership safeguard of §5.4). See §10. Implementation starts with C2.1.
+Target release: v1.39.0.
 
 This document designs the ConnectionManager of OPC UA FX in go-opcua: the
 ConnectionManagerType of OPC 10000-81 §6.7, the ConnectionConfigurationSets
@@ -325,6 +326,11 @@ type Options struct {
 	// ConnectionManagerApplicationUri of the endpoints the CM creates
 	// (§6.6.2); the ownership checks of §5.3 compare against it. Required.
 	ApplicationURI string
+	// ExclusiveApplicationURI asserts that no other ConnectionManager uses
+	// ApplicationURI, so a matching ConnectionManagerApplicationUri can
+	// prove ownership after a lost response (§5.4). Default false: such
+	// endpoints stay unresolved.
+	ExclusiveApplicationURI bool
 	// CallTimeout bounds each EstablishConnections and CloseConnections
 	// call (D6). Default 30 s. RollbackTimeout bounds the rollback of a run
 	// as a whole. Default 2 minutes.
@@ -597,15 +603,35 @@ create:
   the Name absent, the browse now finds exactly one endpoint of that Name,
   the AC exposes ConnectionManagerApplicationUri and it equals ours, and the
   (AC, FunctionalEntity) was serialized for this run (§5.1), so no other
-  run of this Manager can have made it.
+  run of this Manager can have made it; **and** the deployment asserts
+  that this Manager is the only ConnectionManager that uses its
+  ApplicationUri (the ExclusiveApplicationURI option, false by default).
+  §6.6.2 makes ConnectionManagerApplicationUri the identity of a
+  ConnectionManager application, not of a transaction: the serialization
+  of §5.1 works inside one Manager only and cannot exclude a second
+  instance with the same ApplicationUri (a redundant pair, a copied
+  configuration). Without the assertion the endpoint is unresolved even
+  when the URI matches.
 - **Absent**: nothing was created; nothing to do.
 - **Anything else** (the AC has no ConnectionManagerApplicationUri, the
-  Name was present before, the URI differs): unresolved. A preconfigured
+  Name was present before, the URI differs, the URI matches but the
+  ownership is not asserted exclusive): unresolved: fail closed. A preconfigured
   endpoint the step meant to take is unresolved unless its RelatedEndpoint
   is the one the step set.
 
 Never: closing whatever has the Name. §6.12 makes the Name unique within a
 FunctionalEntity, which identifies an endpoint, not who made it.
+
+`Settle` is an administrative decision, never an automatic recovery: the
+engine itself never calls it, Retry and the monitor do not, and C2.3 does
+not expose it as a UA Method. An application that offers it to operators
+authorizes the caller itself; the Observer reports every Settle with its
+verdict.
+
+A timeout (CallTimeout, RollbackTimeout, a cancelled context) only stops
+the engine waiting: it does not cancel the request at the AC, which may
+still complete. The outcome is unknown and handled as above, never as
+"not done".
 
 A session that cannot be re-established fails the steps of that AC with
 TargetServerConnectionError; its endpoints of this run stay unresolved
@@ -833,6 +859,7 @@ Failure scenarios in the same harness:
 | An endpoint of the set's Name made beforehand by another client (another ApplicationUri), and a preconfigured endpoint the set does not name as preconfigured | Foreign: that Connection fails with CreateConnectionEndpointError and Bad_BrowseNameDuplicated, no call; the endpoints are untouched after the run, the rollback and a Remove |
 | Run 1 establishes Connection A, fails on B with RollbackOnError FALSE; RollbackOnError set TRUE by an edit; run 2 fails on B again | Run 2's step 0 closes A's survivors, re-creates A, fails on B, and the set-wide rollback removes A again: no endpoint of the set is left |
 | A rollback close of AC1 times out (AC1 stalled by the chaos proxy) | The run ends within RollbackTimeout; AC1's endpoint stays known-owned with a close pending; the next run's step 0 closes it |
+| Two Managers with the same ApplicationUri on one AC; Manager 1's response lost | Without ExclusiveApplicationURI the endpoint is unresolved for Manager 1 and foreign for Manager 2, neither closes it; with the option on Manager 1 only, Manager 1 reclaims it |
 | Two Process calls on the same set; `Wait` on each Run | Different RunIDs; the second is refused (Bad_InvalidState) while the first runs; after it, a new run has a new RunID and Version |
 | A multicast flow: AC1 publishes to a UDP multicast group, AC2 and AC3 subscribe (four servers) | One WriterGroup and DataSetWriter on AC1, both subscribers receive; Remove removes all three sides |
 | AC2 restarted after establishment | The monitor reports ConnectionNotEstablished and RuntimeError; with Reestablish the set is processed again and data flows |
@@ -947,11 +974,11 @@ The maintainer reviewed the first version of this document on 2026-11-24
 | — | Async API | Revised: Run handles with RunID and Version; Config (immutable) and Status (live) apart (§4.3) |
 | — | F.3 Replace | Revised: validate the batch, then close, then change; RequireCompleteUpdate and close failures as §5.8 |
 
-Open for the maintainer after this revision:
+The four questions left by the revision were decided on 2026-11-24:
 
-| # | Question | Proposal |
+| # | Question | Decision |
 |---|---|---|
-| Q1 | A re-run of an established set re-creates its known-owned endpoints and interrupts the data flow (§5.5). Acceptable for C2, with keep-in-place left to C3? | Yes |
-| Q2 | Proof of ownership after a lost response needs ConnectionManagerApplicationUri, which §6.6.2 makes optional; without it the endpoint stays unresolved until `Settle`. Acceptable? | Yes; go-opcua's AC sets it |
-| Q3 | Defaults CallTimeout 30 s, RollbackTimeout 2 min | Yes |
-| Q4 | The multicast end-to-end test needs four servers and UDP multicast with loopback; where CI cannot do multicast, the test is skipped with a REQUIRE switch like `pubsub-eth` | Yes |
+| Q1 | A re-run of an established set re-creates its known-owned endpoints and interrupts the data flow (§5.5). Acceptable for C2, with keep-in-place left to C3? | Accepted: docs/uafx.md states the interruption; Retry stays opt-in |
+| Q2 | Proof of ownership after a lost response needs ConnectionManagerApplicationUri, which §6.6.2 makes optional; without it the endpoint stays unresolved until `Settle`. Acceptable? | Accepted with a safeguard: a matching URI proves ownership only with ExclusiveApplicationURI; otherwise fail closed. `Settle` is an explicit administrative decision (§5.4). C2.2 adds a test with two Managers that share an ApplicationUri |
+| Q3 | Defaults CallTimeout 30 s, RollbackTimeout 2 min | Accepted: configurable; a timeout keeps the outcome unknown (§5.4) |
+| Q4 | The multicast end-to-end test needs four servers and UDP multicast with loopback; where CI cannot do multicast, the test is skipped with a REQUIRE switch like `pubsub-eth` | Accepted: validation and planner tests of multicast always run; only the UDP end-to-end test is skipped; no end-to-end multicast claim before it ran on a real network (C2.3) |
