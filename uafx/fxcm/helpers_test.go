@@ -375,3 +375,58 @@ func TestElementAt(t *testing.T) {
 	assert.Equal(t, ua.MustVariant(uint16(9)), a.publisherIDOf(&ua.PubSubConnectionDataType{}))
 	assert.Equal(t, ua.MustVariant(uint16(3)), a.publisherIDOf(&ua.PubSubConnectionDataType{PublisherID: ua.MustVariant(uint16(3))}))
 }
+
+// TestSameDataSet: a PublishedDataSet is reused only when it publishes the
+// same Variables with the same Fields (reuseDataSets).
+func TestSameDataSet(t *testing.T) {
+	v := func(id uint32) *ua.PublishedVariableDataType {
+		return &ua.PublishedVariableDataType{PublishedVariable: ua.NewNumericNodeID(2, id), AttributeID: ua.AttributeIDValue}
+	}
+	assert.True(t, samePublishedData([]*ua.PublishedVariableDataType{v(1), nil}, []*ua.PublishedVariableDataType{v(1), nil}))
+	assert.False(t, samePublishedData([]*ua.PublishedVariableDataType{v(1)}, nil))
+	assert.False(t, samePublishedData([]*ua.PublishedVariableDataType{nil}, []*ua.PublishedVariableDataType{v(1)}))
+	assert.False(t, samePublishedData([]*ua.PublishedVariableDataType{v(1)}, []*ua.PublishedVariableDataType{v(2)}))
+	ranged := v(1)
+	ranged.IndexRange = "0:1"
+	assert.False(t, samePublishedData([]*ua.PublishedVariableDataType{v(1)}, []*ua.PublishedVariableDataType{ranged}))
+	hint := v(1)
+	hint.SamplingIntervalHint = 50
+	assert.True(t, samePublishedData([]*ua.PublishedVariableDataType{v(1)}, []*ua.PublishedVariableDataType{hint}), "a hint is not compared")
+
+	f := func(name string, bt uint8) *ua.FieldMetaData {
+		return &ua.FieldMetaData{Name: name, BuiltInType: bt, DataType: ua.NewNumericNodeID(0, uint32(bt)), ValueRank: -1}
+	}
+	md := func(fs ...*ua.FieldMetaData) *ua.DataSetMetaDataType { return &ua.DataSetMetaDataType{Fields: fs} }
+	assert.True(t, sameFields(nil, nil))
+	assert.True(t, sameFields(md(f("x", 11)), nil), "a set without DataSetMetaData leaves the Fields to the publisher")
+	assert.False(t, sameFields(nil, md(f("x", 11))))
+	assert.True(t, sameFields(md(f("x", 11), nil), md(f("x", 11), nil)))
+	assert.False(t, sameFields(md(f("x", 11)), md(f("x", 11), f("y", 11))))
+	assert.False(t, sameFields(md(nil), md(f("x", 11))))
+	assert.False(t, sameFields(md(f("x", 11)), md(f("y", 11))))
+	assert.False(t, sameFields(md(f("x", 11)), md(f("x", 10))))
+	other := f("x", 11)
+	other.DataType = ua.NewNumericNodeID(0, 10)
+	assert.False(t, sameFields(md(f("x", 11)), md(other)))
+	arr := f("x", 11)
+	arr.ArrayDimensions = []uint32{2}
+	assert.False(t, sameFields(md(f("x", 11)), md(arr)))
+	versioned := md(f("x", 11))
+	versioned.ConfigurationVersion = &ua.ConfigurationVersionDataType{MajorVersion: 9}
+	assert.True(t, sameFields(versioned, md(f("x", 11))), "the ConfigurationVersion is the publisher's")
+
+	// What is read from the server.
+	x := &run{}
+	a := &acRun{addr: ServerAddress{Address: "opc.tcp://ac:4840"}, t: testTarget(offlineSession{})}
+	want := &ua.PublishedDataSetDataType{Name: "P"}
+	same, err := x.sameDataSet(context.Background(), a, ua.NewNumericNodeID(2, 1), want)
+	require.NoError(t, err)
+	assert.False(t, same, "no DataSetSource")
+	want.DataSetSource = ua.NewExtensionObject(&ua.PublishedEventsDataType{})
+	same, err = x.sameDataSet(context.Background(), a, ua.NewNumericNodeID(2, 1), want)
+	require.NoError(t, err)
+	assert.False(t, same, "not PublishedDataItems")
+	want.DataSetSource = ua.NewExtensionObject(&ua.PublishedDataItemsDataType{})
+	_, err = x.sameDataSet(context.Background(), a, ua.NewNumericNodeID(2, 1), want)
+	assert.Equal(t, Failure{uafx.FxErrorSetCommunicationConfigurationError, ua.StatusBadCommunicationError}, fxOf(t, err))
+}

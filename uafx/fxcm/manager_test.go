@@ -253,3 +253,31 @@ func TestOfflineRun(t *testing.T) {
 		assert.Equal(t, StateReady, res.State, "%v", a)
 	}
 }
+
+// TestClaimReserves: a Replace or Remove puts the set in Processing in the
+// same step that claims it, so a Process between the claim and the close
+// is refused (Table 86) and cannot replace the run of the removal.
+func TestClaimReserves(t *testing.T) {
+	t.Parallel()
+	m := offlineManager(t, Options{})
+	cfg, err := m.Add(named("A"))
+	require.NoError(t, err)
+	s, prev, err := m.claim(cfg.Key())
+	require.NoError(t, err)
+	assert.Equal(t, StateReady, prev)
+	st, _ := m.Status(cfg.Key())
+	assert.Equal(t, StateProcessing, st.State)
+	removal := st.Current
+	require.NotNil(t, removal)
+	assert.Equal(t, ActionRemoveSet, removal.Action())
+
+	started := m.Process(uafx.ActionEstablishConnectionsEnabled, cfg.Key())
+	assert.Nil(t, started[0].Run)
+	assert.ErrorIs(t, started[0].Err, ua.StatusBadInvalidState)
+	_, _, err = m.claim(cfg.Key())
+	assert.ErrorIs(t, err, ua.StatusBadInvalidState)
+	st, _ = m.Status(cfg.Key())
+	assert.Same(t, removal, st.Current)
+
+	require.NoError(t, m.removeConnections(context.Background(), s, prev))
+}

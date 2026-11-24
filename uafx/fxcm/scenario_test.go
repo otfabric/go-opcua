@@ -15,6 +15,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
@@ -197,6 +198,35 @@ func TestEstablishTwice(t *testing.T) {
 	assert.Empty(t, b.endpoints())
 	_, ok := m.Status(cfg.Key())
 	assert.False(t, ok)
+
+	// The PublishedDataSet "PDS" of the set stays on a after the remove
+	// (§6.2.5.2), and the set above reused it. A set whose PublishedDataSet
+	// has that Name but publishes another Variable does not reuse it: the
+	// run fails before anything is created.
+	other := e2eConf(t, "Other", a, b)
+	model := other.AutomationComponentConfigurations[0].CommunicationModelConfig.(*uafx.PubSubCommunicationModelConfiguration)
+	model.PubSubConfiguration.PublishedDataSets[0] = pubsub.PublishedDataItems("PDS", pubsub.Var("x", ua.NewNumericNodeID(e2eTest, fxtest.ConnGain), ua.TypeIDDouble))
+	cfg, err = m.Add(other)
+	require.NoError(t, err)
+	res = process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
+	require.Equal(t, StateError, res.State)
+	assert.Contains(t, res.Failures, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: ua.StatusBadBrowseNameDuplicated})
+	assert.Empty(t, a.endpoints())
+	assert.Empty(t, b.endpoints())
+
+	// A PubSub configuration with SecurityGroups needs an SKS configured,
+	// which the ConnectionManager does not do (design EC-9, D3): the set
+	// is refused, not established without its security.
+	sks := e2eConf(t, "SKS", a, b)
+	sksModel := sks.AutomationComponentConfigurations[1].CommunicationModelConfig.(*uafx.PubSubCommunicationModelConfiguration)
+	sksModel.PubSubConfiguration.SecurityGroups = []*ua.SecurityGroupDataType{{Name: "G"}}
+	cfg, err = m.Add(sks)
+	require.NoError(t, err)
+	res = process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
+	require.Equal(t, StateError, res.State)
+	assert.Contains(t, res.Failures, Failure{FxError: uafx.FxErrorConnectionConfigurationSetInvalid, Status: ua.StatusBadNotSupported})
+	assert.Empty(t, a.endpoints())
+	assert.Empty(t, b.endpoints())
 }
 
 // TestTwoManagersSameApplicationURI is the Q2 safeguard: a second Manager
@@ -396,4 +426,93 @@ func TestRetry(t *testing.T) {
 	}, 10*time.Second, 10*time.Millisecond)
 	assert.Len(t, events.of(EventRetry), 1)
 	assert.Equal(t, []string{"ToB"}, a.endpoints())
+}
+
+// TestAdaptPublisherID is CS-18 (§6.16.3): a PubSubConnection of the set
+// that matches one the AC has takes that one's PublisherId, and the
+// ConnectionManager adapts the subscribers to it. The first set adds the
+// publisher's PubSubConnection with an explicit PublisherId; it stays on
+// the AC after the remove (§6.2.5.2). The same set with another
+// PublisherId then matches it (ElementMatch compares the transport, not the
+// PublisherId, OPC 10000-14 §9.1.3.7.2): b's DataSetReader, configured with
+// the set's PublisherId, is modified in one more call, and the data flows.
+// Where CommandBundleRequired forbids that call (§6.2.6) the Connection
+// fails and is rolled back, as when the adaptation call fails. The remove
+// after each leaves no reader behind, so the set can be established again.
+func TestAdaptPublisherID(t *testing.T) {
+	t.Parallel()
+	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
+	events := &eventLog{}
+	m := newManager(t, Options{Observer: events})
+	conf := e2eConf(t, "Adapt", a, b)
+	pubConn := conf.AutomationComponentConfigurations[0].CommunicationModelConfig.(*uafx.PubSubCommunicationModelConfiguration).PubSubConfiguration.Connections[0]
+	establish := func(bundle bool) *RunResult {
+		t.Helper()
+		conf.AutomationComponentConfigurations[1].CommandBundleRequired = bundle
+		cfg, err := m.Add(conf)
+		require.NoError(t, err)
+		return process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
+	}
+	remove := func() {
+		t.Helper()
+		require.NoError(t, m.Remove(context.Background(), KeyOf(conf)))
+		assert.Empty(t, a.endpoints())
+		assert.Empty(t, b.endpoints())
+	}
+	callsTo := func(url string) int {
+		n := 0
+		for _, e := range events.of(EventCall) {
+			if e.Address == url {
+				n++
+			}
+		}
+		return n
+	}
+
+	pubConn.PublisherID = ua.MustVariant(uint16(4242))
+	res := establish(false)
+	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 42.5 }, 10*time.Second, 10*time.Millisecond)
+	remove()
+
+	// The set says 5151; the connection it matches has 4242.
+	pubConn.PublisherID = ua.MustVariant(uint16(5151))
+	require.NoError(t, fxtest.SetValue(a.srv, a.id(fxtest.ConnActual), 7.0))
+	before := callsTo(b.url)
+	res = establish(false)
+	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	assert.Equal(t, 3, callsTo(b.url)-before, "reserve, configure and the adaptation")
+	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 7.0 }, 10*time.Second, 10*time.Millisecond)
+	remove()
+
+	res = establish(true)
+	require.Equal(t, StateError, res.State)
+	assert.Contains(t, res.Failures, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: ua.StatusBadConfigurationError})
+	assert.True(t, res.RolledBack)
+	remove()
+
+	// The adaptation call fails: the Connection fails and is rolled back.
+	d := newHookDialer()
+	d.hook = func(_ ServerAddress, req *ua.CallMethodRequest) (bool, error) {
+		if m := commandMask(req); m&uafx.SetCommunicationConfigurationCmd != 0 && m&uafx.CreateConnectionEndpointCmd == 0 {
+			return false, ua.StatusBadCommunicationError
+		}
+		return false, nil
+	}
+	m2 := newManager(t, Options{Dialer: d})
+	conf.AutomationComponentConfigurations[1].CommandBundleRequired = false
+	cfg2, err := m2.Add(conf)
+	require.NoError(t, err)
+	res = process(t, m2, uafx.ActionEstablishConnectionsEnabled, cfg2.Key())
+	require.Equal(t, StateError, res.State)
+	require.NotEmpty(t, res.Failures)
+	assert.Equal(t, uafx.FxErrorSetCommunicationConfigurationError, res.Failures[0].FxError, "%+v", res.Failures)
+	assert.True(t, res.RolledBack)
+	require.NoError(t, m2.Remove(context.Background(), cfg2.Key()))
+	assert.Empty(t, a.endpoints())
+	assert.Empty(t, b.endpoints())
+
+	res = establish(false)
+	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	remove()
 }

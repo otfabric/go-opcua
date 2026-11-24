@@ -1018,6 +1018,7 @@ const (
 	refWG     = ua.PubSubConfigurationRefMaskReferenceWriterGroup
 	refRG     = ua.PubSubConfigurationRefMaskReferenceReaderGroup
 	refAdd    = ua.PubSubConfigurationRefMaskElementAdd
+	refModify = ua.PubSubConfigurationRefMaskElementModify
 )
 
 // communicate runs SetCommunicationConfigurationCmd (Part 81
@@ -1126,9 +1127,9 @@ func writerAt(cfg *ua.PubSubConfiguration2DataType, r *ua.PubSubConfigurationRef
 func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *uafx.PubSubCommunicationLinkConfiguration) ua.StatusCode {
 	c, rt, e := x.c, x.c.srv.PubSub(), el.ep
 	cfg := cc.PubSubConfiguration
-	added := func(r *ua.PubSubConfigurationRefDataType) bool {
+	has := func(op ua.PubSubConfigurationRefMask, r *ua.PubSubConfigurationRefDataType) bool {
 		for _, ref := range cc.ConfigurationReferences {
-			if ref != nil && ref.ConfigurationMask&refAdd != 0 && ref.ConfigurationMask&r.ConfigurationMask != 0 &&
+			if ref != nil && ref.ConfigurationMask&op != 0 && ref.ConfigurationMask&r.ConfigurationMask != 0 &&
 				ref.ConnectionIndex == r.ConnectionIndex && ref.GroupIndex == r.GroupIndex && ref.ElementIndex == r.ElementIndex {
 				return true
 			}
@@ -1159,7 +1160,7 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 			return ua.StatusBadNoMatch
 		}
 		readerNode, _ = c.srv.PubSubNodeID(cid)
-		x.setLink(e, true, readerNode, added(r))
+		x.setLink(e, true, readerNode, has(refAdd, r), has(refModify, r))
 	}
 	if r := l.DataSetWriterRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
@@ -1185,7 +1186,7 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 			return ua.StatusBadNoMatch
 		}
 		writerNode, _ = c.srv.PubSubNodeID(cid)
-		x.setLink(e, false, writerNode, added(r))
+		x.setLink(e, false, writerNode, has(refAdd, r), has(refModify, r))
 	}
 	if readerNode == nil && writerNode == nil {
 		return ua.StatusBadNotFound
@@ -1211,7 +1212,9 @@ func (x *call) assigned(kind ua.PubSubConfigurationRefMask, r *ua.PubSubConfigur
 }
 
 // setLink is Connections.setLink with an undo for the rollback.
-func (x *call) setLink(e *endpoint, reader bool, n *ua.NodeID, own bool) {
+// own is set when the call added the element; modified when it modified
+// it in place (ElementModify).
+func (x *call) setLink(e *endpoint, reader bool, n *ua.NodeID, own, modified bool) {
 	c := x.c
 	c.mu.Lock()
 	prev, prevOwn := e.writer, e.ownWriter
@@ -1219,6 +1222,12 @@ func (x *call) setLink(e *endpoint, reader bool, n *ua.NodeID, own bool) {
 		prev, prevOwn = e.reader, e.ownReader
 	}
 	c.mu.Unlock()
+	// A later call that links the element again, or modifies the one the
+	// endpoint has (ElementModify, as a ConnectionManager does to adapt a
+	// DataSetReader to a PublisherId, Part 81 §6.16.3; the runtime may give
+	// it a new node), keeps it the endpoint's own: CloseConnections still
+	// removes what the endpoint's calls created (§6.2.5.2).
+	own = own || prevOwn && (prev.Equal(n) || modified)
 	c.setLinkLocked(e, reader, n, own)
 	x.linkUndo = append(x.linkUndo, func() { c.setLinkLocked(e, reader, prev, prevOwn) })
 }

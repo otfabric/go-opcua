@@ -24,8 +24,9 @@ behaviour you may notice, and the deviations of peers are in
   The ConnectionManager (`uafx/fxcm`) is a Go library: a server has no
   ConnectionManager Object or Methods; it configures no SecurityKeyServer,
   asks no GDS, resolves no AliasNames, generates no PubSub configuration
-  from the flows, and does not adapt subscribers to the PublisherId of a
-  matched PubSubConnection (the Connection fails instead). Persistent
+  from the flows, and cannot adapt subscribers to the PublisherId of a
+  matched PubSubConnection on an AutomationComponent with
+  CommandBundleRequired (the Connection fails instead). Persistent
   connections and the other Methods of Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop
   implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
 - Time-scheduled Ethernet (TSN), AMQP over WebSockets, and PubSub Actions bound

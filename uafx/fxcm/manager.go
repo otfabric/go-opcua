@@ -453,11 +453,11 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 	if err != nil {
 		return nil, err
 	}
-	s, err := m.claim(cfg.key)
+	s, prev, err := m.claim(cfg.key)
 	if err != nil {
 		return nil, err
 	}
-	if err := m.removeConnections(ctx, s); err != nil {
+	if err := m.removeConnections(ctx, s, prev); err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
@@ -472,11 +472,11 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 // being processed or edited is ua.StatusBadInvalidState; no set of the key
 // ua.StatusBadNoMatch. When a close fails, the set stays, in Error.
 func (m *Manager) Remove(ctx context.Context, key SetKey) error {
-	s, err := m.claim(key)
+	s, prev, err := m.claim(key)
 	if err != nil {
 		return err
 	}
-	if err := m.removeConnections(ctx, s); err != nil {
+	if err := m.removeConnections(ctx, s, prev); err != nil {
 		return err
 	}
 	m.mu.Lock()
@@ -489,35 +489,42 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 }
 
 // claim puts a set that is neither processed nor edited in Processing for
-// a Replace or Remove: no run starts on it meanwhile.
-func (m *Manager) claim(key SetKey) (*set, error) {
+// a Replace or Remove, in one step under the lock of the set, so that no
+// run starts on it meanwhile (Table 86: Process of a set in Processing is
+// Bad_InvalidState). It returns the state the set was in.
+func (m *Manager) claim(key SetKey) (*set, State, error) {
 	s := m.lookup(key)
 	if s == nil {
-		return nil, managerError(ua.StatusBadNoMatch, "no set %s", key)
+		return nil, 0, managerError(ua.StatusBadNoMatch, "no set %s", key)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	switch {
-	case s.state == StateProcessing:
-		return nil, managerError(ua.StatusBadInvalidState, "the set %s is being processed", key)
-	case s.edit.Editing() != nil:
-		return nil, managerError(ua.StatusBadInvalidState, "the set %s is being edited", key)
+	if s.edit.Editing() != nil {
+		s.mu.Unlock()
+		return nil, 0, managerError(ua.StatusBadInvalidState, "the set %s is being edited", key)
 	}
-	s.current = &Run{id: RunID(m.runs.Add(1)), key: key, version: s.cfg.version, action: ActionRemoveSet, done: make(chan struct{})}
+	tr, err := Start(s.state)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, 0, managerError(ua.StatusBadInvalidState, "the set %s is being processed", key)
+	}
+	prev := s.state
+	r := &Run{id: RunID(m.runs.Add(1)), key: key, version: s.cfg.version, action: ActionRemoveSet, done: make(chan struct{})}
+	s.state, s.current = StateProcessing, r
 	if s.retry != nil {
 		s.retry.Stop()
 		s.retry = nil
 	}
-	return s, nil
+	s.mu.Unlock()
+	m.observe(Event{Kind: EventTransition, Set: key, Run: r.id, Transition: tr})
+	return s, prev, nil
 }
 
-// removeConnections closes the endpoints of s for a Replace or Remove: a
-// remove run. On a failure the set stays in Error.
-func (m *Manager) removeConnections(ctx context.Context, s *set) error {
+// removeConnections closes the endpoints of s, which claim put in
+// Processing from prev, for a Replace or Remove: a remove run. On a failure
+// the set stays in Error.
+func (m *Manager) removeConnections(ctx context.Context, s *set, prev State) error {
 	s.mu.Lock()
 	r := s.current
-	prev := s.state
-	s.state = StateProcessing
 	s.mu.Unlock()
 	res := m.execute(ctx, s, r, prev)
 	if res.State == StateError {

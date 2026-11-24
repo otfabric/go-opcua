@@ -755,17 +755,29 @@ with an unknown outcome and its run ends in Error.
   writers and PublishedDataSets cannot be (OPC 10000-14 §9.1.3.7.2), so a
   WriterGroup that sends the GroupHeader needs a null Name in the set, and
   a PublishedDataSet the AutomationComponent already has under the same
-  Name is reused rather than added again. When the endpoints of an
+  Name is reused rather than added again, but only when its PublishedData
+  (PublishedVariable, AttributeId, IndexRange, DeadbandType and
+  DeadbandValue of each item) and its DataSetMetaData Fields (Name,
+  BuiltInType, DataType, ValueRank, ArrayDimensions) equal the set's
+  (OPC 10000-14 §9.1.4). Otherwise that Connection fails with
+  SetCommunicationConfigurationError and `Bad_BrowseNameDuplicated`. A
+  reused PublishedDataSet is shared: the ConnectionManager never changes
+  or removes it. When the endpoints of an
   AutomationComponent are split over several calls, the first call adds
   the PubSubConnections, groups and PublishedDataSets, and each later call
   adds the readers and writers its endpoints link to, inside them by the
   names the server assigned.
 - When a PubSubConnection matched one with another PublisherId than the
-  subscribers were configured with, the subscribers are not adapted: that
-  Connection fails with SetCommunicationConfigurationError and
-  `Bad_ConfigurationError` (§6.16.3 asks the ConnectionManager to adapt
-  them). With null PublisherIds the AutomationComponent's
-  DefaultPublisherId is used on both sides.
+  subscribers were configured with, the ConnectionManager adapts the
+  subscribers (§6.16.3): after the establish calls it sends one more
+  EstablishConnections call to each subscribing AutomationComponent, with
+  SetCommunicationConfigurationCmd on the endpoint's Node and an
+  ElementModify of each DataSetReader that now names the matched
+  PublisherId. An AutomationComponent with CommandBundleRequired cannot
+  take that call (§6.2.6), so that Connection fails with
+  SetCommunicationConfigurationError and `Bad_ConfigurationError`, as it
+  does when the call fails. With null PublisherIds the
+  AutomationComponent's DefaultPublisherId is used on both sides.
 - CloseConnections answering `Bad_NodeIdUnknown` for an endpoint (Table 24:
   it does not exist) counts as closed.
 - CloseConnections removes the readers and writers of an endpoint
@@ -800,7 +812,7 @@ go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855 -json
 | Every generated structure: the Binary Schemas, hand-written byte fixtures, the bytes of v1.37.0, a round trip of each with its optional fields and union options, the errors of the decoder | `uafx` (`TestSchemaMatchesBinarySchema`, `TestStructureFixtures`, `TestGoldenReleaseB`, `TestStructuresRoundTrip`, `TestStructureErrors`) |
 | The configuration model of a ConnectionManager: each validation rule, the file of F.2 in both namespace layouts and its errors, the edit, the state machine, the ownership and retry rules, the diagnostics and the ConnectionState | `uafx/fxcm` |
 | Fuzz: the ConnectionConfigurationSet file (`FuzzDecodeFile`) | `uafx/fxcm` |
-| The Manager end to end against `fxserver` AutomationComponents with UDP PubSub: establish, enable, disable, remove and re-establish, data flowing; BrowsePaths and placeholders, asset and FunctionalEntity verification, MaxConnectionsPerCall and CommandBundleRequired; preconfigured endpoints; the rollback; every use of every service failed in turn; every call's response lost; two Managers with the same ApplicationUri; the monitor re-establishing; the retry policy; the ClientDialer | `uafx/fxcm` |
+| The Manager end to end against `fxserver` AutomationComponents with UDP PubSub: establish, enable, disable, remove and re-establish, data flowing; BrowsePaths and placeholders, asset and FunctionalEntity verification, MaxConnectionsPerCall and CommandBundleRequired; preconfigured endpoints; the rollback; a PublishedDataSet name collision with other content; a SecurityKeyServer refused; the PublisherId adaptation, refused with CommandBundleRequired and failing; every use of every service failed in turn; every call's response lost; two Managers with the same ApplicationUri; the monitor re-establishing; the retry policy; the ClientDialer | `uafx/fxcm` |
 | Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`, and every generated structure with `FuzzDecodeStructure`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace) | `uafx`, `internal/nodeset` |
 | End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
 | Chaos: connection faults over SignAndEncrypt, values and FunctionalEntities changing during `Inspect`, a server closing; parallel EstablishConnections and CloseConnections, and both under connection faults, leaving the server as it was | [`chaos/uafx`](../chaos/uafx) |
@@ -823,8 +835,7 @@ The test address space is `internal/testutil/fxtest`.
   ConnectionManager Object, ConnectionConfigurationSet nodes or Methods
   yet. It does not configure a SecurityKeyServer, ask a GDS, resolve
   AliasNames (AliasNameProcessingError), generate a PubSub configuration
-  from the flows, or adapt subscribers to the PublisherId of a matched
-  PubSubConnection ([Running a ConnectionManager](#running-a-connectionmanager)).
+  from the flows ([Running a ConnectionManager](#running-a-connectionmanager)).
   It has no LogObject.
 - CloseConnections with Remove removes the DataSetReaders and
   DataSetWriters of a connection, not the groups, PubSubConnections and

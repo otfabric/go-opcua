@@ -241,7 +241,7 @@ func (x *run) establishRun(ctx context.Context) {
 	if x.step(ctx, x.live(), x.configure) {
 		return
 	}
-	x.checkPublishers()
+	x.adaptSubscribers(ctx)
 	if x.anyFailed() {
 		x.stop(ctx)
 	}
@@ -761,46 +761,164 @@ func (x *run) prepare(ctx context.Context, a *acRun) {
 }
 
 // reuseDataSets drops the ElementAdd of each PublishedDataSet of a's
-// configuration that the AC has already under the same Name. Library
-// interpretation: CloseConnections removes the DataSetWriters and
-// DataSetReaders an endpoint used, not the PublishedDataSets, which other
-// Connections may publish (§6.2.5.2); ElementMatch is defined for
-// PubSubConnections and groups only (§6.16.3, OPC 10000-14 Table 241), so
-// establishing a set again reuses the PublishedDataSet of the same Name,
-// found in PublishSubscribe.PublishedDataSets (OPC 10000-14 §9.1.4.2).
+// configuration that the AC has already under the same Name and with the
+// same content. Library interpretation: CloseConnections removes the
+// DataSetWriters and DataSetReaders an endpoint used, not the
+// PublishedDataSets, which other Connections may publish (§6.2.5.2);
+// ElementMatch is defined for PubSubConnections and groups only (§6.16.3,
+// OPC 10000-14 Table 241), so establishing a set again reuses the
+// PublishedDataSet of the same Name, found in
+// PublishSubscribe.PublishedDataSets (OPC 10000-14 §9.1.4.2). It is reused
+// only when its PublishedData and the Fields of its DataSetMetaData are
+// those of the set (sameDataSet); a PublishedDataSet of that Name with
+// other content fails the AutomationComponent with
+// SetCommunicationConfigurationError and Bad_BrowseNameDuplicated. A
+// reused PublishedDataSet is shared, not owned: the ConnectionManager
+// neither changes nor removes it.
 func (x *run) reuseDataSets(ctx context.Context, a *acRun) error {
 	cfg := a.comm.cfg
-	adds := false
+	adds := map[string]*ua.PublishedDataSetDataType{}
 	for _, r := range a.comm.refs {
-		if r != nil && r.ConfigurationMask&ua.PubSubConfigurationRefMaskReferencePubDataset != 0 && r.ConfigurationMask&ua.PubSubConfigurationRefMaskElementAdd != 0 {
-			adds = true
+		if r != nil && r.ConfigurationMask&ua.PubSubConfigurationRefMaskReferencePubDataset != 0 && r.ConfigurationMask&ua.PubSubConfigurationRefMaskElementAdd != 0 &&
+			int(r.ElementIndex) < len(cfg.PublishedDataSets) && cfg.PublishedDataSets[r.ElementIndex] != nil && cfg.PublishedDataSets[r.ElementIndex].Name != "" {
+			p := cfg.PublishedDataSets[r.ElementIndex]
+			adds[p.Name] = p
 		}
 	}
-	if !adds {
+	if len(adds) == 0 {
 		return nil
 	}
-	refs, err := a.t.children(ctx, ua.NewNumericNodeID(0, id.PublishSubscribePublishedDataSets))
-	if err != nil {
-		// A server without the PubSub model: nothing to reuse.
-		return nil //nolint:nilerr // the folder is optional (OPC 10000-14 §9.1.3.2)
-	}
-	have := map[string]bool{}
+	// A server without the PubSub model has no folder (OPC 10000-14
+	// §9.1.3.2): nothing to reuse, and the call adds them.
+	refs, _ := a.t.children(ctx, ua.NewNumericNodeID(0, id.PublishSubscribePublishedDataSets))
+	reuse := map[string]bool{}
 	for _, r := range refs {
-		if r != nil && r.BrowseName != nil {
-			have[r.BrowseName.Name] = true
+		if r == nil || r.BrowseName == nil || r.NodeID == nil || r.NodeID.NodeID == nil {
+			continue
 		}
+		want := adds[r.BrowseName.Name]
+		if want == nil {
+			continue
+		}
+		same, err := x.sameDataSet(ctx, a, r.NodeID.NodeID, want)
+		if err != nil {
+			return err
+		}
+		if !same {
+			return failure(uafx.FxErrorSetCommunicationConfigurationError, ua.StatusBadBrowseNameDuplicated,
+				"%s has a PublishedDataSet %q with other PublishedData or DataSetMetaData than the set", a.addr.Address, want.Name)
+		}
+		reuse[want.Name] = true
 	}
 	kept := a.comm.refs[:0:0]
 	for _, r := range a.comm.refs {
 		if r != nil && r.ConfigurationMask&ua.PubSubConfigurationRefMaskReferencePubDataset != 0 && r.ConfigurationMask&ua.PubSubConfigurationRefMaskElementAdd != 0 &&
 			int(r.ElementIndex) < len(cfg.PublishedDataSets) && cfg.PublishedDataSets[r.ElementIndex] != nil &&
-			cfg.PublishedDataSets[r.ElementIndex].Name != "" && have[cfg.PublishedDataSets[r.ElementIndex].Name] {
+			reuse[cfg.PublishedDataSets[r.ElementIndex].Name] {
 			continue
 		}
 		kept = append(kept, r)
 	}
 	a.comm.refs = kept
 	return nil
+}
+
+// sameDataSet reads the PublishedData and DataSetMetaData Properties of the
+// PublishedDataItemsType Object n (OPC 10000-14 §9.1.4) and reports
+// whether they publish what want does: the same Variables, Attributes,
+// IndexRanges and deadbands in the same order, and Fields of the same
+// Names, BuiltInTypes, DataTypes, ValueRanks and ArrayDimensions (a set
+// without DataSetMetaData leaves the Fields to the publisher). Library
+// interpretation: SamplingIntervalHint is a hint and the
+// ConfigurationVersion the publisher's own (ConfigurationVersionDataType),
+// so neither is compared.
+func (x *run) sameDataSet(ctx context.Context, a *acRun, n *ua.NodeID, want *ua.PublishedDataSetDataType) (bool, error) {
+	if want.DataSetSource == nil {
+		return false, nil
+	}
+	items, ok := want.DataSetSource.Value.(*ua.PublishedDataItemsDataType)
+	if !ok {
+		return false, nil
+	}
+	props, err := a.t.children(ctx, n)
+	if err != nil {
+		f := failureOf(err, uafx.FxErrorSetCommunicationConfigurationError)
+		return false, failure(f.FxError, f.Status, "the PublishedDataSet %q on %s: %v", want.Name, a.addr.Address, err)
+	}
+	pd, md := child(props, 0, "PublishedData"), child(props, 0, "DataSetMetaData")
+	if pd == nil || md == nil {
+		return false, nil
+	}
+	res, err := a.t.sess.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{
+		{NodeID: pd, AttributeID: ua.AttributeIDValue}, {NodeID: md, AttributeID: ua.AttributeIDValue},
+	}})
+	if err == nil && len(res.Results) != 2 {
+		err = ua.StatusBadUnexpectedError
+	}
+	if err != nil {
+		f := failureOf(err, uafx.FxErrorSetCommunicationConfigurationError)
+		return false, failure(f.FxError, f.Status, "the PublishedDataSet %q on %s: %v", want.Name, a.addr.Address, err)
+	}
+	var have []*ua.PublishedVariableDataType
+	if eos, ok := dvValue(res.Results[0]).([]*ua.ExtensionObject); ok {
+		for _, eo := range eos {
+			v, _ := eo.Value.(*ua.PublishedVariableDataType)
+			have = append(have, v)
+		}
+	}
+	var haveMD *ua.DataSetMetaDataType
+	if eo, ok := dvValue(res.Results[1]).(*ua.ExtensionObject); ok {
+		haveMD, _ = eo.Value.(*ua.DataSetMetaDataType)
+	}
+	return samePublishedData(have, items.PublishedData) && sameFields(haveMD, want.DataSetMetaData), nil
+}
+
+func samePublishedData(have, want []*ua.PublishedVariableDataType) bool {
+	if len(have) != len(want) {
+		return false
+	}
+	for i, w := range want {
+		h := have[i]
+		if h == nil || w == nil {
+			if h != w {
+				return false
+			}
+			continue
+		}
+		if !h.PublishedVariable.Equal(w.PublishedVariable) || h.AttributeID != w.AttributeID || h.IndexRange != w.IndexRange ||
+			h.DeadbandType != w.DeadbandType || h.DeadbandValue != w.DeadbandValue {
+			return false
+		}
+	}
+	return true
+}
+
+func sameFields(have, want *ua.DataSetMetaDataType) bool {
+	switch {
+	case want == nil:
+		return true
+	case have == nil:
+		return false
+	}
+	if len(have.Fields) != len(want.Fields) {
+		return false
+	}
+	for i, w := range want.Fields {
+		h := have.Fields[i]
+		if h == nil || w == nil {
+			if h != w {
+				return false
+			}
+			continue
+		}
+		if h.Name != w.Name || h.BuiltInType != w.BuiltInType || h.ValueRank != w.ValueRank || !slices.Equal(h.ArrayDimensions, w.ArrayDimensions) {
+			return false
+		}
+		if (h.DataType != nil || w.DataType != nil) && !h.DataType.Equal(w.DataType) {
+			return false
+		}
+	}
+	return true
 }
 
 // disabledModel sets the DataSetReaders and DataSetWriters of cfg to
@@ -1196,7 +1314,10 @@ func applyValues(cfg *ua.PubSubConfiguration2DataType, values []*ua.PubSubConfig
 		case m&ua.PubSubConfigurationRefMaskReferenceConnection != 0:
 			if c := connAt(cfg, r); c != nil {
 				setName(&c.Name, v.Name)
-				if isNullID(c.PublisherID) && !isNullID(v.Identifier) {
+				// The PublisherId the PubSubConnection has: the one of the
+				// connection it matched, or the one it was added with
+				// (§6.16.3).
+				if !isNullID(v.Identifier) {
 					c.PublisherID = v.Identifier
 				}
 			}
@@ -1443,13 +1564,23 @@ func (x *run) relatedIsOurs(ctx context.Context, t *target, n *ua.NodeID, ours *
 	return sameRelated(relatedOf(t, dvStructure(res.Results[0])), ours)
 }
 
-// checkPublishers checks the PublisherIds the subscribers were configured
-// with against those their publishers' PubSubConnections have after the
-// call (§6.16.3: a PubSubConnection that matched an existing one has its
-// PublisherId). Library interpretation: adapting a subscriber that was
-// configured with another one is not done; that Connection fails with
-// SetCommunicationConfigurationError and Bad_ConfigurationError.
-func (x *run) checkPublishers() {
+// adaptSubscribers adapts the subscribers to the PublisherIds their
+// publishers' PubSubConnections have after the configure step (§6.16.3: a
+// PubSubConnection that matched an existing one has that one's
+// PublisherId, and the ConnectionManager adapts the subscribers'
+// configuration to the PublisherIds returned). A DataSetReader that was
+// configured with another PublisherId is modified on its AC in one more
+// EstablishConnections call, per AC, with SetCommunicationConfigurationCmd
+// for the endpoints created before (ConnectionEndpointDefinition Node,
+// Table 79) and ElementModify of the readers (OPC 10000-14 Table 241), and
+// EnableCommunicationCmd for an enabled establish. An AC with
+// CommandBundleRequired takes SetCommunicationConfigurationCmd only with
+// CreateConnectionEndpointCmd (§6.2.6): its subscribers cannot be adapted,
+// and their Connections fail with SetCommunicationConfigurationError and
+// Bad_ConfigurationError.
+func (x *run) adaptSubscribers(ctx context.Context) {
+	byAC := map[*acRun][]*epRun{}
+	var acs []*acRun
 	for _, ep := range x.eps {
 		as := ep.assumedPublisher
 		if as == nil || ep.failed() {
@@ -1459,7 +1590,71 @@ func (x *run) checkPublishers() {
 		if isNullID(actual) || sameVariant(actual, as.id) {
 			continue
 		}
-		x.fail(ep, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: ua.StatusBadConfigurationError})
+		rd := readerAt(ep.a.comm.cfg, ep.links.DataSetReaderRef)
+		if rd == nil {
+			continue
+		}
+		rd.PublisherID, as.id = actual, actual
+		if byAC[ep.a] == nil {
+			acs = append(acs, ep.a)
+		}
+		byAC[ep.a] = append(byAC[ep.a], ep)
+	}
+	x.parallel(ctx, acs, func(ctx context.Context, a *acRun) {
+		x.adaptOn(ctx, a, byAC[a])
+	})
+}
+
+// adaptOn modifies the DataSetReaders of eps on a (adaptSubscribers).
+func (x *run) adaptOn(ctx context.Context, a *acRun, eps []*epRun) {
+	failAll := func(st ua.StatusCode) {
+		for _, ep := range eps {
+			x.fail(ep, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: st})
+		}
+	}
+	if a.bundle {
+		failAll(ua.StatusBadConfigurationError)
+		return
+	}
+	req := &uafx.EstablishConnectionsRequest{CommandMask: uafx.SetCommunicationConfigurationCmd}
+	var refs []*ua.PubSubConfigurationRefDataType
+	for _, ep := range eps {
+		x.s.mu.Lock()
+		rec := x.s.records[recordKey(a.addr, ep.fe, ep.e.conf.Name)]
+		x.s.mu.Unlock()
+		if rec == nil || rec.NodeID == nil {
+			failAll(ua.StatusBadInvalidState)
+			return
+		}
+		r := *ep.links.DataSetReaderRef
+		r.ConfigurationMask = ua.PubSubConfigurationRefMaskReferenceReader | ua.PubSubConfigurationRefMaskElementModify
+		refs = append(refs, &r)
+		req.ConnectionEndpointConfigurations = append(req.ConnectionEndpointConfigurations, &uafx.ConnectionEndpointConfiguration{
+			FunctionalEntityNode: ep.fe,
+			ConnectionEndpoint:   &uafx.ConnectionEndpointDefinition{Node: rec.NodeID},
+			// The links of the endpoint as created (§10.13.3, Table 16:
+			// they name the reader and writer its Mode needs).
+			CommunicationLinks: ep.links,
+		})
+	}
+	req.CommunicationConfigurations = []*uafx.PubSubCommunicationConfiguration{{
+		PubSubConfiguration: a.comm.cfg, RequireCompleteUpdate: true, ConfigurationReferences: refs,
+	}}
+	if x.r.action == uafx.ActionEstablishConnectionsEnabled {
+		req.CommandMask |= uafx.EnableCommunicationCmd
+	}
+	res, err, _ := x.call(ctx, a, req)
+	switch {
+	case err != nil:
+		failAll(StatusOf(err))
+	case res.Status != ua.StatusGood:
+		failAll(res.Status)
+	default:
+		for i, r := range res.ConnectionEndpointConfigurationResults {
+			if i < len(eps) && r != nil && bad(r.CommunicationLinksResult) {
+				x.fail(eps[i], Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: r.CommunicationLinksResult})
+			}
+		}
 	}
 }
 
