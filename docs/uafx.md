@@ -341,7 +341,10 @@ the Variables, Methods and Objects it reaches with HierarchicalReferences
 (Part 3 §7.3), ControlGroups excepted, and the Methods called on any of
 them. §6.5.2 allows Objects in the lists and locks the "Variables or Methods
 in the hierarchical structure of instances", without saying more; this is
-the library's reading.
+the library's reading. The nodes are found when `EnableConnections` runs: a
+node added below such an Object later is not covered. An item that stands
+for more than 4096 nodes makes `EnableConnections` fail with
+`ErrConnections` instead of protecting a part of it.
 
 Who may administer control:
 
@@ -349,6 +352,8 @@ Who may administer control:
 |---|---|
 | EstablishControl, ReleaseControl, ReassignControl, and EstablishControlCmd and ReassignControlCmd of EstablishConnections | sessions with the well-known Role ConnectionAdmin (§5.9), as §6.5.3 to §6.5.5 recommend |
 | BreakLock | sessions with ConnectionAdmin (OPC 10000-100 §7.8: users with administrator rights) |
+| CloseConnections with Remove of a ConnectionEndpoint that controls ControlGroups, which releases them (§6.2.5.2) | sessions with ConnectionAdmin; the others get `Bad_UserAccessDenied` for that endpoint, and nothing of it is closed |
+| SetConfigurationDataCmd writing, as an existing ConnectionEndpoint, a Variable of a Lock that endpoint holds | sessions with ConnectionAdmin; the others get `Bad_UserAccessDenied` for that value (Table 14) |
 | InitLock, RenewLock, ExitLock | anyone the `AccessController` allows; RenewLock and ExitLock only the owner |
 
 The others get `Bad_UserAccessDenied`. A `server.RoleMapper`
@@ -360,7 +365,12 @@ and the caller, so an application can, for example, let clients control
 groups for themselves (an empty LockContext or their own ApplicationUri)
 but not for others. EstablishConnections and CloseConnections themselves,
 which §6.2.4.1 and §6.2.5.1 also recommend restricting to ConnectionAdmin,
-stay with the `AccessController` and RolePermissions, as in v1.37.0.
+stay with the `AccessController` and RolePermissions, as in v1.37.0: the
+default `server.DefaultAccessController` lets any session call them, so a
+client without ConnectionAdmin can still create, close and remove
+ConnectionEndpoints that control no ControlGroups. A deployment that
+restricts connections sets `server.WithAccessController` (or
+RolePermissions) as well.
 
 | Method | What the server does |
 |---|---|
@@ -537,7 +547,10 @@ The test address space is `internal/testutil/fxtest`.
   interpreted. A ControlGroup a client controls has no Controls Reference
   (§6.5.2 wants it from the Object of the client connection, which the
   server does not have). An item in two lists of one ControlGroup is not
-  refused. No persistent connections ([Persistence](#persistence)), no ConnectionManager behaviour
+  refused. The Guard checks a write or call before it runs, not while: an
+  InitLock or EstablishControl that comes between the check and the
+  operation does not stop it (OPC 10000-100 §7.2 wants a Lock refused while
+  an incompatible operation is active). No persistent connections ([Persistence](#persistence)), no ConnectionManager behaviour
   (§6.7: no ConnectionConfigurationSets are established), no
   AutomationComponent log.
 - CloseConnections with Remove removes the DataSetReaders and

@@ -55,5 +55,12 @@ func SetLockClock(c *Connections, now func() time.Time) { c.ctl.clock.Store(&now
 // TickLocks runs one tick of the Locks as the monitor does.
 func TickLocks(c *Connections) { c.tickLocks() }
 
+// WithMaxControlled sets the most nodes an item of a ControlItemFolder
+// stands for.
+func WithMaxControlled(o ConnectionOptions, n int) ConnectionOptions {
+	o.maxControlled = n
+	return o
+}
+
 // SessionEnded tells the Guard of the Locks that the session s ended.
 func SessionEnded(c *Connections, s *server.Session) { lockGuard{c}.SessionEnded(s) }

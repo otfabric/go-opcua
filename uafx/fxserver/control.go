@@ -5,6 +5,7 @@ package fxserver
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"math"
 	"slices"
 	"strconv"
@@ -38,7 +39,10 @@ import (
 // structure of instances" and lets the lists include Objects, without
 // saying more. The Lock covers the Object, the nodes it reaches with
 // HierarchicalReferences (Part 3 §7.3) and the Methods called on them,
-// ControlGroups excepted.
+// ControlGroups excepted. The nodes are found when EnableConnections runs:
+// a node added below such an Object later is not covered. An item that
+// stands for more than 4096 nodes makes EnableConnections fail rather
+// than leave a part of it unprotected.
 //
 // Establishing, releasing and reassigning control and breaking a Lock need
 // the ControlAuthorizer of ConnectionOptions; without one, the well-known
@@ -61,6 +65,14 @@ const (
 	// ControlBreakLock is BreakLock of the Lock of a ControlItemFolder
 	// (OPC 10000-100 §7.8, Part 81 §6.5.2).
 	ControlBreakLock
+	// ControlCloseRemove is CloseConnections with Remove of a
+	// ConnectionEndpoint that controls the ControlGroup, which releases it
+	// (§6.2.5.2).
+	ControlCloseRemove
+	// ControlWriteAsEndpoint is SetConfigurationDataCmd writing, as a
+	// ConnectionEndpoint (§6.2.4.3.7), a Variable of a Lock that endpoint
+	// holds.
+	ControlWriteAsEndpoint
 )
 
 // String returns the name of the Method.
@@ -74,6 +86,10 @@ func (o ControlOperation) String() string {
 		return "ReassignControl"
 	case ControlBreakLock:
 		return "BreakLock"
+	case ControlCloseRemove:
+		return "CloseConnections"
+	case ControlWriteAsEndpoint:
+		return "SetConfigurationDataCmd"
 	}
 	return "ControlOperation(" + strconv.Itoa(int(o)) + ")"
 }
@@ -83,8 +99,15 @@ type ControlRequest struct {
 	Operation ControlOperation
 	// Group is the ControlGroup.
 	Group *ua.NodeID
-	// Lock is the Lock of BreakLock; nil for the other operations.
+	// Lock is the Lock of BreakLock and ControlWriteAsEndpoint; nil for
+	// the other operations.
 	Lock *ua.NodeID
+	// Endpoint is the ConnectionEndpoint of ControlCloseRemove and
+	// ControlWriteAsEndpoint; nil for the other operations.
+	Endpoint *ua.NodeID
+	// Node is the Variable of ControlWriteAsEndpoint; nil for the other
+	// operations.
+	Node *ua.NodeID
 	// LockContext names the owner EstablishControl and ReassignControl
 	// give the ControlGroup to (Part 81 Table 64): an ApplicationUri, the
 	// NodeId of a ConnectionEndpoint in string form, or "" for the caller.
@@ -341,7 +364,11 @@ func (c *Connections) setupGroup(n *ua.NodeID) error {
 			maxInactive: durationOf(c.value(c.diChild(folder, "MaxInactiveLockTime")))}
 		seen := map[string]bool{}
 		for _, r := range c.children(folder, id.Organizes) {
-			for _, x := range c.controlled(r.NodeID.NodeID) {
+			nodes, err := c.controlled(r.NodeID.NodeID)
+			if err != nil {
+				return fmt.Errorf("%w: ControlGroup %s, %s: %w", ErrConnections, n, f.name, err)
+			}
+			for _, x := range nodes {
 				if !seen[x.String()] {
 					seen[x.String()] = true
 					l.items = append(l.items, x)
@@ -401,23 +428,60 @@ const maxControlled = 4096
 
 // controlled returns the nodes the item n of a ControlItemFolder stands
 // for: n and the nodes of its hierarchy, without ControlGroups and their
-// members, whose Methods must stay callable.
-func (c *Connections) controlled(n *ua.NodeID) []*ua.NodeID {
+// members, whose Methods must stay callable. More nodes than the limit is
+// an error: a Lock that covers a part of them would leave the rest
+// unprotected.
+func (c *Connections) controlled(n *ua.NodeID) ([]*ua.NodeID, error) {
 	if c.isA(n, fxacid.ControlGroupType) {
-		return nil
+		return nil, nil
+	}
+	limit := c.opts.maxControlled
+	if limit <= 0 {
+		limit = maxControlled
 	}
 	out := []*ua.NodeID{n}
 	seen := map[string]bool{n.String(): true}
-	for i := 0; i < len(out) && len(out) < maxControlled; i++ {
+	for i := 0; i < len(out); i++ {
 		for _, r := range c.children(out[i], id.HierarchicalReferences) {
 			x := r.NodeID.NodeID
 			if seen[x.String()] {
 				continue
 			}
 			seen[x.String()] = true
-			if !c.isA(x, fxacid.ControlGroupType) {
-				out = append(out, x)
+			if c.isA(x, fxacid.ControlGroupType) {
+				continue
 			}
+			if len(out) == limit {
+				return nil, fmt.Errorf("item %s stands for more than %d nodes", n, limit)
+			}
+			out = append(out, x)
+		}
+	}
+	return out, nil
+}
+
+// endpointLock returns a Lock that the ConnectionEndpoint e holds on the
+// node n, or nil.
+func (c *Connections) endpointLock(e *endpoint, n *ua.NodeID) *itemLock {
+	c.ctl.mu.Lock()
+	defer c.ctl.mu.Unlock()
+	for _, l := range c.ctl.byItem[n.String()] {
+		if l.owner != nil && l.owner.endpoint == e {
+			return l
+		}
+	}
+	return nil
+}
+
+// endpointGroups returns the ControlGroups the ConnectionEndpoint e
+// controls.
+func (c *Connections) endpointGroups(e *endpoint) []*ua.NodeID {
+	c.ctl.mu.Lock()
+	defer c.ctl.mu.Unlock()
+	var out []*ua.NodeID
+	for _, g := range c.ctl.groups {
+		if g.controller != nil && g.controller.endpoint == e {
+			out = append(out, g.id)
 		}
 	}
 	return out

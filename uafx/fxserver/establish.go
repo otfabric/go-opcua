@@ -988,7 +988,14 @@ func (x *call) configureOne(el *element, p *uafx.NodeIDValuePair, vars map[strin
 	}
 	// The command acts as the ConnectionEndpoint, which may own the Locks
 	// of a ControlGroup (Part 81 §6.5.2); a Lock that rejects the write is
-	// Bad_UserAccessDenied (Table 14).
+	// Bad_UserAccessDenied (Table 14). Writing through the endpoint's own
+	// Lock needs the ControlAuthorizer.
+	if l := x.c.endpointLock(el.ep, n); l != nil {
+		if sc := x.c.authorize(x.ctx, ControlRequest{Operation: ControlWriteAsEndpoint, Group: l.group.id, Lock: l.id,
+			Endpoint: el.ep.id, Node: n}); sc != ua.StatusOK {
+			return ua.StatusBadUserAccessDenied
+		}
+	}
 	switch sc := x.c.srv.WriteValue(actingAs(x.ctx, el.ep), n, v); sc {
 	case ua.StatusOK:
 		return ua.StatusOK

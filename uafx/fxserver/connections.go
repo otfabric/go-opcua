@@ -62,13 +62,18 @@ type ConnectionOptions struct {
 	MaxInactiveLockTime time.Duration
 	// ControlAuthorizer decides who establishes, releases and reassigns
 	// the control of a ControlGroup, with its Methods or the commands of
-	// EstablishConnections, and who breaks a Lock of one. nil allows the
+	// EstablishConnections, who breaks a Lock of one, who removes a
+	// ConnectionEndpoint that controls one with CloseConnections, and who
+	// writes through the Lock of a ConnectionEndpoint with
+	// SetConfigurationDataCmd (see ControlOperation). nil allows the
 	// sessions with the well-known Role ConnectionAdmin
 	// ([Namespaces.ConnectionAdmin]) only, as Part 81 §6.5.3 to §6.5.5
 	// recommend; the others get Bad_UserAccessDenied. InitLock, RenewLock
 	// and ExitLock are the owner's (OPC 10000-100 §7.5 to §7.7) and the
 	// AccessController's.
 	ControlAuthorizer ControlAuthorizer
+	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
+	maxControlled int
 	// Logger logs what the connections do; nil is slog.Default().
 	Logger *slog.Logger
 }

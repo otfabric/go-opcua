@@ -5,6 +5,7 @@ package fxserver_test
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"testing"
 	"time"
@@ -256,6 +257,7 @@ func TestControlOperation(t *testing.T) {
 	for op, name := range map[fxserver.ControlOperation]string{
 		fxserver.ControlEstablish: "EstablishControl", fxserver.ControlRelease: "ReleaseControl",
 		fxserver.ControlReassign: "ReassignControl", fxserver.ControlBreakLock: "BreakLock",
+		fxserver.ControlCloseRemove: "CloseConnections", fxserver.ControlWriteAsEndpoint: "SetConfigurationDataCmd",
 		0: "ControlOperation(0)",
 	} {
 		assert.Equal(t, name, op.String())
@@ -370,7 +372,9 @@ func TestLockTime(t *testing.T) {
 	// An endpoint keeps its Locks; a client's Lock taken with them goes.
 	r := f.controlRequest("Renewed")
 	r.CommandMask &^= uafx.EnableCommunicationCmd
-	require.Equal(t, ua.StatusOK, f.establish(t, r).Status)
+	res := f.establish(t, r)
+	require.Equal(t, ua.StatusOK, res.Status)
+	ep := res.ConnectionEndpointConfigurationResults[0].ConnectionEndpointID
 	require.Equal(t, int32(0), f.lockStatus(t, a, monitorID+blockLock, monitorID+blockLock+lockInit, ""))
 	tick(2 * time.Hour)
 	for _, l := range []uint32{controlID + blockLock, controlID + restrictLock} {
@@ -380,6 +384,62 @@ func TestLockTime(t *testing.T) {
 	}
 	assert.False(t, locked(monitorID+blockLock), "the client's Lock")
 	assert.Equal(t, ua.StatusBadLocked, f.writeValue(t, f.c, gainID, 9.0))
+
+	// Without ConnectionAdmin a client neither writes through the
+	// endpoint's Lock with SetConfigurationDataCmd nor releases its
+	// ControlGroups with CloseConnections and Remove; with it, it does.
+	p := f.plainClient(t, appA)
+	cr := f.configureAs(t, p, ep, gainID, 7.0)
+	assert.Equal(t, []ua.StatusCode{ua.StatusBadUserAccessDenied}, cr.ConnectionEndpointConfigurationResults[0].ConfigurationDataResult)
+	assert.NotEqual(t, 7.0, f.value(t, gainID))
+	sc, results, err := uafx.CloseConnections(context.Background(), p, f.id(ctlID), []*ua.NodeID{ep}, true)
+	require.NoError(t, err)
+	assert.Equal(t, ua.StatusUncertain, sc)
+	assert.Equal(t, []ua.StatusCode{ua.StatusBadUserAccessDenied}, results)
+	assert.Equal(t, true, f.value(t, controlID+isControlled))
+	assert.Len(t, f.conns.Endpoints(), 2, "Preset and Renewed")
+	cr = f.configureAs(t, f.c, ep, gainID, 7.0)
+	assert.Equal(t, ua.StatusOK, cr.Status)
+	assert.Equal(t, 7.0, f.value(t, gainID))
+	sc, _ = f.close(t, true, ep)
+	require.Equal(t, ua.StatusOK, sc)
+	assert.Equal(t, false, f.value(t, controlID+isControlled))
+}
+
+// TestControlItemLimit: an item of a ControlItemFolder that stands for more
+// nodes than the limit fails EnableConnections instead of leaving the rest
+// unprotected. Axis stands for itself, InputData, AxisIn and Home.
+func TestControlItemLimit(t *testing.T) {
+	t.Parallel()
+	for _, limit := range []int{3, 4} {
+		srv := newServer(t, server.WithPubSub(nil))
+		ns, _, err := fxtest.PrepareControlGroups(srv)
+		require.NoError(t, err)
+		opts := fxserver.WithMaxControlled(fxserver.ConnectionOptions{Logger: slog.New(slog.DiscardHandler)}, limit)
+		c, err := fxserver.EnableConnections(srv, ns, opts)
+		if limit == 3 {
+			require.ErrorIs(t, err, fxserver.ErrConnections)
+			assert.ErrorContains(t, err, "more than 3 nodes")
+			continue
+		}
+		require.NoError(t, err)
+		require.NoError(t, c.Close())
+	}
+}
+
+// configureAs runs SetConfigurationDataCmd for the existing
+// ConnectionEndpoint ep of Motion with the client c: key is written v.
+func (f *fx) configureAs(t *testing.T, c *opcua.Client, ep *ua.NodeID, key uint32, v any) *uafx.EstablishConnectionsResult {
+	t.Helper()
+	res, err := uafx.EstablishConnections(context.Background(), c, f.id(ctlID), &uafx.EstablishConnectionsRequest{
+		CommandMask: uafx.SetConfigurationDataCmd,
+		ConnectionEndpointConfigurations: []*uafx.ConnectionEndpointConfiguration{{
+			FunctionalEntityNode: f.id(motionID), ConnectionEndpoint: &uafx.ConnectionEndpointDefinition{Node: ep},
+			ConfigurationData: []*uafx.NodeIDValuePair{{Key: &uafx.NodeIDArray{Node: f.id(key)}, Value: ua.MustVariant(v)}},
+		}},
+	})
+	require.NoError(t, err)
+	return res
 }
 
 // controlRequest establishes control of Control, writes Gain and reassigns
@@ -475,9 +535,16 @@ func TestEstablishConnectionsControl(t *testing.T) {
 				}},
 			})
 		}
+		requests()
 		r := cfg(gainID, 3.5)
 		assert.Equal(t, ua.StatusOK, r.Status)
 		assert.Equal(t, 3.5, f.value(t, gainID))
+		reqs = requests()
+		require.Len(t, reqs, 1)
+		assert.Equal(t, fxserver.ControlWriteAsEndpoint, reqs[0].Operation)
+		assert.Equal(t, ep, reqs[0].Endpoint.String())
+		assert.Equal(t, f.id(gainID).String(), reqs[0].Node.String())
+		assert.Equal(t, f.id(controlID+restrictLock).String(), reqs[0].Lock.String())
 		r = cfg(tableID, []float64{9, 9, 9})
 		assert.Equal(t, ua.StatusUncertain, r.Status)
 		assert.Equal(t, []ua.StatusCode{ua.StatusBadUserAccessDenied}, r.ConnectionEndpointConfigurationResults[0].ConfigurationDataResult)
@@ -487,8 +554,13 @@ func TestEstablishConnectionsControl(t *testing.T) {
 		require.Equal(t, ua.StatusOK, sc)
 		locked, _, _ = f.lockProps(t, controlID+restrictLock)
 		assert.True(t, locked)
+		requests()
 		sc, _ = f.close(t, true, er.ConnectionEndpointID)
 		require.Equal(t, ua.StatusOK, sc)
+		reqs = requests()
+		require.Len(t, reqs, 1)
+		assert.Equal(t, fxserver.ControlCloseRemove, reqs[0].Operation)
+		assert.Equal(t, ep, reqs[0].Endpoint.String())
 		assert.Equal(t, false, f.value(t, controlID+isControlled))
 		locked, client, _ = f.lockProps(t, controlID+restrictLock)
 		assert.False(t, locked)

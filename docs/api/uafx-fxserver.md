@@ -87,15 +87,21 @@ type ConnectionOptions struct {
 	MaxInactiveLockTime time.Duration
 	// ControlAuthorizer decides who establishes, releases and reassigns
 	// the control of a ControlGroup, with its Methods or the commands of
-	// EstablishConnections, and who breaks a Lock of one. nil allows the
+	// EstablishConnections, who breaks a Lock of one, who removes a
+	// ConnectionEndpoint that controls one with CloseConnections, and who
+	// writes through the Lock of a ConnectionEndpoint with
+	// SetConfigurationDataCmd (see ControlOperation). nil allows the
 	// sessions with the well-known Role ConnectionAdmin
 	// ([Namespaces.ConnectionAdmin]) only, as Part 81 §6.5.3 to §6.5.5
 	// recommend; the others get Bad_UserAccessDenied. InitLock, RenewLock
 	// and ExitLock are the owner's (OPC 10000-100 §7.5 to §7.7) and the
 	// AccessController's.
 	ControlAuthorizer ControlAuthorizer
+	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
+
 	// Logger logs what the connections do; nil is slog.Default().
 	Logger *slog.Logger
+
 }
 ```
 
@@ -197,6 +203,14 @@ const (
 	// ControlBreakLock is BreakLock of the Lock of a ControlItemFolder
 	// (OPC 10000-100 §7.8, Part 81 §6.5.2).
 	ControlBreakLock
+	// ControlCloseRemove is CloseConnections with Remove of a
+	// ConnectionEndpoint that controls the ControlGroup, which releases it
+	// (§6.2.5.2).
+	ControlCloseRemove
+	// ControlWriteAsEndpoint is SetConfigurationDataCmd writing, as a
+	// ConnectionEndpoint (§6.2.4.3.7), a Variable of a Lock that endpoint
+	// holds.
+	ControlWriteAsEndpoint
 )
 ```
 
@@ -215,8 +229,15 @@ type ControlRequest struct {
 	Operation ControlOperation
 	// Group is the ControlGroup.
 	Group *ua.NodeID
-	// Lock is the Lock of BreakLock; nil for the other operations.
+	// Lock is the Lock of BreakLock and ControlWriteAsEndpoint; nil for
+	// the other operations.
 	Lock *ua.NodeID
+	// Endpoint is the ConnectionEndpoint of ControlCloseRemove and
+	// ControlWriteAsEndpoint; nil for the other operations.
+	Endpoint *ua.NodeID
+	// Node is the Variable of ControlWriteAsEndpoint; nil for the other
+	// operations.
+	Node *ua.NodeID
 	// LockContext names the owner EstablishControl and ReassignControl
 	// give the ControlGroup to (Part 81 Table 64): an ApplicationUri, the
 	// NodeId of a ConnectionEndpoint in string form, or "" for the caller.
