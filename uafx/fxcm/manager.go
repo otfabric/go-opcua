@@ -116,6 +116,12 @@ type Manager struct {
 
 	places placeLocks
 
+	obs struct {
+		mu   sync.RWMutex
+		next int
+		list map[int]Observer
+	}
+
 	counters struct {
 		establish, establishFailed, close, closeFailed atomic.Uint32
 	}
@@ -251,6 +257,9 @@ func (m *Manager) Close() error {
 	m.pool.close(ctx)
 	return nil
 }
+
+// Options returns the Options of the Manager, with their defaults.
+func (m *Manager) Options() Options { return m.opts }
 
 // Counters returns the counters of the EstablishConnections and
 // CloseConnections calls of the Manager (§6.7.2 Table 78). A call that
@@ -417,12 +426,9 @@ func (m *Manager) Add(conf *uafx.ConnectionConfigurationSetConf) (*Config, error
 	if err != nil {
 		return nil, err
 	}
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if err := m.addCheckLocked(cfg.key); err != nil {
+	if err := m.addConfig(cfg); err != nil {
 		return nil, err
 	}
-	m.sets[keyString(cfg.key)] = newSet(cfg)
 	return cfg, nil
 }
 
@@ -466,6 +472,7 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 	s.cfg, s.state, s.diags, s.records, s.lastEstablish, s.retries = cfg, StateReady, newDiagnostics(cfg), map[string]*record{}, nil, 0
 	s.current = nil
 	s.mu.Unlock()
+	m.observe(Event{Kind: EventSetReplaced, Set: cfg.key, Version: cfg.version})
 	return cfg, nil
 }
 
@@ -488,6 +495,7 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 	s.mu.Lock()
 	s.removed, s.current = true, nil
 	s.mu.Unlock()
+	m.observe(Event{Kind: EventSetRemoved, Set: key})
 	return nil
 }
 
@@ -629,11 +637,13 @@ func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete b
 
 func (m *Manager) addConfig(cfg *Config) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if err := m.addCheckLocked(cfg.key); err != nil {
+		m.mu.Unlock()
 		return err
 	}
 	m.sets[keyString(cfg.key)] = newSet(cfg)
+	m.mu.Unlock()
+	m.observe(Event{Kind: EventSetAdded, Set: cfg.key, Version: cfg.version})
 	return nil
 }
 
@@ -832,8 +842,13 @@ func (m *Manager) StartEdit(key SetKey, owner LockOwner) (*Edit, error) {
 		return nil, managerError(ua.StatusBadNodeIDUnknown, "no set %s", key)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.edit.Start(s.cfg, owner)
+	started := s.edit.Editing() == nil
+	e, err := s.edit.Start(s.cfg, owner)
+	s.mu.Unlock()
+	if err == nil && started {
+		m.observe(Event{Kind: EventEditStarted, Set: key})
+	}
+	return e, err
 }
 
 // CommitEdit is CommitUpdates (§6.7.4): the working copy becomes the next
@@ -846,6 +861,14 @@ func (m *Manager) CommitEdit(key SetKey, owner LockOwner) (*Config, bool, error)
 	if s == nil {
 		return nil, false, managerError(ua.StatusBadNodeIDUnknown, "no set %s", key)
 	}
+	cfg, ok, err := m.commitLocked(s, owner)
+	if ok {
+		m.observe(Event{Kind: EventCommitted, Set: key, Version: cfg.version})
+	}
+	return cfg, ok, err
+}
+
+func (m *Manager) commitLocked(s *set, owner LockOwner) (*Config, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	e := s.edit.Editing()
@@ -888,8 +911,12 @@ func (m *Manager) DiscardEdit(key SetKey, owner LockOwner) (bool, error) {
 		return false, managerError(ua.StatusBadNodeIDUnknown, "no set %s", key)
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.edit.Discard(owner)
+	ok, err := s.edit.Discard(owner)
+	s.mu.Unlock()
+	if ok {
+		m.observe(Event{Kind: EventEditEnded, Set: key})
+	}
+	return ok, err
 }
 
 // EditLockLost ends the edit of a set whose Lock went (the owner's session
@@ -900,8 +927,12 @@ func (m *Manager) EditLockLost(key SetKey) bool {
 		return false
 	}
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.edit.LockLost()
+	ok := s.edit.LockLost()
+	s.mu.Unlock()
+	if ok {
+		m.observe(Event{Kind: EventEditEnded, Set: key})
+	}
+	return ok
 }
 
 // placeLocks serializes the runs of a Manager on one FunctionalEntity of

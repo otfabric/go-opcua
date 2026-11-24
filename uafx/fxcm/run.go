@@ -91,6 +91,23 @@ const (
 	// EventMonitor: the monitor read a new Status of Record, or found it
 	// gone (Err).
 	EventMonitor
+	// EventSetAdded: a set was added with Version 1 (Add, or ElementAdd of
+	// Update).
+	EventSetAdded
+	// EventSetReplaced: a set was replaced by a new one of Version 1
+	// (Replace, or ElementReplace of Update).
+	EventSetReplaced
+	// EventSetRemoved: a set was removed (Remove, or ElementRemove of
+	// Update).
+	EventSetRemoved
+	// EventEditStarted: a set went into edit (StartEditing, §6.7.4).
+	EventEditStarted
+	// EventCommitted: the edit of a set was committed as Version
+	// (CommitUpdates, §6.7.4).
+	EventCommitted
+	// EventEditEnded: the edit of a set ended without a commit
+	// (DiscardUpdates, or its Lock went, §6.7.4).
+	EventEditEnded
 )
 
 // Event is what an Observer receives.
@@ -107,6 +124,9 @@ type Event struct {
 	Closed     bool
 	Verdict    Verdict
 	Attempt    int
+	// Version is the Version of the set after EventSetAdded,
+	// EventSetReplaced and EventCommitted.
+	Version uint32
 }
 
 // Observer receives the Events of a Manager: transitions, calls, endpoints,
@@ -123,10 +143,36 @@ type ObserverFunc func(Event)
 // Observe implements Observer.
 func (f ObserverFunc) Observe(e Event) { f(e) }
 
+// AddObserver adds an Observer besides Options.Observer, for example the
+// address space of a server that exposes the Manager. remove removes it;
+// after remove returns it receives no more Events.
+func (m *Manager) AddObserver(o Observer) (remove func()) {
+	m.obs.mu.Lock()
+	defer m.obs.mu.Unlock()
+	m.obs.next++
+	n := m.obs.next
+	if m.obs.list == nil {
+		m.obs.list = map[int]Observer{}
+	}
+	m.obs.list[n] = o
+	return func() {
+		m.obs.mu.Lock()
+		defer m.obs.mu.Unlock()
+		delete(m.obs.list, n)
+	}
+}
+
 func (m *Manager) observe(e Event) {
 	if m.opts.Observer != nil {
 		m.opts.Observer.Observe(e)
 	}
+	// The added Observers are called under a read lock, so that remove
+	// waits for a call in progress.
+	m.obs.mu.RLock()
+	for _, o := range m.obs.list {
+		o.Observe(e)
+	}
+	m.obs.mu.RUnlock()
 	m.log.Debug("fxcm", "kind", e.Kind, "set", e.Set.String(), "run", e.Run, "transition", e.Transition,
 		"method", e.Method, "address", e.Address, "status", e.Status, "error", e.Err)
 }
