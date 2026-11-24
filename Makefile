@@ -14,7 +14,7 @@ TEST_PKGS := . ./ua/ ./uacp/ ./uasc/ ./uapolicy/ ./server/ ./monitor/ ./errors/ 
 COVER_PKGS := github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/internal/websocket,github.com/otfabric/go-opcua/pubsub,github.com/otfabric/go-opcua/pubsub/message,github.com/otfabric/go-opcua/pubsub/uadp,github.com/otfabric/go-opcua/pubsub/jsonmsg,github.com/otfabric/go-opcua/pubsub/transport,github.com/otfabric/go-opcua/pubsub/transport/udp,github.com/otfabric/go-opcua/pubsub/transport/eth,github.com/otfabric/go-opcua/pubsub/transport/mqtt,github.com/otfabric/go-opcua/pubsub/transport/amqp,github.com/otfabric/go-opcua/pubsub/security,github.com/otfabric/go-opcua/pubsub/sks,github.com/otfabric/go-opcua/pubsub/remote,github.com/otfabric/go-opcua/gds,github.com/otfabric/go-opcua/gds/gdsserver,github.com/otfabric/go-opcua/internal/mqtt,github.com/otfabric/go-opcua/internal/amqp,github.com/otfabric/go-opcua/uafx,github.com/otfabric/go-opcua/uafx/fxserver,github.com/otfabric/go-opcua/internal/nodeset
 COVER_TEST_PKGS := $(TEST_PKGS) ./conformance/...
 
-.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-check coverage-pkg-check cross fuzz bench e2e docs-check
+.PHONY: help all test test-norace coverage cover lint lint-ci vuln fmt vet verify integration selfintegration interop interop-shard chaos examples test-race install-py-opcua gen check-gen coverage-ledger coverage-check coverage-merged-check coverage-pkg-check cross fuzz bench e2e docs-check
 
 help: ## Show this help
 	@awk 'BEGIN {FS = ":.*?## "} /^[a-zA-Z0-9_-]+:.*?## / {printf "\033[36m%-22s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -108,6 +108,16 @@ coverage: ## Run tests with coverage on core library only (writes coverage.out)
 	awk -v p="$$pct" 'BEGIN { if (p+0 < 90) { printf "ERROR: coverage %.1f%% is below 90%% threshold\n", p; exit 1 } }'
 
 coverage-check: coverage ## Alias of coverage: fail below the 90 % total
+
+# Repository coverage minimum for CI: the coverage-merged job of ci.yml merges
+# the shared go-ci profile with the server package's and runs this gate on it.
+COVERAGE_MIN := 94
+PROFILE ?= coverage.out
+
+coverage-merged-check: ## Fail when the total of PROFILE (a merged CI profile) is below COVERAGE_MIN%
+	@pct=$$(go tool cover -func=$(PROFILE) | awk '/^total:/ {gsub(/%/,""); print $$3}'); \
+	echo "Total coverage: $$pct% (minimum $(COVERAGE_MIN)%)"; \
+	awk -v p="$$pct" -v m="$(COVERAGE_MIN)" 'BEGIN { if (p+0 < m+0) { printf "ERROR: coverage %.1f%% is below %s%%\n", p, m; exit 1 } }'
 
 # Every library package must reach COVER_PKG_MIN percent on its own, generated
 # code excluded (internal/cmd/coverage-gate). The coverage of a package counts

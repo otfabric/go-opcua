@@ -21,7 +21,7 @@ jobs:
       go-versions: '["1.26","1.27"]'
       run-govulncheck: true
       # No coverage-min here: this job no longer runs the server package's
-      # tests (87 % alone), so the 94 % gate moved to coverage-merged, on the
+      # tests (87 % alone), so the 94 % gate moved to coverage-merged (make coverage-merged-check), on the
       # same merged metric (95.5 % on #43; 95.4 % before the split). The
       # per-package gate of the coverage-gate job stays.
       fuzz-time: 10s
@@ -120,18 +120,11 @@ jobs:
           name: coverage-go-mod-version
           path: shared
       - name: Coverage gate (merged)
-        env:
-          # The repository coverage minimum (go-ci coverage-min before the
-          # server split); never lower it.
-          MIN: "94"
+        # The minimum is COVERAGE_MIN in the Makefile (94 %, go-ci
+        # coverage-min before the server split); never lower it.
         run: |
-          set -euo pipefail
           { cat shared/coverage.out; tail -n +2 server.out; } > merged.out
-          total=$(go tool cover -func=merged.out | awk '/^total:/ {sub("%","",$3); print $3}')
-          awk -v t="$total" -v m="$MIN" 'BEGIN {
-            if (t+0 < m+0) { printf "::error::merged coverage %.1f%% is below the minimum %s%%\n", t, m; exit 1 }
-            printf "merged coverage %.1f%% >= %s%%\n", t, m
-          }'
+          make coverage-merged-check PROFILE=merged.out
       - name: Upload to Codecov
         uses: codecov/codecov-action@v7
         with:

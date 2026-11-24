@@ -22,7 +22,7 @@ This repository follows **otfabric/engineering policy 1.6**, profile **protocol-
 
 ## Hard rules
 
-1. Never lower `COVER_PKG_MIN` (90 per library package, `make coverage-pkg-check`), the 90 % gate of `make coverage`, or the 94 % `MIN` of the `coverage-merged` job in `.github/workflows/ci.yml`. No new lint suppressions, and do not skip or delete tests to make CI pass.
+1. Never lower `COVER_PKG_MIN` (90 per library package, `make coverage-pkg-check`), the 90 % gate of `make coverage`, or `COVERAGE_MIN` (94 %, gated by `make coverage-merged-check` in the `coverage-merged` CI job). No new lint suppressions, and do not skip or delete tests to make CI pass.
 2. Generated files come from `make gen`; `make check-gen` fails on drift. Do not edit them by hand. `interop/COVERAGE.md` and `interop/GAPS.md` are rendered from the ledger.
 3. Never invent protocol semantics: cite the Part and clause.
 4. Interop claims only from a test recorded in the ledger, against the pinned opcua-interop release.
