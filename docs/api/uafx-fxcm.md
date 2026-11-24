@@ -6,21 +6,58 @@
 import "github.com/otfabric/go-opcua/uafx/fxcm"
 ```
 
-Package fxcm is the configuration model of a UAFX ConnectionManager: OPC 10000-81 version 1.00.04, §6.7 to §6.16 and Annex F.
+Package fxcm is a UAFX ConnectionManager: OPC 10000-81 version 1.00.04, §6.7 to §6.16, §13 and Annex F.
 
 A ConnectionConfigurationSet comes in as the Annex F structure uafx.ConnectionConfigurationSetConf, from a file (DecodeFile, F.2) or built in Go. NewConfig validates it and turns it into an immutable Config, one per Version of the set (§6.8.2). An Edit is the transactional edit of §6.7.4: a working copy that CommitUpdates turns into the next Version.
 
-State is the state machine of a set (§6.9), with the transitions an action may start and the event each one has. The ownership classes of the ConnectionEndpoints a ConnectionManager finds (Ownership) and the decisions over them (what a run may close, when a lost response proves an endpoint ours, when a set may be processed again by itself) are pure functions here, as are the diagnostics of §10.19 and the ConnectionState of §10.20.
+State is the state machine of a set (§6.9), with the transitions an action may start and the event each one has. The ownership classes of the ConnectionEndpoints a ConnectionManager finds (Ownership) and the decisions over them (what a run may close, when a lost response proves an endpoint ours, when a set may be processed again by itself) are pure functions, as are the diagnostics of §10.19 and the ConnectionState of §10.20.
 
-The package makes no calls to a server. The design of the ConnectionManager, which the comments cite as "design §n", is docs/design/uafx-connection-manager.md (go-opcua pull request 44).
+A Manager holds sets and processes them against the AutomationComponents (§6.7.3, §6.7.5): it dials their servers through a Dialer, resolves the identifiers of a set (§13.3), and calls EstablishConnections and CloseConnections (§6.2.4, §6.2.5). Process starts a Run per set and returns at once; Status, the Observer and the Counters report what the runs do. An endpoint whose ownership a run cannot prove is Unresolved and never closed until Settle decides it.
+
+The design of the ConnectionManager, which the comments cite as "design §n", is docs/design/uafx-connection-manager.md (go-opcua pull request 44).
 
 ## Constants
+
+```go
+const (
+	DefaultCallTimeout                    = 30 * time.Second
+	DefaultRollbackTimeout                = 2 * time.Minute
+	DefaultParallelism                    = 8
+	DefaultMaxConnectionConfigurationSets = 256
+)
+```
+
+Defaults of Options (design §4.3, decision Q3).
+
+```go
+const ActionReconcile uafx.FxProcess = -1
+```
+
+ActionReconcile is the Action of a Reconcile run: not a value of FxProcessEnum (§10.30 has no activity bit for it).
+
+```go
+const ActionRemoveSet uafx.FxProcess = -2
+```
+
+ActionRemoveSet is the Action of the run that closes the Connections of a set a Replace or Remove replaces or removes (F.3.3.2).
 
 ```go
 const MaxFileSize = 16 << 20
 ```
 
 MaxFileSize is the largest file DecodeFile takes and EncodeFile writes: 16 MiB. Library interpretation: F.2 and F.3 set no limit; this one bounds the memory a decode of untrusted input takes.
+
+```go
+const TranslationNamespace = "http://opcfoundation.org/UA/FX/CM/Translation/"
+```
+
+TranslationNamespace is the namespace of the placeholder NodeIds of a PubSubCommunicationModelConfiguration (§6.16.3).
+
+```go
+const UDPUADP = "http://opcfoundation.org/UA-Profile/Transport/pubsub-udp-uadp"
+```
+
+UDPUADP is the transport profile of UDP with UADP (Part 14 §7.3.2), the default for an opc.udp Address.
 
 ## Variables
 
@@ -105,6 +142,34 @@ func StatusOf(err error) ua.StatusCode
 StatusOf returns the StatusCode in the chain of err: Good for nil, ua.StatusBad for an error without one.
 
 ## Types
+
+### type ClientDialer
+
+```go
+type ClientDialer struct {
+	// Options are the options of every client: the ApplicationURI of the
+	// ConnectionManager (required for the ownership checks, §6.6.2), the
+	// certificate and key, the user identity. The endpoint options are
+	// added from the selected endpoint.
+	Options []opcua.Option
+	// Certificate is the DER certificate given in Options, used to select
+	// an endpoint whose policy can use it (opcua.SelectEndpoint).
+	Certificate []byte
+	// AuthType is the user token type of the identity in Options. Default
+	// Anonymous.
+	AuthType ua.UserTokenType
+}
+```
+
+ClientDialer is the default Dialer: GetEndpoints on the Address, the endpoint opcua.SelectEndpoint selects for the SecurityMode and SecurityPolicyUri (§13.2.1), a check of the ServerUri against the ApplicationUri of the endpoint, and an opcua.Client with automatic reconnection and session recovery (CL-1). With a secured endpoint the client verifies that the server certificate is bound to that ApplicationUri.
+
+#### func (ClientDialer) Dial
+
+```go
+func (d *ClientDialer) Dial(ctx context.Context, addr ServerAddress) (Session, error)
+```
+
+Dial implements Dialer.
 
 ### type Config
 
@@ -198,6 +263,29 @@ func (e *ConfigError) Unwrap() []error
 ```
 
 Unwrap returns ErrConfig and ua.StatusBadConfigurationError.
+
+### type Counters
+
+```go
+type Counters struct {
+	EstablishCallCount       uint32
+	EstablishCallFailedCount uint32
+	CloseCallCount           uint32
+	CloseCallFailedCount     uint32
+}
+```
+
+Counters are the Diagnostics of a ConnectionManager (§6.7.2 Table 78).
+
+### type Dialer
+
+```go
+type Dialer interface {
+	Dial(ctx context.Context, addr ServerAddress) (Session, error)
+}
+```
+
+Dialer opens a session to the server of a ServerAddress (§9.2, §13.2).
 
 ### type Edit
 
@@ -332,6 +420,58 @@ func Renamed(old, next *Config) []EndpointRef
 
 Renamed returns the endpoints of old whose Name next changes, in the order of old. A ConnectionManager rejects such a change while the Connection is established (§6.12: the Name is needed to close the Connection); which Connections are established is the engine's state.
 
+### type Event
+
+```go
+type Event struct {
+	Kind       EventKind
+	Set        SetKey
+	Run        RunID
+	Transition Transition
+	Method     string
+	Address    string
+	Status     ua.StatusCode
+	Err        error
+	Record     *EndpointRecord
+	Closed     bool
+	Verdict    Verdict
+	Attempt    int
+}
+```
+
+Event is what an Observer receives.
+
+### type EventKind
+
+```go
+type EventKind int
+```
+
+EventKind is the kind of an Event.
+
+```go
+const (
+	// EventTransition: a set took Transition.
+	EventTransition EventKind = iota + 1
+	// EventCall: an EstablishConnections or CloseConnections call
+	// returned; Method names it, Status is its outcome, Err a failure to
+	// get one.
+	EventCall
+	// EventEndpoint: an endpoint was recorded, reclassified or forgotten
+	// (Record; Closed when it was closed).
+	EventEndpoint
+	// EventSettle: Settle decided Record with Verdict.
+	EventSettle
+	// EventRetry: the set is processed again after Delay (RetryPolicy).
+	EventRetry
+	// EventMonitor: the monitor read a new Status of Record, or found it
+	// gone (Err).
+	EventMonitor
+)
+```
+
+The kinds of Event.
+
 ### type Failure
 
 ```go
@@ -405,6 +545,167 @@ type LostResponse struct {
 
 LostResponse is what a ConnectionManager knows of an endpoint that a call whose response was lost meant to create or take (design §5.4).
 
+### type Manager
+
+```go
+type Manager struct {
+	// contains filtered or unexported fields
+}
+```
+
+Manager is a UAFX ConnectionManager (OPC 10000-81 §6.7): it holds ConnectionConfigurationSets and processes them against the AutomationComponents. It is safe for concurrent use.
+
+#### func New
+
+```go
+func New(opts Options) (*Manager, error)
+```
+
+New returns a Manager without sets.
+
+#### func (Manager) Add
+
+```go
+func (m *Manager) Add(conf *uafx.ConnectionConfigurationSetConf) (*Config, error)
+```
+
+Add adds a set (F.3.3.2 ElementAdd): validated, Version 1, state Ready, not in edit, not processed (F.1.3, SM-8). A set of the same key is ua.StatusBadBrowseNameDuplicated; more than MaxConnectionConfigurationSets ua.StatusBadResourceUnavailable.
+
+#### func (Manager) Close
+
+```go
+func (m *Manager) Close() error
+```
+
+Close stops the runs, retries and the monitor and closes the sessions. A run in progress stops waiting for its calls (design §5.4: their outcome stays unknown) and ends in Error.
+
+#### func (Manager) CommitEdit
+
+```go
+func (m *Manager) CommitEdit(key SetKey, owner LockOwner) (*Config, bool, error)
+```
+
+CommitEdit is CommitUpdates (§6.7.4): the working copy becomes the next Version of the set. See EditSlot.Commit. A change of the Name of an endpoint that is established (has a record) is refused with ua.StatusBadInvalidState and the set stays in edit (§6.12: the CM rejects it while the Connection is established).
+
+#### func (Manager) Config
+
+```go
+func (m *Manager) Config(key SetKey) (*Config, bool)
+```
+
+Config returns the committed configuration of a set.
+
+#### func (Manager) Counters
+
+```go
+func (m *Manager) Counters() Counters
+```
+
+Counters returns the counters of the EstablishConnections and CloseConnections calls of the Manager (§6.7.2 Table 78). A call that returned Uncertain or Bad, or got no response, is a failed call.
+
+#### func (Manager) DiscardEdit
+
+```go
+func (m *Manager) DiscardEdit(key SetKey, owner LockOwner) (bool, error)
+```
+
+DiscardEdit is DiscardUpdates (§6.7.4). See EditSlot.Discard.
+
+#### func (Manager) EditLockLost
+
+```go
+func (m *Manager) EditLockLost(key SetKey) bool
+```
+
+EditLockLost ends the edit of a set whose Lock went (the owner's session ended, the Lock expired): DiscardUpdates (§6.7.4).
+
+#### func (Manager) Keys
+
+```go
+func (m *Manager) Keys() []SetKey
+```
+
+Keys returns the keys of the sets, sorted by Folder and Name.
+
+#### func (Manager) Process
+
+```go
+func (m *Manager) Process(action uafx.FxProcess, keys ...SetKey) []Started
+```
+
+Process starts the processing of the sets with action (§6.7.5) and returns at once, one Started per key in the order of keys: Err is ua.StatusBadNodeIDUnknown for a key without a set, ua.StatusBadNotSupported for an action that is not one of FxProcessEnum, ua.StatusBadInvalidState for a set in Processing (Table 86); Run is set when the run started. A set in edit is processed with its last committed Config (decision D7).
+
+#### func (Manager) Reconcile
+
+```go
+func (m *Manager) Reconcile(key SetKey) Started
+```
+
+Reconcile starts a run that closes the known-owned endpoints of a set that its committed configuration does not need (survivors of an earlier Version or of a failed run, closes still pending) and checks its Unresolved endpoints again: one that disappeared is forgotten. It is a run without an Action of FxProcessEnum (ActionReconcile): transition 1 or 4 by vendor-specific means (§6.9.2).
+
+#### func (Manager) Remove
+
+```go
+func (m *Manager) Remove(ctx context.Context, key SetKey) error
+```
+
+Remove removes a set (F.3.3.2 ElementRemove): CloseConnections with Remove TRUE for its known-owned endpoints, then the set goes. A set being processed or edited is ua.StatusBadInvalidState; no set of the key ua.StatusBadNoMatch. When a close fails, the set stays, in Error.
+
+#### func (Manager) Replace
+
+```go
+func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfigurationSetConf) (*Config, error)
+```
+
+Replace replaces a set (F.3.3.2 ElementReplace): conf is validated first, then the Connections of the old set are removed (CloseConnections with Remove TRUE for its known-owned endpoints), then conf becomes Version 1 of the set, in Ready, not processed. A set being processed or edited is ua.StatusBadInvalidState; no set of the key ua.StatusBadNoMatch. When a close fails, the old set stays, in Error, and the error has the StatusCode of the close (design §5.8).
+
+#### func (Manager) Settle
+
+```go
+func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error
+```
+
+Settle decides an Unresolved endpoint of a set (design §5.4). It is an administrative decision: the Manager never makes it itself. The Observer receives it. An endpoint that is not Unresolved is ua.StatusBadInvalidState; no such endpoint ua.StatusBadNoMatch.
+
+#### func (Manager) StartEdit
+
+```go
+func (m *Manager) StartEdit(key SetKey, owner LockOwner) (*Edit, error)
+```
+
+StartEdit is StartEditing (§6.7.4) of a set for owner: the set goes into edit with a working copy of its committed Config. See EditSlot.Start.
+
+#### func (Manager) Status
+
+```go
+func (m *Manager) Status(key SetKey) (Status, bool)
+```
+
+Status returns the live state of a set.
+
+#### func (Manager) Update
+
+```go
+func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error)
+```
+
+Update applies a batch of operations as CloseAndUpdate does (F.3.3, design §5.8). First the whole batch is checked: one operation bit (FC-6, ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a Remove or Replace), the state (ua.StatusBadInvalidState while processed or edited), and every new set. With requireComplete, one failure ends the call there: nothing is closed or changed, applied is false. Else the failed operations are dropped. Then the operations are applied in order; a remove or replace whose close fails fails (the old set stays, in Error), and with requireComplete the operations after it are skipped (ua.StatusBadInvalidState). applied is true when every operation was applied. results has one error per operation, nil for success.
+
+### type MonitorOptions
+
+```go
+type MonitorOptions struct {
+	// Interval is how often the Status of the endpoints is read. 0: 1 s.
+	Interval time.Duration
+	// Reestablish processes a set again, with the action of its last
+	// establish run, when an endpoint of an established Connection
+	// disappeared (§4.7.2: the CM could trigger it).
+	Reestablish bool
+}
+```
+
+MonitorOptions configure the monitoring of ConnectionEndpoints.
+
 ### type Observed
 
 ```go
@@ -423,6 +724,91 @@ type Observed struct {
 ```
 
 Observed is an endpoint a browse of a FunctionalEntity found under a Name.
+
+### type Observer
+
+```go
+type Observer interface {
+	Observe(Event)
+}
+```
+
+Observer receives the Events of a Manager: transitions, calls, endpoints, settles, retries and monitor findings (design §4.3; the facts a LogObject of OPC 10000-26 would record, CM-8). It must not block, and it is called from several goroutines at once.
+
+### type ObserverFunc
+
+```go
+type ObserverFunc func(Event)
+```
+
+ObserverFunc is an Observer.
+
+#### func (ObserverFunc) Observe
+
+```go
+func (f ObserverFunc) Observe(e Event)
+```
+
+Observe implements Observer.
+
+### type Operation
+
+```go
+type Operation struct {
+	Op   uafx.ConnectionConfigurationSetOperation
+	Conf *uafx.ConnectionConfigurationSetConf
+}
+```
+
+Operation is one operation of a batch (F.3.3, Table F.40): exactly one of ElementAdd, ElementRemove, ElementReplace on Conf (for ElementRemove only its BrowseName and ConnectionConfigurationSetFolder count).
+
+### type Options
+
+```go
+type Options struct {
+	// Dialer opens the sessions to the servers of the AutomationComponents
+	// (§9.2, §13.2). Required; ClientDialer is the default implementation.
+	Dialer Dialer
+	// ApplicationURI is the ApplicationUri of this ConnectionManager, the
+	// one its sessions present: the AutomationComponents record it in the
+	// ConnectionManagerApplicationUri of the endpoints it creates (§6.6.2).
+	// Required.
+	ApplicationURI string
+	// ExclusiveApplicationURI asserts that no other ConnectionManager uses
+	// ApplicationURI, so that a matching ConnectionManagerApplicationUri
+	// proves an endpoint ours after a lost response (design §5.4). Without
+	// it such an endpoint stays Unresolved.
+	ExclusiveApplicationURI bool
+	// CallTimeout bounds each EstablishConnections and CloseConnections call
+	// (decision D6). 0: DefaultCallTimeout.
+	CallTimeout time.Duration
+	// RollbackTimeout bounds the rollback of a run. 0:
+	// DefaultRollbackTimeout.
+	RollbackTimeout time.Duration
+	// Parallelism bounds the AutomationComponents called at the same time
+	// by one run (§6.7.3.2 recommends parallel calls). 0:
+	// DefaultParallelism.
+	Parallelism int
+	// MaxConnectionConfigurationSets limits the sets (§6.7.6). 0:
+	// DefaultMaxConnectionConfigurationSets.
+	MaxConnectionConfigurationSets int
+	// Retry processes a set in Error again by itself (§6.9.1, transition 4
+	// by vendor-specific means), only as RetryAllowed says. Nil: never
+	// (decision D5).
+	Retry *RetryPolicy
+	// Monitor watches the ConnectionEndpoints of the established
+	// Connections (§4.7.2, §10.20). Nil: ConnectionState is
+	// ConnectionNotMonitored.
+	Monitor *MonitorOptions
+	// Observer receives what the Manager does. It must not block.
+	Observer Observer
+	// Logger logs at Debug what the Observer receives, and failures. Nil:
+	// slog.Default().
+	Logger *slog.Logger
+}
+```
+
+Options configure a Manager.
 
 ### type Outcome
 
@@ -529,6 +915,76 @@ MayClose reports whether a ConnectionManager may close an endpoint of the class 
 func (o Ownership) String() string
 ```
 
+### type RetryPolicy
+
+```go
+type RetryPolicy struct {
+	Initial  time.Duration
+	Max      time.Duration
+	Attempts int
+}
+```
+
+RetryPolicy is when a set in Error is processed again: after Initial, doubled after each attempt up to Max, with up to a fifth of jitter, at most Attempts times in a row.
+
+### type Run
+
+```go
+type Run struct {
+	// contains filtered or unexported fields
+}
+```
+
+Run is one processing of one set: from transition 1 or 4 to transition 2 or 3 (§6.9), of the Config of one Version, for one action.
+
+#### func (Run) Action
+
+```go
+func (r *Run) Action() uafx.FxProcess
+```
+
+Action returns the action of the run: a value of FxProcessEnum, ActionReconcile, or ActionRemoveSet.
+
+#### func (Run) Done
+
+```go
+func (r *Run) Done() <-chan struct{}
+```
+
+Done is closed when the run has finished.
+
+#### func (Run) ID
+
+```go
+func (r *Run) ID() RunID
+```
+
+ID returns the id of the run, unique and increasing within its Manager.
+
+#### func (Run) Key
+
+```go
+func (r *Run) Key() SetKey
+```
+
+Key returns the set of the run.
+
+#### func (Run) Version
+
+```go
+func (r *Run) Version() uint32
+```
+
+Version returns the Version of the Config the run processes.
+
+#### func (Run) Wait
+
+```go
+func (r *Run) Wait(ctx context.Context) (*RunResult, error)
+```
+
+Wait waits for the end of the run and returns its result, or the error of ctx.
+
 ### type RunID
 
 ```go
@@ -536,6 +992,34 @@ type RunID uint64
 ```
 
 RunID identifies one processing of one set within a ConnectionManager.
+
+### type RunResult
+
+```go
+type RunResult struct {
+	// State is the state the set ended in, Ready or Error, and Transition
+	// the transition that took it there (§6.9.2).
+	State      State
+	Transition Transition
+	// Diagnostics are the ConnectionsDiagnostics after the run (§10.19).
+	Diagnostics []*uafx.ConnectionDiagnostics
+	// Failures are the failed operations, one per endpoint that failed.
+	Failures []Failure
+	// Created are the endpoints the run created or took, Closed those it
+	// closed, Unresolved those whose ownership it could not decide (design
+	// §5.4).
+	Created    []EndpointRecord
+	Closed     []EndpointRecord
+	Unresolved []EndpointRecord
+	// RolledBack is set when the run closed the endpoints of the set after
+	// a failure (RollbackOnError, §6.8.2); RollbackComplete when every
+	// close of the rollback succeeded.
+	RolledBack       bool
+	RollbackComplete bool
+}
+```
+
+RunResult is what a finished run did.
 
 ### type ScanVerdict
 
@@ -569,6 +1053,39 @@ The verdicts of Scan.
 ```go
 func (v ScanVerdict) String() string
 ```
+
+### type ServerAddress
+
+```go
+type ServerAddress struct {
+	// Address is the DiscoveryUrl of the server.
+	Address string
+	// SecurityMode and SecurityPolicyURI select the endpoint; an empty
+	// SecurityPolicyURI selects the best policy both support (§9.2).
+	SecurityMode      ua.MessageSecurityMode
+	SecurityPolicyURI string
+	// ServerURI, when not empty, is the ApplicationUri the server must
+	// have (§9.2).
+	ServerURI string
+}
+```
+
+ServerAddress is where a ConnectionManager reaches the server of an AutomationComponent (§9.2): the current values of the SelectionLists of a ServerAddressConf.
+
+### type Session
+
+```go
+type Session interface {
+	NamespaceArray(ctx context.Context) ([]string, error)
+	Read(ctx context.Context, req *ua.ReadRequest) (*ua.ReadResponse, error)
+	Browse(ctx context.Context, req *ua.BrowseRequest) (*ua.BrowseResponse, error)
+	TranslateBrowsePaths(ctx context.Context, req *ua.TranslateBrowsePathsToNodeIDsRequest) (*ua.TranslateBrowsePathsToNodeIDsResponse, error)
+	Call(ctx context.Context, req *ua.CallMethodRequest) (*ua.CallMethodResult, error)
+	Close(ctx context.Context) error
+}
+```
+
+Session is what the ConnectionManager needs of a session to a server (§13.1). Its methods are the OPC UA services of the same name; an error is a failure of the service, a StatusCode of a result is in the result. It must be safe for concurrent use.
 
 ### type SetKey
 
@@ -605,6 +1122,17 @@ func (k SetKey) String() string
 
 String returns the Folder path and the Name separated by "/", each element quoted when it holds a "/" or is empty.
 
+### type Started
+
+```go
+type Started struct {
+	Run *Run
+	Err error
+}
+```
+
+Started is the outcome of starting the processing of one set.
+
 ### type State
 
 ```go
@@ -636,6 +1164,28 @@ ID returns the identifier of the state Object of the ConnectionConfigurationSetS
 ```go
 func (s State) String() string
 ```
+
+### type Status
+
+```go
+type Status struct {
+	State   State
+	Version uint32
+	// Editing is set while the set is in edit (Edit TRUE, §6.7.4).
+	Editing bool
+	// Diagnostics are the ConnectionsDiagnostics of the set (§6.8.2), one
+	// per Connection, in the order of the set.
+	Diagnostics []*uafx.ConnectionDiagnostics
+	// Current is the run in progress, Last the last finished one.
+	Current *Run
+	Last    *Run
+	// Endpoints are the endpoints the Manager made, took or may have made
+	// for the set (design §5.3).
+	Endpoints []EndpointRecord
+}
+```
+
+Status is a copy of the live state of a set.
 
 ### type Transition
 
@@ -709,3 +1259,22 @@ func (t Transition) To() State
 ```
 
 To returns the state the transition enters, 0 for an unknown one.
+
+### type Verdict
+
+```go
+type Verdict int
+```
+
+Verdict is the decision of Settle.
+
+```go
+const (
+	// SettleOwned makes the endpoint KnownOwned: the next run closes it.
+	SettleOwned Verdict = iota + 1
+	// SettleForeign forgets the endpoint: the Manager never touches it.
+	SettleForeign
+)
+```
+
+The verdicts of Settle.

@@ -1014,6 +1014,9 @@ func (x *call) configureOne(el *element, p *uafx.NodeIDValuePair, vars map[strin
 const (
 	refReader = ua.PubSubConfigurationRefMaskReferenceReader
 	refWriter = ua.PubSubConfigurationRefMaskReferenceWriter
+	refConn   = ua.PubSubConfigurationRefMaskReferenceConnection
+	refWG     = ua.PubSubConfigurationRefMaskReferenceWriterGroup
+	refRG     = ua.PubSubConfigurationRefMaskReferenceReaderGroup
 	refAdd    = ua.PubSubConfigurationRefMaskElementAdd
 )
 
@@ -1136,7 +1139,8 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 	if r := l.DataSetReaderRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
 		g := conn.ReaderGroups[r.GroupIndex]
-		cid, ok := lookupPath(rt, pubsub.KindReaderGroup, pubsub.KindDataSetReader, conn.Name, g.Name, readerAt(cfg, r).Name)
+		cid, ok := lookupPath(rt, pubsub.KindReaderGroup, pubsub.KindDataSetReader,
+			x.assigned(refConn, r, 0, conn.Name), x.assigned(refRG, r, 1, g.Name), x.assigned(refReader, r, 2, readerAt(cfg, r).Name))
 		if !ok {
 			return ua.StatusBadNotFound
 		}
@@ -1160,7 +1164,8 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 	if r := l.DataSetWriterRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
 		g := conn.WriterGroups[r.GroupIndex]
-		cid, ok := lookupPath(rt, pubsub.KindWriterGroup, pubsub.KindDataSetWriter, conn.Name, g.Name, writerAt(cfg, r).Name)
+		cid, ok := lookupPath(rt, pubsub.KindWriterGroup, pubsub.KindDataSetWriter,
+			x.assigned(refConn, r, 0, conn.Name), x.assigned(refWG, r, 1, g.Name), x.assigned(refWriter, r, 2, writerAt(cfg, r).Name))
 		if !ok {
 			return ua.StatusBadNotFound
 		}
@@ -1186,6 +1191,23 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		return ua.StatusBadNotFound
 	}
 	return ua.StatusOK
+}
+
+// assigned returns the Name the configuration of the call has for the
+// element of kind on the path of r (level 0 its connection, 1 its group, 2
+// the element), name when the call did not assign one: an element added
+// with a null Name gets one from the server, given in the
+// ConfigurationValues (Part 81 §6.16.3), and the links refer to it.
+func (x *call) assigned(kind ua.PubSubConfigurationRefMask, r *ua.PubSubConfigurationRefDataType, level int, name string) string {
+	for _, v := range x.update.ConfigurationValues {
+		e := v.ConfigurationElement
+		if e == nil || e.ConfigurationMask&kind == 0 || v.Name == "" || e.ConnectionIndex != r.ConnectionIndex ||
+			level >= 1 && e.GroupIndex != r.GroupIndex || level == 2 && e.ElementIndex != r.ElementIndex {
+			continue
+		}
+		return v.Name
+	}
+	return name
 }
 
 // setLink is Connections.setLink with an undo for the rollback.

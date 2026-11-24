@@ -983,3 +983,27 @@ func TestEstablishAbortLate(t *testing.T) {
 	assert.Equal(t, 1.0, g.value(t, gainID))
 	assert.Len(t, g.conns.Endpoints(), 1)
 }
+
+// TestEstablishAssignedNames: CommunicationLinks refer to a group and
+// elements added with a null Name by the Names the server assigns (Part 81
+// §6.16.3).
+func TestEstablishAssignedNames(t *testing.T) {
+	t.Parallel()
+	f := newFX(t, fxserver.ConnectionOptions{})
+	req := f.fullRequest("Named")
+	cfg := req.CommunicationConfigurations[0].PubSubConfiguration
+	cfg.Connections[0].WriterGroups[0].Name = ""
+	cfg.Connections[0].WriterGroups[0].DataSetWriters[0].Name = ""
+	cfg.Connections[1].ReaderGroups[0].Name = ""
+	cfg.Connections[1].ReaderGroups[0].DataSetReaders[0].Name = ""
+	res := f.establish(t, req)
+	require.Equal(t, ua.StatusOK, res.Status, "%+v", res.ConnectionEndpointConfigurationResults[0])
+	er := res.ConnectionEndpointConfigurationResults[0]
+	assert.Equal(t, ua.StatusOK, er.CommunicationLinksResult)
+	names := map[string]bool{}
+	for _, v := range res.CommunicationConfigurationResults[0].ConfigurationValues {
+		names[v.Name] = true
+	}
+	assert.True(t, names["WriterGroup1"] && names["DataSetWriter1"] && names["DataSetReader1"], "%v", names)
+	require.Eventually(t, func() bool { return f.value(t, setpointID) == 42.5 }, 5*time.Second, 5*time.Millisecond)
+}

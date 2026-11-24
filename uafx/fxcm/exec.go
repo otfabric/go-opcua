@@ -1,0 +1,2008 @@
+// SPDX-License-Identifier: MIT
+
+package fxcm
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+	"math/rand/v2"
+	"slices"
+	"sync"
+	"time"
+
+	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uafx"
+	"github.com/otfabric/go-opcua/uafx/fxacid"
+	"github.com/otfabric/go-opcua/uafx/fxdataid"
+)
+
+// run is the work of one Run.
+type run struct {
+	m   *Manager
+	s   *set
+	r   *Run
+	cfg *Config
+
+	acs []*acRun
+	eps []*epRun
+
+	mu      sync.Mutex
+	stopped bool
+	res     RunResult
+}
+
+// acRun is an AutomationComponent of a run.
+type acRun struct {
+	ac   *automationComponent
+	addr ServerAddress
+	t    *target
+	eps  []*epRun
+
+	node      *ua.NodeID // the AutomationComponent
+	establish *ua.NodeID // its Methods
+	close     *ua.NodeID
+	data      uint16 // the UAFX Data namespace
+	// maxPerCall and bundle are the capabilities of §6.2.6, bundle also
+	// CommandBundleRequired of the set (§6.14, decision D13).
+	maxPerCall uint32
+	bundle     bool
+	assets     []*uafx.AssetVerification
+	comm       *commModel
+	// defaultPublisherID is the DefaultPublisherId of the reservation.
+	defaultPublisherID *ua.Variant
+	// values are the ConfigurationValues the calls returned (§6.16.3).
+	values []*ua.PubSubConfigurationValueDataType
+}
+
+// epRun is an endpoint configuration of a run.
+type epRun struct {
+	x *run
+	e *endpoint
+	a *acRun
+
+	fe       *ua.NodeID
+	inputs   []*ua.NodeID
+	outputs  []*ua.NodeID
+	controls []*ua.NodeID
+	verify   []*uafx.NodeIDValuePair
+	config   []*uafx.NodeIDValuePair
+	links    *uafx.PubSubCommunicationLinkConfiguration
+	param    *uafx.PubSubConnectionEndpointParameter
+
+	// obs is what step 0 found under the Name, nil for nothing.
+	obs              *Observed
+	assumedPublisher *assumed
+
+	outcome *Outcome
+}
+
+func (ep *epRun) ref() EndpointRef { return EndpointRef{ep.e.conn.name, ep.e.number} }
+
+func (ep *epRun) failed() bool {
+	ep.x.mu.Lock()
+	defer ep.x.mu.Unlock()
+	return ep.outcome != nil && ep.outcome.Kind == Failed
+}
+
+// fail sets the outcome of ep to a failure, unless it failed already.
+func (x *run) fail(ep *epRun, f Failure) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	if ep.outcome != nil && ep.outcome.Kind == Failed {
+		return
+	}
+	o := FailedWith(f.FxError, f.Status)
+	ep.outcome = &o
+}
+
+func (x *run) failErr(ep *epRun, err error, fx uafx.FxError) {
+	x.m.log.Warn("fxcm: operation failed", "set", x.r.key.String(), "run", x.r.id, "connection", ep.e.conn.name, "endpoint", ep.e.number, "error", err)
+	x.fail(ep, failureOf(err, fx))
+}
+
+func (x *run) setOutcome(ep *epRun, k OutcomeKind) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	if ep.outcome != nil && ep.outcome.Kind == Failed {
+		return
+	}
+	ep.outcome = &Outcome{Kind: k}
+}
+
+func (x *run) anyFailed() bool {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	for _, ep := range x.eps {
+		if ep.outcome != nil && ep.outcome.Kind == Failed {
+			return true
+		}
+	}
+	return false
+}
+
+// execute runs r on s, which the caller put in Processing from prev, and
+// takes the transition at its end.
+func (m *Manager) execute(ctx context.Context, s *set, r *Run, prev State) *RunResult {
+	s.mu.Lock()
+	cfg := s.cfg
+	s.mu.Unlock()
+	x := &run{m: m, s: s, r: r, cfg: cfg}
+	for _, cn := range cfg.conns {
+		for _, e := range cn.endpoints {
+			x.eps = append(x.eps, &epRun{x: x, e: e})
+		}
+	}
+	// EC-12: the AuditEntryId of the calls of the run.
+	ctx = opcua.WithAuditEntryID(ctx, fmt.Sprintf("fxcm:%s:run:%d", r.key, r.id))
+	switch r.action {
+	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled, uafx.ActionEstablishConnections:
+		x.establishRun(ctx)
+	case uafx.ActionRemoveConnections, ActionRemoveSet:
+		x.closeRun(ctx, true)
+	case uafx.ActionDisableConnections:
+		x.closeRun(ctx, false)
+	case uafx.ActionEnableConnections:
+		x.enableRun(ctx)
+	case ActionReconcile:
+		x.reconcileRun(ctx, prev)
+	}
+	return x.finish()
+}
+
+// parallel runs f for each AutomationComponent of the run, at most
+// Parallelism at a time (§6.7.3.2: calls to several ACs in parallel).
+func (x *run) parallel(ctx context.Context, acs []*acRun, f func(context.Context, *acRun)) {
+	sem := make(chan struct{}, x.m.opts.Parallelism)
+	var wg sync.WaitGroup
+	for _, a := range acs {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				x.failAC(a, failure(uafx.FxErrorProcessingStopped, ua.StatusBadTimeout, "%v", ctx.Err()))
+				return
+			}
+			defer func() { <-sem }()
+			f(ctx, a)
+		}()
+	}
+	wg.Wait()
+}
+
+// live returns the AutomationComponents of the run with an endpoint that
+// did not fail.
+func (x *run) live() []*acRun {
+	var out []*acRun
+	for _, a := range x.acs {
+		if slices.ContainsFunc(a.eps, func(ep *epRun) bool { return !ep.failed() }) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+func (x *run) failAC(a *acRun, err error) {
+	for _, ep := range a.eps {
+		x.failErr(ep, err, uafx.FxErrorTargetServerConnectionError)
+	}
+}
+
+// --- establish ------------------------------------------------------------
+
+// establishRun establishes the Connections of the set (§6.7.3.2, design
+// §5.2): connect and resolve, scan and reconcile (step 0), reserve,
+// configure; on a failure no new step starts and, with RollbackOnError,
+// every closable endpoint of the set is closed (§6.8.2, F.1.3).
+func (x *run) establishRun(ctx context.Context) {
+	byAC := map[*automationComponent]*acRun{}
+	for _, ep := range x.eps {
+		a := byAC[ep.e.ac]
+		if a == nil {
+			a = &acRun{ac: ep.e.ac, addr: x.cfg.serverAddress(ep.e.ac.server), bundle: ep.e.ac.conf.CommandBundleRequired}
+			byAC[ep.e.ac] = a
+			x.acs = append(x.acs, a)
+		}
+		a.eps = append(a.eps, ep)
+		ep.a = a
+	}
+	if x.step(ctx, x.acs, x.setup) {
+		return
+	}
+	x.checkNames()
+	if x.anyFailed() {
+		x.stop(ctx)
+		return
+	}
+	var places []string
+	for _, ep := range x.eps {
+		places = append(places, ep.a.addr.Address+"\x00"+ep.fe.String())
+	}
+	release, err := x.m.places.lock(ctx, places)
+	defer release()
+	if err != nil {
+		for _, ep := range x.eps {
+			x.failErr(ep, err, uafx.FxErrorProcessingStopped)
+		}
+		x.stop(ctx)
+		return
+	}
+	for _, f := range []func(context.Context, *acRun){x.scan, x.prepare, x.reserve} {
+		if x.step(ctx, x.live(), f) {
+			return
+		}
+	}
+	x.linkFlows()
+	if x.step(ctx, x.live(), x.configure) {
+		return
+	}
+	x.checkPublishers()
+	if x.anyFailed() {
+		x.stop(ctx)
+	}
+}
+
+// step runs f on acs and reports whether the run stopped after it.
+func (x *run) step(ctx context.Context, acs []*acRun, f func(context.Context, *acRun)) bool {
+	x.parallel(ctx, acs, f)
+	if x.anyFailed() {
+		x.stop(ctx)
+		return true
+	}
+	return false
+}
+
+// stop ends a failed establish run: no new step starts (EC-10); with
+// RollbackOnError the endpoints of the set are closed (EC-11).
+func (x *run) stop(ctx context.Context) {
+	x.mu.Lock()
+	x.stopped = true
+	x.mu.Unlock()
+	if x.cfg.RollbackOnError() {
+		x.rollback(ctx)
+	}
+}
+
+// setup opens the session of a, resolves the AutomationComponent, its
+// Methods and capabilities, and the identifiers of its endpoints (step 1).
+func (x *run) setup(ctx context.Context, a *acRun) {
+	sess, err := x.m.pool.get(ctx, a.addr)
+	if err != nil {
+		x.failAC(a, failure(uafx.FxErrorTargetServerConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err))
+		return
+	}
+	a.t = &target{addr: a.addr, sess: sess, cache: x.m.res.of(a.addr)}
+	if err := a.t.open(ctx); err != nil {
+		x.m.pool.drop(ctx, a.addr, sess)
+		x.failAC(a, err)
+		return
+	}
+	root, err := a.t.fxRoot()
+	if err != nil {
+		x.failAC(a, err)
+		return
+	}
+	scope := a.ac.server.ns
+	if a.node, err = a.t.resolve(ctx, a.ac.conf.AutomationComponentNode, scope, root); err != nil {
+		x.failAC(a, err)
+		return
+	}
+	if err := x.methods(ctx, a); err != nil {
+		x.failAC(a, err)
+		return
+	}
+	x.capabilities(ctx, a)
+	for _, av := range a.ac.conf.AssetVerification {
+		v, err := x.asset(ctx, a, av)
+		if err != nil {
+			x.failAC(a, err)
+			return
+		}
+		a.assets = append(a.assets, v)
+	}
+	for _, ep := range a.eps {
+		if err := x.resolveEndpoint(ctx, ep, root); err != nil {
+			x.failErr(ep, err, uafx.FxErrorResolvingPathsError)
+		}
+	}
+}
+
+// methods finds EstablishConnections and CloseConnections of a.
+func (x *run) methods(ctx context.Context, a *acRun) error {
+	var err error
+	a.establish, a.close, a.data, err = methodsOf(ctx, a.t, a.node)
+	return err
+}
+
+func methodsOf(ctx context.Context, t *target, ac *ua.NodeID) (establish, closeM *ua.NodeID, data uint16, err error) {
+	acNS, err := t.acNamespace()
+	if err != nil {
+		return nil, nil, 0, err
+	}
+	d, ok := t.ns(fxdataid.NamespaceURI)
+	if !ok {
+		return nil, nil, 0, failure(uafx.FxErrorResolvingNamespacesError, ua.StatusBadNoMatch, "%s has no UAFX Data namespace", t.addr.Address)
+	}
+	res, err := t.sess.Browse(ctx, &ua.BrowseRequest{NodesToBrowse: []*ua.BrowseDescription{{
+		NodeID: ac, BrowseDirection: ua.BrowseDirectionForward,
+		ReferenceTypeID: ua.NewNumericNodeID(0, id.HasComponent), IncludeSubtypes: true,
+		NodeClassMask: uint32(ua.NodeClassMethod), ResultMask: uint32(ua.BrowseResultMaskAll),
+	}}})
+	if err != nil {
+		f := failureOf(err, uafx.FxErrorTargetServerConnectionError)
+		return nil, nil, 0, failure(f.FxError, f.Status, "Browse of %v: %v", ac, err)
+	}
+	if len(res.Results) != 1 || res.Results[0] == nil || res.Results[0].StatusCode != ua.StatusOK {
+		return nil, nil, 0, failure(uafx.FxErrorResolvingPathsError, ua.StatusBadNodeIDUnknown, "the AutomationComponent %v cannot be browsed", ac)
+	}
+	establish = child(res.Results[0].References, acNS, "EstablishConnections")
+	closeM = child(res.Results[0].References, acNS, "CloseConnections")
+	if establish == nil || closeM == nil {
+		return nil, nil, 0, failure(uafx.FxErrorResolvingPathsError, ua.StatusBadMethodInvalid, "%v is not an AutomationComponent with EstablishConnections and CloseConnections", ac)
+	}
+	return establish, closeM, d, nil
+}
+
+// capabilities reads MaxConnectionsPerCall and CommandBundleRequired of a
+// (§6.2.6). A capability that cannot be read is absent.
+func (x *run) capabilities(ctx context.Context, a *acRun) {
+	acNS, _ := a.t.acNamespace()
+	refs, err := a.t.children(ctx, a.node)
+	if err != nil {
+		return
+	}
+	capsNode := child(refs, acNS, "ComponentCapabilities")
+	if capsNode == nil {
+		return
+	}
+	caps, err := a.t.children(ctx, capsNode)
+	if err != nil {
+		return
+	}
+	max, bundle := child(caps, acNS, "MaxConnectionsPerCall"), child(caps, acNS, "CommandBundleRequired")
+	var nodes []*ua.ReadValueID
+	for _, n := range []*ua.NodeID{max, bundle} {
+		if n == nil {
+			n = ua.NewNumericNodeID(0, 0)
+		}
+		nodes = append(nodes, &ua.ReadValueID{NodeID: n, AttributeID: ua.AttributeIDValue})
+	}
+	res, err := a.t.sess.Read(ctx, &ua.ReadRequest{NodesToRead: nodes, TimestampsToReturn: ua.TimestampsToReturnNeither})
+	if err != nil || len(res.Results) != 2 {
+		return
+	}
+	if v, ok := dvValue(res.Results[0]).(uint32); ok {
+		a.maxPerCall = v
+	}
+	if v, ok := dvValue(res.Results[1]).(bool); ok && v {
+		a.bundle = true
+	}
+}
+
+// asset returns the AssetVerification of av (Table 79): AssetToVerify from
+// the AutomationComponent, ExpectedVerificationVariables as BrowseNames of
+// Variables of the Asset (§6.15, §10.4: KeyValuePairs whose Key is the
+// BrowseName), the additional ones as NodeIds from the Asset.
+func (x *run) asset(ctx context.Context, a *acRun, av *uafx.AssetVerificationConf) (*uafx.AssetVerification, error) {
+	scope := a.ac.server.ns
+	n, err := a.t.resolve(ctx, av.AssetToVerify, scope, a.node)
+	if err != nil {
+		return nil, err
+	}
+	out := &uafx.AssetVerification{AssetToVerify: n, VerificationMode: av.VerificationMode, ExpectedVerificationResult: av.ExpectedVerificationResult}
+	for _, p := range av.ExpectedVerificationVariables {
+		qn, err := x.browseName(ctx, a, p.Key, n)
+		if err != nil {
+			return nil, err
+		}
+		out.ExpectedVerificationVariables = append(out.ExpectedVerificationVariables, &ua.KeyValuePair{Key: qn, Value: p.Value})
+	}
+	pairs, err := x.pairs(ctx, a, av.ExpectedAdditionalVerificationVariables, n)
+	if err != nil {
+		return nil, err
+	}
+	out.ExpectedAdditionalVerificationVariables = pairs
+	return out, nil
+}
+
+// browseName returns the BrowseName of the Variable key names: the
+// TargetName of a one-element RelativePath, else the BrowseName of the
+// resolved node.
+func (x *run) browseName(ctx context.Context, a *acRun, key *uafx.NodeIdentifier, start *ua.NodeID) (*ua.QualifiedName, error) {
+	if key != nil && key.IdentifierBrowsePath != nil && len(key.IdentifierBrowsePath.Elements) == 1 {
+		tn := key.IdentifierBrowsePath.Elements[0].TargetName
+		uri, ok := a.ac.server.ns.uri(tn.NamespaceIndex)
+		if !ok {
+			return nil, failure(uafx.FxErrorResolvingNamespacesError, ua.StatusBadNoMatch, "the namespace index %d is not in the Namespaces of the ServerAddress", tn.NamespaceIndex)
+		}
+		return a.t.qualifiedName(uri, tn.Name)
+	}
+	n, err := a.t.resolve(ctx, key, a.ac.server.ns, start)
+	if err != nil {
+		return nil, err
+	}
+	res, err := a.t.sess.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{NodeID: n, AttributeID: ua.AttributeIDBrowseName}}})
+	if err != nil {
+		f := failureOf(err, uafx.FxErrorResolvingPathsError)
+		return nil, failure(f.FxError, f.Status, "the BrowseName of %v: %v", n, err)
+	}
+	if len(res.Results) == 1 {
+		if qn, ok := dvValue(res.Results[0]).(*ua.QualifiedName); ok {
+			return qn, nil
+		}
+	}
+	return nil, failure(uafx.FxErrorResolvingPathsError, ua.StatusBadNodeIDUnknown, "no BrowseName of %v", n)
+}
+
+func (x *run) pairs(ctx context.Context, a *acRun, ps []*uafx.NodeIdentifierValuePair, start *ua.NodeID) ([]*uafx.NodeIDValuePair, error) {
+	var out []*uafx.NodeIDValuePair
+	for _, p := range ps {
+		n, err := a.t.resolve(ctx, p.Key, a.ac.server.ns, start)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, &uafx.NodeIDValuePair{Key: &uafx.NodeIDArray{Node: n, ArrayIndex: p.ArrayIndex}, Value: p.Value})
+	}
+	return out, nil
+}
+
+func (x *run) nodes(ctx context.Context, a *acRun, ids []*uafx.NodeIdentifier, start *ua.NodeID) ([]*ua.NodeID, error) {
+	var out []*ua.NodeID
+	for _, i := range ids {
+		n, err := a.t.resolve(ctx, i, a.ac.server.ns, start)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, n)
+	}
+	return out, nil
+}
+
+// resolveEndpoint resolves the identifiers of an endpoint configuration
+// (EC-8): FunctionalEntityNode from FxRoot (§6.11), the variables,
+// ControlGroups and the keys of ExpectedVerificationVariables and
+// ConfigurationData from the FunctionalEntity (§6.12).
+func (x *run) resolveEndpoint(ctx context.Context, ep *epRun, root *ua.NodeID) error {
+	a, conf := ep.a, ep.e.conf
+	var err error
+	if ep.fe, err = a.t.resolve(ctx, conf.FunctionalEntityNode, a.ac.server.ns, root); err != nil {
+		return err
+	}
+	if ep.inputs, err = x.nodes(ctx, a, conf.InputVariableIDs, ep.fe); err != nil {
+		return err
+	}
+	if ep.outputs, err = x.nodes(ctx, a, conf.OutputVariableIDs, ep.fe); err != nil {
+		return err
+	}
+	if ep.controls, err = x.nodes(ctx, a, conf.ControlGroups, ep.fe); err != nil {
+		return err
+	}
+	if ep.verify, err = x.pairs(ctx, a, conf.ExpectedVerificationVariables, ep.fe); err != nil {
+		return err
+	}
+	if ep.config, err = x.pairs(ctx, a, conf.ConfigurationData, ep.fe); err != nil {
+		return err
+	}
+	if ep.links, err = links(conf.CommunicationLinks); err != nil {
+		return err
+	}
+	ep.param, err = ep.parameter()
+	return err
+}
+
+// checkNames fails the endpoints that would be created under the same Name
+// in the same resolved FunctionalEntity (§6.12).
+func (x *run) checkNames() {
+	seen := map[string]*epRun{}
+	for _, ep := range x.eps {
+		if ep.failed() || ep.fe == nil {
+			continue
+		}
+		k := recordKey(ep.a.addr, ep.fe, ep.e.conf.Name)
+		if o := seen[k]; o != nil {
+			f := Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadBrowseNameDuplicated}
+			x.fail(ep, f)
+			x.fail(o, f)
+			continue
+		}
+		seen[k] = ep
+	}
+}
+
+// --- step 0: scan and reconcile ------------------------------------------
+
+// observeName returns the endpoints under name in the ConnectionEndpoints
+// Folder of fe (§6.4.2), with what classifies them (§6.6.2).
+func observeName(ctx context.Context, t *target, fe *ua.NodeID, name string, ours *uafx.RelatedEndpoint) ([]Observed, error) {
+	acNS, err := t.acNamespace()
+	if err != nil {
+		return nil, err
+	}
+	refs, err := t.children(ctx, fe)
+	if err != nil {
+		return nil, err
+	}
+	folder := child(refs, acNS, "ConnectionEndpoints")
+	if folder == nil {
+		return nil, nil
+	}
+	eps, err := t.children(ctx, folder)
+	if err != nil {
+		return nil, err
+	}
+	var out []Observed
+	for _, r := range eps {
+		if r == nil || r.BrowseName == nil || r.BrowseName.Name != name || r.NodeID == nil || r.NodeID.NodeID == nil || r.NodeClass != ua.NodeClassObject {
+			continue
+		}
+		o, err := observeEndpoint(ctx, t, r.NodeID.NodeID, acNS, ours)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// observeEndpoint reads ConnectionManagerApplicationUri, IsPreconfigured
+// and RelatedEndpoint of the endpoint n. Library interpretation: an
+// endpoint without IsPreconfigured is preconfigured when it has no
+// ConnectionManagerApplicationUri, which EstablishConnections sets for the
+// endpoints it creates (§6.6.2); it is in use when its RelatedEndpoint
+// names another end than ours (Table 12).
+func observeEndpoint(ctx context.Context, t *target, n *ua.NodeID, acNS uint16, ours *uafx.RelatedEndpoint) (Observed, error) {
+	o := Observed{NodeID: n}
+	props, err := t.children(ctx, n)
+	if err != nil {
+		return o, err
+	}
+	names := []string{"ConnectionManagerApplicationUri", "IsPreconfigured", "RelatedEndpoint"}
+	read := &ua.ReadRequest{TimestampsToReturn: ua.TimestampsToReturnNeither}
+	for _, nm := range names {
+		c := child(props, acNS, nm)
+		if c == nil {
+			c = ua.NewNumericNodeID(0, 0)
+		}
+		read.NodesToRead = append(read.NodesToRead, &ua.ReadValueID{NodeID: c, AttributeID: ua.AttributeIDValue})
+	}
+	res, err := t.sess.Read(ctx, read)
+	if err != nil {
+		return o, err
+	}
+	if len(res.Results) != len(names) {
+		return o, fmt.Errorf("fxcm: Read: %d results", len(res.Results))
+	}
+	if s, ok := dvValue(res.Results[0]).(string); ok && s != "" {
+		o.CMApplicationURI = &s
+	}
+	if b, ok := dvValue(res.Results[1]).(bool); ok {
+		o.IsPreconfigured = b
+	} else {
+		o.IsPreconfigured = o.CMApplicationURI == nil
+	}
+	if eo := dvStructure(res.Results[2]); eo != nil {
+		rel := relatedOf(t, eo)
+		o.InUse = rel != nil && !nullRelated(rel) && !sameRelated(rel, ours)
+	}
+	return o, nil
+}
+
+// relatedOf decodes the RelatedEndpoint value eo read from t, a structure
+// of the AC namespace (§10.42) whose encoding NodeId has the namespace
+// index of t.
+func relatedOf(t *target, eo *ua.ExtensionObject) *uafx.RelatedEndpoint {
+	if eo == nil {
+		return nil
+	}
+	if r, ok := eo.Value.(*uafx.RelatedEndpoint); ok {
+		return r
+	}
+	ns := uafx.NamespaceIndexes{}
+	ns.Data, _ = t.ns(fxdataid.NamespaceURI)
+	ns.AC, _ = t.ns(fxacid.NamespaceURI)
+	s, err := uafx.DecodeStructure(eo, ns)
+	if err != nil {
+		return nil
+	}
+	r, _ := s.(*uafx.RelatedEndpoint)
+	return r
+}
+
+func nullRelated(r *uafx.RelatedEndpoint) bool {
+	return r.Address == "" && r.ConnectionEndpointName == "" && len(r.ConnectionEndpointPath) == 0
+}
+
+func sameRelated(a, b *uafx.RelatedEndpoint) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	x, err1 := ua.Encode(a)
+	y, err2 := ua.Encode(b)
+	return err1 == nil && err2 == nil && string(x) == string(y)
+}
+
+// scan is step 0 (design §5.2): classify what exists under each Name;
+// close known-owned survivors; fail a Connection whose Name is taken.
+func (x *run) scan(ctx context.Context, a *acRun) {
+	var closeFirst []*record
+	var closeEps []*epRun
+	for _, ep := range a.eps {
+		if ep.failed() {
+			continue
+		}
+		found, err := observeName(ctx, a.t, ep.fe, ep.e.conf.Name, ep.param.RelatedEndpoint)
+		if err != nil {
+			x.failErr(ep, err, uafx.FxErrorResolvingPathsError)
+			continue
+		}
+		k := recordKey(a.addr, ep.fe, ep.e.conf.Name)
+		x.s.mu.Lock()
+		rec := x.s.records[k]
+		var recCopy *EndpointRecord
+		if rec != nil {
+			c := rec.EndpointRecord
+			recCopy = &c
+		}
+		x.s.mu.Unlock()
+		if len(found) > 1 {
+			x.fail(ep, Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadBrowseNameDuplicated})
+			continue
+		}
+		var obs *Observed
+		if len(found) == 1 {
+			obs = &found[0]
+		}
+		if obs == nil && rec != nil {
+			// The endpoint is gone (cleanup, a restarted AC): forget it.
+			x.forget(k)
+		}
+		class, verdict := Scan(recCopy, obs, x.m.opts.ApplicationURI, ep.e.conf.IsPreconfigured)
+		ep.obs = obs
+		switch verdict {
+		case ScanCloseFirst:
+			closeFirst = append(closeFirst, rec)
+			closeEps = append(closeEps, ep)
+		case ScanBlocked:
+			if class == Unresolved && rec == nil {
+				x.remember(a, ep, obs.NodeID, Unresolved)
+			}
+			x.fail(ep, Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadBrowseNameDuplicated})
+		case ScanCreate, ScanTake:
+		}
+	}
+	if len(closeFirst) == 0 {
+		return
+	}
+	errs := x.closeRecords(ctx, closeFirst, true)
+	for i, rec := range closeFirst {
+		if err := errs[rec]; err != nil {
+			x.failErr(closeEps[i], err, uafx.FxErrorCloseConnectionError)
+			continue
+		}
+		if !rec.IsPreconfiguredClass() {
+			closeEps[i].obs = nil // absent before the create of this run
+		}
+	}
+}
+
+// IsPreconfiguredClass reports whether the record is of an endpoint the
+// AC keeps after a close.
+func (r *record) IsPreconfiguredClass() bool { return r.Class == TakenPreconfigured }
+
+// remember records an endpoint of ep with class, as the run found or
+// made it.
+func (x *run) remember(a *acRun, ep *epRun, n *ua.NodeID, class Ownership) {
+	rec := &record{EndpointRecord: EndpointRecord{
+		Set: x.r.key, Endpoint: ep.ref(), ServerURI: a.addr.ServerURI, FunctionalEntity: ep.fe, Name: ep.e.conf.Name,
+		NodeID: n, Class: class, Run: x.r.id, Version: x.r.version,
+	}, addr: a.addr, acNode: a.node}
+	x.s.mu.Lock()
+	x.s.records[recordKey(a.addr, ep.fe, ep.e.conf.Name)] = rec
+	x.s.mu.Unlock()
+	cp := rec.EndpointRecord
+	x.mu.Lock()
+	switch class {
+	case Unresolved:
+		x.res.Unresolved = append(x.res.Unresolved, cp)
+	case KnownOwned, TakenPreconfigured:
+		x.res.Created = append(x.res.Created, cp)
+	case Foreign:
+	}
+	x.mu.Unlock()
+	x.m.observe(Event{Kind: EventEndpoint, Set: x.r.key, Run: x.r.id, Record: &cp})
+}
+
+func (x *run) forget(k string) {
+	x.s.mu.Lock()
+	rec := x.s.records[k]
+	delete(x.s.records, k)
+	x.s.mu.Unlock()
+	if rec != nil {
+		cp := rec.EndpointRecord
+		x.m.observe(Event{Kind: EventEndpoint, Set: x.r.key, Run: x.r.id, Record: &cp, Closed: true})
+	}
+}
+
+// --- steps 2 and 3: reserve, configure ------------------------------------
+
+// prepare builds the PubSub configuration of a (§6.16.3) and the
+// parameters of its endpoints.
+func (x *run) prepare(ctx context.Context, a *acRun) {
+	cm, err := x.prepareComm(ctx, a)
+	if err != nil {
+		x.failAC(a, err)
+		return
+	}
+	a.comm = cm
+	if cm != nil {
+		if err := x.reuseDataSets(ctx, a); err != nil {
+			x.failAC(a, err)
+			return
+		}
+	}
+	if cm == nil {
+		for _, ep := range a.eps {
+			if ep.links != nil {
+				x.fail(ep, Failure{FxError: uafx.FxErrorConnectionConfigurationSetInvalid, Status: ua.StatusBadNotSupported})
+			}
+		}
+		return
+	}
+	switch x.r.action {
+	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled:
+		disabledModel(cm.cfg)
+	default:
+	}
+}
+
+// reuseDataSets drops the ElementAdd of each PublishedDataSet of a's
+// configuration that the AC has already under the same Name. Library
+// interpretation: CloseConnections removes the DataSetWriters and
+// DataSetReaders an endpoint used, not the PublishedDataSets, which other
+// Connections may publish (§6.2.5.2); ElementMatch is defined for
+// PubSubConnections and groups only (§6.16.3, OPC 10000-14 Table 241), so
+// establishing a set again reuses the PublishedDataSet of the same Name,
+// found in PublishSubscribe.PublishedDataSets (OPC 10000-14 §9.1.4.2).
+func (x *run) reuseDataSets(ctx context.Context, a *acRun) error {
+	cfg := a.comm.cfg
+	adds := false
+	for _, r := range a.comm.refs {
+		if r != nil && r.ConfigurationMask&ua.PubSubConfigurationRefMaskReferencePubDataset != 0 && r.ConfigurationMask&ua.PubSubConfigurationRefMaskElementAdd != 0 {
+			adds = true
+		}
+	}
+	if !adds {
+		return nil
+	}
+	refs, err := a.t.children(ctx, ua.NewNumericNodeID(0, id.PublishSubscribePublishedDataSets))
+	if err != nil {
+		// A server without the PubSub model: nothing to reuse.
+		return nil //nolint:nilerr // the folder is optional (OPC 10000-14 §9.1.3.2)
+	}
+	have := map[string]bool{}
+	for _, r := range refs {
+		if r != nil && r.BrowseName != nil {
+			have[r.BrowseName.Name] = true
+		}
+	}
+	kept := a.comm.refs[:0:0]
+	for _, r := range a.comm.refs {
+		if r != nil && r.ConfigurationMask&ua.PubSubConfigurationRefMaskReferencePubDataset != 0 && r.ConfigurationMask&ua.PubSubConfigurationRefMaskElementAdd != 0 &&
+			int(r.ElementIndex) < len(cfg.PublishedDataSets) && cfg.PublishedDataSets[r.ElementIndex] != nil &&
+			cfg.PublishedDataSets[r.ElementIndex].Name != "" && have[cfg.PublishedDataSets[r.ElementIndex].Name] {
+			continue
+		}
+		kept = append(kept, r)
+	}
+	a.comm.refs = kept
+	return nil
+}
+
+// disabledModel sets the DataSetReaders and DataSetWriters of cfg to
+// Enabled FALSE and everything else to TRUE (§6.7.5.3.1: a disabled
+// communication model).
+func disabledModel(cfg *ua.PubSubConfiguration2DataType) {
+	cfg.Enabled = true
+	for _, c := range cfg.Connections {
+		if c == nil {
+			continue
+		}
+		c.Enabled = true
+		for _, g := range c.WriterGroups {
+			if g == nil {
+				continue
+			}
+			g.Enabled = true
+			for _, w := range g.DataSetWriters {
+				if w != nil {
+					w.Enabled = false
+				}
+			}
+		}
+		for _, g := range c.ReaderGroups {
+			if g == nil {
+				continue
+			}
+			g.Enabled = true
+			for _, r := range g.DataSetReaders {
+				if r != nil {
+					r.Enabled = false
+				}
+			}
+		}
+	}
+}
+
+// reserve is step 2 (E.2.2.1 step 1): ReserveCommunicationIdsCmd for the
+// WriterGroupIds and DataSetWriterIds a's configuration leaves 0 and for
+// the DefaultPublisherId, with VerifyAssetCmd.
+func (x *run) reserve(ctx context.Context, a *acRun) {
+	if a.comm == nil {
+		return
+	}
+	groups, writers, profile := a.comm.reserveNeed()
+	nullPub := false
+	for _, c := range a.comm.cfg.Connections {
+		if c != nil && len(c.WriterGroups) > 0 && isNullID(c.PublisherID) {
+			nullPub = true
+		}
+	}
+	if groups == 0 && writers == 0 && !nullPub {
+		return
+	}
+	if profile == "" {
+		profile = UDPUADP
+	}
+	req := &uafx.EstablishConnectionsRequest{
+		CommandMask: uafx.ReserveCommunicationIDsCmd,
+		ReserveCommunicationIDs: []*uafx.PubSubReserveCommunicationIDs{{
+			TransportProfileURI: profile, NumReqWriterGroupIDs: groups, NumReqDataSetWriterIDs: writers,
+		}},
+	}
+	if len(a.assets) > 0 {
+		req.CommandMask |= uafx.VerifyAssetCmd
+		req.AssetVerifications = a.assets
+		a.assets = nil
+	}
+	res, err, unknown := x.call(ctx, a, req)
+	switch {
+	case unknown:
+		// Ids are released with the session (CL-2); nothing was created.
+		x.failAC(a, failure(uafx.FxErrorReserveCommunicationIDsError, failureOf(err, uafx.FxErrorReserveCommunicationIDsError).Status, "%v", err))
+		return
+	case err != nil:
+		x.failAC(a, failure(fxOfMask(req.CommandMask), StatusOf(err), "%v", err))
+		return
+	}
+	if f, ok := assetFailure(res); ok {
+		x.failAC(a, failure(f.FxError, f.Status, "VerifyAsset"))
+		return
+	}
+	if len(res.ReserveCommunicationIDsResults) != 1 || res.ReserveCommunicationIDsResults[0] == nil || bad(res.ReserveCommunicationIDsResults[0].Result) || res.Status != ua.StatusGood {
+		st := res.Status
+		if len(res.ReserveCommunicationIDsResults) == 1 && res.ReserveCommunicationIDsResults[0] != nil && bad(res.ReserveCommunicationIDsResults[0].Result) {
+			st = res.ReserveCommunicationIDsResults[0].Result
+		}
+		x.failAC(a, failure(uafx.FxErrorReserveCommunicationIDsError, st, "ReserveCommunicationIds"))
+		return
+	}
+	rr := res.ReserveCommunicationIDsResults[0]
+	if err := a.comm.fillReserved(rr); err != nil {
+		x.failAC(a, err)
+		return
+	}
+	a.defaultPublisherID = rr.DefaultPublisherID
+}
+
+// bad reports whether st is a Bad StatusCode (OPC 10000-4 §7.39).
+func bad(st ua.StatusCode) bool { return st.Uint32()&0x80000000 != 0 }
+
+func assetFailure(res *uafx.EstablishConnectionsResult) (Failure, bool) {
+	for _, r := range res.AssetVerificationResults {
+		if r == nil {
+			continue
+		}
+		if bad(r.VerificationStatus) {
+			return Failure{FxError: uafx.FxErrorVerifyAssetError, Status: r.VerificationStatus}, true
+		}
+		if r.VerificationResult == uafx.AssetVerificationMismatch {
+			return Failure{FxError: uafx.FxErrorVerifyAssetError, Status: ua.StatusBadNoMatch}, true
+		}
+	}
+	return Failure{}, false
+}
+
+// fxOfMask returns the FxError of the first command of mask in the order
+// of §6.2.4.3.1 (design §5.7).
+func fxOfMask(mask uafx.FxCommandMask) uafx.FxError {
+	if o := mask.Order(); len(o) > 0 {
+		return fxOfCommand(o[0])
+	}
+	return uafx.FxErrorUnknownStatus
+}
+
+func fxOfCommand(c uafx.FxCommandMask) uafx.FxError {
+	switch c {
+	case uafx.VerifyAssetCmd:
+		return uafx.FxErrorVerifyAssetError
+	case uafx.VerifyFunctionalEntityCmd:
+		return uafx.FxErrorVerifyFunctionalEntityError
+	case uafx.CreateConnectionEndpointCmd:
+		return uafx.FxErrorCreateConnectionEndpointError
+	case uafx.EstablishControlCmd:
+		return uafx.FxErrorEstablishControlError
+	case uafx.SetConfigurationDataCmd:
+		return uafx.FxErrorSetConfigurationDataError
+	case uafx.ReassignControlCmd:
+		return uafx.FxErrorReassignControlError
+	case uafx.ReserveCommunicationIDsCmd:
+		return uafx.FxErrorReserveCommunicationIDsError
+	case uafx.SetCommunicationConfigurationCmd:
+		return uafx.FxErrorSetCommunicationConfigurationError
+	case uafx.EnableCommunicationCmd:
+		return uafx.FxErrorEnableCommunicationError
+	default:
+		return uafx.FxErrorUnknownStatus
+	}
+}
+
+// call calls EstablishConnections on a. unknown is set when no response
+// came (a communication error, a timeout): the outcome is unknown (design
+// §5.4). Otherwise err is a Bad status of the call (Table 9), and res the
+// result of a call that returned Good or Uncertain.
+func (x *run) call(ctx context.Context, a *acRun, req *uafx.EstablishConnectionsRequest) (res *uafx.EstablishConnectionsResult, err error, unknown bool) {
+	args, err := uafx.EncodeEstablishConnectionsRequest(req, a.data)
+	if err != nil {
+		return nil, failure(uafx.FxErrorConnectionConfigurationSetInvalid, ua.StatusBadEncodingError, "%v", err), false
+	}
+	cctx, cancel := context.WithTimeout(ctx, x.m.opts.CallTimeout)
+	defer cancel()
+	x.m.counters.establish.Add(1)
+	out, err := a.t.sess.Call(cctx, &ua.CallMethodRequest{ObjectID: a.node, MethodID: a.establish, InputArguments: args})
+	ev := Event{Kind: EventCall, Set: x.r.key, Run: x.r.id, Method: "EstablishConnections", Address: a.addr.Address}
+	defer func() { x.m.observe(ev) }()
+	if err != nil {
+		x.m.counters.establishFailed.Add(1)
+		if errors.Is(err, context.DeadlineExceeded) {
+			err = fmt.Errorf("%w: %w", ua.StatusBadTimeout, err)
+		}
+		ev.Err = err
+		return nil, err, true
+	}
+	ev.Status = out.StatusCode
+	if out.StatusCode != ua.StatusGood {
+		x.m.counters.establishFailed.Add(1)
+	}
+	if out.StatusCode.Uint32()&0x80000000 != 0 {
+		return nil, out.StatusCode, false
+	}
+	res, err = uafx.DecodeEstablishConnectionsResult(out.OutputArguments, a.data)
+	if err != nil {
+		ev.Err = err
+		return nil, fmt.Errorf("%w: %w", ua.StatusBadDecodingError, err), true
+	}
+	res.Status = out.StatusCode
+	return res, nil, false
+}
+
+// configure is step 3 (E.2.2.2): one call per AutomationComponent with the
+// bundle of each endpoint (CreateConnectionEndpoint, EstablishControl,
+// SetConfigurationData, ReassignControl, SetCommunicationConfiguration with
+// the ids of step 2, EnableCommunication for an enabled establish), split at
+// MaxConnectionsPerCall without separating the commands of one endpoint
+// (EC-4, EC-5).
+func (x *run) configure(ctx context.Context, a *acRun) {
+	var eps []*epRun
+	for _, ep := range a.eps {
+		if !ep.failed() {
+			eps = append(eps, ep)
+		}
+	}
+	size := len(eps)
+	if a.maxPerCall > 0 && int(a.maxPerCall) < size {
+		size = int(a.maxPerCall)
+	}
+	var chunks [][]*epRun
+	for i := 0; i < len(eps); i += size {
+		chunks = append(chunks, eps[i:min(i+size, len(eps))])
+	}
+	for ci, chunk := range chunks {
+		refs := chunkRefs(a, chunks, ci)
+		withComm := a.comm != nil && (len(refs) > 0 || slices.ContainsFunc(chunk, func(ep *epRun) bool { return ep.links != nil }))
+		req := x.configureRequest(a, chunk, withComm, refs)
+		res, err, unknown := x.call(ctx, a, req)
+		switch {
+		case unknown:
+			x.lostResponse(ctx, a, chunk, req.CommandMask, err)
+			x.stopRest(chunks[ci+1:])
+			return
+		case err != nil:
+			for _, ep := range chunk {
+				x.fail(ep, Failure{FxError: fxOfMask(req.CommandMask), Status: StatusOf(err)})
+			}
+			x.stopRest(chunks[ci+1:])
+			return
+		}
+		if !x.configured(a, chunk, req, res) {
+			x.stopRest(chunks[ci+1:])
+			return
+		}
+		if withComm && len(res.CommunicationConfigurationResults) == 1 && res.CommunicationConfigurationResults[0] != nil {
+			a.values = append(a.values, res.CommunicationConfigurationResults[0].ConfigurationValues...)
+			applyValues(a.comm.cfg, res.CommunicationConfigurationResults[0].ConfigurationValues)
+		}
+	}
+}
+
+// linkedBy reports whether the CommunicationLinks l name the reader or
+// writer of the reference r.
+func linkedBy(l *uafx.PubSubCommunicationLinkConfiguration, r *ua.PubSubConfigurationRefDataType) bool {
+	same := func(x *ua.PubSubConfigurationRefDataType, kind ua.PubSubConfigurationRefMask) bool {
+		return x != nil && x.ConfigurationMask&kind != 0 && r.ConfigurationMask&kind != 0 &&
+			x.ConnectionIndex == r.ConnectionIndex && x.GroupIndex == r.GroupIndex && x.ElementIndex == r.ElementIndex
+	}
+	return l != nil && (same(l.DataSetWriterRef, ua.PubSubConfigurationRefMaskReferenceWriter) || same(l.DataSetReaderRef, ua.PubSubConfigurationRefMaskReferenceReader))
+}
+
+// chunkRefs returns the ConfigurationReferences of call ci of a split
+// configure step (EC-5). The first call adds the PublishedDataSets,
+// PubSubConnections and groups, the removals, and the readers and writers
+// that no endpoint of a later call links to; a later call adds the readers
+// and writers its endpoints link to, inside the parents the first call
+// added, which the server finds by the Names it assigned (§6.16.3,
+// applyValues). Library interpretation: ElementMatch is defined for
+// PubSubConnections and groups only (OPC 10000-14 §9.1.3.7.2), so no
+// element is sent twice. A later call whose readers and writers were all
+// added before matches the PubSubConnection of its first link, as the
+// command needs a reference.
+func chunkRefs(a *acRun, chunks [][]*epRun, ci int) []*ua.PubSubConfigurationRefDataType {
+	if a.comm == nil {
+		return nil
+	}
+	owner := func(r *ua.PubSubConfigurationRefDataType) int {
+		if r.ConfigurationMask&(ua.PubSubConfigurationRefMaskReferenceWriter|ua.PubSubConfigurationRefMaskReferenceReader) == 0 ||
+			r.ConfigurationMask&ua.PubSubConfigurationRefMaskElementAdd == 0 {
+			return 0
+		}
+		for k, c := range chunks {
+			for _, ep := range c {
+				if linkedBy(ep.links, r) {
+					return k
+				}
+			}
+		}
+		return 0
+	}
+	var out []*ua.PubSubConfigurationRefDataType
+	for _, r := range a.comm.refs {
+		if r != nil && owner(r) == ci {
+			out = append(out, r)
+		}
+	}
+	if len(out) > 0 || ci == 0 {
+		return out
+	}
+	for _, ep := range chunks[ci] {
+		if ep.links == nil {
+			continue
+		}
+		for _, l := range []*ua.PubSubConfigurationRefDataType{ep.links.DataSetWriterRef, ep.links.DataSetReaderRef} {
+			if l != nil && l.ConfigurationMask != 0 {
+				return []*ua.PubSubConfigurationRefDataType{{
+					ConfigurationMask: ua.PubSubConfigurationRefMaskElementMatch | ua.PubSubConfigurationRefMaskReferenceConnection,
+					ConnectionIndex:   l.ConnectionIndex,
+				}}
+			}
+		}
+	}
+	return nil
+}
+
+// stopRest gives the endpoints of chunks that were not called the outcome
+// Stopped (§10.19: skipped because of an unrelated failure).
+func (x *run) stopRest(chunks [][]*epRun) {
+	for _, c := range chunks {
+		for _, ep := range c {
+			x.setOutcome(ep, Stopped)
+		}
+	}
+}
+
+func (x *run) configureRequest(a *acRun, chunk []*epRun, withComm bool, refs []*ua.PubSubConfigurationRefDataType) *uafx.EstablishConnectionsRequest {
+	req := &uafx.EstablishConnectionsRequest{CommandMask: uafx.CreateConnectionEndpointCmd}
+	if len(a.assets) > 0 {
+		req.CommandMask |= uafx.VerifyAssetCmd
+		req.AssetVerifications = a.assets
+		a.assets = nil
+	}
+	for _, ep := range chunk {
+		el := &uafx.ConnectionEndpointConfiguration{
+			FunctionalEntityNode:          ep.fe,
+			ConnectionEndpoint:            &uafx.ConnectionEndpointDefinition{Parameter: ep.param},
+			ExpectedVerificationVariables: ep.verify,
+			ControlGroups:                 ep.controls,
+			ConfigurationData:             ep.config,
+		}
+		if withComm {
+			el.CommunicationLinks = ep.links
+		}
+		if len(ep.verify) > 0 {
+			req.CommandMask |= uafx.VerifyFunctionalEntityCmd
+		}
+		if len(ep.controls) > 0 {
+			req.CommandMask |= uafx.EstablishControlCmd | uafx.ReassignControlCmd
+		}
+		if len(ep.config) > 0 {
+			req.CommandMask |= uafx.SetConfigurationDataCmd
+		}
+		req.ConnectionEndpointConfigurations = append(req.ConnectionEndpointConfigurations, el)
+	}
+	if withComm {
+		req.CommandMask |= uafx.SetCommunicationConfigurationCmd
+		req.CommunicationConfigurations = []*uafx.PubSubCommunicationConfiguration{{
+			PubSubConfiguration: a.comm.cfg, RequireCompleteUpdate: true, ConfigurationReferences: refs,
+		}}
+	}
+	if x.r.action == uafx.ActionEstablishConnectionsEnabled && (withComm || a.comm == nil) {
+		req.CommandMask |= uafx.EnableCommunicationCmd
+	}
+	return req
+}
+
+// applyValues writes the names and ids an AC assigned (ConfigurationValues,
+// §6.16.3) into cfg, so that a later call can match the elements.
+func applyValues(cfg *ua.PubSubConfiguration2DataType, values []*ua.PubSubConfigurationValueDataType) {
+	for _, v := range values {
+		if v == nil || v.ConfigurationElement == nil {
+			continue
+		}
+		r := v.ConfigurationElement
+		m := r.ConfigurationMask
+		switch {
+		case m&ua.PubSubConfigurationRefMaskReferencePubDataset != 0:
+			if int(r.ElementIndex) < len(cfg.PublishedDataSets) && cfg.PublishedDataSets[r.ElementIndex] != nil && v.Name != "" {
+				old := cfg.PublishedDataSets[r.ElementIndex].Name
+				cfg.PublishedDataSets[r.ElementIndex].Name = v.Name
+				renameDataSet(cfg, old, v.Name)
+			}
+		case m&ua.PubSubConfigurationRefMaskReferenceWriter != 0:
+			if _, _, w := writerAt(cfg, r); w != nil {
+				setName(&w.Name, v.Name)
+				if id, ok := v.Identifier.Value().(uint16); ok && w.DataSetWriterID == 0 {
+					w.DataSetWriterID = id
+				}
+			}
+		case m&ua.PubSubConfigurationRefMaskReferenceReader != 0:
+			if rd := readerAt(cfg, r); rd != nil {
+				setName(&rd.Name, v.Name)
+			}
+		case m&ua.PubSubConfigurationRefMaskReferenceWriterGroup != 0:
+			if c := connAt(cfg, r); c != nil && int(r.GroupIndex) < len(c.WriterGroups) && c.WriterGroups[r.GroupIndex] != nil {
+				g := c.WriterGroups[r.GroupIndex]
+				setName(&g.Name, v.Name)
+				if id, ok := v.Identifier.Value().(uint16); ok && g.WriterGroupID == 0 {
+					g.WriterGroupID = id
+				}
+			}
+		case m&ua.PubSubConfigurationRefMaskReferenceReaderGroup != 0:
+			if c := connAt(cfg, r); c != nil && int(r.GroupIndex) < len(c.ReaderGroups) && c.ReaderGroups[r.GroupIndex] != nil {
+				setName(&c.ReaderGroups[r.GroupIndex].Name, v.Name)
+			}
+		case m&ua.PubSubConfigurationRefMaskReferenceConnection != 0:
+			if c := connAt(cfg, r); c != nil {
+				setName(&c.Name, v.Name)
+				if isNullID(c.PublisherID) && !isNullID(v.Identifier) {
+					c.PublisherID = v.Identifier
+				}
+			}
+		}
+	}
+}
+
+func setName(dst *string, name string) {
+	if *dst == "" && name != "" {
+		*dst = name
+	}
+}
+
+func connAt(cfg *ua.PubSubConfiguration2DataType, r *ua.PubSubConfigurationRefDataType) *ua.PubSubConnectionDataType {
+	if int(r.ConnectionIndex) < len(cfg.Connections) {
+		return cfg.Connections[r.ConnectionIndex]
+	}
+	return nil
+}
+
+func renameDataSet(cfg *ua.PubSubConfiguration2DataType, old, name string) {
+	if old == "" || old == name {
+		return
+	}
+	for _, c := range cfg.Connections {
+		if c == nil {
+			continue
+		}
+		for _, g := range c.WriterGroups {
+			if g == nil {
+				continue
+			}
+			for _, w := range g.DataSetWriters {
+				if w != nil && w.DataSetName == old {
+					w.DataSetName = name
+				}
+			}
+		}
+	}
+}
+
+// configured processes the result of a configure call and reports whether
+// the run goes on (§6.2.4.3.11: an Uncertain call was aborted and undone by
+// the AC, its results say which command failed).
+func (x *run) configured(a *acRun, chunk []*epRun, req *uafx.EstablishConnectionsRequest, res *uafx.EstablishConnectionsResult) bool {
+	if x.m.log.Enabled(context.Background(), slog.LevelDebug) {
+		var eps, comm []string
+		for _, r := range res.ConnectionEndpointConfigurationResults {
+			if r != nil {
+				eps = append(eps, fmt.Sprintf("%+v", *r))
+			}
+		}
+		for _, r := range res.CommunicationConfigurationResults {
+			if r != nil {
+				comm = append(comm, fmt.Sprintf("result %v references %v", r.Result, r.ReferenceResults))
+			}
+		}
+		x.m.log.Debug("fxcm: EstablishConnections result", "set", x.r.key.String(), "run", x.r.id, "address", a.addr.Address,
+			"status", res.Status, "endpoints", eps, "communication", comm)
+	}
+	failed := false
+	if f, ok := assetFailure(res); ok {
+		for _, ep := range chunk {
+			x.fail(ep, f)
+		}
+		failed = true
+	}
+	// The commands that failed are reported; those the AC skipped after
+	// them return Bad_NothingToDo (§6.2.4.3.11) and are reported only when
+	// nothing else failed.
+	results := res.ConnectionEndpointConfigurationResults
+	resultOf := func(i int) *uafx.ConnectionEndpointConfigurationResult {
+		if i < len(results) {
+			return results[i]
+		}
+		return nil
+	}
+	var commResult ua.StatusCode
+	if len(res.CommunicationConfigurationResults) == 1 && res.CommunicationConfigurationResults[0] != nil {
+		commResult = res.CommunicationConfigurationResults[0].Result
+	}
+	failComm := func() {
+		for _, ep := range chunk {
+			if ep.links != nil || len(chunk) == 1 {
+				x.fail(ep, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: commResult})
+			}
+		}
+		failed = true
+	}
+	for _, skip := range []bool{true, false} {
+		for i, ep := range chunk {
+			if r := resultOf(i); r != nil {
+				if f, ok := elementFailureSkipping(r, skip); ok {
+					x.fail(ep, f)
+					failed = true
+				}
+			}
+		}
+		if bad(commResult) && (!skip || commResult != ua.StatusBadNothingToDo) {
+			failComm()
+		}
+		if failed {
+			break
+		}
+	}
+	if res.Status != ua.StatusGood {
+		// The AC aborted the call and undid it (§6.2.4.3.11, Table 21).
+		if !failed {
+			for _, ep := range chunk {
+				x.fail(ep, Failure{FxError: uafx.FxErrorUnknownStatus, Status: res.Status})
+			}
+		}
+		for _, ep := range chunk {
+			x.setOutcome(ep, Stopped)
+		}
+		return false
+	}
+	for i, ep := range chunk {
+		if i >= len(results) || results[i] == nil || results[i].ConnectionEndpointID == nil {
+			x.fail(ep, Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadUnexpectedError})
+			failed = true
+			continue
+		}
+		class := KnownOwned
+		if ep.e.conf.IsPreconfigured {
+			class = TakenPreconfigured
+		}
+		x.remember(a, ep, results[i].ConnectionEndpointID, class)
+		x.setOutcome(ep, Succeeded)
+	}
+	return !failed
+}
+
+// elementFailure returns the failure of the first command of an element
+// that failed, in the order of §6.2.4.3.1.
+func elementFailure(r *uafx.ConnectionEndpointConfigurationResult) (Failure, bool) {
+	if f, ok := elementFailureSkipping(r, true); ok {
+		return f, true
+	}
+	return elementFailureSkipping(r, false)
+}
+
+// elementFailureSkipping is elementFailure; with skip a Bad_NothingToDo,
+// a command the AC skipped after another failed, is not a failure.
+func elementFailureSkipping(r *uafx.ConnectionEndpointConfigurationResult, skip bool) (Failure, bool) {
+	bad := func(s ua.StatusCode) bool { return bad(s) && (!skip || s != ua.StatusBadNothingToDo) }
+	firstBad := func(sts []ua.StatusCode) (ua.StatusCode, bool) {
+		for _, s := range sts {
+			if bad(s) {
+				return s, true
+			}
+		}
+		return 0, false
+	}
+	switch {
+	case bad(r.FunctionalEntityNodeResult):
+		return Failure{uafx.FxErrorVerifyFunctionalEntityError, r.FunctionalEntityNodeResult}, true
+	case bad(r.VerificationStatus):
+		return Failure{uafx.FxErrorVerifyFunctionalEntityError, r.VerificationStatus}, true
+	case r.VerificationResult == uafx.FunctionalEntityVerificationMismatch:
+		return Failure{uafx.FxErrorVerifyFunctionalEntityError, ua.StatusBadNoMatch}, true
+	case bad(r.ConnectionEndpointResult):
+		return Failure{uafx.FxErrorCreateConnectionEndpointError, r.ConnectionEndpointResult}, true
+	}
+	if st, ok := firstBad(r.EstablishControlResult); ok {
+		return Failure{uafx.FxErrorEstablishControlError, st}, true
+	}
+	if st, ok := firstBad(r.ConfigurationDataResult); ok {
+		return Failure{uafx.FxErrorSetConfigurationDataError, st}, true
+	}
+	if st, ok := firstBad(r.ReassignControlResult); ok {
+		return Failure{uafx.FxErrorReassignControlError, st}, true
+	}
+	switch {
+	case bad(r.CommunicationLinksResult):
+		return Failure{uafx.FxErrorSetCommunicationConfigurationError, r.CommunicationLinksResult}, true
+	case bad(r.EnableCommunicationResult):
+		return Failure{uafx.FxErrorEnableCommunicationError, r.EnableCommunicationResult}, true
+	}
+	return Failure{}, false
+}
+
+// lostResponse handles a configure call without a response (design §5.4):
+// the step fails; on a new session each FunctionalEntity is browsed for the
+// Names the call meant to create, and what is found is classified by
+// ResolveLostResponse. The call is never sent again.
+func (x *run) lostResponse(ctx context.Context, a *acRun, chunk []*epRun, mask uafx.FxCommandMask, err error) {
+	f := failureOf(err, fxOfMask(mask))
+	if f.Status != ua.StatusBadTimeout {
+		f.Status = ua.StatusBadCommunicationError
+	}
+	for _, ep := range chunk {
+		x.fail(ep, f)
+	}
+	x.m.pool.drop(ctx, a.addr, a.t.sess)
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), x.m.opts.CallTimeout)
+	defer cancel()
+	sess, derr := x.m.pool.get(cctx, a.addr)
+	var t *target
+	if derr == nil {
+		t = &target{addr: a.addr, sess: sess, cache: x.m.res.of(a.addr)}
+		derr = t.open(cctx)
+	}
+	for _, ep := range chunk {
+		if derr != nil {
+			// Not checked: unresolved until a Reconcile or a run checks it.
+			x.remember(a, ep, nil, Unresolved)
+			continue
+		}
+		found, err := observeName(cctx, t, ep.fe, ep.e.conf.Name, ep.param.RelatedEndpoint)
+		if err != nil {
+			x.remember(a, ep, nil, Unresolved)
+			continue
+		}
+		lr := LostResponse{AbsentBefore: ep.obs == nil, Serialized: true, Preconfigured: ep.e.conf.IsPreconfigured, Found: found}
+		if ep.e.conf.IsPreconfigured && len(found) == 1 {
+			lr.RelatedEndpointOurs = x.relatedIsOurs(cctx, t, found[0].NodeID, ep.param.RelatedEndpoint)
+		}
+		class, absent := ResolveLostResponse(lr, x.m.opts.ApplicationURI, x.m.opts.ExclusiveApplicationURI)
+		if absent {
+			continue
+		}
+		x.remember(a, ep, found[0].NodeID, class)
+	}
+}
+
+func (x *run) relatedIsOurs(ctx context.Context, t *target, n *ua.NodeID, ours *uafx.RelatedEndpoint) bool {
+	acNS, err := t.acNamespace()
+	if err != nil {
+		return false
+	}
+	props, err := t.children(ctx, n)
+	if err != nil {
+		return false
+	}
+	c := child(props, acNS, "RelatedEndpoint")
+	if c == nil {
+		return false
+	}
+	res, err := t.sess.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{NodeID: c, AttributeID: ua.AttributeIDValue}}})
+	if err != nil || len(res.Results) != 1 {
+		return false
+	}
+	return sameRelated(relatedOf(t, dvStructure(res.Results[0])), ours)
+}
+
+// checkPublishers checks the PublisherIds the subscribers were configured
+// with against those their publishers' PubSubConnections have after the
+// call (§6.16.3: a PubSubConnection that matched an existing one has its
+// PublisherId). Library interpretation: adapting a subscriber that was
+// configured with another one is not done; that Connection fails with
+// SetCommunicationConfigurationError and Bad_ConfigurationError.
+func (x *run) checkPublishers() {
+	for _, ep := range x.eps {
+		as := ep.assumedPublisher
+		if as == nil || ep.failed() {
+			continue
+		}
+		actual := as.conn.PublisherID
+		if isNullID(actual) || sameVariant(actual, as.id) {
+			continue
+		}
+		x.fail(ep, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: ua.StatusBadConfigurationError})
+	}
+}
+
+func sameVariant(a, b *ua.Variant) bool {
+	x, err1 := ua.Encode(a)
+	y, err2 := ua.Encode(b)
+	return err1 == nil && err2 == nil && string(x) == string(y)
+}
+
+// --- closing ---------------------------------------------------------------
+
+// closeRecords closes recs with CloseConnections (§6.2.5), one call per
+// AutomationComponent, in parallel. It returns the error of each record
+// that was not closed. A closed record of a removed endpoint is forgotten; a
+// record that was not closed gets ClosePending.
+func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map[*record]error {
+	type group struct {
+		addr ServerAddress
+		ac   *ua.NodeID
+		recs []*record
+	}
+	var groups []*group
+	for _, r := range recs {
+		var g *group
+		for _, o := range groups {
+			if o.addr == r.addr && o.ac.Equal(r.acNode) {
+				g = o
+			}
+		}
+		if g == nil {
+			g = &group{addr: r.addr, ac: r.acNode}
+			groups = append(groups, g)
+		}
+		g.recs = append(g.recs, r)
+	}
+	errs := map[*record]error{}
+	closedGone := map[*record]bool{}
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, x.m.opts.Parallelism)
+	for _, g := range groups {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			results, err := x.closeOn(ctx, g.addr, g.ac, g.recs, remove)
+			mu.Lock()
+			defer mu.Unlock()
+			for i, r := range g.recs {
+				e := err
+				// Bad_NodeIdUnknown: the endpoint does not exist (Table 24),
+				// as after a close whose response was lost or a cleanup:
+				// it is closed.
+				if e == nil && bad(results[i]) && results[i] != ua.StatusBadNodeIDUnknown {
+					e = failure(uafx.FxErrorCloseConnectionError, results[i], "CloseConnections of %v", r.NodeID)
+				}
+				if e != nil {
+					errs[r] = e
+				} else if err == nil && results[i] == ua.StatusBadNodeIDUnknown {
+					closedGone[r] = true
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	for _, r := range recs {
+		x.s.mu.Lock()
+		k := recordKey(r.addr, r.FunctionalEntity, r.Name)
+		cur := x.s.records[k]
+		if errs[r] != nil {
+			if cur != nil {
+				cur.ClosePending = true
+			}
+		} else if (remove || closedGone[r]) && cur == r {
+			delete(x.s.records, k)
+		} else if cur != nil {
+			cur.ClosePending = false
+		}
+		x.s.mu.Unlock()
+		cp := r.EndpointRecord
+		if errs[r] == nil {
+			x.mu.Lock()
+			x.res.Closed = append(x.res.Closed, cp)
+			x.mu.Unlock()
+			x.m.observe(Event{Kind: EventEndpoint, Set: x.r.key, Run: x.r.id, Record: &cp, Closed: true})
+		}
+	}
+	return errs
+}
+
+// closeOn calls CloseConnections on the AutomationComponent ac of addr.
+func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, recs []*record, remove bool) ([]ua.StatusCode, error) {
+	sess, err := x.m.pool.get(ctx, addr)
+	if err != nil {
+		return nil, failure(uafx.FxErrorCloseConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err)
+	}
+	t := &target{addr: addr, sess: sess, cache: x.m.res.of(addr)}
+	if err := t.open(ctx); err != nil {
+		x.m.pool.drop(ctx, addr, sess)
+		f := failureOf(err, uafx.FxErrorCloseConnectionError)
+		return nil, failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
+	}
+	_, closeM, _, err := methodsOf(ctx, t, ac)
+	if err != nil {
+		f := failureOf(err, uafx.FxErrorCloseConnectionError)
+		return nil, failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
+	}
+	nodes := make([]*ua.NodeID, len(recs))
+	for i, r := range recs {
+		nodes[i] = r.NodeID
+	}
+	cctx, cancel := context.WithTimeout(ctx, x.m.opts.CallTimeout)
+	defer cancel()
+	x.m.counters.close.Add(1)
+	ev := Event{Kind: EventCall, Set: x.r.key, Run: x.r.id, Method: "CloseConnections", Address: addr.Address}
+	defer func() { x.m.observe(ev) }()
+	out, err := sess.Call(cctx, &ua.CallMethodRequest{ObjectID: ac, MethodID: closeM, InputArguments: []*ua.Variant{ua.MustVariant(nodes), ua.MustVariant(remove)}})
+	if err != nil {
+		x.m.counters.closeFailed.Add(1)
+		ev.Err = err
+		f := failureOf(err, uafx.FxErrorCloseConnectionError)
+		if errors.Is(err, context.DeadlineExceeded) {
+			f.Status = ua.StatusBadTimeout
+		}
+		return nil, failure(uafx.FxErrorCloseConnectionError, f.Status, "CloseConnections: %v", err)
+	}
+	ev.Status = out.StatusCode
+	if out.StatusCode != ua.StatusGood {
+		x.m.counters.closeFailed.Add(1)
+	}
+	if bad(out.StatusCode) {
+		return nil, failure(uafx.FxErrorCloseConnectionError, out.StatusCode, "CloseConnections")
+	}
+	var results []ua.StatusCode
+	if len(out.OutputArguments) == 1 && out.OutputArguments[0] != nil {
+		results, _ = out.OutputArguments[0].Value().([]ua.StatusCode)
+	}
+	if len(results) != len(recs) {
+		return nil, failure(uafx.FxErrorCloseConnectionError, ua.StatusBadUnexpectedError, "CloseConnections: %d results for %d endpoints", len(results), len(recs))
+	}
+	return results, nil
+}
+
+// closable returns the records of the set that may be closed and the
+// Unresolved ones.
+func (x *run) closable() (closable, unresolved []*record) {
+	x.s.mu.Lock()
+	defer x.s.mu.Unlock()
+	for _, r := range x.s.records {
+		switch {
+		case r.Class.MayClose() && r.NodeID != nil:
+			closable = append(closable, r)
+		case r.Class == Unresolved:
+			unresolved = append(unresolved, r)
+		}
+	}
+	sortRecords(closable)
+	sortRecords(unresolved)
+	return closable, unresolved
+}
+
+func sortRecords(rs []*record) {
+	slices.SortFunc(rs, func(a, b *record) int {
+		switch {
+		case a.Endpoint.Connection != b.Endpoint.Connection:
+			if a.Endpoint.Connection < b.Endpoint.Connection {
+				return -1
+			}
+			return 1
+		case a.Endpoint.Endpoint != b.Endpoint.Endpoint:
+			return a.Endpoint.Endpoint - b.Endpoint.Endpoint
+		case a.Name < b.Name:
+			return -1
+		case a.Name > b.Name:
+			return 1
+		}
+		return 0
+	})
+}
+
+func (x *run) epOf(ref EndpointRef) *epRun {
+	for _, ep := range x.eps {
+		if ep.ref() == ref {
+			return ep
+		}
+	}
+	return nil
+}
+
+// rollback closes every closable endpoint of the set with Remove TRUE
+// (§6.8.2, F.1.3, EC-11), within RollbackTimeout. Unresolved endpoints are
+// reported, never closed (design §5.5).
+func (x *run) rollback(ctx context.Context) {
+	recs, unresolved := x.closable()
+	x.mu.Lock()
+	for _, r := range unresolved {
+		if !slices.ContainsFunc(x.res.Unresolved, func(e EndpointRecord) bool { return e.Endpoint == r.Endpoint && e.Name == r.Name }) {
+			x.res.Unresolved = append(x.res.Unresolved, r.EndpointRecord)
+		}
+	}
+	x.mu.Unlock()
+	if len(recs) == 0 {
+		return
+	}
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), x.m.opts.RollbackTimeout)
+	defer cancel()
+	errs := x.closeRecords(rctx, recs, true)
+	x.mu.Lock()
+	x.res.RolledBack = true
+	x.res.RollbackComplete = len(errs) == 0
+	x.mu.Unlock()
+	for _, r := range recs {
+		ep := x.epOf(r.Endpoint)
+		if ep == nil {
+			continue
+		}
+		if err := errs[r]; err != nil {
+			x.failErr(ep, err, uafx.FxErrorCloseConnectionError)
+			continue
+		}
+		x.setOutcome(ep, RolledBack)
+	}
+}
+
+// closeRun is a Remove (remove) or Disable run (§6.7.5.3.2, §6.7.5.3.4):
+// CloseConnections for every closable endpoint of the set; a failure does
+// not stop the others (EC-15). An Unresolved endpoint is not closed; in a
+// remove run its Connection fails with CloseConnectionError and
+// Bad_InvalidState, so that the set is not removed while it may have
+// Connections (design §5.4).
+func (x *run) closeRun(ctx context.Context, remove bool) {
+	recs, unresolved := x.closable()
+	for _, r := range unresolved {
+		x.mu.Lock()
+		x.res.Unresolved = append(x.res.Unresolved, r.EndpointRecord)
+		x.mu.Unlock()
+		if remove {
+			if ep := x.epOf(r.Endpoint); ep != nil {
+				x.fail(ep, Failure{FxError: uafx.FxErrorCloseConnectionError, Status: ua.StatusBadInvalidState})
+			} else {
+				x.extraFailure(Failure{FxError: uafx.FxErrorCloseConnectionError, Status: ua.StatusBadInvalidState})
+			}
+		}
+	}
+	if len(recs) == 0 {
+		return
+	}
+	errs := x.closeRecords(ctx, recs, remove)
+	for _, r := range recs {
+		err := errs[r]
+		ep := x.epOf(r.Endpoint)
+		switch {
+		case err != nil && ep != nil:
+			x.failErr(ep, err, uafx.FxErrorCloseConnectionError)
+		case err != nil:
+			x.extraFailure(failureOf(err, uafx.FxErrorCloseConnectionError))
+		}
+	}
+}
+
+// extraFailure records a failure of an endpoint that the current Config no
+// longer has (an earlier Version's): the run fails without a Connection to
+// report it on.
+func (x *run) extraFailure(f Failure) {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	x.res.Failures = append(x.res.Failures, f)
+}
+
+// enableRun is an Enable run (§6.7.5.3.3): EstablishConnections with
+// EnableCommunicationCmd for the closable endpoints of the set, one call
+// per AutomationComponent.
+func (x *run) enableRun(ctx context.Context) {
+	recs, unresolved := x.closable()
+	x.mu.Lock()
+	for _, r := range unresolved {
+		x.res.Unresolved = append(x.res.Unresolved, r.EndpointRecord)
+	}
+	x.mu.Unlock()
+	type group struct {
+		addr ServerAddress
+		ac   *ua.NodeID
+		recs []*record
+	}
+	var groups []*group
+	for _, r := range recs {
+		var g *group
+		for _, o := range groups {
+			if o.addr == r.addr && o.ac.Equal(r.acNode) {
+				g = o
+			}
+		}
+		if g == nil {
+			g = &group{addr: r.addr, ac: r.acNode}
+			groups = append(groups, g)
+		}
+		g.recs = append(g.recs, r)
+	}
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, x.m.opts.Parallelism)
+	for _, g := range groups {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			x.enableOn(ctx, g.addr, g.ac, g.recs)
+		}()
+	}
+	wg.Wait()
+}
+
+func (x *run) enableOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, recs []*record) {
+	failAll := func(f Failure) {
+		for _, r := range recs {
+			if ep := x.epOf(r.Endpoint); ep != nil {
+				x.fail(ep, f)
+			} else {
+				x.extraFailure(f)
+			}
+		}
+	}
+	sess, err := x.m.pool.get(ctx, addr)
+	if err != nil {
+		failAll(failureOf(err, uafx.FxErrorTargetServerConnectionError))
+		return
+	}
+	a := &acRun{addr: addr, node: ac, t: &target{addr: addr, sess: sess, cache: x.m.res.of(addr)}}
+	if err := a.t.open(ctx); err != nil {
+		x.m.pool.drop(ctx, addr, sess)
+		failAll(failureOf(err, uafx.FxErrorTargetServerConnectionError))
+		return
+	}
+	if err := x.methods(ctx, a); err != nil {
+		failAll(failureOf(err, uafx.FxErrorEnableCommunicationError))
+		return
+	}
+	req := &uafx.EstablishConnectionsRequest{CommandMask: uafx.EnableCommunicationCmd}
+	for _, r := range recs {
+		req.ConnectionEndpointConfigurations = append(req.ConnectionEndpointConfigurations, &uafx.ConnectionEndpointConfiguration{
+			FunctionalEntityNode: r.FunctionalEntity,
+			ConnectionEndpoint:   &uafx.ConnectionEndpointDefinition{Node: r.NodeID},
+		})
+	}
+	res, err, unknown := x.call(ctx, a, req)
+	switch {
+	case unknown:
+		f := failureOf(err, uafx.FxErrorEnableCommunicationError)
+		if f.Status != ua.StatusBadTimeout {
+			f.Status = ua.StatusBadCommunicationError
+		}
+		failAll(Failure{FxError: uafx.FxErrorEnableCommunicationError, Status: f.Status})
+		return
+	case err != nil:
+		failAll(Failure{FxError: uafx.FxErrorEnableCommunicationError, Status: StatusOf(err)})
+		return
+	}
+	for i, r := range recs {
+		ep := x.epOf(r.Endpoint)
+		var f Failure
+		ok := false
+		if i < len(res.ConnectionEndpointConfigurationResults) && res.ConnectionEndpointConfigurationResults[i] != nil {
+			f, ok = elementFailure(res.ConnectionEndpointConfigurationResults[i])
+		}
+		if !ok && res.Status != ua.StatusGood {
+			f, ok = Failure{FxError: uafx.FxErrorEnableCommunicationError, Status: res.Status}, true
+		}
+		switch {
+		case ok && ep != nil:
+			x.fail(ep, f)
+		case ok:
+			x.extraFailure(f)
+		}
+	}
+}
+
+// reconcileRun is a Reconcile run: it closes the closable endpoints the
+// committed Config does not need (another Version's, a close pending, the
+// survivors of a failed run), and checks the Unresolved ones again: one
+// that disappeared is forgotten.
+func (x *run) reconcileRun(ctx context.Context, prev State) {
+	recs, unresolved := x.closable()
+	var toClose []*record
+	for _, r := range recs {
+		needed := x.epOf(r.Endpoint) != nil && x.epOf(r.Endpoint).e.conf.Name == r.Name
+		if !needed || r.ClosePending || prev == StateError {
+			toClose = append(toClose, r)
+		}
+	}
+	if len(toClose) > 0 {
+		errs := x.closeRecords(ctx, toClose, true)
+		for _, r := range toClose {
+			if err := errs[r]; err != nil {
+				if ep := x.epOf(r.Endpoint); ep != nil {
+					x.failErr(ep, err, uafx.FxErrorCloseConnectionError)
+				} else {
+					x.extraFailure(failureOf(err, uafx.FxErrorCloseConnectionError))
+				}
+			}
+		}
+	}
+	for _, r := range unresolved {
+		gone, err := x.recheck(ctx, r)
+		switch {
+		case err != nil || !gone:
+			x.mu.Lock()
+			x.res.Unresolved = append(x.res.Unresolved, r.EndpointRecord)
+			x.mu.Unlock()
+		default:
+			x.forget(recordKey(r.addr, r.FunctionalEntity, r.Name))
+		}
+	}
+}
+
+// recheck reports whether the endpoint of an Unresolved record is gone; a
+// record without NodeId gets the one found.
+func (x *run) recheck(ctx context.Context, r *record) (gone bool, err error) {
+	sess, err := x.m.pool.get(ctx, r.addr)
+	if err != nil {
+		return false, err
+	}
+	t := &target{addr: r.addr, sess: sess, cache: x.m.res.of(r.addr)}
+	if err := t.open(ctx); err != nil {
+		x.m.pool.drop(ctx, r.addr, sess)
+		return false, err
+	}
+	found, err := observeName(ctx, t, r.FunctionalEntity, r.Name, nil)
+	if err != nil {
+		return false, err
+	}
+	if len(found) == 0 {
+		return true, nil
+	}
+	x.s.mu.Lock()
+	if r.NodeID == nil {
+		r.NodeID = found[0].NodeID
+	}
+	x.s.mu.Unlock()
+	return false, nil
+}
+
+// --- the end of a run -----------------------------------------------------
+
+// finish takes the transition at the end of the run (§6.9.2), updates the
+// diagnostics (§10.19) and the counters, and schedules a retry.
+func (x *run) finish() *RunResult {
+	x.mu.Lock()
+	stopped := x.stopped
+	for _, ep := range x.eps {
+		if ep.outcome == nil {
+			k := Succeeded
+			if stopped {
+				k = Stopped
+			}
+			ep.outcome = &Outcome{Kind: k}
+		}
+		if ep.outcome.Kind == Failed {
+			x.res.Failures = append(x.res.Failures, Failure{FxError: ep.outcome.FxError, Status: ep.outcome.Status})
+		}
+	}
+	failed := len(x.res.Failures) > 0
+	x.mu.Unlock()
+
+	monitored := x.m.opts.Monitor != nil
+	s := x.s
+	s.mu.Lock()
+	tr, _ := Finish(StateProcessing, failed)
+	s.state = tr.To()
+	action := x.r.action
+	if action == ActionRemoveSet {
+		action = uafx.ActionRemoveConnections
+	}
+	if Activity(action) != 0 && s.cfg == x.cfg {
+		for i, cn := range x.cfg.conns {
+			eps := x.connectionEps(cn)
+			var ep2 *Outcome
+			if len(eps) > 1 {
+				ep2 = eps[1].outcome
+			}
+			s.diags[i] = Diagnose(&ua.QualifiedName{Name: cn.name}, action, uafx.ConnectionNotMonitored, *eps[0].outcome, ep2)
+		}
+	}
+	switch x.r.action {
+	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled, uafx.ActionEstablishConnections:
+		a := x.r.action
+		s.lastEstablish = &a
+	case uafx.ActionRemoveConnections:
+		s.lastEstablish = nil
+	default:
+	}
+	unresolved := 0
+	for _, r := range s.records {
+		if r.Class == Unresolved {
+			unresolved++
+		}
+	}
+	x.res.State, x.res.Transition = s.state, tr
+	x.res.Diagnostics = s.diagnostics(monitored)
+	s.current = nil
+	s.last = x.r
+	res := x.res
+	x.r.result = &res
+	retry := x.scheduleRetryLocked(failed, unresolved)
+	s.mu.Unlock()
+	close(x.r.done)
+	x.m.observe(Event{Kind: EventTransition, Set: x.r.key, Run: x.r.id, Transition: tr})
+	if retry > 0 {
+		x.m.observe(Event{Kind: EventRetry, Set: x.r.key, Run: x.r.id, Attempt: s.retries})
+	}
+	return &res
+}
+
+func (x *run) connectionEps(cn *connection) []*epRun {
+	var out []*epRun
+	for _, ep := range x.eps {
+		if ep.e.conn == cn {
+			out = append(out, ep)
+		}
+	}
+	return out
+}
+
+// scheduleRetryLocked schedules the next attempt of a failed establish run
+// when the RetryPolicy and RetryAllowed allow it, and returns its delay.
+func (x *run) scheduleRetryLocked(failed bool, unresolved int) time.Duration {
+	p, s := x.m.opts.Retry, x.s
+	switch x.r.action {
+	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled, uafx.ActionEstablishConnections:
+	default:
+		return 0
+	}
+	if p == nil || !failed || s.removed || !RetryAllowed(x.res.Failures, unresolved) || s.retries >= p.Attempts {
+		return 0
+	}
+	d := p.Initial << s.retries
+	if d > p.Max || d <= 0 {
+		d = p.Max
+	}
+	d += time.Duration(rand.Int64N(int64(d)/5 + 1))
+	s.retries++
+	key, action := x.r.key, x.r.action
+	m := x.m
+	s.retry = time.AfterFunc(d, func() { m.start(key, action, true) })
+	return d
+}
