@@ -372,7 +372,10 @@ func (a *acRun) publisherIDOf(conn *ua.PubSubConnectionDataType) *ua.Variant {
 // linkFlows fills the DataSetReaders of the subscribers of each flow with
 // the PublisherId, WriterGroupId and DataSetWriterId of its publisher
 // (E.2.2: the subscriber side is configured with the publisher's ids). A
-// reader whose ids are set already keeps them. Library interpretation: the
+// reader whose ids are set already keeps them. A reader whose PublisherId
+// is null or that of its publisher is adapted to the PublisherId the
+// publisher's PubSubConnection has after its call (§6.16.3,
+// adaptSubscribers, configureWaves). Library interpretation: the
 // publisher and subscribers of a flow are the endpoints that reference it
 // (ToOutboundFlow, ToInboundFlow, §6.13.3), their DataSetWriter and
 // DataSetReader those of their CommunicationLinks.
@@ -404,8 +407,14 @@ func (x *run) linkFlows() {
 		if rd == nil {
 			continue
 		}
+		// A reader that names its publisher's PublisherId, or none, is
+		// adapted to the PublisherId the publisher's call returns
+		// (§6.16.3); one that names another keeps it.
+		want := p.a.publisherIDOf(p.conn)
 		if isNullID(rd.PublisherID) {
-			rd.PublisherID = p.a.publisherIDOf(p.conn)
+			rd.PublisherID = want
+		}
+		if sameVariant(rd.PublisherID, want) {
 			ep.assumedPublisher = &assumed{a: p.a, conn: p.conn, id: rd.PublisherID}
 		}
 		if rd.WriterGroupID == 0 {

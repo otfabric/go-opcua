@@ -392,6 +392,31 @@ func TestSameDataSet(t *testing.T) {
 	hint := v(1)
 	hint.SamplingIntervalHint = 50
 	assert.True(t, samePublishedData([]*ua.PublishedVariableDataType{v(1)}, []*ua.PublishedVariableDataType{hint}), "a hint is not compared")
+	pv := func(change func(*ua.PublishedVariableDataType)) []*ua.PublishedVariableDataType {
+		x := v(1)
+		change(x)
+		return []*ua.PublishedVariableDataType{x}
+	}
+	sub := func(f float64) func(*ua.PublishedVariableDataType) {
+		return func(x *ua.PublishedVariableDataType) { x.SubstituteValue = ua.MustVariant(f) }
+	}
+	assert.True(t, samePublishedData(pv(sub(1)), pv(sub(1))))
+	assert.False(t, samePublishedData(pv(sub(1)), pv(sub(2))), "SubstituteValue")
+	assert.False(t, samePublishedData([]*ua.PublishedVariableDataType{v(1)}, pv(sub(1))), "a SubstituteValue the publisher lacks")
+	assert.False(t, samePublishedData(pv(sub(1)), []*ua.PublishedVariableDataType{v(1)}), "a SubstituteValue the set lacks")
+	assert.True(t, samePublishedData(pv(func(x *ua.PublishedVariableDataType) { x.SubstituteValue = &ua.Variant{} }), []*ua.PublishedVariableDataType{v(1)}), "an empty Variant is none")
+	props := func(names ...string) func(*ua.PublishedVariableDataType) {
+		return func(x *ua.PublishedVariableDataType) {
+			for _, n := range names {
+				x.MetaDataProperties = append(x.MetaDataProperties, &ua.QualifiedName{Name: n})
+			}
+		}
+	}
+	assert.True(t, samePublishedData(pv(props("EURange")), pv(props("EURange"))))
+	assert.False(t, samePublishedData(pv(props("EURange")), pv(props("EngineeringUnits"))), "MetaDataProperties")
+	assert.False(t, samePublishedData(pv(props()), pv(props("EURange"))))
+	assert.True(t, samePublishedData(pv(func(x *ua.PublishedVariableDataType) { x.MetaDataProperties = []*ua.QualifiedName{nil} }), pv(func(x *ua.PublishedVariableDataType) { x.MetaDataProperties = []*ua.QualifiedName{nil} })))
+	assert.False(t, samePublishedData(pv(func(x *ua.PublishedVariableDataType) { x.MetaDataProperties = []*ua.QualifiedName{nil} }), pv(props("EURange"))))
 
 	f := func(name string, bt uint8) *ua.FieldMetaData {
 		return &ua.FieldMetaData{Name: name, BuiltInType: bt, DataType: ua.NewNumericNodeID(0, uint32(bt)), ValueRank: -1}
@@ -464,9 +489,10 @@ func TestSameDataSet(t *testing.T) {
 }
 
 // TestConfigureWaves: a bundled AC is configured after the ACs it
-// subscribes to, with their PublisherIds (§6.2.6, §6.16.3); a cycle of
-// bundled ACs, or a bundled AC that subscribes to itself, cannot wait and
-// is left to adaptSubscribers, which fails it.
+// subscribes to, with their PublisherIds (§6.2.6, §6.16.3); the members of
+// a cycle of bundled ACs, or a bundled AC that subscribes to itself,
+// cannot wait and are left to adaptSubscribers, which fails them; an AC
+// that waits on a cycle goes after it.
 func TestConfigureWaves(t *testing.T) {
 	x := &run{}
 	conn := func(id uint16) *ua.PubSubConnectionDataType {
@@ -495,8 +521,13 @@ func TestConfigureWaves(t *testing.T) {
 	sub(self, self, conn(7))
 	sub(c1, c2, conn(7))
 	sub(c2, c1, conn(7))
-	waves := x.configureWaves([]*acRun{s, c1, p, n, self, c2})
-	assert.Equal(t, [][]*acRun{{p, n, self}, {s}, {c1, c2}}, waves)
+	sub(c2, c1, conn(8))
+	// d waits on the cycle, and e on d: neither goes with the cycle.
+	d, e := ac(true), ac(true)
+	sub(d, c1, conn(7))
+	sub(e, d, conn(7))
+	waves := x.configureWaves([]*acRun{e, s, c1, d, p, n, self, c2})
+	assert.Equal(t, [][]*acRun{{p, n, self}, {s}, {c1, c2}, {d}, {e}}, waves)
 
 	// Before p is configured its PublisherId is not known.
 	x.resolvePublishers([]*acRun{s, n})
@@ -568,4 +599,39 @@ func TestAdapted(t *testing.T) {
 
 func failedWith(st ua.StatusCode) *Outcome {
 	return &Outcome{Kind: Failed, FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: st}
+}
+
+// TestLinkFlowsAssumes: a subscriber's DataSetReader that names no
+// PublisherId, or its publisher's, is adapted to the one the publisher's
+// call returns (§6.16.3); one that names another keeps it.
+func TestLinkFlowsAssumes(t *testing.T) {
+	x := &run{}
+	f := &flow{}
+	pubCfg := &ua.PubSubConfiguration2DataType{Connections: []*ua.PubSubConnectionDataType{{
+		PublisherID:  ua.MustVariant(uint16(5)),
+		WriterGroups: []*ua.WriterGroupDataType{{WriterGroupID: 3, DataSetWriters: []*ua.DataSetWriterDataType{{DataSetWriterID: 4}}}},
+	}}}
+	p := &acRun{comm: &commModel{cfg: pubCfg}}
+	pubEp := &epRun{x: x, a: p, e: &endpoint{outbound: f}, links: &uafx.PubSubCommunicationLinkConfiguration{DataSetWriterRef: &ua.PubSubConfigurationRefDataType{}}}
+	sub := func(id *ua.Variant) *epRun {
+		cfg := &ua.PubSubConfiguration2DataType{Connections: []*ua.PubSubConnectionDataType{{
+			ReaderGroups: []*ua.ReaderGroupDataType{{DataSetReaders: []*ua.DataSetReaderDataType{{PublisherID: id}}}},
+		}}}
+		return &epRun{x: x, a: &acRun{comm: &commModel{cfg: cfg}}, e: &endpoint{inbound: &inbound{flow: f}},
+			links: &uafx.PubSubCommunicationLinkConfiguration{DataSetReaderRef: &ua.PubSubConfigurationRefDataType{}}}
+	}
+	null, same, other := sub(nil), sub(ua.MustVariant(uint16(5))), sub(ua.MustVariant(uint16(9)))
+	x.eps = []*epRun{pubEp, null, same, other}
+	x.linkFlows()
+	for _, ep := range []*epRun{null, same} {
+		require.NotNil(t, ep.assumedPublisher)
+		assert.Same(t, p, ep.assumedPublisher.a)
+		assert.Equal(t, ua.MustVariant(uint16(5)), ep.assumedPublisher.id)
+		rd := readerAt(ep.a.comm.cfg, ep.links.DataSetReaderRef)
+		assert.Equal(t, ua.MustVariant(uint16(5)), rd.PublisherID)
+		assert.Equal(t, uint16(3), rd.WriterGroupID)
+		assert.Equal(t, uint16(4), rd.DataSetWriterID)
+	}
+	assert.Nil(t, other.assumedPublisher, "a reader naming another PublisherId keeps it")
+	assert.Equal(t, ua.MustVariant(uint16(9)), readerAt(other.a.comm.cfg, other.links.DataSetReaderRef).PublisherID)
 }

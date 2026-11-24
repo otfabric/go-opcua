@@ -832,7 +832,9 @@ func (x *run) reuseDataSets(ctx context.Context, a *acRun) error {
 // sameDataSet reads the PublishedData and DataSetMetaData Properties of the
 // PublishedDataItemsType Object n (OPC 10000-14 §9.1.4) and reports
 // whether they publish what want does: the same Variables, Attributes,
-// IndexRanges and deadbands in the same order, and Fields (FieldMetaData,
+// IndexRanges, deadbands, SubstituteValues (sent for a Bad value,
+// OPC 10000-14 §6.2.3.7.1) and MetaDataProperties in the same order, and
+// Fields (FieldMetaData,
 // OPC 10000-14 §6.2.3.2.4) of the same Names, FieldFlags, BuiltInTypes,
 // DataTypes, ValueRanks, ArrayDimensions, MaxStringLengths, Properties and
 // DataSetFieldIds, and the same DataSetClassId (a set without
@@ -894,11 +896,30 @@ func samePublishedData(have, want []*ua.PublishedVariableDataType) bool {
 			continue
 		}
 		if !h.PublishedVariable.Equal(w.PublishedVariable) || h.AttributeID != w.AttributeID || h.IndexRange != w.IndexRange ||
-			h.DeadbandType != w.DeadbandType || h.DeadbandValue != w.DeadbandValue {
+			h.DeadbandType != w.DeadbandType || h.DeadbandValue != w.DeadbandValue ||
+			!sameValue(h.SubstituteValue, w.SubstituteValue) || !sameNames(h.MetaDataProperties, w.MetaDataProperties) {
 			return false
 		}
 	}
 	return true
+}
+
+// sameValue compares two Variants of which either may be absent: a nil
+// Variant and one without a value are the same (no SubstituteValue).
+func sameValue(have, want *ua.Variant) bool {
+	if have == nil || have.Value() == nil || want == nil || want.Value() == nil {
+		return (have == nil || have.Value() == nil) == (want == nil || want.Value() == nil)
+	}
+	return sameVariant(have, want)
+}
+
+func sameNames(have, want []*ua.QualifiedName) bool {
+	return slices.EqualFunc(have, want, func(h, w *ua.QualifiedName) bool {
+		if h == nil || w == nil {
+			return h == w
+		}
+		return h.NamespaceIndex == w.NamespaceIndex && h.Name == w.Name
+	})
 }
 
 func sameFields(have, want *ua.DataSetMetaDataType) bool {
@@ -1623,33 +1644,57 @@ func (x *run) relatedIsOurs(ctx context.Context, t *target, n *ua.NodeID, ours *
 // it is configured after the ACs whose flows it subscribes to, with the
 // PublisherIds their calls returned (resolvePublishers). Every other AC is
 // configured in the first wave, in parallel. Bundled ACs that subscribe to
-// each other in a cycle, or to themselves, cannot wait for each other:
-// they are configured together in the last wave, and a mismatch there
-// fails as in adaptOn.
+// each other in a cycle cannot wait for each other: when no other AC can
+// go, the members of the cycles go together in one wave, and a mismatch
+// among them fails as in adaptOn; the ACs that wait on a cycle still go
+// after it. A bundled AC that subscribes to itself does not wait for
+// itself.
 func (x *run) configureWaves(acs []*acRun) [][]*acRun {
-	waits := func(a *acRun, pending map[*acRun]bool) bool {
-		for _, ep := range a.eps {
-			if as := ep.assumedPublisher; as != nil && as.a != a && pending[as.a] {
-				return true
-			}
-		}
-		return false
-	}
 	pending := map[*acRun]bool{}
 	for _, a := range acs {
 		pending[a] = true
+	}
+	// deps are the pending ACs a bundled AC subscribes to, but itself.
+	deps := func(a *acRun) []*acRun {
+		if !a.bundle {
+			return nil
+		}
+		var ds []*acRun
+		for _, ep := range a.eps {
+			if as := ep.assumedPublisher; as != nil && as.a != a && pending[as.a] && !slices.Contains(ds, as.a) {
+				ds = append(ds, as.a)
+			}
+		}
+		return ds
+	}
+	// inCycle reports whether a reaches itself over deps.
+	inCycle := func(a *acRun) bool {
+		seen := map[*acRun]bool{}
+		next := deps(a)
+		for len(next) > 0 {
+			d := next[len(next)-1]
+			next = next[:len(next)-1]
+			if d == a {
+				return true
+			}
+			if !seen[d] {
+				seen[d] = true
+				next = append(next, deps(d)...)
+			}
+		}
+		return false
 	}
 	var waves [][]*acRun
 	for len(pending) > 0 {
 		var wave []*acRun
 		for _, a := range acs {
-			if pending[a] && (!a.bundle || !waits(a, pending)) {
+			if pending[a] && len(deps(a)) == 0 {
 				wave = append(wave, a)
 			}
 		}
 		if len(wave) == 0 {
 			for _, a := range acs {
-				if pending[a] {
+				if pending[a] && inCycle(a) {
 					wave = append(wave, a)
 				}
 			}
@@ -1699,7 +1744,7 @@ func (x *run) resolvePublishers(wave []*acRun) {
 // CommandBundleRequired takes SetCommunicationConfigurationCmd only with
 // CreateConnectionEndpointCmd (§6.2.6): it is configured after its
 // publishers with their PublisherIds (configureWaves), and only a
-// subscriber that could not wait (a cycle of bundled ACs, or its own
+// subscriber that could not wait (in a cycle of bundled ACs, or on its own
 // flow) is left to adapt here: its Connection fails with
 // SetCommunicationConfigurationError and Bad_ConfigurationError.
 func (x *run) adaptSubscribers(ctx context.Context) {

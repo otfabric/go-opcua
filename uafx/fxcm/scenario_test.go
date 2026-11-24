@@ -487,6 +487,19 @@ func TestAdaptPublisherID(t *testing.T) {
 	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 7.0 }, 10*time.Second, 10*time.Millisecond)
 	remove()
 
+	// A reader that names the set's PublisherId itself is adapted as well.
+	subConf := conf.AutomationComponentConfigurations[1].CommunicationModelConfig.(*uafx.PubSubCommunicationModelConfiguration).PubSubConfiguration
+	reader := subConf.Connections[1].ReaderGroups[0].DataSetReaders[0]
+	reader.PublisherID = ua.MustVariant(uint16(5151))
+	require.NoError(t, fxtest.SetValue(a.srv, a.id(fxtest.ConnActual), 8.0))
+	before = callsTo(b.url)
+	res = establish(false)
+	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	assert.Equal(t, 3, callsTo(b.url)-before, "reserve, configure and the adaptation")
+	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 8.0 }, 10*time.Second, 10*time.Millisecond)
+	remove()
+	reader.PublisherID = nil
+
 	// With CommandBundleRequired b cannot take the adaptation (§6.2.6): it
 	// is configured after a, with the PublisherId a's call returned.
 	require.NoError(t, fxtest.SetValue(a.srv, a.id(fxtest.ConnActual), 9.0))
