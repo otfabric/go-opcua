@@ -41,7 +41,7 @@ The columns count ledger capabilities against open62541 and Eclipse Milo, the tw
 | View | 2 | 2 | 2 | 0 |
 | **Total** | **224** | **167** | **185** | **24** |
 
-OPC UA FX (Part 81) is not in the ledger: go-opcua reads (`uafx.Inspect`) and serves (`uafx/fxserver`) its information model and establishes and closes non-persistent connections with PubSub, tested Go to Go only, since none of the interop peers implements UAFX; ControlGroups, persistence and the ConnectionManager are not implemented ([docs/uafx.md](uafx.md)).
+OPC UA FX (Part 81) is not in the ledger: go-opcua reads (`uafx.Inspect`) and serves (`uafx/fxserver`) its information model and establishes and closes non-persistent connections with PubSub and ControlGroups, tested Go to Go only, since none of the pinned references of opcua-interop implements UAFX; of the ConnectionManager there is the configuration model only (`uafx/fxcm`), and persistence is not implemented ([docs/uafx.md](uafx.md)).
 
 These counts are a snapshot of `interop/COVERAGE.md`; when they differ, the ledger is right. A row counted as not verified is not necessarily missing: the per-row reason is in the ledger and in [interop/GAPS.md](../interop/GAPS.md), and the other peers may verify it.
 

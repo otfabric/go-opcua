@@ -94,6 +94,7 @@ Complete reference for all public types, functions, and interfaces in `github.co
 - [Package `gds/gdsserver`](#package-gdsgdsserver)
 - [Package `uafx`](#package-uafx)
 - [Package `uafx/fxserver`](#package-uafxfxserver)
+- [Package `uafx/fxcm`](#package-uafxfxcm)
 - [Package `monitor`](#package-monitor)
   - [NodeMonitor](#nodemonitor)
   - [Subscription (monitor)](#subscription-monitor)
@@ -2992,6 +2993,34 @@ type Namespaces struct{ DI, Data, AC, CM uint16 }
 ```
 
 The model only: the Methods of Part 81 have no handler and answer `Bad_MethodInvalid`.
+
+## Package `uafx/fxcm`
+
+The configuration model of a UAFX ConnectionManager (Part 81 §6.7 to §6.16,
+Annex F); no calls to a server.
+
+```go
+func NewConfig(conf *uafx.ConnectionConfigurationSetConf) (*Config, error) // Version 1; *ConfigError (ErrConfig, Bad_ConfigurationError)
+func (c *Config) Key() SetKey
+func (c *Config) Version() uint32
+func (c *Config) Conf() *uafx.ConnectionConfigurationSetConf // a copy
+func (c *Config) RollbackOnError() bool
+func (c *Config) Connections() []string
+func DecodeFile(b []byte) ([]*uafx.ConnectionConfigurationSetConf, error) // F.2; ErrConfig with Bad_TypeMismatch
+func EncodeFile(sets []*uafx.ConnectionConfigurationSetConf) ([]byte, error)
+```
+
+`SetKey{Folder, Name}` and `KeyOf`; `ConfigError{Key, Findings}` with
+`Finding{Path, Clause, Problem}`; `StatusOf(err)`; `ErrConfig`,
+`ErrManager`, `MaxFileSize`. The edit of §6.7.4: `EditSlot` (`Start`,
+`Commit`, `Discard`, `LockLost`, `Editing`), `Edit`, `LockOwner`,
+`Renamed`, `EndpointRef`. The state machine of §6.9: `State`,
+`Transition`, `Start`, `Finish`. Ownership: `Ownership`, `Classify`,
+`Scan`, `ScanVerdict`, `Observed`, `EndpointRecord`, `RunID`,
+`LostResponse`, `ResolveLostResponse`, `Failure`, `RetryAllowed`.
+Diagnostics: `Activity`, `Outcome`, `OutcomeKind`, `FailedWith`,
+`Diagnose`, `ConnectionStateOf`. See
+[docs/uafx.md](docs/uafx.md#connectionmanager-configuration).
 
 ## Package `monitor`
 

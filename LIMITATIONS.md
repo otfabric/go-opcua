@@ -21,8 +21,10 @@ behaviour you may notice, and the deviations of peers are in
   ControlGroup a client controls has no Controls Reference (Part 81
   §6.5.2 wants it from the Object of the client connection, which the
   server does not have).
-  Persistent connections, the ConnectionManager and the other Methods of
-  Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop
+  Of the ConnectionManager there is the configuration model only
+  (`uafx/fxcm`: validation, files, edit, state machine); it establishes
+  nothing, and a server has no ConnectionManager Methods. Persistent
+  connections and the other Methods of Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop
   implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
 - Time-scheduled Ethernet (TSN), AMQP over WebSockets, and PubSub Actions bound
   to server Methods (go-opcua runs Go handlers).
