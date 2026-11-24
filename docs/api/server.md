@@ -1358,7 +1358,7 @@ A Guard vets the changes clients make to the address space, after the [AccessCon
 
 The server consults its Guards, in the order they were added, for every Variable value a client writes (the Write service and [Server.WriteValue](#func-server-writevalue)) and for every Method a client calls (the Call service). A Guard returns [ua.StatusOK](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusOK) to allow the change or the Bad StatusCode to reject it with. The [Session](#type-session) is that of the request (nil without one); ctx is that of the request, or of the Method call for [Server.WriteValue](#func-server-writevalue).
 
-A Guard is called on the goroutine of the request and must not block. A Guard that also implements [SessionEndGuard](#type-sessionendguard) learns when sessions end.
+A Guard is called on the goroutine of the request and must not block. A Guard that also implements [SessionEndGuard](#type-sessionendguard) learns when sessions end, one that implements [OperationGuard](#type-operationguard) when the operations it allowed are over.
 
 ### type HTTPSClientAuth
 
@@ -2618,6 +2618,18 @@ type NonExclusiveLimits struct {
 ```
 
 NonExclusiveLimits are the states of a non-exclusive limit alarm (NonExclusiveLimitAlarmType, Part 9 §5.8.13): any combination may be active.
+
+### type OperationGuard
+
+```go
+type OperationGuard interface {
+	Guard
+	WriteDone(ctx context.Context, session *Session, nodeID *ua.NodeID)
+	CallDone(ctx context.Context, session *Session, objectID, methodID *ua.NodeID)
+}
+```
+
+OperationGuard is a [Guard](#type-guard) that is told when a write or call it allowed is over, so that it knows which operations are active: OPC 10000-100 §7.2 rejects a lock request while operations are active that the lock would prevent. The server calls WriteDone, with the arguments of CheckWrite, at the end of the Write request or of [Server.WriteValue](#func-server-writevalue), and CallDone when the Method returned; a Guard that allowed an operation another Guard rejected is told right away. They must not block.
 
 ### type OperationalLimits
 

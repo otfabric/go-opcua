@@ -23,7 +23,9 @@ import (
 // request, or of the Method call for [Server.WriteValue].
 //
 // A Guard is called on the goroutine of the request and must not block.
-// A Guard that also implements [SessionEndGuard] learns when sessions end.
+// A Guard that also implements [SessionEndGuard] learns when sessions end,
+// one that implements [OperationGuard] when the operations it allowed are
+// over.
 type Guard interface {
 	CheckWrite(ctx context.Context, session *Session, nodeID *ua.NodeID) ua.StatusCode
 	CheckCall(ctx context.Context, session *Session, objectID, methodID *ua.NodeID) ua.StatusCode
@@ -35,6 +37,19 @@ type Guard interface {
 type SessionEndGuard interface {
 	Guard
 	SessionEnded(session *Session)
+}
+
+// OperationGuard is a [Guard] that is told when a write or call it allowed
+// is over, so that it knows which operations are active: OPC 10000-100 §7.2
+// rejects a lock request while operations are active that the lock would
+// prevent. The server calls WriteDone, with the arguments of CheckWrite,
+// at the end of the Write request or of [Server.WriteValue], and CallDone
+// when the Method returned; a Guard that allowed an operation another Guard
+// rejected is told right away. They must not block.
+type OperationGuard interface {
+	Guard
+	WriteDone(ctx context.Context, session *Session, nodeID *ua.NodeID)
+	CallDone(ctx context.Context, session *Session, objectID, methodID *ua.NodeID)
 }
 
 // AddGuard adds g to the Guards of the server. Add Guards before the server
@@ -61,25 +76,54 @@ func (s *Server) guardList() []Guard {
 	return nil
 }
 
-// guardWrite returns the first rejection of a write of nid by a Guard.
-func (s *Server) guardWrite(ctx context.Context, sess *session, nid *ua.NodeID) ua.StatusCode {
-	for _, g := range s.guardList() {
-		if st := g.CheckWrite(ctx, sess.handle(), nid); st != ua.StatusOK {
-			return st
-		}
-	}
-	return ua.StatusOK
+// noDone is the done of an operation no OperationGuard follows.
+func noDone() {}
+
+// guardWrite returns the first rejection of a write of nid by a Guard, or
+// Good and done, which tells the OperationGuards the write is over.
+func (s *Server) guardWrite(ctx context.Context, sess *session, nid *ua.NodeID) (ua.StatusCode, func()) {
+	h := sess.handle()
+	return s.guard(func(g Guard) ua.StatusCode { return g.CheckWrite(ctx, h, nid) },
+		func(g OperationGuard) { g.WriteDone(ctx, h, nid) })
 }
 
-// guardCall returns the first rejection of a call of methodID on objectID
-// by a Guard.
-func (s *Server) guardCall(ctx context.Context, sess *session, objectID, methodID *ua.NodeID) ua.StatusCode {
-	for _, g := range s.guardList() {
-		if st := g.CheckCall(ctx, sess.handle(), objectID, methodID); st != ua.StatusOK {
-			return st
+// guardCall is guardWrite for a call of methodID on objectID.
+func (s *Server) guardCall(ctx context.Context, sess *session, objectID, methodID *ua.NodeID) (ua.StatusCode, func()) {
+	h := sess.handle()
+	return s.guard(func(g Guard) ua.StatusCode { return g.CheckCall(ctx, h, objectID, methodID) },
+		func(g OperationGuard) { g.CallDone(ctx, h, objectID, methodID) })
+}
+
+// guard asks the Guards with check and returns the first rejection, after
+// telling the OperationGuards that allowed the operation that it is over;
+// or Good and the func that tells them.
+func (s *Server) guard(check func(Guard) ua.StatusCode, done func(OperationGuard)) (ua.StatusCode, func()) {
+	var allowed []OperationGuard
+	finish := func() {
+		for i := len(allowed) - 1; i >= 0; i-- {
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						logPanic(s.cfg.logger, "telling an OperationGuard an operation is over", r)
+					}
+				}()
+				done(allowed[i])
+			}()
 		}
 	}
-	return ua.StatusOK
+	for _, g := range s.guardList() {
+		if st := check(g); st != ua.StatusOK {
+			finish()
+			return st, noDone
+		}
+		if og, ok := g.(OperationGuard); ok {
+			allowed = append(allowed, og)
+		}
+	}
+	if len(allowed) == 0 {
+		return ua.StatusOK, noDone
+	}
+	return ua.StatusOK, finish
 }
 
 // guardSessionEnded tells the SessionEndGuards that sess ended.

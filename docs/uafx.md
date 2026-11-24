@@ -389,7 +389,18 @@ are renewed while its Status is not Error, and its ControlGroups have a
 Controls Reference from the endpoint. A ControlGroup a client controls has
 none: §6.5.2 wants one from "the Object associated with the Client
 connection" (OPC 10000-100), which a go-opcua server does not have; the
-LockingClient of its Locks names the client. Expiry and the end of a
+LockingClient of its Locks names the client.
+
+A lock request is refused while an operation runs that the Lock would
+prevent (OPC 10000-100 §7.2): InitLock and EstablishControl return
+LockStatus -1 (EstablishControlCmd `Bad_Locked`) while a write or call of
+an item runs that is not the new owner's, or any for ListToBlock. §7.2
+gives no LockStatus for it; -1, which a client tries again, is the
+library's choice. The server handles requests one at a time, so this is a
+Write a `server.ValueWriter` takes, which runs after its request handler
+returned, until it is answered; the Lock follows the operations with a
+`server.OperationGuard`. ReassignControl is not a lock request and is not
+refused. Expiry and the end of a
 session wait for an EstablishConnections or CloseConnections call in
 progress, so the Locks EstablishControlCmd took are still there for the
 ReassignControlCmd of the same call.
@@ -547,10 +558,7 @@ The test address space is `internal/testutil/fxtest`.
   interpreted. A ControlGroup a client controls has no Controls Reference
   (§6.5.2 wants it from the Object of the client connection, which the
   server does not have). An item in two lists of one ControlGroup is not
-  refused. The Guard checks a write or call before it runs, not while: an
-  InitLock or EstablishControl that comes between the check and the
-  operation does not stop it (OPC 10000-100 §7.2 wants a Lock refused while
-  an incompatible operation is active). No persistent connections ([Persistence](#persistence)), no ConnectionManager behaviour
+  refused. No persistent connections ([Persistence](#persistence)), no ConnectionManager behaviour
   (§6.7: no ConnectionConfigurationSets are established), no
   AutomationComponent log.
 - CloseConnections with Remove removes the DataSetReaders and

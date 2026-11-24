@@ -26,7 +26,9 @@ func (s *Server) WriteValue(ctx context.Context, nodeID *ua.NodeID, value *ua.Va
 	if st != ua.StatusOK {
 		return st
 	}
-	if st := s.checkWrite(ctx, sess, nodeID); st != ua.StatusOK {
+	st, done := s.checkWrite(ctx, sess, nodeID)
+	defer done()
+	if st != ua.StatusOK {
 		return st
 	}
 	if st := accessRestrictionsFor(caller.SecurityMode, node); st != ua.StatusOK {

@@ -325,13 +325,30 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 
 	status := make([]ua.StatusCode, len(req.NodesToWrite))
 	var jobs []valueWriteJob
+	// The OperationGuards learn that the writes are over when the request
+	// is: the writes of ValueWriters run after the loop, off the dispatcher
+	// when the request is answered later.
+	var dones []func()
+	finish := func() {
+		for _, done := range dones {
+			done()
+		}
+	}
+	answeredLater := false
+	defer func() {
+		if !answeredLater {
+			finish()
+		}
+	}()
 
 	for i := range req.NodesToWrite {
 		n := req.NodesToWrite[i]
 		s.srv.cfg.logger.Debug("write", "node_id", n.NodeID, "attribute", n.AttributeID)
 
-		if sc := s.srv.checkWrite(ctx, sess, n.NodeID); sc != ua.StatusOK {
-			status[i] = sc
+		st, done := s.srv.checkWrite(ctx, sess, n.NodeID)
+		dones = append(dones, done)
+		if st != ua.StatusOK {
+			status[i] = st
 			continue
 		}
 		if isEnabledFlag(n) {
@@ -434,7 +451,9 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 	}
 	if len(jobs) > 0 {
 		if reply := answerLater(ctx); reply != nil {
+			answeredLater = true
 			s.srv.runValueWriters(ctx, sess, req.RequestHeader, jobs, status, func(results []ua.StatusCode) {
+				finish()
 				reply(req, writeResponse(req, results))
 			})
 			return nil, nil

@@ -44,6 +44,7 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 
 	for i, m := range req.MethodsToCall {
 		m = s.srv.instanceMethod(m)
+		done := noDone
 		if m.MethodID != nil {
 			if sc := ac.CheckCall(ctx, sess.handle(), m.MethodID); sc != ua.StatusOK {
 				results[i] = &ua.CallMethodResult{StatusCode: sc}
@@ -55,7 +56,8 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 					continue
 				}
 			}
-			if st := s.srv.guardCall(ctx, sess, m.ObjectID, m.MethodID); st != ua.StatusOK {
+			var st ua.StatusCode
+			if st, done = s.srv.guardCall(ctx, sess, m.ObjectID, m.MethodID); st != ua.StatusOK {
 				results[i] = &ua.CallMethodResult{StatusCode: st}
 				continue
 			}
@@ -64,7 +66,7 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 		if caller, ok := MethodCallerFromContext(mctx); ok && req.RequestHeader != nil {
 			caller.AuditEntryID = req.RequestHeader.AuditEntryID
 		}
-		results[i] = s.callMethod(mctx, m)
+		results[i] = s.callMethodDone(mctx, m, done)
 	}
 
 	return &ua.CallResponse{
@@ -79,6 +81,12 @@ func (s *MethodService) Call(ctx context.Context, sc *uasc.SecureChannel, r ua.R
 		Results:         results,
 		DiagnosticInfos: []*ua.DiagnosticInfo{},
 	}, nil
+}
+
+// callMethodDone is callMethod, then done.
+func (s *MethodService) callMethodDone(ctx context.Context, m *ua.CallMethodRequest, done func()) *ua.CallMethodResult {
+	defer done()
+	return s.callMethod(ctx, m)
 }
 
 func (s *MethodService) callMethod(ctx context.Context, m *ua.CallMethodRequest) *ua.CallMethodResult {

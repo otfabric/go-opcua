@@ -139,7 +139,9 @@ func (s *Server) checkTargetWrite(ctx context.Context, sess *session, t *ua.Fiel
 	if t == nil || t.TargetNodeID == nil {
 		return ua.StatusOK
 	}
-	if st := s.checkWrite(ctx, sess, t.TargetNodeID); st != ua.StatusOK {
+	// An authorization of later writes, not a write: no operation is
+	// active.
+	if st := s.checkWriteNow(ctx, sess, t.TargetNodeID); st != ua.StatusOK {
 		return st
 	}
 	n := s.Node(t.TargetNodeID)

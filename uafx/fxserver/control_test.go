@@ -275,6 +275,49 @@ func TestLockingServices(t *testing.T) {
 	a, b := f.client(t, appA), f.client(t, appB)
 	l := uint32(controlID + restrictLock)
 
+	// A lock request is refused while an operation that the Lock would
+	// prevent runs (OPC 10000-100 §7.2). The server handles requests one
+	// at a time; a Write a ValueWriter takes runs on after the request
+	// handler: B's write of AxisIn, which ListToRestrict of Control
+	// covers, waits in its ValueWriter.
+	started, release := make(chan struct{}), make(chan struct{})
+	axisIn := f.srv.Node(f.id(axisInID))
+	require.NotNil(t, axisIn)
+	axisIn.SetValueWriter(func(context.Context, *server.ValueWrite) ua.StatusCode {
+		close(started)
+		<-release
+		return ua.StatusOK
+	})
+	result := make(chan ua.StatusCode, 1)
+	go func() {
+		res, err := b.Write(context.Background(), &ua.WriteRequest{NodesToWrite: []*ua.WriteValue{{
+			NodeID: f.id(axisInID), AttributeID: ua.AttributeIDValue,
+			Value: &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(1.0)},
+		}}})
+		if err != nil {
+			result <- ua.StatusBadUnexpectedError
+			return
+		}
+		result <- res.Results[0]
+	}()
+	select {
+	case <-started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the ValueWriter was not called")
+	}
+	assert.Equal(t, int32(-1), f.lockStatus(t, a, l, l+lockInit, ""), "B's write runs")
+	assert.Equal(t, int32(-1), f.lockStatus(t, a, controlID, controlID+establishCtl, ""), "B's write runs")
+	assert.Equal(t, false, f.value(t, controlID+isControlled))
+	assert.Equal(t, int32(0), f.lockStatus(t, a, controlID+blockLock, controlID+blockLock+lockInit, ""), "AxisIn is not in ListToBlock")
+	assert.Equal(t, int32(0), f.lockStatus(t, a, controlID+blockLock, controlID+blockLock+lockExit))
+	assert.Equal(t, int32(0), f.lockStatus(t, b, l, l+lockInit, ""), "B's Lock would not prevent B's write")
+	assert.Equal(t, int32(0), f.lockStatus(t, b, l, l+lockExit))
+	close(release)
+	assert.Equal(t, ua.StatusOK, <-result)
+	axisIn.SetValueWriter(nil)
+	assert.Equal(t, int32(0), f.lockStatus(t, a, l, l+lockInit, ""), "the write is over")
+	assert.Equal(t, int32(0), f.lockStatus(t, a, l, l+lockExit))
+
 	assert.Equal(t, int32(-1), f.lockStatus(t, a, l, l+lockRenew), "E_NotLocked")
 	assert.Equal(t, int32(-1), f.lockStatus(t, a, l, l+lockExit), "E_NotLocked")
 	assert.Equal(t, int32(-1), f.lockStatus(t, a, l, l+lockBreak), "E_NotLocked")

@@ -210,6 +210,9 @@ type itemLock struct {
 
 	owner    *lockOwner // nil when not locked
 	deadline time.Time
+	// active counts the writes and calls of its items that are running,
+	// by who runs them (OPC 10000-100 §7.2).
+	active map[actor]int
 	// shown is the RemainingLockTime last written, in seconds.
 	shown int64
 }
@@ -489,7 +492,54 @@ func (c *Connections) endpointGroups(e *endpoint) []*ua.NodeID {
 
 // --- the Guard ----------------------------------------------------------------
 
-// lockGuard is the [server.SessionEndGuard] of the Locks.
+// actor is who runs a write or call: a ConnectionEndpoint a command acts
+// as, or the client and session of the request.
+type actor struct {
+	endpoint *endpoint
+	client   string
+	session  string
+}
+
+func actorOf(ctx context.Context, sess *server.Session) actor {
+	a := actor{}
+	if ctx != nil {
+		a.endpoint = actingEndpoint(ctx)
+	}
+	if sess != nil {
+		a.client = sess.ClientApplicationURI()
+		if id := sess.ID(); id != nil {
+			a.session = id.String()
+		}
+	}
+	return a
+}
+
+// permits reports whether the Lock of ListToRestrict owned by o lets a
+// write or call of a, as isOwner does for a request.
+func (o *lockOwner) permits(a actor) bool {
+	switch {
+	case o.endpoint != nil:
+		return a.endpoint == o.endpoint
+	case o.client != "":
+		return a.endpoint == nil && a.client == o.client
+	}
+	return a.endpoint == nil && o.session != nil && o.session.String() == a.session
+}
+
+// prevented reports whether l, held by o, would prevent a write or call
+// that is running: OPC 10000-100 §7.2 rejects the lock request then. It
+// runs under c.ctl.mu.
+func (l *itemLock) prevented(o *lockOwner) bool {
+	for a := range l.active {
+		if l.block || !o.permits(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// lockGuard is the [server.SessionEndGuard] and [server.OperationGuard] of
+// the Locks.
 type lockGuard struct{ c *Connections }
 
 // CheckWrite implements [server.Guard]: a Variable of a held Lock of
@@ -507,15 +557,48 @@ func (g lockGuard) CheckCall(ctx context.Context, sess *server.Session, object, 
 	return g.c.check(ctx, sess, method, object)
 }
 
-func (c *Connections) check(ctx context.Context, sess *server.Session, ns ...*ua.NodeID) ua.StatusCode {
-	c.ctl.mu.Lock()
-	defer c.ctl.mu.Unlock()
+// WriteDone implements [server.OperationGuard]: the write CheckWrite
+// allowed is over.
+func (g lockGuard) WriteDone(ctx context.Context, sess *server.Session, n *ua.NodeID) {
+	g.c.operationDone(ctx, sess, n)
+}
+
+// CallDone implements [server.OperationGuard] for a call.
+func (g lockGuard) CallDone(ctx context.Context, sess *server.Session, object, method *ua.NodeID) {
+	g.c.operationDone(ctx, sess, method, object)
+}
+
+// covering returns the Locks whose items include the nodes ns. It runs
+// under c.ctl.mu.
+func (c *Connections) covering(ns []*ua.NodeID) []*itemLock {
 	var ls []*itemLock
 	for _, n := range ns {
 		if n != nil {
 			ls = append(ls, c.ctl.byItem[n.String()]...)
 		}
 	}
+	return ls
+}
+
+// operationDone ends the operation check counted as active.
+func (c *Connections) operationDone(ctx context.Context, sess *server.Session, ns ...*ua.NodeID) {
+	a := actorOf(ctx, sess)
+	c.ctl.mu.Lock()
+	defer c.ctl.mu.Unlock()
+	for _, l := range c.covering(ns) {
+		if l.active[a]--; l.active[a] <= 0 {
+			delete(l.active, a)
+		}
+	}
+}
+
+// check allows a write or call of the nodes ns or rejects it with
+// Bad_Locked; an allowed one renews the Locks of its owner and is active
+// until operationDone.
+func (c *Connections) check(ctx context.Context, sess *server.Session, ns ...*ua.NodeID) ua.StatusCode {
+	c.ctl.mu.Lock()
+	defer c.ctl.mu.Unlock()
+	ls := c.covering(ns)
 	var renew []*itemLock
 	for _, l := range ls {
 		switch {
@@ -529,6 +612,13 @@ func (c *Connections) check(ctx context.Context, sess *server.Session, ns ...*ua
 	now := c.now()
 	for _, l := range renew {
 		l.deadline = now.Add(c.timeout(l))
+	}
+	a := actorOf(ctx, sess)
+	for _, l := range ls {
+		if l.active == nil {
+			l.active = map[actor]int{}
+		}
+		l.active[a]++
 	}
 	return ua.StatusOK
 }
@@ -619,7 +709,7 @@ func (c *Connections) acquire(g *controlGroup, o *lockOwner) int32 {
 		return lockInvalid
 	}
 	for _, l := range ls {
-		if l.owner != nil || c.conflict(l, o) {
+		if l.owner != nil || c.conflict(l, o) || l.prevented(o) {
 			return lockBusy
 		}
 	}
@@ -728,7 +818,7 @@ func (c *Connections) initLock(ctx context.Context, l *itemLock) (int32, ua.Stat
 	if g := l.group.controller; g != nil && (g.endpoint != nil || !callerOwns(ctx, g)) {
 		return 0, ua.StatusBadUserAccessDenied
 	}
-	if l.owner != nil || c.conflict(l, o) {
+	if l.owner != nil || c.conflict(l, o) || l.prevented(o) {
 		return lockBusy, ua.StatusOK
 	}
 	l.owner, l.deadline = o, c.now().Add(c.timeout(l))
