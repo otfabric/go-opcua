@@ -1,7 +1,10 @@
 # Design: UAFX ConnectionManager (C2)
 
-Status: **proposal, for the maintainer's review**. No runtime code is
-written until this design is approved. Target release: v1.39.0.
+Status: **proposal, revised after the maintainer's review of 2026-11-24**
+(PR #44: architecture approved; rollback scope, endpoint ownership,
+reprocessing, run identity, multicast, branch mechanics and F.3 Replace
+revised; see §10). No runtime code is written until this revision is
+approved. Target release: v1.39.0.
 
 This document designs the ConnectionManager of OPC UA FX in go-opcua: the
 ConnectionManagerType of OPC 10000-81 §6.7, the ConnectionConfigurationSets
@@ -73,11 +76,11 @@ matrix in §3 says what C2 does with each.
 | CS-7 | §6.8.2, §10.19 | S | `ConnectionsDiagnostics`: one element per `<Connection>`, linked by Name; updated each time processing of the set finishes, and, when the CM monitors endpoints, when it learns something new about them; by the rules of §10.19 (see DG-1 to DG-7) |
 | CS-8 | §6.8.2 Table 90 | S | References: ServerAddress `ToAutomationComponentConfiguration` AutomationComponentConfiguration; AutomationComponentConfiguration `ToConnectionEndpointConfiguration` Endpoint1/Endpoint2; `ToOutboundFlow` present when an outbound PubSub flow is configured, `ToInboundFlow` when an inbound one is; at most one of each per endpoint |
 | CS-9 | §6.8.2 | R | Clients that configure sets use the Role ConfigureAdmin; the modifiable content is writable for ConfigureAdmin (§5.9 Table 2) |
-| CS-10 | §6.8.2 | S | `RollbackOnError` TRUE: on an error during establishment, processing of the set stops and all Connections of the set established so far are closed (§6.7.3.2, EC-11) |
+| CS-10 | §6.8.2, F.1.3 | S | `RollbackOnError` TRUE: on an error during establishment, processing of the set stops and all established Connections that are part of the set are closed (§6.8.2, F.1.3: "all established Connections that are part of this set"; §6.7.3.2, EC-11) |
 | CS-11 | §6.10 Table 94 | S | A `<Connection>` has `Endpoint1` and optionally `Endpoint2` |
 | CS-12 | §6.11 Table 95 | S | An endpoint configuration has `FunctionalEntityNode` (a relative path starts at FxRoot), `ConnectionEndpoint` (its parameters), and optionally `ExpectedVerificationVariables`, `ControlGroups`, `ConfigurationData`, whose relative paths start at FunctionalEntityNode |
 | CS-13 | §6.12 Table 96 | S | ConnectionEndpointParameter: `Name` unique in the FunctionalEntity's ConnectionEndpoints Folder; the CM rejects a change of Name while the Connection is established. At least one of InputVariableIds, OutputVariableIds, each non-empty when present; their relative paths start at FunctionalEntityNode. PreconfiguredPublishedDataSet and PreconfiguredSubscribedDataSet only for PubSubConnectionEndpointType |
-| CS-14 | §6.13.3 | S | Flow configuration: unicast, the subscriber references the single SubscriberConfiguration; the configuration is invalid without an Address in the flow and in its SubscriberConfiguration; a missing HeaderLayoutUri means UADP-Periodic-Fixed; a missing TransportProfileUri means the default transport of the Address; ReceiveQos of a SubscriberConfiguration only when the flow has Qos, and it overrides it; AvailableRanges excludes RestrictToList TRUE |
+| CS-14 | §6.13.3 | S | Flow configuration, unicast (1:1) and multicast (1:N, §6.13.3.2): the publisher references the flow with ToOutboundFlow; unicast, the subscriber references the single SubscriberConfiguration; multicast, each subscriber references its own or a shared SubscriberConfiguration, and a SubscriberConfiguration without Address takes the multicast Address of the flow; the configuration is invalid without an Address in the flow and in its SubscriberConfiguration; a missing HeaderLayoutUri means UADP-Periodic-Fixed; a missing TransportProfileUri means the default transport of the Address; ReceiveQos of a SubscriberConfiguration only when the flow has Qos, and it overrides it; AvailableRanges excludes RestrictToList TRUE |
 | CS-15 | §6.14 Table 101 | S | AutomationComponentConfiguration: `AutomationComponentNode` (relative to FxRoot), `CommandBundleRequired` (TRUE: the CM shall bundle commands to this AC), AssetVerifications, `CommunicationModelConfig` |
 | CS-16 | §6.15 | S | AssetVerification: AssetToVerify relative to AutomationComponentNode; ExpectedAdditionalVerificationVariables relative to the Asset |
 | CS-17 | §6.16.3 | S | PubSubCommunicationModelConfiguration: `Namespaces` maps the namespace indexes of PubSubConfiguration to the target server; NodeIds of the namespace `http://opcfoundation.org/UA/FX/CM/Translation/` are placeholders, resolved in two steps (TranslationTable to PortableNodeIdentifier, then on the target server per §13); a path of a published or subscribed Variable starts at the hosting AutomationComponent; `ConfigurationReferences` say add/match/modify/remove; `ConfigurationValues` hold the names and ids EstablishConnections assigned for null names and 0 ids |
@@ -142,7 +145,7 @@ matrix in §3 says what C2 does with each.
 | EC-8 | §6.7.3.2, §13 | S | The CM resolves the identifiers of the set into the arguments (CL-5 to CL-8) |
 | EC-9 | §6.7.3.2, §13.4, E.5 | S | When an endpoint needs SKS configuration, the CM calls the SKS and adds SecurityGroups and/or PushTargets; the CM shall be able to configure an SKS for push distribution |
 | EC-10 | §6.7.3.2 | S | On Uncertain from EstablishConnections (an abort, §6.2.4.3.11) or a fatal OPC UA communication error, the CM stops the sequence and takes ProcessingToError |
-| EC-11 | §6.7.3.2 | S | With RollbackOnError TRUE it then calls CloseConnections with Remove TRUE for all endpoints established so far; with FALSE it does nothing more |
+| EC-11 | §6.7.3.2, §6.8.2, F.1.3 | S | With RollbackOnError TRUE it then calls CloseConnections with Remove TRUE for all ConnectionEndpoints established so far, which §6.8.2 and F.1.3 state as all established Connections that are part of the set; with FALSE it does nothing more |
 | EC-12 | §6.7.3.2 | S | With Auditing, an AuditClientUpdateMethodResultEventType event for every EstablishConnections call, and the AuditEntryId passed with the call |
 | EC-13 | §6.7.3.2 | S | With the log, LogRecords for EstablishConnections calls: SourceNode the set, SourceName the Connection, one per error, ErrorCodeNode the related node |
 | EC-14 | §6.7.3.2, §6.2.4.1, §5.9 | R | The CM has the Role ConnectionAdmin on the ACs |
@@ -208,7 +211,7 @@ what part is planned.
 | CM-6 | §6.7.2 | C2.2 (counting), C2.3 (nodes) | |
 | CM-7 | §6.7.2 | later | Needs CL-3; see decision D3 |
 | CM-8 | §6.7.2 | out (C2) | go-opcua has no LogObject (OPC 10000-26). The engine reports the same facts to an `Observer` and `slog`, so a later LogObject can be fed from them |
-| CM-9 | §6.7.6 | C2.3 | MaxConnectionConfigurationSets; MonitorsLocal/All only if monitoring is in C2 (D3) |
+| CM-9 | §6.7.6 | C2.3 | MaxConnectionConfigurationSets; MonitorsLocal/All from the Monitor option |
 | CM-10, FC-1 to FC-6 | Annex F | C2.1 (F.2 codec), C2.3 (F.3 file) | The file codec is how sets get in; the FileType Methods follow `server/pubsub_config_file.go` |
 | CS-1 | §6.8.2 | C2.3 | |
 | CS-2 | §6.8.2 | C2.3 | Reuses the LockingServices of `fxserver/control.go` (C1) |
@@ -219,8 +222,9 @@ what part is planned.
 | CS-7 | §6.8.2 | C2.2 | |
 | CS-8 | §6.8.2 | C2.1 (validation), C2.3 (References) | The Conf indexes are the References (F.1.2.1) |
 | CS-9 | §6.8.2 | C2.3 | Default authorization, D8 |
-| CS-10, CS-11, CS-12, CS-13, CS-15, CS-16 | §6.8 to §6.15 | C2.1 | Validation of a set; Name change refused while established |
-| CS-14 | §6.13.3 | C2.1 (validation), C2.2 (use) | |
+| CS-11, CS-12, CS-13, CS-15, CS-16 | §6.8 to §6.15 | C2.1 | Validation of a set; Name change refused while established |
+| CS-10 | §6.8.2, F.1.3 | C2.2 | Set-wide over the endpoints this CM owns (§5.3); an endpoint whose ownership is not proven is reported, not closed (§5.4) |
+| CS-14 | §6.13.3 | C2.1 (validation), C2.2 (use) | Unicast and multicast flows, and all five Connection types of §5.5.1 (bidirectional, unidirectional, unidirectional with heartbeat, autonomous publisher, autonomous subscriber) |
 | CS-17, CS-18 | §6.16.3 | C2.2 | Translation table, namespace mapping, null names and ids, PubSubConnection match and PublisherId propagation |
 | CS-19 | §6.16.3 | C2.3 | On CommitUpdates |
 | CS-20 | §9.2 | C2.2 | DNS through the Go resolver; ServerUri checked against the server certificate and the ApplicationUri of the endpoint |
@@ -235,7 +239,8 @@ what part is planned.
 | PR-10 | Part 84 | C2.3 | Met by PR-3 to PR-8 |
 | EC-1 to EC-8 | §6.7.3.2 | C2.2 | |
 | EC-9, EC-16 | §6.7.3, §13.4, E.5 | partial | C2.2: a set whose flows need no security, or whose SKS keys are already in place (SecurityMode None, or keys provisioned outside the CM). Configuring an SKS (AddSecurityGroup, AddPushTarget, ConnectSecurityGroups, removal) is later, D3. A set that needs SKS configuration the CM cannot do is `ConnectionConfigurationSetInvalid`, not silently established |
-| EC-10, EC-11, EC-15 | §6.7.3 | C2.2 | See §5 |
+| EC-10, EC-15 | §6.7.3 | C2.2 | See §5 |
+| EC-11 | §6.7.3.2 | C2.2 | As CS-10 |
 | EC-12 | §6.7.3.2 | C2.2 (AuditEntryId, `opcua.WithAuditEntryID`), C2.3 (client audit event on the CM's server) | |
 | EC-13 | §6.7.3.2 | out (C2) | LogObject |
 | EC-14 | §6.7.3.2 | C2.2 | The Dialer's identity is the application's; the docs say to grant ConnectionAdmin |
@@ -250,10 +255,19 @@ what part is planned.
 | CL-10 | §13.5 | C2.2 | |
 | CL-11 | Part 84 | partial | NTP and DNS are the host's |
 | DG-1 to DG-5, DG-8 | §10.19, §10.30 | C2.2 | |
-| DG-6, DG-7 | §10.19, §10.20 | C2.2 if monitoring is in (D3), else ConnectionNotMonitored | |
+| DG-6, DG-7 | §10.19, §10.20 | C2.2 | ConnectionNotMonitored when the Monitor option is not set | |
 | DG-9 | §8.10, §8.11 | out (C2) | LogObject |
 | ClientServer communication model | §6.13.4, §6.16.4 | out | Not defined in Part 81 1.00.04 |
 | Persistent connections (IsPersistent TRUE) | §6.12, §5.5.5 | later (C3) | The AC side refuses them today (`Bad_NotSupported`, docs/uafx.md Persistence) |
+
+What v1.39.0 claims: the ConformanceUnits of the rows marked C2.x, by
+name, in docs/uafx.md and FEATURE-STATUS. It claims **no Part 84 Facet or
+Profile**: the UAFX ConnectionManager 2024 Facet needs the UAFX SKS Push
+Facet and the Logging Facet (Part 84 Table 45), which are later; the
+Connection Monitoring Facet is covered by C2 but not claimed on its own. A set that
+needs a later feature (SKS configuration, an AliasName, a ClientServer
+flow) is refused as ConnectionConfigurationSetInvalid (or
+AliasNameProcessingError), with a test for each.
 
 ## 4. Package layout and public API
 
@@ -281,7 +295,7 @@ writes back on CommitUpdates. **Library interpretation**: the Conf form is
 canonical inside the library; F.1.3 calls the two "semantically
 equivalent".
 
-The engine converts a Conf once into an immutable `fxcm.Set` (resolved
+The engine converts a Conf once into an immutable `fxcm.Config` (resolved
 indexes, the SelectionList current values, the namespace tables of
 F.1.2.2), validates it, and processes only such snapshots. An edit creates a
 new snapshot on CommitUpdates; a run that is in progress keeps the snapshot
@@ -306,13 +320,23 @@ type Options struct {
 	// opcua.SelectEndpoint with the SecurityMode and SecurityPolicyUri of
 	// the set, and checks the ServerUri.
 	Dialer Dialer
+	// ApplicationURI is the ApplicationUri of this ConnectionManager, the
+	// one its sessions present. ACs record it in the
+	// ConnectionManagerApplicationUri of the endpoints the CM creates
+	// (§6.6.2); the ownership checks of §5.3 compare against it. Required.
+	ApplicationURI string
+	// CallTimeout bounds each EstablishConnections and CloseConnections
+	// call (D6). Default 30 s. RollbackTimeout bounds the rollback of a run
+	// as a whole. Default 2 minutes.
+	CallTimeout, RollbackTimeout time.Duration
 	// Parallelism bounds the AutomationComponents called at the same time
 	// within one run (§6.7.3.2 recommends parallel calls). Default 8.
 	Parallelism int
 	// MaxConnectionConfigurationSets limits the sets (§6.7.6). 0: 256.
 	MaxConnectionConfigurationSets int
 	// Retry re-processes a set in Error after a delay (§6.9.1, transition 4
-	// by vendor-specific means). Nil: never; see decision D5.
+	// by vendor-specific means), only when its last run left no unresolved
+	// endpoint (§5.5). Nil: never; see decision D5.
 	Retry *RetryPolicy
 	// Monitor watches the ConnectionEndpoints of established Connections
 	// (§4.7.2, §10.20). Nil: ConnectionState is ConnectionNotMonitored.
@@ -326,17 +350,66 @@ func New(opts Options) (*Manager, error)
 func (m *Manager) Close() error // stops runs and monitors, closes sessions
 
 // Sets (F.3.3.2 semantics, used by the file and by applications).
-func (m *Manager) Add(conf *uafx.ConnectionConfigurationSetConf) (*Set, error)
-func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfigurationSetConf) (*Set, error) // removes the Connections of the old set first (FC-5)
-func (m *Manager) Remove(ctx context.Context, key SetKey) error                                         // the same
-func (m *Manager) Sets() []*Set
-func (m *Manager) Set(key SetKey) (*Set, bool)
+func (m *Manager) Add(conf *uafx.ConnectionConfigurationSetConf) (*Config, error)
+func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfigurationSetConf) (*Config, error) // validates first, then removes the Connections of the old set (FC-5, §5.8)
+func (m *Manager) Remove(ctx context.Context, key SetKey) error                                            // the same
+// Update applies a CloseAndUpdate batch (F.3.3) with RequireCompleteUpdate.
+func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error)
+func (m *Manager) Keys() []SetKey
+
+// Config is the committed configuration of a set: immutable, one per
+// Version. Status is the live part: state, diagnostics, runs, endpoints.
+func (m *Manager) Config(key SetKey) (*Config, bool)
+func (m *Manager) Status(key SetKey) (Status, bool)
 
 // Process starts the processing of the sets (§6.7.5) and returns at once,
-// one error per set (Table 86 as ua.StatusCode: Bad_InvalidState while a
-// set is Processing). Wait or the Observer gives the outcome.
-func (m *Manager) Process(action uafx.FxProcess, keys ...SetKey) []error
-func (m *Manager) Wait(ctx context.Context, key SetKey) (RunResult, error)
+// one Start per key in the order of keys. Err is the Table 86 outcome as a
+// ua.StatusCode (Bad_InvalidState while a set is Processing); Run is set
+// when the run was accepted. The UA Method maps Err to its Results.
+func (m *Manager) Process(action uafx.FxProcess, keys ...SetKey) []Start
+
+type Start struct {
+	Run *Run
+	Err error
+}
+
+// Run is one processing of one set: an id unique within the Manager,
+// the SetKey, the Version of the Config it processes, the Action.
+type Run struct{ /* ... */ }
+
+func (r *Run) ID() RunID // monotonic per Manager
+func (r *Run) Key() SetKey
+func (r *Run) Version() uint32
+func (r *Run) Action() uafx.FxProcess
+func (r *Run) Done() <-chan struct{}
+func (r *Run) Wait(ctx context.Context) (*RunResult, error)
+
+// RunResult is what a finished run did: the end state (Ready or Error),
+// per Connection the diagnostics, the endpoints it created, closed and
+// could not resolve (§5.4), and whether a rollback ran and completed.
+type RunResult struct{ /* ... */ }
+
+// Status is a copy of the live state of a set.
+type Status struct {
+	State       State // Ready, Processing, Error (§6.9)
+	Version     uint32
+	Diagnostics []*uafx.ConnectionDiagnostics
+	Current     *Run // the run in progress, if any
+	Last        *Run // the last finished run
+	Endpoints   []EndpointRecord // known-owned and unresolved endpoints (§5.3)
+}
+
+// Reconcile closes the known-owned endpoints of a set that no committed
+// configuration needs (survivors of RollbackOnError FALSE, of a failed
+// rollback, of a removed Connection) and re-checks the unresolved ones
+// (§5.4). It is a run (Processing, events) without an Action of
+// FxProcessEnum: transition 1 or 4 by vendor-specific means.
+func (m *Manager) Reconcile(key SetKey) Start
+
+// Settle decides an unresolved endpoint the engine could not prove to be
+// its own: Owned makes it known-owned (the next run closes it), Foreign
+// forgets it (never touched).
+func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error
 
 // SetKey is the identity of a set across replaces and restarts: the
 // string BrowseName and the ConnectionConfigurationSetFolder (§6.7.2, F.3.3.2).
@@ -345,19 +418,17 @@ type SetKey struct {
 	Name   string
 }
 
-type Set struct{ /* immutable snapshot */ }
+type Config struct{ /* immutable snapshot of one Version */ }
 
-func (s *Set) Key() SetKey
-func (s *Set) Version() uint32
-func (s *Set) State() State // Ready, Processing, Error (§6.9)
-func (s *Set) Diagnostics() []*uafx.ConnectionDiagnostics
-func (s *Set) Conf() *uafx.ConnectionConfigurationSetConf // a copy
+func (c *Config) Key() SetKey
+func (c *Config) Version() uint32
+func (c *Config) Conf() *uafx.ConnectionConfigurationSetConf // a copy
 
 // Edit is the transactional edit of §6.7.4 for an application that holds
 // the set in Go; fxserver maps EditConnectionConfigurationSets onto it.
 func (m *Manager) Edit(key SetKey, owner LockOwner) (*Edit, error)
 func (e *Edit) SetSelection(path SelectionPath, value any) error // RestrictToList checked
-func (e *Edit) Commit() (*Set, error)                            // Version+1, re-derives CommunicationModelConfig (CS-19)
+func (e *Edit) Commit() (*Config, error)                         // Version+1, re-derives CommunicationModelConfig (CS-19)
 func (e *Edit) Discard()
 
 // Dialer and Session are what the engine needs of a server (§13.1).
@@ -412,9 +483,13 @@ a `ua.StatusCode` in the chain where the specification gives one.
 ### 5.1 Units of work
 
 - **Run**: the processing of one set for one action, from transition 1 or
-  4 to transition 2 or 3. At most one run per set; `Process` on a set in
-  Processing is `Bad_InvalidState` (Table 86). Runs of different sets are
-  independent and may run at the same time.
+  4 to transition 2 or 3, with a RunID unique within the Manager and the
+  Version of the Config it processes. At most one run per set; `Process`
+  on a set in Processing is `Bad_InvalidState` (Table 86). Runs of
+  different sets are independent and may run at the same time; two runs
+  of different sets that use the same AutomationComponent are serialized
+  per (AC, FunctionalEntity) for their scan and create steps, so that the
+  absent-before check of §5.4 cannot race between them.
 - **Step**: one EstablishConnections or CloseConnections call to one
   AutomationComponent. Steps of a run are ordered by a plan (§5.2); steps
   on different AutomationComponents run in parallel up to
@@ -439,6 +514,13 @@ the Process handler has returned (D10).
 
 Per run, after validation of the snapshot:
 
+0. **Scan and reconcile** (§5.3): after step 1 has resolved the
+   FunctionalEntities, browse each one for the endpoint Names of the set
+   and classify what exists. Known-owned survivors of the set are closed
+   with Remove TRUE before anything is created; a Connection with a
+   foreign or unresolved endpoint of that Name fails with
+   CreateConnectionEndpointError and Bad_BrowseNameDuplicated without a
+   call, and the rest of the set goes on or stops as §5.3 says.
 1. **Connect and resolve** (C2.2): open or reuse the session of each
    ServerAddress; read NamespaceArray and NamespacePublicationDates; resolve
    AutomationComponentNode, FunctionalEntityNode, the variable, ControlGroup,
@@ -460,7 +542,7 @@ Per run, after validation of the snapshot:
    with the configuration completed with the ids step 3 returned (E.2.2
    step 3). An AC that is both is handled in two calls when its counterpart
    assigns ids; when all ids are reserved up front, one call per AC (E.2.2.2).
-5. **Finish**: diagnostics (§5.5), ProcessingResult, transition 2 or 3,
+5. **Finish**: diagnostics (§5.7), ProcessingResult, transition 2 or 3,
    counters, events.
 
 Splitting: the ConnectionEndpointConfigurations of a step are split at the
@@ -472,61 +554,113 @@ refuses split commands anyway.
 
 Remove, Enable and Disable runs have one step per AC: CloseConnections
 (Remove TRUE or FALSE) or EstablishConnections with EnableCommunicationCmd,
-for the endpoints of the set on that AC, found by (FunctionalEntity, Name)
-when the run has no NodeId for them (a restart, or a set added after the
-Connections were made).
+for the known-owned endpoints of the set on that AC (§5.3). Endpoints this
+Manager has no record of (a CM restart, a set added after the Connections
+were made by someone else) are reported, not acted on: adopting them is C3.
 
-### 5.3 Partial failure and rollback
+Multicast (CS-14): one publisher's outbound flow serves several Connections;
+its WriterGroup and DataSetWriter are configured once, on the publisher's
+step, and the ids it reserved or returned go into every subscriber's step
+(E.2.2.2). The subscribers' steps run in parallel.
 
-A step fails when the call returns Uncertain (the AC aborted and undid that
-call itself, Table 21), Bad, or a fatal communication error (EC-10). Then:
+### 5.3 Endpoint ownership
 
-1. No new step of the run starts. Steps already in flight on other ACs are
-   allowed to finish (**library interpretation**: cancelling a Call in
-   flight makes its outcome unknown, which is worse; see D6).
-2. Transition 3 is decided; before it is taken, with RollbackOnError TRUE,
-   every endpoint that a finished step of this run established is closed
-   with CloseConnections Remove TRUE, per AC, in parallel (EC-11). Endpoints
-   established by earlier runs are not touched: "established so far" is read
-   as "by this processing" (**library interpretation**).
-3. A failure of a rollback close is recorded (CloseConnectionError on that
-   endpoint, the StatusCode) and not retried within the run; the endpoint
-   stays in the run's journal as an orphan, and the next run of the set, or
-   C3's reconciliation, closes it first (D9).
-4. With RollbackOnError FALSE nothing more is called; the established
-   endpoints stay and the diagnostics say which ones failed.
+Every endpoint the engine finds under the Name of an endpoint
+configuration of the set is in one of these classes. Only the first may
+be closed with Remove TRUE.
 
-For close-type runs (Remove, Disable, the close of a Replace or Remove of a
-set) a failure does not stop the run: all steps are attempted, then
-transition 3 (EC-15).
+| Class | Proof | May the engine |
+|---|---|---|
+| **Known-owned** | This Manager created it: the EstablishConnections result returned its NodeId (ConnectionEndpointConfigurationResults), or the lost-response check of §5.4 proved it; and its ConnectionManagerApplicationUri (§6.6.2), when the AC exposes it, is the ApplicationURI option | close it, disable, enable, remove |
+| **Taken preconfigured** | The set says IsPreconfigured TRUE (Table 79: "use a preconfigured ConnectionEndpoint") and this Manager's step took it (its result named it) | close it with Remove TRUE: §6.2.5.2 keeps preconfigured objects, so this releases it and does not delete it |
+| **Unresolved** | It carries our ApplicationUri, or a step of ours may have created it, but there is no proof (§5.4) | report it (RunResult, Status, diagnostics), never close it; `Reconcile` re-checks it, `Settle` decides it |
+| **Foreign** | Anything else: another ConnectionManagerApplicationUri, none on an endpoint this Manager has no record of, a preconfigured endpoint the set does not name as preconfigured, a preconfigured endpoint in use by someone else (RelatedEndpoint set, not by us) | never touch it; a Connection that needs that Name fails (D4) |
 
-### 5.4 Unknown outcomes and reconnection
+The records live in memory in C2 (keyed by SetKey, AC ServerUri,
+FunctionalEntity path and Name, with the NodeId, the RunID and the Version
+that created it). C3 persists them. A record of a known-owned endpoint
+outlives the run, so "the endpoints of the set" is a set-wide notion, not a
+per-run one.
+
+### 5.4 Unknown outcomes
 
 An EstablishConnections call whose response is lost (the channel breaks
-after the request was sent) has an unknown outcome. `opcua.Client`
-reconnects and recovers the session (CL-1), but the engine does not
-re-send a state-changing call (OT Fabric rule: no implicit retry of
-state-changing operations). It treats the step as failed (fatal
-communication error, EC-10) and, for rollback, looks the endpoints of the
-step up by (FunctionalEntity, Name), which §6.12 makes unique, and closes
-those it finds. The Name is the identity that survives a lost response, a
-CM restart and an AC restart; NodeIds are a cache.
+after the request was sent, or the CallTimeout expires) has an unknown
+outcome. `opcua.Client` reconnects and recovers the session (CL-1); the
+engine never re-sends a state-changing call (OT Fabric rule: no implicit
+retry of state-changing operations). It fails the step (fatal
+communication error, EC-10), then, on the recovered or a new session,
+browses each FunctionalEntity of the step for the Names the step meant to
+create:
+
+- **Proven ours** (made known-owned): the scan of step 0 of this run found
+  the Name absent, the browse now finds exactly one endpoint of that Name,
+  the AC exposes ConnectionManagerApplicationUri and it equals ours, and the
+  (AC, FunctionalEntity) was serialized for this run (§5.1), so no other
+  run of this Manager can have made it.
+- **Absent**: nothing was created; nothing to do.
+- **Anything else** (the AC has no ConnectionManagerApplicationUri, the
+  Name was present before, the URI differs): unresolved. A preconfigured
+  endpoint the step meant to take is unresolved unless its RelatedEndpoint
+  is the one the step set.
+
+Never: closing whatever has the Name. §6.12 makes the Name unique within a
+FunctionalEntity, which identifies an endpoint, not who made it.
 
 A session that cannot be re-established fails the steps of that AC with
-TargetServerConnectionError; other ACs continue as in §5.3.
+TargetServerConnectionError; its endpoints of this run stay unresolved
+until a later Reconcile or run can check them.
 
-### 5.5 Retries and re-processing
+### 5.5 Partial failure, rollback and reprocessing
 
-Part 81 leaves re-processing to the Process Method or vendor-specific means
-(SM-2, SM-4). The engine never retries by itself unless
-the Retry option is set: then a set that ended in Error is processed again
-(transition 4) after a jittered, capped exponential delay, up to a maximum
-number of attempts, and only for errors classed transient
-(TargetServerConnectionError, a fatal communication error, Bad_Locked,
-Bad_TooManyOperations from a busy AC); a configuration or verification
-error is permanent and needs the integrator (§6.9.1). See D5.
+A step fails when the call returns Uncertain (the AC aborted and undid that
+call itself, Table 21), Bad, or a fatal communication error or timeout
+(EC-10). Then:
 
-### 5.6 Monitoring (if D3 includes it)
+1. No new step of the run starts. Steps in flight on other ACs finish or
+   reach their CallTimeout (D6); a step that times out is an unknown
+   outcome (§5.4).
+2. With RollbackOnError TRUE, the engine closes with CloseConnections Remove
+   TRUE **every known-owned and taken-preconfigured endpoint of the set**,
+   not only those of this run (CS-10, EC-11: §6.8.2 and F.1.3 say "all
+   established Connections that are part of this set"), per AC, in
+   parallel, within RollbackTimeout. Unresolved and foreign endpoints are
+   not closed; the Connections they belong to are reported with their
+   FxError and Bad status, and the RunResult lists them.
+3. A rollback close that fails or times out is recorded (CloseConnectionError
+   and the StatusCode, DG-3) and not retried in the run; the endpoint stays
+   known-owned with a close pending.
+4. With RollbackOnError FALSE nothing more is called; the established
+   endpoints stay known-owned and the diagnostics say which Connections
+   failed.
+5. Transition 3, events, diagnostics.
+
+For close-type runs (Remove, Disable, the close of a Replace or Remove of a
+set) a failure does not stop the run: every known-owned endpoint is
+attempted, then transition 3 (EC-15). A remove run also closes known-owned
+endpoints of Connections that a newer Version no longer has.
+
+**Reprocessing.** One rule serves a re-run, a retry and the cleanup of
+survivors: every establish run starts with step 0 (§5.2). It closes the
+known-owned survivors of the set (from a run with RollbackOnError FALSE, a
+failed rollback, an earlier Version) and establishes the Connections anew;
+it fails, without calls, a Connection whose Name is taken by a foreign or
+unresolved endpoint. A re-run of an established set therefore interrupts its
+data flow: C2 does not keep endpoints in place (D4). Disable, Enable and
+Remove act on known-owned endpoints only; an endpoint of the set that is
+not known-owned is left alone and reported.
+
+**Retries** (D5). Without the Retry option the engine never processes a
+set by itself. With it, a set in Error is processed again (transition 4)
+after a jittered, capped exponential delay, up to a maximum number of
+attempts, only when (a) every failure of the last run was transient
+(TargetServerConnectionError, a communication error or timeout, Bad_Locked,
+Bad_TooManyOperations) and (b) the last run left **no unresolved
+endpoint**. An unresolved endpoint stops automatic retries until `Reconcile`
+or `Settle` clears it. A retry is a new run with step 0, never a replay of
+a call.
+
+### 5.6 Monitoring
 
 The monitor subscribes to the Status of each endpoint of an established
 Connection (§6.6.2), on the pooled sessions, and keeps ConnectionState per
@@ -535,8 +669,9 @@ browse by Name finds nothing: cleanup §5.5.4 or a restarted AC) makes the
 Connection ConnectionNotEstablished and the endpoint RuntimeError (DG-6).
 Re-establishing it is the application's decision (§4.7.2: the CM "could"
 trigger it): with the Reestablish monitor option the monitor processes the
-set again with the action of its last establish; without it, the state is
-only reported. MonitorsLocalConnectionEndpoints and
+set again with the action of its last establish, a normal run with step 0;
+without it, the state is only reported. A vanished endpoint's record is
+dropped: the AC no longer has it. MonitorsLocalConnectionEndpoints and
 MonitorsAllConnectionEndpoints follow what is monitored.
 
 ### 5.7 Diagnostics mapping
@@ -555,16 +690,52 @@ mapping:
 | CloseConnections | CloseConnectionError | the element's StatusCode |
 | Skipped because of another Connection's failure | ProcessingStopped | Good (DG-4) |
 | Established, then rolled back | Rollback | Good (DG-5) |
+| Lost response, ownership not proven (§5.4) | the FxError of the command of the step | Bad_CommunicationError or Bad_Timeout; listed as unresolved |
+| The Name is taken by a foreign or unresolved endpoint | CreateConnectionEndpointError | Bad_BrowseNameDuplicated (no call made) |
+
+### 5.8 Adding, replacing and removing sets (F.3)
+
+CloseAndUpdate (FC-4, FC-5) and `Manager.Update` work in two phases:
+
+1. **Validate the whole batch** before anything changes: decode the file
+   (Bad_TypeMismatch), check every operation's bits (one bit, FC-6:
+   Bad_InvalidArgument; none: Bad_NothingToDo), names (Bad_BrowseNameDuplicated
+   for Add, Bad_NoMatch for Remove and Replace), authorization, the state of
+   the target (Processing or Edit TRUE: Bad_InvalidState), and validate every
+   new Conf (CS-8 to CS-16). With RequireCompleteUpdate TRUE, one failure
+   ends the call here: ChangesApplied FALSE, nothing closed, nothing changed.
+   With FALSE, the failed operations are dropped and the rest go on.
+2. **Apply**: for Remove and Replace, close the known-owned endpoints of the
+   old set (CloseConnections Remove TRUE, FC-5), then change the set table:
+   Add and Replace give Version 1, state Ready, Edit FALSE, the Lock with the
+   CM (SM-8); nothing is processed (F.3.3.2.2, F.3.3.2.4).
+
+A remote close can still fail in phase 2, after validation. Table F.41 has
+no code for it. **Library interpretation**: that operation's result is the
+StatusCode of the failed close (as `fxserver` does for CloseConnections),
+the old set stays in the table in state Error with CloseConnectionError in
+its diagnostics, and the new Conf of a Replace is not installed. Closes are
+not undone: with RequireCompleteUpdate TRUE, ChangesApplied is FALSE when
+any operation failed, but the Connections already closed stay closed, which
+the diagnostics and the AuditUpdateMethodResult event show. Operations are
+applied in file order; an operation after a failed close still runs when
+RequireCompleteUpdate is FALSE and is skipped (Bad_InvalidState) when it is
+TRUE.
 
 ## 6. Stages
 
-C2 is three stages on the branch `feat/uafx-connection-manager`, released
-together as v1.39.0 (D11). Each stage ends with its tests, docs and
-coverage at the gates (90 % per package, 94 % merged).
+C2 is three stages, each its own branch and PR from main, merged to main
+in turn: C2.1 on `feat/uafx-cm-model`, C2.2 on `feat/uafx-cm-engine`
+started from main after C2.1 is merged, C2.3 on `feat/uafx-cm-server`
+likewise (D11). Each PR is reviewable on its own and leaves main green with
+coverage at the gates (90 % per package, 94 % merged). The exported API of
+`uafx/fxcm` may still change between the stage PRs: gorelease compares
+against the released v1.38.0, and v1.39.0 is released once, after C2.3,
+with one RELEASE.md section that each stage PR extends.
 
 ### C2.1 Configuration model and state machine
 
-- `fxcm.Set` from `uafx.ConnectionConfigurationSetConf`: index resolution
+- `fxcm.Config` from `uafx.ConnectionConfigurationSetConf`: index resolution
   (F.1.2.1), namespace scopes (F.1.2.2), SelectionList current values
   (F.1.2.3), validation of CS-8 and CS-10 to CS-16 with one finding per
   defect (ErrConfig, ConnectionConfigurationSetInvalid).
@@ -572,6 +743,9 @@ coverage at the gates (90 % per package, 94 % merged).
   server: owner, commit, discard).
 - The §6.9 state machine as a pure type: states, transitions, which
   transitions an action may start, the event each one has (SM-1 to SM-5).
+- The endpoint ownership classes and the record of §5.3, and the
+  decision rules of §5.4 and §5.5 (what a run may close, when a retry is
+  allowed), as pure functions over scan results.
 - Diagnostics model: ConnectionDiagnostics per Connection, LastActivity,
   the §10.19 update rules, ConnectionState from endpoint Status (Figures 58
   and 59).
@@ -585,8 +759,13 @@ coverage at the gates (90 % per package, 94 % merged).
 - Planner: Table 79 arguments, command order across calls, bundling,
   splitting, the E.2.2 id flow, PublisherId propagation (EC-2 to EC-7,
   EC-17 to EC-19, CS-18).
-- Executor: parallel steps, stop on failure, rollback, unknown outcomes,
-  close runs, the six actions (PR-3 to PR-8, EC-10, EC-11, EC-15).
+- Executor: scan and reconcile (step 0), parallel steps with CallTimeout,
+  stop on failure, set-wide rollback within RollbackTimeout, unknown
+  outcomes and the ownership proof, close runs, the six actions, multicast
+  flows, `Reconcile` and `Settle` (PR-3 to PR-8, EC-10, EC-11, EC-15,
+  CS-10).
+- Run handles (RunID, Version, Wait), Config and Status (§4.3); the batch
+  update of §5.8 without the file Methods.
 - Diagnostics and counters, AuditEntryId on the calls (EC-12), Observer and
   slog, optional Retry and Monitor.
 - The Go API of §4.3 is usable at the end of C2.2 without a server.
@@ -649,16 +828,28 @@ Failure scenarios in the same harness:
 | AC2's FunctionalEntity does not verify, RollbackOnError TRUE | AC2 aborts its call; AC1's endpoint closed by the CM; AC1 Connection diagnostics Rollback/Good, AC2 VerifyFunctionalEntityError; Failed event; Error; AggregatedCurrentState TRUE |
 | The same, RollbackOnError FALSE | AC1's endpoint stays; diagnostics say which side failed |
 | AC2 not running at the first Process | TargetServerConnectionError, Error; start AC2, Process again (transition 4): Ready. With a Retry policy, without the second Process |
-| The CM-AC1 connection cut after the EstablishConnections request (chaos proxy) | Unknown outcome treated as failure; rollback finds the endpoint by Name and removes it |
+| The CM-AC1 connection cut after the EstablishConnections request (chaos proxy) | Unknown outcome; the endpoint is proven ours (absent before, our ConnectionManagerApplicationUri) and removed by the set-wide rollback |
+| The same, but AC1 does not expose ConnectionManagerApplicationUri | The endpoint is unresolved: not removed, listed in RunResult and Status; Retry does not fire; `Settle(Owned)` then `Reconcile` removes it |
+| An endpoint of the set's Name made beforehand by another client (another ApplicationUri), and a preconfigured endpoint the set does not name as preconfigured | Foreign: that Connection fails with CreateConnectionEndpointError and Bad_BrowseNameDuplicated, no call; the endpoints are untouched after the run, the rollback and a Remove |
+| Run 1 establishes Connection A, fails on B with RollbackOnError FALSE; RollbackOnError set TRUE by an edit; run 2 fails on B again | Run 2's step 0 closes A's survivors, re-creates A, fails on B, and the set-wide rollback removes A again: no endpoint of the set is left |
+| A rollback close of AC1 times out (AC1 stalled by the chaos proxy) | The run ends within RollbackTimeout; AC1's endpoint stays known-owned with a close pending; the next run's step 0 closes it |
+| Two Process calls on the same set; `Wait` on each Run | Different RunIDs; the second is refused (Bad_InvalidState) while the first runs; after it, a new run has a new RunID and Version |
+| A multicast flow: AC1 publishes to a UDP multicast group, AC2 and AC3 subscribe (four servers) | One WriterGroup and DataSetWriter on AC1, both subscribers receive; Remove removes all three sides |
 | AC2 restarted after establishment | The monitor reports ConnectionNotEstablished and RuntimeError; with Reestablish the set is processed again and data flows |
 | Process twice on a set in Processing | Second Bad_InvalidState |
 | Edit by client A, commit by client B | Bad_InvalidState for B; A's session ends: the edit is discarded |
 | CommandBundleRequired AC, MaxConnectionsPerCall 1 with three Connections | Calls split per Connection, never inside a bundle |
 | ElementReplace of an established set | The old Connections are removed first; the new set is Ready, not processed |
+| A CloseAndUpdate batch with RequireCompleteUpdate TRUE whose second operation is invalid | Nothing is closed or changed, ChangesApplied FALSE |
+| A Replace whose remote close fails | The old set stays in Error with CloseConnectionError; the new Conf is not installed; the operation result is the close StatusCode |
+| A set with an AliasName, with an SKS configuration to apply, with a ClientServer flow | Refused as §3 says, no call made |
 
 ### 7.2 Unit and component tests
 
 - State machine: every (state, trigger) pair, legal and illegal.
+- Ownership: every row of the classes of §5.3 and every condition of the
+  proof of §5.4 alone false, as table tests of the pure rules; the retry
+  gate of §5.5.
 - Validation: every defect of CS-8 to CS-16 and FC-1 alone, on a valid set.
 - Planner: golden plans (command masks per call, call order, splitting,
   bundles) for the Annex E topologies: one Connection, two ACs with several
@@ -695,14 +886,19 @@ state. C2 prepares for it without persisting anything:
   for endpoints. NodeIds are caches that C3 re-resolves (CL-8).
 - **Desired state** is the committed Conf with its Version: exactly what a
   backend stores (F.1.1 names persistence as a use of the Conf types).
-- **Run journal**: each run records per step what it created, reserved and
-  closed, with ids and Names; C2 keeps it in memory and in the Observer,
-  C3 gives it to the backend and replays it after a crash.
+- **Endpoint records and run journal**: the known-owned and unresolved
+  records of §5.3 and, per run, what each step created, reserved and
+  closed, with ids and Names. C2 keeps them in memory and reports them to
+  the Observer; C3 gives them to the backend, writes the intent before each
+  call, and uses them after a restart. Without them a restarted C2 Manager
+  knows no endpoint as its own, so it closes nothing it did not create in
+  its own lifetime (§5.3): safe, but it leaves survivors to C3.
 - **Planner as a diff**: the planner takes the desired Connections and an
   observed state (which endpoints exist, their Status) and plans the steps
-  between them. In C2 the observed state of an establish run is "nothing"
-  (or what D4 decides); C3 fills it from a scan of the ACs, which makes
-  reconciliation the same code path.
+  between them. In C2 step 0 classifies the observed endpoints and closes
+  the known-owned ones; C3 adds adoption (keep an endpoint in place when it
+  matches the desired Version) and durable records, through the same code
+  path.
 - **Resolution cache with NamespaceArray and publication dates** (CL-5,
   CL-6) so that a reloaded cache can be checked before use.
 - **AC side**: IsPersistent TRUE (`Bad_NotSupported` today) and
@@ -726,20 +922,36 @@ state. C2 prepares for it without persisting anything:
   CM (ADR-0012), so that consumers and future peers can run the lifecycle of
   §7.1 against the released library.
 
-## 10. Decisions for the maintainer
+## 10. Decisions
+
+The maintainer reviewed the first version of this document on 2026-11-24
+(PR #44). The table records the outcome and where the document changed.
+
+| # | Question | Decision |
+|---|---|---|
+| D1 | Package: engine in a new `uafx/fxcm`, server exposure in `fxserver`, client wrappers in `uafx` | Accepted |
+| D2 | The Annex F Conf structure as the canonical model, the §6.8 address space a projection | Accepted |
+| D3 | Scope of C2. In: Edit, Process (all six actions), events, diagnostics, counters, Capabilities, F.3 file, endpoint monitoring, unicast and multicast flows. Later: SKS configuration, GDS lookup, AliasName, LogObject. Out: session-less, ClientServer | Accepted with limits: v1.39.0 claims no Part 84 Facet; the ConformanceUnits are listed by name; sets that need a later feature are refused with a test (§3). Multicast is in (CS-14, §5.2, §7.1) |
+| D4 | An endpoint of that Name already exists | Revised: known-owned endpoints of the set are closed by step 0 and re-created; foreign and unresolved ones are never touched and fail their Connection; taking a preconfigured endpoint the set names as preconfigured stays (§5.3, §5.5) |
+| D5 | Retries | Revised: opt-in only, transient errors only, and only when the last run left no unresolved endpoint; a retry is a new run with step 0, never a replay (§5.5) |
+| D6 | On a failure, let parallel calls in flight finish, then roll back | Accepted with bounds: CallTimeout per call, RollbackTimeout per rollback; a timeout is an unknown outcome (§5.4, §5.5) |
+| D7 | Process while a set is being edited | Accepted: the last committed Config |
+| D8 | Default authorization of Edit, Process, SelectionList writes and file writes | Accepted: ConfigureAdmin, replaceable |
+| D9 | A rollback close that fails | Revised: bounded by RollbackTimeout, recorded, the endpoint stays known-owned with a close pending; the next run's step 0 or `Reconcile` closes it (§5.5) |
+| D10 | A co-located AutomationComponent | Accepted: loopback session |
+| D11 | Delivery | Revised: three branches and PRs from main, merged in turn; one release v1.39.0 after C2.3 (§6) |
+| D12 | ProcessingResult | Accepted |
+| D13 | CommandBundleRequired from the set or the AC | Accepted: either |
+| — | Rollback scope | Revised: set-wide over the known-owned endpoints (CS-10, EC-11, §5.5) |
+| — | Unknown outcome | Revised: a Name match is not ownership; the proof of §5.4 or nothing is closed |
+| — | Async API | Revised: Run handles with RunID and Version; Config (immutable) and Status (live) apart (§4.3) |
+| — | F.3 Replace | Revised: validate the batch, then close, then change; RequireCompleteUpdate and close failures as §5.8 |
+
+Open for the maintainer after this revision:
 
 | # | Question | Proposal |
 |---|---|---|
-| D1 | Package: engine in a new `uafx/fxcm`, server exposure in `fxserver`, client wrappers in `uafx`? | Yes |
-| D2 | The Annex F Conf structure as the canonical model, the §6.8 address space a projection? | Yes |
-| D3 | Scope of C2. In: Edit, Process (all six actions), events, diagnostics, counters, Capabilities, F.3 file, endpoint monitoring with MonitorsLocal/All. Later: SKS configuration (CS-21, EC-9, EC-16, CL-9; needed for the "UAFX ConnectionManager 2024" Facet), GDS lookup (CM-7, CL-3), AliasName (CL-7), LogObject (CM-8 and the log rows). Out: session-less, ClientServer | As listed; SKS is the first item after C2 |
-| D4 | Establish when an endpoint of that Name already exists on the FunctionalEntity (a re-run, another CM) | C2: fail with CreateConnectionEndpointError, no adoption; C3 adds reconciliation that adopts endpoints this CM made |
-| D5 | Retries | None by default; opt-in `RetryPolicy` (jittered, capped, transient errors only) that uses transition 4 |
-| D6 | On a failure, let parallel calls in flight finish, then roll back | Yes |
-| D7 | Process while a set is being edited | Process the last committed snapshot (ED-4), do not refuse |
-| D8 | Default authorization of Edit, Process, SelectionList writes and file writes | ConfigureAdmin (§6.8.2, F.3.2), with an Authorizer to replace it, as C1 did for ConnectionAdmin |
-| D9 | A rollback close that fails | Record it, no retry in the run; closed first by the next run of the set |
-| D10 | A co-located AutomationComponent | Loopback client session in C2; an in-process path later if needed |
-| D11 | Delivery | One branch, three stage PRs reviewed in turn, one release v1.39.0 after C2.3 |
-| D12 | ProcessingResult (in the NodeSet, not in Table 94) | Expose it, set per Connection |
-| D13 | CommandBundleRequired from the set (§6.14) or the AC (§6.2.6) | Bundle when either is TRUE |
+| Q1 | A re-run of an established set re-creates its known-owned endpoints and interrupts the data flow (§5.5). Acceptable for C2, with keep-in-place left to C3? | Yes |
+| Q2 | Proof of ownership after a lost response needs ConnectionManagerApplicationUri, which §6.6.2 makes optional; without it the endpoint stays unresolved until `Settle`. Acceptable? | Yes; go-opcua's AC sets it |
+| Q3 | Defaults CallTimeout 30 s, RollbackTimeout 2 min | Yes |
+| Q4 | The multicast end-to-end test needs four servers and UDP multicast with loopback; where CI cannot do multicast, the test is skipped with a REQUIRE switch like `pubsub-eth` | Yes |
