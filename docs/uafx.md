@@ -5,12 +5,16 @@ version 1.00.04 (Connecting Devices and Information Model), and it
 establishes and closes non-persistent UAFX connections with PubSub: a
 server answers EstablishConnections and CloseConnections (Part 81 §6.2.4,
 §6.2.5), and a client calls them, with the ControlGroups of §6.5.
-Persistent connections and the ConnectionManager are not implemented, and none of the profiles of
-Part 84 is claimed. What is missing is listed under [Limits](#limits).
+Of the ConnectionManager (§6.7 to §6.16) there is the configuration model
+of package `uafx/fxcm` ([ConnectionManager configuration](#connectionmanager-configuration)):
+it validates ConnectionConfigurationSets and reads and writes their files,
+but establishes nothing yet. Persistent connections are not implemented,
+and none of the profiles of Part 84 is claimed. What is missing is listed under [Limits](#limits).
 
 | Package | What it holds |
 |---|---|
 | `uafx` | `Inspect`: reads the UAFX model of a server into a `Report`; `EstablishConnections` and `CloseConnections` call the Methods of an AutomationComponent; the DataTypes of the UAFX namespaces, generated from the NodeSets, with their binary encoding ([Structures](#structures)) |
+| `uafx/fxcm` | The configuration model of a ConnectionManager: `NewConfig` validates a ConnectionConfigurationSet, `DecodeFile` and `EncodeFile` read and write its file (Annex F), the state machine of a set, the edit of §6.7.4, and the ownership and diagnostics rules |
 | `uafx/fxserver` | `AddModel`: adds the UAFX model to a `server.Server`; `ImportNodeSet` imports NodeSets that build on it; `EnableConnections` serves EstablishConnections and CloseConnections |
 | `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid` | NodeIds of the UAFX Data, AutomationComponent (AC) and ConnectionManager (CM) namespaces |
 | `di/diid` | NodeIds of the Devices (DI) model of OPC 10000-100, which the UAFX model builds on |
@@ -518,6 +522,117 @@ OptionSets against the Go constants), byte fixtures written by hand from Part 6
 (`TestStructureFixtures`), and the bytes of the EstablishConnections
 arguments of v1.37.0 (`TestGoldenReleaseB`).
 
+## ConnectionManager configuration
+
+Package `uafx/fxcm` is the first stage of a ConnectionManager (Part 81
+§6.7). It holds the model a ConnectionManager works on; it makes no calls
+to a server, and nothing is established yet. The design of the whole
+ConnectionManager, with the stages that follow, is in
+`docs/design/uafx-connection-manager.md` (go-opcua pull request 44).
+
+A set is the Annex F structure `uafx.ConnectionConfigurationSetConf`.
+`NewConfig` validates it and returns an immutable `Config`, Version 1
+(§6.8.2: a set that is added or replaced has Version 1). An invalid set is
+a `*ConfigError` with one `Finding` per defect, each with its path in the
+set and the clause it breaks; `ErrConfig`, `ua.StatusBadConfigurationError`
+and the FxError ConnectionConfigurationSetInvalid go with it.
+
+```go
+cfg, err := fxcm.NewConfig(set)
+var ce *fxcm.ConfigError
+if errors.As(err, &ce) {
+	for _, f := range ce.Findings {
+		fmt.Println(f.Path, f.Problem, f.Clause)
+	}
+}
+```
+
+What `NewConfig` checks:
+
+| Rule | Clause |
+|---|---|
+| One or more Connections, CommunicationFlows, ServerAddresses and AutomationComponentConfigurations | §6.8.2 Table 89 (MandatoryPlaceholder) |
+| The names of the Connections are unique: ConnectionsDiagnostics are linked to them by name | §6.8.2 |
+| Every index refers to an element (a negative one is no reference), an AutomationComponent has a ServerAddress, an endpoint has an AutomationComponent, InboundFlowIndex has the flow and its SubscriberConfiguration | F.1.2.1, §6.8.2 Table 90, F.1.5 Table F.5 |
+| The namespace index of every NodeId and RelativePath is in the Namespaces of the ServerAddress of its AutomationComponent | F.1.2.2 |
+| Endpoints: a FunctionalEntityNode, a Name, a ConnectionEndpointTypeId, InputVariableIds or OutputVariableIds; a preconfigured DataSet only with PubSubConnectionEndpointType; no two endpoints with the same Name in the same FunctionalEntity | §6.11, §6.12, F.1.5 |
+| Flows: an Address in the flow or in the SubscriberConfiguration; ReceiveQos only with Qos; a unicast flow has one SubscriberConfiguration and one subscriber | §6.13.3 |
+| AutomationComponentNode, AssetToVerify and the verification variables are NodeIdentifiers | §6.14, §6.15, F.1.15 |
+| A ServerAddress has a DiscoveryUrl and a usable SecurityMode; a SecurityKeyServer has an Address | §9.2, §9.3 |
+
+Library interpretations, each named in its Finding: the set, its Folders
+and its elements need a non-empty BrowseName, unique among the elements of
+one kind; a SelectionList whose Modify field is absent or FALSE
+(RestrictToList TRUE) has its current value among its Selection (F.1.2.3);
+a flow has one publisher; a flow is unicast or multicast by the kind of its
+IP address, and one with a host name is not checked; index 0 of the
+Namespaces of a ServerAddress is the OPC UA namespace, as in a
+NamespaceArray; the SecurityKeyServer field, a structure that cannot be
+null on the wire, is absent when it has its default value. Before the
+nodes are resolved, endpoints with the same AutomationComponentIndex and
+FunctionalEntityNode are in the same FunctionalEntity.
+
+`DecodeFile` and `EncodeFile` read and write the file of F.2: a
+UABinaryFileDataType whose Body is an array of
+ConnectionConfigurationSetConfDataType. A defect in a file is `ErrConfig`
+with `ua.StatusBadTypeMismatch` (Table F.40). Part 5 §12.31 gives the
+first entry of the Namespaces of the file the index 1, and F.2 asks for the
+OPC UA and CM namespaces in it; `EncodeFile` writes the OPC UA, Data, AC
+and CM namespaces with the indexes 1 to 4. A compatibility tolerance, not
+a reading of F.2: a file written with the indexes of a NamespaceArray (the
+OPC UA namespace with index 0) is read too, when its Body does not decode
+the other way, and so is a file without the OPC UA namespace. Hand-written
+files of each layout are the fixtures of `TestFileFixtures`. `DecodeFile`
+reads and `EncodeFile` writes at most `MaxFileSize`, 16 MiB (larger is
+`Bad_EncodingLimitsExceeded` when encoding).
+
+An `EditSlot` is the edit of §6.7.4 without the address space: `Start`
+gives the Lock and a working copy to a `LockOwner` (StartEditing again by
+the owner changes nothing; another owner is `Bad_InvalidState`); `Commit`
+turns the working copy into the next Version (incremented on every commit)
+and `Discard` drops it; both are ignored for a set that is not in edit;
+`LockLost` is a Lock that went for any reason, treated as DiscardUpdates.
+**Library interpretation**: a working copy that is not valid, or that
+renames the set, is not committed and stays in edit. `Renamed` lists the
+endpoints whose Name an edit changes, which a ConnectionManager refuses
+while their Connection is established (§6.12).
+
+The state machine of a set (§6.9.2) is `State` (Ready, Processing, Error)
+and `Transition`, with the NodeIds of the state machine type and the event
+type each transition has (Table 92). `Start` and `Finish` return the
+transition of a set, and `Start` of a set in Processing is
+`Bad_InvalidState` (Table 86).
+
+The decisions of a ConnectionManager over the endpoints it finds are pure
+functions (design §5.3 to §5.5):
+
+- `Ownership`: KnownOwned, TakenPreconfigured, Unresolved, Foreign; only
+  the first two may be closed. `Classify` and `Scan` give the class of an
+  endpoint found under a Name and what the first step of a run does with it:
+  create, close first, take a free preconfigured endpoint, or fail the
+  Connection with `Bad_BrowseNameDuplicated`. An endpoint with the
+  ApplicationUri of this ConnectionManager that it has no record of is
+  Unresolved: §6.6.2 identifies an application, not a call. A preconfigured
+  endpoint this ConnectionManager took becomes Unresolved when it is in use
+  by another ConnectionManager or carries another
+  ConnectionManagerApplicationUri: §6.2.5.2 keeps preconfigured objects,
+  which does not make closing another ConnectionManager's Connection safe.
+- `ResolveLostResponse`: after a call whose response was lost, an endpoint
+  is KnownOwned only when the Name was absent before, exactly one endpoint
+  is there now, its ConnectionManagerApplicationUri is ours, the
+  FunctionalEntity was serialized for the run, and the deployment asserts
+  that no other ConnectionManager uses that ApplicationUri; otherwise it is
+  Unresolved.
+- `RetryAllowed`: a set in Error is processed again by the
+  ConnectionManager itself only when every failure of its last run was
+  transient and the run left no Unresolved endpoint.
+
+`Diagnose` makes the ConnectionDiagnostics of a Connection after a
+processing by the rules of §10.19, keeping the StatusCode of a failure as
+reported (Uncertain too; only a Good one becomes Bad), and `ConnectionStateOf` its
+ConnectionState from the Status of its endpoints (§10.20, Figures 58 and
+59).
+
 ## Examples
 
 [`examples/uafx/server`](../examples/uafx/server) runs a server with the
@@ -542,6 +657,8 @@ go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855 -json
 | Connections end to end with UDP PubSub: data flowing between two endpoints, Status and health, a failure injected at every command with the state after the abort checked, preconfigured and shared readers and writers surviving CloseConnections, CleanupTimeout, ControlGroups, access control, audit events | `uafx/fxserver` |
 | The mandatory members of the inspector against the ModellingRules of the embedded NodeSets | `uafx` (`TestMandatoryMatchesModel`) |
 | Every generated structure: the Binary Schemas, hand-written byte fixtures, the bytes of v1.37.0, a round trip of each with its optional fields and union options, the errors of the decoder | `uafx` (`TestSchemaMatchesBinarySchema`, `TestStructureFixtures`, `TestGoldenReleaseB`, `TestStructuresRoundTrip`, `TestStructureErrors`) |
+| The configuration model of a ConnectionManager: each validation rule, the file of F.2 in both namespace layouts and its errors, the edit, the state machine, the ownership and retry rules, the diagnostics and the ConnectionState | `uafx/fxcm` |
+| Fuzz: the ConnectionConfigurationSet file (`FuzzDecodeFile`) | `uafx/fxcm` |
 | Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`, and every generated structure with `FuzzDecodeStructure`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace) | `uafx`, `internal/nodeset` |
 | End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
 | Chaos: connection faults over SignAndEncrypt, values and FunctionalEntities changing during `Inspect`, a server closing; parallel EstablishConnections and CloseConnections, and both under connection faults, leaving the server as it was | [`chaos/uafx`](../chaos/uafx) |
@@ -559,7 +676,8 @@ The test address space is `internal/testutil/fxtest`.
   (§6.5.2 wants it from the Object of the client connection, which the
   server does not have). An item in two lists of one ControlGroup is not
   refused. No persistent connections ([Persistence](#persistence)), no ConnectionManager behaviour
-  (§6.7: no ConnectionConfigurationSets are established), no
+  (§6.7: `uafx/fxcm` validates ConnectionConfigurationSets but none is
+  established, and a server has no ConnectionManager Methods), no
   AutomationComponent log.
 - CloseConnections with Remove removes the DataSetReaders and
   DataSetWriters of a connection, not the groups, PubSubConnections and
