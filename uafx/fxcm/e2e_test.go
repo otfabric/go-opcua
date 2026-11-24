@@ -75,16 +75,17 @@ func newAC(t *testing.T, name string, opts fxserver.ConnectionOptions) *ac {
 }
 
 // newACWith is newAC with the NodeSet extra imported after the fixture.
-func newACWith(t *testing.T, name string, opts fxserver.ConnectionOptions, extra string) *ac {
+// srvOpts are added to the options of the server.
+func newACWith(t *testing.T, name string, opts fxserver.ConnectionOptions, extra string, srvOpts ...server.Option) *ac {
 	t.Helper()
 	uri := "urn:go-opcua:fxcm:" + name
-	srv, err := server.New(
+	srv, err := server.New(append([]server.Option{
 		server.EndPoint("localhost", 0),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI(uri),
 		server.WithPubSub(nil),
-	)
+	}, srvOpts...)...)
 	require.NoError(t, err)
 	ns, test, err := fxtest.PrepareConnections(srv)
 	require.NoError(t, err)
