@@ -286,10 +286,8 @@ func TestEstablishPaths(t *testing.T) {
 	require.NoError(t, err)
 	res = process(t, m, uafx.ActionEstablishConnectionsDisabled, cfg2.Key())
 	require.Equal(t, StateError, res.State)
-	// The PubSub elements of b collide with those of the set Paths.
-	assert.ElementsMatch(t, []Failure{
-		{FxError: uafx.FxErrorVerifyFunctionalEntityError, Status: ua.StatusBadNoMatch},
-		{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: ua.StatusBadConfigurationError},
-	}, res.Failures)
+	// b, bundled, subscribes to a and is configured after it
+	// (configureWaves): a's failure stops the run before b's call (EC-10).
+	assert.Equal(t, []Failure{{FxError: uafx.FxErrorVerifyFunctionalEntityError, Status: ua.StatusBadNoMatch}}, res.Failures)
 	assert.ElementsMatch(t, []string{"ToA", "FromA"}, b.endpoints())
 }

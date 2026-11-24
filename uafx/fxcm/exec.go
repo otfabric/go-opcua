@@ -56,6 +56,9 @@ type acRun struct {
 	defaultPublisherID *ua.Variant
 	// values are the ConfigurationValues the calls returned (§6.16.3).
 	values []*ua.PubSubConfigurationValueDataType
+	// configured is set when the configure step of the AC returned, so
+	// its PubSubConnections have their PublisherIds (resolvePublishers).
+	configured bool
 }
 
 // epRun is an endpoint configuration of a run.
@@ -238,8 +241,11 @@ func (x *run) establishRun(ctx context.Context) {
 		}
 	}
 	x.linkFlows()
-	if x.step(ctx, x.live(), x.configure) {
-		return
+	for _, wave := range x.configureWaves(x.live()) {
+		x.resolvePublishers(wave)
+		if x.step(ctx, wave, x.configure) {
+			return
+		}
 	}
 	x.adaptSubscribers(ctx)
 	if x.anyFailed() {
@@ -826,12 +832,14 @@ func (x *run) reuseDataSets(ctx context.Context, a *acRun) error {
 // sameDataSet reads the PublishedData and DataSetMetaData Properties of the
 // PublishedDataItemsType Object n (OPC 10000-14 §9.1.4) and reports
 // whether they publish what want does: the same Variables, Attributes,
-// IndexRanges and deadbands in the same order, and Fields of the same
-// Names, BuiltInTypes, DataTypes, ValueRanks and ArrayDimensions (a set
-// without DataSetMetaData leaves the Fields to the publisher). Library
-// interpretation: SamplingIntervalHint is a hint and the
-// ConfigurationVersion the publisher's own (ConfigurationVersionDataType),
-// so neither is compared.
+// IndexRanges and deadbands in the same order, and Fields (FieldMetaData,
+// OPC 10000-14 §6.2.3.2.4) of the same Names, FieldFlags, BuiltInTypes,
+// DataTypes, ValueRanks, ArrayDimensions, MaxStringLengths, Properties and
+// DataSetFieldIds, and the same DataSetClassId (a set without
+// DataSetMetaData leaves the Fields to the publisher). Library
+// interpretation: SamplingIntervalHint is a hint, Descriptions are text
+// for people, and the ConfigurationVersion is the publisher's own
+// (ConfigurationVersionDataType), so none of them is compared.
 func (x *run) sameDataSet(ctx context.Context, a *acRun, n *ua.NodeID, want *ua.PublishedDataSetDataType) (bool, error) {
 	if want.DataSetSource == nil {
 		return false, nil
@@ -911,10 +919,54 @@ func sameFields(have, want *ua.DataSetMetaDataType) bool {
 			}
 			continue
 		}
-		if h.Name != w.Name || h.BuiltInType != w.BuiltInType || h.ValueRank != w.ValueRank || !slices.Equal(h.ArrayDimensions, w.ArrayDimensions) {
+		if h.Name != w.Name || h.FieldFlags != w.FieldFlags || h.BuiltInType != w.BuiltInType || h.ValueRank != w.ValueRank ||
+			!slices.Equal(h.ArrayDimensions, w.ArrayDimensions) || h.MaxStringLength != w.MaxStringLength ||
+			!sameAssigned(h.DataSetFieldID, w.DataSetFieldID) || !sameProperties(h.Properties, w.Properties) {
 			return false
 		}
 		if (h.DataType != nil || w.DataType != nil) && !h.DataType.Equal(w.DataType) {
+			return false
+		}
+	}
+	return sameAssigned(have.DataSetClassID, want.DataSetClassID)
+}
+
+// sameAssigned compares a Guid the set may leave null. A DataSetFieldId is
+// generated when the field is added (OPC 10000-14 §6.2.3.2.4) and a
+// DataSetClassId is null for a DataSet not created from a class
+// (§6.2.3.2.3, §6.2.3.3). Library interpretation: a null want leaves the
+// Guid to the publisher and matches any; one the set names must be the
+// publisher's, since a subscriber maps received fields by DataSetFieldId
+// (FieldTargetDataType, §6.2.10.2.3).
+func sameAssigned(have, want *ua.GUID) bool {
+	if nullGUID(want) {
+		return true
+	}
+	return !nullGUID(have) && have.String() == want.String()
+}
+
+func nullGUID(g *ua.GUID) bool {
+	if g == nil {
+		return true
+	}
+	return g.Data1 == 0 && g.Data2 == 0 && g.Data3 == 0 && !slices.ContainsFunc(g.Data4, func(b byte) bool { return b != 0 })
+}
+
+// sameProperties compares the Properties of two fields (FieldMetaData,
+// OPC 10000-14 §6.2.3.2.4) in order: their Keys and Values.
+func sameProperties(have, want []*ua.KeyValuePair) bool {
+	if len(have) != len(want) {
+		return false
+	}
+	for i, w := range want {
+		h := have[i]
+		if h == nil || w == nil {
+			if h != w {
+				return false
+			}
+			continue
+		}
+		if (h.Key == nil) != (w.Key == nil) || h.Key != nil && (h.Key.NamespaceIndex != w.Key.NamespaceIndex || h.Key.Name != w.Key.Name) || !sameVariant(h.Value, w.Value) {
 			return false
 		}
 	}
@@ -1155,6 +1207,7 @@ func (x *run) configure(ctx context.Context, a *acRun) {
 			applyValues(a.comm.cfg, res.CommunicationConfigurationResults[0].ConfigurationValues)
 		}
 	}
+	a.configured = true
 }
 
 // linkedBy reports whether the CommunicationLinks l name the reader or
@@ -1564,6 +1617,75 @@ func (x *run) relatedIsOurs(ctx context.Context, t *target, n *ua.NodeID, ours *
 	return sameRelated(relatedOf(t, dvStructure(res.Results[0])), ours)
 }
 
+// configureWaves orders the configure step (§6.16.3, §6.2.6). An AC with
+// CommandBundleRequired cannot take the call that adapts its subscribers
+// to the PublisherId a matched PubSubConnection has (adaptSubscribers), so
+// it is configured after the ACs whose flows it subscribes to, with the
+// PublisherIds their calls returned (resolvePublishers). Every other AC is
+// configured in the first wave, in parallel. Bundled ACs that subscribe to
+// each other in a cycle, or to themselves, cannot wait for each other:
+// they are configured together in the last wave, and a mismatch there
+// fails as in adaptOn.
+func (x *run) configureWaves(acs []*acRun) [][]*acRun {
+	waits := func(a *acRun, pending map[*acRun]bool) bool {
+		for _, ep := range a.eps {
+			if as := ep.assumedPublisher; as != nil && as.a != a && pending[as.a] {
+				return true
+			}
+		}
+		return false
+	}
+	pending := map[*acRun]bool{}
+	for _, a := range acs {
+		pending[a] = true
+	}
+	var waves [][]*acRun
+	for len(pending) > 0 {
+		var wave []*acRun
+		for _, a := range acs {
+			if pending[a] && (!a.bundle || !waits(a, pending)) {
+				wave = append(wave, a)
+			}
+		}
+		if len(wave) == 0 {
+			for _, a := range acs {
+				if pending[a] {
+					wave = append(wave, a)
+				}
+			}
+		}
+		for _, a := range wave {
+			delete(pending, a)
+		}
+		waves = append(waves, wave)
+	}
+	return waves
+}
+
+// resolvePublishers sets the DataSetReaders of the bundled ACs of a wave
+// to the PublisherIds their publishers' PubSubConnections have after an
+// earlier wave (§6.16.3), before their single call (configureWaves).
+func (x *run) resolvePublishers(wave []*acRun) {
+	for _, a := range wave {
+		if !a.bundle {
+			continue
+		}
+		for _, ep := range a.eps {
+			as := ep.assumedPublisher
+			if as == nil || as.a == a || ep.failed() || !as.a.configured {
+				continue
+			}
+			actual := as.conn.PublisherID
+			if isNullID(actual) || sameVariant(actual, as.id) {
+				continue
+			}
+			if rd := readerAt(a.comm.cfg, ep.links.DataSetReaderRef); rd != nil {
+				rd.PublisherID, as.id = actual, actual
+			}
+		}
+	}
+}
+
 // adaptSubscribers adapts the subscribers to the PublisherIds their
 // publishers' PubSubConnections have after the configure step (§6.16.3: a
 // PubSubConnection that matched an existing one has that one's
@@ -1575,9 +1697,11 @@ func (x *run) relatedIsOurs(ctx context.Context, t *target, n *ua.NodeID, ours *
 // Table 79) and ElementModify of the readers (OPC 10000-14 Table 241), and
 // EnableCommunicationCmd for an enabled establish. An AC with
 // CommandBundleRequired takes SetCommunicationConfigurationCmd only with
-// CreateConnectionEndpointCmd (§6.2.6): its subscribers cannot be adapted,
-// and their Connections fail with SetCommunicationConfigurationError and
-// Bad_ConfigurationError.
+// CreateConnectionEndpointCmd (§6.2.6): it is configured after its
+// publishers with their PublisherIds (configureWaves), and only a
+// subscriber that could not wait (a cycle of bundled ACs, or its own
+// flow) is left to adapt here: its Connection fails with
+// SetCommunicationConfigurationError and Bad_ConfigurationError.
 func (x *run) adaptSubscribers(ctx context.Context) {
 	byAC := map[*acRun][]*epRun{}
 	var acs []*acRun
@@ -1650,10 +1774,39 @@ func (x *run) adaptOn(ctx context.Context, a *acRun, eps []*epRun) {
 	case res.Status != ua.StatusGood:
 		failAll(res.Status)
 	default:
-		for i, r := range res.ConnectionEndpointConfigurationResults {
-			if i < len(eps) && r != nil && bad(r.CommunicationLinksResult) {
-				x.fail(eps[i], Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: r.CommunicationLinksResult})
-			}
+		x.adapted(eps, res)
+	}
+}
+
+// adapted checks the nested results of a Good adaptation call (Table 21):
+// the PubSubCommunicationConfigurationResult of the one configuration, its
+// ReferenceResult for the reader of each endpoint (one reference per
+// endpoint, in order, as CloseAndUpdate returns them, OPC 10000-14
+// §9.1.3.7.4), and the result of each endpoint. A result that is missing
+// is Bad_UnexpectedError.
+func (x *run) adapted(eps []*epRun, res *uafx.EstablishConnectionsResult) {
+	failEp := func(ep *epRun, fx uafx.FxError, st ua.StatusCode) {
+		x.fail(ep, Failure{FxError: fx, Status: st})
+	}
+	var comm *uafx.PubSubCommunicationConfigurationResult
+	if len(res.CommunicationConfigurationResults) == 1 {
+		comm = res.CommunicationConfigurationResults[0]
+	}
+	for i, ep := range eps {
+		switch {
+		case comm == nil:
+			failEp(ep, uafx.FxErrorSetCommunicationConfigurationError, ua.StatusBadUnexpectedError)
+		case bad(comm.Result):
+			failEp(ep, uafx.FxErrorSetCommunicationConfigurationError, comm.Result)
+		case i >= len(comm.ReferenceResults):
+			failEp(ep, uafx.FxErrorSetCommunicationConfigurationError, ua.StatusBadUnexpectedError)
+		case bad(comm.ReferenceResults[i]):
+			failEp(ep, uafx.FxErrorSetCommunicationConfigurationError, comm.ReferenceResults[i])
+		}
+		if i >= len(res.ConnectionEndpointConfigurationResults) || res.ConnectionEndpointConfigurationResults[i] == nil {
+			failEp(ep, uafx.FxErrorSetCommunicationConfigurationError, ua.StatusBadUnexpectedError)
+		} else if f, ok := elementFailure(res.ConnectionEndpointConfigurationResults[i]); ok {
+			x.fail(ep, f)
 		}
 	}
 }

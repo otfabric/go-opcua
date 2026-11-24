@@ -219,8 +219,9 @@ func New(opts Options) (*Manager, error) {
 }
 
 // Close stops the runs, retries and the monitor and closes the sessions.
-// A run in progress stops waiting for its calls (design §5.4: their
-// outcome stays unknown) and ends in Error.
+// A run in progress, also the closes of a Replace or Remove, stops waiting
+// for its calls (design §5.4: their outcome stays unknown) and ends in
+// Error; Close returns after them. Later calls are ua.StatusBadShutdown.
 func (m *Manager) Close() error {
 	m.mu.Lock()
 	if m.closed {
@@ -457,6 +458,7 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 	if err != nil {
 		return nil, err
 	}
+	defer m.wg.Done()
 	if err := m.removeConnections(ctx, s, prev); err != nil {
 		return nil, err
 	}
@@ -476,6 +478,7 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 	if err != nil {
 		return err
 	}
+	defer m.wg.Done()
 	if err := m.removeConnections(ctx, s, prev); err != nil {
 		return err
 	}
@@ -491,20 +494,34 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 // claim puts a set that is neither processed nor edited in Processing for
 // a Replace or Remove, in one step under the lock of the set, so that no
 // run starts on it meanwhile (Table 86: Process of a set in Processing is
-// Bad_InvalidState). It returns the state the set was in.
+// Bad_InvalidState). It returns the state the set was in. A claimed set
+// is counted as a run, so that Close waits for it (as start does): the
+// caller calls m.wg.Done when it is finished; a closed Manager is
+// ua.StatusBadShutdown.
 func (m *Manager) claim(key SetKey) (*set, State, error) {
-	s := m.lookup(key)
-	if s == nil {
+	m.mu.Lock()
+	closed := m.closed
+	s := m.sets[keyString(key)]
+	if !closed && s != nil {
+		m.wg.Add(1)
+	}
+	m.mu.Unlock()
+	switch {
+	case closed:
+		return nil, 0, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
+	case s == nil:
 		return nil, 0, managerError(ua.StatusBadNoMatch, "no set %s", key)
 	}
 	s.mu.Lock()
 	if s.edit.Editing() != nil {
 		s.mu.Unlock()
+		m.wg.Done()
 		return nil, 0, managerError(ua.StatusBadInvalidState, "the set %s is being edited", key)
 	}
 	tr, err := Start(s.state)
 	if err != nil {
 		s.mu.Unlock()
+		m.wg.Done()
 		return nil, 0, managerError(ua.StatusBadInvalidState, "the set %s is being processed", key)
 	}
 	prev := s.state
@@ -521,8 +538,11 @@ func (m *Manager) claim(key SetKey) (*set, State, error) {
 
 // removeConnections closes the endpoints of s, which claim put in
 // Processing from prev, for a Replace or Remove: a remove run. On a failure
-// the set stays in Error.
+// the set stays in Error. Close stops it as it stops a run.
 func (m *Manager) removeConnections(ctx context.Context, s *set, prev State) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	defer context.AfterFunc(m.ctx, cancel)()
 	s.mu.Lock()
 	r := s.current
 	s.mu.Unlock()

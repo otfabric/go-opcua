@@ -577,7 +577,7 @@ Add adds a set (F.3.3.2 ElementAdd): validated, Version 1, state Ready, not in e
 func (m *Manager) Close() error
 ```
 
-Close stops the runs, retries and the monitor and closes the sessions. A run in progress stops waiting for its calls (design §5.4: their outcome stays unknown) and ends in Error.
+Close stops the runs, retries and the monitor and closes the sessions. A run in progress, also the closes of a Replace or Remove, stops waiting for its calls (design §5.4: their outcome stays unknown) and ends in Error; Close returns after them. Later calls are ua.StatusBadShutdown.
 
 #### func (Manager) CommitEdit
 

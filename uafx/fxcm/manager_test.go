@@ -5,6 +5,7 @@ package fxcm
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -280,4 +281,41 @@ func TestClaimReserves(t *testing.T) {
 	assert.Same(t, removal, st.Current)
 
 	require.NoError(t, m.removeConnections(context.Background(), s, prev))
+	m.wg.Done()
+}
+
+// TestCloseWaitsForClaim: Close waits for a Replace or Remove that has
+// claimed its set, as it waits for a run, and stops its closes; after
+// Close both are ua.StatusBadShutdown.
+func TestCloseWaitsForClaim(t *testing.T) {
+	t.Parallel()
+	m := offlineManager(t, Options{})
+	cfg, err := m.Add(named("A"))
+	require.NoError(t, err)
+	_, err = m.Add(named("B"))
+	require.NoError(t, err)
+	s, prev, err := m.claim(cfg.Key())
+	require.NoError(t, err)
+	closed := make(chan struct{})
+	go func() {
+		assert.NoError(t, m.Close())
+		close(closed)
+	}()
+	require.Eventually(t, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.closed
+	}, 5*time.Second, time.Millisecond)
+	select {
+	case <-closed:
+		t.Fatal("Close returned while a Remove held its set")
+	case <-time.After(50 * time.Millisecond):
+	}
+	assert.Error(t, m.ctx.Err(), "Close stops what the claim does")
+	require.NoError(t, m.removeConnections(context.Background(), s, prev))
+	m.wg.Done()
+	<-closed
+	assert.ErrorIs(t, m.Remove(context.Background(), KeyOf(named("B"))), ua.StatusBadShutdown)
+	_, err = m.Replace(context.Background(), named("B"))
+	assert.ErrorIs(t, err, ua.StatusBadShutdown)
 }

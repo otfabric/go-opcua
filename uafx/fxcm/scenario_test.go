@@ -436,8 +436,10 @@ func TestRetry(t *testing.T) {
 // PublisherId then matches it (ElementMatch compares the transport, not the
 // PublisherId, OPC 10000-14 §9.1.3.7.2): b's DataSetReader, configured with
 // the set's PublisherId, is modified in one more call, and the data flows.
-// Where CommandBundleRequired forbids that call (§6.2.6) the Connection
-// fails and is rolled back, as when the adaptation call fails. The remove
+// Where CommandBundleRequired forbids that call (§6.2.6) the subscriber is
+// configured after its publisher, with the PublisherId the publisher's call
+// returned. When the adaptation call fails the Connection fails and is
+// rolled back. The remove
 // after each leaves no reader behind, so the set can be established again.
 func TestAdaptPublisherID(t *testing.T) {
 	t.Parallel()
@@ -485,10 +487,14 @@ func TestAdaptPublisherID(t *testing.T) {
 	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 7.0 }, 10*time.Second, 10*time.Millisecond)
 	remove()
 
+	// With CommandBundleRequired b cannot take the adaptation (§6.2.6): it
+	// is configured after a, with the PublisherId a's call returned.
+	require.NoError(t, fxtest.SetValue(a.srv, a.id(fxtest.ConnActual), 9.0))
+	before = callsTo(b.url)
 	res = establish(true)
-	require.Equal(t, StateError, res.State)
-	assert.Contains(t, res.Failures, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: ua.StatusBadConfigurationError})
-	assert.True(t, res.RolledBack)
+	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	assert.Equal(t, 2, callsTo(b.url)-before, "reserve and configure, no adaptation")
+	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 9.0 }, 10*time.Second, 10*time.Millisecond)
 	remove()
 
 	// The adaptation call fails: the Connection fails and is rolled back.

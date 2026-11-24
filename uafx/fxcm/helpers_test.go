@@ -414,6 +414,38 @@ func TestSameDataSet(t *testing.T) {
 	versioned := md(f("x", 11))
 	versioned.ConfigurationVersion = &ua.ConfigurationVersionDataType{MajorVersion: 9}
 	assert.True(t, sameFields(versioned, md(f("x", 11))), "the ConfigurationVersion is the publisher's")
+	with := func(change func(*ua.FieldMetaData)) *ua.DataSetMetaDataType {
+		g := f("x", 11)
+		change(g)
+		return md(g)
+	}
+	id1 := ua.NewGUID("11111111-2222-3333-4444-555555555555")
+	id2 := ua.NewGUID("11111111-2222-3333-4444-666666666666")
+	assert.False(t, sameFields(md(f("x", 11)), with(func(g *ua.FieldMetaData) { g.FieldFlags = ua.DataSetFieldFlagsPromotedField })), "FieldFlags")
+	assert.False(t, sameFields(md(f("x", 11)), with(func(g *ua.FieldMetaData) { g.MaxStringLength = 8 })), "MaxStringLength")
+	assert.True(t, sameFields(with(func(g *ua.FieldMetaData) { g.DataSetFieldID = id1 }), md(f("x", 11))), "a null DataSetFieldId is the publisher's")
+	assert.True(t, sameFields(with(func(g *ua.FieldMetaData) { g.DataSetFieldID = id1 }), with(func(g *ua.FieldMetaData) { g.DataSetFieldID = &ua.GUID{Data4: make([]byte, 8)} })), "an all-zero Guid is null")
+	assert.True(t, sameFields(with(func(g *ua.FieldMetaData) { g.DataSetFieldID = id1 }), with(func(g *ua.FieldMetaData) { g.DataSetFieldID = ua.NewGUID(id1.String()) })))
+	assert.False(t, sameFields(with(func(g *ua.FieldMetaData) { g.DataSetFieldID = id2 }), with(func(g *ua.FieldMetaData) { g.DataSetFieldID = id1 })), "the subscribers map by DataSetFieldId")
+	assert.False(t, sameFields(md(f("x", 11)), with(func(g *ua.FieldMetaData) { g.DataSetFieldID = id1 })), "a named DataSetFieldId the publisher lacks")
+	prop := func(name string, v any) *ua.KeyValuePair {
+		return &ua.KeyValuePair{Key: &ua.QualifiedName{Name: name}, Value: ua.MustVariant(v)}
+	}
+	withProps := func(ps ...*ua.KeyValuePair) *ua.DataSetMetaDataType {
+		return with(func(g *ua.FieldMetaData) { g.Properties = ps })
+	}
+	assert.True(t, sameFields(withProps(prop("EURange", 1.0), nil), withProps(prop("EURange", 1.0), nil)))
+	assert.False(t, sameFields(withProps(prop("EURange", 1.0)), withProps(prop("EURange", 2.0))), "a Property Value")
+	assert.False(t, sameFields(withProps(prop("EURange", 1.0)), withProps(prop("Unit", 1.0))), "a Property Key")
+	assert.False(t, sameFields(withProps(prop("EURange", 1.0)), withProps(&ua.KeyValuePair{Value: ua.MustVariant(1.0)})), "a null Key")
+	assert.False(t, sameFields(withProps(nil), withProps(prop("EURange", 1.0))))
+	assert.False(t, sameFields(withProps(), withProps(prop("EURange", 1.0))))
+	classed := md(f("x", 11))
+	classed.DataSetClassID = id1
+	assert.True(t, sameFields(classed, md(f("x", 11))), "a null DataSetClassId")
+	assert.False(t, sameFields(md(f("x", 11)), classed), "a DataSetClassId the publisher lacks")
+	described := with(func(g *ua.FieldMetaData) { g.Description = &ua.LocalizedText{Text: "gain"} })
+	assert.True(t, sameFields(md(f("x", 11)), described), "Descriptions are not compared")
 
 	// What is read from the server.
 	x := &run{}
@@ -429,4 +461,111 @@ func TestSameDataSet(t *testing.T) {
 	want.DataSetSource = ua.NewExtensionObject(&ua.PublishedDataItemsDataType{})
 	_, err = x.sameDataSet(context.Background(), a, ua.NewNumericNodeID(2, 1), want)
 	assert.Equal(t, Failure{uafx.FxErrorSetCommunicationConfigurationError, ua.StatusBadCommunicationError}, fxOf(t, err))
+}
+
+// TestConfigureWaves: a bundled AC is configured after the ACs it
+// subscribes to, with their PublisherIds (§6.2.6, §6.16.3); a cycle of
+// bundled ACs, or a bundled AC that subscribes to itself, cannot wait and
+// is left to adaptSubscribers, which fails it.
+func TestConfigureWaves(t *testing.T) {
+	x := &run{}
+	conn := func(id uint16) *ua.PubSubConnectionDataType {
+		return &ua.PubSubConnectionDataType{PublisherID: ua.MustVariant(id)}
+	}
+	ac := func(bundle bool) *acRun {
+		return &acRun{bundle: bundle, comm: &commModel{cfg: &ua.PubSubConfiguration2DataType{Connections: []*ua.PubSubConnectionDataType{{
+			ReaderGroups: []*ua.ReaderGroupDataType{{DataSetReaders: []*ua.DataSetReaderDataType{{PublisherID: ua.MustVariant(uint16(5))}}}},
+		}}}}}
+	}
+	sub := func(a, pub *acRun, c *ua.PubSubConnectionDataType) *epRun {
+		ep := &epRun{x: x, a: a, links: &uafx.PubSubCommunicationLinkConfiguration{DataSetReaderRef: &ua.PubSubConfigurationRefDataType{}},
+			assumedPublisher: &assumed{a: pub, conn: c, id: ua.MustVariant(uint16(5))}}
+		a.eps = append(a.eps, ep)
+		return ep
+	}
+	reader := func(a *acRun) *ua.Variant {
+		return a.comm.cfg.Connections[0].ReaderGroups[0].DataSetReaders[0].PublisherID
+	}
+
+	p, n, s, self := ac(false), ac(false), ac(true), ac(true)
+	c1, c2 := ac(true), ac(true)
+	pc := conn(7)
+	sub(s, p, pc)
+	sub(n, p, pc)
+	sub(self, self, conn(7))
+	sub(c1, c2, conn(7))
+	sub(c2, c1, conn(7))
+	waves := x.configureWaves([]*acRun{s, c1, p, n, self, c2})
+	assert.Equal(t, [][]*acRun{{p, n, self}, {s}, {c1, c2}}, waves)
+
+	// Before p is configured its PublisherId is not known.
+	x.resolvePublishers([]*acRun{s, n})
+	assert.Equal(t, ua.MustVariant(uint16(5)), reader(s))
+	p.configured = true
+	x.resolvePublishers([]*acRun{s, n, self})
+	assert.Equal(t, ua.MustVariant(uint16(7)), reader(s), "a bundled subscriber takes its publisher's PublisherId")
+	assert.Equal(t, ua.MustVariant(uint16(7)), s.eps[0].assumedPublisher.id)
+	assert.Equal(t, ua.MustVariant(uint16(5)), reader(n), "the others are adapted afterwards")
+	assert.Equal(t, ua.MustVariant(uint16(5)), reader(self), "its own PublisherId is not known before its call")
+	pc.PublisherID = nil
+	s.eps[0].assumedPublisher.id = ua.MustVariant(uint16(5))
+	x.resolvePublishers([]*acRun{s})
+	assert.Equal(t, ua.MustVariant(uint16(7)), reader(s), "a null PublisherId changes nothing")
+
+	// What could not wait fails in adaptOn.
+	x.adaptOn(context.Background(), c1, c1.eps)
+	assert.Equal(t, &Outcome{Kind: Failed, FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: ua.StatusBadConfigurationError}, c1.eps[0].outcome)
+	assert.Equal(t, [][]*acRun{{p}}, x.configureWaves([]*acRun{p}))
+	assert.Empty(t, x.configureWaves(nil))
+}
+
+// TestAdapted: a Good adaptation call fails the endpoints whose nested
+// results are Bad or missing (Table 21).
+func TestAdapted(t *testing.T) {
+	type comm = uafx.PubSubCommunicationConfigurationResult
+	type epr = uafx.ConnectionEndpointConfigurationResult
+	good := func() []*epr { return []*epr{{}, {}} }
+	cases := []struct {
+		name string
+		res  *uafx.EstablishConnectionsResult
+		want []*Outcome
+	}{
+		{"all good", &uafx.EstablishConnectionsResult{
+			CommunicationConfigurationResults:      []*comm{{ReferenceResults: []ua.StatusCode{ua.StatusGood, ua.StatusGood}}},
+			ConnectionEndpointConfigurationResults: good(),
+		}, []*Outcome{nil, nil}},
+		{"no configuration result", &uafx.EstablishConnectionsResult{ConnectionEndpointConfigurationResults: good()},
+			[]*Outcome{failedWith(ua.StatusBadUnexpectedError), failedWith(ua.StatusBadUnexpectedError)}},
+		{"configuration Bad", &uafx.EstablishConnectionsResult{
+			CommunicationConfigurationResults:      []*comm{{Result: ua.StatusBadConfigurationError}},
+			ConnectionEndpointConfigurationResults: good(),
+		}, []*Outcome{failedWith(ua.StatusBadConfigurationError), failedWith(ua.StatusBadConfigurationError)}},
+		{"one reference Bad, one missing", &uafx.EstablishConnectionsResult{
+			CommunicationConfigurationResults:      []*comm{{ReferenceResults: []ua.StatusCode{ua.StatusBadNodeIDUnknown}}},
+			ConnectionEndpointConfigurationResults: good(),
+		}, []*Outcome{failedWith(ua.StatusBadNodeIDUnknown), failedWith(ua.StatusBadUnexpectedError)}},
+		{"endpoint results Bad or missing", &uafx.EstablishConnectionsResult{
+			CommunicationConfigurationResults:      []*comm{{ReferenceResults: []ua.StatusCode{ua.StatusGood, ua.StatusGood}}},
+			ConnectionEndpointConfigurationResults: []*epr{{CommunicationLinksResult: ua.StatusBadInvalidArgument}},
+		}, []*Outcome{failedWith(ua.StatusBadInvalidArgument), failedWith(ua.StatusBadUnexpectedError)}},
+	}
+	for _, tc := range cases {
+		x := &run{}
+		eps := []*epRun{{x: x}, {x: x}}
+		x.adapted(eps, tc.res)
+		for i, ep := range eps {
+			assert.Equal(t, tc.want[i], ep.outcome, "%s: endpoint %d", tc.name, i)
+		}
+	}
+	x := &run{}
+	ep := &epRun{x: x}
+	x.adapted([]*epRun{ep}, &uafx.EstablishConnectionsResult{
+		CommunicationConfigurationResults:      []*comm{{ReferenceResults: []ua.StatusCode{ua.StatusGood}}},
+		ConnectionEndpointConfigurationResults: []*epr{{EnableCommunicationResult: ua.StatusBadInvalidState}},
+	})
+	assert.Equal(t, &Outcome{Kind: Failed, FxError: uafx.FxErrorEnableCommunicationError, Status: ua.StatusBadInvalidState}, ep.outcome)
+}
+
+func failedWith(st ua.StatusCode) *Outcome {
+	return &Outcome{Kind: Failed, FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: st}
 }
