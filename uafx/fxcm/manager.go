@@ -116,6 +116,9 @@ type Manager struct {
 	// reserved are the keys an Update with requireComplete adds, which no
 	// other Add may take meanwhile (updateComplete).
 	reserved map[string]bool
+	// beforeCommit, set by tests only, runs in updateComplete right before
+	// the batch is applied.
+	beforeCommit func()
 
 	places placeLocks
 
@@ -594,6 +597,7 @@ func (m *Manager) unclaim(s *set, prev State) {
 	tr, _ := Finish(StateProcessing, prev == StateError)
 	r := s.current
 	s.state, s.current, s.transition, s.held = prev, nil, tr, false
+	m.endClaimRunLocked(s, r)
 	s.mu.Unlock()
 	if r != nil {
 		close(r.done)
@@ -698,6 +702,19 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 		s    *set
 		prev State
 	}
+	// The whole update is counted as a run, also an add-only batch, so
+	// that Close waits for it; a closed Manager applies nothing.
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		for j := range results {
+			results[j] = managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
+		}
+		return false, results
+	}
+	m.wg.Add(1)
+	m.mu.Unlock()
+	defer m.wg.Done()
 	var held []claimed
 	fail := func(i int, err error) (bool, []error) {
 		for j := range results {
@@ -786,10 +803,19 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 			return fail(h.i, err)
 		}
 	}
+	if m.beforeCommit != nil {
+		m.beforeCommit()
+	}
 	var events []Event
 	m.mu.Lock()
 	for _, a := range adds {
 		delete(m.reserved, a)
+	}
+	if m.closed && len(closing) == 0 {
+		// Close began while the update ran and nothing irreversible
+		// happened yet: nothing is applied.
+		m.mu.Unlock()
+		return fail(0, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed"))
 	}
 	for _, h := range held {
 		if ops[h.i].Op == uafx.ElementRemove {
@@ -843,11 +869,24 @@ func (m *Manager) finishClaim(s *set) {
 	tr, _ := Finish(StateProcessing, false)
 	r := s.current
 	s.state, s.current, s.transition = StateReady, nil, tr
+	m.endClaimRunLocked(s, r)
 	s.mu.Unlock()
 	if r != nil {
 		close(r.done)
 		m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
 	}
+}
+
+// endClaimRunLocked gives the run r of a claim that closed nothing its
+// terminal result, before its done channel is closed: the state and
+// transition s took, its diagnostics, and no endpoints closed or failed.
+// r becomes the last run of s. The caller holds s.mu.
+func (m *Manager) endClaimRunLocked(s *set, r *Run) {
+	if r == nil {
+		return
+	}
+	r.result = &RunResult{State: s.state, Transition: s.transition, Diagnostics: s.diagnostics(m.opts.Monitor != nil)}
+	s.last = r
 }
 
 func (m *Manager) addConfig(cfg *Config) error {

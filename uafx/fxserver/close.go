@@ -265,15 +265,17 @@ func (c *Connections) pruneOne(e *endpoint, it pruneItem) ua.StatusCode {
 		c.mu.Unlock()
 		return ua.StatusOK
 	}
+	// A group still in use stays, and so does its connection; the
+	// PublishedDataSet of the departing writer is checked all the same.
+	shared := false
 	if created(it.group) && exists(it.group) {
-		if children(it.group) {
-			return ua.StatusOK // in use: it stays, and so does its connection
-		}
-		if sc := remove(it.group, "remove group", c.ops.removeGroup); sc != ua.StatusOK {
-			return sc
+		if shared = children(it.group); !shared {
+			if sc := remove(it.group, "remove group", c.ops.removeGroup); sc != ua.StatusOK {
+				return sc
+			}
 		}
 	}
-	if created(it.conn) && exists(it.conn) && !children(it.conn) {
+	if !shared && created(it.conn) && exists(it.conn) && !children(it.conn) {
 		if sc := remove(it.conn, "remove connection", c.ops.removeConnection); sc != ua.StatusOK {
 			return sc
 		}

@@ -233,17 +233,36 @@ func TestUpdateComplete(t *testing.T) {
 	// gives it back.
 	s, prev, err := m.claim(KeyOf(named("D")))
 	require.NoError(t, err)
+	st, _ := m.Status(KeyOf(named("D")))
+	require.NotNil(t, st.Current, "the claim is the current run")
+	claimRun := st.Current
 	assert.ErrorIs(t, m.Process(uafx.ActionEstablishConnections, KeyOf(named("D")))[0].Err, ua.StatusBadInvalidState)
 	_, err = m.StartEdit(KeyOf(named("D")), "e")
 	assert.ErrorIs(t, err, ua.StatusBadInvalidState)
 	m.unclaim(s, prev)
 	assert.Equal(t, StateReady, state("D"))
+	// The aborted claim has a terminal result, not (nil, nil).
+	rr, err := claimRun.Wait(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, rr, "an unclaimed run has a result")
+	assert.Equal(t, StateReady, rr.State)
+	assert.Equal(t, ProcessingToReady, rr.Transition)
+	assert.Empty(t, rr.Closed)
+	assert.Empty(t, rr.Failures)
+	st, _ = m.Status(KeyOf(named("D")))
+	assert.Same(t, claimRun, st.Last)
 	_, err = m.StartEdit(KeyOf(named("D")), "e")
 	require.NoError(t, err)
 	_, err = m.DiscardEdit(KeyOf(named("D")), "e")
 	require.NoError(t, err)
 
-	// [Add N, Replace D]: nothing to close, applied whole.
+	// [Add N, Replace D]: nothing to close, applied whole; the claim of D
+	// ends with a result (finishClaim).
+	var replaceRun *Run
+	m.beforeCommit = func() {
+		st, _ := m.Status(KeyOf(named("D")))
+		replaceRun = st.Current
+	}
 	applied, res = m.Update(ctx, []Operation{
 		{Op: uafx.ElementAdd, Conf: named("N")},
 		{Op: uafx.ElementReplace, Conf: named("D")},
@@ -253,6 +272,12 @@ func TestUpdateComplete(t *testing.T) {
 	assert.ElementsMatch(t, []string{"B", "C", "D", "N"}, names(m))
 	assert.Equal(t, StateReady, state("D"))
 	assert.Equal(t, ProcessingToReady, func() Transition { st, _ := m.Status(KeyOf(named("D"))); return st.Transition }())
+	m.beforeCommit = nil
+	require.NotNil(t, replaceRun)
+	rr, err = replaceRun.Wait(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, rr, "a claim that closed nothing has a result")
+	assert.Equal(t, StateReady, rr.State)
 
 	// The limit counts the keys the batch adds.
 	m2 := offlineManager(t, Options{MaxConnectionConfigurationSets: 1})
@@ -260,6 +285,53 @@ func TestUpdateComplete(t *testing.T) {
 	assert.False(t, applied)
 	assert.ErrorIs(t, res[1], ua.StatusBadResourceUnavailable)
 	assert.Empty(t, m2.Keys())
+}
+
+// TestUpdateCompleteClose: an add-only complete update is counted as a
+// run, so Close waits for it, and one that Close overtakes before anything
+// irreversible happened applies nothing (ua.StatusBadShutdown).
+func TestUpdateCompleteClose(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := offlineManager(t, Options{})
+	entered, release := make(chan struct{}), make(chan struct{})
+	m.beforeCommit = func() {
+		close(entered)
+		<-release
+	}
+	type out struct {
+		applied bool
+		res     []error
+	}
+	updated := make(chan out, 1)
+	go func() {
+		a, r := m.Update(ctx, []Operation{{Op: uafx.ElementAdd, Conf: named("N")}}, true)
+		updated <- out{a, r}
+	}()
+	<-entered
+	closed := make(chan struct{})
+	go func() {
+		_ = m.Close()
+		close(closed)
+	}()
+	select {
+	case <-closed:
+		t.Fatal("Close returned while the update was running")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+	u := <-updated
+	<-closed
+	assert.False(t, u.applied)
+	require.Len(t, u.res, 1)
+	assert.ErrorIs(t, u.res[0], ua.StatusBadShutdown)
+	assert.Empty(t, m.Keys(), "nothing was added after Close")
+	assert.Empty(t, m.reserved)
+
+	// After Close a complete update is refused at once.
+	applied, res := m.Update(ctx, []Operation{{Op: uafx.ElementAdd, Conf: named("M")}}, true)
+	assert.False(t, applied)
+	assert.ErrorIs(t, res[0], ua.StatusBadShutdown)
 }
 
 func names(m *Manager) []string {

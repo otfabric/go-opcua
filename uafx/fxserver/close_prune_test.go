@@ -123,6 +123,38 @@ func TestCloseConnectionsPrune(t *testing.T) {
 		assert.False(t, ok, "the publisher side is not in use")
 	})
 
+	// A second writer with its own PublishedDataSet in the WriterGroup the
+	// call created keeps the group, its connection and the second writer;
+	// the PublishedDataSet of the departing writer, which nothing else
+	// uses, goes all the same.
+	t.Run("shared writer group", func(t *testing.T) {
+		t.Parallel()
+		f := newFX(t, fxserver.ConnectionOptions{})
+		rt := f.srv.PubSub()
+		ep := f.operational(t, "One", -1)
+		w := f.lookup(t, pubsub.KindDataSetWriter, pubConn, wgName, writerName)
+		info, err := rt.Component(w)
+		require.NoError(t, err)
+		other, err := rt.AddPublishedDataSet(pubsub.PublishedDataItems("Other", pubsub.Var("x", f.id(actualID), ua.TypeIDDouble)))
+		require.NoError(t, err)
+		w2 := pubsub.DataSetWriter("W2", 12, "Other")
+		w2.Enabled = false
+		second, err := rt.AddDataSetWriter(info.Parent, w2)
+		require.NoError(t, err)
+		sc, results := f.close(t, true, ep)
+		require.Equal(t, ua.StatusOK, sc, "%v", results)
+		_, ok := rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, pdsName)
+		assert.False(t, ok, "the PublishedDataSet of the departing writer goes")
+		_, err = rt.Component(info.Parent)
+		require.NoError(t, err, "the shared group stays")
+		_, ok = rt.Lookup(pubsub.KindConnection, pubsub.Root, pubConn)
+		assert.True(t, ok, "and so does its connection")
+		_, err = rt.Component(second)
+		require.NoError(t, err, "the second writer stays")
+		_, err = rt.Component(other)
+		require.NoError(t, err, "and so does its PublishedDataSet")
+	})
+
 	// A removal that fails is the result of the endpoint (Table 23:
 	// Uncertain), the endpoint stays, and a later close removes what is
 	// left; each remover fails once in turn.

@@ -253,7 +253,9 @@ call created for the removed reader or writer goes as well once nothing
 uses it ("all related communication model Objects if not referenced from
 other ConnectionEndpoints", §6.2.5.2): a group without readers and
 writers, then a PubSubConnection without groups, and a PublishedDataSet no
-DataSetWriter publishes. A component is the call's when the call adds it
+DataSetWriter publishes. A group another writer or reader still uses stays
+with its PubSubConnection, but the PublishedDataSet of the departing writer
+goes all the same when no other writer publishes it. A component is the call's when the call adds it
 (an ElementAdd reference) and the call's update created it in the
 runtime, as `server.PubSubConfigurationUpdate.Created` records while the
 update applies the configuration. A preconfigured component, one the call
@@ -697,7 +699,9 @@ commit that changes the Name of an established endpoint is refused
 (§6.7.5; a set in Processing is `Bad_InvalidState`, Table 86). `Run.Wait`
 returns its `RunResult`: the state it ended in, the ConnectionsDiagnostics
 (§10.19), a `Failure` per failed endpoint, and the endpoints it created,
-closed or could not decide. `Status` is the live state of a set, `Counters`
+closed or could not decide. A Replace, Remove or `Update` that claimed a
+set and ended without closing anything ends its run with a result too:
+the state the set went back to, nothing closed and no failures. `Status` is the live state of a set, `Counters`
 the call counters of §6.7.2. Every call of a run carries the AuditEntryId
 `fxcm:<set>:run:<n>` (§6.7.3.2).
 
@@ -972,6 +976,17 @@ ConnectionConfigurationSet Objects. A file holds at most 16 MiB.
   nothing changes and the set stays, in Error. Then the batch is applied
   at once. The other operations of a refused batch are
   `Bad_InvalidState`.
+- The atomicity covers the sets of the Manager, not the
+  AutomationComponents. A close that fails part way may already have
+  closed some endpoints of the set on their AutomationComponents
+  (CloseConnections is a call per AutomationComponent, §6.2.5.2); nothing
+  reopens them, so ChangesApplied FALSE says that no set was added,
+  removed or replaced, not that no Connection was closed. The set in Error
+  and its ConnectionsDiagnostics show what the close did (library
+  interpretation).
+- The whole update counts as a run of the Manager, an add-only batch as
+  well: `Manager.Close` waits for it, and one that Close overtakes before
+  anything was closed applies nothing (`Bad_Shutdown`).
 
 A Replace or Remove through the Go API claims its set in the same way
 until it is done.
