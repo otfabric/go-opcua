@@ -104,9 +104,13 @@ func TestConnectionManagerStateOnReturn(t *testing.T) {
 		require.Equal(t, ua.StatusOK, rs[0], "run %d", i)
 		require.Equal(t, uint32(fxcmid.ConnectionConfigurationSetStateMachineTypeProcessing), state(), "run %d: the state right after the Method", i)
 		d.release()
-		require.Eventually(t, func() bool { return state() == fxcmid.ConnectionConfigurationSetStateMachineTypeError }, 10*time.Second, time.Millisecond)
+		// CurrentState.Id and LastTransition are published one after the
+		// other: wait for both of the end of the run.
+		require.Eventually(t, func() bool {
+			return state() == fxcmid.ConnectionConfigurationSetStateMachineTypeError &&
+				f.value(t, ".LastTransition").(*ua.LocalizedText).Text == "ProcessingToError"
+		}, 10*time.Second, time.Millisecond, "run %d", i)
 	}
-	assert.Equal(t, "ProcessingToError", f.value(t, ".LastTransition").(*ua.LocalizedText).Text)
 
 	for i := range 20 {
 		sc, _ := f.edit(t, f.c, uafx.StartEditing, f.set)
@@ -241,8 +245,11 @@ func TestConnectionManagerFastRun(t *testing.T) {
 		// Read after the state: the transition of this run, never one of
 		// the run before.
 		assert.Contains(t, []string{r.start, r.last}, f.value(t, ".LastTransition").(*ua.LocalizedText).Text, "run %d", i)
-		require.Eventually(t, func() bool { return f.value(t, ".CurrentState.Id").(*ua.NodeID).IntID() == r.end }, 10*time.Second, time.Millisecond, "run %d", i)
-		assert.Equal(t, r.last, f.value(t, ".LastTransition").(*ua.LocalizedText).Text, "run %d", i)
+		// Both of the end of the run, published one after the other.
+		require.Eventually(t, func() bool {
+			return f.value(t, ".CurrentState.Id").(*ua.NodeID).IntID() == r.end &&
+				f.value(t, ".LastTransition").(*ua.LocalizedText).Text == r.last
+		}, 10*time.Second, time.Millisecond, "run %d", i)
 	}
 }
 
@@ -279,11 +286,22 @@ func TestConnectionManagerDrainUnderLoad(t *testing.T) {
 	}
 	t.Cleanup(func() { cancel(); wg.Wait() })
 
-	var worst time.Duration
-	for i := range 15 {
+	// The slowest call of each Method, each timed on its own.
+	worst := map[string]time.Duration{}
+	timed := func(method string, call func()) {
 		t0 := time.Now()
-		sc, rs, err := uafx.ProcessConnectionConfigurationSets(context.Background(), f.c, uafx.ActionEstablishConnections, []*ua.NodeID{f.set})
-		worst = max(worst, time.Since(t0))
+		call()
+		worst[method] = max(worst[method], time.Since(t0))
+	}
+	for i := range 15 {
+		var (
+			sc  ua.StatusCode
+			rs  []ua.StatusCode
+			err error
+		)
+		timed("Process", func() {
+			sc, rs, err = uafx.ProcessConnectionConfigurationSets(context.Background(), f.c, uafx.ActionEstablishConnections, []*ua.NodeID{f.set})
+		})
 		require.NoError(t, err)
 		require.Equal(t, ua.StatusOK, sc, "run %d", i)
 		require.Equal(t, ua.StatusOK, rs[0], "run %d", i)
@@ -294,18 +312,18 @@ func TestConnectionManagerDrainUnderLoad(t *testing.T) {
 			return f.value(t, ".CurrentState.Id").(*ua.NodeID).IntID() == fxcmid.ConnectionConfigurationSetStateMachineTypeError
 		}, 10*time.Second, time.Millisecond, "run %d", i)
 
-		t0 = time.Now()
-		sc, _ = f.edit(t, f.c, uafx.StartEditing, f.set)
+		timed("StartEditing", func() { sc, _ = f.edit(t, f.c, uafx.StartEditing, f.set) })
 		require.Equal(t, ua.StatusOK, sc, "edit %d", i)
 		require.Equal(t, true, f.value(t, ".Edit"), "edit %d: the edit right after StartEditing", i)
-		sc, _ = f.edit(t, f.c, uafx.DiscardUpdates, f.set)
+		timed("DiscardUpdates", func() { sc, _ = f.edit(t, f.c, uafx.DiscardUpdates, f.set) })
 		require.Equal(t, ua.StatusOK, sc, "edit %d", i)
 		require.Equal(t, false, f.value(t, ".Edit"), "edit %d: no edit right after DiscardUpdates", i)
-		worst = max(worst, time.Since(t0)/2)
 	}
 	cancel()
 	wg.Wait()
-	t.Logf("%d runs of the other sets, the slowest Method %v", events.Load(), worst)
+	t.Logf("%d runs of the other sets, the slowest calls %v", events.Load(), worst)
 	assert.Positive(t, events.Load())
-	assert.Less(t, worst, 2*time.Second, "a Method held up by the events of other sets")
+	for _, m := range []string{"Process", "StartEditing", "DiscardUpdates"} {
+		assert.Less(t, worst[m], 2*time.Second, "%s held up by the events of other sets", m)
+	}
 }

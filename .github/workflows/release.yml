@@ -27,5 +27,8 @@ jobs:
       update-major-tag: false
       # chaos/... runs in the chaos job of CI (see ci.yml): next to the
       # other packages under the race detector it starves them of CPU.
-      test-exclude-regex: "(/examples($|/)|/cmd($|/)|/chaos($|/))"
+      # server, uafx/fxcm and uafx/fxserver run in the server job of CI
+      # (5 min race): beside the others each goes over the 120 s timeout
+      # this workflow gives a package (the v1.39.1 release run failed so).
+      test-exclude-regex: "(/examples($|/)|/cmd($|/)|/chaos($|/)|/server$|/uafx/fxcm$|/uafx/fxserver$)"
     secrets: inherit
