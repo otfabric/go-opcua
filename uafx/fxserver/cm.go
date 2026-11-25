@@ -36,7 +36,8 @@ const (
 	// CMWrite is a write of a SelectionList Variable of a set (§6.8.1).
 	CMWrite
 	// CMFileWrite is Open for writing of ConnectionManagerConfiguration
-	// (F.3.2).
+	// (F.3.2), and CloseAndUpdate of the written file, which asks again
+	// (F.3.3).
 	CMFileWrite
 	// CMBreakLock is BreakLock of the Lock of a set (OPC 10000-100 §7.8).
 	CMBreakLock
@@ -362,14 +363,18 @@ func ownerOf(sessionID *ua.NodeID) fxcm.LockOwner {
 // 82).
 func (c *ConnectionManager) editHandler(ctx context.Context, object, method *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if c.isClosed() {
+		c.auditCall(ctx, method, args, nil, ua.StatusBadShutdown)
 		return nil, ua.StatusBadShutdown
 	}
 	a, sets, sc := setsArgs(args)
 	if sc != ua.StatusGood {
+		// §6.7.4: an audit event for all calls.
+		c.auditCall(ctx, method, args, nil, sc)
 		return nil, sc
 	}
 	action := uafx.FxEdit(a)
 	if action != uafx.StartEditing && action != uafx.CommitUpdates && action != uafx.DiscardUpdates {
+		c.auditCall(ctx, method, args, nil, ua.StatusBadInvalidArgument)
 		return nil, ua.StatusBadInvalidArgument
 	}
 	mc, _ := server.MethodCallerFromContext(ctx)
@@ -404,6 +409,18 @@ func (c *ConnectionManager) editSet(ctx context.Context, n *ua.NodeID, action ua
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.expireLocked(s) {
+		// The expired edit is gone; s may have been rebuilt. Library
+		// interpretation: CommitUpdates of the edit that just expired is
+		// Bad_InvalidState, not the Good of a commit outside edit, as its
+		// changes were discarded.
+		if action == uafx.CommitUpdates {
+			return ua.StatusBadInvalidState
+		}
+		if s = c.sets[s.key.String()]; s == nil {
+			return ua.StatusBadNodeIDUnknown
+		}
+	}
 	switch action {
 	case uafx.StartEditing:
 		e, err := c.m.StartEdit(s.key, owner)
@@ -455,16 +472,18 @@ func statusOr(err error, def ua.StatusCode) ua.StatusCode {
 // the outcome.
 func (c *ConnectionManager) processHandler(ctx context.Context, object, method *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 	if c.isClosed() {
+		c.auditCall(ctx, method, args, nil, ua.StatusBadShutdown)
 		return nil, ua.StatusBadShutdown
 	}
 	a, sets, sc := setsArgs(args)
 	if sc != ua.StatusGood {
+		// §6.7.5: an audit event for all calls.
+		c.auditCall(ctx, method, args, nil, sc)
 		return nil, sc
 	}
 	action := uafx.FxProcess(a)
 	if fxcm.Activity(action) == 0 {
-		out := []*ua.Variant{ua.MustVariant([]ua.StatusCode{})}
-		c.auditCall(ctx, method, args, out, ua.StatusBadNotSupported)
+		c.auditCall(ctx, method, args, nil, ua.StatusBadNotSupported)
 		return nil, ua.StatusBadNotSupported
 	}
 	results := make([]ua.StatusCode, len(sets))

@@ -5,6 +5,7 @@ package fxserver
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
@@ -92,8 +93,11 @@ func (c *Connections) closeOne(ctx context.Context, n *ua.NodeID, remove bool, s
 // created for it: the reader and writer its calls configured, unless another
 // endpoint references them, and e itself unless it is preconfigured, which
 // keeps its nodes, loses its References to the removed reader and writer
-// and its RelatedEndpoint, and can be used again. The groups and
-// connections stay.
+// and its RelatedEndpoint, and can be used again. A group, PubSubConnection
+// or PublishedDataSet an EstablishConnections call added for the removed
+// reader or writer goes too once nothing uses it ("all related
+// communication model Objects if not referenced from other
+// ConnectionEndpoints"); preconfigured ones stay (prune).
 //
 // It returns Good, or the status of the first PubSub operation that failed:
 // Table 24 has no code for that, so it is the StatusCode the runtime gives,
@@ -146,11 +150,13 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 		if x.reader {
 			remover = c.ops.removeReader
 		}
+		group, pds := c.related(cid, x.reader)
 		if err := remover(cid); err != nil && !errors.Is(err, ua.StatusBadNotFound) {
 			fail("remove", cid, errors.Join(derr, err))
 			continue
 		}
 		c.setLinkLocked(e, x.reader, nil, false)
+		c.prune(e, group, pds)
 	}
 	if status != ua.StatusOK {
 		return status
@@ -166,6 +172,84 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 		c.releaseEndpoint(e)
 	}
 	return ua.StatusOK
+}
+
+// related returns the group of the DataSetReader or DataSetWriter cid and,
+// for a writer, the name of its PublishedDataSet.
+func (c *Connections) related(cid pubsub.ComponentID, reader bool) (group pubsub.ComponentID, pds string) {
+	rt := c.srv.PubSub()
+	if info, err := rt.Component(cid); err == nil {
+		group = info.Parent
+	}
+	if !reader {
+		if dw, err := rt.DataSetWriterConfig(cid); err == nil {
+			pds = dw.DataSetName
+		}
+	}
+	return group, pds
+}
+
+// prune removes, after the removal of a DataSetReader or DataSetWriter of
+// e, its group and then the group's PubSubConnection when an
+// EstablishConnections call added them and they are empty, and the
+// PublishedDataSet pds when a call added it and no DataSetWriter uses it
+// (Part 81 §6.2.5.2). Preconfigured components stay. The endpoint is
+// closed either way: a failure is logged, and the component stays.
+func (c *Connections) prune(e *endpoint, group pubsub.ComponentID, pds string) {
+	rt := c.srv.PubSub()
+	created := func(id pubsub.ComponentID) bool {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		return id != 0 && c.created[id]
+	}
+	children := func(id pubsub.ComponentID) bool {
+		for _, ci := range rt.Components() {
+			if ci.Parent == id && ci.Kind != pubsub.KindPublishedDataSet {
+				return true
+			}
+		}
+		return false
+	}
+	remove := func(id pubsub.ComponentID, op string, f func(pubsub.ComponentID) error) bool {
+		if err := f(id); err != nil && !errors.Is(err, ua.StatusBadNotFound) {
+			c.log.Warn("uafx: CloseConnections: "+op, "endpoint", e.id, "component", id, "error", err)
+			return false
+		}
+		c.mu.Lock()
+		delete(c.created, id)
+		c.mu.Unlock()
+		return true
+	}
+	if created(group) && !children(group) {
+		conn := pubsub.Root
+		if info, err := rt.Component(group); err == nil {
+			conn = info.Parent
+		}
+		if remove(group, "remove group", c.ops.removeGroup) && created(conn) && !children(conn) {
+			remove(conn, "remove connection", c.ops.removeConnection)
+		}
+	}
+	if pds == "" {
+		return
+	}
+	pid, ok := rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, pds)
+	if !ok || !created(pid) {
+		return
+	}
+	for _, conn := range rt.Configuration().Connections {
+		if conn == nil {
+			continue
+		}
+		for _, g := range conn.WriterGroups {
+			if g == nil {
+				continue
+			}
+			if slices.ContainsFunc(g.DataSetWriters, func(w *ua.DataSetWriterDataType) bool { return w != nil && w.DataSetName == pds }) {
+				return
+			}
+		}
+	}
+	remove(pid, "remove PublishedDataSet", c.ops.removePDS)
 }
 
 // badStatusOf returns the Bad StatusCode err carries, or Bad_InternalError.

@@ -137,7 +137,7 @@ func TestUpdate(t *testing.T) {
 		{Op: uafx.ElementAdd, Conf: named("Third")},
 		{Op: uafx.ElementAdd, Conf: named("Fourth")},
 	}, false)
-	assert.False(t, applied)
+	assert.True(t, applied, "F.3.3 Table F.39: one or more changes were applied")
 	assert.NoError(t, res[0])
 	assert.ErrorIs(t, res[1], ua.StatusBadBrowseNameDuplicated)
 	assert.ErrorIs(t, res[2], ua.StatusBadNothingToDo)
@@ -149,6 +149,11 @@ func TestUpdate(t *testing.T) {
 	assert.NoError(t, res[7])
 	assert.ErrorIs(t, res[8], ua.StatusBadResourceUnavailable)
 	assert.Len(t, m.Keys(), 3)
+
+	// Without RequireCompleteUpdate and no operation applied: FALSE.
+	applied, res = m.Update(context.Background(), []Operation{{Op: uafx.ElementAdd, Conf: named("New")}}, false)
+	assert.False(t, applied)
+	assert.ErrorIs(t, res[0], ua.StatusBadBrowseNameDuplicated)
 
 	// A remove makes room for an add of the same batch.
 	applied, res = m.Update(context.Background(), []Operation{
@@ -253,6 +258,19 @@ func TestOfflineRun(t *testing.T) {
 		res = process(t, m, a, cfg.Key())
 		assert.Equal(t, StateReady, res.State, "%v", a)
 	}
+	// LastTransition is the transition taken (§6.9.2): a run from Ready
+	// starts with ReadyToProcessing even after a run that ended in Error.
+	var starts []Transition
+	for _, e := range events.of(EventTransition) {
+		if e.Transition == ReadyToProcessing || e.Transition == ErrorToProcessing {
+			starts = append(starts, e.Transition)
+		}
+	}
+	// The first run, its two retries and Disable start from Error; Enable
+	// and Remove from Ready.
+	assert.Equal(t, []Transition{ReadyToProcessing, ErrorToProcessing, ErrorToProcessing, ErrorToProcessing, ReadyToProcessing, ReadyToProcessing}, starts)
+	st, _ = m.Status(cfg.Key())
+	assert.Equal(t, ProcessingToReady, st.Transition)
 }
 
 // TestClaimReserves: a Replace or Remove puts the set in Processing in the

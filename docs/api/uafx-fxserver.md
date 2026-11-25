@@ -91,7 +91,8 @@ const (
 	// CMWrite is a write of a SelectionList Variable of a set (§6.8.1).
 	CMWrite
 	// CMFileWrite is Open for writing of ConnectionManagerConfiguration
-	// (F.3.2).
+	// (F.3.2), and CloseAndUpdate of the written file, which asks again
+	// (F.3.3).
 	CMFileWrite
 	// CMBreakLock is BreakLock of the Lock of a set (OPC 10000-100 §7.8).
 	CMBreakLock
@@ -279,6 +280,11 @@ type Connections struct {
 	// 81 makes atomic (§6.2.4.3.9.1, §6.2.4.3.10.1, §6.2.5.2).
 
 	// by NodeId
+
+	// created are the PubSubConnections, groups and PublishedDataSets an
+	// EstablishConnections call added (ElementAdd) for the DataSetReader or
+	// DataSetWriter of an endpoint; CloseConnections with Remove removes
+	// them once nothing uses them (Part 81 §6.2.5.2). Guarded by mu.
 
 	// beforeExpire, when set by a test, runs after the monitor found an
 	// expired CleanupTimeout and before it takes c.call; guarded by mu.

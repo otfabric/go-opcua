@@ -77,3 +77,20 @@ func TickCMLocks(c *ConnectionManager) { c.tickLocks() }
 
 // CMSessionEnded tells the Guard of the ConnectionManager that s ended.
 func CMSessionEnded(c *ConnectionManager, s *server.Session) { cmGuard{c}.SessionEnded(s) }
+
+// SetPruneOps replaces the runtime operations that remove the groups,
+// PubSubConnections and PublishedDataSets an EstablishConnections call
+// created (prune); a nil function keeps the current one.
+func SetPruneOps(c *Connections, removeGroup, removeConnection, removePDS func(pubsub.ComponentID) error) {
+	c.call.Lock()
+	defer c.call.Unlock()
+	if removeGroup != nil {
+		c.ops.removeGroup = removeGroup
+	}
+	if removeConnection != nil {
+		c.ops.removeConnection = removeConnection
+	}
+	if removePDS != nil {
+		c.ops.removePDS = removePDS
+	}
+}

@@ -452,6 +452,21 @@ func TestConnectionManagerLock(t *testing.T) {
 	fxserver.TickCMLocks(f.cm)
 	assert.Equal(t, false, f.value(t, ".Edit"))
 
+	// Expiry between two ticks: a write and a commit after the deadline
+	// find the Lock gone, without waiting for the loop.
+	_, _ = f.edit(t, f.c, uafx.StartEditing, f.set)
+	now.Add(int64(61 * time.Second))
+	assert.Equal(t, ua.StatusBadLocked, f.write(t, f.c, f.node(".Flow[Flow1].PublishingInterval"), 20.0))
+	_, _ = f.edit(t, f.c, uafx.StartEditing, f.set)
+	now.Add(int64(61 * time.Second))
+	_, rs := f.edit(t, f.c, uafx.CommitUpdates, f.set)
+	assert.Equal(t, []ua.StatusCode{ua.StatusBadInvalidState}, rs)
+	assert.Equal(t, false, f.value(t, ".Edit"))
+	_, _ = f.edit(t, f.c, uafx.StartEditing, f.set)
+	now.Add(int64(61 * time.Second))
+	st, _ = f.lockCall(t, f.c, "RenewLock")
+	assert.Equal(t, int32(-1), st, "an expired Lock is not renewed")
+
 	// The end of the session.
 	c := f.client(t, "urn:test:gone", true)
 	_, _ = f.edit(t, c, uafx.StartEditing, f.set)
@@ -553,6 +568,38 @@ func TestConnectionManagerFile(t *testing.T) {
 	_, sc = call(f.c, "Write", h, []byte{1})
 	assert.Equal(t, ua.StatusBadInvalidState, sc)
 
+	_, sc = call(f.c, "Close", h)
+	require.Equal(t, ua.StatusOK, sc)
+
+	// RequireCompleteUpdate FALSE: one of two applied is ChangesApplied
+	// TRUE (F.3.3 Table F.39).
+	partial, err := fxcm.EncodeFile([]*uafx.ConnectionConfigurationSetConf{cmConf("Line3"), cmConf("Line2")})
+	require.NoError(t, err)
+	out, _ = call(f.c, "Open", uint8(0x06))
+	h = out[0].Value().(uint32)
+	_, _ = call(f.c, "Write", h, partial)
+	out, sc = call(f.c, "CloseAndUpdate", h, false, []byte{byte(uafx.ElementAdd), byte(uafx.ElementAdd)})
+	require.Equal(t, ua.StatusOK, sc)
+	assert.Equal(t, true, out[0].Value(), "one set applied")
+	rs := out[1].Value().([]ua.StatusCode)
+	assert.Equal(t, ua.StatusGood, rs[0])
+	assert.NotEqual(t, ua.StatusGood, rs[1], "Line2 exists")
+
+	// The handles of a session end with it (OPC 10000-20 §4.2.1): its
+	// writer no longer blocks another.
+	gone := f.client(t, "urn:test:gone", true)
+	out, sc = call(gone, "Open", uint8(0x06))
+	require.Equal(t, ua.StatusOK, sc)
+	_, sc = call(f.c, "Open", uint8(0x06))
+	assert.Equal(t, ua.StatusBadInvalidState, sc)
+	require.NoError(t, gone.Close(context.Background()))
+	require.Eventually(t, func() bool {
+		out, sc = call(f.c, "Open", uint8(0x06))
+		return sc == ua.StatusOK
+	}, 10*time.Second, 10*time.Millisecond)
+	_, sc = call(f.c, "Close", out[0].Value().(uint32))
+	require.Equal(t, ua.StatusOK, sc)
+
 	// Writing needs ConfigureAdmin.
 	plain := f.client(t, "urn:test:plain", false)
 	_, sc = call(plain, "Open", uint8(0x06))
@@ -596,6 +643,40 @@ func TestConnectionManagerFollowsManager(t *testing.T) {
 	assert.ErrorIs(t, err, ua.StatusBadShutdown)
 }
 
+// TestConnectionManagerNodeIDs: the names in the String NodeIds are
+// escaped, so a set "Line1.Version" is not the Version of Line1 and a
+// Folder "a/b" is not the Folders a and b.
+func TestConnectionManagerNodeIDs(t *testing.T) {
+	t.Parallel()
+	f := newCMFX(t, fxserver.ConnectionManagerOptions{})
+	dotted := cmConf("Line1.Version")
+	_, err := f.m.Add(dotted)
+	require.NoError(t, err)
+	slash := cmConf("S")
+	slash.ConnectionConfigurationSetFolder = []string{"a/b"}
+	_, err = f.m.Add(slash)
+	require.NoError(t, err)
+	nested := cmConf("S")
+	nested.ConnectionConfigurationSetFolder = []string{"a", "b"}
+	_, err = f.m.Add(nested)
+	require.NoError(t, err)
+	f.cm.Flush()
+
+	n1, ok := f.cm.SetNode(fxcm.KeyOf(dotted))
+	require.True(t, ok)
+	assert.NotEqual(t, f.node(".Version").String(), n1.String())
+	assert.Equal(t, uint32(1), f.value(t, ".Version"), "Line1's Version is still a Variable")
+	n2, ok := f.cm.SetNode(fxcm.KeyOf(slash))
+	require.True(t, ok)
+	n3, ok := f.cm.SetNode(fxcm.KeyOf(nested))
+	require.True(t, ok)
+	assert.NotEqual(t, n2.String(), n3.String())
+	for _, n := range []*ua.NodeID{n1, n2, n3} {
+		dv := f.read(t, f.c, n)
+		assert.Equal(t, ua.StatusBadAttributeIDInvalid, dv.Status, "%v is an Object", n)
+	}
+}
+
 // TestConnectionManagerAudit: with auditing, a call of a Method reports an
 // AuditUpdateMethodResultEventType event and a write of a set an
 // AuditUpdateConnectionConfigurationSetEventType event (§6.7.4, §8.5).
@@ -612,6 +693,16 @@ func TestConnectionManagerAudit(t *testing.T) {
 	w := nextEvent(t, events, ua.NewNumericNodeID(f.ns.CM, fxcmid.AuditUpdateConnectionConfigurationSetEventType))
 	assert.Equal(t, pi.String(), w[1].Value().(*ua.NodeID).String())
 	assert.Equal(t, true, w[2].Value())
+
+	// A call refused before it reaches a set is audited too (§6.7.4).
+	_, _, err := uafx.EditConnectionConfigurationSets(context.Background(), f.c, 99, []*ua.NodeID{f.set})
+	require.Error(t, err)
+	call = nextEvent(t, events, ua.NewNumericNodeID(f.ns.Data, fxdataid.AuditUpdateMethodResultEventType))
+	assert.Equal(t, false, call[2].Value())
+	_, _, err = uafx.ProcessConnectionConfigurationSets(context.Background(), f.c, 99, []*ua.NodeID{f.set})
+	require.Error(t, err)
+	call = nextEvent(t, events, ua.NewNumericNodeID(f.ns.Data, fxdataid.AuditUpdateMethodResultEventType))
+	assert.Equal(t, false, call[2].Value())
 }
 
 // TestEnableConnectionManagerErrors: the model and the Manager are needed.

@@ -2351,6 +2351,7 @@ func (x *run) finish() *RunResult {
 		}
 	}
 	x.res.State, x.res.Transition = s.state, tr
+	s.transition = tr
 	x.res.Diagnostics = s.diagnostics(monitored)
 	s.current = nil
 	s.last = x.r

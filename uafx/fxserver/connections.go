@@ -113,7 +113,12 @@ type Connections struct {
 	once sync.Once
 
 	ops pubsubOps
-	ctl controls
+	// created are the PubSubConnections, groups and PublishedDataSets an
+	// EstablishConnections call added (ElementAdd) for the DataSetReader or
+	// DataSetWriter of an endpoint; CloseConnections with Remove removes
+	// them once nothing uses them (Part 81 §6.2.5.2). Guarded by mu.
+	created map[pubsub.ComponentID]bool
+	ctl     controls
 	// beforeExpire, when set by a test, runs after the monitor found an
 	// expired CleanupTimeout and before it takes c.call; guarded by mu.
 	beforeExpire func()
@@ -125,7 +130,8 @@ type Connections struct {
 // pubsubOps are the operations of the PubSub runtime that close
 // ConnectionEndpoints; tests replace them to inject failures.
 type pubsubOps struct {
-	disable, removeReader, removeWriter func(pubsub.ComponentID) error
+	disable, removeReader, removeWriter      func(pubsub.ComponentID) error
+	removeGroup, removeConnection, removePDS func(pubsub.ComponentID) error
 }
 
 // automationComponent is an AutomationComponent of the server.
@@ -166,7 +172,9 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	}
 	c.retryCleanup = time.Second
 	rt := srv.PubSub()
-	c.ops = pubsubOps{disable: rt.Disable, removeReader: rt.RemoveDataSetReader, removeWriter: rt.RemoveDataSetWriter}
+	c.ops = pubsubOps{disable: rt.Disable, removeReader: rt.RemoveDataSetReader, removeWriter: rt.RemoveDataSetWriter,
+		removeGroup: rt.RemoveGroup, removeConnection: rt.RemoveConnection, removePDS: rt.RemovePublishedDataSet}
+	c.created = map[pubsub.ComponentID]bool{}
 	for _, ref := range c.children(ua.NewNumericNodeID(ns.Data, fxRootID), id.Organizes) {
 		n := ref.NodeID.NodeID
 		if !c.isA(n, fxacid.AutomationComponentType) {

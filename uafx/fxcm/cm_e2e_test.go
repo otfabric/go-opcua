@@ -302,13 +302,20 @@ func TestConnectionManagerLifecycle(t *testing.T) {
 	require.Eventually(t, func() bool { return a.value(t, fxtest.ConnSetpoint) == 19.0 }, 10*time.Second, 10*time.Millisecond)
 	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 42.5 }, 10*time.Second, 10*time.Millisecond)
 
-	// 6. Remove: the endpoints and the writers and readers the
-	// ConnectionManager configured are gone on both ACs.
+	// 6. Remove: the endpoints, and the writers, readers, groups,
+	// PubSubConnections and PublishedDataSets the ConnectionManager's
+	// calls created, are gone on both ACs (§6.2.5.2): the establishes
+	// before left nothing behind.
 	expectRun(uafx.ActionRemoveConnections, set)
 	assert.Empty(t, a.endpoints())
 	assert.Empty(t, b.endpoints())
 	assert.Zero(t, countWritersReaders(a))
 	assert.Zero(t, countWritersReaders(b))
+	for _, x := range []*ac{a, b} {
+		cfg := x.srv.PubSub().Configuration()
+		assert.Empty(t, cfg.Connections)
+		assert.Empty(t, cfg.PublishedDataSets)
+	}
 	diag(uafx.ConnectionNotEstablished)
 	assert.Equal(t, fxcm.StateReady.String(), s.state(t, "Life"))
 	c := m.Counters()
@@ -319,17 +326,15 @@ func TestConnectionManagerLifecycle(t *testing.T) {
 	assert.Equal(t, c.EstablishCallCount, dv.Value(), "the Diagnostics counters follow the Manager")
 }
 
-// writerGroupInterval is the PublishingInterval of the WriterGroup of the
-// PubSub runtime of a that has a DataSetWriter. A close leaves the groups
-// (fxserver closeEndpoint), so a new establish adds a new one.
+// writerGroupInterval is the PublishingInterval of the one WriterGroup of
+// the PubSub runtime of a: a close with Remove takes the group the
+// establish created (fxserver prune), so none accumulate.
 func writerGroupInterval(t *testing.T, a *ac) float64 {
 	t.Helper()
 	var out []float64
 	for _, c := range a.srv.PubSub().Configuration().Connections {
 		for _, wg := range c.WriterGroups {
-			if len(wg.DataSetWriters) > 0 {
-				out = append(out, wg.PublishingInterval)
-			}
+			out = append(out, wg.PublishingInterval)
 		}
 	}
 	require.Len(t, out, 1)

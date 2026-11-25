@@ -278,17 +278,17 @@ func TestConnectionsLifecycle(t *testing.T) {
 		return ok && st == uafx.ConnectionEndpointOperational
 	}, 5*time.Second, 5*time.Millisecond)
 
-	// Close with Remove: the endpoint and the reader and writer go.
+	// Close with Remove: the endpoint and the reader and writer go, and
+	// the groups, connections and PublishedDataSet the call added, now
+	// empty (§6.2.5.2).
 	sc, results, err := uafx.CloseConnections(ctx, f.c, f.id(ctlID), []*ua.NodeID{ep}, true)
 	require.NoError(t, err)
 	require.Equal(t, ua.StatusOK, sc)
 	require.Equal(t, []ua.StatusCode{ua.StatusOK}, results)
 	require.Nil(t, f.srv.Node(ep))
 	rt := f.srv.PubSub()
-	sub, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
-	require.True(t, ok, "the connections stay")
-	rg, ok := rt.Lookup(pubsub.KindReaderGroup, sub, rgName)
-	require.True(t, ok, "the groups stay")
-	_, ok = rt.Lookup(pubsub.KindDataSetReader, rg, readerName)
-	require.False(t, ok, "the reader the call configured goes")
+	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
+	require.False(t, ok, "the connection the call added goes once empty")
+	require.Empty(t, rt.Configuration().Connections, "nothing of the call is left")
+	require.Empty(t, rt.Configuration().PublishedDataSets)
 }

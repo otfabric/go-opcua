@@ -731,7 +731,7 @@ Status returns the live state of a set.
 func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error)
 ```
 
-Update applies a batch of operations as CloseAndUpdate does (F.3.3, design §5.8). First the whole batch is checked: one operation bit (FC-6, ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a Remove or Replace), the state (ua.StatusBadInvalidState while processed or edited), and every new set. With requireComplete, one failure ends the call there: nothing is closed or changed, applied is false. Else the failed operations are dropped. Then the operations are applied in order; a remove or replace whose close fails fails (the old set stays, in Error), and with requireComplete the operations after it are skipped (ua.StatusBadInvalidState). applied is true when every operation was applied. results has one error per operation, nil for success.
+Update applies a batch of operations as CloseAndUpdate does (F.3.3, design §5.8). First the whole batch is checked: one operation bit (FC-6, ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a Remove or Replace), the state (ua.StatusBadInvalidState while processed or edited), and every new set. With requireComplete, one failure ends the call there: nothing is closed or changed, applied is false. Else the failed operations are dropped. Then the operations are applied in order; a remove or replace whose close fails fails (the old set stays, in Error), and with requireComplete the operations after it are skipped (ua.StatusBadInvalidState). applied is ChangesApplied of Table F.39: true when one or more operations were applied, false when none was. With requireComplete that is every operation, except when a close fails after earlier operations were applied: those stay applied and applied is true (library interpretation: Table F.39 has no value for a partial complete update; FALSE would say that nothing changed). results has one error per operation, nil for success.
 
 ### type MonitorOptions
 
@@ -1221,6 +1221,9 @@ type Status struct {
 	// Current is the run in progress, Last the last finished one.
 	Current *Run
 	Last    *Run
+	// Transition is the transition the state machine of the set took last
+	// (LastTransition, §6.9.2), 0 before the first.
+	Transition Transition
 	// Endpoints are the endpoints the Manager made, took or may have made
 	// for the set (design §5.3).
 	Endpoints []EndpointRecord

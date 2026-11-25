@@ -145,9 +145,26 @@ func (b *nodeBuilder) variableOf(sid string, bn *ua.QualifiedName, dt *ua.NodeID
 
 // --- the sets ---------------------------------------------------------------
 
+// idEscaper escapes the characters the String NodeIds of the sets use as
+// separators, so that no two names give the same NodeId: a set "A.Version"
+// is not the Version of a set "A", a Folder "a/b" not the Folders a and b.
+var idEscaper = strings.NewReplacer("%", "%25", "/", "%2F", ".", "%2E", "[", "%5B", "]", "%5D")
+
+// idPart is a name as a part of a String NodeId of the ConnectionManager.
+func idPart(name string) string { return idEscaper.Replace(name) }
+
+// idPath is the escaped names of path joined with "/".
+func idPath(path []string) string {
+	parts := make([]string, len(path))
+	for i, p := range path {
+		parts[i] = idPart(p)
+	}
+	return strings.Join(parts, "/")
+}
+
 // setNodeID is the NodeId of the Object of a set.
 func (c *ConnectionManager) setNodeID(k fxcm.SetKey) string {
-	return "cm.set:" + strings.Join(append(append([]string{}, k.Folder...), k.Name), "/")
+	return "cm.set:" + idPath(append(append([]string{}, k.Folder...), k.Name))
 }
 
 // syncSetLocked brings the projection of key up to date with the Manager:
@@ -248,7 +265,7 @@ func shapeOf(conf *uafx.ConnectionConfigurationSetConf) string {
 func (c *ConnectionManager) folderLocked(path []string) (*ua.NodeID, error) {
 	parent := c.folder
 	for i := range path {
-		k := strings.Join(path[:i+1], "/")
+		k := idPath(path[:i+1])
 		if f, ok := c.folders[k]; ok {
 			parent = f
 			continue
@@ -324,12 +341,12 @@ func (c *ConnectionManager) buildSetLocked(k fxcm.SetKey, conf *uafx.ConnectionC
 		return nil, err
 	}
 	last, err := pb.v(sm, sid+".LastTransition", qn(0, "LastTransition"), dt0(id.LocalizedText), -1, dt0(id.FiniteTransitionVariableType), false,
-		func(v *cmView) any { return ua.NewLocalizedText(lastTransition(v.st).String()) })
+		func(v *cmView) any { return ua.NewLocalizedText(v.st.Transition.String()) })
 	if err != nil {
 		return nil, err
 	}
 	if _, err := pb.p(last, sid+".LastTransition.Id", qn(0, "Id"), dt0(id.NodeID), -1, func(v *cmView) any {
-		if t := lastTransition(v.st); t != 0 {
+		if t := v.st.Transition; t != 0 {
 			return ua.NewNumericNodeID(cmNS, t.ID())
 		}
 		return ua.NewTwoByteNodeID(0)
@@ -387,22 +404,6 @@ func (c *ConnectionManager) buildSetLocked(k fxcm.SetKey, conf *uafx.ConnectionC
 	c.byNode[s.id.String()] = s
 	ok = true
 	return s, nil
-}
-
-// lastTransition is the transition the set took last: that of its run in
-// progress or of its last run.
-func lastTransition(st fxcm.Status) fxcm.Transition {
-	switch {
-	case st.State == fxcm.StateProcessing && st.Last != nil:
-		return fxcm.ErrorToProcessing
-	case st.State == fxcm.StateProcessing:
-		return fxcm.ReadyToProcessing
-	case st.State == fxcm.StateError:
-		return fxcm.ProcessingToError
-	case st.Last != nil:
-		return fxcm.ProcessingToReady
-	}
-	return 0
 }
 
 // diagnostics encodes ConnectionsDiagnostics (§6.8.2).
@@ -508,7 +509,7 @@ func (p *projector) servers(obj *server.Node, sid string, conf *uafx.ConnectionC
 			}
 			return &uafx.ServerAddressConf{}
 		}
-		ssid := fmt.Sprintf("%s.ServerAddress[%s]", sid, sa.BrowseName)
+		ssid := fmt.Sprintf("%s.ServerAddress[%s]", sid, idPart(sa.BrowseName))
 		x, err := p.v(obj, ssid, qn(cmNS, sa.BrowseName), ua.NewNumericNodeID(cmNS, fxcmid.ServerAddressDataType), -1,
 			ua.NewNumericNodeID(cmNS, fxcmid.ServerAddressType), false, func(*cmView) any { return nil })
 		if err != nil {
@@ -559,7 +560,7 @@ func (p *projector) acs(obj *server.Node, sid string, conf *uafx.ConnectionConfi
 			}
 			return &uafx.AutomationComponentConfigurationConf{}
 		}
-		asid := fmt.Sprintf("%s.AC[%s]", sid, a.BrowseName)
+		asid := fmt.Sprintf("%s.AC[%s]", sid, idPart(a.BrowseName))
 		n, err := p.b.object(asid, qn(cmNS, a.BrowseName), ua.NewNumericNodeID(cmNS, fxcmid.AutomationComponentConfigurationType))
 		if err != nil {
 			return nil, err
@@ -611,7 +612,7 @@ func (p *projector) flows(obj *server.Node, sid string, conf *uafx.ConnectionCon
 			}
 			return &uafx.PubSubCommunicationFlowConfigurationConf{}
 		}
-		fsid := fmt.Sprintf("%s.Flow[%s]", sid, ps.BrowseName)
+		fsid := fmt.Sprintf("%s.Flow[%s]", sid, idPart(ps.BrowseName))
 		n, err := p.b.object(fsid, qn(cmNS, ps.BrowseName), ua.NewNumericNodeID(cmNS, fxcmid.PubSubCommunicationFlowConfigurationType))
 		if err != nil {
 			return nil, err
@@ -663,7 +664,7 @@ func (p *projector) flows(obj *server.Node, sid string, conf *uafx.ConnectionCon
 				}
 				return &uafx.SubscriberConfigurationConf{}
 			}
-			ssid := fmt.Sprintf("%s.Sub[%s]", fsid, sc.BrowseName)
+			ssid := fmt.Sprintf("%s.Sub[%s]", fsid, idPart(sc.BrowseName))
 			sn, err := p.b.object(ssid, qn(cmNS, sc.BrowseName), ua.NewNumericNodeID(cmNS, fxcmid.SubscriberConfigurationType))
 			if err != nil {
 				return nil, err
@@ -692,7 +693,7 @@ func (p *projector) connections(obj *server.Node, sid string, conf *uafx.Connect
 	cmNS := p.c.ns.CM
 	for i, cn := range conf.Connections {
 		i := i
-		csid := fmt.Sprintf("%s.Conn[%s]", sid, cn.BrowseName)
+		csid := fmt.Sprintf("%s.Conn[%s]", sid, idPart(cn.BrowseName))
 		n, err := p.b.object(csid, qn(cmNS, cn.BrowseName), ua.NewNumericNodeID(cmNS, fxcmid.ConnectionConfigurationType))
 		if err != nil {
 			return err

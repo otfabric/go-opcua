@@ -199,7 +199,7 @@ func callerOwnsSet(ctx context.Context, s *cmSet) bool {
 func (c *ConnectionManager) renewLock(ctx context.Context, s *cmSet) (int32, ua.StatusCode) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if !callerOwnsSet(ctx, s) {
+	if c.expireLocked(s) || !callerOwnsSet(ctx, s) {
 		return lockBusy, ua.StatusGood
 	}
 	s.deadline = c.now().Add(c.maxInactive)
@@ -244,6 +244,19 @@ func (c *ConnectionManager) loseLockLocked(s *cmSet) {
 
 // tickLocks expires the Locks of the sets in edit and updates their
 // RemainingLockTime.
+// expireLocked releases the Lock of s when its deadline passed, before the
+// next tick does: a write, an edit action or RenewLock of an owner whose
+// Lock expired must not count (OPC 10000-100 §7.2). It reports whether it
+// released it; s may have been rebuilt then. c.mu is held.
+func (c *ConnectionManager) expireLocked(s *cmSet) bool {
+	if s.edit == nil || c.now().Before(s.deadline) {
+		return false
+	}
+	c.log.Debug("uafx: the Lock of a set in edit expired", "set", s.key.String())
+	c.loseLockLocked(s)
+	return true
+}
+
 func (c *ConnectionManager) tickLocks() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -253,8 +266,7 @@ func (c *ConnectionManager) tickLocks() {
 			continue
 		}
 		if !now.Before(s.deadline) {
-			c.log.Debug("uafx: the Lock of a set in edit expired", "set", s.key.String())
-			c.loseLockLocked(s)
+			c.expireLocked(s)
 			continue
 		}
 		c.syncSetLocked(s.key)
@@ -285,6 +297,9 @@ func (g cmGuard) SessionEnded(sess *server.Session) {
 			c.loseLockLocked(s)
 		}
 	}
+	if c.file != nil {
+		c.file.dropSession(owner)
+	}
 }
 
 // --- SelectionList writes ---------------------------------------------------
@@ -310,7 +325,7 @@ func (c *ConnectionManager) writer(x *cmVar) server.ValueWriter {
 			c.mu.Unlock()
 			return ua.StatusBadNodeIDUnknown
 		}
-		if s.edit == nil || w.Session == nil || ownerOf(w.Session.ID()) != s.owner {
+		if c.expireLocked(s) || s.edit == nil || w.Session == nil || ownerOf(w.Session.ID()) != s.owner {
 			// The set is locked to the ConnectionManager or another
 			// client (§6.8.2).
 			c.mu.Unlock()

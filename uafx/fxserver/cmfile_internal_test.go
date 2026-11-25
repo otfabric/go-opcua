@@ -16,7 +16,7 @@ import (
 func TestCMFileArguments(t *testing.T) {
 	ctx := context.Background()
 	f := &cmFile{handles: map[uint32]*fileHandle{}}
-	c := &ConnectionManager{}
+	c := &ConnectionManager{opts: ConnectionManagerOptions{Authorizer: func(context.Context, CMRequest) ua.StatusCode { return ua.StatusOK }}}
 	v := ua.MustVariant
 	h := v(uint32(1))
 	type m = func(context.Context, []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
@@ -66,6 +66,12 @@ func TestCMFileArguments(t *testing.T) {
 	assert.Equal(t, ua.StatusGood, sc, "a null ByteString writes nothing")
 	_, sc = f.closeAndUpdate(c)(ctx, []*ua.Variant{h, v(true), v([]byte{})})
 	assert.Equal(t, ua.StatusBadTypeMismatch, sc, "not a file body")
+	// F.3.3: CloseAndUpdate authorizes again; a refused call closes the
+	// handle and decodes nothing.
+	f.handles[3] = &fileHandle{write: true, data: []byte("x")}
+	_, sc = f.closeAndUpdate(&ConnectionManager{})(ctx, []*ua.Variant{v(uint32(3)), v(true), {}})
+	assert.Equal(t, ua.StatusBadUserAccessDenied, sc)
+	assert.NotContains(t, f.handles, uint32(3))
 	f.handles[2] = &fileHandle{}
 	_, sc = f.read(ctx, []*ua.Variant{v(uint32(2)), v(int32(-1))})
 	assert.Equal(t, ua.StatusBadInvalidState, sc)

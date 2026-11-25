@@ -543,7 +543,9 @@ func TestCloseConnections(t *testing.T) {
 	require.Equal(t, []ua.StatusCode{ua.StatusOK}, results)
 	assert.False(t, pubsubIDs(f)["DataSetWriter/"+writerName])
 	assert.Nil(t, f.srv.Node(ep2))
-	assert.True(t, pubsubIDs(f)["WriterGroup/"+wgName], "the groups stay")
+	// The call added the groups and connections (ElementAdd): they go
+	// once empty (§6.2.5.2).
+	assert.False(t, pubsubIDs(f)["WriterGroup/"+wgName], "an emptied group the call added goes")
 
 	// Element errors (Table 24).
 	sc, results, err = uafx.CloseConnections(ctx, f.c, f.id(ctlID), []*ua.NodeID{
@@ -938,7 +940,7 @@ func TestConnectionsAudit(t *testing.T) {
 	assert.True(t, sameNode(f.id(motionID), a.source))
 	assert.Equal(t, "Audited", a.removed)
 	assert.Nil(t, f.srv.Node(ep))
-	assert.True(t, pubsubIDs(f)["Connection/"+subConn], "a connection is not the endpoint's to remove")
+	assert.False(t, pubsubIDs(f)["Connection/"+subConn], "the cleanup removes the emptied connection the call added (§6.2.5.2)")
 }
 
 // TestEstablishAbortLate: an abort after part of the call has run undoes
@@ -1050,10 +1052,8 @@ func TestEstablishModifyKeepsOwnership(t *testing.T) {
 	sc, results := f.close(t, true, ep)
 	require.Equal(t, ua.StatusOK, sc, "%v", results)
 	rt := f.srv.PubSub()
-	c, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
-	require.True(t, ok)
-	g, ok := rt.Lookup(pubsub.KindReaderGroup, c, rgName)
-	require.True(t, ok)
-	_, ok = rt.Lookup(pubsub.KindDataSetReader, g, readerName)
-	assert.False(t, ok, "the modified reader is removed with its endpoint")
+	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
+	assert.False(t, ok, "the modified reader is removed with its endpoint, and its emptied group and connection")
+	_, err = rt.Component(after)
+	assert.Error(t, err)
 }

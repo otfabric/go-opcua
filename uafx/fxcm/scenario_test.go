@@ -200,10 +200,14 @@ func TestEstablishTwice(t *testing.T) {
 	_, ok := m.Status(cfg.Key())
 	assert.False(t, ok)
 
-	// The PublishedDataSet "PDS" of the set stays on a after the remove
-	// (§6.2.5.2), and the set above reused it. A set whose PublishedDataSet
-	// has that Name but publishes another Variable does not reuse it: the
-	// run fails before anything is created.
+	// The calls of the set added the PublishedDataSet "PDS" on a, so the
+	// remove took it (§6.2.5.2). One a has itself, preconfigured, stays;
+	// a set whose PublishedDataSet has that Name but publishes another
+	// Variable does not reuse it: the run fails before anything is created.
+	_, ok = a.srv.PubSub().Lookup(pubsub.KindPublishedDataSet, pubsub.Root, "PDS")
+	assert.False(t, ok, "the remove took the PublishedDataSet the set added")
+	_, err = a.srv.PubSub().AddPublishedDataSet(pubsub.PublishedDataItems("PDS", pubsub.Var("x", a.id(fxtest.ConnActual), ua.TypeIDDouble)))
+	require.NoError(t, err)
 	other := e2eConf(t, "Other", a, b)
 	model := other.AutomationComponentConfigurations[0].CommunicationModelConfig.(*uafx.PubSubCommunicationModelConfiguration)
 	model.PubSubConfiguration.PublishedDataSets[0] = pubsub.PublishedDataItems("PDS", pubsub.Var("x", ua.NewNumericNodeID(e2eTest, fxtest.ConnGain), ua.TypeIDDouble))
@@ -477,6 +481,15 @@ func TestAdaptPublisherID(t *testing.T) {
 	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnSetpoint) == 42.5 }, 10*time.Second, 10*time.Millisecond)
 	remove()
+	// The remove took the PubSubConnection the set added on a (§6.2.5.2).
+	// a has it preconfigured from here on, with PublisherId 4242 and no
+	// groups, so the remove keeps it.
+	_, ok := a.srv.PubSub().Lookup(pubsub.KindConnection, pubsub.Root, pubConn.Name)
+	require.False(t, ok)
+	pre := *pubConn
+	pre.WriterGroups, pre.ReaderGroups = nil, nil
+	_, err := a.srv.PubSub().AddConnection(&pre)
+	require.NoError(t, err)
 
 	// The set says 5151; the connection it matches has 4242.
 	pubConn.PublisherID = ua.MustVariant(uint16(5151))

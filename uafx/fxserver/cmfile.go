@@ -132,6 +132,20 @@ func callerSession(ctx context.Context) fxcm.LockOwner {
 	return ""
 }
 
+// dropSession closes the handles of a session that ended: a FileHandle is
+// valid in the session that opened it only (OPC 10000-20 §4.2.1), and the
+// written data of a closed handle is discarded, as Close does (F.3.3).
+// Without it an abandoned writer would block every later Open.
+func (f *cmFile) dropSession(owner fxcm.LockOwner) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for h, fh := range f.handles {
+		if fh.session == owner {
+			delete(f.handles, h)
+		}
+	}
+}
+
 // handle returns the open handle h of the caller's session.
 func (f *cmFile) handle(ctx context.Context, v *ua.Variant) (uint32, *fileHandle, ua.StatusCode) {
 	h, ok := v.Value().(uint32)
@@ -314,6 +328,12 @@ func (f *cmFile) closeAndUpdate(c *ConnectionManager) func(ctx context.Context, 
 		}
 		f.mu.Unlock()
 		if sc != ua.StatusGood {
+			return nil, sc
+		}
+		// F.3.3: the Client shall be authorized when it calls
+		// CloseAndUpdate, not only when it opened the file. A refused call
+		// closes the handle and changes nothing, as Close does.
+		if sc := c.authorize(ctx, CMRequest{Operation: CMFileWrite}); sc != ua.StatusOK {
 			return nil, sc
 		}
 		sets, err := fxcm.DecodeFile(fh.data)

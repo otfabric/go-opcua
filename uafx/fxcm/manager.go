@@ -139,6 +139,9 @@ type set struct {
 	records map[string]*record
 	current *Run
 	last    *Run
+	// transition is the transition the state machine took last (§6.9.2),
+	// 0 before the first.
+	transition Transition
 	// lastEstablish is the action of the last establish run, which the
 	// monitor repeats with Reestablish.
 	lastEstablish *uafx.FxProcess
@@ -314,6 +317,9 @@ type Status struct {
 	// Current is the run in progress, Last the last finished one.
 	Current *Run
 	Last    *Run
+	// Transition is the transition the state machine of the set took last
+	// (LastTransition, §6.9.2), 0 before the first.
+	Transition Transition
 	// Endpoints are the endpoints the Manager made, took or may have made
 	// for the set (design §5.3).
 	Endpoints []EndpointRecord
@@ -331,7 +337,7 @@ func (m *Manager) Status(key SetKey) (Status, bool) {
 }
 
 func (s *set) status(monitored bool) Status {
-	st := Status{State: s.state, Version: s.cfg.version, Editing: s.edit.Editing() != nil, Current: s.current, Last: s.last}
+	st := Status{State: s.state, Version: s.cfg.version, Editing: s.edit.Editing() != nil, Current: s.current, Last: s.last, Transition: s.transition}
 	st.Diagnostics = s.diagnostics(monitored)
 	st.Endpoints = s.endpointList()
 	return st
@@ -534,7 +540,7 @@ func (m *Manager) claim(key SetKey) (*set, State, error) {
 	}
 	prev := s.state
 	r := &Run{id: RunID(m.runs.Add(1)), key: key, version: s.cfg.version, action: ActionRemoveSet, done: make(chan struct{})}
-	s.state, s.current = StateProcessing, r
+	s.state, s.current, s.transition = StateProcessing, r, tr
 	if s.retry != nil {
 		s.retry.Stop()
 		s.retry = nil
@@ -588,8 +594,13 @@ type Operation struct {
 // failed operations are dropped. Then the operations are applied in order;
 // a remove or replace whose close fails fails (the old set stays, in
 // Error), and with requireComplete the operations after it are skipped
-// (ua.StatusBadInvalidState). applied is true when every operation was
-// applied. results has one error per operation, nil for success.
+// (ua.StatusBadInvalidState). applied is ChangesApplied of Table F.39:
+// true when one or more operations were applied, false when none was.
+// With requireComplete that is every operation, except when a close fails
+// after earlier operations were applied: those stay applied and applied is
+// true (library interpretation: Table F.39 has no value for a partial
+// complete update; FALSE would say that nothing changed). results has one
+// error per operation, nil for success.
 func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error) {
 	results = make([]error, len(ops))
 	cfgs := make([]*Config, len(ops))
@@ -607,7 +618,6 @@ func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete b
 	if failed && requireComplete {
 		return false, results
 	}
-	applied = !failed
 	stop := false
 	for i, op := range ops {
 		if results[i] != nil {
@@ -615,7 +625,6 @@ func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete b
 		}
 		if stop {
 			results[i] = managerError(ua.StatusBadInvalidState, "an earlier operation failed")
-			applied = false
 			continue
 		}
 		var err error
@@ -628,9 +637,11 @@ func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete b
 			_, err = m.Replace(ctx, op.Conf)
 		}
 		if err != nil {
-			results[i], applied = err, false
+			results[i] = err
 			stop = requireComplete
+			continue
 		}
+		applied = true
 	}
 	return applied, results
 }
@@ -763,7 +774,7 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 	r := &Run{id: RunID(m.runs.Add(1)), key: s.cfg.Key(), version: s.cfg.version, action: action, done: make(chan struct{})}
 	prev := s.state
 	s.state = StateProcessing
-	s.current = r
+	s.current, s.transition = r, tr
 	s.mu.Unlock()
 	m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
 	go func() {

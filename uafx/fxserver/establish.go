@@ -123,10 +123,13 @@ type call struct {
 	els []*element
 
 	// Rollback (Part 81 §6.2.4.3.11, Table 21).
-	created    []*endpoint // CreateConnectionEndpointCmd
-	restore    []func()    // preconfigured endpoints the call changed
-	update     *server.PubSubConfigurationUpdate
-	linkUndo   []func()             // SetCommunicationConfigurationCmd
+	created  []*endpoint // CreateConnectionEndpointCmd
+	restore  []func()    // preconfigured endpoints the call changed
+	update   *server.PubSubConfigurationUpdate
+	linkUndo []func() // SetCommunicationConfigurationCmd
+	// existed: the PubSub components before the call applied its
+	// configuration (markCreated).
+	existed    map[pubsub.ComponentID]bool
 	enabled    []pubsub.ComponentID // EnableCommunicationCmd
 	cleanupsOn []*endpoint
 	controlled []*controlGroup // EstablishControlCmd
@@ -1052,6 +1055,10 @@ func (x *call) communicate() bool {
 			return false
 		}
 	}
+	x.existed = map[pubsub.ComponentID]bool{}
+	for _, ci := range x.c.srv.PubSub().Components() {
+		x.existed[ci.ID] = true
+	}
 	u, sc := x.c.srv.UpdatePubSubConfiguration(x.ctx, cc.PubSubConfiguration, cc.RequireCompleteUpdate, cc.ConfigurationReferences)
 	if sc != ua.StatusOK {
 		out.Result = sc
@@ -1140,11 +1147,13 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 	if r := l.DataSetReaderRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
 		g := conn.ReaderGroups[r.GroupIndex]
-		cid, ok := lookupPath(rt, pubsub.KindReaderGroup, pubsub.KindDataSetReader,
+		connID, gid, cid, ok := lookupPath(rt, pubsub.KindReaderGroup, pubsub.KindDataSetReader,
 			x.assigned(refConn, r, 0, conn.Name), x.assigned(refRG, r, 1, g.Name), x.assigned(refReader, r, 2, readerAt(cfg, r).Name))
 		if !ok {
 			return ua.StatusBadNotFound
 		}
+		x.markCreated(connID)
+		x.markCreated(gid)
 		dr, err := rt.DataSetReaderConfig(cid)
 		if err != nil {
 			return ua.StatusBadNotFound
@@ -1165,16 +1174,21 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 	if r := l.DataSetWriterRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
 		g := conn.WriterGroups[r.GroupIndex]
-		cid, ok := lookupPath(rt, pubsub.KindWriterGroup, pubsub.KindDataSetWriter,
+		connID, gid, cid, ok := lookupPath(rt, pubsub.KindWriterGroup, pubsub.KindDataSetWriter,
 			x.assigned(refConn, r, 0, conn.Name), x.assigned(refWG, r, 1, g.Name), x.assigned(refWriter, r, 2, writerAt(cfg, r).Name))
 		if !ok {
 			return ua.StatusBadNotFound
 		}
+		x.markCreated(connID)
+		x.markCreated(gid)
 		dw, err := rt.DataSetWriterConfig(cid)
 		if err != nil {
 			return ua.StatusBadNotFound
 		}
 		pds := publishedDataSet(rt, dw.DataSetName)
+		if pid, ok := rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, dw.DataSetName); ok {
+			x.markCreated(pid)
+		}
 		var meta *ua.ConfigurationVersionDataType
 		if pds != nil && pds.DataSetMetaData != nil {
 			meta = pds.DataSetMetaData.ConfigurationVersion
@@ -1192,6 +1206,27 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		return ua.StatusBadNotFound
 	}
 	return ua.StatusOK
+}
+
+// markCreated records that the call created the component id, which the
+// runtime did not have before the call applied its configuration, so that
+// CloseConnections with Remove removes it once nothing uses it (Part 81
+// §6.2.5.2); the rollback forgets it. A component that was there before,
+// preconfigured or matched (the server matches an ElementAdd of a
+// PubSubConnection it has by its Name), is not the call's.
+func (x *call) markCreated(id pubsub.ComponentID) {
+	c := x.c
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if id == 0 || x.existed[id] || c.created[id] {
+		return
+	}
+	c.created[id] = true
+	x.linkUndo = append(x.linkUndo, func() {
+		c.mu.Lock()
+		delete(c.created, id)
+		c.mu.Unlock()
+	})
 }
 
 // assigned returns the Name the configuration of the call has for the
@@ -1239,17 +1274,19 @@ func (c *Connections) setLinkLocked(e *endpoint, reader bool, n *ua.NodeID, own 
 	c.setLink(e, reader, n, own)
 }
 
-// lookupPath finds connection/group/element in the runtime.
-func lookupPath(rt *pubsub.PubSub, groupKind, kind pubsub.ComponentKind, conn, group, name string) (pubsub.ComponentID, bool) {
-	cid, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, conn)
+// lookupPath finds connection/group/element in the runtime and returns the
+// ids of all three.
+func lookupPath(rt *pubsub.PubSub, groupKind, kind pubsub.ComponentKind, conn, group, name string) (connID, gid, id pubsub.ComponentID, ok bool) {
+	connID, ok = rt.Lookup(pubsub.KindConnection, pubsub.Root, conn)
 	if !ok {
-		return 0, false
+		return 0, 0, 0, false
 	}
-	gid, ok := rt.Lookup(groupKind, cid, group)
+	gid, ok = rt.Lookup(groupKind, connID, group)
 	if !ok {
-		return 0, false
+		return 0, 0, 0, false
 	}
-	return rt.Lookup(kind, gid, name)
+	id, ok = rt.Lookup(kind, gid, name)
+	return connID, gid, id, ok
 }
 
 // versionMatches checks a DataSet ConfigurationVersion against the expected
