@@ -579,6 +579,9 @@ type Manager struct {
 	// reserved are the keys an Update with requireComplete adds, which no
 	// other Add may take meanwhile (updateComplete).
 
+	// beforeCommit, set by tests only, runs in updateComplete right before
+	// the batch is applied.
+
 }
 ```
 
