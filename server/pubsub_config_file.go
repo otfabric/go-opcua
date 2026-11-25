@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -47,8 +48,9 @@ type configFile struct {
 	next     uint32
 	reserved map[string]*idReservation // by SessionId
 
-	// update serialises CloseAndUpdate.
-	update sync.Mutex
+	// beforeReconcile, set by tests only, runs in applyLocked between
+	// reading the configuration and applying the update.
+	beforeReconcile func()
 
 	openCount atomic.Int32
 	modified  atomic.Int64 // UnixNano
@@ -420,12 +422,17 @@ func (f *configFile) reserveIDs(ctx context.Context, _ *ua.NodeID, args []*ua.Va
 }
 
 // reserve reserves ng WriterGroupIds and nw DataSetWriterIds for the
-// session of ctx (Part 14 §9.1.3.7.5).
+// session of ctx (Part 14 §9.1.3.7.5). It runs in the PubSub transaction:
+// the ids it reserves are neither used nor reserved (§9.1.3.7.5), so it
+// must not read the configuration while a CloseAndUpdate assigns ids that
+// it has not applied yet. The lock order is ps.txn, then f.mu.
 func (f *configFile) reserve(ctx context.Context, ng, nw uint16) (*PubSubIDReservation, ua.StatusCode) {
 	sess := sessionOf(ctx)
 	if sess == nil {
 		return nil, ua.StatusBadSessionIDInvalid
 	}
+	f.m.s.ps.txn.Lock()
+	defer f.m.s.ps.txn.Unlock()
 	cfg := f.m.rt.Configuration()
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -481,8 +488,8 @@ func (f *configFile) releaseUsedLocked(conns []*ua.PubSubConnectionDataType) {
 }
 
 func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	f.update.Lock()
-	defer f.update.Unlock()
+	f.m.s.ps.txn.Lock()
+	defer f.m.s.ps.txn.Unlock()
 
 	f.mu.Lock()
 	h, x, sc := f.handleLocked(ctx, args)
@@ -526,7 +533,7 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 }
 
 // applyLocked applies file as CloseAndUpdate does (Part 14 §9.1.3.7.4).
-// The caller holds f.update.
+// The caller holds the PubSub transaction (pubsubState.txn).
 func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfiguration2DataType, require bool, refs []*ua.PubSubConfigurationRefDataType) (*PubSubConfigurationUpdate, ua.StatusCode) {
 	if st := f.m.checkConnectionTargets(ctx, file.Connections...); st != ua.StatusOK {
 		return nil, st
@@ -539,8 +546,12 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 	u := newConfigUpdate(file, old, f.defaultPublisherID(old.Connections), usedG, usedW)
 	results := u.run(refs)
 	applied := u.changed && (!require || !u.failed)
+	created := map[pubsub.ComponentID]bool{}
+	if f.beforeReconcile != nil {
+		f.beforeReconcile()
+	}
 	if applied {
-		if err := reconcilePubSub(f.m.rt, u.cfg); err != nil {
+		if err := reconcilePubSubRecord(f.m.rt, u.cfg, func(id pubsub.ComponentID) { created[id] = true }); err != nil {
 			f.m.s.cfg.logger.Warn("pubsub: CloseAndUpdate failed, restoring the configuration", "error", err)
 			if rerr := reconcilePubSub(f.m.rt, old); rerr != nil {
 				f.m.s.cfg.logger.Error("pubsub: restoring the configuration failed", "error", rerr)
@@ -559,7 +570,7 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 	}
 	r := &PubSubConfigurationUpdate{ChangesApplied: applied, ReferenceResults: results, ConfigurationObjects: objs, f: f}
 	if applied {
-		r.ConfigurationValues = u.values
+		r.ConfigurationValues, r.created = u.values, created
 		r.before, r.after = old, f.m.rt.Configuration()
 	}
 	return r, ua.StatusOK

@@ -50,6 +50,22 @@ func CloseConnections(ctx context.Context, c *opcua.Client, ac *ua.NodeID, endpo
 
 CloseConnections calls the CloseConnections Method of the AutomationComponent ac (Part 81 §6.2.5) for the ConnectionEndpoints endpoints, with remove to remove what EstablishConnections created for them. It returns the status of the call, Good or Uncertain (Table 23), and one result per endpoint (Table 24).
 
+### func ConnectionManagerNode
+
+```go
+func ConnectionManagerNode(ctx context.Context, c *opcua.Client) (*ua.NodeID, error)
+```
+
+ConnectionManagerNode returns the NodeId of FxRoot.ConnectionManager (Part 81 §12.3) on the server.
+
+### func EditConnectionConfigurationSets
+
+```go
+func EditConnectionConfigurationSets(ctx context.Context, c *opcua.Client, action FxEdit, sets []*ua.NodeID) (ua.StatusCode, []ua.StatusCode, error)
+```
+
+EditConnectionConfigurationSets calls EditConnectionConfigurationSets of the ConnectionManager of the server (Part 81 §6.7.4, §12.3) with action for the ConnectionConfigurationSet Objects sets. It returns the status of the call, Good, Uncertain or Bad\_UserAccessDenied (Table 81), and one result per set (Table 82).
+
 ### func EncodeEstablishConnectionsRequest
 
 ```go
@@ -73,6 +89,14 @@ func EncodeStructure(v Structure, ns NamespaceIndexes) (*ua.ExtensionObject, err
 ```
 
 EncodeStructure returns v in an ExtensionObject in the binary encoding, for a server with the namespace indexes ns.
+
+### func ProcessConnectionConfigurationSets
+
+```go
+func ProcessConnectionConfigurationSets(ctx context.Context, c *opcua.Client, action FxProcess, sets []*ua.NodeID) (ua.StatusCode, []ua.StatusCode, error)
+```
+
+ProcessConnectionConfigurationSets calls ProcessConnectionConfigurationSets of the ConnectionManager of the server (Part 81 §6.7.5, §12.3) with action for the ConnectionConfigurationSet Objects sets. The Method returns once the processing started; the ConnectionConfigurationSet events (§8.7 to §8.9) and the state machines of the sets tell the outcome. It returns the status of the call (Table 85) and one result per set (Table 86).
 
 ## Types
 

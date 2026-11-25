@@ -5,6 +5,7 @@ package server_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/pubsub"
+	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -79,8 +81,14 @@ func TestPubSubBridge(t *testing.T) {
 	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusOK}, u.ReferenceResults)
 	require.Len(t, u.ConfigurationObjects, 2)
 	require.Len(t, u.ConfigurationValues, 2)
-	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	a, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
 	require.True(t, ok)
+	g, ok := rt.Lookup(pubsub.KindWriterGroup, a, "G")
+	require.True(t, ok)
+	require.True(t, u.Created(a), "the update created the connection")
+	require.True(t, u.Created(g), "and its group")
+	require.False(t, u.Created(pubsub.Root))
+	require.False(t, (*server.PubSubConfigurationUpdate)(nil).Created(a))
 
 	require.NoError(t, u.Revert())
 	_, ok = rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
@@ -107,6 +115,25 @@ func TestPubSubBridge(t *testing.T) {
 		return sc
 	}))
 	require.False(t, u.ChangesApplied)
+	bid, _ := rt.Lookup(pubsub.KindConnection, pubsub.Root, "B")
+	require.False(t, u.Created(bid), "a matched connection is not the update's")
+	require.NoError(t, u.Revert())
+
+	// A group added to a connection that exists is the update's; the
+	// connection is not.
+	cfg := bridgeConfig("B")
+	cfg.Connections[0].WriterGroups = append(cfg.Connections[0].WriterGroups, pubsub.WriterGroup("G2", 0, time.Second))
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		var sc ua.StatusCode
+		u, sc = b.srv.UpdatePubSubConfiguration(ctx, cfg, true, []*ua.PubSubConfigurationRefDataType{
+			{ConfigurationMask: refMatch | refConn}, {ConfigurationMask: refAdd | refWG, GroupIndex: 1}})
+		return sc
+	}))
+	require.True(t, u.ChangesApplied, "%v", u.ReferenceResults)
+	g2, ok := rt.Lookup(pubsub.KindWriterGroup, bid, "G2")
+	require.True(t, ok)
+	require.True(t, u.Created(g2))
+	require.False(t, u.Created(bid))
 	require.NoError(t, u.Revert())
 
 	// Argument errors.
@@ -192,4 +219,152 @@ func TestPubSubBridgeAccess(t *testing.T) {
 		require.NoError(t, n.SetAttribute(ua.AttributeIDAccessRestrictions, server.DataValueFromValue(uint16(ua.AccessRestrictionTypeSigningRequired))))
 		require.Equal(t, ua.StatusBadSecurityModeInsufficient, b.call(t, update(b)))
 	})
+}
+
+// TestPubSubConfigurationTransaction: an AddConnection Method call and a
+// ChangePubSubConfiguration that come while an update is between reading
+// the configuration and applying it wait for the update, so the update
+// does not remove what they add (Part 14 §9.1.3.7.4: elements the update
+// does not reference are left alone).
+func TestPubSubConfigurationTransaction(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	c := testutil.NewTestClient(t, b.url)
+	others := make(chan ua.StatusCode, 2)
+	server.SetPubSubBeforeReconcile(b.srv, func() {
+		go func() {
+			res := psCall(t, c, nid(id.PublishSubscribe), nid(id.PublishSubscribeAddConnection),
+				eoArg(pubsub.UDPConnection("ByMethod", "opc.udp://239.0.0.1:4840", uint16(21))))
+			others <- res.StatusCode
+		}()
+		go func() {
+			err := b.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+				_, err := rt.AddConnection(pubsub.UDPConnection("ByAPI", "opc.udp://239.0.0.1:4840", uint16(22)))
+				return err
+			})
+			sc := ua.StatusOK
+			if err != nil {
+				sc = ua.StatusBadInternalError
+			}
+			others <- sc
+		}()
+		// Without the transaction both would land here, before the update
+		// applies the configuration it read without them.
+		select {
+		case sc := <-others:
+			t.Errorf("a change came in during the update (%v)", sc)
+			others <- sc
+		case <-time.After(200 * time.Millisecond):
+		}
+	})
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		u, sc := b.srv.UpdatePubSubConfiguration(ctx, bridgeConfig("A"), true,
+			[]*ua.PubSubConfigurationRefDataType{{ConfigurationMask: refAdd | refConn}})
+		if sc == ua.StatusOK && !u.ChangesApplied {
+			sc = ua.StatusBadInvalidState
+		}
+		return sc
+	}))
+	server.SetPubSubBeforeReconcile(b.srv, nil)
+	require.Equal(t, ua.StatusOK, <-others)
+	require.Equal(t, ua.StatusOK, <-others)
+	for _, n := range []string{"A", "ByMethod", "ByAPI"} {
+		_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, n)
+		require.True(t, ok, n)
+	}
+
+	// Without PubSub there is nothing to change.
+	plain, _ := testutil.NewTestServer(t)
+	require.ErrorIs(t, plain.ChangePubSubConfiguration(func(*pubsub.PubSub) error { return nil }), ua.StatusBadNotSupported)
+}
+
+// TestPubSubReserveDuringUpdate: ReserveIds runs in the PubSub
+// transaction, so a reservation made while an update assigns ids never gets
+// one of them (Part 14 §9.1.3.7.5: the ids are neither used nor reserved).
+func TestPubSubReserveDuringUpdate(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	c := testutil.NewTestClient(t, b.url)
+	type reserved struct {
+		groups []uint16
+		err    error
+	}
+	got := make(chan reserved, 1)
+	server.SetPubSubBeforeReconcile(b.srv, func() {
+		go func() {
+			res, err := c.Call(context.Background(), &ua.CallMethodRequest{
+				ObjectID: nid(id.PublishSubscribePubSubConfiguration),
+				MethodID: nid(id.PublishSubscribePubSubConfigurationReserveIDs),
+				InputArguments: []*ua.Variant{ua.MustVariant(transport.ProfileUDPUADP),
+					ua.MustVariant(uint16(1)), ua.MustVariant(uint16(0))},
+			})
+			if err == nil && res.StatusCode != ua.StatusOK {
+				err = res.StatusCode
+			}
+			var gs []uint16
+			if err == nil && len(res.OutputArguments) == 3 {
+				gs, _ = res.OutputArguments[1].Value().([]uint16)
+			}
+			got <- reserved{gs, err}
+		}()
+		// Without the transaction the reservation is made here, from the
+		// configuration before the update.
+		select {
+		case r := <-got:
+			t.Errorf("ReserveIds ran during the update (%v)", r.groups)
+			got <- r
+		case <-time.After(200 * time.Millisecond):
+		}
+	})
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		u, sc := b.srv.UpdatePubSubConfiguration(ctx, bridgeConfig("A"), true,
+			[]*ua.PubSubConfigurationRefDataType{{ConfigurationMask: refAdd | refConn}, {ConfigurationMask: refAdd | refWG}})
+		if sc == ua.StatusOK && !u.ChangesApplied {
+			sc = ua.StatusBadInvalidState
+		}
+		return sc
+	}))
+	server.SetPubSubBeforeReconcile(b.srv, nil)
+	r := <-got
+	require.NoError(t, r.err)
+	require.Len(t, r.groups, 1)
+	a, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	require.True(t, ok)
+	g, ok := rt.Lookup(pubsub.KindWriterGroup, a, "G")
+	require.True(t, ok)
+	cfg, err := rt.WriterGroupConfig(g)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, cfg.WriterGroupID, uint16(0x8000), "the update assigned the id")
+	require.NotEqual(t, cfg.WriterGroupID, r.groups[0], "the reservation does not get the id the update uses")
+}
+
+// TestPubSubRevertConcurrent: concurrent Revert calls of one update restore
+// the configuration once; the others do nothing and return nil.
+func TestPubSubRevertConcurrent(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	var u *server.PubSubConfigurationUpdate
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		var sc ua.StatusCode
+		u, sc = b.srv.UpdatePubSubConfiguration(ctx, bridgeConfig("A"), true,
+			[]*ua.PubSubConfigurationRefDataType{{ConfigurationMask: refAdd | refConn}})
+		return sc
+	}))
+	require.True(t, u.ChangesApplied)
+	const n = 8
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() { errs <- u.Revert() })
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	require.False(t, ok, "the update is reverted")
 }

@@ -10,15 +10,17 @@ library: it validates ConnectionConfigurationSets and reads and writes their
 files ([ConnectionManager configuration](#connectionmanager-configuration)),
 and a `Manager` establishes, enables, disables and removes their
 Connections on AutomationComponents
-([Running a ConnectionManager](#running-a-connectionmanager)). A server has
-no ConnectionManager Object and Methods yet. Persistent connections are not implemented,
+([Running a ConnectionManager](#running-a-connectionmanager)), and
+`fxserver.EnableConnectionManager` serves it on a server, with its sets,
+Methods, events and file
+([Serving a ConnectionManager](#serving-a-connectionmanager)). Persistent connections are not implemented,
 and none of the profiles of Part 84 is claimed. What is missing is listed under [Limits](#limits).
 
 | Package | What it holds |
 |---|---|
-| `uafx` | `Inspect`: reads the UAFX model of a server into a `Report`; `EstablishConnections` and `CloseConnections` call the Methods of an AutomationComponent; the DataTypes of the UAFX namespaces, generated from the NodeSets, with their binary encoding ([Structures](#structures)) |
+| `uafx` | `Inspect`: reads the UAFX model of a server into a `Report`; `EstablishConnections` and `CloseConnections` call the Methods of an AutomationComponent, `EditConnectionConfigurationSets` and `ProcessConnectionConfigurationSets` those of a ConnectionManager; the DataTypes of the UAFX namespaces, generated from the NodeSets, with their binary encoding ([Structures](#structures)) |
 | `uafx/fxcm` | A ConnectionManager: `NewConfig` validates a ConnectionConfigurationSet, `DecodeFile` and `EncodeFile` read and write its file (Annex F), the state machine of a set, the edit of §6.7.4, the ownership and diagnostics rules, and `Manager`, which processes the sets against the AutomationComponents |
-| `uafx/fxserver` | `AddModel`: adds the UAFX model to a `server.Server`; `ImportNodeSet` imports NodeSets that build on it; `EnableConnections` serves EstablishConnections and CloseConnections |
+| `uafx/fxserver` | `AddModel`: adds the UAFX model to a `server.Server`; `ImportNodeSet` imports NodeSets that build on it; `EnableConnections` serves EstablishConnections and CloseConnections; `EnableConnectionManager` serves a `Manager` as the ConnectionManager of the server |
 | `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid` | NodeIds of the UAFX Data, AutomationComponent (AC) and ConnectionManager (CM) namespaces |
 | `di/diid` | NodeIds of the Devices (DI) model of OPC 10000-100, which the UAFX model builds on |
 
@@ -246,7 +248,26 @@ CleanupTimeout. With Remove it also removes the reader and writer the
 connection's calls configured, unless another endpoint references them,
 and deletes the endpoint unless it is preconfigured: a preconfigured
 endpoint keeps its nodes, loses its RelatedEndpoint and can be used again.
-The groups, PubSubConnections and PublishedDataSets stay. An endpoint of
+A group, PubSubConnection or PublishedDataSet that an EstablishConnections
+call created for the removed reader or writer goes as well once nothing
+uses it ("all related communication model Objects if not referenced from
+other ConnectionEndpoints", §6.2.5.2): a group without readers and
+writers, then a PubSubConnection without groups, and a PublishedDataSet no
+DataSetWriter publishes. A group another writer or reader still uses stays
+with its PubSubConnection, but the PublishedDataSet of the departing writer
+goes all the same when no other writer publishes it. A component is the call's when the call adds it
+(an ElementAdd reference) and the call's update created it in the
+runtime, as `server.PubSubConfigurationUpdate.Created` records while the
+update applies the configuration. The removals, and the disables and
+enables of the calls, run in the PubSub transaction of the server
+(`server.Server.ChangePubSubConfiguration`), so that a CloseAndUpdate or
+a PubSub Method of another client neither loses them nor is lost to
+them. A preconfigured component, one the call
+matched or modified, and one another client added while the call ran are
+not the call's and stay. Repeated establishes and removes therefore leave
+the runtime as it was. A removal that fails there is the result of the
+endpoint, as for the reader and writer below: the endpoint stays, and a
+later CloseConnections with Remove removes what is left. An endpoint of
 another AutomationComponent is `Bad_NodeIdUnknown`, a node that is not a
 ConnectionEndpoint `Bad_InvalidArgument` (Table 24).
 
@@ -798,6 +819,198 @@ with an unknown outcome and its run ends in Error.
   collides with them.
 - The monitor polls the Status with Read; it does not subscribe.
 
+## Serving a ConnectionManager
+
+`fxserver.EnableConnectionManager` exposes a `Manager` on a server with the
+UAFX CM model (`AddModel` with `ModelCM`) as FxRoot.ConnectionManager
+(§6.7, §12.3): its sets as ConnectionConfigurationSetType Objects,
+EditConnectionConfigurationSets and ProcessConnectionConfigurationSets, the
+events of the set state machines, AggregatedCurrentState, the Diagnostics
+counters and Capabilities, and, with `File`, ConnectionManagerConfiguration
+(F.3). The nodes follow the Manager: a set added, replaced, edited or
+removed through the Go API appears, changes or goes (`Flush` waits for it).
+
+```go
+ns, err := fxserver.AddModel(srv, fxserver.ModelCM)
+cm, err := fxserver.EnableConnectionManager(srv, ns, fxserver.ConnectionManagerOptions{
+	Manager: m, Editable: true, File: true,
+})
+defer cm.Close()
+// A client:
+set, _ := cm.SetNode(fxcm.SetKey{Folder: []string{"Plant"}, Name: "Line1"})
+sc, results, err := uafx.ProcessConnectionConfigurationSets(ctx, c, uafx.ActionEstablishConnectionsEnabled, []*ua.NodeID{set})
+```
+
+Call `EnableConnectionManager` before the server starts: it adds a Guard
+that releases the Lock of a set in edit when its session ends.
+`uafx.EditConnectionConfigurationSets`, `uafx.ProcessConnectionConfigurationSets`
+and `uafx.ConnectionManagerNode` call the Methods from a client; they
+return the status of the call and one result per set.
+
+### The sets in the address space
+
+Each set is an Object below ConnectionConfigurationSets, in Folders named
+by its ConnectionConfigurationSetFolder, with the members of §6.8.2
+Table 89 and the References of Table 90 between them: its
+ServerAddresses, AutomationComponentConfigurations, CommunicationFlows
+with their SubscriberConfigurations, and Connections with their two
+endpoint configurations. The NodeIds are String NodeIds of the CM
+namespace, `cm.set:<folder>/<name>` and a path per member
+(`cm.set:Plant/Line1.Flow[Flow1].PublishingInterval`). The names in it
+are escaped (`%`, `/`, `.`, `[` and `]` as `%25`, `%2F`, `%2E`, `%5B` and
+`%5D`), so a set named `Line1.Version` or a Folder named `a/b` has
+NodeIds of its own.
+
+- The fields a client may configure are SelectionListType Variables (OPC
+  10000-5 §7.18, §6.8.1): the value, its Selections and RestrictToList,
+  TRUE unless the set's `<Var>Modify` is TRUE (F.1.2.3). A field without
+  a Selection has its value as its only Selection. CleanupTimeout and
+  IsPersistent are shown, not writable.
+- A MessageSecurityMode is shown as an Int32 (Part 6 §5.2.4).
+- A NodeIdentifier is shown as the PortableNodeIdentifier the NodeSet
+  gives the Variable (CM DataType 3012): its namespace indexes are mapped
+  to the NamespaceUris of the set's ServerAddress (F.1.2.2), index 0 being
+  the OPC UA namespace. A written PortableNodeIdentifier that names a
+  namespace the ServerAddress lacks is `Bad_InvalidArgument`.
+- Version, Edit (with `Editable`), RollbackOnError, ConnectionsDiagnostics
+  and the state machine (CurrentState, LastTransition, §6.9.2) follow the
+  Manager; LastTransition is the transition the set took last
+  (`fxcm.Status.Transition`). Each Connection has a ProcessingResult (library
+  interpretation): Good, or the first Bad status of its endpoints in the
+  diagnostics of the last run.
+
+### Editing
+
+EditConnectionConfigurationSets (§6.7.4, Tables 80 to 82) works on sets
+with the Edit Property, which `Editable` adds; without it a set is
+`Bad_InvalidState`. A set not in edit is locked to the ConnectionManager
+(§6.8.2): its Lock (OPC 10000-100 §7) has the LockingClient of the
+ConnectionManager's NodeId and the LockingUser `CM`, and a write is
+`Bad_Locked`.
+
+- StartEditing gives the Lock to the calling session, with the client's
+  ApplicationUri and user. The owner writes the SelectionList Variables;
+  a value RestrictToList does not allow is `Bad_OutOfRange`, another
+  DataType `Bad_TypeMismatch`. A write or RenewLock renews the Lock;
+  after `MaxInactiveLockTime` without either (the server's
+  MaxInactiveLockTime of DI, else one minute) the Lock goes and the edit
+  is discarded. The deadline is checked on every write, RenewLock and
+  edit call, not only by the periodic check: a write after it is
+  `Bad_Locked`, RenewLock answers -1, and CommitUpdates is
+  `Bad_InvalidState` (library interpretation). InitLock answers -1: the Lock is taken with StartEditing.
+  ExitLock discards the edit; BreakLock needs the authorizer.
+- CommitUpdates makes the working copy the next Version and returns the
+  Lock to the ConnectionManager. The changed flow Variables are reflected
+  onto the PubSubConfigurations of the AutomationComponents (§6.13.1,
+  §6.16.3; CS-19, a library interpretation of the mapping):
+  PublishingInterval, HeaderLayoutUri, SecurityMode and SecurityGroupId to
+  the publisher's WriterGroup, TransportProfileUri and Address to its
+  PubSubConnection; HeaderLayoutUri, SecurityMode, SecurityGroupId and
+  MessageReceiveTimeout to the subscribers' DataSetReaders,
+  TransportProfileUri and the Address (the SubscriberConfiguration's, else
+  the flow's when it is multicast) to their PubSubConnections. Two flows
+  that reflect different values onto one field are a Finding. Qos and
+  ReceiveQos are not reflected.
+- **Library interpretation**: a working copy that is not valid, or whose
+  reflection conflicts, is not committed: the result is `Bad_InvalidState`
+  (Table 82 has no code for it) and the set stays in edit.
+- DiscardUpdates, the end of the owner's session and a lost Lock drop the
+  working copy. A commit does not process the set: the Connections change
+  at the next ProcessConnectionConfigurationSets.
+
+### Processing
+
+ProcessConnectionConfigurationSets (§6.7.5, Tables 84 to 86) starts a run
+per set and returns; an Action that is no FxProcessEnum value is
+`Bad_NotSupported`, a set in Processing `Bad_InvalidState`. The outcome is
+in the events and the state of the set:
+
+- ConnectionConfigurationSetProcessingStartedEventType,
+  ProcessingSucceededEventType and ProcessingFailedEventType (§8.6 to
+  §8.9) on transitions 1 and 4, 2 and 3 of §6.9.2, SourceNode the
+  ConnectionManager, with ConnectionConfigurationSetNode, Name and Action.
+- AggregatedCurrentState is TRUE while one or more sets are in Error
+  (§6.7.2).
+- The Diagnostics FunctionalGroup holds EstablishCallCount,
+  EstablishCallFailedCount, CloseCallCount and CloseCallFailedCount of the
+  Manager (§6.7.2).
+- Capabilities (§6.7.6, HasCMCapability): MaxConnectionConfigurationSets
+  of the Manager; MonitorsLocalConnectionEndpoints and
+  MonitorsAllConnectionEndpoints are TRUE with `Options.Monitor`, which
+  reads the Status of every endpoint the Manager made, wherever it is.
+
+Both Methods return Good when every set's result is Good,
+`Bad_UserAccessDenied` when every set was refused for that, else
+Uncertain (Tables 81 and 85). With auditing on (`server.WithAuditing`),
+every call reports an AuditUpdateMethodResultEventType event, also one
+refused before it reaches a set (bad arguments, an unknown Action, a
+ConnectionManager that is closing), and every write of a set an AuditUpdateConnectionConfigurationSetEventType event
+(§8.5).
+
+### The configuration file
+
+ConnectionManagerConfiguration (F.3, a FileType of OPC 10000-20) reads and
+writes the sets as the file of F.2. Open takes Read (0x01), which reads
+the sets of the Manager, or Write with EraseExisting (0x06), which needs
+the authorizer (F.3.2); other modes are `Bad_InvalidArgument`. There is
+one writer, and no reader beside it. Handles belong to their session
+(OPC 10000-20 §4.2.1): they go when it ends, so a writer that went away
+does not block the next. CloseAndUpdate (F.3.3, Tables F.39 to
+F.41) closes the written file and applies its sets, one operation per Body
+element (library interpretation of the length), with `Manager.Update`:
+RequireCompleteUpdate TRUE changes nothing unless every operation is
+applied (see below). CloseAndUpdate asks the authorizer again ("The Client shall be
+authorized to modify the configuration"), so a right revoked after Open
+is `Bad_UserAccessDenied`; the handle is closed and nothing changes. It
+returns ChangesApplied (Table F.39), a result per operation and the
+ConnectionConfigurationSet Objects. A file holds at most 16 MiB.
+
+- RequireCompleteUpdate FALSE: the operations that fail are dropped, the
+  others applied. ChangesApplied is TRUE when one or more were applied,
+  FALSE when none was.
+- RequireCompleteUpdate TRUE: all or nothing; ChangesApplied is TRUE when
+  all were applied, FALSE when none was. The sets the batch removes or
+  replaces are claimed first, so that no run or edit starts on them, and
+  the Names it adds are reserved. Closing Connections cannot be undone,
+  so a batch that would close the Connections of more than one set is
+  `Bad_InvalidState` (library interpretation: the ConnectionManager could
+  not keep the batch whole). The one close runs first: when it fails,
+  nothing changes and the set stays, in Error. Then the batch is applied
+  at once. The other operations of a refused batch are
+  `Bad_InvalidState`.
+- The atomicity covers the sets of the Manager, not the
+  AutomationComponents. A close that fails part way may already have
+  closed some endpoints of the set on their AutomationComponents
+  (CloseConnections is a call per AutomationComponent, §6.2.5.2); nothing
+  reopens them, so ChangesApplied FALSE says that no set was added,
+  removed or replaced, not that no Connection was closed. The set in Error
+  and its ConnectionsDiagnostics show what the close did (library
+  interpretation).
+- The whole update counts as a run of the Manager, an add-only batch as
+  well: `Manager.Close` waits for it, and one that Close overtakes before
+  anything was closed applies nothing (`Bad_Shutdown`).
+
+A Replace or Remove through the Go API claims its set in the same way
+until it is done. A claim holds the set, so that no run, retry or edit
+starts on it, but is no processing: the set keeps its state, and only the
+remove run that closes its Connections (or, for a set without
+Connections, the commit of the batch) takes it through Processing, with
+the transitions and the ProcessingStarted and ProcessingSucceeded or
+ProcessingFailed events of §6.9.2 and §8.6 to §8.9. A refused batch
+therefore leaves no transition and no event. `Manager.Update` without
+operations applies nothing and returns ChangesApplied FALSE, with or
+without requireComplete.
+
+### Access
+
+By default Edit, Process, the writes of a set, a file opened for writing,
+its CloseAndUpdate and BreakLock need the well-known Role ConfigureAdmin
+(Part 3 §4.9.2,
+`fxserver.ConfigureAdmin()` for a `server.RoleMapper`), as §6.8.2 and
+F.3.2 recommend; the others get `Bad_UserAccessDenied`.
+`ConnectionManagerOptions.Authorizer` (`CMAuthorizer`, `CMRequest`,
+`CMOperation`) replaces that policy.
+
 ## Examples
 
 [`examples/uafx/server`](../examples/uafx/server) runs a server with the
@@ -805,6 +1018,9 @@ UAFX model and one AutomationComponent, a controller with a drive as its
 Asset and a Motion FunctionalEntity with a preconfigured
 PubSubConnectionEndpoint (`controller.xml`), and serves EstablishConnections
 and CloseConnections; every few seconds the device health changes.
+[`examples/uafx/cm`](../examples/uafx/cm) runs a ConnectionManager server
+whose sets a client writes through ConnectionManagerConfiguration or which
+`-set` loads from a file of F.2.
 [`examples/uafx/inspect`](../examples/uafx/inspect) prints the report of
 `Inspect`:
 
@@ -812,6 +1028,7 @@ and CloseConnections; every few seconds the device health changes.
 go run ./examples/uafx/server -port 4855 &
 go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855
 go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855 -json
+go run ./examples/uafx/cm -port 4856
 ```
 
 ## Tests
@@ -819,12 +1036,15 @@ go run ./examples/uafx/inspect -endpoint opc.tcp://localhost:4855 -json
 | What | Where |
 |---|---|
 | Unit tests, the findings of a broken model, faults of every service call, Browse paging | `uafx`, `uafx/fxserver`, `internal/nodeset` |
-| Connections end to end with UDP PubSub: data flowing between two endpoints, Status and health, a failure injected at every command with the state after the abort checked, preconfigured and shared readers and writers surviving CloseConnections, CleanupTimeout, ControlGroups, access control, audit events | `uafx/fxserver` |
+| Connections end to end with UDP PubSub: data flowing between two endpoints, Status and health, a failure injected at every command with the state after the abort checked, preconfigured and shared readers and writers surviving CloseConnections, the groups, connections and PublishedDataSets a call created removed with it (five establish and remove cycles leaving the runtime as it was, preconfigured and shared ones staying, a failed removal), CleanupTimeout, ControlGroups, access control, audit events | `uafx/fxserver` |
 | The mandatory members of the inspector against the ModellingRules of the embedded NodeSets | `uafx` (`TestMandatoryMatchesModel`) |
 | Every generated structure: the Binary Schemas, hand-written byte fixtures, the bytes of v1.37.0, a round trip of each with its optional fields and union options, the errors of the decoder | `uafx` (`TestSchemaMatchesBinarySchema`, `TestStructureFixtures`, `TestGoldenReleaseB`, `TestStructuresRoundTrip`, `TestStructureErrors`) |
 | The configuration model of a ConnectionManager: each validation rule, the file of F.2 in both namespace layouts and its errors, the edit, the state machine, the ownership and retry rules, the diagnostics and the ConnectionState | `uafx/fxcm` |
 | Fuzz: the ConnectionConfigurationSet file (`FuzzDecodeFile`) | `uafx/fxcm` |
 | The Manager end to end against `fxserver` AutomationComponents with UDP PubSub: establish, enable, disable, remove and re-establish, data flowing; BrowsePaths and placeholders, asset and FunctionalEntity verification, MaxConnectionsPerCall and CommandBundleRequired; preconfigured endpoints; the rollback; a PublishedDataSet name collision with other content and the comparison of every item and field member; a DataSetReader that names its publisher's PublisherId adapted; a SecurityKeyServer refused; the PublisherId adaptation, with CommandBundleRequired after the publisher, its nested results and a failing call; Close waiting for a Remove; every use of every service failed in turn; every call's response lost; two Managers with the same ApplicationUri; the monitor re-establishing; the retry policy; the ClientDialer | `uafx/fxcm` |
+| The ConnectionManager server: the nodes and References of a set, the SelectionList writes and their RestrictToList, the PortableNodeIdentifier view, the Lock (ownership, renewal, expiry on the clock of the test, the end of a session, BreakLock), commit with CS-19 reflection and its conflicts, Process and its events, the audit events (also of calls refused early), the file and its argument errors, ChangesApplied of a partial update, handles dropped at the end of their session, the Lock deadline between two checks, escaped NodeIds, the authorizer, the nodes following the Manager; on a SignAndEncrypt Basic256Sha256 endpoint with user names, an authorized user and a viewer, and a right revoked between Open and CloseAndUpdate (`TestConnectionManagerSecure`) | `uafx/fxserver` |
+| Headline (design §7.1): AC1, AC2 and a ConnectionManager server, each its own server, driven only through the Methods, the SelectionList Variables and the file, over SignAndEncrypt sessions with a ConnectionAdmin user: add by file, establish, disable, enable, edit the PublishingInterval and see it on the AC after a new establish, remove (`TestConnectionManagerLifecycle`) | `uafx/fxcm` |
+| Multicast (four servers): AC1 publishes to a UDP multicast group, AC2 and AC3 subscribe, one DataSetWriter serves both, Remove removes all three sides (`TestConnectionManagerMulticast`). It needs an interface that carries multicast (`GO_OPCUA_MULTICAST_IFACE`, else the first that works) and skips without one; `GO_OPCUA_MULTICAST_REQUIRE=1`, set in the CI `server` job, makes that a failure. Run on macOS on en0 and lo0 | `uafx/fxcm` |
 | Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`, and every generated structure with `FuzzDecodeStructure`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace) | `uafx`, `internal/nodeset` |
 | End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
 | Chaos: connection faults over SignAndEncrypt, values and FunctionalEntities changing during `Inspect`, a server closing; parallel EstablishConnections and CloseConnections, and both under connection faults, leaving the server as it was | [`chaos/uafx`](../chaos/uafx) |
@@ -835,23 +1055,22 @@ The test address space is `internal/testutil/fxtest`.
 
 - EstablishConnections and CloseConnections are implemented with the
   PubSub communication model only. Verify and VerifyAsset called on their
-  own and the Methods of the ConnectionManager answer `Bad_MethodInvalid`
-  on a go-opcua server; VerifyAssetCmd needs an `AssetVerifier`.
+  own answer `Bad_MethodInvalid` on a go-opcua server; VerifyAssetCmd
+  needs an `AssetVerifier`.
 - ControlGroups keep their Locks in memory; ListOfRelated is not
   interpreted. A ControlGroup a client controls has no Controls Reference
   (§6.5.2 wants it from the Object of the client connection, which the
   server does not have). An item in two lists of one ControlGroup is not
   refused. No persistent connections ([Persistence](#persistence)), no
   AutomationComponent log.
-- The ConnectionManager (`uafx/fxcm`) is a Go library: a server has no
-  ConnectionManager Object, ConnectionConfigurationSet nodes or Methods
-  yet. It does not configure a SecurityKeyServer, ask a GDS, resolve
-  AliasNames (AliasNameProcessingError), generate a PubSub configuration
-  from the flows ([Running a ConnectionManager](#running-a-connectionmanager)).
-  It has no LogObject.
-- CloseConnections with Remove removes the DataSetReaders and
-  DataSetWriters of a connection, not the groups, PubSubConnections and
-  PublishedDataSets its calls configured.
+- The ConnectionManager (`uafx/fxcm`, served by `EnableConnectionManager`)
+  keeps its sets, their Versions and the records of its endpoints in
+  memory. It does not configure a SecurityKeyServer, ask a GDS (no
+  GlobalDiscoveryServers), resolve AliasNames (AliasNameProcessingError),
+  generate a PubSub configuration from the flows
+  ([Running a ConnectionManager](#running-a-connectionmanager)), or
+  reflect Qos and ReceiveQos of an edited flow
+  ([Editing](#editing)). It has no ConnectionManagerLog (LogObject).
 - The CleanupTimeout and the Status are checked every `Interval`, so they
   lag by up to one Interval.
 - No offline engineering descriptors (Part 83), no networking or time
@@ -861,5 +1080,5 @@ The test address space is `internal/testutil/fxtest`.
   (`DecodeStructure` decodes them).
 - There is no interoperability evidence: none of the stacks of
   [opcua-interop](https://github.com/otfabric/opcua-interop) implements
-  UAFX, so `Inspect`, the connection Methods and `fxserver` are tested
-  against go-opcua only.
+  UAFX, so `Inspect`, the connection Methods, `fxserver` and the
+  ConnectionManager are tested against go-opcua only.

@@ -56,7 +56,7 @@ var cloneNS = uafx.NamespaceIndexes{Data: 2, AC: 3, CM: 4}
 
 // cloneConf returns a deep copy of conf, through its binary encoding.
 func cloneConf(conf *uafx.ConnectionConfigurationSetConf) (*uafx.ConnectionConfigurationSetConf, error) {
-	eo, err := uafx.EncodeStructure(conf, cloneNS)
+	eo, err := uafx.EncodeStructure(withRawLinks(conf), cloneNS)
 	if err != nil {
 		return nil, err
 	}
@@ -73,6 +73,44 @@ func cloneConf(conf *uafx.ConnectionConfigurationSetConf) (*uafx.ConnectionConfi
 		return nil, err
 	}
 	return s.(*uafx.ConnectionConfigurationSetConf), nil
+}
+
+// withRawLinks returns conf, or a shallow copy of it, in which every
+// CommunicationLinks that ua.Decode left as a RawBody, its type not being
+// registered (as after a clone, or a set decoded from a file), carries the
+// body as its Value, so that it is encoded again: Encode ignores RawBody.
+// conf is not changed.
+func withRawLinks(conf *uafx.ConnectionConfigurationSetConf) *uafx.ConnectionConfigurationSetConf {
+	raw := func(e *uafx.ConnectionEndpointConfigurationConf) bool {
+		return e != nil && e.CommunicationLinks != nil && e.CommunicationLinks.Value == nil && len(e.CommunicationLinks.RawBody) > 0
+	}
+	fix := func(e *uafx.ConnectionEndpointConfigurationConf) *uafx.ConnectionEndpointConfigurationConf {
+		if !raw(e) {
+			return e
+		}
+		ec, eo := *e, *e.CommunicationLinks
+		eo.Value, eo.RawBody = eo.RawBody, nil
+		ec.CommunicationLinks = &eo
+		return &ec
+	}
+	need := false
+	for _, cn := range conf.Connections {
+		need = need || (cn != nil && (raw(cn.Endpoint1) || raw(cn.Endpoint2)))
+	}
+	if !need {
+		return conf
+	}
+	cp := *conf
+	cp.Connections = make([]*uafx.ConnectionConfigurationConf, len(conf.Connections))
+	for i, cn := range conf.Connections {
+		if cn == nil {
+			continue
+		}
+		cc := *cn
+		cc.Endpoint1, cc.Endpoint2 = fix(cn.Endpoint1), fix(cn.Endpoint2)
+		cp.Connections[i] = &cc
+	}
+	return &cp
 }
 
 // Key returns the identity of the set.

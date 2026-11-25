@@ -71,6 +71,10 @@ func (s *EditSlot) Start(cur *Config, owner LockOwner) (*Edit, error) {
 // or Folder changed (the identity of the set, §6.7.2; renaming is a
 // Replace, F.3.3.2), is a *ConfigError and the set stays in edit with the
 // Lock at the owner, who may correct or discard it.
+//
+// The flow Variables the edit changed are reflected onto the
+// PubSubConfigurations of the set (§6.13.1, §6.16.3) as reflectFlows
+// describes; a conflict there is a *ConfigError too.
 func (s *EditSlot) Commit(owner LockOwner) (cfg *Config, ok bool, err error) {
 	e := s.edit
 	switch {
@@ -88,6 +92,9 @@ func (s *EditSlot) Commit(owner LockOwner) (cfg *Config, ok bool, err error) {
 	cfg, err = newConfig(e.work, e.base.version+1)
 	if err != nil {
 		return nil, false, err
+	}
+	if fs := reflectFlows(e.base, cfg); len(fs) > 0 {
+		return nil, false, &ConfigError{Key: e.base.key, Findings: fs}
 	}
 	s.edit = nil
 	return cfg, true, nil

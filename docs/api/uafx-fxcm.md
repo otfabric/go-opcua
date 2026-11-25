@@ -341,6 +341,8 @@ Commit is CommitUpdates (§6.7.4): the working copy becomes the next Version of 
 
 Library interpretation: an invalid working copy, or one whose BrowseName or Folder changed (the identity of the set, §6.7.2; renaming is a Replace, F.3.3.2), is a \*ConfigError and the set stays in edit with the Lock at the owner, who may correct or discard it.
 
+The flow Variables the edit changed are reflected onto the PubSubConfigurations of the set (§6.13.1, §6.16.3) as reflectFlows describes; a conflict there is a \*ConfigError too.
+
 #### func (EditSlot) Discard
 
 ```go
@@ -436,6 +438,13 @@ type Event struct {
 	Closed     bool
 	Verdict    Verdict
 	Attempt    int
+	// Version is the Version of the set after EventSetAdded,
+	// EventSetReplaced and EventCommitted.
+	Version uint32
+	// Action is the action of the run of an EventTransition: the Action
+	// of the processing events (§8.6 Table 114). ActionRemoveSet and
+	// ActionReconcile are the runs of Remove and Reconcile.
+	Action uafx.FxProcess
 }
 ```
 
@@ -467,6 +476,23 @@ const (
 	// EventMonitor: the monitor read a new Status of Record, or found it
 	// gone (Err).
 	EventMonitor
+	// EventSetAdded: a set was added with Version 1 (Add, or ElementAdd of
+	// Update).
+	EventSetAdded
+	// EventSetReplaced: a set was replaced by a new one of Version 1
+	// (Replace, or ElementReplace of Update).
+	EventSetReplaced
+	// EventSetRemoved: a set was removed (Remove, or ElementRemove of
+	// Update).
+	EventSetRemoved
+	// EventEditStarted: a set went into edit (StartEditing, §6.7.4).
+	EventEditStarted
+	// EventCommitted: the edit of a set was committed as Version
+	// (CommitUpdates, §6.7.4).
+	EventCommitted
+	// EventEditEnded: the edit of a set ended without a commit
+	// (DiscardUpdates, or its Lock went, §6.7.4).
+	EventEditEnded
 )
 ```
 
@@ -549,7 +575,13 @@ LostResponse is what a ConnectionManager knows of an endpoint that a call whose 
 
 ```go
 type Manager struct {
-	// contains filtered or unexported fields
+
+	// reserved are the keys an Update with requireComplete adds, which no
+	// other Add may take meanwhile (updateComplete).
+
+	// beforeCommit, set by tests only, runs in updateComplete right before
+	// the batch is applied.
+
 }
 ```
 
@@ -570,6 +602,14 @@ func (m *Manager) Add(conf *uafx.ConnectionConfigurationSetConf) (*Config, error
 ```
 
 Add adds a set (F.3.3.2 ElementAdd): validated, Version 1, state Ready, not in edit, not processed (F.1.3, SM-8). A set of the same key is ua.StatusBadBrowseNameDuplicated; more than MaxConnectionConfigurationSets ua.StatusBadResourceUnavailable.
+
+#### func (Manager) AddObserver
+
+```go
+func (m *Manager) AddObserver(o Observer) (remove func())
+```
+
+AddObserver adds an Observer besides Options.Observer, for example the address space of a server that exposes the Manager. remove removes it; after remove returns it receives no more Events.
 
 #### func (Manager) Close
 
@@ -626,6 +666,14 @@ func (m *Manager) Keys() []SetKey
 ```
 
 Keys returns the keys of the sets, sorted by Folder and Name.
+
+#### func (Manager) Options
+
+```go
+func (m *Manager) Options() Options
+```
+
+Options returns the Options of the Manager, with their defaults.
 
 #### func (Manager) Process
 
@@ -689,7 +737,11 @@ Status returns the live state of a set.
 func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error)
 ```
 
-Update applies a batch of operations as CloseAndUpdate does (F.3.3, design §5.8). First the whole batch is checked: one operation bit (FC-6, ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a Remove or Replace), the state (ua.StatusBadInvalidState while processed or edited), and every new set. With requireComplete, one failure ends the call there: nothing is closed or changed, applied is false. Else the failed operations are dropped. Then the operations are applied in order; a remove or replace whose close fails fails (the old set stays, in Error), and with requireComplete the operations after it are skipped (ua.StatusBadInvalidState). applied is true when every operation was applied. results has one error per operation, nil for success.
+Update applies a batch of operations as CloseAndUpdate does (F.3.3, design §5.8). First the whole batch is checked: one operation bit (FC-6, ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a Remove or Replace), the state (ua.StatusBadInvalidState while processed or edited), and every new set. results has one error per operation, nil for success; applied is ChangesApplied of Table F.39.
+
+Without requireComplete the failed operations are dropped and the others applied in order; a remove or replace whose close fails fails (the old set stays, in Error). applied is true when one or more operations were applied, false when none was.
+
+With requireComplete nothing changes unless every operation is applied: applied is true when all were, false when none was (Table F.39). See updateComplete.
 
 ### type MonitorOptions
 
@@ -1179,6 +1231,9 @@ type Status struct {
 	// Current is the run in progress, Last the last finished one.
 	Current *Run
 	Last    *Run
+	// Transition is the transition the state machine of the set took last
+	// (LastTransition, §6.9.2), 0 before the first.
+	Transition Transition
 	// Endpoints are the endpoints the Manager made, took or may have made
 	// for the set (design §5.3).
 	Endpoints []EndpointRecord

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-package fxcm
+package fxcm_test
 
 import (
 	"context"
@@ -19,6 +19,7 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
+	"github.com/otfabric/go-opcua/uafx/fxcm"
 	"github.com/otfabric/go-opcua/uafx/fxdataid"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 )
@@ -253,11 +254,11 @@ func TestEstablishPaths(t *testing.T) {
 	b := newACWith(t, "b", fxserver.ConnectionOptions{MaxConnectionsPerCall: 1, CommandBundleRequired: true}, capabilitiesNodeSet)
 	require.NoError(t, fxtest.SetValue(b.srv, b.id(fxtest.ConnActual), 17.0))
 	events := &eventLog{}
-	m := newManager(t, Options{Observer: events, Logger: slog.New(slog.DiscardHandler)})
+	m := newManager(t, fxcm.Options{Observer: events, Logger: slog.New(slog.DiscardHandler)})
 	cfg, err := m.Add(pathsConf(t, a, b))
 	require.NoError(t, err)
 	res := process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
-	require.Equal(t, StateReady, res.State, "%+v", res.Failures)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.Len(t, res.Created, 4)
 	mu.Lock()
 	assert.Equal(t, []*ua.QualifiedName{{NamespaceIndex: a.test, Name: "SerialNumber"}, {NamespaceIndex: a.test, Name: "Pump"}}, keys)
@@ -269,7 +270,7 @@ func TestEstablishPaths(t *testing.T) {
 	require.Eventually(t, func() bool { return b.value(t, fxtest.ConnAxisIn) == 42.5 }, 10*time.Second, 10*time.Millisecond)
 	require.Eventually(t, func() bool { return a.value(t, fxtest.ConnSetpoint) == 17.0 }, 10*time.Second, 10*time.Millisecond)
 	calls := map[string]int{}
-	for _, e := range events.of(EventCall) {
+	for _, e := range events.of(fxcm.EventCall) {
 		calls[e.Address]++
 	}
 	// a: reserve, configure; b: reserve, two configure calls.
@@ -285,9 +286,9 @@ func TestEstablishPaths(t *testing.T) {
 	cfg2, err := m.Add(conf)
 	require.NoError(t, err)
 	res = process(t, m, uafx.ActionEstablishConnectionsDisabled, cfg2.Key())
-	require.Equal(t, StateError, res.State)
+	require.Equal(t, fxcm.StateError, res.State)
 	// b, bundled, subscribes to a and is configured after it
 	// (configureWaves): a's failure stops the run before b's call (EC-10).
-	assert.Equal(t, []Failure{{FxError: uafx.FxErrorVerifyFunctionalEntityError, Status: ua.StatusBadNoMatch}}, res.Failures)
+	assert.Equal(t, []fxcm.Failure{{FxError: uafx.FxErrorVerifyFunctionalEntityError, Status: ua.StatusBadNoMatch}}, res.Failures)
 	assert.ElementsMatch(t, []string{"ToA", "FromA"}, b.endpoints())
 }

@@ -4,6 +4,8 @@ package fxcm
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"testing"
 	"time"
 
@@ -137,7 +139,7 @@ func TestUpdate(t *testing.T) {
 		{Op: uafx.ElementAdd, Conf: named("Third")},
 		{Op: uafx.ElementAdd, Conf: named("Fourth")},
 	}, false)
-	assert.False(t, applied)
+	assert.True(t, applied, "F.3.3 Table F.39: one or more changes were applied")
 	assert.NoError(t, res[0])
 	assert.ErrorIs(t, res[1], ua.StatusBadBrowseNameDuplicated)
 	assert.ErrorIs(t, res[2], ua.StatusBadNothingToDo)
@@ -149,6 +151,11 @@ func TestUpdate(t *testing.T) {
 	assert.NoError(t, res[7])
 	assert.ErrorIs(t, res[8], ua.StatusBadResourceUnavailable)
 	assert.Len(t, m.Keys(), 3)
+
+	// Without RequireCompleteUpdate and no operation applied: FALSE.
+	applied, res = m.Update(context.Background(), []Operation{{Op: uafx.ElementAdd, Conf: named("New")}}, false)
+	assert.False(t, applied)
+	assert.ErrorIs(t, res[0], ua.StatusBadBrowseNameDuplicated)
 
 	// A remove makes room for an add of the same batch.
 	applied, res = m.Update(context.Background(), []Operation{
@@ -164,6 +171,207 @@ func TestUpdate(t *testing.T) {
 	_, res = m.Update(context.Background(), []Operation{{Op: uafx.ElementReplace, Conf: named("Old")}}, true)
 	assert.ErrorIs(t, res[0], ua.StatusBadInvalidState)
 	assert.ErrorIs(t, m.Remove(context.Background(), KeyOf(named("Old"))), ua.StatusBadInvalidState)
+}
+
+// TestUpdateComplete: with RequireCompleteUpdate a batch is applied whole
+// or not at all (F.3.3, Table F.39): an Add before a Remove whose close
+// fails is not kept, and a batch that would close the Connections of two
+// sets is refused before anything is closed.
+func TestUpdateComplete(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := offlineManager(t, Options{})
+	for _, n := range []string{"B", "C", "D"} {
+		_, err := m.Add(named(n))
+		require.NoError(t, err)
+	}
+	established := func(n string) {
+		s := m.lookup(KeyOf(named(n)))
+		s.mu.Lock()
+		s.records["x"] = &record{EndpointRecord: EndpointRecord{Endpoint: EndpointRef{"C1", 1}, Class: KnownOwned, NodeID: ua.NewNumericNodeID(1, 1)},
+			addr: ServerAddress{Address: "opc.tcp://offline:4840"}}
+		s.mu.Unlock()
+	}
+	state := func(n string) State {
+		st, ok := m.Status(KeyOf(named(n)))
+		require.True(t, ok, n)
+		return st.State
+	}
+	established("B")
+	established("C")
+	var mu sync.Mutex
+	transitions := map[string][]Transition{}
+	defer m.AddObserver(ObserverFunc(func(e Event) {
+		if e.Kind == EventTransition {
+			mu.Lock()
+			transitions[e.Set.Name] = append(transitions[e.Set.Name], e.Transition)
+			mu.Unlock()
+		}
+	}))()
+	took := func(n string) []Transition {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(transitions[n])
+	}
+
+	// Two sets with Connections to close: refused, nothing closed.
+	applied, res := m.Update(ctx, []Operation{
+		{Op: uafx.ElementAdd, Conf: named("N")},
+		{Op: uafx.ElementRemove, Conf: named("B")},
+		{Op: uafx.ElementReplace, Conf: named("C")},
+	}, true)
+	assert.False(t, applied)
+	for _, e := range res {
+		assert.ErrorIs(t, e, ua.StatusBadInvalidState)
+	}
+	assert.Contains(t, res[2].Error(), "one set only")
+	assert.ElementsMatch(t, []string{"B", "C", "D"}, names(m))
+	assert.Equal(t, StateReady, state("B"), "unclaimed")
+	assert.Equal(t, StateReady, state("C"))
+	// A refused batch processed nothing: no transition and so no
+	// ProcessingStarted or ProcessingSucceeded event (§8.6 to §8.8).
+	assert.Empty(t, took("B"))
+	assert.Empty(t, took("C"))
+	assert.Empty(t, took("D"))
+
+	// [Add N, Remove B] with a close of B that fails: N is not added and B
+	// stays, in Error; the key N is free again.
+	applied, res = m.Update(ctx, []Operation{
+		{Op: uafx.ElementAdd, Conf: named("N")},
+		{Op: uafx.ElementRemove, Conf: named("B")},
+	}, true)
+	assert.False(t, applied, "Table F.39: FALSE, nothing was applied")
+	assert.ErrorIs(t, res[0], ua.StatusBadInvalidState)
+	assert.Error(t, res[1])
+	assert.ElementsMatch(t, []string{"B", "C", "D"}, names(m))
+	assert.Equal(t, StateError, state("B"))
+	assert.Empty(t, m.reserved)
+	_, err := m.Add(named("N"))
+	require.NoError(t, err)
+	require.NoError(t, m.Remove(ctx, KeyOf(named("N"))))
+
+	// A claim of D holds it: no run or edit starts meanwhile, but the set
+	// is not processed: no run, no transition. An unclaim gives it back
+	// without a trace.
+	s, err := m.claim(KeyOf(named("D")))
+	require.NoError(t, err)
+	st, _ := m.Status(KeyOf(named("D")))
+	assert.Nil(t, st.Current, "a claim is no run")
+	assert.Equal(t, StateReady, st.State)
+	assert.ErrorIs(t, m.Process(uafx.ActionEstablishConnections, KeyOf(named("D")))[0].Err, ua.StatusBadInvalidState)
+	_, err = m.StartEdit(KeyOf(named("D")), "e")
+	assert.ErrorIs(t, err, ua.StatusBadInvalidState)
+	m.unclaim(s)
+	assert.Equal(t, StateReady, state("D"))
+	assert.Empty(t, took("D"), "an unclaim takes no transition")
+	st, _ = m.Status(KeyOf(named("D")))
+	assert.Nil(t, st.Last)
+	_, err = m.StartEdit(KeyOf(named("D")), "e")
+	require.NoError(t, err)
+	_, err = m.DiscardEdit(KeyOf(named("D")), "e")
+	require.NoError(t, err)
+
+	// [Add N, Replace D]: nothing to close, applied whole; D goes through
+	// its remove run at the commit, which ends with a result.
+	m.beforeCommit = func() {
+		st, _ := m.Status(KeyOf(named("D")))
+		assert.Nil(t, st.Current, "nothing is processed before the commit")
+	}
+	applied, res = m.Update(ctx, []Operation{
+		{Op: uafx.ElementAdd, Conf: named("N")},
+		{Op: uafx.ElementReplace, Conf: named("D")},
+	}, true)
+	m.beforeCommit = nil
+	assert.True(t, applied, "%v", res)
+	assert.Equal(t, []error{nil, nil}, res)
+	assert.ElementsMatch(t, []string{"B", "C", "D", "N"}, names(m))
+	assert.Equal(t, StateReady, state("D"))
+	assert.Equal(t, []Transition{ReadyToProcessing, ProcessingToReady}, took("D"))
+	st, _ = m.Status(KeyOf(named("D")))
+	assert.Equal(t, ProcessingToReady, st.Transition)
+	require.NotNil(t, st.Last)
+	rr, err := st.Last.Wait(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, rr, "the remove run has a result")
+	assert.Equal(t, StateReady, rr.State)
+	assert.Empty(t, rr.Failures)
+
+	// An empty batch applies nothing, with or without requireComplete.
+	for _, complete := range []bool{false, true} {
+		applied, res = m.Update(ctx, nil, complete)
+		assert.False(t, applied, "requireComplete %v", complete)
+		assert.Empty(t, res)
+	}
+
+	// The limit counts the keys the batch adds.
+	m2 := offlineManager(t, Options{MaxConnectionConfigurationSets: 1})
+	applied, res = m2.Update(ctx, []Operation{{Op: uafx.ElementAdd, Conf: named("X")}, {Op: uafx.ElementAdd, Conf: named("Y")}}, true)
+	assert.False(t, applied)
+	assert.ErrorIs(t, res[1], ua.StatusBadResourceUnavailable)
+	assert.Empty(t, m2.Keys())
+}
+
+// TestUpdateCompleteClose: an add-only complete update is counted as a
+// run, so Close waits for it, and one that Close overtakes before anything
+// irreversible happened applies nothing (ua.StatusBadShutdown). The update
+// is held right before its commit until Close has marked the Manager
+// closed, so the commit always sees it.
+func TestUpdateCompleteClose(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := offlineManager(t, Options{})
+	entered, release := make(chan struct{}), make(chan struct{})
+	m.beforeCommit = func() {
+		close(entered)
+		<-release
+	}
+	type out struct {
+		applied bool
+		res     []error
+	}
+	updated := make(chan out, 1)
+	go func() {
+		a, r := m.Update(ctx, []Operation{{Op: uafx.ElementAdd, Conf: named("N")}}, true)
+		updated <- out{a, r}
+	}()
+	<-entered
+	closed := make(chan struct{})
+	go func() {
+		_ = m.Close()
+		close(closed)
+	}()
+	// Close has marked the Manager closed and waits for the update.
+	require.Eventually(t, func() bool {
+		m.mu.Lock()
+		defer m.mu.Unlock()
+		return m.closed
+	}, 5*time.Second, time.Millisecond)
+	select {
+	case <-closed:
+		t.Fatal("Close returned while the update was running")
+	default:
+	}
+	close(release)
+	u := <-updated
+	<-closed
+	assert.False(t, u.applied)
+	require.Len(t, u.res, 1)
+	assert.ErrorIs(t, u.res[0], ua.StatusBadShutdown)
+	assert.Empty(t, m.Keys(), "nothing was added after Close")
+	assert.Empty(t, m.reserved)
+
+	// After Close a complete update is refused at once.
+	applied, res := m.Update(ctx, []Operation{{Op: uafx.ElementAdd, Conf: named("M")}}, true)
+	assert.False(t, applied)
+	assert.ErrorIs(t, res[0], ua.StatusBadShutdown)
+}
+
+func names(m *Manager) []string {
+	var out []string
+	for _, k := range m.Keys() {
+		out = append(out, k.Name)
+	}
+	return out
 }
 
 // TestEdits: StartEditing, CommitUpdates, DiscardUpdates and the end of
@@ -253,34 +461,46 @@ func TestOfflineRun(t *testing.T) {
 		res = process(t, m, a, cfg.Key())
 		assert.Equal(t, StateReady, res.State, "%v", a)
 	}
+	// LastTransition is the transition taken (§6.9.2): a run from Ready
+	// starts with ReadyToProcessing even after a run that ended in Error.
+	var starts []Transition
+	for _, e := range events.of(EventTransition) {
+		if e.Transition == ReadyToProcessing || e.Transition == ErrorToProcessing {
+			starts = append(starts, e.Transition)
+		}
+	}
+	// The first run, its two retries and Disable start from Error; Enable
+	// and Remove from Ready.
+	assert.Equal(t, []Transition{ReadyToProcessing, ErrorToProcessing, ErrorToProcessing, ErrorToProcessing, ReadyToProcessing, ReadyToProcessing}, starts)
+	st, _ = m.Status(cfg.Key())
+	assert.Equal(t, ProcessingToReady, st.Transition)
 }
 
-// TestClaimReserves: a Replace or Remove puts the set in Processing in the
-// same step that claims it, so a Process between the claim and the close
-// is refused (Table 86) and cannot replace the run of the removal.
+// TestClaimReserves: a Replace or Remove holds the set in the same step
+// that claims it, so a Process or another claim between the claim and the
+// close is refused (Table 86) and cannot replace the run of the removal;
+// the remove run starts with the close.
 func TestClaimReserves(t *testing.T) {
 	t.Parallel()
 	m := offlineManager(t, Options{})
 	cfg, err := m.Add(named("A"))
 	require.NoError(t, err)
-	s, prev, err := m.claim(cfg.Key())
+	s, err := m.claim(cfg.Key())
 	require.NoError(t, err)
-	assert.Equal(t, StateReady, prev)
 	st, _ := m.Status(cfg.Key())
-	assert.Equal(t, StateProcessing, st.State)
-	removal := st.Current
-	require.NotNil(t, removal)
-	assert.Equal(t, ActionRemoveSet, removal.Action())
+	assert.Equal(t, StateReady, st.State)
+	assert.Nil(t, st.Current)
 
 	started := m.Process(uafx.ActionEstablishConnectionsEnabled, cfg.Key())
 	assert.Nil(t, started[0].Run)
 	assert.ErrorIs(t, started[0].Err, ua.StatusBadInvalidState)
-	_, _, err = m.claim(cfg.Key())
+	_, err = m.claim(cfg.Key())
 	assert.ErrorIs(t, err, ua.StatusBadInvalidState)
-	st, _ = m.Status(cfg.Key())
-	assert.Same(t, removal, st.Current)
 
-	require.NoError(t, m.removeConnections(context.Background(), s, prev))
+	require.NoError(t, m.removeConnections(context.Background(), s))
+	st, _ = m.Status(cfg.Key())
+	require.NotNil(t, st.Last)
+	assert.Equal(t, ActionRemoveSet, st.Last.Action())
 	m.wg.Done()
 }
 
@@ -294,7 +514,7 @@ func TestCloseWaitsForClaim(t *testing.T) {
 	require.NoError(t, err)
 	_, err = m.Add(named("B"))
 	require.NoError(t, err)
-	s, prev, err := m.claim(cfg.Key())
+	s, err := m.claim(cfg.Key())
 	require.NoError(t, err)
 	closed := make(chan struct{})
 	go func() {
@@ -312,7 +532,7 @@ func TestCloseWaitsForClaim(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	assert.Error(t, m.ctx.Err(), "Close stops what the claim does")
-	require.NoError(t, m.removeConnections(context.Background(), s, prev))
+	require.NoError(t, m.removeConnections(context.Background(), s))
 	m.wg.Done()
 	<-closed
 	assert.ErrorIs(t, m.Remove(context.Background(), KeyOf(named("B"))), ua.StatusBadShutdown)

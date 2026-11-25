@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -44,6 +45,19 @@ type PubSubConfigurationUpdate struct {
 
 	f             *configFile
 	before, after *ua.PubSubConfigurationDataType
+	created       map[pubsub.ComponentID]bool
+}
+
+// Created reports whether the update added the component id to the PubSub
+// runtime: a PubSubConnection, WriterGroup, ReaderGroup or
+// PublishedDataSet its own reconciliation created, not one it found there
+// (one an ElementMatch matched, or one that had the Name already). It is
+// recorded as the update applies the configuration, from the ids the
+// runtime returned, so a component another client adds meanwhile is never
+// the update's. A component the update replaced because its parameters
+// changed (ElementModify) counts as created.
+func (u *PubSubConfigurationUpdate) Created(id pubsub.ComponentID) bool {
+	return u != nil && u.created[id]
 }
 
 // ErrPubSubChanged reports that the PubSub configuration changed after an
@@ -54,13 +68,20 @@ var ErrPubSubChanged = errors.New("server: the PubSub configuration changed afte
 // configuration is still the one the update applied: else it changes
 // nothing and returns ErrPubSubChanged. It does nothing for an update that
 // applied no changes. The ids the update used stay released.
+//
+// Revert is safe for concurrent use: calls run one after the other in the
+// PubSub transaction, and those after the first that restored the
+// configuration do nothing.
 func (u *PubSubConfigurationUpdate) Revert() error {
-	if u == nil || !u.ChangesApplied || u.before == nil {
+	if u == nil || !u.ChangesApplied || u.f == nil {
 		return nil
 	}
 	f := u.f
-	f.update.Lock()
-	defer f.update.Unlock()
+	f.m.s.ps.txn.Lock()
+	defer f.m.s.ps.txn.Unlock()
+	if u.before == nil {
+		return nil // reverted already
+	}
 	if !reflect.DeepEqual(f.m.rt.Configuration(), u.after) {
 		return ErrPubSubChanged
 	}
@@ -71,6 +92,25 @@ func (u *PubSubConfigurationUpdate) Revert() error {
 	f.modified.Store(time.Now().UnixNano())
 	go f.changed()
 	return nil
+}
+
+// ChangePubSubConfiguration calls fn with the PubSub runtime of the server
+// inside the transaction that CloseAndUpdate, UpdatePubSubConfiguration,
+// PubSubConfigurationUpdate.Revert and the PubSub Methods that change the
+// configuration (AddConnection, AddWriterGroup, RemoveGroup, Enable and the
+// others of Part 14 §9.1.3) hold, and returns its error. Changes made
+// through it are never lost to a CloseAndUpdate that read the
+// configuration before them, nor resurrected by one. fn must not call
+// those functions or Methods itself. A server without PubSub ([WithPubSub])
+// returns ua.StatusBadNotSupported without calling fn.
+func (s *Server) ChangePubSubConfiguration(fn func(rt *pubsub.PubSub) error) error {
+	rt := s.PubSub()
+	if rt == nil {
+		return ua.StatusBadNotSupported
+	}
+	s.ps.txn.Lock()
+	defer s.ps.txn.Unlock()
+	return fn(rt)
 }
 
 // ReservePubSubIDs reserves WriterGroupIds and DataSetWriterIds for the
@@ -108,8 +148,8 @@ func (s *Server) UpdatePubSubConfiguration(ctx context.Context, cfg *ua.PubSubCo
 	if len(refs) == 0 {
 		return nil, ua.StatusBadNothingToDo
 	}
-	f.update.Lock()
-	defer f.update.Unlock()
+	f.m.s.ps.txn.Lock()
+	defer f.m.s.ps.txn.Unlock()
 	return f.applyLocked(ctx, cfg, requireCompleteUpdate, refs)
 }
 

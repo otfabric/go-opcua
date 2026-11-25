@@ -43,6 +43,10 @@ type endpoint struct {
 	// CloseConnections with Remove removes it unless another endpoint
 	// references it (Part 81 §6.2.5.2).
 	ownReader, ownWriter bool
+	// pending are the groups, PubSubConnections and PublishedDataSets of a
+	// removed reader or writer that CloseConnections with Remove has still
+	// to remove (prune); the endpoint stays until they are gone.
+	pending []pruneItem
 
 	status atomic.Int32 // uafx.ConnectionEndpointStatus
 

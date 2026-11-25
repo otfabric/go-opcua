@@ -5,6 +5,7 @@ package fxserver
 import (
 	"bytes"
 	"context"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -229,9 +230,8 @@ func (x *call) run() ua.StatusCode {
 // (Table 21), except where the release of a ControlGroup or the removal of
 // an endpoint undoes it.
 func (x *call) rollback() {
-	rt := x.c.srv.PubSub()
 	for i := len(x.enabled) - 1; i >= 0; i-- {
-		if err := rt.Disable(x.enabled[i]); err != nil {
+		if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Disable(x.enabled[i]) }); err != nil {
 			x.c.log.Warn("uafx: rollback: disable", "component", x.enabled[i], "error", err)
 		}
 	}
@@ -1019,6 +1019,7 @@ const (
 	refRG     = ua.PubSubConfigurationRefMaskReferenceReaderGroup
 	refAdd    = ua.PubSubConfigurationRefMaskElementAdd
 	refModify = ua.PubSubConfigurationRefMaskElementModify
+	refPDS    = ua.PubSubConfigurationRefMaskReferencePubDataset
 )
 
 // communicate runs SetCommunicationConfigurationCmd (Part 81
@@ -1051,6 +1052,12 @@ func (x *call) communicate() bool {
 			out.Result = ua.StatusBadNothingToDo
 			return false
 		}
+	}
+	x.c.mu.Lock()
+	hook := x.c.beforeUpdate
+	x.c.mu.Unlock()
+	if hook != nil {
+		hook()
 	}
 	u, sc := x.c.srv.UpdatePubSubConfiguration(x.ctx, cc.PubSubConfiguration, cc.RequireCompleteUpdate, cc.ConfigurationReferences)
 	if sc != ua.StatusOK {
@@ -1136,15 +1143,34 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		}
 		return false
 	}
+	// addedAt: the call adds the element of kind on the path of r (an
+	// ElementAdd reference), level 0 its connection, 1 its group; a
+	// PublishedDataSet by its ElementIndex (Part 14 §6.2.12.3).
+	addedAt := func(kind ua.PubSubConfigurationRefMask, r *ua.PubSubConfigurationRefDataType, level int) bool {
+		for _, ref := range cc.ConfigurationReferences {
+			if ref == nil || ref.ConfigurationMask&refAdd == 0 || ref.ConfigurationMask&kind == 0 {
+				continue
+			}
+			switch {
+			case level == 0 && ref.ConnectionIndex == r.ConnectionIndex,
+				level == 1 && ref.ConnectionIndex == r.ConnectionIndex && ref.GroupIndex == r.GroupIndex,
+				level == 2 && ref.ElementIndex == r.ElementIndex:
+				return true
+			}
+		}
+		return false
+	}
 	var readerNode, writerNode *ua.NodeID
 	if r := l.DataSetReaderRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
 		g := conn.ReaderGroups[r.GroupIndex]
-		cid, ok := lookupPath(rt, pubsub.KindReaderGroup, pubsub.KindDataSetReader,
+		connID, gid, cid, ok := lookupPath(rt, pubsub.KindReaderGroup, pubsub.KindDataSetReader,
 			x.assigned(refConn, r, 0, conn.Name), x.assigned(refRG, r, 1, g.Name), x.assigned(refReader, r, 2, readerAt(cfg, r).Name))
 		if !ok {
 			return ua.StatusBadNotFound
 		}
+		x.markCreated(connID, addedAt(refConn, r, 0))
+		x.markCreated(gid, addedAt(refRG, r, 1))
 		dr, err := rt.DataSetReaderConfig(cid)
 		if err != nil {
 			return ua.StatusBadNotFound
@@ -1165,16 +1191,26 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 	if r := l.DataSetWriterRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
 		g := conn.WriterGroups[r.GroupIndex]
-		cid, ok := lookupPath(rt, pubsub.KindWriterGroup, pubsub.KindDataSetWriter,
+		connID, gid, cid, ok := lookupPath(rt, pubsub.KindWriterGroup, pubsub.KindDataSetWriter,
 			x.assigned(refConn, r, 0, conn.Name), x.assigned(refWG, r, 1, g.Name), x.assigned(refWriter, r, 2, writerAt(cfg, r).Name))
 		if !ok {
 			return ua.StatusBadNotFound
 		}
+		x.markCreated(connID, addedAt(refConn, r, 0))
+		x.markCreated(gid, addedAt(refWG, r, 1))
 		dw, err := rt.DataSetWriterConfig(cid)
 		if err != nil {
 			return ua.StatusBadNotFound
 		}
 		pds := publishedDataSet(rt, dw.DataSetName)
+		if pid, ok := rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, dw.DataSetName); ok {
+			i := slices.IndexFunc(cfg.PublishedDataSets, func(p *ua.PublishedDataSetDataType) bool {
+				return p != nil && x.assignedPDS(cfg, p) == dw.DataSetName
+			})
+			if i >= 0 && i <= math.MaxUint16 {
+				x.markCreated(pid, addedAt(refPDS, &ua.PubSubConfigurationRefDataType{ElementIndex: uint16(i)}, 2))
+			}
+		}
 		var meta *ua.ConfigurationVersionDataType
 		if pds != nil && pds.DataSetMetaData != nil {
 			meta = pds.DataSetMetaData.ConfigurationVersion
@@ -1192,6 +1228,40 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		return ua.StatusBadNotFound
 	}
 	return ua.StatusOK
+}
+
+// markCreated records that the call created the component id, so that
+// CloseConnections with Remove removes it once nothing uses it (Part 81
+// §6.2.5.2); the rollback forgets it. It is the call's when the call adds
+// it (added: an ElementAdd reference) and the update of the call created
+// it in the runtime (PubSubConfigurationUpdate.Created, recorded as the
+// update applied the configuration): a component that was there, one
+// another client added meanwhile, one the call matched or modified is not.
+func (x *call) markCreated(id pubsub.ComponentID, added bool) {
+	c := x.c
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if id == 0 || !added || !x.update.Created(id) || c.created[id] {
+		return
+	}
+	c.created[id] = true
+	x.linkUndo = append(x.linkUndo, func() {
+		c.mu.Lock()
+		delete(c.created, id)
+		c.mu.Unlock()
+	})
+}
+
+// assignedPDS returns the Name of the PublishedDataSet p of cfg: its own,
+// or the one the server assigned to it (Part 81 §6.16.3).
+func (x *call) assignedPDS(cfg *ua.PubSubConfiguration2DataType, p *ua.PublishedDataSetDataType) string {
+	i := slices.Index(cfg.PublishedDataSets, p)
+	for _, v := range x.update.ConfigurationValues {
+		if e := v.ConfigurationElement; e != nil && e.ConfigurationMask&refPDS != 0 && v.Name != "" && int(e.ElementIndex) == i {
+			return v.Name
+		}
+	}
+	return p.Name
 }
 
 // assigned returns the Name the configuration of the call has for the
@@ -1239,17 +1309,19 @@ func (c *Connections) setLinkLocked(e *endpoint, reader bool, n *ua.NodeID, own 
 	c.setLink(e, reader, n, own)
 }
 
-// lookupPath finds connection/group/element in the runtime.
-func lookupPath(rt *pubsub.PubSub, groupKind, kind pubsub.ComponentKind, conn, group, name string) (pubsub.ComponentID, bool) {
-	cid, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, conn)
+// lookupPath finds connection/group/element in the runtime and returns the
+// ids of all three.
+func lookupPath(rt *pubsub.PubSub, groupKind, kind pubsub.ComponentKind, conn, group, name string) (connID, gid, id pubsub.ComponentID, ok bool) {
+	connID, ok = rt.Lookup(pubsub.KindConnection, pubsub.Root, conn)
 	if !ok {
-		return 0, false
+		return 0, 0, 0, false
 	}
-	gid, ok := rt.Lookup(groupKind, cid, group)
+	gid, ok = rt.Lookup(groupKind, connID, group)
 	if !ok {
-		return 0, false
+		return 0, 0, 0, false
 	}
-	return rt.Lookup(kind, gid, name)
+	id, ok = rt.Lookup(kind, gid, name)
+	return connID, gid, id, ok
 }
 
 // versionMatches checks a DataSet ConfigurationVersion against the expected
@@ -1363,7 +1435,7 @@ func (x *call) enableOne(rt *pubsub.PubSub, e *endpoint) ua.StatusCode {
 				return ua.StatusBadInvalidState
 			}
 			if !info.Enabled {
-				if err := rt.Enable(id); err != nil {
+				if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
 					return pubsub.StatusCodeOf(err)
 				}
 				x.enabled = append(x.enabled, id)

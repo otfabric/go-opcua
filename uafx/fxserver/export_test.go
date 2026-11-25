@@ -64,3 +64,41 @@ func WithMaxControlled(o ConnectionOptions, n int) ConnectionOptions {
 
 // SessionEnded tells the Guard of the Locks that the session s ended.
 func SessionEnded(c *Connections, s *server.Session) { lockGuard{c}.SessionEnded(s) }
+
+// SetCMClock replaces the clock of the set Locks of c.
+func SetCMClock(c *ConnectionManager, now func() time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.clock = now
+}
+
+// TickCMLocks runs one tick of the set Locks.
+func TickCMLocks(c *ConnectionManager) { c.tickLocks() }
+
+// CMSessionEnded tells the Guard of the ConnectionManager that s ended.
+func CMSessionEnded(c *ConnectionManager, s *server.Session) { cmGuard{c}.SessionEnded(s) }
+
+// SetPruneOps replaces the runtime operations that remove the groups,
+// PubSubConnections and PublishedDataSets an EstablishConnections call
+// created (prune); a nil function keeps the current one.
+func SetPruneOps(c *Connections, removeGroup, removeConnection, removePDS func(pubsub.ComponentID) error) {
+	c.call.Lock()
+	defer c.call.Unlock()
+	if removeGroup != nil {
+		c.ops.removeGroup = removeGroup
+	}
+	if removeConnection != nil {
+		c.ops.removeConnection = removeConnection
+	}
+	if removePDS != nil {
+		c.ops.removePDS = removePDS
+	}
+}
+
+// SetBeforeUpdate sets the function SetCommunicationConfigurationCmd runs
+// right before it applies the PubSub configuration.
+func SetBeforeUpdate(c *Connections, f func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.beforeUpdate = f
+}
