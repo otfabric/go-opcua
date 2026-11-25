@@ -929,8 +929,9 @@ Processing or a later state of that run, never the state before it. The
 guarantee is the publication of the run, not that the set is still in
 Processing: a run that ends fast (nothing to reach, nothing to remove)
 may be Ready or Error already, with LastTransition ProcessingToReady or
-ProcessingToError; read CurrentState and LastTransition in one Read to
-get them of the same moment. A run that ends in the state the set was in
+ProcessingToError. The nodes of a set change one after the other, so a
+Read while a run ends may see its end state beside its start transition.
+A run that ends in the state the set was in
 before (Error after Error) is told apart by its ProcessingStarted and
 ProcessingFailed events. The Lock and Edit of a set are shown the same way
 before EditConnectionConfigurationSets returns. Before its first
