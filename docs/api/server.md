@@ -3242,6 +3242,14 @@ type PubSubConfigurationUpdate struct {
 
 PubSubConfigurationUpdate is the result of [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration): the output arguments of CloseAndUpdate (Part 14 §9.1.3.7.4).
 
+#### func (PubSubConfigurationUpdate) Created
+
+```go
+func (u *PubSubConfigurationUpdate) Created(id pubsub.ComponentID) bool
+```
+
+Created reports whether the update added the component id to the PubSub runtime: a PubSubConnection, WriterGroup, ReaderGroup or PublishedDataSet its own reconciliation created, not one it found there (one an ElementMatch matched, or one that had the Name already). It is recorded as the update applies the configuration, from the ids the runtime returned, so a component another client adds meanwhile is never the update's. A component the update replaced because its parameters changed (ElementModify) counts as created.
+
 #### func (PubSubConfigurationUpdate) Revert
 
 ```go

@@ -677,6 +677,55 @@ func TestConnectionManagerNodeIDs(t *testing.T) {
 	}
 }
 
+// TestConnectionManagerFlowIndex: a Replace that moves an endpoint from
+// flow 0 to flow 1 moves its ToOutboundFlow and ToInboundFlow References;
+// the set keeps its NodeId.
+func TestConnectionManagerFlowIndex(t *testing.T) {
+	t.Parallel()
+	f := newCMFX(t, fxserver.ConnectionManagerOptions{})
+	two := func(out, in int32) *uafx.ConnectionConfigurationSetConf {
+		conf := cmConf("Line1")
+		second := *conf.CommunicationFlows[0].(*uafx.PubSubCommunicationFlowConfigurationConf)
+		second.BrowseName = "Flow2"
+		conf.CommunicationFlows = append(conf.CommunicationFlows, &second)
+		conf.Connections[0].Endpoint1.OutboundFlowIndex = ptrOf(out)
+		conf.Connections[0].Endpoint2.InboundFlowIndex = []int32{in, 0}
+		return conf
+	}
+	target := func(endpoint string, ref uint32) string {
+		t.Helper()
+		var out []string
+		for _, r := range browse(t, f.c, f.node(".Conn[C1]."+endpoint), 0) {
+			if r.ReferenceTypeID.Equal(ua.NewNumericNodeID(f.ns.CM, ref)) {
+				out = append(out, r.NodeID.NodeID.String())
+			}
+		}
+		require.Len(t, out, 1, endpoint)
+		return out[0]
+	}
+	_, err := f.m.Replace(context.Background(), two(0, 0))
+	require.NoError(t, err)
+	f.cm.Flush()
+	assert.Equal(t, f.node(".Flow[Flow1]").String(), target("Endpoint1", fxcmid.ToOutboundFlow))
+	assert.Equal(t, f.node(".Flow[Flow1]").String(), target("Endpoint2", fxcmid.ToInboundFlow))
+
+	// Only the outbound index changes (the shape once had only whether it
+	// was set), then the inbound one.
+	_, err = f.m.Replace(context.Background(), two(1, 0))
+	require.NoError(t, err)
+	f.cm.Flush()
+	assert.Equal(t, f.node(".Flow[Flow2]").String(), target("Endpoint1", fxcmid.ToOutboundFlow))
+	assert.Equal(t, f.node(".Flow[Flow1]").String(), target("Endpoint2", fxcmid.ToInboundFlow))
+	_, err = f.m.Replace(context.Background(), two(1, 1))
+	require.NoError(t, err)
+	f.cm.Flush()
+	n, ok := f.cm.SetNode(fxcm.SetKey{Folder: []string{"Plant"}, Name: "Line1"})
+	require.True(t, ok)
+	assert.Equal(t, f.set.String(), n.String(), "the set keeps its NodeId")
+	assert.Equal(t, f.node(".Flow[Flow2]").String(), target("Endpoint1", fxcmid.ToOutboundFlow))
+	assert.Equal(t, f.node(".Flow[Flow2]").String(), target("Endpoint2", fxcmid.ToInboundFlow))
+}
+
 // TestConnectionManagerAudit: with auditing, a call of a Method reports an
 // AuditUpdateMethodResultEventType event and a write of a set an
 // AuditUpdateConnectionConfigurationSetEventType event (§6.7.4, §8.5).

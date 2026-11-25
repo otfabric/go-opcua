@@ -113,6 +113,9 @@ type Manager struct {
 	mu     sync.Mutex
 	sets   map[string]*set
 	closed bool
+	// reserved are the keys an Update with requireComplete adds, which no
+	// other Add may take meanwhile (updateComplete).
+	reserved map[string]bool
 
 	places placeLocks
 
@@ -148,6 +151,9 @@ type set struct {
 	retries       int
 	retry         *time.Timer
 	removed       bool
+	// held: a Replace, Remove or Update claimed the set (claim); no run or
+	// edit starts on it until the change is made or the claim released.
+	held bool
 }
 
 // record is an EndpointRecord with what closing the endpoint needs.
@@ -442,9 +448,9 @@ func (m *Manager) addCheckLocked(k SetKey) error {
 	switch {
 	case m.closed:
 		return managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
-	case m.sets[keyString(k)] != nil:
+	case m.sets[keyString(k)] != nil || m.reserved[keyString(k)]:
 		return managerError(ua.StatusBadBrowseNameDuplicated, "a set %s exists", k)
-	case len(m.sets) >= m.opts.MaxConnectionConfigurationSets:
+	case len(m.sets)+len(m.reserved) >= m.opts.MaxConnectionConfigurationSets:
 		return managerError(ua.StatusBadResourceUnavailable, "MaxConnectionConfigurationSets is %d", m.opts.MaxConnectionConfigurationSets)
 	}
 	return nil
@@ -474,12 +480,18 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 	if err := m.removeConnections(ctx, s, prev); err != nil {
 		return nil, err
 	}
-	s.mu.Lock()
-	s.cfg, s.state, s.diags, s.records, s.lastEstablish, s.retries = cfg, StateReady, newDiagnostics(cfg), map[string]*record{}, nil, 0
-	s.current = nil
-	s.mu.Unlock()
+	m.replaceSet(s, cfg)
 	m.observe(Event{Kind: EventSetReplaced, Set: cfg.key, Version: cfg.version})
 	return cfg, nil
+}
+
+// replaceSet puts cfg in the claimed set s, whose Connections are closed,
+// and releases the claim.
+func (m *Manager) replaceSet(s *set, cfg *Config) {
+	s.mu.Lock()
+	s.cfg, s.state, s.diags, s.records, s.lastEstablish, s.retries = cfg, StateReady, newDiagnostics(cfg), map[string]*record{}, nil, 0
+	s.current, s.held = nil, false
+	s.mu.Unlock()
 }
 
 // Remove removes a set (F.3.3.2 ElementRemove): CloseConnections with
@@ -499,7 +511,7 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 	delete(m.sets, keyString(key))
 	m.mu.Unlock()
 	s.mu.Lock()
-	s.removed, s.current = true, nil
+	s.removed, s.current, s.held = true, nil, false
 	s.mu.Unlock()
 	m.observe(Event{Kind: EventSetRemoved, Set: key})
 	return nil
@@ -527,10 +539,10 @@ func (m *Manager) claim(key SetKey) (*set, State, error) {
 		return nil, 0, managerError(ua.StatusBadNoMatch, "no set %s", key)
 	}
 	s.mu.Lock()
-	if s.edit.Editing() != nil {
+	if s.edit.Editing() != nil || s.held {
 		s.mu.Unlock()
 		m.wg.Done()
-		return nil, 0, managerError(ua.StatusBadInvalidState, "the set %s is being edited", key)
+		return nil, 0, managerError(ua.StatusBadInvalidState, "the set %s is being edited, replaced or removed", key)
 	}
 	tr, err := Start(s.state)
 	if err != nil {
@@ -540,7 +552,7 @@ func (m *Manager) claim(key SetKey) (*set, State, error) {
 	}
 	prev := s.state
 	r := &Run{id: RunID(m.runs.Add(1)), key: key, version: s.cfg.version, action: ActionRemoveSet, done: make(chan struct{})}
-	s.state, s.current, s.transition = StateProcessing, r, tr
+	s.state, s.current, s.transition, s.held = StateProcessing, r, tr, true
 	if s.retry != nil {
 		s.retry.Stop()
 		s.retry = nil
@@ -562,9 +574,32 @@ func (m *Manager) removeConnections(ctx context.Context, s *set, prev State) err
 	s.mu.Unlock()
 	res := m.execute(ctx, s, r, prev)
 	if res.State == StateError {
+		m.release(s)
 		return managerError(firstStatus(res.Failures), "the Connections of the set %s were not all closed", r.key)
 	}
 	return nil
+}
+
+// release ends the claim of s without a change.
+func (m *Manager) release(s *set) {
+	s.mu.Lock()
+	s.held = false
+	s.mu.Unlock()
+}
+
+// unclaim ends the claim of s before its Connections were closed: the set
+// leaves Processing for the state it was in (transition 2 or 3, §6.9.2).
+func (m *Manager) unclaim(s *set, prev State) {
+	s.mu.Lock()
+	tr, _ := Finish(StateProcessing, prev == StateError)
+	r := s.current
+	s.state, s.current, s.transition, s.held = prev, nil, tr, false
+	s.mu.Unlock()
+	if r != nil {
+		close(r.done)
+		m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
+	}
+	m.wg.Done()
 }
 
 func firstStatus(fs []Failure) ua.StatusCode {
@@ -589,18 +624,17 @@ type Operation struct {
 // ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names
 // (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a
 // Remove or Replace), the state (ua.StatusBadInvalidState while processed
-// or edited), and every new set. With requireComplete, one failure ends
-// the call there: nothing is closed or changed, applied is false. Else the
-// failed operations are dropped. Then the operations are applied in order;
-// a remove or replace whose close fails fails (the old set stays, in
-// Error), and with requireComplete the operations after it are skipped
-// (ua.StatusBadInvalidState). applied is ChangesApplied of Table F.39:
-// true when one or more operations were applied, false when none was.
-// With requireComplete that is every operation, except when a close fails
-// after earlier operations were applied: those stay applied and applied is
-// true (library interpretation: Table F.39 has no value for a partial
-// complete update; FALSE would say that nothing changed). results has one
-// error per operation, nil for success.
+// or edited), and every new set. results has one error per operation, nil
+// for success; applied is ChangesApplied of Table F.39.
+//
+// Without requireComplete the failed operations are dropped and the others
+// applied in order; a remove or replace whose close fails fails (the old
+// set stays, in Error). applied is true when one or more operations were
+// applied, false when none was.
+//
+// With requireComplete nothing changes unless every operation is applied:
+// applied is true when all were, false when none was (Table F.39). See
+// updateComplete.
 func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error) {
 	results = make([]error, len(ops))
 	cfgs := make([]*Config, len(ops))
@@ -615,16 +649,14 @@ func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete b
 		results[i] = m.checkOperation(op, existing, &n, &cfgs[i])
 	}
 	failed := slices.ContainsFunc(results, func(e error) bool { return e != nil })
-	if failed && requireComplete {
-		return false, results
+	if requireComplete {
+		if failed {
+			return false, results
+		}
+		return m.updateComplete(ctx, ops, cfgs, results)
 	}
-	stop := false
 	for i, op := range ops {
 		if results[i] != nil {
-			continue
-		}
-		if stop {
-			results[i] = managerError(ua.StatusBadInvalidState, "an earlier operation failed")
 			continue
 		}
 		var err error
@@ -638,12 +670,184 @@ func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete b
 		}
 		if err != nil {
 			results[i] = err
-			stop = requireComplete
 			continue
 		}
 		applied = true
 	}
 	return applied, results
+}
+
+// errNotApplied is the result of an operation of a complete update that
+// was not applied because another one failed.
+func errNotApplied() error {
+	return managerError(ua.StatusBadInvalidState, "not applied: another operation of the batch failed (RequireCompleteUpdate)")
+}
+
+// updateComplete is Update with requireComplete: all or nothing (F.3.3,
+// Table F.39). It claims every set the batch removes or replaces, so that
+// no run or edit starts on them, and reserves the keys it adds. Closing
+// Connections cannot be undone, so a batch whose removes and replaces
+// would close the Connections of more than one set is refused with
+// ua.StatusBadInvalidState (library interpretation: the Manager cannot
+// guarantee it). The one close runs first; when it fails nothing changes
+// and the set stays, in Error. Then all operations are applied at once
+// under the lock of the Manager, where nothing can fail.
+func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*Config, results []error) (bool, []error) {
+	type claimed struct {
+		i    int
+		s    *set
+		prev State
+	}
+	var held []claimed
+	fail := func(i int, err error) (bool, []error) {
+		for j := range results {
+			results[j] = errNotApplied()
+		}
+		results[i] = err
+		for _, h := range held {
+			m.unclaim(h.s, h.prev)
+		}
+		return false, results
+	}
+	for i, op := range ops {
+		if op.Op == uafx.ElementAdd {
+			continue
+		}
+		s, prev, err := m.claim(KeyOf(op.Conf))
+		if err != nil {
+			return fail(i, err)
+		}
+		held = append(held, claimed{i, s, prev})
+	}
+	var closing []claimed
+	for _, h := range held {
+		h.s.mu.Lock()
+		if len(h.s.records) > 0 {
+			closing = append(closing, h)
+		}
+		h.s.mu.Unlock()
+	}
+	if len(closing) > 1 {
+		return fail(closing[1].i, managerError(ua.StatusBadInvalidState,
+			"with RequireCompleteUpdate a batch may close the Connections of one set only; %d sets have Connections", len(closing)))
+	}
+	m.mu.Lock()
+	if m.reserved == nil {
+		m.reserved = map[string]bool{}
+	}
+	var adds []string
+	removing := map[string]bool{}
+	for _, h := range held {
+		if ops[h.i].Op == uafx.ElementRemove {
+			removing[keyString(KeyOf(ops[h.i].Conf))] = true
+		}
+	}
+	n := len(m.sets) + len(m.reserved)
+	for i, op := range ops {
+		if op.Op != uafx.ElementAdd {
+			continue
+		}
+		k := keyString(cfgs[i].key)
+		var err error
+		switch {
+		case m.closed:
+			err = managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
+		case m.reserved[k] || m.sets[k] != nil && !removing[k]:
+			err = managerError(ua.StatusBadBrowseNameDuplicated, "a set %s exists", cfgs[i].key)
+		case n-len(removing)+1 > m.opts.MaxConnectionConfigurationSets:
+			err = managerError(ua.StatusBadResourceUnavailable, "MaxConnectionConfigurationSets is %d", m.opts.MaxConnectionConfigurationSets)
+		}
+		if err != nil {
+			for _, a := range adds {
+				delete(m.reserved, a)
+			}
+			m.mu.Unlock()
+			return fail(i, err)
+		}
+		m.reserved[k] = true
+		adds = append(adds, k)
+		n++
+	}
+	m.mu.Unlock()
+	unreserve := func() {
+		m.mu.Lock()
+		for _, a := range adds {
+			delete(m.reserved, a)
+		}
+		m.mu.Unlock()
+	}
+	for _, h := range closing {
+		if err := m.removeConnections(ctx, h.s, h.prev); err != nil {
+			// The close left h in Error and released it; the other
+			// claims are undone by fail.
+			unreserve()
+			m.wg.Done()
+			held = slices.DeleteFunc(held, func(x claimed) bool { return x.s == h.s })
+			return fail(h.i, err)
+		}
+	}
+	var events []Event
+	m.mu.Lock()
+	for _, a := range adds {
+		delete(m.reserved, a)
+	}
+	for _, h := range held {
+		if ops[h.i].Op == uafx.ElementRemove {
+			delete(m.sets, keyString(KeyOf(ops[h.i].Conf)))
+		}
+	}
+	for i, op := range ops {
+		if op.Op == uafx.ElementAdd {
+			m.sets[keyString(cfgs[i].key)] = newSet(cfgs[i])
+		}
+	}
+	m.mu.Unlock()
+	for i, op := range ops {
+		switch op.Op {
+		case uafx.ElementAdd:
+			events = append(events, Event{Kind: EventSetAdded, Set: cfgs[i].key, Version: cfgs[i].version})
+		case uafx.ElementRemove:
+			events = append(events, Event{Kind: EventSetRemoved, Set: KeyOf(op.Conf)})
+		case uafx.ElementReplace:
+			events = append(events, Event{Kind: EventSetReplaced, Set: cfgs[i].key, Version: cfgs[i].version})
+		}
+	}
+	for _, h := range held {
+		closed := slices.ContainsFunc(closing, func(x claimed) bool { return x.s == h.s })
+		if !closed {
+			// Nothing to close: the set leaves Processing.
+			m.finishClaim(h.s)
+		}
+		switch ops[h.i].Op {
+		case uafx.ElementRemove:
+			h.s.mu.Lock()
+			h.s.removed, h.s.current, h.s.held = true, nil, false
+			h.s.mu.Unlock()
+		case uafx.ElementReplace:
+			m.replaceSet(h.s, cfgs[h.i])
+		default:
+			// Only removes and replaces are claimed.
+		}
+		m.wg.Done()
+	}
+	for _, e := range events {
+		m.observe(e)
+	}
+	return true, results
+}
+
+// finishClaim ends the Processing a claim of a set without Connections
+// started: nothing to close, transition 2 (§6.9.2); the set stays held.
+func (m *Manager) finishClaim(s *set) {
+	s.mu.Lock()
+	tr, _ := Finish(StateProcessing, false)
+	r := s.current
+	s.state, s.current, s.transition = StateReady, nil, tr
+	s.mu.Unlock()
+	if r != nil {
+		close(r.done)
+		m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
+	}
 }
 
 func (m *Manager) addConfig(cfg *Config) error {
@@ -759,6 +963,9 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 	}
 	s.mu.Lock()
 	tr, err := Start(s.state)
+	if err == nil && s.held {
+		err = managerError(ua.StatusBadInvalidState, "the set %s is being replaced or removed", k)
+	}
 	if err != nil {
 		s.mu.Unlock()
 		m.wg.Done()
@@ -853,6 +1060,10 @@ func (m *Manager) StartEdit(key SetKey, owner LockOwner) (*Edit, error) {
 		return nil, managerError(ua.StatusBadNodeIDUnknown, "no set %s", key)
 	}
 	s.mu.Lock()
+	if s.held {
+		s.mu.Unlock()
+		return nil, managerError(ua.StatusBadInvalidState, "the set %s is being replaced or removed", key)
+	}
 	started := s.edit.Editing() == nil
 	e, err := s.edit.Start(s.cfg, owner)
 	s.mu.Unlock()

@@ -4,6 +4,7 @@ package fxserver_test
 
 import (
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -65,6 +66,39 @@ func TestCloseConnectionsPrune(t *testing.T) {
 		assert.False(t, ok, "the connection the call created goes")
 	})
 
+	// Another client adds a PubSubConnection of the Name the call matches
+	// while the call runs, right before its update: it is not the call's,
+	// and the close leaves it (only the group the call added goes).
+	t.Run("concurrent", func(t *testing.T) {
+		t.Parallel()
+		f := newFX(t, fxserver.ConnectionOptions{})
+		rt := f.srv.PubSub()
+		var foreign pubsub.ComponentID
+		fxserver.SetBeforeUpdate(f.conns, func() {
+			id, err := rt.AddConnection(pubsub.UDPConnection(subConn, f.udp, nil))
+			assert.NoError(t, err)
+			foreign = id
+		})
+		r := f.fullRequest("Race")
+		r.ConnectionEndpointConfigurations[0].ConnectionEndpoint.Parameter.CleanupTimeout = -1
+		refs := append([]*ua.PubSubConfigurationRefDataType{}, addAll...)
+		refs[2] = ref(ua.PubSubConfigurationRefMaskElementMatch|refConn, 1, 0, 0)
+		r.CommunicationConfigurations[0].ConfigurationReferences = refs
+		res := f.establish(t, r)
+		require.Equal(t, ua.StatusOK, res.Status, "%+v", res.CommunicationConfigurationResults)
+		fxserver.SetBeforeUpdate(f.conns, nil)
+		c, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
+		require.True(t, ok)
+		require.Equal(t, foreign, c, "the call matched the foreign connection")
+		ep := res.ConnectionEndpointConfigurationResults[0].ConnectionEndpointID
+		sc, results := f.close(t, true, ep)
+		require.Equal(t, ua.StatusOK, sc, "%v", results)
+		_, err := rt.Component(foreign)
+		require.NoError(t, err, "the foreign connection survives the close")
+		_, ok = rt.Lookup(pubsub.KindReaderGroup, foreign, rgName)
+		assert.False(t, ok, "the group the call added goes")
+	})
+
 	t.Run("shared", func(t *testing.T) {
 		t.Parallel()
 		f := newFX(t, fxserver.ConnectionOptions{})
@@ -89,19 +123,45 @@ func TestCloseConnectionsPrune(t *testing.T) {
 		assert.False(t, ok, "the publisher side is not in use")
 	})
 
-	t.Run("failure", func(t *testing.T) {
-		t.Parallel()
-		f := newFX(t, fxserver.ConnectionOptions{})
-		rt := f.srv.PubSub()
-		boom := func(pubsub.ComponentID) error { return ua.StatusBadResourceUnavailable }
-		fxserver.SetPruneOps(f.conns, boom, boom, boom)
-		ep := f.operational(t, "Fail", -1)
-		sc, results := f.close(t, true, ep)
-		require.Equal(t, ua.StatusOK, sc, "the endpoint is closed: %v", results)
-		assert.Nil(t, f.srv.Node(ep))
-		_, ok := rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, pdsName)
-		assert.True(t, ok, "what failed to go stays")
-		_, ok = rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
-		assert.True(t, ok)
-	})
+	// A removal that fails is the result of the endpoint (Table 23:
+	// Uncertain), the endpoint stays, and a later close removes what is
+	// left; each remover fails once in turn.
+	for _, which := range []string{"group", "connection", "pds"} {
+		t.Run("failure "+which, func(t *testing.T) {
+			t.Parallel()
+			f := newFX(t, fxserver.ConnectionOptions{})
+			rt := f.srv.PubSub()
+			baseline := len(rt.Components())
+			var failed atomic.Int32
+			boom := func(real func(pubsub.ComponentID) error) func(pubsub.ComponentID) error {
+				return func(id pubsub.ComponentID) error {
+					if failed.Add(1) == 1 {
+						return ua.StatusBadResourceUnavailable
+					}
+					return real(id)
+				}
+			}
+			var g, c, p func(pubsub.ComponentID) error
+			switch which {
+			case "group":
+				g = boom(rt.RemoveGroup)
+			case "connection":
+				c = boom(rt.RemoveConnection)
+			default:
+				p = boom(rt.RemovePublishedDataSet)
+			}
+			fxserver.SetPruneOps(f.conns, g, c, p)
+			ep := f.operational(t, "Fail", -1)
+			sc, results := f.close(t, true, ep)
+			assert.Equal(t, ua.StatusUncertain, sc)
+			assert.Equal(t, []ua.StatusCode{ua.StatusBadResourceUnavailable}, results)
+			require.NotNil(t, f.srv.Node(ep), "the endpoint stays for a retry")
+			assert.Greater(t, len(rt.Components()), baseline)
+
+			sc, results = f.close(t, true, ep)
+			require.Equal(t, ua.StatusOK, sc, "%v", results)
+			assert.Nil(t, f.srv.Node(ep))
+			assert.Len(t, rt.Components(), baseline, "the retry removed what was left")
+		})
+	}
 }

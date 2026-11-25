@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -44,6 +45,19 @@ type PubSubConfigurationUpdate struct {
 
 	f             *configFile
 	before, after *ua.PubSubConfigurationDataType
+	created       map[pubsub.ComponentID]bool
+}
+
+// Created reports whether the update added the component id to the PubSub
+// runtime: a PubSubConnection, WriterGroup, ReaderGroup or
+// PublishedDataSet its own reconciliation created, not one it found there
+// (one an ElementMatch matched, or one that had the Name already). It is
+// recorded as the update applies the configuration, from the ids the
+// runtime returned, so a component another client adds meanwhile is never
+// the update's. A component the update replaced because its parameters
+// changed (ElementModify) counts as created.
+func (u *PubSubConfigurationUpdate) Created(id pubsub.ComponentID) bool {
+	return u != nil && u.created[id]
 }
 
 // ErrPubSubChanged reports that the PubSub configuration changed after an

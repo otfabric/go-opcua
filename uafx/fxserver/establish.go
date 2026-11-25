@@ -5,6 +5,7 @@ package fxserver
 import (
 	"bytes"
 	"context"
+	"math"
 	"reflect"
 	"slices"
 	"strings"
@@ -123,13 +124,10 @@ type call struct {
 	els []*element
 
 	// Rollback (Part 81 §6.2.4.3.11, Table 21).
-	created  []*endpoint // CreateConnectionEndpointCmd
-	restore  []func()    // preconfigured endpoints the call changed
-	update   *server.PubSubConfigurationUpdate
-	linkUndo []func() // SetCommunicationConfigurationCmd
-	// existed: the PubSub components before the call applied its
-	// configuration (markCreated).
-	existed    map[pubsub.ComponentID]bool
+	created    []*endpoint // CreateConnectionEndpointCmd
+	restore    []func()    // preconfigured endpoints the call changed
+	update     *server.PubSubConfigurationUpdate
+	linkUndo   []func()             // SetCommunicationConfigurationCmd
 	enabled    []pubsub.ComponentID // EnableCommunicationCmd
 	cleanupsOn []*endpoint
 	controlled []*controlGroup // EstablishControlCmd
@@ -1022,6 +1020,7 @@ const (
 	refRG     = ua.PubSubConfigurationRefMaskReferenceReaderGroup
 	refAdd    = ua.PubSubConfigurationRefMaskElementAdd
 	refModify = ua.PubSubConfigurationRefMaskElementModify
+	refPDS    = ua.PubSubConfigurationRefMaskReferencePubDataset
 )
 
 // communicate runs SetCommunicationConfigurationCmd (Part 81
@@ -1055,9 +1054,11 @@ func (x *call) communicate() bool {
 			return false
 		}
 	}
-	x.existed = map[pubsub.ComponentID]bool{}
-	for _, ci := range x.c.srv.PubSub().Components() {
-		x.existed[ci.ID] = true
+	x.c.mu.Lock()
+	hook := x.c.beforeUpdate
+	x.c.mu.Unlock()
+	if hook != nil {
+		hook()
 	}
 	u, sc := x.c.srv.UpdatePubSubConfiguration(x.ctx, cc.PubSubConfiguration, cc.RequireCompleteUpdate, cc.ConfigurationReferences)
 	if sc != ua.StatusOK {
@@ -1143,6 +1144,23 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		}
 		return false
 	}
+	// addedAt: the call adds the element of kind on the path of r (an
+	// ElementAdd reference), level 0 its connection, 1 its group; a
+	// PublishedDataSet by its ElementIndex (Part 14 §6.2.12.3).
+	addedAt := func(kind ua.PubSubConfigurationRefMask, r *ua.PubSubConfigurationRefDataType, level int) bool {
+		for _, ref := range cc.ConfigurationReferences {
+			if ref == nil || ref.ConfigurationMask&refAdd == 0 || ref.ConfigurationMask&kind == 0 {
+				continue
+			}
+			switch {
+			case level == 0 && ref.ConnectionIndex == r.ConnectionIndex,
+				level == 1 && ref.ConnectionIndex == r.ConnectionIndex && ref.GroupIndex == r.GroupIndex,
+				level == 2 && ref.ElementIndex == r.ElementIndex:
+				return true
+			}
+		}
+		return false
+	}
 	var readerNode, writerNode *ua.NodeID
 	if r := l.DataSetReaderRef; r != nil && r.ConfigurationMask != 0 {
 		conn := cfg.Connections[r.ConnectionIndex]
@@ -1152,8 +1170,8 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		if !ok {
 			return ua.StatusBadNotFound
 		}
-		x.markCreated(connID)
-		x.markCreated(gid)
+		x.markCreated(connID, addedAt(refConn, r, 0))
+		x.markCreated(gid, addedAt(refRG, r, 1))
 		dr, err := rt.DataSetReaderConfig(cid)
 		if err != nil {
 			return ua.StatusBadNotFound
@@ -1179,15 +1197,20 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		if !ok {
 			return ua.StatusBadNotFound
 		}
-		x.markCreated(connID)
-		x.markCreated(gid)
+		x.markCreated(connID, addedAt(refConn, r, 0))
+		x.markCreated(gid, addedAt(refWG, r, 1))
 		dw, err := rt.DataSetWriterConfig(cid)
 		if err != nil {
 			return ua.StatusBadNotFound
 		}
 		pds := publishedDataSet(rt, dw.DataSetName)
 		if pid, ok := rt.Lookup(pubsub.KindPublishedDataSet, pubsub.Root, dw.DataSetName); ok {
-			x.markCreated(pid)
+			i := slices.IndexFunc(cfg.PublishedDataSets, func(p *ua.PublishedDataSetDataType) bool {
+				return p != nil && x.assignedPDS(cfg, p) == dw.DataSetName
+			})
+			if i >= 0 && i <= math.MaxUint16 {
+				x.markCreated(pid, addedAt(refPDS, &ua.PubSubConfigurationRefDataType{ElementIndex: uint16(i)}, 2))
+			}
 		}
 		var meta *ua.ConfigurationVersionDataType
 		if pds != nil && pds.DataSetMetaData != nil {
@@ -1208,17 +1231,18 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 	return ua.StatusOK
 }
 
-// markCreated records that the call created the component id, which the
-// runtime did not have before the call applied its configuration, so that
+// markCreated records that the call created the component id, so that
 // CloseConnections with Remove removes it once nothing uses it (Part 81
-// §6.2.5.2); the rollback forgets it. A component that was there before,
-// preconfigured or matched (the server matches an ElementAdd of a
-// PubSubConnection it has by its Name), is not the call's.
-func (x *call) markCreated(id pubsub.ComponentID) {
+// §6.2.5.2); the rollback forgets it. It is the call's when the call adds
+// it (added: an ElementAdd reference) and the update of the call created
+// it in the runtime (PubSubConfigurationUpdate.Created, recorded as the
+// update applied the configuration): a component that was there, one
+// another client added meanwhile, one the call matched or modified is not.
+func (x *call) markCreated(id pubsub.ComponentID, added bool) {
 	c := x.c
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if id == 0 || x.existed[id] || c.created[id] {
+	if id == 0 || !added || !x.update.Created(id) || c.created[id] {
 		return
 	}
 	c.created[id] = true
@@ -1227,6 +1251,18 @@ func (x *call) markCreated(id pubsub.ComponentID) {
 		delete(c.created, id)
 		c.mu.Unlock()
 	})
+}
+
+// assignedPDS returns the Name of the PublishedDataSet p of cfg: its own,
+// or the one the server assigned to it (Part 81 §6.16.3).
+func (x *call) assignedPDS(cfg *ua.PubSubConfiguration2DataType, p *ua.PublishedDataSetDataType) string {
+	i := slices.Index(cfg.PublishedDataSets, p)
+	for _, v := range x.update.ConfigurationValues {
+		if e := v.ConfigurationElement; e != nil && e.ConfigurationMask&refPDS != 0 && v.Name != "" && int(e.ElementIndex) == i {
+			return v.Name
+		}
+	}
+	return p.Name
 }
 
 // assigned returns the Name the configuration of the call has for the

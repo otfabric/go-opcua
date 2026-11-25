@@ -289,6 +289,9 @@ type Connections struct {
 	// beforeExpire, when set by a test, runs after the monitor found an
 	// expired CleanupTimeout and before it takes c.call; guarded by mu.
 
+	// beforeUpdate, when set by a test, runs in SetCommunicationConfigurationCmd
+	// right before the PubSub configuration is applied; guarded by mu.
+
 	// retryCleanup is the shortest time after which a failed cleanup is
 	// tried again; guarded by mu.
 

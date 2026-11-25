@@ -12,6 +12,15 @@ import (
 // again with its children, one that is the same keeps running, and the
 // children of it are compared in turn.
 func reconcilePubSub(rt *pubsub.PubSub, want *ua.PubSubConfigurationDataType) error {
+	return reconcilePubSubRecord(rt, want, nil)
+}
+
+// reconcilePubSubRecord is reconcilePubSub that reports to created, when
+// set, every PubSubConnection, group and PublishedDataSet it adds.
+func reconcilePubSubRecord(rt *pubsub.PubSub, want *ua.PubSubConfigurationDataType, created func(pubsub.ComponentID)) error {
+	if created == nil {
+		created = func(pubsub.ComponentID) {}
+	}
 	have := rt.Configuration()
 	for _, d := range have.PublishedDataSets {
 		if w := pdsNamed(want, d.Name); w == nil || !sameEncoding(d, w) {
@@ -27,9 +36,11 @@ func reconcilePubSub(rt *pubsub.PubSub, want *ua.PubSubConfigurationDataType) er
 	have = rt.Configuration()
 	for _, w := range want.PublishedDataSets {
 		if pdsNamed(have, w.Name) == nil {
-			if _, err := rt.AddPublishedDataSet(w); err != nil {
+			id, err := rt.AddPublishedDataSet(w)
+			if err != nil {
 				return err
 			}
+			created(id)
 		}
 	}
 
@@ -54,13 +65,27 @@ func reconcilePubSub(rt *pubsub.PubSub, want *ua.PubSubConfigurationDataType) er
 	for _, w := range want.Connections {
 		c := connNamed(have, w.Name)
 		if c == nil {
-			if _, err := rt.AddConnection(w); err != nil {
+			cid, err := rt.AddConnection(w)
+			if err != nil {
 				return err
+			}
+			// The groups came with the connection, which did not exist
+			// before: no one else can have added them.
+			created(cid)
+			for _, g := range w.WriterGroups {
+				if gid, ok := rt.Lookup(pubsub.KindWriterGroup, cid, g.Name); ok {
+					created(gid)
+				}
+			}
+			for _, g := range w.ReaderGroups {
+				if gid, ok := rt.Lookup(pubsub.KindReaderGroup, cid, g.Name); ok {
+					created(gid)
+				}
 			}
 			continue
 		}
 		cid, _ := rt.Lookup(pubsub.KindConnection, pubsub.Root, c.Name)
-		if err := addMissingGroups(rt, cid, c, w); err != nil {
+		if err := addMissingGroups(rt, cid, c, w, created); err != nil {
 			return err
 		}
 	}
@@ -115,13 +140,15 @@ func removeChangedGroups(rt *pubsub.PubSub, cid pubsub.ComponentID, c, w *ua.Pub
 	return nil
 }
 
-func addMissingGroups(rt *pubsub.PubSub, cid pubsub.ComponentID, c, w *ua.PubSubConnectionDataType) error {
+func addMissingGroups(rt *pubsub.PubSub, cid pubsub.ComponentID, c, w *ua.PubSubConnectionDataType, created func(pubsub.ComponentID)) error {
 	for _, wg := range w.WriterGroups {
 		g := writerGroupNamed(c, wg.Name)
 		if g == nil {
-			if _, err := rt.AddWriterGroup(cid, wg); err != nil {
+			gid, err := rt.AddWriterGroup(cid, wg)
+			if err != nil {
 				return err
 			}
+			created(gid)
 			continue
 		}
 		gid, _ := rt.Lookup(pubsub.KindWriterGroup, cid, g.Name)
@@ -136,9 +163,11 @@ func addMissingGroups(rt *pubsub.PubSub, cid pubsub.ComponentID, c, w *ua.PubSub
 	for _, rg := range w.ReaderGroups {
 		g := readerGroupNamed(c, rg.Name)
 		if g == nil {
-			if _, err := rt.AddReaderGroup(cid, rg); err != nil {
+			gid, err := rt.AddReaderGroup(cid, rg)
+			if err != nil {
 				return err
 			}
+			created(gid)
 			continue
 		}
 		gid, _ := rt.Lookup(pubsub.KindReaderGroup, cid, g.Name)

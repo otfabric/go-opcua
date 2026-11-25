@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 )
 
@@ -539,8 +540,9 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 	u := newConfigUpdate(file, old, f.defaultPublisherID(old.Connections), usedG, usedW)
 	results := u.run(refs)
 	applied := u.changed && (!require || !u.failed)
+	created := map[pubsub.ComponentID]bool{}
 	if applied {
-		if err := reconcilePubSub(f.m.rt, u.cfg); err != nil {
+		if err := reconcilePubSubRecord(f.m.rt, u.cfg, func(id pubsub.ComponentID) { created[id] = true }); err != nil {
 			f.m.s.cfg.logger.Warn("pubsub: CloseAndUpdate failed, restoring the configuration", "error", err)
 			if rerr := reconcilePubSub(f.m.rt, old); rerr != nil {
 				f.m.s.cfg.logger.Error("pubsub: restoring the configuration failed", "error", rerr)
@@ -559,7 +561,7 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 	}
 	r := &PubSubConfigurationUpdate{ChangesApplied: applied, ReferenceResults: results, ConfigurationObjects: objs, f: f}
 	if applied {
-		r.ConfigurationValues = u.values
+		r.ConfigurationValues, r.created = u.values, created
 		r.before, r.after = old, f.m.rt.Configuration()
 	}
 	return r, ua.StatusOK

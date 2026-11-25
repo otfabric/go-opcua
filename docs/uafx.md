@@ -253,10 +253,15 @@ call created for the removed reader or writer goes as well once nothing
 uses it ("all related communication model Objects if not referenced from
 other ConnectionEndpoints", §6.2.5.2): a group without readers and
 writers, then a PubSubConnection without groups, and a PublishedDataSet no
-DataSetWriter publishes. A component the runtime had before the call
-(preconfigured, or matched with ElementMatch) is not the call's and stays.
-Repeated establishes and removes therefore leave the runtime as it was.
-A removal that fails there is logged; the endpoint is closed. An endpoint of
+DataSetWriter publishes. A component is the call's when the call adds it
+(an ElementAdd reference) and the call's update created it in the
+runtime, as `server.PubSubConfigurationUpdate.Created` records while the
+update applies the configuration. A preconfigured component, one the call
+matched or modified, and one another client added while the call ran are
+not the call's and stay. Repeated establishes and removes therefore leave
+the runtime as it was. A removal that fails there is the result of the
+endpoint, as for the reader and writer below: the endpoint stays, and a
+later CloseConnections with Remove removes what is left. An endpoint of
 another AutomationComponent is `Bad_NodeIdUnknown`, a node that is not a
 ConnectionEndpoint `Bad_InvalidArgument` (Table 24).
 
@@ -947,16 +952,29 @@ one writer, and no reader beside it. Handles belong to their session
 does not block the next. CloseAndUpdate (F.3.3, Tables F.39 to
 F.41) closes the written file and applies its sets, one operation per Body
 element (library interpretation of the length), with `Manager.Update`:
-RequireCompleteUpdate TRUE changes nothing unless every operation can be
-applied. CloseAndUpdate asks the authorizer again ("The Client shall be
+RequireCompleteUpdate TRUE changes nothing unless every operation is
+applied (see below). CloseAndUpdate asks the authorizer again ("The Client shall be
 authorized to modify the configuration"), so a right revoked after Open
 is `Bad_UserAccessDenied`; the handle is closed and nothing changes. It
-returns ChangesApplied (TRUE when one or more operations were applied, as
-Table F.39 has it for RequireCompleteUpdate FALSE; FALSE when none was;
-with RequireCompleteUpdate TRUE a remove whose close fails after earlier
-operations were applied leaves those applied and reports TRUE, a library
-interpretation), a result per operation and the ConnectionConfigurationSet Objects. A file
-holds at most 16 MiB.
+returns ChangesApplied (Table F.39), a result per operation and the
+ConnectionConfigurationSet Objects. A file holds at most 16 MiB.
+
+- RequireCompleteUpdate FALSE: the operations that fail are dropped, the
+  others applied. ChangesApplied is TRUE when one or more were applied,
+  FALSE when none was.
+- RequireCompleteUpdate TRUE: all or nothing; ChangesApplied is TRUE when
+  all were applied, FALSE when none was. The sets the batch removes or
+  replaces are claimed first, so that no run or edit starts on them, and
+  the Names it adds are reserved. Closing Connections cannot be undone,
+  so a batch that would close the Connections of more than one set is
+  `Bad_InvalidState` (library interpretation: the ConnectionManager could
+  not keep the batch whole). The one close runs first: when it fails,
+  nothing changes and the set stays, in Error. Then the batch is applied
+  at once. The other operations of a refused batch are
+  `Bad_InvalidState`.
+
+A Replace or Remove through the Go API claims its set in the same way
+until it is done.
 
 ### Access
 

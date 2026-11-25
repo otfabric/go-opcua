@@ -223,14 +223,26 @@ func (c *ConnectionManager) refreshSetLocked(s *cmSet, v *cmView) {
 	}
 }
 
-// shapeOf is the structure of a set: what decides which nodes it has.
+// shapeOf is the structure of a set: what decides which nodes and
+// References it has.
 func shapeOf(conf *uafx.ConnectionConfigurationSetConf) string {
+	// Names are quoted, so that no Name can look like a delimiter; the
+	// indexes are the ones the References follow (ToOutboundFlow,
+	// ToInboundFlow, ToConnectionEndpointConfiguration), -1 when the
+	// builder adds no Reference.
+	nflows := len(conf.CommunicationFlows)
+	flow := func(i int32) int32 {
+		if i < 0 || int(i) >= nflows {
+			return -1
+		}
+		return i
+	}
 	var b strings.Builder
 	for _, s := range conf.ServerAddresses {
-		fmt.Fprintf(&b, "S%s;", s.BrowseName)
+		fmt.Fprintf(&b, "S%q;", s.BrowseName)
 	}
 	for _, a := range conf.AutomationComponentConfigurations {
-		fmt.Fprintf(&b, "A%s/%d;", a.BrowseName, a.ServerAddressIndex)
+		fmt.Fprintf(&b, "A%q/%d;", a.BrowseName, a.ServerAddressIndex)
 	}
 	for _, f := range conf.CommunicationFlows {
 		p, ok := f.(*uafx.PubSubCommunicationFlowConfigurationConf)
@@ -238,21 +250,28 @@ func shapeOf(conf *uafx.ConnectionConfigurationSetConf) string {
 			b.WriteString("F?;")
 			continue
 		}
-		fmt.Fprintf(&b, "F%s/%t%t%t%t%t%t", p.BrowseName, p.Address != nil, p.TransportProfileURI != nil,
+		fmt.Fprintf(&b, "F%q/%t%t%t%t%t%t", p.BrowseName, p.Address != nil, p.TransportProfileURI != nil,
 			p.HeaderLayoutURI != nil, p.PublishingInterval != nil, p.SecurityMode != nil, p.SecurityGroupID != nil)
 		for _, sc := range p.SubscriberConfigurations {
-			fmt.Fprintf(&b, "/%s%t", sc.BrowseName, sc.Address != nil)
+			fmt.Fprintf(&b, "/%q%t", sc.BrowseName, sc.Address != nil)
 		}
 		b.WriteString(";")
 	}
 	for _, cn := range conf.Connections {
-		fmt.Fprintf(&b, "C%s", cn.BrowseName)
+		fmt.Fprintf(&b, "C%q", cn.BrowseName)
 		for _, e := range []*uafx.ConnectionEndpointConfigurationConf{cn.Endpoint1, cn.Endpoint2} {
 			if e == nil {
 				b.WriteString("/-")
 				continue
 			}
-			fmt.Fprintf(&b, "/%d,%v,%v", e.AutomationComponentIndex, e.OutboundFlowIndex != nil && *e.OutboundFlowIndex >= 0, e.InboundFlowIndex)
+			out, in := int32(-1), int32(-1)
+			if e.OutboundFlowIndex != nil {
+				out = flow(*e.OutboundFlowIndex)
+			}
+			if len(e.InboundFlowIndex) > 0 {
+				in = flow(e.InboundFlowIndex[0])
+			}
+			fmt.Fprintf(&b, "/%d,%d,%d", e.AutomationComponentIndex, out, in)
 		}
 		b.WriteString(";")
 	}

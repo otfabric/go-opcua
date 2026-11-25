@@ -171,6 +171,105 @@ func TestUpdate(t *testing.T) {
 	assert.ErrorIs(t, m.Remove(context.Background(), KeyOf(named("Old"))), ua.StatusBadInvalidState)
 }
 
+// TestUpdateComplete: with RequireCompleteUpdate a batch is applied whole
+// or not at all (F.3.3, Table F.39): an Add before a Remove whose close
+// fails is not kept, and a batch that would close the Connections of two
+// sets is refused before anything is closed.
+func TestUpdateComplete(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	m := offlineManager(t, Options{})
+	for _, n := range []string{"B", "C", "D"} {
+		_, err := m.Add(named(n))
+		require.NoError(t, err)
+	}
+	established := func(n string) {
+		s := m.lookup(KeyOf(named(n)))
+		s.mu.Lock()
+		s.records["x"] = &record{EndpointRecord: EndpointRecord{Endpoint: EndpointRef{"C1", 1}, Class: KnownOwned, NodeID: ua.NewNumericNodeID(1, 1)},
+			addr: ServerAddress{Address: "opc.tcp://offline:4840"}}
+		s.mu.Unlock()
+	}
+	state := func(n string) State {
+		st, ok := m.Status(KeyOf(named(n)))
+		require.True(t, ok, n)
+		return st.State
+	}
+	established("B")
+	established("C")
+
+	// Two sets with Connections to close: refused, nothing closed.
+	applied, res := m.Update(ctx, []Operation{
+		{Op: uafx.ElementAdd, Conf: named("N")},
+		{Op: uafx.ElementRemove, Conf: named("B")},
+		{Op: uafx.ElementReplace, Conf: named("C")},
+	}, true)
+	assert.False(t, applied)
+	for _, e := range res {
+		assert.ErrorIs(t, e, ua.StatusBadInvalidState)
+	}
+	assert.Contains(t, res[2].Error(), "one set only")
+	assert.ElementsMatch(t, []string{"B", "C", "D"}, names(m))
+	assert.Equal(t, StateReady, state("B"), "unclaimed")
+	assert.Equal(t, StateReady, state("C"))
+
+	// [Add N, Remove B] with a close of B that fails: N is not added and B
+	// stays, in Error; the key N is free again.
+	applied, res = m.Update(ctx, []Operation{
+		{Op: uafx.ElementAdd, Conf: named("N")},
+		{Op: uafx.ElementRemove, Conf: named("B")},
+	}, true)
+	assert.False(t, applied, "Table F.39: FALSE, nothing was applied")
+	assert.ErrorIs(t, res[0], ua.StatusBadInvalidState)
+	assert.Error(t, res[1])
+	assert.ElementsMatch(t, []string{"B", "C", "D"}, names(m))
+	assert.Equal(t, StateError, state("B"))
+	assert.Empty(t, m.reserved)
+	_, err := m.Add(named("N"))
+	require.NoError(t, err)
+	require.NoError(t, m.Remove(ctx, KeyOf(named("N"))))
+
+	// A claim of D holds it: no run or edit starts meanwhile; an unclaim
+	// gives it back.
+	s, prev, err := m.claim(KeyOf(named("D")))
+	require.NoError(t, err)
+	assert.ErrorIs(t, m.Process(uafx.ActionEstablishConnections, KeyOf(named("D")))[0].Err, ua.StatusBadInvalidState)
+	_, err = m.StartEdit(KeyOf(named("D")), "e")
+	assert.ErrorIs(t, err, ua.StatusBadInvalidState)
+	m.unclaim(s, prev)
+	assert.Equal(t, StateReady, state("D"))
+	_, err = m.StartEdit(KeyOf(named("D")), "e")
+	require.NoError(t, err)
+	_, err = m.DiscardEdit(KeyOf(named("D")), "e")
+	require.NoError(t, err)
+
+	// [Add N, Replace D]: nothing to close, applied whole.
+	applied, res = m.Update(ctx, []Operation{
+		{Op: uafx.ElementAdd, Conf: named("N")},
+		{Op: uafx.ElementReplace, Conf: named("D")},
+	}, true)
+	assert.True(t, applied, "%v", res)
+	assert.Equal(t, []error{nil, nil}, res)
+	assert.ElementsMatch(t, []string{"B", "C", "D", "N"}, names(m))
+	assert.Equal(t, StateReady, state("D"))
+	assert.Equal(t, ProcessingToReady, func() Transition { st, _ := m.Status(KeyOf(named("D"))); return st.Transition }())
+
+	// The limit counts the keys the batch adds.
+	m2 := offlineManager(t, Options{MaxConnectionConfigurationSets: 1})
+	applied, res = m2.Update(ctx, []Operation{{Op: uafx.ElementAdd, Conf: named("X")}, {Op: uafx.ElementAdd, Conf: named("Y")}}, true)
+	assert.False(t, applied)
+	assert.ErrorIs(t, res[1], ua.StatusBadResourceUnavailable)
+	assert.Empty(t, m2.Keys())
+}
+
+func names(m *Manager) []string {
+	var out []string
+	for _, k := range m.Keys() {
+		out = append(out, k.Name)
+	}
+	return out
+}
+
 // TestEdits: StartEditing, CommitUpdates, DiscardUpdates and the end of
 // the Lock (§6.7.4).
 func TestEdits(t *testing.T) {

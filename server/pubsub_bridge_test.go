@@ -79,8 +79,14 @@ func TestPubSubBridge(t *testing.T) {
 	require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusOK}, u.ReferenceResults)
 	require.Len(t, u.ConfigurationObjects, 2)
 	require.Len(t, u.ConfigurationValues, 2)
-	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	a, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
 	require.True(t, ok)
+	g, ok := rt.Lookup(pubsub.KindWriterGroup, a, "G")
+	require.True(t, ok)
+	require.True(t, u.Created(a), "the update created the connection")
+	require.True(t, u.Created(g), "and its group")
+	require.False(t, u.Created(pubsub.Root))
+	require.False(t, (*server.PubSubConfigurationUpdate)(nil).Created(a))
 
 	require.NoError(t, u.Revert())
 	_, ok = rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
@@ -107,6 +113,25 @@ func TestPubSubBridge(t *testing.T) {
 		return sc
 	}))
 	require.False(t, u.ChangesApplied)
+	bid, _ := rt.Lookup(pubsub.KindConnection, pubsub.Root, "B")
+	require.False(t, u.Created(bid), "a matched connection is not the update's")
+	require.NoError(t, u.Revert())
+
+	// A group added to a connection that exists is the update's; the
+	// connection is not.
+	cfg := bridgeConfig("B")
+	cfg.Connections[0].WriterGroups = append(cfg.Connections[0].WriterGroups, pubsub.WriterGroup("G2", 0, time.Second))
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		var sc ua.StatusCode
+		u, sc = b.srv.UpdatePubSubConfiguration(ctx, cfg, true, []*ua.PubSubConfigurationRefDataType{
+			{ConfigurationMask: refMatch | refConn}, {ConfigurationMask: refAdd | refWG, GroupIndex: 1}})
+		return sc
+	}))
+	require.True(t, u.ChangesApplied, "%v", u.ReferenceResults)
+	g2, ok := rt.Lookup(pubsub.KindWriterGroup, bid, "G2")
+	require.True(t, ok)
+	require.True(t, u.Created(g2))
+	require.False(t, u.Created(bid))
 	require.NoError(t, u.Revert())
 
 	// Argument errors.

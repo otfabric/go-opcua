@@ -94,3 +94,11 @@ func SetPruneOps(c *Connections, removeGroup, removeConnection, removePDS func(p
 		c.ops.removePDS = removePDS
 	}
 }
+
+// SetBeforeUpdate sets the function SetCommunicationConfigurationCmd runs
+// right before it applies the PubSub configuration.
+func SetBeforeUpdate(c *Connections, f func()) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.beforeUpdate = f
+}

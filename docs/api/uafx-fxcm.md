@@ -575,7 +575,10 @@ LostResponse is what a ConnectionManager knows of an endpoint that a call whose 
 
 ```go
 type Manager struct {
-	// contains filtered or unexported fields
+
+	// reserved are the keys an Update with requireComplete adds, which no
+	// other Add may take meanwhile (updateComplete).
+
 }
 ```
 
@@ -731,7 +734,11 @@ Status returns the live state of a set.
 func (m *Manager) Update(ctx context.Context, ops []Operation, requireComplete bool) (applied bool, results []error)
 ```
 
-Update applies a batch of operations as CloseAndUpdate does (F.3.3, design §5.8). First the whole batch is checked: one operation bit (FC-6, ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a Remove or Replace), the state (ua.StatusBadInvalidState while processed or edited), and every new set. With requireComplete, one failure ends the call there: nothing is closed or changed, applied is false. Else the failed operations are dropped. Then the operations are applied in order; a remove or replace whose close fails fails (the old set stays, in Error), and with requireComplete the operations after it are skipped (ua.StatusBadInvalidState). applied is ChangesApplied of Table F.39: true when one or more operations were applied, false when none was. With requireComplete that is every operation, except when a close fails after earlier operations were applied: those stay applied and applied is true (library interpretation: Table F.39 has no value for a partial complete update; FALSE would say that nothing changed). results has one error per operation, nil for success.
+Update applies a batch of operations as CloseAndUpdate does (F.3.3, design §5.8). First the whole batch is checked: one operation bit (FC-6, ua.StatusBadInvalidArgument; none ua.StatusBadNothingToDo), the names (ua.StatusBadBrowseNameDuplicated for an Add, ua.StatusBadNoMatch for a Remove or Replace), the state (ua.StatusBadInvalidState while processed or edited), and every new set. results has one error per operation, nil for success; applied is ChangesApplied of Table F.39.
+
+Without requireComplete the failed operations are dropped and the others applied in order; a remove or replace whose close fails fails (the old set stays, in Error). applied is true when one or more operations were applied, false when none was.
+
+With requireComplete nothing changes unless every operation is applied: applied is true when all were, false when none was (Table F.39). See updateComplete.
 
 ### type MonitorOptions
 
