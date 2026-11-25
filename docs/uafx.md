@@ -922,12 +922,19 @@ ConnectionManager's NodeId and the LockingUser `CM`, and a write is
 
 ProcessConnectionConfigurationSets (§6.7.5, Tables 84 to 86) starts a run
 per set and returns; an Action that is no FxProcessEnum value is
-`Bad_NotSupported`, a set in Processing `Bad_InvalidState`. A set whose
-result is Good is in Processing when the Method returns: its nodes show
-the transition before the answer goes out, so that a client that reads
-CurrentState after the call sees the run, not the state before it; the
-same holds for the Lock after EditConnectionConfigurationSets. Before its
-first transition a set has an empty LastTransition and a null
+`Bad_NotSupported`, a set in Processing `Bad_InvalidState`. For a set
+whose result is Good the nodes show the run the call started before the
+answer goes out: a client that reads CurrentState after the call sees
+Processing or a later state of that run, never the state before it. The
+guarantee is the publication of the run, not that the set is still in
+Processing: a run that ends fast (nothing to reach, nothing to remove)
+may be Ready or Error already, with LastTransition ProcessingToReady or
+ProcessingToError; read CurrentState and LastTransition in one Read to
+get them of the same moment. A run that ends in the state the set was in
+before (Error after Error) is told apart by its ProcessingStarted and
+ProcessingFailed events. The Lock and Edit of a set are shown the same way
+before EditConnectionConfigurationSets returns. Before its first
+transition a set has an empty LastTransition and a null
 LastTransition.Id. The outcome is in the events and the state of the set:
 
 - ConnectionConfigurationSetProcessingStartedEventType,
