@@ -5,6 +5,7 @@ package server_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/pubsub"
+	"github.com/otfabric/go-opcua/pubsub/transport"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
@@ -275,4 +277,94 @@ func TestPubSubConfigurationTransaction(t *testing.T) {
 	// Without PubSub there is nothing to change.
 	plain, _ := testutil.NewTestServer(t)
 	require.ErrorIs(t, plain.ChangePubSubConfiguration(func(*pubsub.PubSub) error { return nil }), ua.StatusBadNotSupported)
+}
+
+// TestPubSubReserveDuringUpdate: ReserveIds runs in the PubSub
+// transaction, so a reservation made while an update assigns ids never gets
+// one of them (Part 14 §9.1.3.7.5: the ids are neither used nor reserved).
+func TestPubSubReserveDuringUpdate(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	c := testutil.NewTestClient(t, b.url)
+	type reserved struct {
+		groups []uint16
+		err    error
+	}
+	got := make(chan reserved, 1)
+	server.SetPubSubBeforeReconcile(b.srv, func() {
+		go func() {
+			res, err := c.Call(context.Background(), &ua.CallMethodRequest{
+				ObjectID: nid(id.PublishSubscribePubSubConfiguration),
+				MethodID: nid(id.PublishSubscribePubSubConfigurationReserveIDs),
+				InputArguments: []*ua.Variant{ua.MustVariant(transport.ProfileUDPUADP),
+					ua.MustVariant(uint16(1)), ua.MustVariant(uint16(0))},
+			})
+			if err == nil && res.StatusCode != ua.StatusOK {
+				err = res.StatusCode
+			}
+			var gs []uint16
+			if err == nil && len(res.OutputArguments) == 3 {
+				gs, _ = res.OutputArguments[1].Value().([]uint16)
+			}
+			got <- reserved{gs, err}
+		}()
+		// Without the transaction the reservation is made here, from the
+		// configuration before the update.
+		select {
+		case r := <-got:
+			t.Errorf("ReserveIds ran during the update (%v)", r.groups)
+			got <- r
+		case <-time.After(200 * time.Millisecond):
+		}
+	})
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		u, sc := b.srv.UpdatePubSubConfiguration(ctx, bridgeConfig("A"), true,
+			[]*ua.PubSubConfigurationRefDataType{{ConfigurationMask: refAdd | refConn}, {ConfigurationMask: refAdd | refWG}})
+		if sc == ua.StatusOK && !u.ChangesApplied {
+			sc = ua.StatusBadInvalidState
+		}
+		return sc
+	}))
+	server.SetPubSubBeforeReconcile(b.srv, nil)
+	r := <-got
+	require.NoError(t, r.err)
+	require.Len(t, r.groups, 1)
+	a, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	require.True(t, ok)
+	g, ok := rt.Lookup(pubsub.KindWriterGroup, a, "G")
+	require.True(t, ok)
+	cfg, err := rt.WriterGroupConfig(g)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, cfg.WriterGroupID, uint16(0x8000), "the update assigned the id")
+	require.NotEqual(t, cfg.WriterGroupID, r.groups[0], "the reservation does not get the id the update uses")
+}
+
+// TestPubSubRevertConcurrent: concurrent Revert calls of one update restore
+// the configuration once; the others do nothing and return nil.
+func TestPubSubRevertConcurrent(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	var u *server.PubSubConfigurationUpdate
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		var sc ua.StatusCode
+		u, sc = b.srv.UpdatePubSubConfiguration(ctx, bridgeConfig("A"), true,
+			[]*ua.PubSubConfigurationRefDataType{{ConfigurationMask: refAdd | refConn}})
+		return sc
+	}))
+	require.True(t, u.ChangesApplied)
+	const n = 8
+	errs := make(chan error, n)
+	var wg sync.WaitGroup
+	for range n {
+		wg.Go(func() { errs <- u.Revert() })
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	require.False(t, ok, "the update is reverted")
 }

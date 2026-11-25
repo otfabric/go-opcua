@@ -92,6 +92,13 @@ func WithPubSubAuthorizer(a PubSubAuthorizer) Option {
 // PubSub returns the PubSub runtime of the server, nil if the server was
 // created without [WithPubSub]. Components added to it, before or after
 // Start, appear in the information model.
+//
+// Calls on the runtime itself are outside the PubSub transaction of the
+// server: a change made through them while a CloseAndUpdate (Part 14
+// §9.1.3.7.4) or [Server.UpdatePubSubConfiguration] runs can be lost to it,
+// or put back by it. Code that changes the configuration while clients may
+// update it makes the change through [Server.ChangePubSubConfiguration].
+// Reading the runtime needs no transaction.
 func (s *Server) PubSub() *pubsub.PubSub {
 	if s.cfg.pubsub == nil {
 		return nil

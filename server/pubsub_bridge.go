@@ -68,13 +68,20 @@ var ErrPubSubChanged = errors.New("server: the PubSub configuration changed afte
 // configuration is still the one the update applied: else it changes
 // nothing and returns ErrPubSubChanged. It does nothing for an update that
 // applied no changes. The ids the update used stay released.
+//
+// Revert is safe for concurrent use: calls run one after the other in the
+// PubSub transaction, and those after the first that restored the
+// configuration do nothing.
 func (u *PubSubConfigurationUpdate) Revert() error {
-	if u == nil || !u.ChangesApplied || u.before == nil {
+	if u == nil || !u.ChangesApplied || u.f == nil {
 		return nil
 	}
 	f := u.f
 	f.m.s.ps.txn.Lock()
 	defer f.m.s.ps.txn.Unlock()
+	if u.before == nil {
+		return nil // reverted already
+	}
 	if !reflect.DeepEqual(f.m.rt.Configuration(), u.after) {
 		return ErrPubSubChanged
 	}

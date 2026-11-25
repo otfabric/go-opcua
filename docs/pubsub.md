@@ -443,7 +443,10 @@ cfg, err := r.ReadConfiguration(ctx)
   the update runs is applied after it and is not lost: the update leaves
   the elements it does not reference alone (§9.1.3.7.6). Go code that
   changes the runtime of a server directly while clients may call
-  CloseAndUpdate uses `Server.ChangePubSubConfiguration`.
+  CloseAndUpdate uses `Server.ChangePubSubConfiguration`: calls on
+  `Server.PubSub()` itself are outside the transaction. ReserveIds
+  (§9.1.3.7.5) and `Server.ReservePubSubIDs` run in it too, so they never
+  reserve an id that an update is assigning.
   ConfigurationValues name the added and matched elements with their
   PublisherId, WriterGroupId or DataSetWriterId, ConfigurationObjects are
   their nodes.

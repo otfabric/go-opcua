@@ -422,12 +422,17 @@ func (f *configFile) reserveIDs(ctx context.Context, _ *ua.NodeID, args []*ua.Va
 }
 
 // reserve reserves ng WriterGroupIds and nw DataSetWriterIds for the
-// session of ctx (Part 14 §9.1.3.7.5).
+// session of ctx (Part 14 §9.1.3.7.5). It runs in the PubSub transaction:
+// the ids it reserves are neither used nor reserved (§9.1.3.7.5), so it
+// must not read the configuration while a CloseAndUpdate assigns ids that
+// it has not applied yet. The lock order is ps.txn, then f.mu.
 func (f *configFile) reserve(ctx context.Context, ng, nw uint16) (*PubSubIDReservation, ua.StatusCode) {
 	sess := sessionOf(ctx)
 	if sess == nil {
 		return nil, ua.StatusBadSessionIDInvalid
 	}
+	f.m.s.ps.txn.Lock()
+	defer f.m.s.ps.txn.Unlock()
 	cfg := f.m.rt.Configuration()
 	f.mu.Lock()
 	defer f.mu.Unlock()

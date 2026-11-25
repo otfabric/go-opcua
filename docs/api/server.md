@@ -3258,6 +3258,8 @@ func (u *PubSubConfigurationUpdate) Revert() error
 
 Revert restores the configuration the update replaced, provided the configuration is still the one the update applied: else it changes nothing and returns ErrPubSubChanged. It does nothing for an update that applied no changes. The ids the update used stay released.
 
+Revert is safe for concurrent use: calls run one after the other in the PubSub transaction, and those after the first that restored the configuration do nothing.
+
 ### type PubSubIDReservation
 
 ```go
@@ -4219,6 +4221,8 @@ func (s *Server) PubSub() *pubsub.PubSub
 ```
 
 PubSub returns the PubSub runtime of the server, nil if the server was created without [WithPubSub](#func-withpubsub). Components added to it, before or after Start, appear in the information model.
+
+Calls on the runtime itself are outside the PubSub transaction of the server: a change made through them while a CloseAndUpdate (Part 14 §9.1.3.7.4) or [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration) runs can be lost to it, or put back by it. Code that changes the configuration while clients may update it makes the change through [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration). Reading the runtime needs no transaction.
 
 #### func (Server) PubSubComponentID
 
