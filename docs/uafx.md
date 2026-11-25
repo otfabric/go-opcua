@@ -258,7 +258,11 @@ with its PubSubConnection, but the PublishedDataSet of the departing writer
 goes all the same when no other writer publishes it. A component is the call's when the call adds it
 (an ElementAdd reference) and the call's update created it in the
 runtime, as `server.PubSubConfigurationUpdate.Created` records while the
-update applies the configuration. A preconfigured component, one the call
+update applies the configuration. The removals, and the disables and
+enables of the calls, run in the PubSub transaction of the server
+(`server.Server.ChangePubSubConfiguration`), so that a CloseAndUpdate or
+a PubSub Method of another client neither loses them nor is lost to
+them. A preconfigured component, one the call
 matched or modified, and one another client added while the call ran are
 not the call's and stay. Repeated establishes and removes therefore leave
 the runtime as it was. A removal that fails there is the result of the
@@ -699,9 +703,7 @@ commit that changes the Name of an established endpoint is refused
 (§6.7.5; a set in Processing is `Bad_InvalidState`, Table 86). `Run.Wait`
 returns its `RunResult`: the state it ended in, the ConnectionsDiagnostics
 (§10.19), a `Failure` per failed endpoint, and the endpoints it created,
-closed or could not decide. A Replace, Remove or `Update` that claimed a
-set and ended without closing anything ends its run with a result too:
-the state the set went back to, nothing closed and no failures. `Status` is the live state of a set, `Counters`
+closed or could not decide. `Status` is the live state of a set, `Counters`
 the call counters of §6.7.2. Every call of a run carries the AuditEntryId
 `fxcm:<set>:run:<n>` (§6.7.3.2).
 
@@ -989,7 +991,15 @@ ConnectionConfigurationSet Objects. A file holds at most 16 MiB.
   anything was closed applies nothing (`Bad_Shutdown`).
 
 A Replace or Remove through the Go API claims its set in the same way
-until it is done.
+until it is done. A claim holds the set, so that no run, retry or edit
+starts on it, but is no processing: the set keeps its state, and only the
+remove run that closes its Connections (or, for a set without
+Connections, the commit of the batch) takes it through Processing, with
+the transitions and the ProcessingStarted and ProcessingSucceeded or
+ProcessingFailed events of §6.9.2 and §8.6 to §8.9. A refused batch
+therefore leaves no transition and no event. `Manager.Update` without
+operations applies nothing and returns ChangesApplied FALSE, with or
+without requireComplete.
 
 ### Access
 

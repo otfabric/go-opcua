@@ -30,6 +30,13 @@ type pubsubState struct {
 	mu    sync.Mutex
 	model *pubsubModel
 
+	// txn serialises the changes of the PubSub configuration that read it
+	// and then change it (CloseAndUpdate, UpdatePubSubConfiguration,
+	// Revert) with the PubSub Methods that change it and with
+	// ChangePubSubConfiguration, so that none of them is lost in between
+	// (Part 14 §9.1.3.7.4).
+	txn sync.Mutex
+
 	evMu   sync.Mutex
 	evSubs map[*pubsubEventSub]struct{}
 }

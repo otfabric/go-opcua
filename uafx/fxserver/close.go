@@ -136,25 +136,37 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 			}
 			continue
 		}
-		derr := c.ops.disable(cid)
-		if errors.Is(derr, ua.StatusBadInvalidState) {
-			derr = nil // disabled already
-		}
+		// The disable and removal run in the PubSub transaction of the
+		// server, so that no CloseAndUpdate that read the configuration
+		// before them puts the component back.
+		var derr, rerr error
+		var it pruneItem
+		_ = c.srv.ChangePubSubConfiguration(func(*pubsub.PubSub) error {
+			derr = c.ops.disable(cid)
+			if errors.Is(derr, ua.StatusBadInvalidState) {
+				derr = nil // disabled already
+			}
+			if !remove || !x.own {
+				return nil
+			}
+			// Removing stops the component as well: a failed disable
+			// matters only if the removal fails too.
+			remover := c.ops.removeWriter
+			if x.reader {
+				remover = c.ops.removeReader
+			}
+			it = c.related(cid, x.reader)
+			rerr = remover(cid)
+			return nil
+		})
 		if !remove || !x.own {
 			if derr != nil {
 				fail("disable", cid, derr)
 			}
 			continue
 		}
-		// Removing stops the component as well: a failed disable matters
-		// only if the removal fails too.
-		remover := c.ops.removeWriter
-		if x.reader {
-			remover = c.ops.removeReader
-		}
-		it := c.related(cid, x.reader)
-		if err := remover(cid); err != nil && !errors.Is(err, ua.StatusBadNotFound) {
-			fail("remove", cid, errors.Join(derr, err))
+		if rerr != nil && !errors.Is(rerr, ua.StatusBadNotFound) {
+			fail("remove", cid, errors.Join(derr, rerr))
 			continue
 		}
 		c.mu.Lock()
@@ -223,7 +235,15 @@ func (c *Connections) prune(e *endpoint) ua.StatusCode {
 	status := ua.StatusOK
 	var left []pruneItem
 	for _, it := range items {
-		if sc := c.pruneOne(e, it); sc != ua.StatusOK {
+		// What is in use and what goes is decided and done in one PubSub
+		// transaction: a component another client adds meanwhile is
+		// neither removed with it nor lost (Part 14 §9.1.3.7.4).
+		var sc ua.StatusCode
+		_ = c.srv.ChangePubSubConfiguration(func(*pubsub.PubSub) error {
+			sc = c.pruneOne(e, it)
+			return nil
+		})
+		if sc != ua.StatusOK {
 			left = append(left, it)
 			if status == ua.StatusOK {
 				status = sc

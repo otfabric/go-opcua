@@ -436,6 +436,14 @@ cfg, err := r.ReadConfiguration(ctx)
   Bad_ConfigurationError when the result would not be valid). With
   RequireCompleteUpdate nothing is applied unless all are. The runtime then
   changes only the components that differ: the others keep running.
+  CloseAndUpdate runs in one transaction with the Methods that change the
+  configuration (AddConnection, AddWriterGroup, RemoveGroup, Enable,
+  Disable and the others of §9.1.3) and with
+  `Server.ChangePubSubConfiguration`, so a change one of them makes while
+  the update runs is applied after it and is not lost: the update leaves
+  the elements it does not reference alone (§9.1.3.7.6). Go code that
+  changes the runtime of a server directly while clients may call
+  CloseAndUpdate uses `Server.ChangePubSubConfiguration`.
   ConfigurationValues name the added and matched elements with their
   PublisherId, WriterGroupId or DataSetWriterId, ConfigurationObjects are
   their nodes.

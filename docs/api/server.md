@@ -4043,6 +4043,14 @@ CertificateGroupID returns the NodeId of the certificate group with the BrowseNa
 func (s *Server) ChangeNotification(n *ua.NodeID)
 ```
 
+#### func (Server) ChangePubSubConfiguration
+
+```go
+func (s *Server) ChangePubSubConfiguration(fn func(rt *pubsub.PubSub) error) error
+```
+
+ChangePubSubConfiguration calls fn with the PubSub runtime of the server inside the transaction that CloseAndUpdate, UpdatePubSubConfiguration, PubSubConfigurationUpdate.Revert and the PubSub Methods that change the configuration (AddConnection, AddWriterGroup, RemoveGroup, Enable and the others of Part 14 §9.1.3) hold, and returns its error. Changes made through it are never lost to a CloseAndUpdate that read the configuration before them, nor resurrected by one. fn must not call those functions or Methods itself. A server without PubSub ([WithPubSub](#func-withpubsub)) returns ua.StatusBadNotSupported without calling fn.
+
 #### func (Server) Close
 
 ```go

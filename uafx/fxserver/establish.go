@@ -230,9 +230,8 @@ func (x *call) run() ua.StatusCode {
 // (Table 21), except where the release of a ControlGroup or the removal of
 // an endpoint undoes it.
 func (x *call) rollback() {
-	rt := x.c.srv.PubSub()
 	for i := len(x.enabled) - 1; i >= 0; i-- {
-		if err := rt.Disable(x.enabled[i]); err != nil {
+		if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Disable(x.enabled[i]) }); err != nil {
 			x.c.log.Warn("uafx: rollback: disable", "component", x.enabled[i], "error", err)
 		}
 	}
@@ -1436,7 +1435,7 @@ func (x *call) enableOne(rt *pubsub.PubSub, e *endpoint) ua.StatusCode {
 				return ua.StatusBadInvalidState
 			}
 			if !info.Enabled {
-				if err := rt.Enable(id); err != nil {
+				if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
 					return pubsub.StatusCodeOf(err)
 				}
 				x.enabled = append(x.enabled, id)

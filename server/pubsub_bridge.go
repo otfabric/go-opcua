@@ -73,8 +73,8 @@ func (u *PubSubConfigurationUpdate) Revert() error {
 		return nil
 	}
 	f := u.f
-	f.update.Lock()
-	defer f.update.Unlock()
+	f.m.s.ps.txn.Lock()
+	defer f.m.s.ps.txn.Unlock()
 	if !reflect.DeepEqual(f.m.rt.Configuration(), u.after) {
 		return ErrPubSubChanged
 	}
@@ -85,6 +85,25 @@ func (u *PubSubConfigurationUpdate) Revert() error {
 	f.modified.Store(time.Now().UnixNano())
 	go f.changed()
 	return nil
+}
+
+// ChangePubSubConfiguration calls fn with the PubSub runtime of the server
+// inside the transaction that CloseAndUpdate, UpdatePubSubConfiguration,
+// PubSubConfigurationUpdate.Revert and the PubSub Methods that change the
+// configuration (AddConnection, AddWriterGroup, RemoveGroup, Enable and the
+// others of Part 14 §9.1.3) hold, and returns its error. Changes made
+// through it are never lost to a CloseAndUpdate that read the
+// configuration before them, nor resurrected by one. fn must not call
+// those functions or Methods itself. A server without PubSub ([WithPubSub])
+// returns ua.StatusBadNotSupported without calling fn.
+func (s *Server) ChangePubSubConfiguration(fn func(rt *pubsub.PubSub) error) error {
+	rt := s.PubSub()
+	if rt == nil {
+		return ua.StatusBadNotSupported
+	}
+	s.ps.txn.Lock()
+	defer s.ps.txn.Unlock()
+	return fn(rt)
 }
 
 // ReservePubSubIDs reserves WriterGroupIds and DataSetWriterIds for the
@@ -122,8 +141,8 @@ func (s *Server) UpdatePubSubConfiguration(ctx context.Context, cfg *ua.PubSubCo
 	if len(refs) == 0 {
 		return nil, ua.StatusBadNothingToDo
 	}
-	f.update.Lock()
-	defer f.update.Unlock()
+	f.m.s.ps.txn.Lock()
+	defer f.m.s.ps.txn.Unlock()
 	return f.applyLocked(ctx, cfg, requireCompleteUpdate, refs)
 }
 

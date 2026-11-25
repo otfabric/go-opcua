@@ -129,14 +129,14 @@ func (s *Server) buildPubSubModel() error {
 	s.RegisterMethod(status.ID(), ua.NewNumericNodeID(0, id.PubSubStatusTypeDisable), m.enableMethod(pubsub.Root, false))
 
 	m.buildConfigFile()
-	s.RegisterMethod(root.ID(), ua.NewNumericNodeID(0, id.PublishSubscribeAddConnection), m.method("AddConnection", m.addConnection))
-	s.RegisterMethod(root.ID(), ua.NewNumericNodeID(0, id.PublishSubscribeRemoveConnection), m.method("RemoveConnection", m.removeConnection))
+	s.RegisterMethod(root.ID(), ua.NewNumericNodeID(0, id.PublishSubscribeAddConnection), m.change("AddConnection", m.addConnection))
+	s.RegisterMethod(root.ID(), ua.NewNumericNodeID(0, id.PublishSubscribeRemoveConnection), m.change("RemoveConnection", m.removeConnection))
 	for _, mid := range []uint32{id.DataSetFolderTypeAddPublishedDataItems, id.DataSetFolderTypeAddPublishedDataItemsTemplate, id.DataSetFolderTypeRemovePublishedDataSet} {
 		s.addMethodRef(pdsDir, mid)
 	}
-	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeAddPublishedDataItems), m.method("AddPublishedDataItems", m.addPublishedDataItems))
-	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeAddPublishedDataItemsTemplate), m.method("AddPublishedDataItemsTemplate", m.addPublishedDataItemsTemplate))
-	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeRemovePublishedDataSet), m.method("RemovePublishedDataSet", m.removePublishedDataSet))
+	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeAddPublishedDataItems), m.change("AddPublishedDataItems", m.addPublishedDataItems))
+	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeAddPublishedDataItemsTemplate), m.change("AddPublishedDataItemsTemplate", m.addPublishedDataItemsTemplate))
+	s.RegisterMethod(pdsDir.ID(), ua.NewNumericNodeID(0, id.DataSetFolderTypeRemovePublishedDataSet), m.change("RemovePublishedDataSet", m.removePublishedDataSet))
 
 	if n := s.ownNode(id.PublishSubscribeSupportedTransportProfiles); n != nil {
 		dv := DataValueFromValue(supportedTransportProfiles())
@@ -484,9 +484,9 @@ func (m *pubsubModel) addConnectionNodes(c *psComp, info pubsub.ComponentInfo) e
 		m.s.addMethodRef(c.obj, mid)
 	}
 	cid := info.ID
-	m.register(c, c.obj.ID(), id.PubSubConnectionTypeAddWriterGroup, m.method("AddWriterGroup", m.addGroup(cid, true)))
-	m.register(c, c.obj.ID(), id.PubSubConnectionTypeAddReaderGroup, m.method("AddReaderGroup", m.addGroup(cid, false)))
-	m.register(c, c.obj.ID(), id.PubSubConnectionTypeRemoveGroup, m.method("RemoveGroup", m.removeChild(cid, pubsub.KindWriterGroup, pubsub.KindReaderGroup)))
+	m.register(c, c.obj.ID(), id.PubSubConnectionTypeAddWriterGroup, m.change("AddWriterGroup", m.addGroup(cid, true)))
+	m.register(c, c.obj.ID(), id.PubSubConnectionTypeAddReaderGroup, m.change("AddReaderGroup", m.addGroup(cid, false)))
+	m.register(c, c.obj.ID(), id.PubSubConnectionTypeRemoveGroup, m.change("RemoveGroup", m.removeChild(cid, pubsub.KindWriterGroup, pubsub.KindReaderGroup)))
 	return nil
 }
 
@@ -533,8 +533,8 @@ func (m *pubsubModel) addWriterGroupNodes(c *psComp, info pubsub.ComponentInfo) 
 	m.s.addMethodRef(c.obj, id.WriterGroupTypeAddDataSetWriter)
 	m.s.addMethodRef(c.obj, id.WriterGroupTypeRemoveDataSetWriter)
 	gid := info.ID
-	m.register(c, c.obj.ID(), id.WriterGroupTypeAddDataSetWriter, m.method("AddDataSetWriter", m.addWriter(gid)))
-	m.register(c, c.obj.ID(), id.WriterGroupTypeRemoveDataSetWriter, m.method("RemoveDataSetWriter", m.removeChild(gid, pubsub.KindDataSetWriter)))
+	m.register(c, c.obj.ID(), id.WriterGroupTypeAddDataSetWriter, m.change("AddDataSetWriter", m.addWriter(gid)))
+	m.register(c, c.obj.ID(), id.WriterGroupTypeRemoveDataSetWriter, m.change("RemoveDataSetWriter", m.removeChild(gid, pubsub.KindDataSetWriter)))
 	return nil
 }
 
@@ -555,8 +555,8 @@ func (m *pubsubModel) addReaderGroupNodes(c *psComp, info pubsub.ComponentInfo) 
 	m.s.addMethodRef(c.obj, id.ReaderGroupTypeAddDataSetReader)
 	m.s.addMethodRef(c.obj, id.ReaderGroupTypeRemoveDataSetReader)
 	gid := info.ID
-	m.register(c, c.obj.ID(), id.ReaderGroupTypeAddDataSetReader, m.method("AddDataSetReader", m.addReader(gid)))
-	m.register(c, c.obj.ID(), id.ReaderGroupTypeRemoveDataSetReader, m.method("RemoveDataSetReader", m.removeChild(gid, pubsub.KindDataSetReader)))
+	m.register(c, c.obj.ID(), id.ReaderGroupTypeAddDataSetReader, m.change("AddDataSetReader", m.addReader(gid)))
+	m.register(c, c.obj.ID(), id.ReaderGroupTypeRemoveDataSetReader, m.change("RemoveDataSetReader", m.removeChild(gid, pubsub.KindDataSetReader)))
 	return nil
 }
 
@@ -762,12 +762,24 @@ func (m *pubsubModel) method(name string, f func(ctx context.Context, obj *ua.No
 	}
 }
 
+// change wraps a configuration method that changes the configuration: as
+// method, and the call holds the PubSub transaction, so that it does not
+// fall between what a CloseAndUpdate reads and what it applies (Part 14
+// §9.1.3.7.4).
+func (m *pubsubModel) change(name string, f func(ctx context.Context, obj *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode)) MethodHandler {
+	return m.method(name, func(ctx context.Context, obj *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		m.s.ps.txn.Lock()
+		defer m.s.ps.txn.Unlock()
+		return f(ctx, obj, args)
+	})
+}
+
 func (m *pubsubModel) enableMethod(cid pubsub.ComponentID, on bool) MethodHandler {
 	name := "Disable"
 	if on {
 		name = "Enable"
 	}
-	return m.method(name, func(context.Context, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	return m.change(name, func(context.Context, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		var err error
 		if on {
 			err = m.rt.Enable(cid)

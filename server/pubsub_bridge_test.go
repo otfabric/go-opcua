@@ -218,3 +218,61 @@ func TestPubSubBridgeAccess(t *testing.T) {
 		require.Equal(t, ua.StatusBadSecurityModeInsufficient, b.call(t, update(b)))
 	})
 }
+
+// TestPubSubConfigurationTransaction: an AddConnection Method call and a
+// ChangePubSubConfiguration that come while an update is between reading
+// the configuration and applying it wait for the update, so the update
+// does not remove what they add (Part 14 §9.1.3.7.4: elements the update
+// does not reference are left alone).
+func TestPubSubConfigurationTransaction(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	c := testutil.NewTestClient(t, b.url)
+	others := make(chan ua.StatusCode, 2)
+	server.SetPubSubBeforeReconcile(b.srv, func() {
+		go func() {
+			res := psCall(t, c, nid(id.PublishSubscribe), nid(id.PublishSubscribeAddConnection),
+				eoArg(pubsub.UDPConnection("ByMethod", "opc.udp://239.0.0.1:4840", uint16(21))))
+			others <- res.StatusCode
+		}()
+		go func() {
+			err := b.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+				_, err := rt.AddConnection(pubsub.UDPConnection("ByAPI", "opc.udp://239.0.0.1:4840", uint16(22)))
+				return err
+			})
+			sc := ua.StatusOK
+			if err != nil {
+				sc = ua.StatusBadInternalError
+			}
+			others <- sc
+		}()
+		// Without the transaction both would land here, before the update
+		// applies the configuration it read without them.
+		select {
+		case sc := <-others:
+			t.Errorf("a change came in during the update (%v)", sc)
+			others <- sc
+		case <-time.After(200 * time.Millisecond):
+		}
+	})
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		u, sc := b.srv.UpdatePubSubConfiguration(ctx, bridgeConfig("A"), true,
+			[]*ua.PubSubConfigurationRefDataType{{ConfigurationMask: refAdd | refConn}})
+		if sc == ua.StatusOK && !u.ChangesApplied {
+			sc = ua.StatusBadInvalidState
+		}
+		return sc
+	}))
+	server.SetPubSubBeforeReconcile(b.srv, nil)
+	require.Equal(t, ua.StatusOK, <-others)
+	require.Equal(t, ua.StatusOK, <-others)
+	for _, n := range []string{"A", "ByMethod", "ByAPI"} {
+		_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, n)
+		require.True(t, ok, n)
+	}
+
+	// Without PubSub there is nothing to change.
+	plain, _ := testutil.NewTestServer(t)
+	require.ErrorIs(t, plain.ChangePubSubConfiguration(func(*pubsub.PubSub) error { return nil }), ua.StatusBadNotSupported)
+}
