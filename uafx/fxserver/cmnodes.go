@@ -360,7 +360,14 @@ func (c *ConnectionManager) buildSetLocked(k fxcm.SetKey, conf *uafx.ConnectionC
 		return nil, err
 	}
 	last, err := pb.v(sm, sid+".LastTransition", qn(0, "LastTransition"), dt0(id.LocalizedText), -1, dt0(id.FiniteTransitionVariableType), false,
-		func(v *cmView) any { return ua.NewLocalizedText(v.st.Transition.String()) })
+		func(v *cmView) any {
+			// A set that took no transition yet has no LastTransition: an
+			// empty text, as its Id is the null NodeId.
+			if v.st.Transition == 0 {
+				return &ua.LocalizedText{}
+			}
+			return ua.NewLocalizedText(v.st.Transition.String())
+		})
 	if err != nil {
 		return nil, err
 	}

@@ -535,7 +535,8 @@ func TestConnectionManagerFile(t *testing.T) {
 	assert.Equal(t, ua.StatusBadInvalidState, sc)
 	_, sc = call(f.c, "Write", h, body)
 	require.Equal(t, ua.StatusOK, sc)
-	ops := []byte{byte(uafx.ElementAdd), byte(uafx.ElementReplace)}
+	// Operations is an array of Byte (Table F.39).
+	ops := ua.ByteArray{byte(uafx.ElementAdd), byte(uafx.ElementReplace)}
 	out, sc = call(f.c, "CloseAndUpdate", h, true, ops)
 	require.Equal(t, ua.StatusOK, sc)
 	assert.Equal(t, true, out[0].Value())

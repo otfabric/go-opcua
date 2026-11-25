@@ -134,7 +134,10 @@ type ConnectionManager struct {
 
 	file *cmFile
 
-	// The events of the Manager, handled in order by loop.
+	// The events of the Manager, handled in order by loop. amu is held
+	// while events are applied, so that a drain of a Method handler or of
+	// Flush and the one of loop apply them in the order they came.
+	amu    sync.Mutex
 	qmu    sync.Mutex
 	queue  []fxcm.Event
 	wake   chan struct{}
@@ -386,6 +389,8 @@ func (c *ConnectionManager) editHandler(ctx context.Context, object, method *ua.
 	for i, n := range sets {
 		results[i] = c.editSet(ctx, n, action, sess)
 	}
+	// The address space shows the edit before the Method returns.
+	c.drain()
 	out := []*ua.Variant{ua.MustVariant(results)}
 	st := methodStatus(results)
 	c.auditCall(ctx, method, args, out, st)
@@ -506,6 +511,10 @@ func (c *ConnectionManager) processHandler(ctx context.Context, object, method *
 			results[at[j]] = statusOr(st.Err, ua.StatusBadInvalidState)
 		}
 	}
+	// A Good result means the run started: the set is in Processing
+	// (§6.7.5, §6.9.2) when the Method returns, so that a client that
+	// reads its state then does not see the state before the run.
+	c.drain()
 	out := []*ua.Variant{ua.MustVariant(results)}
 	status := methodStatus(results)
 	c.auditCall(ctx, method, args, out, status)
@@ -581,6 +590,8 @@ func (c *ConnectionManager) loop() {
 }
 
 func (c *ConnectionManager) drain() {
+	c.amu.Lock()
+	defer c.amu.Unlock()
 	for {
 		c.qmu.Lock()
 		q := c.queue

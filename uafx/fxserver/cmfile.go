@@ -308,14 +308,21 @@ func (f *cmFile) closeAndUpdate(c *ConnectionManager) func(ctx context.Context, 
 			return nil, ua.StatusBadTypeMismatch
 		}
 		var ops []uafx.ConnectionConfigurationSetOperation
+		// Operations is an array of ConnectionConfigurationSetOperation, an
+		// OptionSet of Byte (Table F.39): an array of Byte. A ByteString is
+		// taken for it as well (OPC 10000-4 §5.12.2.4).
+		var raw []byte
 		switch v := args[2].Value().(type) {
+		case ua.ByteArray:
+			raw = v
 		case []byte:
-			for _, b := range v {
-				ops = append(ops, uafx.ConnectionConfigurationSetOperation(b))
-			}
+			raw = v
 		case nil:
 		default:
 			return nil, ua.StatusBadTypeMismatch
+		}
+		for _, b := range raw {
+			ops = append(ops, uafx.ConnectionConfigurationSetOperation(b))
 		}
 		f.mu.Lock()
 		h, fh, sc := f.handle(ctx, args[0])

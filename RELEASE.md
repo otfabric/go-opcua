@@ -1,5 +1,21 @@
 # go-opcua Releases
 
+## v1.39.1
+
+**Date:** unreleased
+**Previous release:** v1.39.0
+
+Three fixes to the ConnectionManager server of `uafx/fxserver`, found while driving it from opcuactl: a client that read the state of a set right after ProcessConnectionConfigurationSets could see the state before the run, CloseAndUpdate refused its Operations in the encoding Table F.39 gives, and a set that never took a transition showed LastTransition `Transition(0)`. No API changes; no changes need attention when upgrading.
+
+### Fixed
+
+- `uafx/fxserver`: ProcessConnectionConfigurationSets returned before the nodes of a set showed the run it started: they followed the Manager in a goroutine, so a client that read CurrentState right after a Good result could read Ready, the state before the run, and take a run that had not started for one that had ended. The Method now applies the transition to the nodes before it returns, so the set is in Processing then (§6.7.5, §6.9.2); EditConnectionConfigurationSets does the same for the Lock and Edit of the set. The events of the Manager are applied in the order they came also when a Method, `ConnectionManager.Flush` and the server's own loop apply them at once: before, two of them could apply two batches of events in the other order.
+- `uafx/fxserver`: CloseAndUpdate of ConnectionManagerConfiguration answered `Bad_TypeMismatch` to Operations sent as an array of Byte, the DataType Table F.39 gives it (an array of ConnectionConfigurationSetOperation, an OptionSet of Byte), and took only a ByteString. It now takes both (OPC 10000-4 §5.12.2.4).
+- `uafx/fxserver`: LastTransition of a set that never took a transition read `Transition(0)`; it is now an empty LocalizedText, as its Id is the null NodeId.
+- Tests: twenty runs, each with its state read right after the Method returned (it was Ready in some before the fix), twenty StartEditing and DiscardUpdates with the Lock read right after, LastTransition before the first run, and CloseAndUpdate with Operations as an array of Byte.
+
+---
+
 ## v1.39.0
 
 **Date:** unreleased
