@@ -148,7 +148,9 @@ type ConnectionManager struct {
 
 	// nil is time.Now
 
-	// The events of the Manager, handled in order by loop.
+	// The events of the Manager, handled in order by loop. amu is held
+	// while events are applied, so that a drain of a Method handler or of
+	// Flush and the one of loop apply them in the order they came.
 
 }
 ```

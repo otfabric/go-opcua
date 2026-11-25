@@ -134,7 +134,10 @@ type ConnectionManager struct {
 
 	file *cmFile
 
-	// The events of the Manager, handled in order by loop.
+	// The events of the Manager, handled in order by loop. amu is held
+	// while events are applied, so that a drain of a Method handler or of
+	// Flush and the one of loop apply them in the order they came.
+	amu    sync.Mutex
 	qmu    sync.Mutex
 	queue  []fxcm.Event
 	wake   chan struct{}
@@ -386,6 +389,8 @@ func (c *ConnectionManager) editHandler(ctx context.Context, object, method *ua.
 	for i, n := range sets {
 		results[i] = c.editSet(ctx, n, action, sess)
 	}
+	// The address space shows the edit before the Method returns.
+	c.drain()
 	out := []*ua.Variant{ua.MustVariant(results)}
 	st := methodStatus(results)
 	c.auditCall(ctx, method, args, out, st)
@@ -506,6 +511,11 @@ func (c *ConnectionManager) processHandler(ctx context.Context, object, method *
 			results[at[j]] = statusOr(st.Err, ua.StatusBadInvalidState)
 		}
 	}
+	// A Good result means the run started (§6.7.5): the nodes show it
+	// before the Method returns, so that a client that reads the state then
+	// sees Processing or a later state of the run (it may have ended
+	// already, §6.9.2), never the state before it.
+	c.drain()
 	out := []*ua.Variant{ua.MustVariant(results)}
 	status := methodStatus(results)
 	c.auditCall(ctx, method, args, out, status)
@@ -580,18 +590,21 @@ func (c *ConnectionManager) loop() {
 	}
 }
 
+// drain applies the events queued so far, in order: a barrier for the
+// events reported before the call. An event queued before it is either in
+// the batch it takes or was taken by a drain that held amu before it, and
+// is applied when it gets amu. It takes one batch only, so that events
+// that keep coming during a Method do not hold the Method up; the loop
+// takes those after a wake.
 func (c *ConnectionManager) drain() {
-	for {
-		c.qmu.Lock()
-		q := c.queue
-		c.queue = nil
-		c.qmu.Unlock()
-		if len(q) == 0 {
-			return
-		}
-		for _, e := range q {
-			c.apply(e)
-		}
+	c.amu.Lock()
+	defer c.amu.Unlock()
+	c.qmu.Lock()
+	q := c.queue
+	c.queue = nil
+	c.qmu.Unlock()
+	for _, e := range q {
+		c.apply(e)
 	}
 }
 
@@ -613,14 +626,12 @@ func (c *ConnectionManager) apply(e fxcm.Event) {
 		c.refreshAggregated()
 	case fxcm.EventCall:
 		c.refreshCounters()
-	case fxcm.EventEditEnded:
-		c.mu.Lock()
-		if s := c.sets[e.Set.String()]; s != nil {
-			s.edit, s.owner = nil, ""
-		}
-		c.syncSetLocked(e.Set)
-		c.mu.Unlock()
 	default:
+		// EventEditEnded carries no edit: it may come from an edit that
+		// ended before another StartEditing (a Lock lost, then taken by
+		// another session, §6.7.4). syncSetLocked ends the projected edit
+		// only when the Manager has none, so a late event never ends the
+		// edit of a later owner.
 		c.mu.Lock()
 		c.syncSetLocked(e.Set)
 		c.mu.Unlock()

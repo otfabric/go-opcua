@@ -922,8 +922,21 @@ ConnectionManager's NodeId and the LockingUser `CM`, and a write is
 
 ProcessConnectionConfigurationSets (§6.7.5, Tables 84 to 86) starts a run
 per set and returns; an Action that is no FxProcessEnum value is
-`Bad_NotSupported`, a set in Processing `Bad_InvalidState`. The outcome is
-in the events and the state of the set:
+`Bad_NotSupported`, a set in Processing `Bad_InvalidState`. For a set
+whose result is Good the nodes show the run the call started before the
+answer goes out: a client that reads CurrentState after the call sees
+Processing or a later state of that run, never the state before it. The
+guarantee is the publication of the run, not that the set is still in
+Processing: a run that ends fast (nothing to reach, nothing to remove)
+may be Ready or Error already, with LastTransition ProcessingToReady or
+ProcessingToError. The nodes of a set change one after the other, so a
+Read while a run ends may see its end state beside its start transition.
+A run that ends in the state the set was in
+before (Error after Error) is told apart by its ProcessingStarted and
+ProcessingFailed events. The Lock and Edit of a set are shown the same way
+before EditConnectionConfigurationSets returns. Before its first
+transition a set has an empty LastTransition and a null
+LastTransition.Id. The outcome is in the events and the state of the set:
 
 - ConnectionConfigurationSetProcessingStartedEventType,
   ProcessingSucceededEventType and ProcessingFailedEventType (§8.6 to
@@ -957,7 +970,9 @@ one writer, and no reader beside it. Handles belong to their session
 (OPC 10000-20 §4.2.1): they go when it ends, so a writer that went away
 does not block the next. CloseAndUpdate (F.3.3, Tables F.39 to
 F.41) closes the written file and applies its sets, one operation per Body
-element (library interpretation of the length), with `Manager.Update`:
+element (library interpretation of the length), with `Manager.Update`;
+Operations is taken as the array of Byte of Table F.39 or as a ByteString
+(OPC 10000-4 §5.12.2.4):
 RequireCompleteUpdate TRUE changes nothing unless every operation is
 applied (see below). CloseAndUpdate asks the authorizer again ("The Client shall be
 authorized to modify the configuration"), so a right revoked after Open

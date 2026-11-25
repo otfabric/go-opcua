@@ -7,6 +7,7 @@ import (
 
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/uafx/fxcm"
 )
 
 // SetPubSubOps replaces the runtime operations that close ConnectionEndpoints;
@@ -102,3 +103,7 @@ func SetBeforeUpdate(c *Connections, f func()) {
 	defer c.mu.Unlock()
 	c.beforeUpdate = f
 }
+
+// ApplyCMEvent applies e to the address space as the loop does: a test
+// replays an event the loop has not drained yet.
+func ApplyCMEvent(c *ConnectionManager, e fxcm.Event) { c.apply(e) }
