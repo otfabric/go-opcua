@@ -237,7 +237,7 @@ func (f *FileStore) read() (map[string][]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("fxstore: %w", err)
 	}
-	defer h.Close()
+	defer func() { _ = h.Close() }() // opened read-only: nothing to lose
 	fi, err := h.Stat()
 	if err != nil {
 		return nil, fmt.Errorf("fxstore: %w", err)

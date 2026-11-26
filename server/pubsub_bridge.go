@@ -88,6 +88,11 @@ func (u *PubSubConfigurationUpdate) Revert() error {
 	if err := reconcilePubSub(f.m.rt, u.before); err != nil {
 		return fmt.Errorf("server: revert the PubSub configuration: %w", err)
 	}
+	if h := f.m.s.pubsubHook(); h != nil {
+		if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: u.after, Revert: true}); err != nil {
+			return fmt.Errorf("server: revert the PubSub configuration: %w", err)
+		}
+	}
 	u.before = nil
 	f.modified.Store(time.Now().UnixNano())
 	go f.changed()
@@ -110,7 +115,118 @@ func (s *Server) ChangePubSubConfiguration(fn func(rt *pubsub.PubSub) error) err
 	}
 	s.ps.txn.Lock()
 	defer s.ps.txn.Unlock()
-	return fn(rt)
+	h := s.pubsubHook()
+	if h == nil {
+		return fn(rt)
+	}
+	before := rt.Configuration()
+	if err := fn(rt); err != nil {
+		// What fn changed before it failed is the hook's to see too.
+		if herr := s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: before}); herr != nil {
+			return errors.Join(err, herr)
+		}
+		return err
+	}
+	return s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: before})
+}
+
+// PubSubConfigurationHook follows the changes of the PubSub configuration of
+// a server, whatever makes them: CloseAndUpdate and the other Methods of
+// Part 14 §9.1.3, [Server.UpdatePubSubConfiguration],
+// [PubSubConfigurationUpdate.Revert] and [Server.ChangePubSubConfiguration].
+// A companion specification that keeps durable records of components (the
+// persistent ConnectionEndpoints of OPC UA FX, OPC 10000-81 §6.6.2) uses it
+// to keep them in line with the configuration in the same transaction
+// (Part 14 §9.1.2).
+type PubSubConfigurationHook interface {
+	// PubSubConfigurationChanged is called in the PubSub transaction after
+	// a change was applied to the runtime, before the Method or function
+	// that made it returns. An error undoes the change (the runtime is
+	// reconciled back to ch.Before) and fails it with the error's
+	// ua.StatusCode, or Bad_InternalError. It must not change the PubSub
+	// configuration itself.
+	PubSubConfigurationChanged(ch *PubSubChange) error
+	// HeldPubSubIDs returns WriterGroupIds and DataSetWriterIds that
+	// ReserveIds does not hand out and CloseAndUpdate does not assign to
+	// new components, and refuse, which makes ReserveIds fail with
+	// Bad_ResourceUnavailable. It is called in the PubSub transaction.
+	HeldPubSubIDs() (writerGroups, dataSetWriters []uint16, refuse bool)
+}
+
+// PubSubChange is a change of the PubSub configuration a
+// [PubSubConfigurationHook] sees.
+type PubSubChange struct {
+	// Context is the context of the Method call or of the
+	// [Server.UpdatePubSubConfiguration] call that made the change;
+	// context.Background() for [Server.ChangePubSubConfiguration] and
+	// [PubSubConfigurationUpdate.Revert].
+	Context context.Context
+	// Before and After are the configuration before and after the change.
+	Before, After *ua.PubSubConfigurationDataType
+	// Revert: the change is [PubSubConfigurationUpdate.Revert] undoing an
+	// update.
+	Revert bool
+}
+
+type pubsubHookBox struct{ h PubSubConfigurationHook }
+
+// SetPubSubConfigurationHook sets the hook that follows the changes of the
+// PubSub configuration; nil removes it. One hook at a time: a second call
+// replaces the first.
+func (s *Server) SetPubSubConfigurationHook(h PubSubConfigurationHook) {
+	s.ps.txn.Lock()
+	defer s.ps.txn.Unlock()
+	if h == nil {
+		s.ps.hook.Store(nil)
+		return
+	}
+	s.ps.hook.Store(&pubsubHookBox{h: h})
+}
+
+func (s *Server) pubsubHook() PubSubConfigurationHook {
+	if b := s.ps.hook.Load(); b != nil {
+		return b.h
+	}
+	return nil
+}
+
+// pubsubChanged runs the hook h after the change ch, whose After it sets,
+// in the PubSub transaction; when it fails, the runtime goes back to
+// ch.Before. Nothing changed: no call.
+func (s *Server) pubsubChanged(h PubSubConfigurationHook, ch *PubSubChange) error {
+	rt := s.PubSub()
+	ch.After = rt.Configuration()
+	if reflect.DeepEqual(ch.Before, ch.After) {
+		return nil
+	}
+	err := h.PubSubConfigurationChanged(ch)
+	if err == nil {
+		return nil
+	}
+	if rerr := reconcilePubSub(rt, ch.Before); rerr != nil {
+		s.cfg.logger.Error("pubsub: restoring the configuration a hook refused failed", "error", rerr)
+	}
+	var sc ua.StatusCode
+	if !errors.As(err, &sc) {
+		err = fmt.Errorf("%w: %w", ua.StatusBadInternalError, err)
+	}
+	return err
+}
+
+// heldPubSubIDs adds the ids the hook holds to groups and writers.
+func (s *Server) heldPubSubIDs(groups, writers map[uint16]bool) (refuse bool) {
+	h := s.pubsubHook()
+	if h == nil {
+		return false
+	}
+	g, w, refuse := h.HeldPubSubIDs()
+	for _, x := range g {
+		groups[x] = true
+	}
+	for _, x := range w {
+		writers[x] = true
+	}
+	return refuse
 }
 
 // ReservePubSubIDs reserves WriterGroupIds and DataSetWriterIds for the

@@ -56,6 +56,19 @@ type endpoint struct {
 	// deadline is when the CleanupTimeout expires; zero when it does not
 	// run.
 	deadline time.Time
+
+	// ac is the AutomationComponent of the endpoint.
+	ac *automationComponent
+	// persistent: IsPersistent is TRUE and the endpoint has a record in the
+	// store (design §4.2); key is the record's key. removePending: its
+	// removal is durable and the runtime has still to complete it (§4.4).
+	persistent, removePending bool
+	key                       string
+	// createdAt and modifiedAt are its CreationTime and ModificationTime
+	// (Part 81 Table 74); modNode is the ModificationTime Variable, nil
+	// when the endpoint has no Diagnostics.
+	createdAt, modifiedAt time.Time
+	modNode               *ua.NodeID
 }
 
 // Status returns the Status of e.
@@ -66,7 +79,7 @@ func (e *endpoint) Status() uafx.ConnectionEndpointStatus {
 // adopt starts managing the PubSubConnectionEndpoints of the
 // ConnectionEndpoints folder of fe that exist already (preconfigured, Part
 // 81 §5.5.5).
-func (c *Connections) adopt(fe *ua.NodeID) {
+func (c *Connections) adopt(ac *automationComponent, fe *ua.NodeID) {
 	folder := c.childID(fe, "ConnectionEndpoints")
 	if folder == nil {
 		return
@@ -76,7 +89,7 @@ func (c *Connections) adopt(fe *ua.NodeID) {
 		if !c.isA(n, fxacid.PubSubConnectionEndpointType) {
 			continue
 		}
-		e := &endpoint{id: n, fe: fe, folder: folder, name: r.BrowseName.Name, cleanup: -1}
+		e := &endpoint{id: n, fe: fe, folder: folder, name: r.BrowseName.Name, cleanup: -1, ac: ac}
 		if v, ok := val(c.value(c.childID(n, "Mode"))).(int32); ok {
 			e.mode = uafx.PubSubConnectionEndpointMode(v)
 		}
@@ -177,7 +190,10 @@ func (c *Connections) monitor() {
 		select {
 		case <-c.stop:
 			return
-		case <-t.C:
+		case now := <-t.C:
+			if c.pers != nil {
+				c.pers.settle(now)
+			}
 			c.refresh(false)
 			c.expireDue()
 			c.tickLocks()
@@ -434,13 +450,24 @@ func setAttrs(n *server.Node, attrs map[ua.AttributeID]any) error {
 // createEndpoint adds a PubSubConnectionEndpoint named p.Name to the
 // ConnectionEndpoints folder of fe (Part 81 §6.2.4.3.5), creating the
 // folder if fe has none.
-func (c *Connections) createEndpoint(fe *ua.NodeID, p *uafx.PubSubConnectionEndpointParameter, cmURI string) (*endpoint, ua.StatusCode) {
+func (c *Connections) createEndpoint(ac *automationComponent, fe *ua.NodeID, p *uafx.PubSubConnectionEndpointParameter, cmURI string) (*endpoint, ua.StatusCode) {
+	return c.createEndpointWith(ac, fe, p, cmURI, func() *ua.NodeID { return c.newNodeID(fe.Namespace()) }, nil, time.Now())
+}
+
+// createEndpointWith is createEndpoint with the NodeIds of the endpoint
+// and its members from alloc, in their order, the folder at folderID when
+// fe has none and that node is free, and the CreationTime created: a
+// restore gives them as they were (design §4.6).
+func (c *Connections) createEndpointWith(ac *automationComponent, fe *ua.NodeID, p *uafx.PubSubConnectionEndpointParameter, cmURI string,
+	alloc func() *ua.NodeID, folderID *ua.NodeID, created time.Time) (*endpoint, ua.StatusCode) {
 	feNode := c.node(fe)
 	ns, err := c.srv.Namespace(int(fe.Namespace()))
 	if feNode == nil || err != nil {
 		return nil, ua.StatusBadNodeIDUnknown
 	}
-	e := &endpoint{fe: fe, name: p.Name, created: true, mode: p.Mode, inputs: p.InputVariableIDs, outputs: p.OutputVariableIDs, cleanup: -1}
+	created = created.UTC()
+	e := &endpoint{fe: fe, name: p.Name, created: true, mode: p.Mode, inputs: p.InputVariableIDs, outputs: p.OutputVariableIDs, cleanup: -1,
+		ac: ac, createdAt: created, modifiedAt: created}
 	if d, ok := p.CleanupTimeoutDuration(); ok {
 		e.cleanup = d
 	}
@@ -448,7 +475,11 @@ func (c *Connections) createEndpoint(fe *ua.NodeID, p *uafx.PubSubConnectionEndp
 	if folder == nil {
 		// The folder stays when its endpoints go: other endpoints may be
 		// created in it.
-		f := server.NewFolderNode(c.newNodeID(fe.Namespace()), "ConnectionEndpoints")
+		fid := folderID
+		if fid == nil || c.node(fid) != nil {
+			fid = c.newNodeID(fe.Namespace())
+		}
+		f := server.NewFolderNode(fid, "ConnectionEndpoints")
 		if err := setAttrs(f, map[ua.AttributeID]any{ua.AttributeIDBrowseName: &ua.QualifiedName{NamespaceIndex: c.ns.AC, Name: "ConnectionEndpoints"}}); err != nil {
 			return nil, ua.StatusBadInternalError
 		}
@@ -466,7 +497,7 @@ func (c *Connections) createEndpoint(fe *ua.NodeID, p *uafx.PubSubConnectionEndp
 	}
 	relEO.Value = body
 
-	obj := server.NewFolderNode(c.newNodeID(fe.Namespace()), p.Name)
+	obj := server.NewFolderNode(alloc(), p.Name)
 	if err := setAttrs(obj, map[ua.AttributeID]any{ua.AttributeIDBrowseName: &ua.QualifiedName{NamespaceIndex: fe.Namespace(), Name: p.Name}}); err != nil {
 		return nil, ua.StatusBadInternalError
 	}
@@ -491,31 +522,66 @@ func (c *Connections) createEndpoint(fe *ua.NodeID, p *uafx.PubSubConnectionEndp
 		{"ConnectionManagerApplicationUri", ua.NewNumericNodeID(0, id.String), -1, cmURI},
 	}
 	baseVar := c.node(ua.NewNumericNodeID(0, id.BaseDataVariableType))
+	addVar := func(parent *server.Node, bn *ua.QualifiedName, dataType *ua.NodeID, rank int32, v any) (*server.Node, bool) {
+		n := server.NewVariableNode(alloc(), bn.Name, v)
+		if err := setAttrs(n, map[ua.AttributeID]any{
+			ua.AttributeIDBrowseName:      bn,
+			ua.AttributeIDDataType:        ua.NewExpandedNodeID(dataType, "", 0),
+			ua.AttributeIDValueRank:       rank,
+			ua.AttributeIDAccessLevel:     byte(ua.AccessLevelTypeCurrentRead),
+			ua.AttributeIDUserAccessLevel: byte(ua.AccessLevelTypeCurrentRead),
+		}); err != nil {
+			return nil, false
+		}
+		ns.AddNode(n)
+		parent.AddRef(n, server.RefTypeIDHasComponent, true)
+		if baseVar != nil {
+			n.AddReference(baseVar, ua.NewNumericNodeID(0, id.HasTypeDefinition), true)
+		}
+		e.nodes = append(e.nodes, n.ID())
+		return n, true
+	}
 	for _, m := range members {
 		v := m.value
 		if m.name == "Status" {
 			v = server.ValueFunc(func() *ua.DataValue { return server.DataValueFromValue(int32(e.Status())) })
 		}
-		n := server.NewVariableNode(c.newNodeID(fe.Namespace()), m.name, v)
-		if err := setAttrs(n, map[ua.AttributeID]any{
-			ua.AttributeIDBrowseName:      &ua.QualifiedName{NamespaceIndex: c.ns.AC, Name: m.name},
-			ua.AttributeIDDataType:        ua.NewExpandedNodeID(m.dataType, "", 0),
-			ua.AttributeIDValueRank:       m.rank,
-			ua.AttributeIDAccessLevel:     byte(ua.AccessLevelTypeCurrentRead),
-			ua.AttributeIDUserAccessLevel: byte(ua.AccessLevelTypeCurrentRead),
-		}); err != nil {
+		if _, ok := addVar(obj, &ua.QualifiedName{NamespaceIndex: c.ns.AC, Name: m.name}, m.dataType, m.rank, v); !ok {
 			c.dropNodes(e)
 			return nil, ua.StatusBadInternalError
 		}
-		ns.AddNode(n)
-		obj.AddRef(n, server.RefTypeIDHasComponent, true)
-		if baseVar != nil {
-			n.AddReference(baseVar, ua.NewNumericNodeID(0, id.HasTypeDefinition), true)
-		}
-		e.nodes = append(e.nodes, n.ID())
 	}
-	// CreationTime and ModificationTime (Part 81 Table 74) are optional:
-	// the endpoint has no Diagnostics object.
+	// The Diagnostics with CreationTime and ModificationTime (Part 81
+	// §6.6.2 Table 74; OPC 10000-84 Table 6: the ConformanceUnits "UAFX
+	// ConnectionEndpoint Diagnostics CreationTime" and "...
+	// ModificationTime"). Its BrowseName is in the DI namespace, as the
+	// InstanceDeclaration's: a server without DI has none.
+	if c.ns.DI != 0 {
+		d := server.NewFolderNode(alloc(), "Diagnostics")
+		if err := setAttrs(d, map[ua.AttributeID]any{ua.AttributeIDBrowseName: &ua.QualifiedName{NamespaceIndex: c.ns.DI, Name: "Diagnostics"}}); err != nil {
+			c.dropNodes(e)
+			return nil, ua.StatusBadInternalError
+		}
+		ns.AddNode(d)
+		e.nodes = append(e.nodes, d.ID())
+		obj.AddRef(d, server.RefTypeIDHasComponent, true)
+		if t := c.typeOf(ua.NewNumericNodeID(c.ns.AC, fxacid.ConnectionEndpointTypeDiagnostics)); t != nil {
+			if tn := c.node(t); tn != nil {
+				d.AddReference(tn, ua.NewNumericNodeID(0, id.HasTypeDefinition), true)
+			}
+		}
+		dt := ua.NewNumericNodeID(0, id.DateTime)
+		if _, ok := addVar(d, &ua.QualifiedName{NamespaceIndex: c.ns.AC, Name: "CreationTime"}, dt, -1, created); !ok {
+			c.dropNodes(e)
+			return nil, ua.StatusBadInternalError
+		}
+		mn, ok := addVar(d, &ua.QualifiedName{NamespaceIndex: c.ns.AC, Name: "ModificationTime"}, dt, -1, created)
+		if !ok {
+			c.dropNodes(e)
+			return nil, ua.StatusBadInternalError
+		}
+		e.modNode = mn.ID()
+	}
 	c.node(folder).AddReference(obj, ua.NewNumericNodeID(c.ns.AC, fxacid.HasConnectionEndpoint), true)
 	e.status.Store(int32(uafx.ConnectionEndpointInitial))
 	c.mu.Lock()

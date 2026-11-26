@@ -3228,6 +3228,46 @@ type PubSubAuthorizer func(ctx context.Context, caller *MethodCaller, method str
 
 PubSubAuthorizer decides whether the caller of a PubSub configuration method (AddConnection, RemoveGroup, Enable, ...) may call it. method is the BrowseName of the method. It returns Good to allow the call or the Bad status to answer it with.
 
+### type PubSubChange
+
+```go
+type PubSubChange struct {
+	// Context is the context of the Method call or of the
+	// [Server.UpdatePubSubConfiguration] call that made the change;
+	// context.Background() for [Server.ChangePubSubConfiguration] and
+	// [PubSubConfigurationUpdate.Revert].
+	Context context.Context
+	// Before and After are the configuration before and after the change.
+	Before, After *ua.PubSubConfigurationDataType
+	// Revert: the change is [PubSubConfigurationUpdate.Revert] undoing an
+	// update.
+	Revert bool
+}
+```
+
+PubSubChange is a change of the PubSub configuration a [PubSubConfigurationHook](#type-pubsubconfigurationhook) sees.
+
+### type PubSubConfigurationHook
+
+```go
+type PubSubConfigurationHook interface {
+	// PubSubConfigurationChanged is called in the PubSub transaction after
+	// a change was applied to the runtime, before the Method or function
+	// that made it returns. An error undoes the change (the runtime is
+	// reconciled back to ch.Before) and fails it with the error's
+	// ua.StatusCode, or Bad_InternalError. It must not change the PubSub
+	// configuration itself.
+	PubSubConfigurationChanged(ch *PubSubChange) error
+	// HeldPubSubIDs returns WriterGroupIds and DataSetWriterIds that
+	// ReserveIds does not hand out and CloseAndUpdate does not assign to
+	// new components, and refuse, which makes ReserveIds fail with
+	// Bad_ResourceUnavailable. It is called in the PubSub transaction.
+	HeldPubSubIDs() (writerGroups, dataSetWriters []uint16, refuse bool)
+}
+```
+
+PubSubConfigurationHook follows the changes of the PubSub configuration of a server, whatever makes them: CloseAndUpdate and the other Methods of Part 14 §9.1.3, [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration), [PubSubConfigurationUpdate.Revert](#func-pubsubconfigurationupdate-revert) and [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration). A companion specification that keeps durable records of components (the persistent ConnectionEndpoints of OPC UA FX, OPC 10000-81 §6.6.2) uses it to keep them in line with the configuration in the same transaction (Part 14 §9.1.2).
+
 ### type PubSubConfigurationUpdate
 
 ```go
@@ -4031,6 +4071,14 @@ func (s *Server) Auditing() bool
 
 Auditing reports whether the server reports audit events.
 
+#### func (Server) BuildPubSubModel
+
+```go
+func (s *Server) BuildPubSubModel() error
+```
+
+BuildPubSubModel publishes the PubSub runtime in the address space now, as Start does: the PublishSubscribe Object, its Methods and the Objects of the components, which then have their NodeIds ([Server.PubSubNodeID](#func-server-pubsubnodeid)). An application that needs those NodeIds before Start (a companion specification that restores References to components, as the persistent ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the model again. It needs a server with a PubSub runtime (WithPubSub).
+
 #### func (Server) CertificateGroupID
 
 ```go
@@ -4391,6 +4439,14 @@ func (s *Server) SetHistorian(h HistoryProvider)
 ```
 
 SetHistorian attaches a HistoryProvider for HistoryRead support. Pass nil to disable historical access (HistoryRead returns BadHistoryOperationUnsupported). A provider that also implements [EventHistoryProvider](#type-eventhistoryprovider) keeps the event history of the HistoricalEventNodes ([Server.EnableEventHistory](#func-server-enableeventhistory)). The HistoryServerCapabilities report what the provider supports.
+
+#### func (Server) SetPubSubConfigurationHook
+
+```go
+func (s *Server) SetPubSubConfigurationHook(h PubSubConfigurationHook)
+```
+
+SetPubSubConfigurationHook sets the hook that follows the changes of the PubSub configuration; nil removes it. One hook at a time: a second call replaces the first.
 
 #### func (Server) SetServerDiagnosticsEnabled
 

@@ -79,6 +79,12 @@ func (c *Connections) closeOne(ctx context.Context, n *ua.NodeID, remove bool, s
 				}
 			}
 		}
+		c.mu.Lock()
+		persistent := e.persistent
+		c.mu.Unlock()
+		if persistent && c.pers != nil {
+			return c.closePersistent(e, remove)
+		}
 		return c.closeEndpoint(e, remove)
 	case e != nil || c.isA(n, fxacid.ConnectionEndpointType):
 		// A ConnectionEndpoint of another AutomationComponent.

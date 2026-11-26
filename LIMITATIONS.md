@@ -15,7 +15,7 @@ behaviour you may notice, and the deviations of peers are in
   certificates and keys live in memory only.
 - Dynamic decoding of custom structures from the server's DataTypeDefinition:
   unknown structures stay ExtensionObject bodies.
-- OPC UA FX (UAFX, OPC 10000-81): the information model, and non-persistent
+- OPC UA FX (UAFX, OPC 10000-81): the information model, and
   connections with PubSub (EstablishConnections and CloseConnections, served
   by `uafx/fxserver` and called by `uafx`), with ControlGroups; a
   ControlGroup a client controls has no Controls Reference (Part 81
@@ -30,8 +30,15 @@ behaviour you may notice, and the deviations of peers are in
   from the flows, and cannot adapt subscribers to the PublisherId of a
   matched PubSubConnection on AutomationComponents with
   CommandBundleRequired that subscribe to each other in a cycle (the
-  Connection fails instead). Persistent
-  connections and the other Methods of Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop
+  Connection fails instead). Persistent ConnectionEndpoints of an
+  AutomationComponent (with `ConnectionOptions.Store`) keep the endpoints,
+  their control and the PubSub components they reference, not
+  ConfigurationData or the VariableStorage Methods (§6.4.6), and not the
+  rest of the server's PubSub configuration (OPC 10000-14 §9.1.2); the
+  ConnectionManager persists nothing. `fxstore.FileStore` survives a power
+  loss on Unix systems, only a crash of the process on Windows (no
+  directory fsync), and does not support network file systems. The other
+  Methods of Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop
   implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
 - Time-scheduled Ethernet (TSN), AMQP over WebSockets, and PubSub Actions bound
   to server Methods (go-opcua runs Go handlers).
@@ -54,6 +61,18 @@ behaviour you may notice, and the deviations of peers are in
 
 ## Known deviations
 
+- UAFX persisted check (OPC 10000-81 §6.2.4.3.9.2): for a non-persistent
+  ConnectionEndpoint the DataSetReader or DataSetWriter must not be
+  persisted, which under OPC 10000-14 §6.2.2 Table 4 means 0:NotPersisted
+  TRUE. `uafx/fxserver` checks this only with
+  `ConnectionOptions.StrictNotPersisted`; by default such endpoints are
+  accepted, since few configurations state the property. The check for
+  persistent endpoints always runs. 0:NotPersisted on PublishSubscribe is
+  not checked, and Enable or Disable of a component with the PubSub
+  Methods is not persisted (enablement follows the endpoints after a
+  restart). A restored secured group gates its whole SecurityGroup until a
+  key newer than the restart becomes current
+  ([docs/uafx.md](docs/uafx.md#persistence)).
 - ECC follows open62541, not Part 6 1.05.07, for curve25519 key material
   and ChannelThumbprint
   ([docs/interop-gaps.md](docs/interop-gaps.md)).

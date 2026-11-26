@@ -351,7 +351,7 @@ func TestDomainOnFileStore(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer s2.Close()
+	defer func() { _ = s2.Close() }()
 	d2 := open(t, s2)
 	if string(d2.State()["ep/1"]) != "x" || d2.Status().Revision != 1 {
 		t.Fatalf("reopened: %v %+v", d2.State(), d2.Status())

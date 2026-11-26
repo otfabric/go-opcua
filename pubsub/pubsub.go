@@ -28,6 +28,9 @@ type PubSub struct {
 
 	ksMu       sync.RWMutex
 	keySources map[string]security.KeySource
+	// gates are the restart gates of SecurityGroups (GateSecurityGroup),
+	// guarded by ksMu.
+	gates map[string]*keyGate
 
 	mu sync.Mutex
 	// pending are the callbacks (events, handlers, target writes, event
@@ -335,8 +338,25 @@ func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource) {
 	p.ksMu.Unlock()
 }
 
-// KeySource returns the keys of a SecurityGroup, nil if none are known.
+// KeySource returns the keys of a SecurityGroup, nil if none are known. The
+// KeySource of a gated SecurityGroup (GateSecurityGroup) gives only the keys
+// the gate allows.
 func (p *PubSub) KeySource(securityGroupID string) security.KeySource {
+	ks := p.rawKeySource(securityGroupID)
+	if ks == nil {
+		return nil
+	}
+	p.ksMu.RLock()
+	g := p.gates[securityGroupID]
+	p.ksMu.RUnlock()
+	if g != nil {
+		return &gatedSource{KeySource: ks, g: g, group: securityGroupID}
+	}
+	return ks
+}
+
+// rawKeySource is KeySource without the gate.
+func (p *PubSub) rawKeySource(securityGroupID string) security.KeySource {
 	p.ksMu.RLock()
 	ks := p.keySources[securityGroupID]
 	p.ksMu.RUnlock()

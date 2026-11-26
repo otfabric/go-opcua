@@ -108,7 +108,7 @@ func TestFileStoreRemovesTemp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer g.Close()
+	defer func() { _ = g.Close() }()
 	if _, err := os.Stat(filepath.Join(dir, tempName)); !os.IsNotExist(err) {
 		t.Errorf("temporary file left: %v", err)
 	}
@@ -318,4 +318,21 @@ func TestAppendLen(t *testing.T) {
 		}
 	}()
 	appendLen(nil, -1)
+}
+
+// FuzzDecodeMeta: the meta key of a Domain comes from the store: it
+// decodes or fails, and what decodes encodes back.
+func FuzzDecodeMeta(f *testing.F) {
+	f.Add(meta{schema: 1, owner: "urn:ac", rev: 7}.encode())
+	f.Add([]byte{metaFormat})
+	f.Add([]byte{metaFormat + 1, 0, 0})
+	f.Fuzz(func(t *testing.T, b []byte) {
+		m, err := decodeMeta(b)
+		if err != nil {
+			return
+		}
+		if !bytes.Equal(m.encode(), b) {
+			t.Fatalf("decoded meta does not encode back")
+		}
+	})
 }

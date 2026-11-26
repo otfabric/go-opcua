@@ -107,3 +107,13 @@ func SetBeforeUpdate(c *Connections, f func()) {
 // ApplyCMEvent applies e to the address space as the loop does: a test
 // replays an event the loop has not drained yet.
 func ApplyCMEvent(c *ConnectionManager, e fxcm.Event) { c.apply(e) }
+
+// SetCrashPoint sets the function the persistence protocols run at each of
+// their named points; nil removes it.
+func SetCrashPoint(c *Connections, f func(point string)) {
+	if f == nil {
+		c.crash.Store(nil)
+		return
+	}
+	c.crash.Store(&f)
+}
