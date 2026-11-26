@@ -221,3 +221,63 @@ func TestBuildPubSubModel(t *testing.T) {
 	t.Cleanup(func() { _ = plain.Close() })
 	require.Error(t, plain.BuildPubSubModel())
 }
+
+// funcHook runs f for every change.
+type funcHook struct {
+	f func(ch *server.PubSubChange) error
+}
+
+func (h funcHook) PubSubConfigurationChanged(ch *server.PubSubChange) error { return h.f(ch) }
+
+func (funcHook) HeldPubSubIDs() ([]uint16, []uint16, bool) { return nil, nil, false }
+
+// TestPubSubHookRefusesRevert: a hook that refuses a Revert keeps the
+// update: the runtime goes back to the updated configuration, Revert fails
+// with the StatusCode and can be retried.
+func TestPubSubHookRefusesRevert(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	h := &recordingHook{}
+	b.srv.SetPubSubConfigurationHook(h)
+	var u *server.PubSubConfigurationUpdate
+	require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+		var sc ua.StatusCode
+		u, sc = b.srv.UpdatePubSubConfiguration(ctx, bridgeConfig("A"), true,
+			[]*ua.PubSubConfigurationRefDataType{{ConfigurationMask: refAdd | refConn}, {ConfigurationMask: refAdd | refWG}})
+		return sc
+	}))
+	h.take()
+
+	h.set(ua.StatusBadInvalidState, false)
+	require.ErrorIs(t, u.Revert(), ua.StatusBadInvalidState)
+	ch := h.take()
+	require.Len(t, ch, 1)
+	require.True(t, ch[0].Revert)
+	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	require.True(t, ok, "the refused revert is undone")
+
+	h.set(nil, false)
+	require.NoError(t, u.Revert(), "a refused revert can be retried")
+	_, ok = rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+	require.False(t, ok)
+}
+
+// TestPubSubHookRestoreFails: when the configuration a hook refused cannot
+// be restored, the refusal is still the error (the failed restore is
+// logged).
+func TestPubSubHookRestoreFails(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	b.srv.SetPubSubConfigurationHook(funcHook{f: func(ch *server.PubSubChange) error {
+		// A hook that breaks its contract: Before names a connection the
+		// runtime cannot add, so restoring it fails.
+		ch.Before.Connections = append(ch.Before.Connections, &ua.PubSubConnectionDataType{Name: "x"})
+		return ua.StatusBadInvalidState
+	}})
+	err := b.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+		_, err := rt.AddConnection(pubsub.UDPConnection("C", "opc.udp://239.0.0.1:4840", uint16(5)))
+		return err
+	})
+	require.ErrorIs(t, err, ua.StatusBadInvalidState)
+}
