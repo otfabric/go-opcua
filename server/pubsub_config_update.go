@@ -46,6 +46,10 @@ type configUpdate struct {
 	matched         bool // set by apply when it matched an element
 	values          []*ua.PubSubConfigurationValueDataType
 	paths           []configPath
+	// removed are the paths of the elements ElementRemove removed: a
+	// component the update adds again under one of them is a new one, not
+	// the same element replaced.
+	removed []configPath
 }
 
 func newConfigUpdate(file *ua.PubSubConfiguration2DataType, cfg *ua.PubSubConfigurationDataType, pub *ua.Variant, usedGroups, usedWriters map[uint16]bool) *configUpdate {
@@ -204,6 +208,13 @@ func (u *configUpdate) apply(r *ua.PubSubConfigurationRefDataType) (ua.StatusCod
 	case ua.PubSubConfigurationRefMaskElementRemove:
 		if undo = e.remove(); undo == nil {
 			return ua.StatusBadNoMatch, configPath{}, nil, nil
+		}
+		gone := configPath{kind: e.path.kind, names: slices.Clone(e.path.names)}
+		u.removed = append(u.removed, gone)
+		restore := undo
+		undo = func() {
+			restore()
+			u.removed = slices.DeleteFunc(u.removed, func(p configPath) bool { return p.kind == gone.kind && slices.Equal(p.names, gone.names) })
 		}
 		e.path.names = nil
 	case ua.PubSubConfigurationRefMaskElementModify:

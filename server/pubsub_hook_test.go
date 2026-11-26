@@ -390,3 +390,67 @@ func TestPubSubConfigurationRestorer(t *testing.T) {
 	require.False(t, before.Equal(h.moves[0][0].ToNode))
 	require.Equal(t, []bool{true}, h.nodes, "the new node is in place when the hook is told")
 }
+
+// TestPubSubUpdateMoved: an update that replaces a component in place
+// (ElementModify) lists it in Moved, with its old and new ComponentID and
+// node, and so does the PubSubChange of the hook; RevertMoves lists what the
+// revert put back; a component removed and added again under the same
+// Name in one update (ElementRemove, ElementAdd) is a new one, not a move.
+func TestPubSubUpdateMoved(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	h := &recordingHook{}
+	b.srv.SetPubSubConfigurationHook(h)
+	update := func(cfg *ua.PubSubConfiguration2DataType, refs ...*ua.PubSubConfigurationRefDataType) *server.PubSubConfigurationUpdate {
+		t.Helper()
+		var u *server.PubSubConfigurationUpdate
+		require.Equal(t, ua.StatusOK, b.call(t, func(ctx context.Context) ua.StatusCode {
+			var sc ua.StatusCode
+			u, sc = b.srv.UpdatePubSubConfiguration(ctx, cfg, true, refs)
+			return sc
+		}))
+		require.True(t, u.ChangesApplied)
+		return u
+	}
+	group := func() (pubsub.ComponentID, *ua.NodeID) {
+		t.Helper()
+		c, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "A")
+		require.True(t, ok)
+		g, ok := rt.Lookup(pubsub.KindWriterGroup, c, "G")
+		require.True(t, ok)
+		n, ok := b.srv.PubSubNodeID(g)
+		require.True(t, ok)
+		return g, n
+	}
+	u := update(bridgeConfig("A"), &ua.PubSubConfigurationRefDataType{ConfigurationMask: refAdd | refConn}, &ua.PubSubConfigurationRefDataType{ConfigurationMask: refAdd | refWG})
+	require.Empty(t, u.Moved, "nothing was there before")
+	h.take()
+
+	g0, n0 := group()
+	changed := bridgeConfig("A")
+	changed.Connections[0].WriterGroups[0].KeepAliveTime = 4242
+	u = update(changed, &ua.PubSubConfigurationRefDataType{ConfigurationMask: ua.PubSubConfigurationRefMaskElementModify | refWG})
+	g1, n1 := group()
+	require.NotEqual(t, g0, g1, "the modify replaced the group")
+	want := []server.PubSubComponentMove{{From: g0, To: g1, FromNode: n0, ToNode: n1}}
+	require.Equal(t, want, u.Moved)
+	ch := h.take()
+	require.Len(t, ch, 1)
+	require.Equal(t, want, ch[0].Moved, "the hook sees the moves")
+
+	moved, err := u.RevertMoves()
+	require.NoError(t, err)
+	g2, n2 := group()
+	require.Equal(t, []server.PubSubComponentMove{{From: g1, To: g2, FromNode: n1, ToNode: n2}}, moved)
+	moved, err = u.RevertMoves()
+	require.NoError(t, err)
+	require.Empty(t, moved, "reverted already")
+
+	// Removed and added again in one update: a new group.
+	u = update(changed, &ua.PubSubConfigurationRefDataType{ConfigurationMask: ua.PubSubConfigurationRefMaskElementRemove | refWG},
+		&ua.PubSubConfigurationRefDataType{ConfigurationMask: refAdd | refWG})
+	g3, _ := group()
+	require.NotEqual(t, g2, g3)
+	require.Empty(t, u.Moved, "a component added under a removed path is not the removed one")
+}

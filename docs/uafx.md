@@ -538,7 +538,19 @@ is a property of the component, not of an endpoint record: a reader or
 writer an EstablishConnections call created is stored as created
 (provenance) in the component record every endpoint that references it
 shares, and every endpoint restored with it owns it, so a hand-over needs
-no record of its own and survives a restart.
+no record of its own and survives a restart. An endpoint a later call
+links to an existing reader or writer shares it: the reference needs an
+ElementModify (Part 14 §9.1.3.7.4), which the runtime applies by
+replacing the component (and what is below a modified group or
+connection) under the same Name. The server reports those replacements
+(`PubSubConfigurationUpdate.Moved`, computed in the transaction of the
+update), and every endpoint follows them: its References, what its calls
+created and what it has left to remove; a replaced reader or writer an
+endpoint demands is enabled again (library interpretation: the
+configuration a call sends does not end another endpoint's demand). A
+rollback of the call follows the revert the same way. A component another
+mechanism removes and adds again under the same Name in one update is a
+new one: no endpoint takes it over.
 
 **Restore** (design §4.6). Each record is restored whole or not at all: its
 PubSub components (one of the same path that is equal is adopted, one that

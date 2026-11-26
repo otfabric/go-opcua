@@ -30,6 +30,11 @@ var _ server.PubSubConfigurationRestorer = (*persistence)(nil)
 // committed (design §4.4). The same change made by another mechanism (a
 // PubSub Method, CloseAndUpdate) has no such intent and is refused.
 func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) error {
+	// A CloseAndUpdate that replaced components in place: the endpoints
+	// follow them before their records are read from the runtime (a
+	// refusal below puts the components back, and the endpoints follow
+	// that too: PubSubConfigurationRestored).
+	p.c.followMoves(ch.Moved)
 	added := addedComponents(ch.Before, ch.After)
 	p.mu.Lock()
 	defer p.mu.Unlock()

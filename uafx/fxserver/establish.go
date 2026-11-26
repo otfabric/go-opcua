@@ -135,10 +135,13 @@ type call struct {
 	els []*element
 
 	// Rollback (Part 81 §6.2.4.3.11, Table 21).
-	created    []*endpoint // CreateConnectionEndpointCmd
-	restore    []func()    // preconfigured endpoints the call changed
-	update     *server.PubSubConfigurationUpdate
-	linkUndo   []func()             // SetCommunicationConfigurationCmd
+	created  []*endpoint // CreateConnectionEndpointCmd
+	restore  []func()    // preconfigured endpoints the call changed
+	update   *server.PubSubConfigurationUpdate
+	linkUndo []func() // SetCommunicationConfigurationCmd
+	// moved are the components the update of the call replaced in place
+	// (PubSubConfigurationUpdate.Moved), which the endpoints followed.
+	moved      []server.PubSubComponentMove
 	enabled    []pubsub.ComponentID // EnableCommunicationCmd
 	cleanupsOn []*endpoint
 	demandsOn  []*endpoint     // EnableCommunicationCmd made them demand
@@ -314,9 +317,14 @@ func (x *call) rollback() {
 	for i := len(x.linkUndo) - 1; i >= 0; i-- {
 		x.linkUndo[i]()
 	}
-	if err := x.update.Revert(); err != nil {
+	// The undone References name the components as they were before the
+	// update; the update replaced some, and the revert puts back new ones.
+	x.c.followMoves(x.moved)
+	moved, err := x.update.RevertMoves()
+	if err != nil {
 		x.c.log.Warn("uafx: rollback: the PubSub configuration of the call stays", "error", err)
 	}
+	x.c.followMoves(moved)
 	// A rollback after the commit point is a durable removal of what the
 	// call committed (design §4.3).
 	x.uncommit()
@@ -1165,6 +1173,7 @@ func (x *call) communicate() bool {
 		return false
 	}
 	x.update = u
+	x.followUpdate(u.Moved)
 	out.ChangesApplied, out.ReferenceResults, out.ConfigurationValues, out.ConfigurationObjects =
 		u.ChangesApplied, u.ReferenceResults, u.ConfigurationValues, u.ConfigurationObjects
 	out.Result = ua.StatusOK
@@ -1685,4 +1694,44 @@ func variants(vs []*ua.Variant) []*ua.Variant {
 		out[i] = v
 	}
 	return out
+}
+
+// followUpdate makes the endpoints follow the components the update of
+// the call replaced in place (an ElementModify of a component other
+// endpoints share, or of its group or connection): their References, the
+// provenance and what they have left to prune move to the new components,
+// and a DataSetReader or DataSetWriter an endpoint demands is enabled
+// again, with the groups and connection above it, since its enablement
+// follows the endpoints (design §4.4; library interpretation: the
+// configuration a call sends does not end another endpoint's demand). The
+// moves are by ComponentID, computed by the server in the transaction of
+// the update, so a component another mechanism added under the same name
+// is never taken for the replaced one.
+func (x *call) followUpdate(moved []server.PubSubComponentMove) {
+	if len(moved) == 0 {
+		return
+	}
+	x.moved = moved
+	c := x.c
+	c.followMoves(moved)
+	rt := c.srv.PubSub()
+	for _, m := range moved {
+		if m.ToNode == nil || !c.demanded(m.ToNode) {
+			continue
+		}
+		for id := m.To; id != pubsub.Root; {
+			info, err := rt.Component(id)
+			if err != nil {
+				break
+			}
+			if !info.Enabled {
+				if err := c.change(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
+					c.log.Warn("uafx: EstablishConnections: enable a replaced component an endpoint demands", "component", id, "error", err)
+					break
+				}
+				x.enabled = append(x.enabled, id)
+			}
+			id = info.Parent
+		}
+	}
 }
