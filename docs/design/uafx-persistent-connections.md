@@ -1,12 +1,16 @@
 # Design: UAFX persistent connections (C3)
 
-Status: **revision 2, waiting for re-review**. The maintainer's review of
-revision 1 (PR #52, 2026-11-26) approved the architecture
-(application-supplied storage, the control model of C1, the ownership
-safeguards of C2, three stage PRs and one release v1.40.0), decided C3-D1 to
-C3-D10 (§11) and asked for nine revisions, which this version makes
-(§11.2). No runtime code is written until this revision is approved.
-Target release: v1.40.0, after the last stage (§8).
+Status: **approved (revision 3)**. The maintainer's review of revision 1
+(PR #52, 2026-11-26) approved the architecture (application-supplied
+storage, the control model of C1, the ownership safeguards of C2, three
+stage PRs and one release v1.40.0), decided C3-D1 to C3-D10 and asked for
+nine revisions (§11.2). The review of revision 2 accepted C3-D11 to C3-D13
+and asked for five final refinements (§11.4), which this version makes.
+Implementation starts with C3.1 (§8); each stage PR gets its own code,
+conformance, concurrency, fault-injection and regression review. Target
+release: v1.40.0, after the final implementation review. Out of scope:
+generic Part 14 persistence, the VariableStorage Methods, distributed
+multi-writer storage, HA clustering.
 
 This document designs persistent connections in go-opcua: ConnectionEndpoints
 with IsPersistent TRUE that an AutomationComponent (AC) restores after a
@@ -160,7 +164,8 @@ Each is a **library interpretation** where this design decides it.
 
 ### 3.1 Interface
 
-One package, proposed as uafx/fxstore, used by both sides:
+One package, uafx/fxstore (C3-D12), used by both sides. It is optional
+and has no dependency outside the standard library and go-opcua:
 
 ```text
 package fxstore
@@ -168,10 +173,13 @@ package fxstore
 // Store keeps the durable state of one AutomationComponent server or one
 // ConnectionManager. One writer: the process that opened it.
 type Store interface {
-	// Load returns the last committed state: every key with its value.
+	// Load returns the visible state: every key with its value.
 	Load(ctx context.Context) (map[string][]byte, error)
 	// Apply makes puts and deletes durable, all or none.
 	Apply(ctx context.Context, b Batch) error
+	// Close releases the store (and, for FileStore, its lock). Load and
+	// Apply after Close return ErrClosed, which wraps ErrNotCommitted.
+	Close() error
 }
 
 type Batch struct {
@@ -197,35 +205,98 @@ var ErrLocked = errors.New(...)
 | Durability | Apply returns nil only when the batch survives a process crash and, for a backend on stable storage, a power loss of the machine. FileStore: the data file and its directory are fsynced (§3.4) |
 | Atomicity | All puts and deletes of a batch, or none |
 | Outcomes | nil: **committed**. An error that `errors.Is` ErrNotCommitted: **definitely not committed**, the state is as before. Any other error: **unknown**: the batch may or may not be durable |
-| Unknown | The caller reconciles (§3.3); when it still cannot tell, the protocols of §4 and §6 treat the outcome as unknown, never as "not done". A Load after an unknown Apply returns either the old or the new values of the whole batch |
+| Unknown | The caller reconciles (§3.3); until that succeeds, the protocols of §4 and §6 treat the outcome as unknown, never as "not done", and fence the store (§3.5). A Load after an unknown Apply returns either the old or the new values of the whole batch, but seeing the new values does not prove they are durable |
+| Prefix durability | A committed Apply makes durable the whole state it was applied to, including every earlier batch visible to Load at that moment. This is the property §3.3 relies on; FileStore has it because each Apply writes the complete state and fsyncs the file and the directory |
+| Revisions | Every Apply the library builds puts a new revision in the `<ns>/meta` key: a counter and a random batch identity. Load therefore tells which batch the visible state ends with |
+| Concurrency | Load and Apply are safe for concurrent use and Applies are serialized by the backend; the library also serializes its own Applies per store (§3.5), so a backend sees one Apply at a time from it |
 | Cancellation | A context done before the backend starts writing: ErrNotCommitted. A context done while it writes: the backend may still commit: unknown unless it can prove otherwise |
 | Read-your-writes | Load after a committed Apply returns its values |
 | Single writer | One process owns a store. FileStore takes an exclusive lock on its directory (ErrLocked for a second opener); other backends document how they enforce it. The library refuses a store whose meta key names another owner identity (the CM's ApplicationURI, the AC server's ApplicationUri) |
 | Key namespaces | The AC writes only keys under `ac/`, the CM only under `cm/`; each refuses foreign keys at Load. One backend may hold both when the application gives each its own Store value over it |
 | Versioned format | Every value starts with a format byte and a schema version; a `<ns>/meta` key holds the store format version and the owner identity. A newer version than the library knows, or an undecodable meta key, fails the start of the persistent subsystem (C3-D1); older versions are migrated in memory and written back in one committed Apply before anything else is written |
-| Bounds | A value is at most 4 MiB, a store at most 64 Ki keys (configurable lower); decoding uses the limits of the ua decoder; a value over a bound is a failed record (§4.7), not a panic. The decoders have fuzz targets |
+| Bounds | A value is at most 4 MiB, a store at most 64 Ki keys and 64 MiB in total (each configurable lower). FileStore checks the data file's size before it reads it and reads through a bounded reader; for any backend the library checks the aggregate of what Load returned before it decodes anything, and a store over a bound fails the start (C3-D1). Decoding uses the limits of the ua decoder; a value over its bound is a failed record (§4.7), not a panic. The decoders have fuzz targets |
 | Sensitive data | Values hold PubSub configuration, which can carry broker credentials in its properties (the server redacts them in its address space; the store holds them as configured). The library stores no security keys, no private keys and no session secrets. FileStore creates its directory 0700 and files 0600 and refuses a directory others can write. An application that needs encryption at rest wraps the Store |
 | Resources | Load reads the whole state once at start; Apply writes one batch; neither starts goroutines that outlive the call |
 
 ### 3.3 Reconciling an unknown outcome
 
-After an unknown Apply the library calls Load with a deadline (at most
-10 s by default, configurable) and compares the batch keys: all new values
-present means committed, all old values present means not committed, a
-Load that fails leaves it unknown. Neither side retries the Apply itself:
-an unknown outcome follows the protocol of its operation (§4.3 to §4.5,
-§6.2, §6.3).
+Visibility is not durability: in FileStore the rename can succeed while the
+directory fsync fails, and a Load then shows the new values although a power
+loss could still undo them. So an unknown batch is settled in two steps,
+with a deadline per attempt (10 s by default, configurable) and a bounded
+backoff between attempts:
 
-### 3.4 FileStore (reference implementation)
+1. **Load** and read the revision in the meta key: it ends with the unknown
+   batch (its batch identity) or with the batch before it. A failed Load
+   leaves the outcome unknown.
+2. **Confirm** with an Apply built on exactly that Loaded state: it changes
+   only the meta key (the next revision). If it commits, prefix durability
+   (§3.2) makes the Loaded state durable, and the unknown batch's outcome is
+   then known: committed if the Loaded state contained it, not committed if
+   it did not. If the confirming Apply is itself unknown or not committed,
+   the outcome stays unknown and the next attempt starts again at step 1.
 
-A directory with an exclusive lock file and one data file. Apply writes the
-whole new state to a temporary file, fsyncs it, renames it over the data
-file and fsyncs the directory. An error before the rename is
-ErrNotCommitted (the temporary file is removed); an error at or after the
-rename, including the directory fsync, is unknown. It is meant for the scale
-of a configuration (a few MiB): Apply is O(state). It is in the library
-because the contract tests and the crash tests (§9) need a durable backend
-(C3-D12); applications may use another.
+Neither side re-sends the unknown batch: an unknown outcome follows the
+protocol of its operation (§4.3 to §4.5, §6.2, §6.3), and once settled the
+in-memory state is rebuilt from the Loaded state, not from what the caller
+meant to write.
+
+### 3.4 FileStore and MemoryStore (C3-D12)
+
+**FileStore** is a directory with a lock file and one data file. Open takes
+an exclusive lock on the lock file (flock on Unix, LockFileEx on Windows)
+and holds it until Close; a second opener, in this or another process, gets
+ErrLocked. Apply writes the whole new state to a temporary file, fsyncs it,
+renames it over the data file and fsyncs the directory. An error before the
+rename is ErrNotCommitted (the temporary file is removed); an error at or
+after the rename, including the directory fsync, is unknown. A leftover
+temporary file from a crash is removed at Open. It is meant for the scale of
+a configuration (a few MiB): Apply is O(state).
+
+Platform limits, in its documentation: on Windows a directory cannot be
+fsynced, so the durability of the rename rests on the file system's
+metadata journal (NTFS); network file systems (NFS, SMB) and file systems
+that ignore fsync or advisory locks are not supported, because neither the
+lock nor the durability guarantee holds there. FileStore is safe for
+concurrent use within its process.
+
+**MemoryStore** implements the logical transactions of the contract
+(atomic Apply, revisions, ErrLocked for a second owner, fault injection for
+tests) and nothing else: it is not crash-durable, and an AC or CM on it
+survives no restart. It is for tests and for applications that want the
+protocols without persistence.
+
+The contract tests (a storetest package, reusable by any backend) check Apply
+atomicity, outcomes, revisions, cancellation, bounds, Close and the lock.
+
+### 3.5 Fencing while an outcome is unknown
+
+The **consistency domain** is one store: the AC store of a server, or the
+store of one Manager (library interpretation; finer domains could come
+later without changing the contract). While a domain has an unknown outcome:
+
+- State-changing operations of that domain that write the store are refused
+  before they change anything: an EstablishConnections or CloseConnections
+  gets Bad_ResourceUnavailable for its endpoints (definitely not done, §4.3),
+  a Process or set change of the CM fails the same way, and the diagnostics
+  name the unresolved batch. The reconciliation of §3.3 runs in the
+  background; the fence is lifted only when it has settled.
+- No operation runs on in-memory state that the unknown batch may have
+  overtaken: after settling, the memory of the domain is rebuilt from the
+  Loaded state.
+- Counters and identifiers that the unknown batch may have consumed (the
+  CM's generation and RunID counters, the AC's reserved PubSub ids, endpoint
+  NodeIds) are never reused: after settling, each counter continues past the
+  larger of its value before the batch and in the batch, and ids of a batch
+  that did not commit stay quarantined until the settle proves them free.
+- Read-only access stays available: Browse and Read of the address space,
+  the Status Variables, the Go API's status, recovery and quarantine
+  reports.
+
+A CleanupTimeout expiry of a non-persistent endpoint does not write the
+store and is not fenced. Removals that the protocol must complete for
+safety (§4.4 step 2 after an unknown intent) are runtime-only and are not
+fenced either.
 
 ## 4. The AutomationComponent: `fxserver`
 
@@ -256,7 +327,7 @@ Keys and records (all values versioned, §3.2):
 | Key | Record |
 |---|---|
 | `ac/meta` | format version, owner (server ApplicationUri) |
-| `ac/ep/<id>` | one persistent endpoint: NodeId, FunctionalEntity, Name, the ConnectionEndpointParameter as established (type, Mode, InputVariables, OutputVariables, RelatedEndpoint, CleanupTimeout), ConnectionManagerApplicationUri, CreationTime, ModificationTime, the ControlGroups it controls, the components it references, **Enabled**, **State** (Active or RemovePending, §4.4), and the NamespaceArray of the record (§4.8) |
+| `ac/ep/<ac>/<id>` | one persistent endpoint, under the key of its AutomationComponent. The value starts with a small **identity header**, decodable on its own and checksummed apart from the body (§4.7): NodeId, Name, FunctionalEntity, the PubSub ids it reserves. The body: NodeId, FunctionalEntity, Name, the ConnectionEndpointParameter as established (type, Mode, InputVariables, OutputVariables, RelatedEndpoint, CleanupTimeout), ConnectionManagerApplicationUri, CreationTime, ModificationTime, the ControlGroups it controls, the components it references, **Enabled**, **State** (Active or RemovePending, §4.4), and the NamespaceArray of the record (§4.8) |
 | `ac/pc/<component>` | one PubSub component a persistent endpoint references: its kind and id (PubSubConnection, WriterGroup, ReaderGroup, DataSetWriter, DataSetReader, PublishedDataSet), its configuration as the PubSubConfiguration2DataType element it was applied with, its **provenance**, its **references** (the persistent endpoints that use it), a source field (§5) and its NamespaceArray |
 | `ac/q/<id>` | a quarantined record and its diagnostics (§4.7) |
 
@@ -268,10 +339,21 @@ Provenance decides the delete semantics (§6.2.5.2):
 | Preconfigured | it existed before as a preconfigured Object of the AC | never; only the reference is dropped |
 | Adopted | it existed before, from the application or another configuration mechanism, and the endpoint referenced it | never; only the reference is dropped |
 
-A shared component has one record with every reference; removing one
-endpoint drops one reference and never deletes a component another endpoint
-still needs (AP-9). The restore of endpoints that share a component adds
-that component once, in dependency order (§4.6).
+A shared component has one record. References come in two sets:
+
+- **durable references**: the persistent endpoints that use it, stored in
+  its record;
+- **runtime references**: every endpoint that uses it now, persistent and
+  non-persistent, kept in memory only (a non-persistent endpoint does not
+  survive a restart, AP-6, so its reference must not either).
+
+A Created component is removed only when it has neither: removing one
+endpoint drops its references and never deletes a component another
+endpoint, of either kind, still needs (AP-9). Its record is deleted when it
+has no durable reference left, even while non-persistent endpoints still use
+it at runtime: the component then lives on in memory and is gone after a
+restart, as their endpoints are. The restore of endpoints that share a
+component adds that component once, in dependency order (§4.6).
 
 ### 4.3 Establish: validate, stage, persist, activate
 
@@ -397,7 +479,19 @@ preconfigured component. Status then follows the readers and writers
 
 ### 4.7 Quarantine (C3-D10)
 
-A record that fails is not restored, not half-restored and not deleted. It
+A record that fails is not restored, not half-restored and not deleted.
+What it reserves depends on what can still be read of it:
+
+- **Identity header readable** (the body is corrupt or fails a check): the
+  identities of the header are reserved as below.
+- **Identity header unreadable** (the identities that must be reserved
+  cannot be recovered): its AC, from the key, is **fenced** for establishing:
+  every EstablishConnections of that AC gets Bad_ResourceUnavailable with a
+  diagnostic naming the record, because any new Name, NodeId or PubSub id
+  could collide with the lost ones. CloseConnections, the other ACs and
+  read-only access are not affected. Discard of the record lifts the fence.
+- **Key unreadable** (a key outside the known layout): every AC of the server
+  is fenced for establishing in the same way. It
 moves to `ac/q/<id>` (one Apply; if that does not commit, it stays where it
 is and is quarantined in memory). A quarantined record **reserves** its
 NodeId, its Name in its FunctionalEntity (an establish of that Name gets
@@ -437,30 +531,69 @@ URI the server no longer has quarantines the record (Retryable).
 
 PC-1 is always enforced. PC-2 is enforced only with a StrictNotPersisted
 connection option (proposed; false by default in v1.x: a documented
-conformance deviation in LIMITATIONS.md and docs/uafx.md). A component
-referenced by a persistent and a non-persistent endpoint (G14) needs
-persisted for one and not persisted for the other: with StrictNotPersisted
-it is refused (Bad_InvalidState, PC-3); without, it is persisted, restored
-for the persistent endpoint, and the non-persistent endpoint is gone after a
-restart (AP-6). The decision is made at validation (§4.3 step 1), never by
-whichever endpoint wrote last.
+conformance deviation in LIMITATIONS.md and docs/uafx.md).
+
+PC-2 names only the DataSetReader and DataSetWriter, not their parents. So
+a **parent** (WriterGroup, ReaderGroup, PubSubConnection) shared by the
+readers and writers of persistent and non-persistent endpoints is no
+conflict: PC-1 needs it persisted, and PC-2 says nothing about it. It is
+persisted, and after a restart it is restored for the persistent endpoints;
+the non-persistent readers and writers under it are gone (AP-6). A conflict
+(G14) exists only when the **same** DataSetReader or DataSetWriter is
+referenced by a persistent and a non-persistent endpoint: PC-1 wants it
+persisted and PC-2 not. With StrictNotPersisted it is refused
+(Bad_InvalidState, PC-3); without, it is persisted, restored for the
+persistent endpoint, and the non-persistent endpoint is gone after a restart.
+The decision is made at validation (§4.3 step 1), never by whichever
+endpoint wrote last.
 
 ### 4.10 Secure restart (PS-3)
 
 No keys and no sequence numbers are stored. A restored **secured writer
-group** would start its MessageNonce sequence at 1 under the token current
-at the restart: four random bytes make a repeated nonce under the same key
+group** would start its MessageNonce sequence at 1 under the key current at
+the restart: four random bytes make a repeated nonce under the same key
 unlikely but not impossible, and receivers ignore the restarted sequence
-(§7.2.3). So a restored secured writer group does not publish under any
-SecurityTokenId that was current or earlier when it was restored: it waits
-for the next key of its SecurityGroup, and until then its endpoints stay at
-Status Initial with the reason in the restore report and the Logger. A
-restored **secured reader group** has lost its replay records: it accepts
-messages only under a SecurityTokenId newer than the one current at the
-restore (C3-D11). The SecurityMode is never lowered and nothing is sent
-unsecured. C3.1 checks the PubSub runtime's initialization for these rules
-and adds the "not before the next token" gate where it is missing. The cost:
-a restored secured endpoint is not Operational for up to one KeyLifetime.
+(§7.2.3). A restored **secured reader group** has lost its replay records,
+so it would accept again what it had already processed under the current
+key. Both follow one security-first rule (C3-D11): a restored group neither
+publishes nor accepts messages under a key that may have been in use before
+the restart. The SecurityMode is never lowered and nothing is sent or taken
+unsecured.
+
+**Freshness is a verified key epoch, not a number.** SecurityTokenIds are
+UInt32 values that wrap around and that a restarted SKS may issue again, so
+no comparison of ids is used. An epoch is a key as its key source delivers
+it: SecurityGroupId, SecurityTokenId and a fingerprint of the key material,
+with the start of its validity as the source reports it. At the restore the
+runtime takes a **baseline** per SecurityGroup: the first key set it obtains
+after the restore (pulled with GetSecurityKeys, pushed with SetSecurityKeys,
+or handed over by a cached or pre-distributed source). A key is fresh when
+it is in no baseline as current or past, and it becomes current after the
+restore by the timing of its source (a future key of the baseline set
+counts once it becomes current, since no earlier incarnation could have
+used it before then). A key whose fingerprint matches a baseline key is
+never fresh, whatever its SecurityTokenId.
+
+| Case | Behaviour |
+|---|---|
+| Rotating SKS, pull or push | the group is gated until the next key becomes current: one KeyLifetime is the expected delay with a healthy SKS, not a guaranteed bound |
+| SecurityTokenId wraps around, or a restarted SKS reissues ids | ids are not compared; the fingerprint decides |
+| Cached or pre-distributed keys | their current and past keys at the restore are the baseline; only a key that becomes current later is fresh |
+| Repeated restarts | each restore takes a new baseline; a restart before the next key restarts the wait |
+| Key source unavailable at the restore | no baseline, so no key is fresh: the group stays gated and retries |
+| Static keys (no rotation) | never fresh: the group stays non-operational until the keys are changed or the configuration is |
+
+While gated, the endpoints stay at Status Initial with the reason ("waiting
+for a security key newer than the restart") in the restore report and the
+Logger.
+
+**The gate lives in the PubSub runtime**, in the key state it keeps per
+SecurityGroup for the life of the process, not in the WriterGroup or
+ReaderGroup objects: a group recreated later by any mechanism (CloseAndUpdate,
+the PubSub Methods, a re-establish) under the same SecurityGroup inherits
+the gate, and only a fresh epoch lifts it. `fxserver` sets it when it
+restores a secured group; the PubSub runtime enforces it. C3.1 adds the
+gate there and tests it with every case of the table.
 
 ### 4.11 What C3 does not change on the AC
 
@@ -498,7 +631,7 @@ Manager.
 | `cm/set/<key>` | SetKey, Version, **generation** (a Manager-wide counter, +1 on every committed change of any set, never reset), **fingerprint** (SHA-256 of the canonical F.2 encoding of the set), the committed Conf | before the change is visible (§6.2) |
 | `cm/ep/<id>` | the EndpointRecord of C2 plus the evidence of §6.5 (server identity, namespace-qualified NodeId, CreationTime, ConnectionManagerApplicationUri, the generation and fingerprint of the endpoint configuration) and its Class | with the run step that changes it |
 | `cm/run/<id>` | RunID, set, generation, action, RollbackOnError, **phase** (§6.3), the endpoints established or closed so far | at each phase change |
-| `cm/call/<id>` | call intent: RunID, AC, Establish or Close, the Names and NodeIds it may create or close | before each EstablishConnections or CloseConnections; ended after its result |
+| `cm/call/<id>` | call intent (§6.3): the evidence C2's ownership proof needs | before each EstablishConnections or CloseConnections; completed in the same Apply as the endpoint records that result from it |
 
 Not stored: the state machine state, edits in progress (their Lock is a
 session's, OPC 10000-100 §7.2), Counters (Table 78), monitor readings.
@@ -540,6 +673,24 @@ Remove and Update. Phases (names illustrative):
 | rollback-required | a call aborted with RollbackOnError TRUE; the rollback has not finished | the rollback |
 | reconciling | a Reconcile of this run is in progress | the Reconcile |
 | completed | ended; the record is deleted in the same Apply as the final endpoint records | nothing |
+
+A call intent holds what the proof of C2 §5.4 needs after a restart, so
+the proof does not depend on memory that the crash lost:
+
+- the RunID, the AC and the call (Establish or Close) with its relevant
+  arguments: the Names, the FunctionalEntities, the ConnectionEndpointParameters
+  as sent (or, for a close, the endpoint NodeIds and Remove);
+- the remote server identity (ApplicationUri, and the certificate thumbprint
+  over a secured channel) and the namespace-qualified NodeIds;
+- the intended configuration identity: the generation and the fingerprint of
+  the endpoint configurations;
+- the pre-call evidence: for each Name, that no endpoint of that Name existed
+  (the Browse that showed it), or which preconfigured endpoint it takes, with
+  its NodeId.
+
+Completing an intent and writing the endpoint records that come from its
+result are one Apply: there is no committed state with a result recorded
+but no intent, or an intent completed without its records.
 
 A crash before the first rollback-close intent no longer loses the rollback:
 the phase is rollback-required (or executing with RollbackOnError TRUE). The
@@ -651,8 +802,17 @@ never adopted or changed.
   0:NotPersisted for a reader or writer (and, for persistent endpoints, its
   parents), the CM fills it from IsPersistent before it sends the
   configuration. An explicit value that contradicts IsPersistent is a
-  ConfigError, never overwritten. A reader, writer or parent shared by a
-  persistent and a non-persistent endpoint is a ConfigError (G14).
+  ConfigError, never overwritten. A parent shared by the readers and
+  writers of persistent and non-persistent endpoints is persisted and no
+  conflict (§4.9); only a DataSetReader or DataSetWriter that is itself
+  shared by a persistent and a non-persistent endpoint is a ConfigError
+  (G14).
+- Results (C3-D13): Bad_ResourceUnavailable from an AC means its store
+  definitely did not commit and its runtime rolled back; Bad_InternalError
+  proves neither that the store failed nor that nothing changed remotely.
+  `fxcm` treats Bad_InternalError, and any other ambiguous result of a
+  state-changing call, as an unknown outcome of the whole call (C2 §5.4):
+  the Names are re-proved, nothing is resent, and nothing is assumed absent.
 
 ## 7. Failure windows
 
@@ -673,7 +833,8 @@ Each row is a point where the process stops (crash) or a store write fails.
 | Remove TRUE, RemovePending Apply unknown and not landed | restored as before; the CM repeats the close | fault injection |
 | a change from another mechanism, before or after its record Apply | the latest committed configuration | fault injection |
 | restore of a corrupt or conflicting record | quarantined, resources reserved; the others restored | file corruption |
-| secured writer group restored | Initial until the next key; no nonce under an earlier token | kill |
+| secured writer or reader group restored | Initial until a fresh key epoch; no message sent or accepted under a key that may predate the restart | kill |
+| commit Apply unknown, data visible but the directory fsync failed | outcome unknown until a confirming Apply commits (§3.3); the store is fenced meanwhile | fault injection |
 
 ### 7.2 ConnectionManager
 
@@ -698,8 +859,8 @@ and its RELEASE.md entry.
 
 | Stage | Content | Gate |
 |---|---|---|
-| C3.1 persistent AC | the store package (contract, MemoryStore, FileStore, contract tests), the AC record codecs with fuzz targets and namespace mapping (the PubSub NodeId walker), SupportsPersistence and start-up (§4.1), endpoint Diagnostics with CreationTime (AP-14), validate-stage-persist-activate (§4.3), durable disable and removal (§4.4), the transaction hook for other mechanisms (§4.5), restore and quarantine (§4.6, §4.7), shared components and provenance, PC-1 and StrictNotPersisted (§4.9), C3-D4, the secure-restart gate (§4.10) | persistent endpoints survive an abrupt restart (subprocess kill) with the right control and communication state, and no durable removal or disable is undone by a restart |
-| C3.2 durable CM | the CM records with generation and fingerprint (§6.1), configuration changes before visibility (§6.2), run journal and call intents (§6.3), loading with every record Unverified (§6.4), C3-D2 and C3-D4 validation (§6.7) | a restarted CM keeps its configuration and its owed work, and trusts no ownership record |
+| C3.1 persistent AC | the store package (contract, revisions and reconciliation, fencing, MemoryStore, FileStore, contract tests), the AC record codecs with fuzz targets and namespace mapping (the PubSub NodeId walker), SupportsPersistence and start-up (§4.1), endpoint Diagnostics with CreationTime (AP-14), validate-stage-persist-activate (§4.3), durable disable and removal (§4.4), the transaction hook for other mechanisms (§4.5), restore and quarantine (§4.6, §4.7), shared components and provenance, PC-1 and StrictNotPersisted (§4.9), C3-D4, the key-epoch gate in the PubSub runtime (§4.10) | persistent endpoints survive an abrupt restart (subprocess kill) with the right control and communication state, and no durable removal or disable is undone by a restart |
+| C3.2 durable CM | the CM records with generation and fingerprint (§6.1), call intents with their evidence, configuration changes before visibility (§6.2), run journal and call intents (§6.3), loading with every record Unverified (§6.4), C3-D2 and C3-D4 validation (§6.7) | a restarted CM keeps its configuration and its owed work, and trusts no ownership record |
 | C3.3 recovery and adoption | the verification pass with deadlines, concurrency and cancellation (§6.4), re-proof (§6.5), owed work through Process and Reconcile, action-aware adoption (§6.6), recovery status, the CM projection after a restart, FEATURE-STATUS | CM and AC restart independently without an unsafe removal or a needless interruption |
 
 ## 9. Test plan
@@ -729,7 +890,17 @@ fault injection of store outcomes.
 | NamespaceArray reordered between two starts | records remapped and restored |
 | a writer shared by two endpoints | removing one leaves the other communicating, before and after a restart |
 | a corrupt record | quarantined, its resources reserved, no partial restore, the others restored |
-| secured publisher restart | no message under the token current at the restore; Operational after the next key |
+| secured publisher restart | no message under a key current at or before the restore; Operational after a fresh key epoch |
+| secured subscriber restart | no replayed message accepted; same epoch rule |
+| key epochs: UInt32 SecurityTokenId wraparound, SKS restart reissuing ids, cached and pre-distributed keys, push and pull distribution, repeated restarts, unavailable and static key sources | each as the table of §4.10 says; the SecurityMode never lowered |
+| a secured group recreated by CloseAndUpdate while gated | still gated |
+| rename durable but directory fsync failed (FileStore fault) | outcome stays unknown until a confirming Apply commits; then settled from the Loaded revision |
+| later mutations while an outcome is unknown | refused before any change; reads still answered; no counter or id reused after settling |
+| CM killed after an establish, before the intent is completed | intent evidence restored; ownership proved from it, not from memory |
+| a parent shared by a persistent and a non-persistent endpoint | accepted; restored for the persistent one; the non-persistent one's reader or writer gone after a restart |
+| a non-persistent endpoint still using a component whose last durable reference goes | component kept at runtime, gone after a restart |
+| a store over the aggregate size bound | the start fails before the values are decoded |
+| a record whose identity header is corrupt | its AC fenced for establishing until Discard; others restored |
 | repeated establish with the same configuration | adopted, no interruption of data |
 | adoption with ActionEstablishConnectionsDisabled | stays disabled |
 
@@ -793,10 +964,22 @@ ConnectionManagerApplicationUri.
 | 8 | Namespace-safe records: NamespaceArray per record, PubSub NodeId walker, reorder test | §4.8, §6.1, §9.1 |
 | 9 | Crash testing: subprocess kill with FileStore and the listed scenarios; race, fuzz, bounds, cancellation and contract tests | §9 |
 
-### 11.3 New questions
+### 11.3 Outcomes of the second review (2026-11-26)
 
-| # | Question | Recommendation |
+| # | Question | Decision |
 |---|---|---|
-| C3-D11 | A restored secured **reader** group has lost its replay records (§4.10). Accept only tokens newer than the one current at the restore (safe; the endpoint receives nothing until the publisher's next key), or accept the current token and document the replay window opened by a restart | The safe rule, as for writers |
-| C3-D12 | FileStore in the library (needed by the contract and crash tests) or only under `examples/` | In the library: a tested reference, no external dependency, optional to use |
-| C3-D13 | The codes for a store failure in a Method result: Bad_ResourceUnavailable (definitely not committed) and Bad_InternalError (unknown outcome), both library interpretations | As proposed; `fxcm` maps Bad_InternalError on an endpoint to an unknown outcome |
+| C3-D11 | Restored secured reader groups | Accepted: no replay window; one security-first rule for readers and writers; freshness is a verified key epoch, not a SecurityTokenId comparison; wraparound, SKS restart, cached and pre-distributed keys, push and pull, repeated restarts, unavailable and static sources covered; never a SecurityMode downgrade; the gate in the PubSub runtime; one KeyLifetime expected, not guaranteed (§4.10) |
+| C3-D12 | FileStore | Accepted: in the library under uafx/fxstore with MemoryStore and reusable contract tests, optional and dependency-free; Close, exclusive ownership, concurrency, platform limits and durability defined; MemoryStore is logical, not crash-durable (§3.4) |
+| C3-D13 | Codes | Accepted as library interpretations: Bad_ResourceUnavailable = definitely not committed, Bad_InternalError = unknown; `fxcm` reconciles ambiguous results conservatively (§4.3, §6.7) |
+
+### 11.4 Final refinements
+
+| # | Refinement | Where |
+|---|---|---|
+| 1 | Durability reconciliation: visibility is not durability; revisions with a batch identity, prefix durability, a confirming Apply | §3.2, §3.3 |
+| 2 | Mutation fencing per consistency domain while an outcome is unknown; no stale memory; no reused counters or ids; reads stay available | §3.5 |
+| 3 | Durable call-intent evidence; completing an intent and writing its endpoint records in one Apply | §6.1, §6.3 |
+| 4 | Durable and runtime references of shared components; shared parents are no conflict (§6.7 corrected) | §4.2, §4.9, §6.7 |
+| 5 | Aggregate store-size bound checked before allocation; quarantine when the identities to reserve cannot be recovered | §3.2, §4.2, §4.7 |
+
+Targeted tests for D11 and the refinements are in §9.1.
