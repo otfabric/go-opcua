@@ -188,3 +188,56 @@ func TestNativeEnableDisable(t *testing.T) {
 	_, on = f.writerState(t)
 	require.False(t, on, "the endpoint is disabled: so is its writer after a restart")
 }
+
+// TestSharedOwnershipRestored: the ownership of a shared writer comes from
+// its component record, which every endpoint that references it shares,
+// not from the record of the endpoint: an endpoint whose record does not
+// own the writer (it linked a writer another call created) and that the
+// owner handed it over to, or that is restored without the owner (not
+// persistent), owns it after a restart, and removing it removes what the
+// call created (Part 81 §6.2.5.2; design §4.2, §4.4).
+func TestSharedOwnershipRestored(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name       string
+		persistent [2]bool
+		removeOwn  bool
+	}{
+		{"both persistent, owner removed", [2]bool{true, true}, true},
+		{"owner not persistent, removed", [2]bool{false, true}, true},
+		{"owner not persistent, not restored", [2]bool{false, true}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mem := &fxstore.MemoryStore{}
+			opts := fxserver.ConnectionOptions{Store: mem}
+			f := newFX(t, opts)
+			ep, ep2 := f.sharedPair(t, tc.persistent)
+			if tc.removeOwn {
+				sc, res := f.close(t, true, ep)
+				require.Equal(t, ua.StatusOK, sc, "%v", res)
+				exists, _ := f.writerState(t)
+				require.True(t, exists, "Pub2 references it")
+			}
+			f.stop(t)
+			// Pub2's record as a later call that linked the writer
+			// writes it: the hand-over is in memory only.
+			require.Equal(t, 1, rewrite(t, mem, "ep/", func(v []byte) ([]byte, bool) {
+				out, ok, err := fxserver.NotOwner(v, "Pub2")
+				require.NoError(t, err)
+				return out, ok
+			}))
+			f = newFX(t, opts)
+			require.Nil(t, f.srv.Node(ep))
+			require.NotNil(t, f.srv.Node(ep2))
+			exists, _ := f.writerState(t)
+			require.True(t, exists, "restored with Pub2")
+			sc, res := f.close(t, true, ep2)
+			require.Equal(t, ua.StatusOK, sc, "%v", res)
+			exists, _ = f.writerState(t)
+			require.False(t, exists, "removed with the last endpoint that references it")
+			require.Empty(t, f.srv.PubSub().Configuration().Connections, "nothing the call created is left")
+			require.Equal(t, 0, f.conns.Persistence().Records)
+		})
+	}
+}

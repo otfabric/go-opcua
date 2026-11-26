@@ -281,3 +281,112 @@ func TestPubSubHookRestoreFails(t *testing.T) {
 	})
 	require.ErrorIs(t, err, ua.StatusBadInvalidState)
 }
+
+// TestChangePubSubConfigurationThen: then runs in the transaction of the
+// change, after the hook and after the restore of a refused change: it
+// sees the restored component (under a new ComponentID), and a change
+// waiting for the transaction runs only after it.
+func TestChangePubSubConfigurationThen(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	conn := pubsub.UDPConnection("C", "opc.udp://239.0.0.1:4840", uint16(5))
+	cid, err := rt.AddConnection(conn)
+	require.NoError(t, err)
+	h := &recordingHook{}
+	b.srv.SetPubSubConfigurationHook(h)
+
+	// Without PubSub: neither fn nor then.
+	none := newBridgeServer(t)
+	require.ErrorIs(t, none.srv.ChangePubSubConfigurationThen(func(*pubsub.PubSub) error {
+		t.Fatal("fn called")
+		return nil
+	}, func(*pubsub.PubSub, error) { t.Fatal("then called") }), ua.StatusBadNotSupported)
+
+	h.set(ua.StatusBadResourceUnavailable, false)
+	waiting := make(chan struct{})
+	ran := make(chan struct{})
+	var seen pubsub.ComponentID
+	var seenErr error
+	err = b.srv.ChangePubSubConfigurationThen(func(rt *pubsub.PubSub) error {
+		return rt.RemoveConnection(cid)
+	}, func(rt *pubsub.PubSub, err error) {
+		seenErr = err
+		seen, _ = rt.Lookup(pubsub.KindConnection, pubsub.Root, "C")
+		go func() {
+			close(waiting)
+			_ = b.srv.ChangePubSubConfiguration(func(*pubsub.PubSub) error {
+				close(ran)
+				return nil
+			})
+		}()
+		<-waiting
+		select {
+		case <-ran:
+			t.Error("a change ran inside the transaction of then")
+		case <-time.After(50 * time.Millisecond):
+		}
+	})
+	require.ErrorIs(t, err, ua.StatusBadResourceUnavailable)
+	require.ErrorIs(t, seenErr, ua.StatusBadResourceUnavailable, "then gets the result")
+	require.NotZero(t, seen, "then sees the restored connection")
+	require.NotEqual(t, cid, seen, "under a new ComponentID")
+	<-ran
+	require.Len(t, h.take(), 1)
+}
+
+// restoringHook refuses every change and records the moves it is told.
+type restoringHook struct {
+	recordingHook
+	moves [][]server.PubSubComponentMove
+	srv   *server.Server
+	nodes []bool // whether each move's ToNode was the node of To when told
+}
+
+func (h *restoringHook) PubSubConfigurationRestored(_ *server.PubSubChange, moved []server.PubSubComponentMove) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.moves = append(h.moves, moved)
+	for _, m := range moved {
+		n, ok := h.srv.PubSubNodeID(m.To)
+		h.nodes = append(h.nodes, ok && n.Equal(m.ToNode))
+	}
+}
+
+// TestPubSubConfigurationRestorer: a hook that is a
+// PubSubConfigurationRestorer is told, in the transaction, which
+// components a refused change brought back under a new ComponentID and
+// node, whatever mechanism made the change; nothing for an accepted one.
+func TestPubSubConfigurationRestorer(t *testing.T) {
+	t.Parallel()
+	b := newBridgeServer(t, server.WithPubSub(nil))
+	rt := b.srv.PubSub()
+	conn, err := rt.AddConnection(pubsub.UDPConnection("C", "opc.udp://239.0.0.1:4840", uint16(5)))
+	require.NoError(t, err)
+	require.NoError(t, b.srv.BuildPubSubModel())
+	before, ok := b.srv.PubSubNodeID(conn)
+	require.True(t, ok)
+	h := &restoringHook{srv: b.srv}
+	b.srv.SetPubSubConfigurationHook(h)
+
+	// Accepted: no moves.
+	_, err = rt.AddConnection(pubsub.UDPConnection("D", "opc.udp://239.0.0.1:4841", uint16(6)))
+	require.NoError(t, err) // outside a transaction: no hook at all
+	require.NoError(t, b.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+		id, _ := rt.Lookup(pubsub.KindConnection, pubsub.Root, "D")
+		return rt.RemoveConnection(id)
+	}))
+	require.Empty(t, h.moves)
+
+	// Refused: C comes back under a new id and node, and the hook is told.
+	h.set(ua.StatusBadResourceUnavailable, false)
+	err = b.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.RemoveConnection(conn) })
+	require.ErrorIs(t, err, ua.StatusBadResourceUnavailable)
+	cur, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "C")
+	require.True(t, ok)
+	require.Len(t, h.moves, 1)
+	require.Equal(t, []server.PubSubComponentMove{{From: conn, To: cur, FromNode: before, ToNode: h.moves[0][0].ToNode}}, h.moves[0])
+	require.NotNil(t, h.moves[0][0].ToNode)
+	require.False(t, before.Equal(h.moves[0][0].ToNode))
+	require.Equal(t, []bool{true}, h.nodes, "the new node is in place when the hook is told")
+}

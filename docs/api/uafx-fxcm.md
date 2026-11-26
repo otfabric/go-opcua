@@ -582,6 +582,9 @@ type Manager struct {
 	// beforeCommit, set by tests only, runs in updateComplete right before
 	// the batch is applied.
 
+	// statusOf reads the Status of an endpoint for the monitor
+	// (readStatus; a test replaces it before the monitor starts).
+
 }
 ```
 

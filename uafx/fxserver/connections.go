@@ -151,6 +151,9 @@ type Connections struct {
 	// beforeUpdate, when set by a test, runs in SetCommunicationConfigurationCmd
 	// right before the PubSub configuration is applied; guarded by mu.
 	beforeUpdate func()
+	// afterChange, when set by a test, runs after each PubSub transaction
+	// of change with its result, outside the transaction; guarded by mu.
+	afterChange func(error)
 	// retryCleanup is the shortest time after which a failed cleanup is
 	// tried again; guarded by mu.
 	retryCleanup time.Duration

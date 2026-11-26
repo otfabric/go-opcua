@@ -163,3 +163,26 @@ func RemovePending(v []byte) ([]byte, error) {
 	body.State = stateRemovePending
 	return encodeEndpoint(idn, body)
 }
+
+// NotOwner returns the endpoint record v of the endpoint name with
+// OwnReader and OwnWriter cleared, as the record of an endpoint that
+// linked a component another call created; ok reports whether v is the
+// record of name.
+func NotOwner(v []byte, name string) (out []byte, ok bool, err error) {
+	idn, body, err := decodeEndpoint(v)
+	if err != nil || idn.Name != name {
+		return nil, false, err
+	}
+	body.OwnReader, body.OwnWriter = false, false
+	out, err = encodeEndpoint(idn, body)
+	return out, err == nil, err
+}
+
+// SetAfterChange sets the function that runs after each PubSub transaction
+// of the package's runtime changes, outside the transaction, with its
+// result; nil removes it.
+func SetAfterChange(c *Connections, f func(error)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.afterChange = f
+}

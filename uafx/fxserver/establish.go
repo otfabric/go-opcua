@@ -918,8 +918,15 @@ func (x *call) endpointOf(el *element) bool {
 	default:
 		x.c.mu.Lock()
 		e := x.c.endpoints[d.Node.String()]
+		pending := e != nil && e.removePending
 		x.c.mu.Unlock()
 		switch {
+		case pending && e.fe.Equal(el.fe):
+			// Its removal is durable (RemovePending, design §4.4): no
+			// command may enable, configure or control it again, and no
+			// record may make it Active again. Library interpretation:
+			// Table 12 has no code for an endpoint being removed.
+			sc = ua.StatusBadInvalidState
 		case e != nil && e.fe.Equal(el.fe):
 			el.ep = e
 			el.res.ConnectionEndpointID = e.id

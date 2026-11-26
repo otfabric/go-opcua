@@ -86,7 +86,10 @@ type epBody struct {
 	ControlGroups []*ua.NodeID
 	// Reader and Writer are the component keys of its DataSetReader and
 	// DataSetWriter, "" for none.
-	Reader, Writer       string
+	Reader, Writer string
+	// OwnReader and OwnWriter are kept for the record format; a restore
+	// takes the ownership from the Provenance of the component record,
+	// which every endpoint that references it shares.
 	OwnReader, OwnWriter bool
 }
 

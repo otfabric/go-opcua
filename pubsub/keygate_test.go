@@ -325,3 +325,123 @@ func TestKeyGateKeySourceReplaced(t *testing.T) {
 	_, err = current(p, "g")
 	require.NoError(t, err)
 }
+
+// blockingSource is a KeySource whose KeysForToken blocks, once armed,
+// until the test releases it, so that a test can act while the gate
+// observes it.
+type blockingSource struct {
+	*gateSource
+	mu       sync.Mutex
+	armed    bool
+	entered  chan struct{}
+	released chan struct{}
+}
+
+func newBlockingSource() *blockingSource {
+	return &blockingSource{gateSource: &gateSource{}, entered: make(chan struct{}), released: make(chan struct{})}
+}
+
+func (s *blockingSource) KeysForToken(id uint32) (*security.Keys, error) {
+	s.mu.Lock()
+	armed := s.armed
+	s.armed = false
+	s.mu.Unlock()
+	if armed {
+		close(s.entered)
+		<-s.released
+	}
+	return s.gateSource.KeysForToken(id)
+}
+
+// TestKeyGateReplacedDuringObservation: SetKeySource while the gate is
+// observing the old source starts a new generation: the observation
+// records nothing (the old source's future key is not trusted under the
+// new one), and the KeySource handed out for the old source gives no key
+// any more (design §4.10).
+func TestKeyGateReplacedDuringObservation(t *testing.T) {
+	t.Parallel()
+	p, err := New(nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+	old := newBlockingSource()
+	p.SetKeySource("g", old)
+	p.GateSecurityGroup("g")
+	old.set(gkey(1, 1), gkey(2, 2))
+	stale := p.KeySource("g")
+	old.mu.Lock()
+	old.armed = true
+	old.mu.Unlock()
+	done := make(chan error, 1)
+	go func() {
+		_, err := stale.CurrentKeys()
+		done <- err
+	}()
+	<-old.entered // the observation of old has read its current key
+	next := &gateSource{}
+	next.set(gkey(2, 2), gkey(3, 3))
+	p.SetKeySource("g", next)
+	close(old.released)
+	require.ErrorIs(t, <-done, security.ErrNoKeys)
+
+	// Key 2 was announced only by the replaced source, and the observation
+	// that saw it ran across the replacement: it is not fresh.
+	_, err = current(p, "g")
+	require.ErrorIs(t, err, security.ErrNoKeys, "a future key recorded across a replacement")
+	_, open := p.SecurityGroupGate("g")
+	require.False(t, open)
+	next.set(gkey(3, 3), nil)
+	k, err := current(p, "g")
+	require.NoError(t, err, "a key the new source announced opens it")
+	require.Equal(t, uint32(3), k.TokenID)
+
+	// A KeySource handed out before the replacement gives no key, also
+	// one that is usable under the new source.
+	_, err = stale.CurrentKeys()
+	require.ErrorIs(t, err, security.ErrNoKeys)
+	_, err = stale.KeysForToken(3)
+	require.ErrorIs(t, err, security.ErrNoKeys)
+}
+
+// rotatingSource, once armed, rotates to a key it never announced right
+// after a read of the current key, as a source does that rotates between
+// two calls.
+type rotatingSource struct {
+	*gateSource
+	rotate bool
+	reads  int
+}
+
+func (s *rotatingSource) CurrentKeys() (*security.Keys, error) {
+	k, err := s.gateSource.CurrentKeys()
+	s.mu.Lock()
+	s.reads++
+	rotate := s.rotate
+	s.rotate = false
+	s.mu.Unlock()
+	if err == nil && rotate {
+		s.set(gkey(k.TokenID+10, byte(k.TokenID+10)), nil)
+	}
+	return k, err
+}
+
+// TestKeyGateRotationBetweenReads: the key CurrentKeys gives is the one
+// the gate observed and decided on: a rotation after the observation does
+// not make it give a key the gate never looked at (design §4.10).
+func TestKeyGateRotationBetweenReads(t *testing.T) {
+	t.Parallel()
+	p, err := New(nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = p.Close() })
+	src := &rotatingSource{gateSource: &gateSource{}}
+	p.SetKeySource("g", src)
+	p.GateSecurityGroup("g")
+	// Announce key 2, then make it current: fresh.
+	src.set(gkey(1, 1), gkey(2, 2))
+	_, _ = current(p, "g") // tainted 1, saw 2
+	src.set(gkey(2, 2), gkey(3, 3))
+	src.rotate, src.reads = true, 0
+	k, err := current(p, "g")
+	require.NoError(t, err)
+	require.Equal(t, uint32(2), k.TokenID, "the key the gate observed, not the one after the rotation")
+	require.Equal(t, 1, src.reads, "one read of the current key")
+}

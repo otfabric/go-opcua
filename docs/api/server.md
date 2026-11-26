@@ -3242,10 +3242,25 @@ type PubSubChange struct {
 	// Revert: the change is [PubSubConfigurationUpdate.Revert] undoing an
 	// update.
 	Revert bool
+
+	// ids are the components before the change by path, for a
+	// PubSubConfigurationRestorer; nil for another hook.
+
 }
 ```
 
 PubSubChange is a change of the PubSub configuration a [PubSubConfigurationHook](#type-pubsubconfigurationhook) sees.
+
+### type PubSubComponentMove
+
+```go
+type PubSubComponentMove struct {
+	From, To         pubsub.ComponentID
+	FromNode, ToNode *ua.NodeID // nil when the component has no node
+}
+```
+
+PubSubComponentMove is a component a refused change brought back under a new ComponentID and node: the same kind and path of names (its PubSubConnection, group and own Name; a PublishedDataSet's Name).
 
 ### type PubSubConfigurationHook
 
@@ -3268,6 +3283,17 @@ type PubSubConfigurationHook interface {
 ```
 
 PubSubConfigurationHook follows the changes of the PubSub configuration of a server, whatever makes them: CloseAndUpdate and the other Methods of Part 14 §9.1.3, [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration), [PubSubConfigurationUpdate.Revert](#func-pubsubconfigurationupdate-revert) and [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration). A companion specification that keeps durable records of components (the persistent ConnectionEndpoints of OPC UA FX, OPC 10000-81 §6.6.2) uses it to keep them in line with the configuration in the same transaction (Part 14 §9.1.2).
+
+### type PubSubConfigurationRestorer
+
+```go
+type PubSubConfigurationRestorer interface {
+	PubSubConfigurationHook
+	PubSubConfigurationRestored(ch *PubSubChange, moved []PubSubComponentMove)
+}
+```
+
+PubSubConfigurationRestorer is a [PubSubConfigurationHook](#type-pubsubconfigurationhook) that follows the components a refused change brings back. The runtime is reconciled back to the configuration before the change by name, so a component the change removed or changed comes back under a new ComponentID and node: PubSubConfigurationRestored is called with those moves, in the PubSub transaction, after the runtime was reconciled back and before anything else changes the configuration. It must not change the configuration.
 
 ### type PubSubConfigurationUpdate
 
@@ -4101,6 +4127,14 @@ func (s *Server) ChangePubSubConfiguration(fn func(rt *pubsub.PubSub) error) err
 ```
 
 ChangePubSubConfiguration calls fn with the PubSub runtime of the server inside the transaction that CloseAndUpdate, UpdatePubSubConfiguration, PubSubConfigurationUpdate.Revert and the PubSub Methods that change the configuration (AddConnection, AddWriterGroup, RemoveGroup, Enable and the others of Part 14 §9.1.3) hold, and returns its error. Changes made through it are never lost to a CloseAndUpdate that read the configuration before them, nor resurrected by one. fn must not call those functions or Methods itself. A server without PubSub ([WithPubSub](#func-withpubsub)) returns ua.StatusBadNotSupported without calling fn.
+
+#### func (Server) ChangePubSubConfigurationThen
+
+```go
+func (s *Server) ChangePubSubConfigurationThen(fn func(rt *pubsub.PubSub) error, then func(rt *pubsub.PubSub, err error)) error
+```
+
+ChangePubSubConfigurationThen is [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration) with then, which it calls with the runtime and the result in the same transaction once the change is complete: after the [PubSubConfigurationHook](#type-pubsubconfigurationhook), and, when the hook refused the change, after the runtime was reconciled back to the configuration before it. then sees the runtime as the change left it, before any other change of the configuration; it is not called when fn is not (no PubSub). Like fn, it must not call the functions and Methods that change the configuration.
 
 #### func (Server) Close
 

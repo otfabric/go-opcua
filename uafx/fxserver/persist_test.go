@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -1179,4 +1180,142 @@ func TestQuarantineMissingNamespaceComponent(t *testing.T) {
 	require.Empty(t, f.conns.Quarantined())
 	require.Nil(t, f.srv.Node(ep))
 	require.Zero(t, rewrite(t, mem, "ep/", func([]byte) ([]byte, bool) { return nil, true }), "the removal is completed")
+}
+
+// TestRemovePendingStays: once the removal intent of a persistent endpoint
+// is committed (RemovePending, design §4.4), a runtime removal that fails
+// leaves the endpoint pending: EnableCommunicationCmd on it is refused
+// (Bad_InvalidState, library interpretation), a CloseConnections with
+// Remove FALSE disables what is left without making the record Active
+// again, and a restart completes the removal.
+func TestRemovePendingStays(t *testing.T) {
+	t.Parallel()
+	boom := fmt.Errorf("injected: %w", ua.StatusBadResourceUnavailable)
+	opts := fxserver.ConnectionOptions{Store: &fxstore.MemoryStore{}}
+	f := newFX(t, opts)
+	ep := f.persistent(t, "P")
+	_, removeReader, _ := fxserver.RuntimeOps(f.conns)
+	fxserver.SetPubSubOps(f.conns, nil, func(pubsub.ComponentID) error { return boom }, nil)
+	sc, res := f.close(t, true, ep)
+	require.Equal(t, ua.StatusUncertain, sc)
+	require.Equal(t, []ua.StatusCode{ua.StatusBadResourceUnavailable}, res)
+	require.NotNil(t, f.srv.Node(ep), "the reader is left")
+	fxserver.SetPubSubOps(f.conns, nil, removeReader, nil)
+
+	enable := func() *uafx.EstablishConnectionsResult {
+		return f.establish(t, &uafx.EstablishConnectionsRequest{CommandMask: uafx.EnableCommunicationCmd,
+			ConnectionEndpointConfigurations: []*uafx.ConnectionEndpointConfiguration{{FunctionalEntityNode: f.id(motionID),
+				ConnectionEndpoint: &uafx.ConnectionEndpointDefinition{Node: ep}}}})
+	}
+	er := enable()
+	require.NotEqual(t, ua.StatusOK, er.Status)
+	require.Equal(t, ua.StatusBadInvalidState, er.ConnectionEndpointConfigurationResults[0].ConnectionEndpointResult)
+
+	sc, res = f.close(t, false, ep)
+	require.Equal(t, ua.StatusOK, sc, "%v", res)
+	er = enable()
+	require.Equal(t, ua.StatusBadInvalidState, er.ConnectionEndpointConfigurationResults[0].ConnectionEndpointResult,
+		"still pending after a disable")
+
+	f = f.restart(t, opts)
+	require.Nil(t, f.srv.Node(ep), "the restart completes the removal")
+	require.Equal(t, 0, f.conns.Persistence().Records)
+	require.Empty(t, f.srv.PubSub().Configuration().Connections)
+}
+
+// TestCloseHookRefusedConcurrentChange: the endpoints follow a refused
+// close's restored components in the PubSub transaction of the refusal,
+// so a change of another mechanism right after it (here: replacing the
+// restored PubSubConnections by connections of the same name it owns)
+// takes over neither their provenance nor what the endpoint has left to
+// prune: the second close removes what the call created and leaves the
+// other mechanism's connections alone (design §4.4).
+func TestCloseHookRefusedConcurrentChange(t *testing.T) {
+	t.Parallel()
+	for n := 1; ; n++ {
+		f := newFX(t, fxserver.ConnectionOptions{})
+		h := &refusingHook{}
+		f.srv.SetPubSubConfigurationHook(h)
+		ep := f.operational(t, "R", -1)
+		var native []string
+		fxserver.SetAfterChange(f.conns, func(err error) {
+			if err == nil || native != nil {
+				return
+			}
+			// Right after the refused transaction, before the close
+			// goes on: the restored connections are replaced.
+			native = []string{}
+			h.failNth(0)
+			require.NoError(t, f.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+				for _, name := range []string{pubConn, subConn} {
+					id, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, name)
+					if !ok {
+						continue
+					}
+					cfg, err := rt.ConnectionConfig(id)
+					if err != nil {
+						return err
+					}
+					if err := rt.RemoveConnection(id); err != nil {
+						return err
+					}
+					cfg.WriterGroups, cfg.ReaderGroups, cfg.Enabled = nil, nil, false
+					if _, err := rt.AddConnection(cfg); err != nil {
+						return err
+					}
+					native = append(native, name)
+				}
+				return nil
+			}))
+		})
+		h.failNth(n)
+		sc, _ := f.close(t, true, ep)
+		fxserver.SetAfterChange(f.conns, nil)
+		if native == nil {
+			require.Equal(t, ua.StatusOK, sc)
+			require.Greater(t, n, 3, "the removal has transactions to refuse")
+			f.stop(t)
+			break
+		}
+		require.NotEmpty(t, native, "refusal %d: a restored connection was replaced", n)
+		sc, res := f.close(t, true, ep)
+		require.Equal(t, ua.StatusOK, sc, "refusal %d: %v", n, res)
+		require.Nil(t, f.srv.Node(ep))
+		for _, name := range native {
+			_, ok := f.srv.PubSub().Lookup(pubsub.KindConnection, pubsub.Root, name)
+			require.True(t, ok, "refusal %d: the connection %s of the other mechanism stays", n, name)
+		}
+		f.stop(t)
+	}
+}
+
+// TestNativeRemovalNotCommitted: the removal of a persisted component by
+// another mechanism than CloseConnections (here
+// ChangePubSubConfiguration; a PubSub Method or CloseAndUpdate alike) has
+// no durable removal intent: when its record is not committed it is
+// refused and the runtime keeps the component, unlike the removal of a
+// CloseConnections after its intent (TestPersistentCloseFaults; design
+// §4.4, §4.5).
+func TestNativeRemovalNotCommitted(t *testing.T) {
+	t.Parallel()
+	mem := &fxstore.MemoryStore{}
+	store := storetest.NewFaulty(mem)
+	f := newFX(t, fxserver.ConnectionOptions{Store: store})
+	ep := f.persistent(t, "P")
+	w := f.lookup(t, pubsub.KindDataSetWriter, pubConn, wgName, writerName)
+	store.FailApply(storetest.FailNotCommitted)
+	err := f.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.RemoveDataSetWriter(w) })
+	require.ErrorIs(t, err, ua.StatusBadResourceUnavailable)
+	exists, _ := f.writerState(t)
+	require.True(t, exists, "the refused removal is undone")
+	wn, _ := f.srv.PubSubNodeID(f.lookup(t, pubsub.KindDataSetWriter, pubConn, wgName, writerName))
+	require.Equal(t, []*ua.NodeID{wn}, f.targets(t, ep, fxacid.ToDataSetWriter), "the endpoint follows the restored writer")
+	f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
+	require.False(t, f.conns.Persistence().Store.Fenced)
+
+	// Committed: the removal stands and its record follows.
+	w = f.lookup(t, pubsub.KindDataSetWriter, pubConn, wgName, writerName) // restored: a new id
+	require.NoError(t, f.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.RemoveDataSetWriter(w) }))
+	exists, _ = f.writerState(t)
+	require.False(t, exists)
 }

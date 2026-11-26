@@ -337,45 +337,53 @@ func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource) {
 	} else {
 		p.keySources[securityGroupID] = ks
 	}
-	g := p.gates[securityGroupID]
-	p.ksMu.Unlock()
-	if g != nil {
-		// A new source: the future keys of the old one prove nothing.
+	if g := p.gates[securityGroupID]; g != nil {
+		// A new source: the future keys of the old one prove nothing,
+		// and what is still observing it records nothing (under ksMu, so
+		// that no KeySource is handed out with the new source and the
+		// old generation).
 		g.rebase()
 	}
+	p.ksMu.Unlock()
 }
 
 // KeySource returns the keys of a SecurityGroup, nil if none are known. The
 // KeySource of a gated SecurityGroup (GateSecurityGroup) gives only the keys
 // the gate allows.
 func (p *PubSub) KeySource(securityGroupID string) security.KeySource {
-	ks := p.rawKeySource(securityGroupID)
+	ks, g, gen := p.sourceOf(securityGroupID)
 	if ks == nil {
 		return nil
 	}
-	p.ksMu.RLock()
-	g := p.gates[securityGroupID]
-	p.ksMu.RUnlock()
 	if g != nil {
-		return &gatedSource{KeySource: ks, g: g, group: securityGroupID}
+		return &gatedSource{KeySource: ks, g: g, gen: gen, group: securityGroupID}
 	}
 	return ks
 }
 
-// rawKeySource is KeySource without the gate.
-func (p *PubSub) rawKeySource(securityGroupID string) security.KeySource {
+// sourceOf returns the KeySource of a SecurityGroup without the gate, its
+// gate (nil if none) and the generation of the gate the source belongs
+// to, read together: SetKeySource changes both under ksMu.
+func (p *PubSub) sourceOf(securityGroupID string) (security.KeySource, *keyGate, uint64) {
 	p.ksMu.RLock()
 	ks := p.keySources[securityGroupID]
+	g := p.gates[securityGroupID]
+	var gen uint64
+	if g != nil {
+		gen = g.generation()
+	}
 	p.ksMu.RUnlock()
 	if ks != nil {
-		return ks
+		return ks, g, gen
 	}
+	// The lookups are fixed for the life of the runtime; a source set
+	// meanwhile starts a new generation, which refuses this one.
 	for _, l := range p.opts.keyLookups {
 		if ks := l(securityGroupID); ks != nil {
-			return ks
+			return ks, g, gen
 		}
 	}
-	return nil
+	return nil, g, gen
 }
 
 // reconcileLocked brings every component to the state its configuration and

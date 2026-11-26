@@ -33,8 +33,13 @@ import (
 // since the source's continuity is lost. The gate opens again when a
 // future key seen after that becomes current. Replacing the KeySource
 // (SetKeySource) also ends that continuity: the future keys of the old
-// source are forgotten, keys already proven fresh stay usable. Keys are
-// told apart by a fingerprint of their material, never by their id.
+// source are forgotten, keys already proven fresh stay usable. Each
+// replacement starts a new generation of the gate: an observation of the
+// old source that is still running when it is replaced records nothing,
+// and a KeySource handed out for the old source gives no keys any more.
+// A decision is about the key it read: the current key the gate observed
+// is the one CurrentKeys returns, never a second read of the source. Keys
+// are told apart by a fingerprint of their material, never by their id.
 //
 // Library interpretation (labelled in docs/uafx.md#persistence): the gate
 // relies on the key source never offering as a future key a key that was
@@ -82,17 +87,24 @@ type keyGate struct {
 	// future are keys seen as future keys since the source's continuity
 	// was last lost, not yet current.
 	future map[keyFingerprint]bool
+	// gen counts the replacements of the KeySource (rebase).
+	gen uint64
 }
 
 func newKeyGate() *keyGate {
 	return &keyGate{tainted: map[keyFingerprint]bool{}, fresh: map[keyFingerprint]bool{}, future: map[keyFingerprint]bool{}}
 }
 
-// observe looks at the current and the future keys of ks.
-func (g *keyGate) observe(ks security.KeySource) {
+// observe looks at the current and the future keys of ks, the source of
+// the generation gen, and returns the current key it looked at. An
+// observation of a generation that ended records nothing.
+func (g *keyGate) observe(ks security.KeySource, gen uint64) (*security.Keys, error) {
 	cur, err := ks.CurrentKeys()
-	if err != nil || cur == nil {
-		return
+	if err != nil {
+		return nil, err
+	}
+	if cur == nil {
+		return nil, security.ErrNoKeys
 	}
 	var ahead []keyFingerprint
 	id := cur.TokenID
@@ -106,6 +118,9 @@ func (g *keyGate) observe(ks security.KeySource) {
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if gen != g.gen {
+		return cur, nil
+	}
 	fp := fingerprint(cur)
 	switch {
 	case g.tainted[fp]:
@@ -125,23 +140,34 @@ func (g *keyGate) observe(ks security.KeySource) {
 			g.future[f] = true
 		}
 	}
+	return cur, nil
 }
 
-// rebase forgets the future keys: the KeySource was replaced.
+// rebase forgets the future keys and starts a new generation: the
+// KeySource was replaced.
 func (g *keyGate) rebase() {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	g.gen++
 	clear(g.future)
 }
 
-// usable reports whether messages may be secured or accepted with k: the
+// generation returns the generation of the gate.
+func (g *keyGate) generation() uint64 {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return g.gen
+}
+
+// usable reports whether messages may be secured or accepted with k, a
+// key of the source of the generation gen: the generation is current, the
 // gate is open and k is fresh or a future key seen since the source's
 // continuity was last lost.
-func (g *keyGate) usable(k *security.Keys) bool {
+func (g *keyGate) usable(k *security.Keys, gen uint64) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	fp := fingerprint(k)
-	return g.open && !g.tainted[fp] && (g.fresh[fp] || g.future[fp])
+	return gen == g.gen && g.open && !g.tainted[fp] && (g.fresh[fp] || g.future[fp])
 }
 
 func (g *keyGate) isOpen() bool {
@@ -150,32 +176,33 @@ func (g *keyGate) isOpen() bool {
 	return g.open
 }
 
-// gatedSource is the KeySource of a gated SecurityGroup.
+// gatedSource is the KeySource of a gated SecurityGroup: the source of the
+// generation gen of its gate.
 type gatedSource struct {
 	security.KeySource
 	g     *keyGate
+	gen   uint64
 	group string
 }
 
 func (s *gatedSource) CurrentKeys() (*security.Keys, error) {
-	s.g.observe(s.KeySource)
-	k, err := s.KeySource.CurrentKeys()
+	k, err := s.g.observe(s.KeySource, s.gen)
 	if err != nil {
 		return nil, err
 	}
-	if !s.g.usable(k) {
+	if !s.g.usable(k, s.gen) {
 		return nil, fmt.Errorf("pubsub: SecurityGroup %q waits for a key newer than its restart: %w", s.group, security.ErrNoKeys)
 	}
 	return k, nil
 }
 
 func (s *gatedSource) KeysForToken(tokenID uint32) (*security.Keys, error) {
-	s.g.observe(s.KeySource)
+	_, _ = s.g.observe(s.KeySource, s.gen) // a failure leaves the gate as it was
 	k, err := s.KeySource.KeysForToken(tokenID)
 	if err != nil {
 		return nil, err
 	}
-	if !s.g.usable(k) {
+	if k == nil || !s.g.usable(k, s.gen) {
 		return nil, fmt.Errorf("pubsub: SecurityGroup %q: key %d may predate the restart: %w", s.group, tokenID, security.ErrNoKeys)
 	}
 	return k, nil
@@ -202,14 +229,12 @@ func (p *PubSub) GateSecurityGroup(securityGroupID string) {
 // SecurityGroupGate reports whether the SecurityGroup has a restart gate
 // and whether it is open (a fresh key became current).
 func (p *PubSub) SecurityGroupGate(securityGroupID string) (gated, open bool) {
-	p.ksMu.RLock()
-	g := p.gates[securityGroupID]
-	p.ksMu.RUnlock()
+	ks, g, gen := p.sourceOf(securityGroupID)
 	if g == nil {
 		return false, false
 	}
-	if ks := p.rawKeySource(securityGroupID); ks != nil {
-		g.observe(ks)
+	if ks != nil {
+		_, _ = g.observe(ks, gen) // a failure leaves the gate as it was
 	}
 	return true, g.isOpen()
 }

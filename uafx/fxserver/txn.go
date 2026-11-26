@@ -4,31 +4,56 @@ package fxserver
 
 import (
 	"github.com/otfabric/go-opcua/pubsub"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
 )
 
 // change runs fn in the PubSub transaction of the server
-// (Server.ChangePubSubConfiguration) and returns its result, which is fn's
-// error or the refusal of the PubSub configuration hook. A refusal comes
-// after fn changed the runtime: the server reconciles the runtime back to
-// the configuration before the change, by name, so that what fn removed or
-// changed is back under a new ComponentID and node. What this package
-// keeps of those components follows them by path: the provenance
+// (Server.ChangePubSubConfigurationThen) and returns its result, which is
+// fn's error or the refusal of the PubSub configuration hook. A refusal
+// comes after fn changed the runtime: the server reconciles the runtime
+// back to the configuration before the change, by name, so that what fn
+// removed or changed is back under a new ComponentID and node. What this
+// package keeps of those components follows them by path: the provenance
 // (c.created), what the endpoints have left to prune, and their
-// ToDataSetReader and ToDataSetWriter References. The endpoints are then as consistent with the restored
-// configuration as they were with the one before.
+// ToDataSetReader and ToDataSetWriter References. The endpoints are then
+// as consistent with the restored configuration as they were with the one
+// before. They follow in the same transaction, so that no other change of
+// the configuration comes between the restore and the follow: a component
+// another mechanism puts at the same path afterwards never takes the
+// provenance or the References of a restored one.
 func (c *Connections) change(fn func(rt *pubsub.PubSub) error) error {
 	var before map[string]pubsub.ComponentID
 	var links map[string]pubsub.ComponentID
-	ran := false
-	err := c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
-		before, links, ran = runtimePaths(rt), c.links(), true
+	err := c.srv.ChangePubSubConfigurationThen(func(rt *pubsub.PubSub) error {
+		before, links = runtimePaths(rt), c.links()
+		c.markOwn(true)
 		return fn(rt)
+	}, func(rt *pubsub.PubSub, err error) {
+		c.markOwn(false)
+		if err != nil {
+			c.follow(before, runtimePaths(rt), links)
+		}
 	})
-	if err != nil && ran {
-		c.follow(before, runtimePaths(c.srv.PubSub()), links)
+	c.mu.Lock()
+	after := c.afterChange
+	c.mu.Unlock()
+	if after != nil {
+		after(err)
 	}
 	return err
+}
+
+// markOwn tells the hook whether the PubSub transaction running is one of
+// change: the hook acknowledges a removal or disable of it whose record is
+// not committed (its intent is durable), and refuses that of another
+// mechanism.
+func (c *Connections) markOwn(own bool) {
+	if p := c.pers; p != nil {
+		p.mu.Lock()
+		p.own = own
+		p.mu.Unlock()
+	}
 }
 
 // links returns the components the endpoints reference, by node.
@@ -61,6 +86,28 @@ func (c *Connections) follow(before, after, links map[string]pubsub.ComponentID)
 			moved[old] = cur
 		}
 	}
+	c.followMoved(moved, links)
+}
+
+// PubSubConfigurationRestored follows the components a refused change of
+// any mechanism brought back (server.PubSubConfigurationRestorer), in the
+// PubSub transaction: as change does for the package's own changes.
+func (p *persistence) PubSubConfigurationRestored(_ *server.PubSubChange, moves []server.PubSubComponentMove) {
+	moved := make(map[pubsub.ComponentID]pubsub.ComponentID, len(moves))
+	links := make(map[string]pubsub.ComponentID, len(moves))
+	for _, m := range moves {
+		moved[m.From] = m.To
+		if m.FromNode != nil {
+			links[m.FromNode.String()] = m.From
+		}
+	}
+	p.c.followMoved(moved, links)
+}
+
+// followMoved moves the provenance, the pending prune items and the
+// References of the components moved (old to new ComponentID); links are
+// the old ComponentIDs of the nodes the References may name.
+func (c *Connections) followMoved(moved map[pubsub.ComponentID]pubsub.ComponentID, links map[string]pubsub.ComponentID) {
 	if len(moved) == 0 {
 		return
 	}

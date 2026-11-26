@@ -519,7 +519,13 @@ changes nothing and is `Bad_ResourceUnavailable`; one with an unknown
 outcome acts anyway in the safe direction (disable, remove) and is
 `Bad_InternalError`, and the write is owed until it commits. Once a disable
 or removal is durable, no restart brings the communication back; a
-RemovePending record is completed at the next start, never restored. A
+RemovePending record is completed at the next start, never restored. An
+endpoint whose removal is durable but whose runtime removal failed stays
+RemovePending: EnableCommunicationCmd and any other command naming it are
+`Bad_InvalidState` (library interpretation: Table 12 has no code for an
+endpoint being removed), a close with Remove FALSE disables what is left
+without making the record Active again, and the next close with Remove
+TRUE, or the next start, completes the removal. A
 DataSetReader or DataSetWriter that endpoints share is disabled once none
 of the endpoints that reference it demands it (EnableCommunicationCmd
 enabled it and no CloseConnections disabled it since), whichever closes
@@ -527,7 +533,12 @@ last, and removed with the last endpoint that references it; an endpoint
 whose call created it hands that over when it goes first (§6.2.5.2: "all
 related communication model Objects if not referenced from other
 ConnectionEndpoints"). The demand of a persistent endpoint is its stored
-enablement; that of a non-persistent one ends with the process.
+enablement; that of a non-persistent one ends with the process. Ownership
+is a property of the component, not of an endpoint record: a reader or
+writer an EstablishConnections call created is stored as created
+(provenance) in the component record every endpoint that references it
+shares, and every endpoint restored with it owns it, so a hand-over needs
+no record of its own and survives a restart.
 
 **Restore** (design §4.6). Each record is restored whole or not at all: its
 PubSub components (one of the same path that is equal is adopted, one that
@@ -570,10 +581,12 @@ the change returns. A change the store refuses is undone and fails
 (`Bad_ResourceUnavailable`); 0:NotPersisted TRUE on such a component is
 `Bad_InvalidState`; a removed component is marked removed and not
 re-created after a restart (the latest configuration wins, Part 14 §9.1.2).
-A change that only removes or disables components (CloseConnections' own,
-or one by another mechanism) is never refused for a record that does not
-commit: it stands and the record is owed, as for a close (library
-interpretation). While the store is fenced, new components and ReserveIds
+A change of this package's own that only removes or disables components
+(CloseConnections after its intent, or the rollback of what was not
+committed) is never refused for a record that does not commit: it stands
+and the record is owed, as for a close (library interpretation). The same
+change by another mechanism has no durable intent and is refused like any
+other. While the store is fenced, new components and ReserveIds
 are refused, and so is a new WriterGroupId or DataSetWriterId on an
 existing component (a modify, Part 14 §9.1.3.7.4) that a quarantined
 record reserves. When a hook refuses a change, the server reconciles the
@@ -581,7 +594,13 @@ runtime back to the configuration before it by name: what the change
 removed or changed comes back under a new ComponentID and node, and the
 endpoints' References, what they created and what they have left to
 remove follow it by path, so that the endpoint stays consistent with the
-restored configuration (a refused close fails and can be repeated).
+restored configuration (a refused close fails and can be repeated); for a
+change of another mechanism the server tells the hook what came back
+(`server.PubSubConfigurationRestorer`). They follow in the same
+transaction (`Server.ChangePubSubConfigurationThen`, the restorer):
+no change of another mechanism comes in between, so a component it puts
+at the same path afterwards takes over neither the provenance nor the
+References of a restored one.
 Enable and Disable of a component with the Methods of its Status Object
 (PubSubStatusType) are runtime only: they are not written to the store, and after a
 restart the enablement of a persisted reader or writer follows its
@@ -600,7 +619,11 @@ for every key, also after the gate opened: a current key the runtime did
 not see coming (keys restored from a backup, an SKS that lost its state,
 a rotation it missed) is tainted and closes the gate, and the future keys
 seen before it are no longer trusted; replacing the KeySource
-(`SetKeySource`) forgets the future keys of the old source too. The gate
+(`SetKeySource`) forgets the future keys of the old source too, and starts
+a new generation of the gate: an observation of the old source still
+running records nothing, and a KeySource handed out for the old source
+gives no keys any more. The key a decision is about is the one the gate
+observed: `CurrentKeys` returns it, never a second read of the source. The gate
 opens again when a future key seen after that becomes current. A rotating
 source opens the gate after one key change; a static or unavailable one
 never does, and the endpoint stays non-operational. The gate lasts for the

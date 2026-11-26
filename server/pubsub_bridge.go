@@ -85,11 +85,13 @@ func (u *PubSubConfigurationUpdate) Revert() error {
 	if !reflect.DeepEqual(f.m.rt.Configuration(), u.after) {
 		return ErrPubSubChanged
 	}
+	h := f.m.s.pubsubHook()
+	ids := f.m.s.restorerSnapshot(h)
 	if err := reconcilePubSub(f.m.rt, u.before); err != nil {
 		return fmt.Errorf("server: revert the PubSub configuration: %w", err)
 	}
-	if h := f.m.s.pubsubHook(); h != nil {
-		if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: u.after, Revert: true}); err != nil {
+	if h != nil {
+		if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: u.after, Revert: true, ids: ids}); err != nil {
 			return fmt.Errorf("server: revert the PubSub configuration: %w", err)
 		}
 	}
@@ -109,25 +111,46 @@ func (u *PubSubConfigurationUpdate) Revert() error {
 // those functions or Methods itself. A server without PubSub ([WithPubSub])
 // returns ua.StatusBadNotSupported without calling fn.
 func (s *Server) ChangePubSubConfiguration(fn func(rt *pubsub.PubSub) error) error {
+	return s.ChangePubSubConfigurationThen(fn, nil)
+}
+
+// ChangePubSubConfigurationThen is [Server.ChangePubSubConfiguration] with
+// then, which it calls with the runtime and the result in the same
+// transaction once the change is complete: after the
+// [PubSubConfigurationHook], and, when the hook refused the change, after
+// the runtime was reconciled back to the configuration before it. then
+// sees the runtime as the change left it, before any other change of the
+// configuration; it is not called when fn is not (no PubSub). Like fn, it
+// must not call the functions and Methods that change the configuration.
+func (s *Server) ChangePubSubConfigurationThen(fn func(rt *pubsub.PubSub) error, then func(rt *pubsub.PubSub, err error)) error {
 	rt := s.PubSub()
 	if rt == nil {
 		return ua.StatusBadNotSupported
 	}
 	s.ps.txn.Lock()
 	defer s.ps.txn.Unlock()
+	err := s.changeLocked(rt, fn)
+	if then != nil {
+		then(rt, err)
+	}
+	return err
+}
+
+// changeLocked is ChangePubSubConfiguration in the PubSub transaction.
+func (s *Server) changeLocked(rt *pubsub.PubSub, fn func(rt *pubsub.PubSub) error) error {
 	h := s.pubsubHook()
 	if h == nil {
 		return fn(rt)
 	}
-	before := rt.Configuration()
+	before, ids := rt.Configuration(), s.restorerSnapshot(h)
 	if err := fn(rt); err != nil {
 		// What fn changed before it failed is the hook's to see too.
-		if herr := s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: before}); herr != nil {
+		if herr := s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: before, ids: ids}); herr != nil {
 			return errors.Join(err, herr)
 		}
 		return err
 	}
-	return s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: before})
+	return s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: before, ids: ids})
 }
 
 // PubSubConfigurationHook follows the changes of the PubSub configuration of
@@ -167,6 +190,66 @@ type PubSubChange struct {
 	// Revert: the change is [PubSubConfigurationUpdate.Revert] undoing an
 	// update.
 	Revert bool
+
+	// ids are the components before the change by path, for a
+	// PubSubConfigurationRestorer; nil for another hook.
+	ids map[string]componentAt
+}
+
+// PubSubConfigurationRestorer is a [PubSubConfigurationHook] that follows
+// the components a refused change brings back. The runtime is reconciled
+// back to the configuration before the change by name, so a component the
+// change removed or changed comes back under a new ComponentID and node:
+// PubSubConfigurationRestored is called with those moves, in the PubSub
+// transaction, after the runtime was reconciled back and before anything
+// else changes the configuration. It must not change the configuration.
+type PubSubConfigurationRestorer interface {
+	PubSubConfigurationHook
+	PubSubConfigurationRestored(ch *PubSubChange, moved []PubSubComponentMove)
+}
+
+// PubSubComponentMove is a component a refused change brought back under a
+// new ComponentID and node: the same kind and path of names (its
+// PubSubConnection, group and own Name; a PublishedDataSet's Name).
+type PubSubComponentMove struct {
+	From, To         pubsub.ComponentID
+	FromNode, ToNode *ua.NodeID // nil when the component has no node
+}
+
+// componentAt is a component of the runtime at a path.
+type componentAt struct {
+	id   pubsub.ComponentID
+	node *ua.NodeID
+}
+
+// restorerSnapshot returns the components of the runtime by path when h is
+// a PubSubConfigurationRestorer, else nil.
+func (s *Server) restorerSnapshot(h PubSubConfigurationHook) map[string]componentAt {
+	if _, ok := h.(PubSubConfigurationRestorer); !ok {
+		return nil
+	}
+	return s.componentsByPath()
+}
+
+// componentsByPath returns the components of the runtime by kind and path
+// of names.
+func (s *Server) componentsByPath() map[string]componentAt {
+	rt := s.PubSub()
+	comps := rt.Components()
+	byID := make(map[pubsub.ComponentID]pubsub.ComponentInfo, len(comps))
+	for _, ci := range comps {
+		byID[ci.ID] = ci
+	}
+	out := make(map[string]componentAt, len(comps))
+	for _, ci := range comps {
+		path := fmt.Sprint(ci.Kind)
+		for x, ok := ci, true; ok && x.ID != pubsub.Root; x, ok = byID[x.Parent] {
+			path += "\x00" + x.Name
+		}
+		n, _ := s.PubSubNodeID(ci.ID)
+		out[path] = componentAt{id: ci.ID, node: n}
+	}
+	return out
 }
 
 type pubsubHookBox struct{ h PubSubConfigurationHook }
@@ -206,6 +289,17 @@ func (s *Server) pubsubChanged(h PubSubConfigurationHook, ch *PubSubChange) erro
 	}
 	if rerr := reconcilePubSub(rt, ch.Before); rerr != nil {
 		s.cfg.logger.Error("pubsub: restoring the configuration a hook refused failed", "error", rerr)
+	}
+	if r, ok := h.(PubSubConfigurationRestorer); ok && ch.ids != nil {
+		var moved []PubSubComponentMove
+		for path, cur := range s.componentsByPath() {
+			if old, ok := ch.ids[path]; ok && old.id != cur.id {
+				moved = append(moved, PubSubComponentMove{From: old.id, To: cur.id, FromNode: old.node, ToNode: cur.node})
+			}
+		}
+		if len(moved) > 0 {
+			r.PubSubConfigurationRestored(ch, moved)
+		}
 	}
 	var sc ua.StatusCode
 	if !errors.As(err, &sc) {

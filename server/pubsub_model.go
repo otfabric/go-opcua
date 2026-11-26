@@ -788,9 +788,9 @@ func (m *pubsubModel) change(name string, f func(ctx context.Context, obj *ua.No
 		if h == nil {
 			return f(ctx, obj, args)
 		}
-		before := m.rt.Configuration()
+		before, ids := m.rt.Configuration(), m.s.restorerSnapshot(h)
 		out, sc := f(ctx, obj, args)
-		if err := m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: before}); err != nil {
+		if err := m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: before, ids: ids}); err != nil {
 			return nil, statusOf(err)
 		}
 		return out, sc

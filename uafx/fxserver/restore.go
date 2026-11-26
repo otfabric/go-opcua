@@ -541,7 +541,7 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 		id     pubsub.ComponentID
 		own    bool
 		reader bool
-	}{{readerID, b.OwnReader, true}, {writerID, b.OwnWriter, false}} {
+	}{{readerID, createdComp(comps, b.Reader), true}, {writerID, createdComp(comps, b.Writer), false}} {
 		if x.id == 0 {
 			continue
 		}
@@ -921,4 +921,15 @@ func (c *Connections) setSupportsPersistence() error {
 		}
 	}
 	return nil
+}
+
+// createdComp reports whether the component record key of comps was added
+// by an EstablishConnections call: the endpoint restored with it owns it,
+// as each endpoint that references it does, so the last of them removes
+// it (Part 81 §6.2.5.2). The ownership comes from the component, not from
+// the endpoint record, so a hand-over (handOver) needs no record of its
+// own to survive a restart.
+func createdComp(comps map[string]*compRecord, key string) bool {
+	cr := comps[key]
+	return cr != nil && cr.Provenance == provCreated
 }

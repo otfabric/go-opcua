@@ -719,6 +719,23 @@ func (c *Connections) handOver(e *endpoint, n *ua.NodeID) {
 	}
 }
 
+// ownedByCall reports whether an endpoint that references the DataSetReader
+// or DataSetWriter cid owns it.
+func (c *Connections) ownedByCall(cid pubsub.ComponentID) bool {
+	n, ok := c.srv.PubSubNodeID(cid)
+	if !ok {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, o := range c.endpoints {
+		if o.ownReader && o.reader != nil && o.reader.Equal(n) || o.ownWriter && o.writer != nil && o.writer.Equal(n) {
+			return true
+		}
+	}
+	return false
+}
+
 // componentOf returns the PubSub component of the node n.
 func (c *Connections) componentOf(n *ua.NodeID) (pubsub.ComponentID, bool) {
 	if n == nil {

@@ -51,6 +51,7 @@ func (m *Manager) monitorSet(ctx context.Context, s *set) {
 		s.mu.Unlock()
 		return
 	}
+	runs := s.runs
 	var recs []*record
 	for _, r := range s.records {
 		if r.Class.MayClose() && r.NodeID != nil {
@@ -60,16 +61,21 @@ func (m *Manager) monitorSet(ctx context.Context, s *set) {
 	s.mu.Unlock()
 	gone := false
 	for _, r := range recs {
-		st, ok, err := m.readStatus(ctx, r)
+		read := m.readStatus
+		if m.statusOf != nil {
+			read = m.statusOf
+		}
+		st, ok, err := read(ctx, r)
 		if err != nil {
 			continue // not reachable: keep the last Status
 		}
 		s.mu.Lock()
 		// The record may have changed while the Status was read: a run
-		// may have started, or replaced or removed it. Its fields are
-		// read only under s.mu, and a run owns the set while it runs.
+		// may have started (and even ended: the Status may predate what
+		// it did), or replaced or removed it. Its fields are read only
+		// under s.mu, and a run owns the set while it runs.
 		k := recordKey(r.addr, r.FunctionalEntity, r.Name)
-		if s.records[k] != r || s.current != nil || s.removed {
+		if s.records[k] != r || s.current != nil || s.removed || s.runs != runs {
 			s.mu.Unlock()
 			continue
 		}
@@ -93,7 +99,7 @@ func (m *Manager) monitorSet(ctx context.Context, s *set) {
 	}
 	s.mu.Lock()
 	var action *uafx.FxProcess
-	if m.opts.Monitor.Reestablish && s.lastEstablish != nil && s.state != StateProcessing {
+	if m.opts.Monitor.Reestablish && s.lastEstablish != nil && s.state != StateProcessing && s.runs == runs {
 		a := *s.lastEstablish
 		action = &a
 	}

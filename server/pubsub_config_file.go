@@ -555,6 +555,7 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 		f.beforeReconcile()
 	}
 	if applied {
+		ids := f.m.s.restorerSnapshot(f.m.s.pubsubHook())
 		if err := reconcilePubSubRecord(f.m.rt, u.cfg, func(id pubsub.ComponentID) { created[id] = true }); err != nil {
 			f.m.s.cfg.logger.Warn("pubsub: CloseAndUpdate failed, restoring the configuration", "error", err)
 			if rerr := reconcilePubSub(f.m.rt, old); rerr != nil {
@@ -563,7 +564,7 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 			return nil, statusOf(err)
 		}
 		if h := f.m.s.pubsubHook(); h != nil {
-			if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: old}); err != nil {
+			if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: old, ids: ids}); err != nil {
 				return nil, statusOf(err)
 			}
 		}

@@ -18,13 +18,17 @@ import (
 // UpdatePubSubConfiguration, ChangePubSubConfiguration), and holds the
 // PubSub identifiers the quarantined records reserve (§4.7).
 
-var _ server.PubSubConfigurationHook = (*persistence)(nil)
+var _ server.PubSubConfigurationRestorer = (*persistence)(nil)
 
 // PubSubConfigurationChanged checks the change ch and writes the component
 // records it changes. A change of an EstablishConnections call itself is
-// written at the call's commit point; a Revert, and a change that only
-// removes or disables components, is never refused for a record that is
-// not committed: its record is owed.
+// written at the call's commit point. A Revert, and a change of this
+// package's own that only removes or disables components, is never refused
+// for a record that is not committed: its record is owed. Such a change
+// comes after its durable state: the removal intent (RemovePending) or the
+// disabled record of a CloseConnections, or the rollback of what was not
+// committed (design §4.4). The same change made by another mechanism (a
+// PubSub Method, CloseAndUpdate) has no such intent and is refused.
 func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) error {
 	added := addedComponents(ch.Before, ch.After)
 	p.mu.Lock()
@@ -56,16 +60,17 @@ func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) error 
 	case o == fxstore.Committed:
 		p.reload()
 		return nil
-	case o == fxstore.NotCommitted && !ch.Revert && !safeDirection(ch.Before, ch.After):
+	case o == fxstore.NotCommitted && !ch.Revert && (!p.own || !safeDirection(ch.Before, ch.After)):
 		// The store and the runtime must agree: the change is refused
 		// (library interpretation, design §4.5).
 		p.c.log.Warn("uafx: a PubSub change to a persisted component is refused: its record was not committed", "error", err)
 		return ua.StatusBadResourceUnavailable
 	default:
-		// Unknown, a Revert, or a change in the safe direction (it only
-		// removes or disables components, as CloseConnections does, also
-		// while the store is fenced by its own intent; design §4.4): the
-		// change stands and the store follows.
+		// Unknown, a Revert, or a change of this package's own in the
+		// safe direction (it only removes or disables components, as
+		// CloseConnections does after its intent, also while the store is
+		// fenced by that intent; design §4.4): the change stands and the
+		// store follows.
 		_, _ = p.d.Require(ctx, b)
 		p.c.log.Warn("uafx: the record of a changed PubSub component is owed; the store is fenced until it is written", "error", err)
 		return nil

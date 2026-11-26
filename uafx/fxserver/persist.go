@@ -42,6 +42,10 @@ type persistence struct {
 	// restored are the endpoints the start restored.
 	restored []*ua.NodeID
 
+	// own: the PubSub transaction running is one of this package's own
+	// (Connections.change), set and cleared in it.
+	own bool
+
 	// backoff and next pace the settling of a fenced domain (monitor).
 	backoff time.Duration
 	next    time.Time
@@ -528,7 +532,12 @@ func (p *persistence) chainOf(rt *pubsub.PubSub, cid pubsub.ComponentID, own, pr
 			}
 		}
 	}
-	if r, ok := rec(cid, info.Kind, own, conn.Name, g.Name, info.Name); ok {
+	// The provenance of the reader or writer is that of the component,
+	// not of the endpoint writing the record: created when an endpoint
+	// that references it owns it (its configuration came with an
+	// EstablishConnections call), so that every endpoint restored with it
+	// owns it (design §4.2, §4.4).
+	if r, ok := rec(cid, info.Kind, own || c.ownedByCall(cid), conn.Name, g.Name, info.Name); ok {
 		out = append(out, r)
 	}
 	return out
@@ -658,6 +667,15 @@ func (x *call) persist() bool {
 		e := el.ep
 		if e == nil || !e.persistent {
 			continue
+		}
+		x.c.mu.Lock()
+		pending := e.removePending
+		x.c.mu.Unlock()
+		if pending {
+			// Never written back as Active (endpointOf refuses it).
+			p.mu.Unlock()
+			x.failPersist(el, ua.StatusBadInvalidState)
+			return false
 		}
 		if first == nil {
 			first = el
@@ -845,6 +863,15 @@ func (c *Connections) closePersistent(e *endpoint, remove bool) ua.StatusCode {
 // (design §4.4).
 func (c *Connections) disablePersistent(e *endpoint) ua.StatusCode {
 	p := c.pers
+	c.mu.Lock()
+	pending := e.removePending
+	c.mu.Unlock()
+	if pending {
+		// The removal is durable: the record stays RemovePending (never
+		// Active again); the runtime disables what is left. The next
+		// close with Remove, or the next start, completes the removal.
+		return c.closeEndpoint(e, false)
+	}
 	p.mu.Lock()
 	s := p.begin()
 	r, comps := p.recordOf(e, false, stateActive)
