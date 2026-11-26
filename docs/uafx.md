@@ -2,7 +2,7 @@
 
 go-opcua reads and serves the information model of OPC UA FX, OPC 10000-81
 version 1.00.04 (Connecting Devices and Information Model), and it
-establishes and closes non-persistent UAFX connections with PubSub: a
+establishes and closes UAFX connections with PubSub: a
 server answers EstablishConnections and CloseConnections (Part 81 §6.2.4,
 §6.2.5), and a client calls them, with the ControlGroups of §6.5.
 Package `uafx/fxcm` is a ConnectionManager (§6.7 to §6.16) as a Go
@@ -13,14 +13,17 @@ Connections on AutomationComponents
 ([Running a ConnectionManager](#running-a-connectionmanager)), and
 `fxserver.EnableConnectionManager` serves it on a server, with its sets,
 Methods, events and file
-([Serving a ConnectionManager](#serving-a-connectionmanager)). Persistent connections are not implemented,
-and none of the profiles of Part 84 is claimed. What is missing is listed under [Limits](#limits).
+([Serving a ConnectionManager](#serving-a-connectionmanager)). With a
+store, an AutomationComponent also keeps persistent ConnectionEndpoints
+across a restart ([Persistence](#persistence)); the ConnectionManager does
+not persist its sets yet. None of the profiles of Part 84 is claimed. What is missing is listed under [Limits](#limits).
 
 | Package | What it holds |
 |---|---|
 | `uafx` | `Inspect`: reads the UAFX model of a server into a `Report`; `EstablishConnections` and `CloseConnections` call the Methods of an AutomationComponent, `EditConnectionConfigurationSets` and `ProcessConnectionConfigurationSets` those of a ConnectionManager; the DataTypes of the UAFX namespaces, generated from the NodeSets, with their binary encoding ([Structures](#structures)) |
 | `uafx/fxcm` | A ConnectionManager: `NewConfig` validates a ConnectionConfigurationSet, `DecodeFile` and `EncodeFile` read and write its file (Annex F), the state machine of a set, the edit of §6.7.4, the ownership and diagnostics rules, and `Manager`, which processes the sets against the AutomationComponents |
 | `uafx/fxserver` | `AddModel`: adds the UAFX model to a `server.Server`; `ImportNodeSet` imports NodeSets that build on it; `EnableConnections` serves EstablishConnections and CloseConnections; `EnableConnectionManager` serves a `Manager` as the ConnectionManager of the server |
+| `uafx/fxstore` | The durable storage of persistent connections: the `Store` contract (committed, not committed, unknown), `MemoryStore`, `FileStore` and `Domain`; `uafx/fxstore/storetest` holds the contract tests and a fault injector |
 | `uafx/fxdataid`, `uafx/fxacid`, `uafx/fxcmid` | NodeIds of the UAFX Data, AutomationComponent (AC) and ConnectionManager (CM) namespaces |
 | `di/diid` | NodeIds of the Devices (DI) model of OPC 10000-100, which the UAFX model builds on |
 
@@ -459,10 +462,193 @@ learns when sessions end. An application can add its own with
 
 ### Persistence
 
-Persistent connections are not supported: the AutomationComponents keep
-their SupportsPersistence false, and a ConnectionEndpointDefinition with
-IsPersistent is `Bad_NotSupported` (Table 12). Endpoints and PubSub
-configuration a call created do not survive a server restart.
+With `ConnectionOptions.Store` the AutomationComponents of the server
+support persistent ConnectionEndpoints (Part 81 §5.5.5, §6.6.2). The design
+is [docs/design/uafx-persistent-connections.md](design/uafx-persistent-connections.md)
+(C3); the sections below cite it as "design §n".
+
+```go
+store, err := fxstore.OpenFile("/var/lib/myapp/fx", fxstore.Limits{})
+if err != nil { /* ... */ }
+conns, err := fxserver.EnableConnections(srv, ns, fxserver.ConnectionOptions{Store: store})
+if err != nil { /* the store cannot be opened, has another owner or a newer format */ }
+// conns.Quarantined(), conns.Persistence(): what the start restored and what it could not.
+```
+
+**Start-up** (design §4.1). EnableConnections opens the store (owner: the
+ApplicationUri of the server; a foreign owner, an unknown schema or a
+failed Load fails it with `ErrConnections`, never a silent fall-back to
+memory), completes the removals that were in progress, restores every
+other endpoint and only then adds SupportsPersistence TRUE to the
+ComponentCapabilities of each AutomationComponent (§6.2.6 Table 26,
+HasCapability). Call it before `Server.Start`: no client sees a half
+restored AC (library interpretation, G3). It builds the PubSub model of the
+server early (`Server.BuildPubSubModel`) so that restored endpoints
+reference the Objects of their components. Without a Store
+SupportsPersistence is absent and IsPersistent TRUE is `Bad_NotSupported`
+(Table 12).
+
+**Establish** (design §4.3). An endpoint with IsPersistent TRUE needs a
+negative CleanupTimeout (§6.6.2); zero, a positive value, NaN or infinity
+is `Bad_InvalidArgument` in its ConnectionEndpointResult (library
+interpretation, C3-D4). The call stages everything first, then writes the
+endpoint, its control and the PubSub components it references in one
+atomic Apply, before EnableCommunicationCmd enables anything: the commit
+point. When the store says the write did not commit, the call rolls back
+(Table 21) and the first persistent endpoint gets `Bad_ResourceUnavailable`,
+the others `Bad_NothingToDo`; when the outcome is unknown it rolls back and
+gets `Bad_InternalError`, and the store is fenced until a later write
+settles what is there (library interpretation, C3-D13). A failure after the
+commit is undone with a durable removal. The persisted check of
+SetCommunicationConfigurationCmd (§6.2.4.3.9.2, PC-1): a persistent
+endpoint's DataSetReader or DataSetWriter and its parents (group,
+PubSubConnection) must not have 0:NotPersisted TRUE (Part 14 §6.2.2
+Table 4), else `Bad_InvalidState` in the CommunicationLinksResult. With
+`StrictNotPersisted` the check for non-persistent endpoints (PC-2) runs as
+well: their reader or writer needs 0:NotPersisted TRUE. It is off by
+default, a documented deviation ([Limits](#limits)).
+
+Each endpoint has a Diagnostics Object (DI's BrowseName, the
+ConnectionEndpointDiagnosticsType of the AC model) with CreationTime and
+ModificationTime (§6.6.2 Table 74, AP-14); a restored endpoint keeps both.
+
+**Close** (design §4.4, C3-D8). The intent is written first: Remove FALSE
+writes Enabled FALSE, then disables; Remove TRUE writes RemovePending,
+then removes, then deletes the record. A close whose write did not commit
+changes nothing and is `Bad_ResourceUnavailable`; one with an unknown
+outcome acts anyway in the safe direction (disable, remove) and is
+`Bad_InternalError`, and the write is owed until it commits. Once a disable
+or removal is durable, no restart brings the communication back; a
+RemovePending record is completed at the next start, never restored. An
+endpoint whose removal is durable but whose runtime removal failed stays
+RemovePending: EnableCommunicationCmd and any other command naming it are
+`Bad_InvalidState` (library interpretation: Table 12 has no code for an
+endpoint being removed), a close with Remove FALSE disables what is left
+without making the record Active again, and the next close with Remove
+TRUE, or the next start, completes the removal. A
+DataSetReader or DataSetWriter that endpoints share is disabled once none
+of the endpoints that reference it demands it (EnableCommunicationCmd
+enabled it and no CloseConnections disabled it since), whichever closes
+last, and removed with the last endpoint that references it; an endpoint
+whose call created it hands that over when it goes first (§6.2.5.2: "all
+related communication model Objects if not referenced from other
+ConnectionEndpoints"). The demand of a persistent endpoint is its stored
+enablement; that of a non-persistent one ends with the process. Ownership
+is a property of the component, not of an endpoint record: a reader or
+writer an EstablishConnections call created is stored as created
+(provenance) in the component record every endpoint that references it
+shares, and every endpoint restored with it owns it, so a hand-over needs
+no record of its own and survives a restart.
+
+**Restore** (design §4.6). Each record is restored whole or not at all: its
+PubSub components (one of the same path that is equal is adopted, one that
+differs is a conflict, a missing one it created is added), the endpoint at
+its stored NodeIds, its References, the control of its ControlGroups (the
+endpoint is the owner; G4, library interpretation) and its enablement.
+NodeIds are stored with the NamespaceArray of the record and mapped to the
+server's at load, also inside the PubSub structures (design §4.8). The
+Status then follows the readers and writers (§6.6.3). Every record ends
+the start accounted for: restored, completed (a RemovePending record,
+which needs no NodeId), or quarantined.
+
+**Quarantine** (design §4.7, C3-D10). A record that fails is neither
+restored nor deleted. `Quarantined` lists them (`QuarantinedEndpoint`:
+the reason, `Retryable`, the reserved Name, NodeIds and PubSub ids, and
+`Fences`), `RetryRestore` tries one again, `Discard` deletes it. A record
+with a NodeId in a namespace the server does not have (its own, or one of
+a component record it references) is quarantined, `Retryable`, with the
+namespace URIs in `MissingNamespaces`; it reserves its NodeIds by
+namespace URI, so they stay reserved while the namespace is missing and
+when it comes, and `RetryRestore` (or the next start that has the
+namespace) restores it. When the move of a record to quarantine or a
+Discard has an unknown outcome, the quarantine follows the store once it
+is settled: the record is listed where the store has it (`ID`), and one
+the store no longer has is gone with its reservations. A record
+whose identity still reads reserves its Name in its FunctionalEntity
+(`Bad_BrowseNameDuplicated`), its NodeIds and its WriterGroupIds and
+DataSetWriterIds (ReserveIds and CloseAndUpdate do not hand them out, on
+the whole server). A record whose identity does not read fences
+EstablishConnections of its AC and the PubSub id allocation of the server
+(`Bad_ResourceUnavailable`), and a key that is none of the records fences
+all ACs, until it is discarded.
+
+**Other configuration mechanisms** (design §4.5, PS-2). CloseAndUpdate,
+the PubSub Methods, `Server.UpdatePubSubConfiguration` and
+`Server.ChangePubSubConfiguration` run a hook of the server
+(`server.PubSubConfigurationHook`) in their transaction: a change of a
+component a persistent endpoint references is written to its record before
+the change returns. A change the store refuses is undone and fails
+(`Bad_ResourceUnavailable`); 0:NotPersisted TRUE on such a component is
+`Bad_InvalidState`; a removed component is marked removed and not
+re-created after a restart (the latest configuration wins, Part 14 §9.1.2).
+A change of this package's own that only removes or disables components
+(CloseConnections after its intent, or the rollback of what was not
+committed) is never refused for a record that does not commit: it stands
+and the record is owed, as for a close (library interpretation). The same
+change by another mechanism has no durable intent and is refused like any
+other. While the store is fenced, new components and ReserveIds
+are refused, and so is a new WriterGroupId or DataSetWriterId on an
+existing component (a modify, Part 14 §9.1.3.7.4) that a quarantined
+record reserves. When a hook refuses a change, the server reconciles the
+runtime back to the configuration before it by name: what the change
+removed or changed comes back under a new ComponentID and node, and the
+endpoints' References, what they created and what they have left to
+remove follow it by path, so that the endpoint stays consistent with the
+restored configuration (a refused close fails and can be repeated); for a
+change of another mechanism the server tells the hook what came back
+(`server.PubSubConfigurationRestorer`). They follow in the same
+transaction (`Server.ChangePubSubConfigurationThen`, the restorer):
+no change of another mechanism comes in between, so a component it puts
+at the same path afterwards takes over neither the provenance nor the
+References of a restored one.
+Enable and Disable of a component with the Methods of its Status Object
+(PubSubStatusType) are runtime only: they are not written to the store, and after a
+restart the enablement of a persisted reader or writer follows its
+endpoints' control state, which is what is durable.
+
+**Secure restart** (design §4.10, PS-3). No keys or sequence numbers are
+stored. A restored secured WriterGroup, ReaderGroup or DataSetReader gates
+its SecurityGroup in the PubSub runtime (`pubsub.PubSub.GateSecurityGroup`):
+it neither secures nor accepts messages under a key that may have been in
+use before the restart (Part 14 §7.2.3, §7.2.4.4.3). A key is fresh only
+when the runtime saw it as a future key of its source (up to 8 ahead) and
+then saw it become current; keys are told apart by a fingerprint of their
+material, never by SecurityTokenId (ids wrap around, and a restarted SKS
+may issue them again), and new material alone is not proof. That holds
+for every key, also after the gate opened: a current key the runtime did
+not see coming (keys restored from a backup, an SKS that lost its state,
+a rotation it missed) is tainted and closes the gate, and the future keys
+seen before it are no longer trusted; replacing the KeySource
+(`SetKeySource`) forgets the future keys of the old source too, and starts
+a new generation of the gate: an observation of the old source still
+running records nothing, and a KeySource handed out for the old source
+gives no keys any more. The key a decision is about is the one the gate
+observed: `CurrentKeys` returns it, never a second read of the source. The gate
+opens again when a future key seen after that becomes current. A rotating
+source opens the gate after one key change; a static or unavailable one
+never does, and the endpoint stays non-operational. The gate lasts for the
+life of the runtime: a group recreated under the same SecurityGroup is
+gated too. `SecurityGroupGate` reports it. Library interpretation: the
+gate relies on the key source never offering as a future key one that was
+current before. A source restored from a backup whose future keys were
+used before the restart, and that this process never saw current, cannot
+be told apart from a genuine one without durable evidence of key use,
+which is not kept: the gate is not protection against an arbitrary SKS
+rollback ([Limits](#limits)).
+
+**Durability.** `Connections.Persistence` reports the store state, the
+restored endpoints and the quarantine. `FileStore` reports
+`DurabilityPowerLoss` on Unix systems (where the file system honours
+fsync), and `DurabilityProcessCrash` on Windows, where a directory cannot be
+fsynced, so a committed write survives a crash of the process but a power
+loss only as far as the file system's metadata journal goes. A write with
+an unknown outcome keeps the evidence of at most 64 confirmations with an
+unknown outcome; past that the store stays fenced until it is opened again.
+Network file
+systems and file systems that ignore fsync or advisory locks are not
+supported; platforms without flock cannot open a FileStore. `MemoryStore` survives no restart.
+An application can supply its own `Store`; `storetest.Run` checks it
+against the contract.
 
 ### Calling the Methods
 
@@ -1060,7 +1246,11 @@ go run ./examples/uafx/cm -port 4856
 | The ConnectionManager server: the nodes and References of a set, the SelectionList writes and their RestrictToList, the PortableNodeIdentifier view, the Lock (ownership, renewal, expiry on the clock of the test, the end of a session, BreakLock), commit with CS-19 reflection and its conflicts, Process and its events, the audit events (also of calls refused early), the file and its argument errors, ChangesApplied of a partial update, handles dropped at the end of their session, the Lock deadline between two checks, escaped NodeIds, the authorizer, the nodes following the Manager; on a SignAndEncrypt Basic256Sha256 endpoint with user names, an authorized user and a viewer, and a right revoked between Open and CloseAndUpdate (`TestConnectionManagerSecure`) | `uafx/fxserver` |
 | Headline (design §7.1): AC1, AC2 and a ConnectionManager server, each its own server, driven only through the Methods, the SelectionList Variables and the file, over SignAndEncrypt sessions with a ConnectionAdmin user: add by file, establish, disable, enable, edit the PublishingInterval and see it on the AC after a new establish, remove (`TestConnectionManagerLifecycle`) | `uafx/fxcm` |
 | Multicast (four servers): AC1 publishes to a UDP multicast group, AC2 and AC3 subscribe, one DataSetWriter serves both, Remove removes all three sides (`TestConnectionManagerMulticast`). It needs an interface that carries multicast (`GO_OPCUA_MULTICAST_IFACE`, else the first that works) and skips without one; `GO_OPCUA_MULTICAST_REQUIRE=1`, set in the CI `server` job, makes that a failure. Run on macOS on en0 and lo0 | `uafx/fxcm` |
-| Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`, and every generated structure with `FuzzDecodeStructure`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace) | `uafx`, `internal/nodeset` |
+| Persistence: an endpoint restored at its NodeIds with its CreationTime, control and communication after a restart; disable and remove durable; C3-D4 and the persisted check (PC-1, PC-2 with StrictNotPersisted); every store outcome at the commit point and at close (not committed, unknown, fenced, settled); the hook (changes, refusals, NotPersisted, removed components, held ids); quarantine of a corrupt body, a corrupt identity, a conflict (RetryRestore) and an unknown key, and Discard; the gate of a secured group with a static key and after a rotation; a start on a foreign or failing store | `uafx/fxserver` |
+| Crash: the server killed as a subprocess at seven points of establish, close and disable, then restarted on the same FileStore: the endpoint is restored as committed and no durable disable or removal is undone (`TestCrash`) | `uafx/fxserver` |
+| The store contract (`storetest.Run`) on MemoryStore and FileStore, the Domain (fence, Require, Settle, batch identity of a confirming Apply) and the fault injector | `uafx/fxstore` |
+| The key gate: rotation, wraparound, an SKS that reissues ids or material, static and unavailable sources, a new KeySource | `pubsub` |
+| Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`, and every generated structure with `FuzzDecodeStructure`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace), the records of persistent endpoints and components (`FuzzDecodeEndpoint`, `FuzzDecodeComponent`) | `uafx`, `internal/nodeset`, `uafx/fxserver` |
 | End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
 | Chaos: connection faults over SignAndEncrypt, values and FunctionalEntities changing during `Inspect`, a server closing; parallel EstablishConnections and CloseConnections, and both under connection faults, leaving the server as it was | [`chaos/uafx`](../chaos/uafx) |
 
@@ -1076,8 +1266,22 @@ The test address space is `internal/testutil/fxtest`.
   interpreted. A ControlGroup a client controls has no Controls Reference
   (§6.5.2 wants it from the Object of the client connection, which the
   server does not have). An item in two lists of one ControlGroup is not
-  refused. No persistent connections ([Persistence](#persistence)), no
-  AutomationComponent log.
+  refused. No AutomationComponent log.
+- Persistence ([Persistence](#persistence)) keeps the endpoints, their
+  control and their PubSub components, not ConfigurationData (AP-13) and
+  not the Methods of §6.4.6 (VariableStorage). The PubSub configuration
+  of the server is not persisted as a whole (Part 14 §9.1.2 is not met):
+  only the components persistent endpoints reference. StrictNotPersisted
+  is off by default, so a non-persistent endpoint whose reader or writer
+  lacks 0:NotPersisted TRUE is accepted, against PC-2 (§6.2.4.3.9.2;
+  Part 14 §6.2.2 makes such a component persisted). 0:NotPersisted on
+  PublishSubscribe itself is not checked. Enable and Disable of a
+  component with the PubSub Methods are not written to the store: after a
+  restart enablement follows the endpoints. The gate of a secure restart
+  holds the whole SecurityGroup, also groups of it that were not restored,
+  and is not protection against an SKS rolled back to keys used before
+  the restart that the process never saw current (no durable evidence of
+  key use is kept).
 - The ConnectionManager (`uafx/fxcm`, served by `EnableConnectionManager`)
   keeps its sets, their Versions and the records of its endpoints in
   memory. It does not configure a SecurityKeyServer, ask a GDS (no

@@ -38,6 +38,12 @@ var ErrModel = errors.New("fxserver: UAFX model")
 
 ErrModel reports that the UAFX model cannot be added to the server.
 
+```go
+var ErrQuarantine = errors.New("fxserver: quarantine")
+```
+
+ErrQuarantine reports a quarantined record that cannot be restored or discarded as asked.
+
 ## Functions
 
 ### func ConfigureAdmin
@@ -263,6 +269,28 @@ type ConnectionOptions struct {
 	// and ExitLock are the owner's (OPC 10000-100 §7.5 to §7.7) and the
 	// AccessController's.
 	ControlAuthorizer ControlAuthorizer
+	// Store makes the AutomationComponents of the server support persistent
+	// ConnectionEndpoints (Part 81 §5.5.5, §6.6.2): SupportsPersistence
+	// becomes TRUE, an EstablishConnections with IsPersistent TRUE stores
+	// the endpoint, its control and the PubSub components it references,
+	// and EnableConnections restores them (design
+	// docs/design/uafx-persistent-connections.md §4). A store that cannot
+	// be opened, has another owner or a newer format fails
+	// EnableConnections. nil: IsPersistent TRUE fails with
+	// Bad_NotSupported.
+	Store fxstore.Store
+	// StoreTimeout bounds each store operation; 0 is 10 s.
+	StoreTimeout time.Duration
+	// StrictNotPersisted enforces the persisted check of
+	// SetCommunicationConfigurationCmd for non-persistent endpoints (Part 81
+	// §6.2.4.3.9.2): their DataSetReader or DataSetWriter needs
+	// 0:NotPersisted TRUE (Part 14 §6.2.2 Table 4), else Bad_InvalidState.
+	// It is off by default, a documented deviation (LIMITATIONS.md): a
+	// component without the property is persisted by Part 14's default,
+	// which few configurations state. The check for persistent endpoints
+	// (no NotPersisted TRUE on the component or its parents) always runs.
+	// It applies with a Store only.
+	StrictNotPersisted bool
 	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
 
 	// Logger logs what the connections do; nil is slog.Default().
@@ -294,8 +322,16 @@ type Connections struct {
 	// beforeUpdate, when set by a test, runs in SetCommunicationConfigurationCmd
 	// right before the PubSub configuration is applied; guarded by mu.
 
+	// afterChange, when set by a test, runs after each PubSub transaction
+	// of change with its result, outside the transaction; guarded by mu.
+
 	// retryCleanup is the shortest time after which a failed cleanup is
 	// tried again; guarded by mu.
+
+	// pers keeps the persistent endpoints; nil without a Store.
+
+	// crash, when set by a test, runs at the points of the persistence
+	// protocols.
 
 }
 ```
@@ -304,7 +340,7 @@ Connections serves the connection Methods of the AutomationComponents of a serve
 
 It serves the ControlGroups of the FunctionalEntities (§6.5): their Methods EstablishControl, ReleaseControl and ReassignControl, the LockingServices of their ListToBlock and ListToRestrict (OPC 10000-100 §7), EstablishControlCmd and ReassignControlCmd, and it rejects the writes and calls the Locks forbid with Bad\_Locked, with a [server.Guard](https://pkg.go.dev/github.com/otfabric/go-opcua/server#Guard) that EnableConnections adds to the server when there are ControlGroups.
 
-Persistent ConnectionEndpoints (IsPersistent, SupportsPersistence) are not supported: they fail with Bad\_NotSupported.
+With a Store (ConnectionOptions.Store) it supports persistent ConnectionEndpoints (IsPersistent, SupportsPersistence, Part 81 §5.5.5, §6.6.2): it stores them and restores them when EnableConnections runs again after a restart. Without one they fail with Bad\_NotSupported.
 
 #### func EnableConnections
 
@@ -324,6 +360,14 @@ func (c *Connections) Close() error
 
 Close stops the Status updates. The Methods stay registered.
 
+#### func (Connections) Discard
+
+```go
+func (c *Connections) Discard(ctx context.Context, id string) error
+```
+
+Discard deletes the quarantined record id and releases what it reserves, in one committed Apply. It removes nothing at runtime: a quarantined record restored nothing (design §4.7).
+
 #### func (Connections) Endpoints
 
 ```go
@@ -332,6 +376,22 @@ func (c *Connections) Endpoints() []*ua.NodeID
 
 Endpoints returns the NodeIds of the ConnectionEndpoints the connections manage.
 
+#### func (Connections) Persistence
+
+```go
+func (c *Connections) Persistence() PersistenceStatus
+```
+
+Persistence returns the state of the persistent ConnectionEndpoints.
+
+#### func (Connections) Quarantined
+
+```go
+func (c *Connections) Quarantined() []QuarantinedEndpoint
+```
+
+Quarantined returns the quarantined records (design §4.7).
+
 #### func (Connections) RefreshHealth
 
 ```go
@@ -339,6 +399,14 @@ func (c *Connections) RefreshHealth()
 ```
 
 RefreshHealth recomputes the AggregatedOperationalHealth of every AutomationComponent (Part 81 §9.1.2) from the OperationalHealth of its top-level FunctionalEntities. Call it after changing the bits of an OperationalHealth the connections do not own (16 to 31), or the FunctionalEntities: between calls of the Methods the health follows changes of the Status of the endpoints only.
+
+#### func (Connections) RetryRestore
+
+```go
+func (c *Connections) RetryRestore(ctx context.Context, id string) error
+```
+
+RetryRestore restores the quarantined record id again: when it is restored, its record goes back where the persistent endpoints are, in one committed Apply; else it stays quarantined with the new reason.
 
 #### func (Connections) Status
 
@@ -477,3 +545,62 @@ func (n Namespaces) ConnectionAdmin() *ua.NodeID
 ```
 
 ConnectionAdmin returns the NodeId of the well-known Role ConnectionAdmin (Part 81 §5.9) in the Data namespace, which a [server.RoleMapper](https://pkg.go.dev/github.com/otfabric/go-opcua/server#RoleMapper) grants to the sessions that may establish, release and reassign control and break Locks without a ControlAuthorizer; nil without a Data namespace.
+
+### type PersistenceStatus
+
+```go
+type PersistenceStatus struct {
+	// Enabled: the connections have a store (ConnectionOptions.Store).
+	Enabled bool
+	// Durability is what the store survives, when it says.
+	Durability fxstore.Durability
+	// Store is the state of the records in the store: its revision and
+	// whether a write with an unknown outcome or an owed write fences it.
+	Store fxstore.DomainStatus
+	// Restored are the endpoints the start restored.
+	Restored []*ua.NodeID
+	// Records is the number of persistent endpoints in the store.
+	Records int
+	// Quarantined is the number of quarantined records.
+	Quarantined int
+}
+```
+
+PersistenceStatus is the state of the persistent ConnectionEndpoints of a server.
+
+### type QuarantinedEndpoint
+
+```go
+type QuarantinedEndpoint struct {
+	// ID names the record for RetryRestore and Discard.
+	ID string
+	// AutomationComponent, Endpoint, FunctionalEntity and Name are the
+	// identities of the record, nil and "" when its identity cannot be
+	// read.
+	AutomationComponent, Endpoint, FunctionalEntity *ua.NodeID
+	Name                                            string
+	// Reason is why it was not restored.
+	Reason string
+	// Retryable: the cause can go away (a component conflict, a
+	// ControlGroup in use, a namespace not loaded yet).
+	Retryable bool
+	// Fences: the identities cannot be read, so the record fences the
+	// EstablishConnections of its AutomationComponent (of every one when
+	// its key cannot be read) and the allocation of PubSub identifiers of
+	// the server.
+	Fences bool
+	// Component: the record is a component record that does not decode.
+	Component bool
+	// WriterGroupIDs and DataSetWriterIDs are the PubSub identifiers it
+	// reserves.
+	WriterGroupIDs, DataSetWriterIDs []uint16
+	// MissingNamespaces are the namespace URIs of the record that the
+	// server does not have: its NodeIds in them keep the namespace index
+	// they were written with. The record is restored once they are there
+	// (RetryRestore, or the next start); until then it reserves its
+	// NodeIds by namespace URI.
+	MissingNamespaces []string
+}
+```
+
+QuarantinedEndpoint is a record of a persistent ConnectionEndpoint that the server did not restore (design §4.7, C3-D10). It is kept, and what it reserves stays reserved, until RetryRestore restores it or Discard deletes it.

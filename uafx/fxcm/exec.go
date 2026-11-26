@@ -1932,8 +1932,8 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 		} else if cur != nil {
 			cur.ClosePending = false
 		}
-		x.s.mu.Unlock()
 		cp := r.EndpointRecord
+		x.s.mu.Unlock()
 		if errs[r] == nil {
 			x.mu.Lock()
 			x.res.Closed = append(x.res.Closed, cp)

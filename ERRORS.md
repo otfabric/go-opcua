@@ -162,6 +162,16 @@ Definitions live in [`errors/sentinel.go`](errors/sentinel.go). Match with `erro
 | `uafx/fxserver.ErrConnections` | `EnableConnections` cannot serve the connection Methods: no AC model, no PubSub runtime, no AutomationComponent below FxRoot, or an AutomationComponent without the Methods or their argument declarations |
 | `server.ErrPubSubChanged` | `PubSubConfigurationUpdate.Revert`: the PubSub configuration changed after the update, which is therefore not undone |
 | `uafx/fxserver.ErrModel` | `AddModel` cannot add the UAFX model: a UAFX namespace the server has already, an unknown `Model`, no ApplicationUri, a namespace 1 that is not the ApplicationUri, a DI namespace without the nodes the model refers to, or a NodeSet the server refuses (wrapped) |
+| `uafx/fxserver.ErrQuarantine` | `RetryRestore` or `Discard` that cannot act: no store, no quarantined record of that id, a fenced store, a record that does not decode (only `Discard` takes it), or a restore or delete that fails again (wrapped with the cause) |
+| `uafx/fxstore.ErrNotCommitted` | An `Apply` that made nothing of its batch durable: the definite "not committed" outcome (`fxstore.OutcomeOf`, `fxstore.AsNotCommitted`). Any other Apply error is an unknown outcome |
+| `uafx/fxstore.ErrClosed` | A closed store (wraps `ErrNotCommitted`) |
+| `uafx/fxstore.ErrLocked` | `OpenFile` of a directory another `FileStore`, in this process or another, holds |
+| `uafx/fxstore.ErrLimit` | A key, value or state over its `Limits`; from `Apply` it wraps `ErrNotCommitted` |
+| `uafx/fxstore.ErrCorrupt` | Stored data that does not decode: the data file of a `FileStore`, or the meta key of a `Domain` |
+| `uafx/fxstore.ErrFenced` | A `Domain` write while an earlier write with an unknown outcome is not settled (wraps `ErrNotCommitted`) |
+| `uafx/fxstore.ErrForeignOwner` | `OpenDomain` of a namespace another owner wrote |
+| `uafx/fxstore.ErrSchema` | `OpenDomain` of a namespace written with a newer schema or meta format |
+| `uafx/fxstore/storetest.ErrInjected` | The error of a fault `storetest.Faulty` injects: an unknown Apply outcome, or a Load failure |
 
 Further API errors: package
 `server` the condition errors (`ErrConditionRemoved`, `ErrConditionNotAlarm`,

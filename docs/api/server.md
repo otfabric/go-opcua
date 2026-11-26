@@ -3228,6 +3228,73 @@ type PubSubAuthorizer func(ctx context.Context, caller *MethodCaller, method str
 
 PubSubAuthorizer decides whether the caller of a PubSub configuration method (AddConnection, RemoveGroup, Enable, ...) may call it. method is the BrowseName of the method. It returns Good to allow the call or the Bad status to answer it with.
 
+### type PubSubChange
+
+```go
+type PubSubChange struct {
+	// Context is the context of the Method call or of the
+	// [Server.UpdatePubSubConfiguration] call that made the change;
+	// context.Background() for [Server.ChangePubSubConfiguration] and
+	// [PubSubConfigurationUpdate.Revert].
+	Context context.Context
+	// Before and After are the configuration before and after the change.
+	Before, After *ua.PubSubConfigurationDataType
+	// Revert: the change is [PubSubConfigurationUpdate.Revert] undoing an
+	// update.
+	Revert bool
+
+	// ids are the components before the change by path, for a
+	// PubSubConfigurationRestorer; nil for another hook.
+
+}
+```
+
+PubSubChange is a change of the PubSub configuration a [PubSubConfigurationHook](#type-pubsubconfigurationhook) sees.
+
+### type PubSubComponentMove
+
+```go
+type PubSubComponentMove struct {
+	From, To         pubsub.ComponentID
+	FromNode, ToNode *ua.NodeID // nil when the component has no node
+}
+```
+
+PubSubComponentMove is a component a refused change brought back under a new ComponentID and node: the same kind and path of names (its PubSubConnection, group and own Name; a PublishedDataSet's Name).
+
+### type PubSubConfigurationHook
+
+```go
+type PubSubConfigurationHook interface {
+	// PubSubConfigurationChanged is called in the PubSub transaction after
+	// a change was applied to the runtime, before the Method or function
+	// that made it returns. An error undoes the change (the runtime is
+	// reconciled back to ch.Before, by name: a component the change
+	// removed or changed comes back under a new ComponentID and node) and
+	// fails it with the error's ua.StatusCode, or Bad_InternalError. It
+	// must not change the PubSub configuration itself.
+	PubSubConfigurationChanged(ch *PubSubChange) error
+	// HeldPubSubIDs returns WriterGroupIds and DataSetWriterIds that
+	// ReserveIds does not hand out and CloseAndUpdate does not assign to
+	// new components, and refuse, which makes ReserveIds fail with
+	// Bad_ResourceUnavailable. It is called in the PubSub transaction.
+	HeldPubSubIDs() (writerGroups, dataSetWriters []uint16, refuse bool)
+}
+```
+
+PubSubConfigurationHook follows the changes of the PubSub configuration of a server, whatever makes them: CloseAndUpdate and the other Methods of Part 14 §9.1.3, [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration), [PubSubConfigurationUpdate.Revert](#func-pubsubconfigurationupdate-revert) and [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration). A companion specification that keeps durable records of components (the persistent ConnectionEndpoints of OPC UA FX, OPC 10000-81 §6.6.2) uses it to keep them in line with the configuration in the same transaction (Part 14 §9.1.2).
+
+### type PubSubConfigurationRestorer
+
+```go
+type PubSubConfigurationRestorer interface {
+	PubSubConfigurationHook
+	PubSubConfigurationRestored(ch *PubSubChange, moved []PubSubComponentMove)
+}
+```
+
+PubSubConfigurationRestorer is a [PubSubConfigurationHook](#type-pubsubconfigurationhook) that follows the components a refused change brings back. The runtime is reconciled back to the configuration before the change by name, so a component the change removed or changed comes back under a new ComponentID and node: PubSubConfigurationRestored is called with those moves, in the PubSub transaction, after the runtime was reconciled back and before anything else changes the configuration. It must not change the configuration.
+
 ### type PubSubConfigurationUpdate
 
 ```go
@@ -4031,6 +4098,14 @@ func (s *Server) Auditing() bool
 
 Auditing reports whether the server reports audit events.
 
+#### func (Server) BuildPubSubModel
+
+```go
+func (s *Server) BuildPubSubModel() error
+```
+
+BuildPubSubModel publishes the PubSub runtime in the address space now, as Start does: the PublishSubscribe Object, its Methods and the Objects of the components, which then have their NodeIds ([Server.PubSubNodeID](#func-server-pubsubnodeid)). An application that needs those NodeIds before Start (a companion specification that restores References to components, as the persistent ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the model again. It needs a server with a PubSub runtime (WithPubSub).
+
 #### func (Server) CertificateGroupID
 
 ```go
@@ -4052,6 +4127,14 @@ func (s *Server) ChangePubSubConfiguration(fn func(rt *pubsub.PubSub) error) err
 ```
 
 ChangePubSubConfiguration calls fn with the PubSub runtime of the server inside the transaction that CloseAndUpdate, UpdatePubSubConfiguration, PubSubConfigurationUpdate.Revert and the PubSub Methods that change the configuration (AddConnection, AddWriterGroup, RemoveGroup, Enable and the others of Part 14 §9.1.3) hold, and returns its error. Changes made through it are never lost to a CloseAndUpdate that read the configuration before them, nor resurrected by one. fn must not call those functions or Methods itself. A server without PubSub ([WithPubSub](#func-withpubsub)) returns ua.StatusBadNotSupported without calling fn.
+
+#### func (Server) ChangePubSubConfigurationThen
+
+```go
+func (s *Server) ChangePubSubConfigurationThen(fn func(rt *pubsub.PubSub) error, then func(rt *pubsub.PubSub, err error)) error
+```
+
+ChangePubSubConfigurationThen is [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration) with then, which it calls with the runtime and the result in the same transaction once the change is complete: after the [PubSubConfigurationHook](#type-pubsubconfigurationhook), and, when the hook refused the change, after the runtime was reconciled back to the configuration before it. then sees the runtime as the change left it, before any other change of the configuration; it is not called when fn is not (no PubSub). Like fn, it must not call the functions and Methods that change the configuration.
 
 #### func (Server) Close
 
@@ -4391,6 +4474,14 @@ func (s *Server) SetHistorian(h HistoryProvider)
 ```
 
 SetHistorian attaches a HistoryProvider for HistoryRead support. Pass nil to disable historical access (HistoryRead returns BadHistoryOperationUnsupported). A provider that also implements [EventHistoryProvider](#type-eventhistoryprovider) keeps the event history of the HistoricalEventNodes ([Server.EnableEventHistory](#func-server-enableeventhistory)). The HistoryServerCapabilities report what the provider supports.
+
+#### func (Server) SetPubSubConfigurationHook
+
+```go
+func (s *Server) SetPubSubConfigurationHook(h PubSubConfigurationHook)
+```
+
+SetPubSubConfigurationHook sets the hook that follows the changes of the PubSub configuration; nil removes it. One hook at a time: a second call replaces the first.
 
 #### func (Server) SetServerDiagnosticsEnabled
 

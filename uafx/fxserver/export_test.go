@@ -7,6 +7,7 @@ import (
 
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx/fxcm"
 )
 
@@ -107,3 +108,81 @@ func SetBeforeUpdate(c *Connections, f func()) {
 // ApplyCMEvent applies e to the address space as the loop does: a test
 // replays an event the loop has not drained yet.
 func ApplyCMEvent(c *ConnectionManager, e fxcm.Event) { c.apply(e) }
+
+// SetCrashPoint sets the function the persistence protocols run at each of
+// their named points; nil removes it.
+func SetCrashPoint(c *Connections, f func(point string)) {
+	if f == nil {
+		c.crash.Store(nil)
+		return
+	}
+	c.crash.Store(&f)
+}
+
+// WithLateNode returns the endpoint record v with one more NodeId, name in
+// the namespace uri, which the record then needs: as a record written by a
+// server that had the namespace.
+func WithLateNode(v []byte, uri, name string) ([]byte, error) {
+	idn, body, err := decodeEndpoint(v)
+	if err != nil {
+		return nil, err
+	}
+	idn.Namespaces = append(idn.Namespaces, uri)
+	idn.Nodes = append(idn.Nodes, ua.NewStringNodeID(uint16(len(idn.Namespaces)-1), name))
+	return encodeEndpoint(idn, body)
+}
+
+// WithLateComponent returns the component record v with its NodeIds
+// outside namespace 0 moved to a new namespace uri: as a record written
+// by a server that had it. ok is false when the record has none.
+func WithLateComponent(v []byte, uri string) (out []byte, ok bool, err error) {
+	cr, err := decodeComponent(v)
+	if err != nil {
+		return nil, false, err
+	}
+	late := uint16(len(cr.Namespaces))
+	cr.Namespaces = append(cr.Namespaces, uri)
+	r := &remapper{m: map[uint16]uint16{0: 0}, miss: map[uint16]bool{}}
+	for i := 1; i < int(late); i++ {
+		r.m[uint16(i)] = late
+	}
+	before, _ := encodeComponent(cr)
+	if err := r.remap(cr); err != nil {
+		return nil, false, err
+	}
+	out, err = encodeComponent(cr)
+	return out, err == nil && string(out) != string(before), err
+}
+
+// RemovePending returns the endpoint record v in the state RemovePending.
+func RemovePending(v []byte) ([]byte, error) {
+	idn, body, err := decodeEndpoint(v)
+	if err != nil {
+		return nil, err
+	}
+	body.State = stateRemovePending
+	return encodeEndpoint(idn, body)
+}
+
+// NotOwner returns the endpoint record v of the endpoint name with
+// OwnReader and OwnWriter cleared, as the record of an endpoint that
+// linked a component another call created; ok reports whether v is the
+// record of name.
+func NotOwner(v []byte, name string) (out []byte, ok bool, err error) {
+	idn, body, err := decodeEndpoint(v)
+	if err != nil || idn.Name != name {
+		return nil, false, err
+	}
+	body.OwnReader, body.OwnWriter = false, false
+	out, err = encodeEndpoint(idn, body)
+	return out, err == nil, err
+}
+
+// SetAfterChange sets the function that runs after each PubSub transaction
+// of the package's runtime changes, outside the transaction, with its
+// result; nil removes it.
+func SetAfterChange(c *Connections, f func(error)) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.afterChange = f
+}

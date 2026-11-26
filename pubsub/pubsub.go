@@ -28,6 +28,9 @@ type PubSub struct {
 
 	ksMu       sync.RWMutex
 	keySources map[string]security.KeySource
+	// gates are the restart gates of SecurityGroups (GateSecurityGroup),
+	// guarded by ksMu.
+	gates map[string]*keyGate
 
 	mu sync.Mutex
 	// pending are the callbacks (events, handlers, target writes, event
@@ -324,7 +327,9 @@ func (p *PubSub) Running() bool {
 }
 
 // SetKeySource sets (or, with nil, removes) the keys of a SecurityGroup at
-// run time, for example when a Security Key Service pushes new keys.
+// run time, for example when a Security Key Service pushes new keys. The
+// restart gate of the SecurityGroup (GateSecurityGroup) stays; it forgets
+// the future keys it saw from the old source.
 func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource) {
 	p.ksMu.Lock()
 	if ks == nil {
@@ -332,23 +337,53 @@ func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource) {
 	} else {
 		p.keySources[securityGroupID] = ks
 	}
+	if g := p.gates[securityGroupID]; g != nil {
+		// A new source: the future keys of the old one prove nothing,
+		// and what is still observing it records nothing (under ksMu, so
+		// that no KeySource is handed out with the new source and the
+		// old generation).
+		g.rebase()
+	}
 	p.ksMu.Unlock()
 }
 
-// KeySource returns the keys of a SecurityGroup, nil if none are known.
+// KeySource returns the keys of a SecurityGroup, nil if none are known. The
+// KeySource of a gated SecurityGroup (GateSecurityGroup) gives only the keys
+// the gate allows.
 func (p *PubSub) KeySource(securityGroupID string) security.KeySource {
+	ks, g, gen := p.sourceOf(securityGroupID)
+	if ks == nil {
+		return nil
+	}
+	if g != nil {
+		return &gatedSource{KeySource: ks, g: g, gen: gen, group: securityGroupID}
+	}
+	return ks
+}
+
+// sourceOf returns the KeySource of a SecurityGroup without the gate, its
+// gate (nil if none) and the generation of the gate the source belongs
+// to, read together: SetKeySource changes both under ksMu.
+func (p *PubSub) sourceOf(securityGroupID string) (security.KeySource, *keyGate, uint64) {
 	p.ksMu.RLock()
 	ks := p.keySources[securityGroupID]
+	g := p.gates[securityGroupID]
+	var gen uint64
+	if g != nil {
+		gen = g.generation()
+	}
 	p.ksMu.RUnlock()
 	if ks != nil {
-		return ks
+		return ks, g, gen
 	}
+	// The lookups are fixed for the life of the runtime; a source set
+	// meanwhile starts a new generation, which refuses this one.
 	for _, l := range p.opts.keyLookups {
 		if ks := l(securityGroupID); ks != nil {
-			return ks
+			return ks, g, gen
 		}
 	}
-	return nil
+	return nil, g, gen
 }
 
 // reconcileLocked brings every component to the state its configuration and

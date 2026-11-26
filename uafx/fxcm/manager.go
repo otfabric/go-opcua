@@ -133,6 +133,9 @@ type Manager struct {
 	}
 
 	monitorStop chan struct{}
+	// statusOf reads the Status of an endpoint for the monitor
+	// (readStatus; a test replaces it before the monitor starts).
+	statusOf func(ctx context.Context, r *record) (uafx.ConnectionEndpointStatus, bool, error)
 }
 
 // set is a ConnectionConfigurationSet of a Manager.
@@ -145,6 +148,9 @@ type set struct {
 	records map[string]*record
 	current *Run
 	last    *Run
+	// runs counts the runs started on the set: the monitor drops an
+	// observation made while a run started (and maybe ended).
+	runs uint64
 	// transition is the transition the state machine took last (§6.9.2),
 	// 0 before the first.
 	transition Transition
@@ -573,6 +579,7 @@ func (m *Manager) beginRemove(s *set) (*Run, State) {
 	tr, _ := Start(prev) // a held set is never in Processing
 	r := &Run{id: RunID(m.runs.Add(1)), key: s.cfg.key, version: s.cfg.version, action: ActionRemoveSet, done: make(chan struct{})}
 	s.state, s.current, s.transition = StateProcessing, r, tr
+	s.runs++
 	s.mu.Unlock()
 	m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
 	return r, prev
@@ -1016,6 +1023,7 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 	prev := s.state
 	s.state = StateProcessing
 	s.current, s.transition = r, tr
+	s.runs++
 	s.mu.Unlock()
 	m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
 	go func() {

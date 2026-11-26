@@ -17,6 +17,7 @@ import (
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
 	"github.com/otfabric/go-opcua/uafx/fxdataid"
+	"github.com/otfabric/go-opcua/uafx/fxstore"
 )
 
 // endpointCommands are the commands that work on
@@ -49,6 +50,16 @@ func (c *Connections) establish(ctx context.Context, ac *automationComponent, ar
 	}
 	c.call.Lock()
 	defer c.call.Unlock()
+	if p := c.pers; p != nil {
+		// While a write of the store is unresolved, or a record whose
+		// identities cannot be read is quarantined, nothing is
+		// established: a new Name, NodeId or PubSub id could collide
+		// (design §3.5, §4.7). Definitely not done (C3-D13).
+		if why := p.establishFence(ac); why != "" {
+			c.log.Warn("uafx: EstablishConnections refused", "ac", ac.id, "reason", why)
+			return nil, ua.StatusBadResourceUnavailable
+		}
+	}
 	x := newCall(ctx, c, ac, req)
 	status := x.run()
 	out, err := uafx.EncodeEstablishConnectionsResult(x.res, c.ns.Data)
@@ -130,7 +141,13 @@ type call struct {
 	linkUndo   []func()             // SetCommunicationConfigurationCmd
 	enabled    []pubsub.ComponentID // EnableCommunicationCmd
 	cleanupsOn []*endpoint
+	demandsOn  []*endpoint     // EnableCommunicationCmd made them demand
 	controlled []*controlGroup // EstablishControlCmd
+
+	// persisted: the commit point ran (persist); compensate puts back
+	// what it committed when the call is rolled back after it.
+	persisted  bool
+	compensate *fxstore.Batch
 }
 
 // element is one ConnectionEndpointConfiguration of the call.
@@ -211,14 +228,63 @@ func (x *call) run() ua.StatusCode {
 		uafx.SetCommunicationConfigurationCmd: x.communicate,
 		uafx.EnableCommunicationCmd:           x.enable,
 	}
+	abort := func() ua.StatusCode {
+		x.rollback()
+		x.res.Status = ua.StatusUncertain
+		return ua.StatusUncertain
+	}
+	if !x.validatePersistence() {
+		x.res.Status = ua.StatusUncertain
+		return ua.StatusUncertain
+	}
 	for _, cmd := range x.req.CommandMask.Order() {
+		// The commit point: everything is staged, nothing enabled yet
+		// (design §4.3).
+		if cmd == uafx.EnableCommunicationCmd && !x.persist() {
+			return abort()
+		}
 		if !steps[cmd]() {
-			x.rollback()
-			x.res.Status = ua.StatusUncertain
-			return ua.StatusUncertain
+			return abort()
 		}
 	}
+	if !x.persist() {
+		return abort()
+	}
 	return ua.StatusOK
+}
+
+// validatePersistence checks IsPersistent and the CleanupTimeout of the
+// Parameters before any command runs (design §4.3 step 1): IsPersistent
+// TRUE needs SupportsPersistence (Bad_NotSupported, Part 81 Table 12; G11,
+// library interpretation) and a negative, finite CleanupTimeout (Part 81
+// §6.6.2; C3-D4: Bad_InvalidArgument, never normalized). A failure aborts
+// the call before it changes anything.
+func (x *call) validatePersistence() bool {
+	if x.req.CommandMask&uafx.CreateConnectionEndpointCmd == 0 {
+		return true
+	}
+	for _, el := range x.els {
+		d := el.cfg.ConnectionEndpoint
+		if d == nil || d.Parameter == nil {
+			continue
+		}
+		p := d.Parameter
+		if !p.IsPersistent {
+			continue
+		}
+		sc := ua.StatusOK
+		switch {
+		case x.c.pers == nil:
+			sc = ua.StatusBadNotSupported
+		case !(p.CleanupTimeout < 0) || math.IsInf(p.CleanupTimeout, -1):
+			sc = ua.StatusBadInvalidArgument
+		}
+		if sc != ua.StatusOK {
+			el.res.ConnectionEndpointResult = sc
+			return false
+		}
+	}
+	return true
 }
 
 // rollback undoes what the call did (Part 81 Table 21): it disables what
@@ -231,7 +297,7 @@ func (x *call) run() ua.StatusCode {
 // an endpoint undoes it.
 func (x *call) rollback() {
 	for i := len(x.enabled) - 1; i >= 0; i-- {
-		if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Disable(x.enabled[i]) }); err != nil {
+		if err := x.c.change(func(rt *pubsub.PubSub) error { return rt.Disable(x.enabled[i]) }); err != nil {
 			x.c.log.Warn("uafx: rollback: disable", "component", x.enabled[i], "error", err)
 		}
 	}
@@ -240,12 +306,20 @@ func (x *call) rollback() {
 		e.cleanupOff = true
 		x.c.mu.Unlock()
 	}
+	for _, e := range x.demandsOn {
+		x.c.mu.Lock()
+		e.demand = false
+		x.c.mu.Unlock()
+	}
 	for i := len(x.linkUndo) - 1; i >= 0; i-- {
 		x.linkUndo[i]()
 	}
 	if err := x.update.Revert(); err != nil {
 		x.c.log.Warn("uafx: rollback: the PubSub configuration of the call stays", "error", err)
 	}
+	// A rollback after the commit point is a durable removal of what the
+	// call committed (design §4.3).
+	x.uncommit()
 	for i := len(x.controlled) - 1; i >= 0; i-- {
 		x.c.release(x.controlled[i])
 	}
@@ -644,8 +718,6 @@ func (x *call) createOne(el *element, p *uafx.PubSubConnectionEndpointParameter)
 		return ua.StatusBadInvalidArgument
 	case !p.ConnectionEndpointTypeID.Equal(ps):
 		return ua.StatusBadTypeDefinitionInvalid
-	case p.IsPersistent:
-		return ua.StatusBadNotSupported // SupportsPersistence is not
 	case p.Mode < uafx.PubSubPublisherSubscriber || p.Mode > uafx.PubSubSubscriber:
 		return ua.StatusBadInvalidArgument
 	case p.Mode == uafx.PubSubPublisher && c.feedbackRequired(el.fe):
@@ -670,7 +742,8 @@ func (x *call) createOne(el *element, p *uafx.PubSubConnectionEndpointParameter)
 	if p.IsPreconfigured {
 		return x.usePreconfigured(el, p, existing)
 	}
-	if existing != nil {
+	if existing != nil || c.pers != nil && c.pers.reserved(nil, el.fe, p.Name) {
+		// A quarantined record reserves its Name (design §4.7).
 		return ua.StatusBadBrowseNameDuplicated
 	}
 	c.mu.Lock()
@@ -683,9 +756,13 @@ func (x *call) createOne(el *element, p *uafx.PubSubConnectionEndpointParameter)
 	if caller, ok := server.MethodCallerFromContext(x.ctx); ok {
 		cm = caller.ClientApplicationURI
 	}
-	e, sc := c.createEndpoint(el.fe, p, cm)
+	e, sc := c.createEndpoint(x.ac, el.fe, p, cm)
 	if sc != ua.StatusOK {
 		return sc
+	}
+	if p.IsPersistent {
+		e.persistent = true
+		e.key = c.keyOf(x.ac, e)
 	}
 	el.ep = e
 	x.created = append(x.created, e)
@@ -730,31 +807,44 @@ func (x *call) usePreconfigured(el *element, p *uafx.PubSubConnectionEndpointPar
 	if c.inUse(old) {
 		return ua.StatusBadInvalidState
 	}
-	body, err := ua.Encode(p.RelatedEndpoint)
-	if err != nil {
+	if _, err := ua.Encode(p.RelatedEndpoint); err != nil {
 		return ua.StatusBadInvalidArgument
 	}
+	cleanupID, persistID := c.childID(n, "CleanupTimeout"), c.childID(n, "IsPersistent")
+	oldCleanup, oldPersist, oldDuration := c.value(cleanupID), c.value(persistID), e.cleanup
+	c.setPreconfigured(e, p)
+	x.restore = append(x.restore, func() {
+		c.write(relID, old)
+		c.write(cleanupID, oldCleanup)
+		c.write(persistID, oldPersist)
+		c.mu.Lock()
+		e.cleanup = oldDuration
+		e.persistent, e.key = false, ""
+		c.mu.Unlock()
+	})
+	el.ep = e
+	return ua.StatusOK
+}
+
+// setPreconfigured sets the RelatedEndpoint, CleanupTimeout and
+// IsPersistent of the preconfigured endpoint e from p (Part 81
+// §6.2.4.3.5).
+func (c *Connections) setPreconfigured(e *endpoint, p *uafx.PubSubConnectionEndpointParameter) {
+	body, _ := ua.Encode(p.RelatedEndpoint)
 	rel := &ua.ExtensionObject{EncodingMask: ua.ExtensionObjectBinary, TypeID: ua.NewNumericExpandedNodeID(c.ns.Data, fxdataid.RelatedEndpointDataTypeEncodingDefaultBinary), Value: body}
-	cleanupID := c.childID(n, "CleanupTimeout")
-	oldCleanup, oldDuration := c.value(cleanupID), e.cleanup
-	c.write(relID, ua.MustVariant(rel))
-	c.write(cleanupID, ua.MustVariant(p.CleanupTimeout))
-	c.write(c.childID(n, "IsPersistent"), ua.MustVariant(false))
+	c.write(c.childID(e.id, "RelatedEndpoint"), ua.MustVariant(rel))
+	c.write(c.childID(e.id, "CleanupTimeout"), ua.MustVariant(p.CleanupTimeout))
+	c.write(c.childID(e.id, "IsPersistent"), ua.MustVariant(p.IsPersistent))
 	c.mu.Lock()
 	e.cleanup = -1
 	if d, ok := p.CleanupTimeoutDuration(); ok {
 		e.cleanup = d
 	}
+	if p.IsPersistent {
+		e.persistent = true
+		e.key = c.keyOf(e.ac, e)
+	}
 	c.mu.Unlock()
-	x.restore = append(x.restore, func() {
-		c.write(relID, old)
-		c.write(cleanupID, oldCleanup)
-		c.mu.Lock()
-		e.cleanup = oldDuration
-		c.mu.Unlock()
-	})
-	el.ep = e
-	return ua.StatusOK
 }
 
 // inUse reports whether a RelatedEndpoint value names another end (Part 81
@@ -828,8 +918,15 @@ func (x *call) endpointOf(el *element) bool {
 	default:
 		x.c.mu.Lock()
 		e := x.c.endpoints[d.Node.String()]
+		pending := e != nil && e.removePending
 		x.c.mu.Unlock()
 		switch {
+		case pending && e.fe.Equal(el.fe):
+			// Its removal is durable (RemovePending, design §4.4): no
+			// command may enable, configure or control it again, and no
+			// record may make it Active again. Library interpretation:
+			// Table 12 has no code for an endpoint being removed.
+			sc = ua.StatusBadInvalidState
 		case e != nil && e.fe.Equal(el.fe):
 			el.ep = e
 			el.res.ConnectionEndpointID = e.id
@@ -1059,7 +1156,10 @@ func (x *call) communicate() bool {
 	if hook != nil {
 		hook()
 	}
-	u, sc := x.c.srv.UpdatePubSubConfiguration(x.ctx, cc.PubSubConfiguration, cc.RequireCompleteUpdate, cc.ConfigurationReferences)
+	// The records of this change are written at the commit point of the
+	// call, not by the hook (design §4.3, §4.5).
+	own := context.WithValue(x.ctx, ownCallKey{}, true)
+	u, sc := x.c.srv.UpdatePubSubConfiguration(own, cc.PubSubConfiguration, cc.RequireCompleteUpdate, cc.ConfigurationReferences)
 	if sc != ua.StatusOK {
 		out.Result = sc
 		return false
@@ -1185,6 +1285,9 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		if !contains(targetsOf(dr), e.inputs) {
 			return ua.StatusBadNoMatch
 		}
+		if sc := x.checkPersisted(e, true, cid, gid, connID); sc != ua.StatusOK {
+			return sc
+		}
 		readerNode, _ = c.srv.PubSubNodeID(cid)
 		x.setLink(e, true, readerNode, has(refAdd, r), has(refModify, r))
 	}
@@ -1221,11 +1324,56 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 		if !contains(publishedOf(pds), e.outputs) {
 			return ua.StatusBadNoMatch
 		}
+		if sc := x.checkPersisted(e, false, cid, gid, connID); sc != ua.StatusOK {
+			return sc
+		}
 		writerNode, _ = c.srv.PubSubNodeID(cid)
 		x.setLink(e, false, writerNode, has(refAdd, r), has(refModify, r))
 	}
 	if readerNode == nil && writerNode == nil {
 		return ua.StatusBadNotFound
+	}
+	return ua.StatusOK
+}
+
+// checkPersisted runs the persisted check of SetCommunicationConfigurationCmd
+// (Part 81 §6.2.4.3.9.2) on the DataSetReader or DataSetWriter cid of e,
+// its group gid and its PubSubConnection conn: for a persistent endpoint
+// none has NotPersisted TRUE (PC-1; the PublishSubscribe Object has no
+// configuration properties of its own here); with StrictNotPersisted, a
+// non-persistent endpoint's has NotPersisted TRUE (PC-2, of the reader or
+// writer only: §4.9 of the design). Otherwise Bad_InvalidState (PC-3).
+func (x *call) checkPersisted(e *endpoint, reader bool, cid, gid, conn pubsub.ComponentID) ua.StatusCode {
+	rt := x.c.srv.PubSub()
+	var own []*ua.KeyValuePair
+	var parents [][]*ua.KeyValuePair
+	if reader {
+		if r, err := rt.DataSetReaderConfig(cid); err == nil {
+			own = r.DataSetReaderProperties
+		}
+		if g, err := rt.ReaderGroupConfig(gid); err == nil {
+			parents = append(parents, g.GroupProperties)
+		}
+	} else {
+		if w, err := rt.DataSetWriterConfig(cid); err == nil {
+			own = w.DataSetWriterProperties
+		}
+		if g, err := rt.WriterGroupConfig(gid); err == nil {
+			parents = append(parents, g.GroupProperties)
+		}
+	}
+	if cc, err := rt.ConnectionConfig(conn); err == nil {
+		parents = append(parents, cc.ConnectionProperties)
+	}
+	switch {
+	case e.persistent:
+		if notPersisted(own) || slices.ContainsFunc(parents, notPersisted) {
+			return ua.StatusBadInvalidState
+		}
+	case x.c.opts.StrictNotPersisted && x.c.opts.Store != nil:
+		if !notPersisted(own) {
+			return ua.StatusBadInvalidState
+		}
 	}
 	return ua.StatusOK
 }
@@ -1435,7 +1583,7 @@ func (x *call) enableOne(rt *pubsub.PubSub, e *endpoint) ua.StatusCode {
 				return ua.StatusBadInvalidState
 			}
 			if !info.Enabled {
-				if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
+				if err := x.c.change(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
 					return pubsub.StatusCodeOf(err)
 				}
 				x.enabled = append(x.enabled, id)
@@ -1447,6 +1595,10 @@ func (x *call) enableOne(rt *pubsub.PubSub, e *endpoint) ua.StatusCode {
 	if e.cleanupOff {
 		e.cleanupOff = false
 		x.cleanupsOn = append(x.cleanupsOn, e)
+	}
+	if !e.demand {
+		e.demand = true
+		x.demandsOn = append(x.demandsOn, e)
 	}
 	x.c.mu.Unlock()
 	return ua.StatusOK

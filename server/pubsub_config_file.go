@@ -445,6 +445,9 @@ func (f *configFile) reserve(ctx context.Context, ng, nw uint16) (*PubSubIDReser
 		return nil, ua.StatusBadResourceUnavailable
 	}
 	usedG, usedW := f.usedIDsLocked(cfg.Connections)
+	if f.m.s.heldPubSubIDs(usedG, usedW) {
+		return nil, ua.StatusBadResourceUnavailable
+	}
 	take := func(n uint16, used map[uint16]bool) ([]uint16, bool) {
 		out := make([]uint16, 0, n)
 		for range n {
@@ -543,6 +546,7 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 	f.mu.Lock()
 	usedG, usedW := f.usedIDsLocked(old.Connections)
 	f.mu.Unlock()
+	f.m.s.heldPubSubIDs(usedG, usedW)
 	u := newConfigUpdate(file, old, f.defaultPublisherID(old.Connections), usedG, usedW)
 	results := u.run(refs)
 	applied := u.changed && (!require || !u.failed)
@@ -551,12 +555,18 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 		f.beforeReconcile()
 	}
 	if applied {
+		ids := f.m.s.restorerSnapshot(f.m.s.pubsubHook())
 		if err := reconcilePubSubRecord(f.m.rt, u.cfg, func(id pubsub.ComponentID) { created[id] = true }); err != nil {
 			f.m.s.cfg.logger.Warn("pubsub: CloseAndUpdate failed, restoring the configuration", "error", err)
 			if rerr := reconcilePubSub(f.m.rt, old); rerr != nil {
 				f.m.s.cfg.logger.Error("pubsub: restoring the configuration failed", "error", rerr)
 			}
 			return nil, statusOf(err)
+		}
+		if h := f.m.s.pubsubHook(); h != nil {
+			if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: old, ids: ids}); err != nil {
+				return nil, statusOf(err)
+			}
 		}
 		f.mu.Lock()
 		f.releaseUsedLocked(u.cfg.Connections)

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -16,6 +17,7 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
+	"github.com/otfabric/go-opcua/uafx/fxstore"
 )
 
 // ErrConnections reports that the connection Methods cannot be served.
@@ -72,6 +74,28 @@ type ConnectionOptions struct {
 	// and ExitLock are the owner's (OPC 10000-100 §7.5 to §7.7) and the
 	// AccessController's.
 	ControlAuthorizer ControlAuthorizer
+	// Store makes the AutomationComponents of the server support persistent
+	// ConnectionEndpoints (Part 81 §5.5.5, §6.6.2): SupportsPersistence
+	// becomes TRUE, an EstablishConnections with IsPersistent TRUE stores
+	// the endpoint, its control and the PubSub components it references,
+	// and EnableConnections restores them (design
+	// docs/design/uafx-persistent-connections.md §4). A store that cannot
+	// be opened, has another owner or a newer format fails
+	// EnableConnections. nil: IsPersistent TRUE fails with
+	// Bad_NotSupported.
+	Store fxstore.Store
+	// StoreTimeout bounds each store operation; 0 is 10 s.
+	StoreTimeout time.Duration
+	// StrictNotPersisted enforces the persisted check of
+	// SetCommunicationConfigurationCmd for non-persistent endpoints (Part 81
+	// §6.2.4.3.9.2): their DataSetReader or DataSetWriter needs
+	// 0:NotPersisted TRUE (Part 14 §6.2.2 Table 4), else Bad_InvalidState.
+	// It is off by default, a documented deviation (LIMITATIONS.md): a
+	// component without the property is persisted by Part 14's default,
+	// which few configurations state. The check for persistent endpoints
+	// (no NotPersisted TRUE on the component or its parents) always runs.
+	// It applies with a Store only.
+	StrictNotPersisted bool
 	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
 	maxControlled int
 	// Logger logs what the connections do; nil is slog.Default().
@@ -91,8 +115,10 @@ type ConnectionOptions struct {
 // writes and calls the Locks forbid with Bad_Locked, with a [server.Guard]
 // that EnableConnections adds to the server when there are ControlGroups.
 //
-// Persistent ConnectionEndpoints (IsPersistent, SupportsPersistence) are
-// not supported: they fail with Bad_NotSupported.
+// With a Store (ConnectionOptions.Store) it supports persistent
+// ConnectionEndpoints (IsPersistent, SupportsPersistence, Part 81 §5.5.5,
+// §6.6.2): it stores them and restores them when EnableConnections runs
+// again after a restart. Without one they fail with Bad_NotSupported.
 type Connections struct {
 	srv  *server.Server
 	ns   Namespaces
@@ -125,9 +151,18 @@ type Connections struct {
 	// beforeUpdate, when set by a test, runs in SetCommunicationConfigurationCmd
 	// right before the PubSub configuration is applied; guarded by mu.
 	beforeUpdate func()
+	// afterChange, when set by a test, runs after each PubSub transaction
+	// of change with its result, outside the transaction; guarded by mu.
+	afterChange func(error)
 	// retryCleanup is the shortest time after which a failed cleanup is
 	// tried again; guarded by mu.
 	retryCleanup time.Duration
+
+	// pers keeps the persistent endpoints; nil without a Store.
+	pers *persistence
+	// crash, when set by a test, runs at the points of the persistence
+	// protocols.
+	crash atomic.Pointer[func(string)]
 }
 
 // pubsubOps are the operations of the PubSub runtime that close
@@ -178,6 +213,12 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	c.ops = pubsubOps{disable: rt.Disable, removeReader: rt.RemoveDataSetReader, removeWriter: rt.RemoveDataSetWriter,
 		removeGroup: rt.RemoveGroup, removeConnection: rt.RemoveConnection, removePDS: rt.RemovePublishedDataSet}
 	c.created = map[pubsub.ComponentID]bool{}
+	if opts.Store != nil {
+		// Before any node is created: the records reserve their NodeIds.
+		if err := c.openPersistence(); err != nil {
+			return nil, err
+		}
+	}
 	for _, ref := range c.children(ua.NewNumericNodeID(ns.Data, fxRootID), id.Organizes) {
 		n := ref.NodeID.NodeID
 		if !c.isA(n, fxacid.AutomationComponentType) {
@@ -210,11 +251,20 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	}
 	for _, ac := range c.acs {
 		for _, fe := range c.functionalEntities(ac) {
-			c.adopt(fe)
+			c.adopt(ac, fe)
 		}
 	}
 	if err := c.setupControls(); err != nil {
 		return nil, err
+	}
+	if c.pers != nil {
+		// Restore, then announce SupportsPersistence, then follow the
+		// other configuration mechanisms (design §4.1, §4.5).
+		c.restoreAll()
+		if err := c.setSupportsPersistence(); err != nil {
+			return nil, fmt.Errorf("%w: SupportsPersistence: %w", ErrConnections, err)
+		}
+		srv.SetPubSubConfigurationHook(c.pers)
 	}
 	c.refreshAll()
 	go c.monitor()
@@ -275,7 +325,12 @@ const fxRootID = 71
 
 // Close stops the Status updates. The Methods stay registered.
 func (c *Connections) Close() error {
-	c.once.Do(func() { close(c.stop) })
+	c.once.Do(func() {
+		close(c.stop)
+		if c.pers != nil {
+			c.srv.SetPubSubConfigurationHook(nil)
+		}
+	})
 	<-c.done
 	return nil
 }
@@ -512,7 +567,8 @@ func (c *Connections) newNodeID(ns uint16) *ua.NodeID {
 		c.nextID++
 		n := ua.NewStringNodeID(ns, fmt.Sprintf("uafx-ce-%d", c.nextID))
 		c.mu.Unlock()
-		if c.node(n) == nil {
+		// A NodeId a persistent record holds is not taken (design §4.7).
+		if c.node(n) == nil && (c.pers == nil || !c.pers.reserved(n, nil, "")) {
 			return n
 		}
 	}

@@ -93,6 +93,20 @@ func (s *Server) unregisterMethod(objectID, methodID *ua.NodeID) {
 	s.mu.Unlock()
 }
 
+// BuildPubSubModel publishes the PubSub runtime in the address space now,
+// as Start does: the PublishSubscribe Object, its Methods and the Objects
+// of the components, which then have their NodeIds ([Server.PubSubNodeID]).
+// An application that needs those NodeIds before Start (a companion
+// specification that restores References to components, as the persistent
+// ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the
+// model again. It needs a server with a PubSub runtime (WithPubSub).
+func (s *Server) BuildPubSubModel() error {
+	if s.PubSub() == nil {
+		return fmt.Errorf("server: pubsub: no runtime: %w", s.ps.err)
+	}
+	return s.buildPubSubModel()
+}
+
 // buildPubSubModel publishes the runtime in the address space.
 func (s *Server) buildPubSubModel() error {
 	s.ps.mu.Lock()
@@ -770,7 +784,16 @@ func (m *pubsubModel) change(name string, f func(ctx context.Context, obj *ua.No
 	return m.method(name, func(ctx context.Context, obj *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		m.s.ps.txn.Lock()
 		defer m.s.ps.txn.Unlock()
-		return f(ctx, obj, args)
+		h := m.s.pubsubHook()
+		if h == nil {
+			return f(ctx, obj, args)
+		}
+		before, ids := m.rt.Configuration(), m.s.restorerSnapshot(h)
+		out, sc := f(ctx, obj, args)
+		if err := m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: before, ids: ids}); err != nil {
+			return nil, statusOf(err)
+		}
+		return out, sc
 	})
 }
 

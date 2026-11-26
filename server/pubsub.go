@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -36,6 +37,8 @@ type pubsubState struct {
 	// ChangePubSubConfiguration, so that none of them is lost in between
 	// (Part 14 §9.1.3.7.4).
 	txn sync.Mutex
+	// hook follows the changes made in txn (SetPubSubConfigurationHook).
+	hook atomic.Pointer[pubsubHookBox]
 
 	evMu   sync.Mutex
 	evSubs map[*pubsubEventSub]struct{}

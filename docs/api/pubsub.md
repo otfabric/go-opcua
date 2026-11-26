@@ -1319,6 +1319,9 @@ WithTransportConfig adds a hook that completes the transport configuration of a 
 ```go
 type PubSub struct {
 
+	// gates are the restart gates of SecurityGroups (GateSecurityGroup),
+	// guarded by ksMu.
+
 	// pending are the callbacks (events, handlers, target writes, event
 	// subscriptions) collected under mu; unlock runs them after releasing
 	// it, in order.
@@ -1493,13 +1496,21 @@ func (p *PubSub) Enable(id ComponentID) error
 
 Enable enables a component (or, with Root, the runtime). Like the Enable method of the PubSubStatusType it fails with Bad\_InvalidState if the component is not Disabled.
 
+#### func (PubSub) GateSecurityGroup
+
+```go
+func (p *PubSub) GateSecurityGroup(securityGroupID string)
+```
+
+GateSecurityGroup sets the restart gate of a SecurityGroup: from now on its writer groups secure messages, and its reader groups accept them, only with a key it saw coming before it became current (see the package documentation of the gate in keygate.go). An application that restores secured groups after a restart, as the persistent ConnectionEndpoints of OPC UA FX do, sets it before it enables them. The gate stays for the life of the runtime; setting it again does nothing.
+
 #### func (PubSub) KeySource
 
 ```go
 func (p *PubSub) KeySource(securityGroupID string) security.KeySource
 ```
 
-KeySource returns the keys of a SecurityGroup, nil if none are known.
+KeySource returns the keys of a SecurityGroup, nil if none are known. The KeySource of a gated SecurityGroup (GateSecurityGroup) gives only the keys the gate allows.
 
 #### func (PubSub) Lookup
 
@@ -1607,6 +1618,14 @@ func (p *PubSub) Running() bool
 
 Running reports whether the runtime was started and is not stopped.
 
+#### func (PubSub) SecurityGroupGate
+
+```go
+func (p *PubSub) SecurityGroupGate(securityGroupID string) (gated, open bool)
+```
+
+SecurityGroupGate reports whether the SecurityGroup has a restart gate and whether it is open (a fresh key became current).
+
 #### func (PubSub) SetActionHandler
 
 ```go
@@ -1629,7 +1648,7 @@ SetDiagnosticsLevel sets the DiagnosticsLevel of the diagnostics object of a com
 func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource)
 ```
 
-SetKeySource sets (or, with nil, removes) the keys of a SecurityGroup at run time, for example when a Security Key Service pushes new keys.
+SetKeySource sets (or, with nil, removes) the keys of a SecurityGroup at run time, for example when a Security Key Service pushes new keys. The restart gate of the SecurityGroup (GateSecurityGroup) stays; it forgets the future keys it saw from the old source.
 
 #### func (PubSub) Start
 
