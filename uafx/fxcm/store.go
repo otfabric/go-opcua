@@ -807,6 +807,13 @@ func (p *persistence) follow() bool {
 			return false
 		}
 	}
+	var events []Event
+	defer func() {
+		// After m.mu is released (deferred later, run first).
+		for _, e := range events {
+			m.observe(e)
+		}
+	}()
 	var gen uint64
 	for _, r := range l.sets {
 		gen = max(gen, r.Generation)
@@ -818,6 +825,22 @@ func (p *persistence) follow() bool {
 		k := setStoreKey(s.cfg.key)
 		r := l.sets[k]
 		s.mu.Lock()
+		if pc := s.pending; pc != nil {
+			s.pending = nil
+			if r != nil && r.Generation == pc.gen && string(r.Fingerprint) == string(pc.fp) {
+				// The commit landed: its Version is the set's and the
+				// edit it committed ends, exactly once (§6.7.4).
+				s.cfg, s.gen, s.fp = pc.cfg, pc.gen, pc.fp
+				s.diags = remapDiagnostics(s.diags, pc.cfg)
+				if s.edit.edit == pc.edit {
+					s.edit.edit = nil
+				}
+				events = append(events, Event{Kind: EventCommitted, Set: pc.cfg.key, Version: pc.cfg.version})
+				s.mu.Unlock()
+				continue
+			}
+			// It did not land: the edit stays open.
+		}
 		switch {
 		case r == nil:
 			if p.failed[k] == nil {
@@ -985,13 +1008,14 @@ func (p *persistence) checkKey(key SetKey) error {
 	return nil
 }
 
-// checkRemote refuses an operation on the set key that calls its
-// AutomationComponents (a Process action, a Replace or a Remove) while a
-// record that is not valid could be of it, or while it owes work the
-// operation could bypass (design §6.3): every operation but the closes of
-// KnownOwned endpoints (closeOnly: DisableConnections, RemoveConnections,
-// Reconcile), which never touch an Unverified or Unresolved endpoint.
-func (p *persistence) checkRemote(key SetKey, closeOnly bool) error {
+// checkRemote refuses an operation on the set key that acts on its
+// endpoints (a run of any action, a Replace, a Remove, an Update, a
+// Settle) while a record that is not valid could be of it, or while it
+// owes work (design §6.3). Closes are refused too: whether a close
+// conflicts with the obligation (the evidence of an unproven call, a
+// component it shares, a pending set change) is what recovery proves
+// (stage C3.3), so C3.2 refuses it.
+func (p *persistence) checkRemote(key SetKey) error {
 	ks := keyString(key)
 	p.mu.Lock()
 	all, blocked := p.blockedAll, p.blockedSets[ks]
@@ -1004,7 +1028,7 @@ func (p *persistence) checkRemote(key SetKey, closeOnly bool) error {
 		return managerError(ua.StatusBadInvalidState, "the store holds a record that is not valid: %s", all)
 	case blocked != "":
 		return managerError(ua.StatusBadInvalidState, "the store holds a record of the set %s that is not valid: %s", key, blocked)
-	case len(owed) > 0 && !closeOnly:
+	case len(owed) > 0:
 		return managerError(ua.StatusBadInvalidState, "the set %s owes %v of run %d (recovery, stage C3.3)", key, owed[0].Kind, owed[0].Run)
 	}
 	return nil
@@ -1036,7 +1060,9 @@ func (p *persistence) putConfig(cfg *Config) (uint64, []byte, error) {
 		return 0, nil, storeError(fxstore.NotCommitted, err)
 	}
 	if o, err := p.apply(b, gen); o != fxstore.Committed {
-		return 0, nil, storeError(o, err)
+		// The generation and fingerprint stay the caller's evidence of
+		// a write with an unknown outcome.
+		return gen, fp, storeError(o, err)
 	}
 	return gen, fp, nil
 }

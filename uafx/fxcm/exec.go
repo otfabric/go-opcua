@@ -1124,7 +1124,12 @@ func (x *run) reserve(ctx context.Context, a *acRun) {
 	res, err, unknown := x.call(ctx, a, req)
 	switch {
 	case unknown:
-		// Ids are released with the session (CL-2); nothing was created.
+		// Ids are released with the session (CL-2); nothing was created,
+		// so the intent owes nothing, unless the call had a command with
+		// durable effects (second C3.2 review).
+		if !sessionScoped(req.CommandMask) {
+			x.retain(a.lastIntent)
+		}
 		x.failAC(a, failure(uafx.FxErrorReserveCommunicationIDsError, failureOf(err, uafx.FxErrorReserveCommunicationIDsError).Status, "%v", err))
 		return
 	case err != nil:
@@ -1149,6 +1154,14 @@ func (x *run) reserve(ctx context.Context, a *acRun) {
 		return
 	}
 	a.defaultPublisherID = rr.DefaultPublisherID
+}
+
+// sessionScoped reports whether the commands of mask change nothing that
+// outlives the session: ReserveCommunicationIdsCmd (released with the
+// session, CL-2) and the verifications (§6.2.4.3.2, §6.2.4.3.3). A call of
+// only those owes no recovery when its outcome is unknown.
+func sessionScoped(mask uafx.FxCommandMask) bool {
+	return mask != 0 && mask&^(uafx.ReserveCommunicationIDsCmd|uafx.VerifyAssetCmd|uafx.VerifyFunctionalEntityCmd) == 0
 }
 
 // bad reports whether st is a Bad StatusCode (OPC 10000-4 §7.39).
@@ -1342,6 +1355,26 @@ func (x *run) configure(ctx context.Context, a *acRun) {
 		}
 		ok := x.configured(a, chunk, req, res)
 		x.evidence(ctx, a.t, a, chunk)
+		if !ok && x.store() != nil {
+			// A partial outcome (decision C3-D13 as reviewed): a
+			// definite failure of one operation does not prove that the
+			// others had no effect. The Names of the call without an
+			// endpoint record of this run are browsed again; the intent
+			// stays unless each is proven.
+			var unproven []*epRun
+			for _, ep := range chunk {
+				x.s.mu.Lock()
+				rec := x.s.records[recordKey(a.addr, ep.fe, ep.e.conf.Name)]
+				mine := rec != nil && rec.Run == x.r.id
+				x.s.mu.Unlock()
+				if !mine {
+					unproven = append(unproven, ep)
+				}
+			}
+			if !x.reprove(ctx, a.t, a, unproven, func(*epRun) bool { return false }) {
+				x.retain(a.lastIntent)
+			}
+		}
 		if !ok {
 			x.stopRest(chunks[ci+1:])
 			return
@@ -1633,7 +1666,9 @@ func (x *run) configured(a *acRun, chunk []*epRun, req *uafx.EstablishConnection
 		return false
 	}
 	for i, ep := range chunk {
-		if i >= len(results) || results[i] == nil || results[i].ConnectionEndpointID == nil {
+		// A null NodeId is no NodeId: the encoding has no absent one
+		// (Part 6 §5.2.2.9).
+		if i >= len(results) || results[i] == nil || orNil(results[i].ConnectionEndpointID) == nil {
 			x.fail(ep, Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadUnexpectedError})
 			failed = true
 			continue
@@ -1727,17 +1762,34 @@ func (x *run) lostResponse(ctx context.Context, a *acRun, chunk []*epRun, mask u
 		t = &target{addr: a.addr, sess: sess, cache: x.m.res.of(a.addr)}
 		derr = t.open(cctx)
 	}
-	if derr == nil {
-		x.identify(cctx, t)
-	}
-	for _, ep := range chunk {
-		if derr != nil {
-			// Not checked: unresolved until a Reconcile or a run checks it.
+	if derr != nil {
+		// Not checked: unresolved until a Reconcile or a run checks it.
+		for _, ep := range chunk {
 			x.remember(a, ep, nil, Unresolved)
-			proven = false
-			continue
 		}
-		found, err := observeName(cctx, t, ep.fe, ep.e.conf.Name, ep.param.RelatedEndpoint)
+		proven = false
+		return
+	}
+	x.identify(cctx, t)
+	// Absent proves nothing after an ambiguous result: an
+	// AutomationComponent whose store had an unknown outcome may restore
+	// the endpoint (C3-D13); library interpretation: nor after a lost
+	// response, for a persistent endpoint.
+	if !x.reprove(cctx, t, a, chunk, func(ep *epRun) bool { return ambiguous || ep.e.conf.IsPersistent }) {
+		proven = false
+	}
+}
+
+// reprove browses the FunctionalEntities of t for the Names of eps, whose
+// calls did not prove what they did, and records what it finds as
+// ResolveLostResponse classifies it. A Name that is not found is proven
+// absent unless holdAbsent says absence proves nothing for it: then it is
+// held, Unresolved. It reports whether every Name was proven: found and
+// classified other than Unresolved, or proven absent.
+func (x *run) reprove(ctx context.Context, t *target, a *acRun, eps []*epRun, holdAbsent func(*epRun) bool) bool {
+	proven := true
+	for _, ep := range eps {
+		found, err := observeName(ctx, t, ep.fe, ep.e.conf.Name, ep.param.RelatedEndpoint)
 		if err != nil {
 			x.remember(a, ep, nil, Unresolved)
 			proven = false
@@ -1745,16 +1797,11 @@ func (x *run) lostResponse(ctx context.Context, a *acRun, chunk []*epRun, mask u
 		}
 		lr := LostResponse{AbsentBefore: ep.obs == nil, Serialized: true, Preconfigured: ep.e.conf.IsPreconfigured, Found: found}
 		if ep.e.conf.IsPreconfigured && len(found) == 1 {
-			lr.RelatedEndpointOurs = x.relatedIsOurs(cctx, t, found[0].NodeID, ep.param.RelatedEndpoint)
+			lr.RelatedEndpointOurs = x.relatedIsOurs(ctx, t, found[0].NodeID, ep.param.RelatedEndpoint)
 		}
 		class, absent := ResolveLostResponse(lr, x.m.opts.ApplicationURI, x.m.opts.ExclusiveApplicationURI)
 		switch {
-		case absent && (ambiguous || ep.e.conf.IsPersistent):
-			// Absent now proves nothing: an AutomationComponent whose
-			// store had an unknown outcome may restore it (C3-D13;
-			// library interpretation: so may one whose response was
-			// lost, for a persistent endpoint). The Name is held,
-			// Unresolved.
+		case absent && holdAbsent(ep):
 			x.remember(a, ep, nil, Unresolved)
 			proven = false
 			continue
@@ -1765,9 +1812,8 @@ func (x *run) lostResponse(ctx context.Context, a *acRun, chunk []*epRun, mask u
 		}
 		x.remember(a, ep, found[0].NodeID, class)
 	}
-	if derr == nil {
-		x.evidence(cctx, t, a, chunk)
-	}
+	x.evidence(ctx, t, a, eps)
+	return proven
 }
 
 // inconclusive returns an error wrapping errAmbiguous when the result res
@@ -1818,7 +1864,7 @@ func inconclusive(res *uafx.EstablishConnectionsResult, n int, comm, create bool
 	}
 	if create && res.Status == ua.StatusGood && !failed {
 		for _, r := range res.ConnectionEndpointConfigurationResults {
-			if r.ConnectionEndpointID == nil {
+			if orNil(r.ConnectionEndpointID) == nil {
 				return why(ua.StatusBadUnexpectedError, "a created endpoint without its NodeId")
 			}
 		}

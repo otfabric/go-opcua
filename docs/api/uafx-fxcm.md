@@ -548,7 +548,7 @@ type IdentifiedSession interface {
 }
 ```
 
-IdentifiedSession is a Session that knows the identity of its server. The sessions of ClientDialer are. Of another Session the Manager reads the ApplicationUri from Server.ServerArray (OPC 10000-5 §6.3.1), and has no thumbprint.
+IdentifiedSession is a Session that knows the identity of its server. The sessions of ClientDialer are. Of another Session the Manager reads the ApplicationUri from Server.ServerArray (OPC 10000-5 §6.3.1): the identity the server reports, never authenticated, with no thumbprint. The records keep which of the two they have (design §6.5); certificate evidence that is unavailable is recorded as such, not left out.
 
 ### type LockOwner
 
@@ -1277,6 +1277,13 @@ type ServerIdentity struct {
 	// the server (OPC 10000-6 §6.7.4) over a secured channel, nil over
 	// SecurityMode None.
 	CertificateThumbprint []byte
+	// Authenticated reports that CertificateThumbprint is of the
+	// certificate the secure channel was opened with, whose private key
+	// the server proved it holds (OPC 10000-6 §6.7.4: the
+	// OpenSecureChannel response is signed with it), and that
+	// ApplicationURI is bound to it. Without it the identity is what the
+	// server reported, which is evidence but not proof.
+	Authenticated bool
 }
 ```
 

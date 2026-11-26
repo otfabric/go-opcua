@@ -71,7 +71,11 @@ jobs:
   # AutomationComponent servers, and importing the UAFX NodeSets takes
   # about 1.2 s per server under the race detector (0.1 s without).
   # uafx/fxserver too (#50): it took 96 to 114 s of the 120 s beside the
-  # other packages and went over with the ConnectionManager tests.
+  # other packages and went over with the ConnectionManager tests. The race
+  # run takes the three one at a time (-p 1): side by side on a two-CPU
+  # runner the durable ConnectionManager tests of uafx/fxcm starved
+  # uafx/fxserver past its 5 minutes and the 1 s session timeout test of
+  # server (#55). The coverage run of coverage-merged does the same.
   server:
     name: ${{ matrix.race && 'Race' || 'Test' }} server (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
@@ -99,7 +103,7 @@ jobs:
         run: go test -count=1 -timeout=120s ./server ./uafx/fxcm ./uafx/fxserver
       - name: Race test
         if: ${{ matrix.race }}
-        run: go test -count=1 -timeout=5m -race ./server ./uafx/fxcm ./uafx/fxserver
+        run: go test -count=1 -p 1 -timeout=5m -race ./server ./uafx/fxcm ./uafx/fxserver
 
   # The shared coverage job no longer runs the tests of the server and
   # uafx/fxcm packages, so this job runs them with the same -coverpkg, merges the profile into the
@@ -123,7 +127,7 @@ jobs:
         env:
           # Must match coverpkg of the ci job.
           COVERPKG: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
-        run: go test -count=1 -timeout=120s -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=server.out ./server ./uafx/fxcm ./uafx/fxserver
+        run: go test -count=1 -p 1 -timeout=120s -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=server.out ./server ./uafx/fxcm ./uafx/fxserver
       - name: Download the shared coverage profile
         uses: actions/download-artifact@v7
         with:

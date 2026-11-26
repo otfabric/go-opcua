@@ -1045,8 +1045,13 @@ the store committed (`StoreStatus().Reconciling` until then; memory
 follows once no set is being processed, replaced or removed and no Add
 holds the key of a stored set). A write that landed is then the
 Manager's state, one that did not is not, and the generations it would
-have used are never handed out again. A commit that fails leaves the edit
-open, also one whose Version landed: a commit again is a new Version.
+have used are never handed out again. A commit that definitely did not
+commit leaves the edit open. One whose outcome is unknown keeps the edit
+and what it committed: until the Manager has followed the store, a
+CommitUpdates or DiscardUpdates of it is `Bad_InvalidState`; when the
+store shows the commit, its Version is the set's and the edit ends,
+exactly once (a CommitUpdates again finds no edit and makes no Version);
+when it does not, the edit stays open.
 `Replace`, `Remove` and an `Update` with complete TRUE that closes sets
 first write the whole change, with the generations it reserves, as the
 set change of the first run that closes (a `tx/` record); the switch to
@@ -1075,10 +1080,16 @@ rollback-required phase before its first close; when that write fails it
 sends no close and the rollback is owed.
 
 **Evidence** (design §6.5). An endpoint record, written when its step
-completes, holds the identity of the server (the ApplicationUri the
-session reported, the SHA-1 thumbprint of its certificate when the channel
-is secured, OPC 10000-6 §6.7.4; a `Session` that is no
-`IdentifiedSession` is read Server.ServerArray[0]), its NamespaceArray,
+completes, holds the identity of the server in three parts that are not
+taken for each other: the configured one (the ServerAddress), the
+ApplicationUri the server reported, and, when the channel is secured,
+the SHA-1 thumbprint of the certificate it was opened with (OPC 10000-6
+§6.7.4), with where the identity comes from: authenticated (the peer of
+the secure channel, `ServerIdentity.Authenticated`, as the sessions of
+`ClientDialer` report), reported (a `Session` that is no
+`IdentifiedSession` is read Server.ServerArray[0], which is no proof), or
+unavailable. Missing certificate evidence is recorded as missing; C3.3
+must not take a reported identity for an authenticated one. It holds its NamespaceArray,
 the AutomationComponent, FunctionalEntity and endpoint NodeIds qualified
 by namespace URI, the ConnectionManagerApplicationUri and the Diagnostics
 CreationTime read from the endpoint (§6.6.2 Table 74; what the
@@ -1103,18 +1114,28 @@ endpoint without its NodeId). After such a result, or after a lost
 response for a persistent endpoint, an endpoint the Manager does not find
 is not proven absent (an AutomationComponent whose store had an unknown
 outcome may restore it) and its Name stays Unresolved.
-Bad_ResourceUnavailable is a definite failure: from a persistent
-AutomationComponent (C3.1) it means its store did not commit and the call
-was undone. ReserveCommunicationIds reserves for the session only (CL-2)
-and owes nothing.
+Bad_ResourceUnavailable is a definite failure of its operation: from a
+persistent AutomationComponent (C3.1) it means its store did not commit
+and the call was undone. A definite failure of one operation does not
+prove that the call had no other effect: after a call that reports a
+failure, each Name of it that has no endpoint record of the run is
+browsed again; one found is recorded as ResolveLostResponse classifies
+it, and the intent stays unless every Name was proven (found and proven
+ours or foreign, or absent). A call of only ReserveCommunicationIds and
+the verifications reserves for the session (CL-2) and owes nothing; any
+other command in the call keeps the rule. A null NodeId in a result is
+no NodeId.
 
 **Owed work is enforced** (design §6.3). While the journal owes work for
-a set, the Manager refuses what would create, take or forget an endpoint
-of it: an establish (`Process`), `Replace`, `Remove` and an `Update` that
-names it are `Bad_InvalidState`. A close is allowed: RemoveConnections
-and `Reconcile` run. The Names of an establish intent that did not end
-are held by Unverified records without a NodeId, after a restart and in
-the running Manager, so that no run creates an endpoint under them.
+a set, the Manager refuses everything that acts on its endpoints: every
+`Process` action (closes included), `Reconcile`, `Replace`, `Remove`, an
+`Update` that names it and `Settle` are `Bad_InvalidState`. A close or a
+verdict could invalidate the evidence of an unproven call, a component
+it shares or a pending set change; proving that it cannot is recovery
+(C3.3), so C3.2 refuses it. The Names of an establish intent that did
+not end are held by Unverified records without a NodeId, after a restart
+and in the running Manager, so that no run creates an endpoint under
+them.
 
 **Records are validated** (design §3.2, §6.1). A record that decodes but
 is not valid — its key does not match its content, a generation or RunID

@@ -4,6 +4,7 @@ package fxcm
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"slices"
@@ -192,6 +193,26 @@ type set struct {
 	// record of cfg, with a Store (design §6.1).
 	gen uint64
 	fp  []byte
+	// pending is a commit whose write had an unknown outcome, until the
+	// Manager has followed the store.
+	pending *pendingCommit
+}
+
+// pendingCommit is the commit of the edit edit as cfg, written at
+// generation gen with fingerprint fp, whose outcome is unknown: when the
+// store shows it, the edit ends with that Version; otherwise it stays
+// open.
+type pendingCommit struct {
+	cfg  *Config
+	gen  uint64
+	fp   []byte
+	edit *Edit
+}
+
+// errCommitPending refuses a change of an edit whose commit is being
+// settled.
+func errCommitPending(key SetKey) error {
+	return managerError(ua.StatusBadInvalidState, "the outcome of the commit of the set %s is being settled", key)
 }
 
 // record is an EndpointRecord with what closing the endpoint needs.
@@ -647,7 +668,7 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 // ua.StatusBadShutdown.
 func (m *Manager) claim(key SetKey) (*set, error) {
 	if m.p != nil {
-		if err := m.p.checkRemote(key, false); err != nil {
+		if err := m.p.checkRemote(key); err != nil {
 			return nil, err
 		}
 	}
@@ -1234,10 +1255,11 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 		return Started{Err: managerError(ua.StatusBadNotSupported, "the action %v", action)}
 	}
 	if m.p != nil {
-		// Owed work of the journal blocks what would act on its
-		// endpoints, except a close (design §6.3, stage C3.3 settles it).
-		closeOnly := action == ActionReconcile || action == uafx.ActionRemoveConnections
-		if err := m.p.checkRemote(k, closeOnly); err != nil {
+		// Owed work of the journal blocks every run of its set, closes
+		// included: a close could invalidate the evidence of an
+		// unproven call, a component it shares or a pending set change,
+		// and proving it cannot is recovery (design §6.3, stage C3.3).
+		if err := m.p.checkRemote(k); err != nil {
 			return Started{Err: err}
 		}
 	}
@@ -1313,6 +1335,14 @@ const (
 func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error {
 	if verdict != SettleOwned && verdict != SettleForeign {
 		return managerError(ua.StatusBadInvalidArgument, "the verdict %d", verdict)
+	}
+	if m.p != nil {
+		// A verdict while the set owes work could contradict the
+		// evidence of an unproven call (design §6.3): refused until
+		// recovery (stage C3.3).
+		if err := m.p.checkRemote(key); err != nil {
+			return err
+		}
 	}
 	s := m.lookup(key)
 	if s == nil {
@@ -1396,6 +1426,9 @@ func (m *Manager) CommitEdit(key SetKey, owner LockOwner) (*Config, bool, error)
 func (m *Manager) commitLocked(s *set, owner LockOwner) (*Config, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.pending != nil {
+		return nil, false, errCommitPending(s.cfg.key)
+	}
 	e := s.edit.Editing()
 	if e != nil && e.owner == owner {
 		if next, err := newConfig(e.work, s.cfg.version+1); err == nil {
@@ -1417,6 +1450,11 @@ func (m *Manager) commitLocked(s *set, owner LockOwner) (*Config, bool, error) {
 		gen, fp, err := m.p.putConfig(cfg)
 		if err != nil {
 			s.edit.edit = open
+			if errors.Is(err, ua.StatusBadInternalError) {
+				// Unknown: the edit and what it committed are kept
+				// until the Manager has followed the store.
+				s.pending = &pendingCommit{cfg: cfg, gen: gen, fp: fp, edit: open}
+			}
 			return nil, false, err
 		}
 		s.gen, s.fp = gen, fp
@@ -1447,6 +1485,10 @@ func (m *Manager) DiscardEdit(key SetKey, owner LockOwner) (bool, error) {
 		return false, managerError(ua.StatusBadNodeIDUnknown, "no set %s", key)
 	}
 	s.mu.Lock()
+	if s.pending != nil {
+		s.mu.Unlock()
+		return false, errCommitPending(key)
+	}
 	ok, err := s.edit.Discard(owner)
 	s.mu.Unlock()
 	if ok {

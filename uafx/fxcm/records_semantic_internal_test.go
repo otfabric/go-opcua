@@ -288,3 +288,76 @@ func TestRecordChecks(t *testing.T) {
 		}
 	}
 }
+
+// identified is a Session that reports id.
+type identified struct {
+	offlineSession
+	id ServerIdentity
+}
+
+func (s identified) ServerIdentity() ServerIdentity { return s.id }
+
+// serverArray is a Session whose Server.ServerArray is uris.
+type serverArray struct {
+	offlineSession
+	uris []string
+}
+
+func (s serverArray) Read(context.Context, *ua.ReadRequest) (*ua.ReadResponse, error) {
+	return &ua.ReadResponse{Results: []*ua.DataValue{{Value: ua.MustVariant(s.uris), Status: ua.StatusOK}}}, nil
+}
+
+// TestIdentitySources (design §6.5, second C3.2 review): the evidence of
+// a server says where its identity comes from: the peer of a secured
+// channel (authenticated), what the server reported, or nothing; a
+// thumbprint that is not of the channel is never taken for proof.
+func TestIdentitySources(t *testing.T) {
+	t.Parallel()
+	thumb := make([]byte, thumbprintSize)
+	secured := ServerAddress{Address: "opc.tcp://x", SecurityMode: ua.MessageSecurityModeSignAndEncrypt}
+	insecure := ServerAddress{Address: "opc.tcp://x", SecurityMode: ua.MessageSecurityModeNone}
+	for _, tc := range []struct {
+		name string
+		addr ServerAddress
+		sess Session
+		want serverEvidence
+	}{
+		{"authenticated", secured, identified{id: ServerIdentity{ApplicationURI: "urn:s", CertificateThumbprint: thumb, Authenticated: true}},
+			serverEvidence{ApplicationURI: "urn:s", Secured: true, Thumbprint: thumb, Source: identityAuthenticated}},
+		{"thumbprint not of the channel", secured, identified{id: ServerIdentity{ApplicationURI: "urn:s", CertificateThumbprint: thumb}},
+			serverEvidence{ApplicationURI: "urn:s", Secured: true, Thumbprint: thumb, Source: identityReported}},
+		{"authenticated over None", insecure, identified{id: ServerIdentity{ApplicationURI: "urn:s", CertificateThumbprint: thumb, Authenticated: true}},
+			serverEvidence{ApplicationURI: "urn:s", Thumbprint: thumb, Source: identityReported}},
+		{"nothing reported", secured, identified{}, serverEvidence{Secured: true}},
+		{"ServerArray", secured, serverArray{uris: []string{"urn:s"}}, serverEvidence{ApplicationURI: "urn:s", Secured: true, Source: identityReported}},
+		{"ServerArray empty", insecure, serverArray{}, serverEvidence{}},
+		{"Read fails", insecure, offlineSession{}, serverEvidence{}},
+	} {
+		tg := &target{addr: tc.addr, sess: tc.sess}
+		tg.identify(context.Background())
+		tg.identify(context.Background()) // once
+		assert.Equal(t, tc.want, tg.server, tc.name)
+		assert.NoError(t, tg.server.check(), tc.name)
+	}
+	for _, bad := range []serverEvidence{
+		{Source: 3},
+		{Source: identityAuthenticated, Thumbprint: thumb},
+		{Source: identityAuthenticated, Secured: true, Thumbprint: []byte{1}},
+		{ApplicationURI: "urn:s"},
+	} {
+		assert.ErrorIs(t, bad.check(), errRecord, "%+v", bad)
+	}
+}
+
+// TestSessionScoped: only reservations and verifications are exempt from
+// recovery obligations (second C3.2 review).
+func TestSessionScoped(t *testing.T) {
+	t.Parallel()
+	assert.True(t, sessionScoped(uafx.ReserveCommunicationIDsCmd))
+	assert.True(t, sessionScoped(uafx.ReserveCommunicationIDsCmd|uafx.VerifyAssetCmd))
+	assert.False(t, sessionScoped(0))
+	for _, c := range []uafx.FxCommandMask{uafx.CreateConnectionEndpointCmd, uafx.EstablishControlCmd, uafx.SetConfigurationDataCmd,
+		uafx.ReassignControlCmd, uafx.SetCommunicationConfigurationCmd, uafx.EnableCommunicationCmd} {
+		assert.False(t, sessionScoped(uafx.ReserveCommunicationIDsCmd|c), "%v", c)
+	}
+}

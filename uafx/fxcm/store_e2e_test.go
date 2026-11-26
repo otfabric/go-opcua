@@ -232,6 +232,7 @@ func TestStoreJournalE2E(t *testing.T) {
 		// lost write: refused while the store is fenced, its intent stays
 		// too.
 		assert.NotEmpty(t, storedKeys(t, mem, "call/"), "the intent of the call whose outcome was not written stays")
+		accountedFor(t, mem, st)
 		assert.Len(t, storedKeys(t, mem, "run/"), 1, "and so does the run record")
 		require.NoError(t, m.Close())
 

@@ -242,17 +242,28 @@ func TestCrashChild(t *testing.T) {
 	}
 	var mu sync.Mutex
 	seen := 0
+	crashed := false
 	fxcm.SetCrashPoint(f.m, func(p string) {
+		mu.Lock()
+		if crashed {
+			// The process is "dead": calls running in parallel on the
+			// other AutomationComponent must not write past the crash
+			// while the parent has not killed it yet.
+			mu.Unlock()
+			select {}
+		}
 		if p != sc.point {
+			mu.Unlock()
 			return
 		}
-		mu.Lock()
 		n := seen
 		seen++
-		mu.Unlock()
 		if n != sc.nth {
+			mu.Unlock()
 			return
 		}
+		crashed = true
+		mu.Unlock()
 		fmt.Println("FXCMCRASH " + p)
 		_ = os.Stdout.Sync()
 		select {} // until the parent kills the process

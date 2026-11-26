@@ -85,14 +85,20 @@ func (t *target) identify(ctx context.Context) {
 	if is, ok := t.sess.(IdentifiedSession); ok {
 		id := is.ServerIdentity()
 		t.server.ApplicationURI, t.server.Thumbprint = id.ApplicationURI, slices.Clone(id.CertificateThumbprint)
+		switch {
+		case id.Authenticated && t.server.Secured && len(id.CertificateThumbprint) == thumbprintSize:
+			t.server.Source = identityAuthenticated
+		case id.ApplicationURI != "" || len(id.CertificateThumbprint) > 0:
+			t.server.Source = identityReported
+		}
 		return
 	}
 	res, err := t.sess.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{NodeID: ua.NewNumericNodeID(0, id.ServerServerArray), AttributeID: ua.AttributeIDValue}}})
 	if err != nil || len(res.Results) != 1 {
 		return
 	}
-	if uris, ok := dvValue(res.Results[0]).([]string); ok && len(uris) > 0 {
-		t.server.ApplicationURI = uris[0]
+	if uris, ok := dvValue(res.Results[0]).([]string); ok && len(uris) > 0 && uris[0] != "" {
+		t.server.ApplicationURI, t.server.Source = uris[0], identityReported
 	}
 }
 

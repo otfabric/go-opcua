@@ -5,6 +5,7 @@ package fxcm_test
 import (
 	"context"
 	"crypto/sha256"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -110,6 +111,7 @@ func TestStoreEvidenceE2E(t *testing.T) {
 		uris[r.Server.ApplicationURI] = true
 		assert.False(t, r.Server.Secured, key)
 		assert.Empty(t, r.Server.Thumbprint, "no thumbprint without security")
+		assert.Equal(t, fxcm.IdentityReported, r.Server.Source, "reported over SecurityMode None, not authenticated")
 		require.NotEmpty(t, r.Namespaces, key)
 		require.NotNil(t, r.ACNode, key)
 		require.NotNil(t, r.FunctionalEntity, key)
@@ -173,6 +175,28 @@ func TestStoreCompletionConcurrentE2E(t *testing.T) {
 		}
 	}
 	assert.Len(t, storedKeys(t, mem, "call/"), 1, "the intent whose completion failed")
+	accountedFor(t, mem, st)
+}
+
+// accountedFor checks that every endpoint of st the Manager could not
+// prove keeps the evidence of its call: an intent in the store that names
+// it, on its server.
+func accountedFor(t *testing.T, mem fxstore.Store, st fxcm.Status) {
+	t.Helper()
+	calls := stored[fxcm.StoredCall](t, mem, "call/")
+	for _, e := range st.Endpoints {
+		if e.Class != fxcm.Unresolved {
+			continue
+		}
+		found := false
+		for _, c := range calls {
+			if c.Server.ApplicationURI == e.ServerURI && slices.Contains(c.Names, e.Name) {
+				found = true
+				assert.Len(t, c.EndpointFingerprints, len(c.Names), "the intent is whole")
+			}
+		}
+		assert.True(t, found, "the unresolved %s of %s keeps its intent: %+v", e.Name, e.ServerURI, calls)
+	}
 }
 
 // TestStoreFenceFollowE2E (design §3.3, §6.2): a write whose outcome is
@@ -235,12 +259,19 @@ func TestStoreFenceFollowE2E(t *testing.T) {
 			c, _ := m.Config(k)
 			if tc.landed {
 				assert.Equal(t, uint32(2), c.Version(), "the landed Version is the set's")
-				// The edit the client could not see committed stays
-				// open: the client decides (a commit again is a new
-				// Version).
+				// The commit whose acknowledgement was lost ended its
+				// edit, exactly once: CommitUpdates again is no new
+				// Version or generation.
+				g := onlySet(t, mem).Generation
+				_, ok, err := m.CommitEdit(k, "e")
+				require.NoError(t, err)
+				assert.False(t, ok, "the set is not in edit")
+				c, _ = m.Config(k)
+				assert.Equal(t, uint32(2), c.Version())
+				assert.Equal(t, g, onlySet(t, mem).Generation)
 				open, err := m.DiscardEdit(k, "e")
 				require.NoError(t, err)
-				assert.True(t, open)
+				assert.False(t, open)
 			} else {
 				assert.Equal(t, uint32(1), c.Version())
 				_, ok, err := m.CommitEdit(k, "e")
@@ -287,9 +318,9 @@ func TestStoreFenceFollowE2E(t *testing.T) {
 }
 
 // TestStoreOwedEnforcedE2E (design §6.3): a call whose completion was not
-// written owes its intent, live and after a restart: nothing that would
-// create, take or forget an endpoint of its Names runs on the set; a
-// close (RemoveConnections, Reconcile) does. A restarted Manager holds the
+// written owes its intent, live and after a restart: nothing that acts on
+// the endpoints of the set runs, closes (RemoveConnections, Reconcile) and
+// Settle included, until recovery (C3.3). A restarted Manager holds the
 // Names of the intent with Unverified records.
 func TestStoreOwedEnforcedE2E(t *testing.T) {
 	t.Parallel()
@@ -321,12 +352,15 @@ func TestStoreOwedEnforcedE2E(t *testing.T) {
 		_, err := m.Replace(context.Background(), conf)
 		requireInvalidState(t, err)
 		requireInvalidState(t, m.Remove(context.Background(), k))
-		calls := m.Counters().EstablishCallCount
-		r := m.Reconcile(k)
-		require.NoError(t, r.Err, "a close is not blocked")
-		_, err = r.Run.Wait(context.Background())
-		require.NoError(t, err)
-		assert.Equal(t, calls, m.Counters().EstablishCallCount)
+		// Closes and verdicts too: whether they conflict with the
+		// obligation is what recovery proves (C3.3).
+		requireInvalidState(t, m.Reconcile(k).Err)
+		started = m.Process(uafx.ActionRemoveConnections, k)
+		requireInvalidState(t, started[0].Err)
+		for _, e := range st.Endpoints {
+			requireInvalidState(t, m.Settle(k, e.Endpoint, fxcm.SettleForeign))
+		}
+		assert.Zero(t, m.Counters().CloseCallCount, "no close while the set owes work")
 	}
 	check(m)
 	require.NoError(t, m.Close())
@@ -678,12 +712,8 @@ func TestStorePersistentACE2E(t *testing.T) {
 			}
 			_, err = m.Replace(context.Background(), conf)
 			requireInvalidState(t, err)
-			// A Reconcile finds nothing on B, which proves nothing: the
-			// Name stays held.
-			r := m.Reconcile(k)
-			require.NoError(t, r.Err)
-			_, err = r.Run.Wait(context.Background())
-			require.NoError(t, err)
+			// No Reconcile may forget it either.
+			requireInvalidState(t, m.Reconcile(k).Err)
 			st, _ = m.Status(k)
 			assert.True(t, hasName(st, "ToA", fxcm.Unresolved), "%+v", st.Endpoints)
 		})
@@ -697,4 +727,52 @@ func hasName(st fxcm.Status, name string, c fxcm.Ownership) bool {
 		}
 	}
 	return false
+}
+
+// TestStorePartialOutcomeE2E (decision C3-D13, second C3.2 review): a
+// definite failure of an operation does not prove it had no effect. The
+// AutomationComponent created the endpoint but the result says
+// Bad_ResourceUnavailable, without a NodeId: the Manager browses for the
+// Name and finds the endpoint. With ExclusiveApplicationURI that proves it
+// ours (ResolveLostResponse): it is recorded, the rollback closes it and
+// the intent completes. Without, it is Unresolved: reported, never
+// closed, the intent and the rollback owed.
+func TestStorePartialOutcomeE2E(t *testing.T) {
+	t.Parallel()
+	for _, exclusive := range []bool{true, false} {
+		t.Run(map[bool]string{true: "proven ours", false: "unproven"}[exclusive], func(t *testing.T) {
+			t.Parallel()
+			a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
+			mem := &fxstore.MemoryStore{}
+			d := newHookDialer()
+			m := newManager(t, fxcm.Options{Store: mem, Dialer: d, ExclusiveApplicationURI: exclusive})
+			cfg, err := m.Add(e2eConf(t, "Partial", a, b))
+			require.NoError(t, err)
+			d.result = mangleCall(creates, func(out *ua.CallMethodResult) *ua.CallMethodResult {
+				res, err := uafx.DecodeEstablishConnectionsResult(out.OutputArguments, e2eData)
+				require.NoError(t, err)
+				require.NotEmpty(t, res.ConnectionEndpointConfigurationResults)
+				res.ConnectionEndpointConfigurationResults[0].ConnectionEndpointResult = ua.StatusBadResourceUnavailable
+				res.ConnectionEndpointConfigurationResults[0].ConnectionEndpointID = nil
+				out.OutputArguments, err = uafx.EncodeEstablishConnectionsResult(res, e2eData)
+				require.NoError(t, err)
+				return out
+			})
+			res := process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
+			require.Equal(t, fxcm.StateError, res.State)
+			st, _ := m.Status(cfg.Key())
+			left := len(a.endpoints()) + len(b.endpoints())
+			if exclusive {
+				assert.Zero(t, left, "the endpoint the result denied was found and rolled back")
+				assert.Empty(t, storedKeys(t, mem, "call/"), "every Name proven: no intent left")
+				assert.Empty(t, st.Recovery.Owed, "%+v", st.Recovery.Owed)
+				return
+			}
+			assert.Equal(t, 1, left, "found, not proven ours: never closed")
+			assert.True(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
+			assert.Len(t, storedKeys(t, mem, "call/"), 1, "the evidence of the partial outcome stays")
+			assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedCall), "%+v", st.Recovery.Owed)
+			assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedRollback), "%+v", st.Recovery.Owed)
+		})
+	}
 }

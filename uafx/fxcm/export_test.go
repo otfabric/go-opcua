@@ -46,6 +46,9 @@ type (
 // owed.
 const PhaseRollbackRequired = phaseRollbackRequired
 
+// IdentityReported is the source of an identity the server reported.
+const IdentityReported = identityReported
+
 // DecodeStored decodes the record b of the store.
 func DecodeStored[T any](b []byte) (*T, error) {
 	v := new(T)

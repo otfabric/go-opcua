@@ -215,3 +215,53 @@ func TestStoreFollowWaits(t *testing.T) {
 	m.mu.Unlock()
 	assert.True(t, m.p.follow())
 }
+
+// TestStoreCommitPending (§6.7.4, design §3.3): while the outcome of a
+// commit is unknown its edit is kept and neither committed again nor
+// discarded; memory following a store without it leaves the edit open,
+// following one with it ends the edit once.
+func TestStoreCommitPending(t *testing.T) {
+	t.Parallel()
+	for _, landed := range []bool{false, true} {
+		mem := &fxstore.MemoryStore{}
+		m := storeManager(t, mem)
+		k := KeyOf(named("a"))
+		_, err := m.Add(named("a"))
+		require.NoError(t, err)
+		e, err := m.StartEdit(k, "o")
+		require.NoError(t, err)
+		e.Conf().Version = 2
+		s := m.lookup(k)
+		cfg, err := newConfig(e.Conf(), 2)
+		require.NoError(t, err)
+		var gen uint64
+		var fp []byte
+		if landed {
+			gen, fp, err = m.p.putConfig(cfg) // the write that landed
+			require.NoError(t, err)
+		} else {
+			gen, fp = 99, []byte{1}
+		}
+		s.mu.Lock()
+		s.pending = &pendingCommit{cfg: cfg, gen: gen, fp: fp, edit: e}
+		s.mu.Unlock()
+		_, _, err = m.CommitEdit(k, "o")
+		assert.Equal(t, ua.StatusBadInvalidState, StatusOf(err), "%v", err)
+		_, err = m.DiscardEdit(k, "o")
+		assert.Equal(t, ua.StatusBadInvalidState, StatusOf(err), "%v", err)
+		require.True(t, m.p.follow())
+		s.mu.Lock()
+		open, pending, version := s.edit.Editing() != nil, s.pending, s.cfg.version
+		s.mu.Unlock()
+		assert.Nil(t, pending)
+		assert.Equal(t, !landed, open)
+		if landed {
+			assert.Equal(t, uint32(2), version)
+		} else {
+			assert.Equal(t, uint32(1), version)
+			_, ok, err := m.CommitEdit(k, "o")
+			require.NoError(t, err)
+			assert.True(t, ok, "the edit stayed open")
+		}
+	}
+}

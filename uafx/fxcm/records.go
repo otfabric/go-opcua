@@ -118,6 +118,35 @@ type serverEvidence struct {
 	ApplicationURI string
 	Secured        bool
 	Thumbprint     []byte
+	// Source is where ApplicationURI and Thumbprint come from:
+	// identityUnavailable, identityReported (by the server, unproven) or
+	// identityAuthenticated (the peer of the secure channel). The
+	// configured identity is the ServerAddress's (ServerURIConf).
+	Source uint8
+}
+
+// thumbprintSize is the size of a certificate thumbprint, a SHA-1 hash
+// (OPC 10000-6 §6.7.4).
+const thumbprintSize = 20
+
+// The sources of the identity of a server (serverEvidence.Source).
+const (
+	identityUnavailable   uint8 = 0
+	identityReported      uint8 = 1
+	identityAuthenticated uint8 = 2
+)
+
+// check checks the identity evidence e.
+func (e serverEvidence) check() error {
+	switch {
+	case e.Source > identityAuthenticated:
+		return errSemantic("the identity source %d", e.Source)
+	case e.Source == identityAuthenticated && (!e.Secured || len(e.Thumbprint) != thumbprintSize):
+		return errSemantic("an authenticated identity without the thumbprint of a secured channel")
+	case e.Source == identityUnavailable && (e.ApplicationURI != "" || len(e.Thumbprint) != 0):
+		return errSemantic("an identity of no source")
+	}
+	return nil
 }
 
 // countersRecord holds the counters a crash must not reset (§3.5: never
@@ -445,7 +474,7 @@ func (r *epStored) check(k string, c countersRecord) error {
 			return err
 		}
 	}
-	return nil
+	return r.Server.check()
 }
 
 // validAction reports whether a is the Action of a run.
@@ -551,6 +580,9 @@ func (r *callRecord) check(k string, c countersRecord) error {
 		return errSemantic("the generation %d is not of the counters (%d)", r.Generation, c.Generation)
 	case r.SecurityMode > math.MaxInt32:
 		return errSemantic("the SecurityMode %d", r.SecurityMode)
+	}
+	if err := r.Server.check(); err != nil {
+		return err
 	}
 	switch r.Kind {
 	case callEstablish:

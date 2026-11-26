@@ -38,8 +38,8 @@ behaviour you may notice, and the deviations of peers are in
   Store the ConnectionManager keeps its sets, endpoint records with their
   evidence and run journal, but after a restart verifies no record (all
   are Unverified and never closed or adopted) and executes no owed work:
-  it reports it and refuses what would act on the endpoints of a set
-  that owes work until it is settled (C3.3)
+  it reports it and refuses everything that acts on the endpoints of a
+  set that owes work, closes and Settle included, until recovery (C3.3)
   ([docs/uafx.md](docs/uafx.md#persistence-of-the-connectionmanager)).
   Enable and Disable of a persisted
   component with the Methods of its Status Object are not persisted: after
