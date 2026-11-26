@@ -64,13 +64,16 @@ func (m *Manager) monitorSet(ctx context.Context, s *set) {
 		if err != nil {
 			continue // not reachable: keep the last Status
 		}
-		cp := r.EndpointRecord
 		s.mu.Lock()
+		// The record may have changed while the Status was read: a run
+		// may have started, or replaced or removed it. Its fields are
+		// read only under s.mu, and a run owns the set while it runs.
 		k := recordKey(r.addr, r.FunctionalEntity, r.Name)
-		if s.records[k] != r {
+		if s.records[k] != r || s.current != nil || s.removed {
 			s.mu.Unlock()
 			continue
 		}
+		cp := r.EndpointRecord
 		if !ok {
 			delete(s.records, k)
 			gone = true
