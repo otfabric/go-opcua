@@ -23,19 +23,38 @@ import (
 // Freshness is not a SecurityTokenId comparison (ids wrap around and an SKS
 // that restarts may issue them again) and not new key material alone (a
 // key the process has not seen may still be one it used before the
-// restart). A key is fresh when the gate saw it as the next key of its
-// source (the key after the current one) and then saw it become current:
-// it was not yet current at a moment after the gate was set, so no earlier
-// incarnation can have used it, as far as the key source's own view of
-// time goes. Every key the gate saw current before the first fresh one is
-// tainted and stays refused. Keys are told apart by a fingerprint of their
-// material, never by their id.
+// restart). A key is fresh only when the gate saw it as a future key of its
+// source (after the current one, Part 14 §8.3.2 GetSecurityKeys) and then
+// saw it become current: it was not yet current at a moment after the gate
+// was set. This holds for every key, also after the gate opened: a current
+// key the gate never saw coming (keys rolled back from a backup, an SKS
+// that lost its state, a rotation the gate missed) is tainted and closes
+// the gate, and the future keys seen before it are no longer trusted,
+// since the source's continuity is lost. The gate opens again when a
+// future key seen after that becomes current. Replacing the KeySource
+// (SetKeySource) also ends that continuity: the future keys of the old
+// source are forgotten, keys already proven fresh stay usable. Keys are
+// told apart by a fingerprint of their material, never by their id.
+//
+// Library interpretation (labelled in docs/uafx.md#persistence): the gate
+// relies on the key source never offering as a future key a key that was
+// current before. A source that does (an SKS restored from a backup whose
+// future keys were used before the restart, and never seen current by this
+// process) cannot be told apart from a genuine one without durable
+// evidence of key use, which the gate does not keep: it is not protection
+// against an arbitrary SKS rollback.
 //
 // The gate lives in the runtime, keyed by SecurityGroupId, for the life of
 // the runtime: a group recreated under the same SecurityGroup by any
-// configuration change is gated as well, and replacing the KeySource
-// (SetKeySource) does not lift it. A key source that is unavailable, or
-// static (no next key), never yields a fresh key: the group stays gated.
+// configuration change is gated as well, and replacing the KeySource does
+// not lift it. A key source that is unavailable, or static (no future
+// key), never yields a fresh key: the group stays gated. A rotation the
+// gate does not see coming (no call of the group between the moment the
+// key became known as a future key and the moment it became current; the
+// gate looks maxFutureKeys keys ahead) closes it until the next one.
+
+// maxFutureKeys is how many future keys the gate looks at each time.
+const maxFutureKeys = 8
 
 // keyFingerprint identifies the material of a key.
 type keyFingerprint [sha256.Size]byte
@@ -53,46 +72,76 @@ func fingerprint(k *security.Keys) keyFingerprint {
 
 // keyGate is the restart gate of one SecurityGroup.
 type keyGate struct {
-	mu   sync.Mutex
+	mu sync.Mutex
+	// open: the current key, when last seen, was fresh.
 	open bool
-	// tainted are the keys seen current before the gate opened.
+	// tainted are keys seen current before they were seen as future keys.
 	tainted map[keyFingerprint]bool
-	// allowed are the keys seen as the next key, or current after the gate
-	// opened, that are not tainted.
-	allowed map[keyFingerprint]bool
+	// fresh are keys seen as future keys and then current.
+	fresh map[keyFingerprint]bool
+	// future are keys seen as future keys since the source's continuity
+	// was last lost, not yet current.
+	future map[keyFingerprint]bool
 }
 
-// observe looks at the current and the next key of ks.
+func newKeyGate() *keyGate {
+	return &keyGate{tainted: map[keyFingerprint]bool{}, fresh: map[keyFingerprint]bool{}, future: map[keyFingerprint]bool{}}
+}
+
+// observe looks at the current and the future keys of ks.
 func (g *keyGate) observe(ks security.KeySource) {
 	cur, err := ks.CurrentKeys()
 	if err != nil || cur == nil {
 		return
+	}
+	var ahead []keyFingerprint
+	id := cur.TokenID
+	for range maxFutureKeys {
+		id = security.NextTokenID(id)
+		k, err := ks.KeysForToken(id)
+		if err != nil || k == nil {
+			break
+		}
+		ahead = append(ahead, fingerprint(k))
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	fp := fingerprint(cur)
 	switch {
 	case g.tainted[fp]:
-	case g.open:
-		g.allowed[fp] = true
-	case g.allowed[fp]:
+		g.open = false
+	case g.fresh[fp]:
 		g.open = true
+	case g.future[fp]:
+		delete(g.future, fp)
+		g.fresh[fp], g.open = true, true
 	default:
-		g.tainted[fp] = true
+		// Not seen coming: tainted, and the source's continuity is lost.
+		g.tainted[fp], g.open = true, false
+		clear(g.future)
 	}
-	if next, err := ks.KeysForToken(security.NextTokenID(cur.TokenID)); err == nil && next != nil {
-		if nfp := fingerprint(next); !g.tainted[nfp] && nfp != fp {
-			g.allowed[nfp] = true
+	for _, f := range ahead {
+		if f != fp && !g.tainted[f] && !g.fresh[f] {
+			g.future[f] = true
 		}
 	}
 }
 
-// usable reports whether messages may be secured or accepted with k.
+// rebase forgets the future keys: the KeySource was replaced.
+func (g *keyGate) rebase() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	clear(g.future)
+}
+
+// usable reports whether messages may be secured or accepted with k: the
+// gate is open and k is fresh or a future key seen since the source's
+// continuity was last lost.
 func (g *keyGate) usable(k *security.Keys) bool {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	fp := fingerprint(k)
-	return g.open && !g.tainted[fp] && g.allowed[fp]
+	return g.open && !g.tainted[fp] && (g.fresh[fp] || g.future[fp])
 }
 
 func (g *keyGate) isOpen() bool {
@@ -134,7 +183,7 @@ func (s *gatedSource) KeysForToken(tokenID uint32) (*security.Keys, error) {
 
 // GateSecurityGroup sets the restart gate of a SecurityGroup: from now on
 // its writer groups secure messages, and its reader groups accept them,
-// only with a key that became current after the gate was set (see the
+// only with a key it saw coming before it became current (see the
 // package documentation of the gate in keygate.go). An application that
 // restores secured groups after a restart, as the persistent
 // ConnectionEndpoints of OPC UA FX do, sets it before it enables them. The
@@ -146,7 +195,7 @@ func (p *PubSub) GateSecurityGroup(securityGroupID string) {
 		p.gates = map[string]*keyGate{}
 	}
 	if p.gates[securityGroupID] == nil {
-		p.gates[securityGroupID] = &keyGate{tainted: map[keyFingerprint]bool{}, allowed: map[keyFingerprint]bool{}}
+		p.gates[securityGroupID] = newKeyGate()
 	}
 }
 

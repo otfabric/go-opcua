@@ -35,7 +35,11 @@ behaviour you may notice, and the deviations of peers are in
   their control and the PubSub components they reference, not
   ConfigurationData or the VariableStorage Methods (§6.4.6), and not the
   rest of the server's PubSub configuration (OPC 10000-14 §9.1.2); the
-  ConnectionManager persists nothing. `fxstore.FileStore` survives a power
+  ConnectionManager persists nothing. Enable and Disable of a persisted
+  component with the Methods of its Status Object are not persisted: after
+  a restart its enablement follows its endpoints. The restart gate of a
+  secured SecurityGroup is not protection against a key source rolled back
+  to keys used before the restart that the process never saw current. `fxstore.FileStore` survives a power
   loss on Unix systems, only a crash of the process on Windows (no
   directory fsync), and does not support network file systems. The other
   Methods of Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop

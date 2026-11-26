@@ -591,6 +591,12 @@ type QuarantinedEndpoint struct {
 	// WriterGroupIDs and DataSetWriterIDs are the PubSub identifiers it
 	// reserves.
 	WriterGroupIDs, DataSetWriterIDs []uint16
+	// MissingNamespaces are the namespace URIs of the record that the
+	// server does not have: its NodeIds in them keep the namespace index
+	// they were written with. The record is restored once they are there
+	// (RetryRestore, or the next start); until then it reserves its
+	// NodeIds by namespace URI.
+	MissingNamespaces []string
 }
 ```
 

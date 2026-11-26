@@ -49,6 +49,12 @@ type QuarantinedEndpoint struct {
 	// WriterGroupIDs and DataSetWriterIDs are the PubSub identifiers it
 	// reserves.
 	WriterGroupIDs, DataSetWriterIDs []uint16
+	// MissingNamespaces are the namespace URIs of the record that the
+	// server does not have: its NodeIds in them keep the namespace index
+	// they were written with. The record is restored once they are there
+	// (RetryRestore, or the next start); until then it reserves its
+	// NodeIds by namespace URI.
+	MissingNamespaces []string
 }
 
 // quarantined is a quarantined record.
@@ -60,6 +66,54 @@ type quarantined struct {
 	retryable bool
 	component bool
 	acHash    string // of an unreadable identity; "*" for an unreadable key
+	// nodes and fe are the NodeIds the record reserves and its
+	// FunctionalEntity, qualified by namespace URI (qualified), so that
+	// they stay reserved while a namespace is missing.
+	nodes []string
+	fe    string
+	// missing are the namespace URIs of the record the server does not
+	// have.
+	missing []string
+}
+
+// withIdentity sets the identity of q from the decoded identity idn,
+// written with idn.Namespaces, for the server's NamespaceArray cur.
+func (q *quarantined) withIdentity(idn *epIdentity, cur []string) *quarantined {
+	q.id = remapped(idn, cur)
+	q.nodes = qualifiedNodes(idn)
+	q.fe = qualified(idn.FunctionalEntity, idn.Namespaces)
+	cp := *idn
+	cp.Nodes = slices.Clone(idn.Nodes)
+	q.missing = usedMissing(idn.Namespaces, cur, &cp)
+	if q.value != nil {
+		if m := missingOf(q.value, cur); m != nil {
+			q.missing = m
+		}
+	}
+	return q
+}
+
+// qualifiedNodes returns the nodes of the identity idn qualified by
+// namespace URI.
+func qualifiedNodes(idn *epIdentity) []string {
+	out := make([]string, 0, len(idn.Nodes))
+	for _, n := range idn.Nodes {
+		if k := qualified(n, idn.Namespaces); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
+// reserveLocked rebuilds the NodeIds the quarantined records reserve. The
+// caller holds p.mu.
+func (p *persistence) reserveLocked() {
+	p.nodes = map[string]bool{}
+	for _, q := range p.quar {
+		for _, n := range q.nodes {
+			p.nodes[n] = true
+		}
+	}
 }
 
 // qRecord is the value of a q/ key: a quarantined record with its reason.
@@ -103,11 +157,11 @@ func (c *Connections) openPersistence() error {
 			case idn == nil:
 				p.quar[k] = &quarantined{key: k, value: v, reason: "the identity of the record does not decode: " + errText(err), acHash: acOfKey(strings.TrimPrefix(k, "ep/"))}
 			case err != nil:
-				p.quar[k] = &quarantined{key: k, value: v, id: remapped(idn, cur), reason: "the record does not decode: " + err.Error()}
+				p.quar[k] = (&quarantined{key: k, value: v, reason: "the record does not decode: " + err.Error()}).withIdentity(idn, cur)
 			}
 			if idn != nil {
-				for _, n := range remapped(idn, cur).Nodes {
-					p.nodes[n.String()] = true
+				for _, n := range qualifiedNodes(idn) {
+					p.nodes[n] = true
 				}
 			}
 		case strings.HasPrefix(k, "pc/") && validHash(strings.TrimPrefix(k, "pc/")):
@@ -130,9 +184,9 @@ func (c *Connections) openPersistence() error {
 			case strings.HasPrefix(q.Key, "pc/"):
 				qq.component = true
 			case idn != nil:
-				qq.id = remapped(idn, cur)
-				for _, n := range qq.id.Nodes {
-					p.nodes[n.String()] = true
+				qq.withIdentity(idn, cur)
+				for _, n := range qq.nodes {
+					p.nodes[n] = true
 				}
 			case strings.HasPrefix(q.Key, "ep/"):
 				qq.acHash = acOfKey(strings.TrimPrefix(q.Key, "ep/"))
@@ -228,14 +282,7 @@ func (c *Connections) restoreAll() {
 	// The NodeIds of the restored records are taken now; the quarantined
 	// ones stay reserved.
 	p.mu.Lock()
-	p.nodes = map[string]bool{}
-	for _, q := range p.quar {
-		if q.id != nil {
-			for _, n := range q.id.Nodes {
-				p.nodes[n.String()] = true
-			}
-		}
-	}
+	p.reserveLocked()
 	p.mu.Unlock()
 	for _, q := range c.Quarantined() {
 		c.log.Warn("uafx: a persistent ConnectionEndpoint record is quarantined", "id", q.ID, "endpoint", q.Endpoint, "name", q.Name, "reason", q.Reason, "retryable", q.Retryable)
@@ -258,7 +305,8 @@ func (c *Connections) quarantine(r *epRecord, reason string, retryable bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	v := p.d.State()[r.key]
-	q := &quarantined{key: r.key, value: v, id: r.id, reason: reason, retryable: retryable}
+	q := &quarantined{key: r.key, value: v, id: r.id, reason: reason, retryable: retryable,
+		nodes: qualifiedNodes(r.id), fe: qualified(r.id.FunctionalEntity, r.id.Namespaces)}
 	qk := "q/" + strings.TrimPrefix(r.key, "ep/")
 	enc, err := ua.Encode(&qRecord{Key: r.key, Reason: reason, Retryable: retryable, Value: v})
 	if err == nil {
@@ -327,7 +375,9 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 	var enabled []pubsub.ComponentID
 	undo := func() {
 		for i := len(enabled) - 1; i >= 0; i-- {
-			_ = c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Disable(enabled[i]) })
+			if err := c.change(func(rt *pubsub.PubSub) error { return rt.Disable(enabled[i]) }); err != nil {
+				c.log.Warn("uafx: restore: undo: disable", "component", enabled[i], "error", err)
+			}
 		}
 		if e != nil {
 			c.releaseEndpoint(e)
@@ -345,7 +395,12 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 		}
 		for i := len(added) - 1; i >= 0; i-- {
 			id := added[i]
-			_ = c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return removeComponent(rt, id) })
+			// What is not removed stays created by the endpoints, so
+			// that a later removal of what uses it removes it too.
+			if err := c.change(func(rt *pubsub.PubSub) error { return removeComponent(rt, id) }); err != nil {
+				c.log.Warn("uafx: restore: undo: remove", "component", id, "error", err)
+				continue
+			}
 			c.mu.Lock()
 			delete(c.created, id)
 			c.mu.Unlock()
@@ -369,7 +424,7 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 			return 0, fmt.Errorf("the %v %s, which the endpoint did not create, is not configured", kind, strings.Join(cr.Path, "/"))
 		}
 		var cid pubsub.ComponentID
-		err := c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+		err := c.change(func(rt *pubsub.PubSub) error {
 			var err error
 			cid, err = addComponent(rt, kind, parent, configValue(cr))
 			return err
@@ -475,6 +530,7 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 	}
 	c.mu.Lock()
 	e.persistent, e.key, e.ac = true, r.key, ac
+	e.demand = b.Enabled
 	e.createdAt, e.modifiedAt = b.CreationTime, b.ModificationTime
 	mod := e.modNode
 	c.mu.Unlock()
@@ -512,7 +568,7 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 					return nil, true, err
 				}
 				if !info.Enabled {
-					if err := c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
+					if err := c.change(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
 						undo()
 						return nil, true, fmt.Errorf("the %v %s cannot be enabled: %w", info.Kind, info.Name, err)
 					}
@@ -637,6 +693,7 @@ func (c *Connections) Quarantined() []QuarantinedEndpoint {
 		if q.id != nil {
 			qe.AutomationComponent, qe.Endpoint, qe.FunctionalEntity, qe.Name = q.id.AC, q.id.Endpoint, q.id.FunctionalEntity, q.id.Name
 			qe.WriterGroupIDs, qe.DataSetWriterIDs = slices.Clone(q.id.WriterGroupIDs), slices.Clone(q.id.DataSetWriterIDs)
+			qe.MissingNamespaces = slices.Clone(q.missing)
 		}
 		out = append(out, qe)
 	}
@@ -654,6 +711,9 @@ func (c *Connections) RetryRestore(ctx context.Context, id string) error {
 	c.call.Lock()
 	defer c.call.Unlock()
 	p.mu.Lock()
+	// Namespaces may have been added since: component records that did
+	// not map then may now.
+	p.reload()
 	q := p.quar[id]
 	if q == nil {
 		p.mu.Unlock()
@@ -766,15 +826,8 @@ func (c *Connections) Discard(ctx context.Context, id string) error {
 		return fmt.Errorf("%w: the deletion was not committed: %w", ErrQuarantine, err)
 	}
 	delete(p.quar, id)
-	p.nodes = map[string]bool{}
-	for _, q := range p.quar {
-		if q.id != nil {
-			for _, n := range q.id.Nodes {
-				p.nodes[n.String()] = true
-			}
-		}
-	}
 	p.reload()
+	p.reserveLocked()
 	return nil
 }
 
@@ -803,14 +856,16 @@ func (p *persistence) establishFence(ac *automationComponent) string {
 func (p *persistence) reserved(n *ua.NodeID, fe *ua.NodeID, name string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if n != nil && p.nodes[n.String()] {
+	cur := p.c.namespaces()
+	if k := qualified(n, cur); k != "" && p.nodes[k] {
 		return true
 	}
 	if fe == nil {
 		return false
 	}
+	fk := qualified(fe, cur)
 	for _, q := range p.quar {
-		if q.id != nil && q.id.Name == name && q.id.FunctionalEntity != nil && q.id.FunctionalEntity.Equal(fe) {
+		if q.id != nil && q.id.Name == name && q.fe != "" && q.fe == fk {
 			return true
 		}
 	}

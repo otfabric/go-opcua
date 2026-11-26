@@ -90,11 +90,20 @@ func (c *Connections) keyOf(ac *automationComponent, e *endpoint) string {
 }
 
 // reload rebuilds the mirror from the committed state of the domain. The
-// caller holds p.mu.
+// caller holds p.mu. Every record ends up accounted for (design §4.6,
+// §4.7): in the mirror, or quarantined. A record with a NodeId in a
+// namespace the server does not have is quarantined, retryable, with its
+// reservations by namespace URI; so is an endpoint record whose component
+// record has one. A record of a durable removal (RemovePending) needs no
+// NodeId to be completed: it is in the mirror as written.
 func (p *persistence) reload() {
 	cur := p.c.namespaces()
 	p.eps, p.comps = map[string]*epRecord{}, map[string]*compRecord{}
-	for k, v := range p.d.State() {
+	unmapped := map[string]string{} // endpoint key -> reason
+	st := p.d.State()
+	p.reconcileQuarLocked(st)
+	for _, k := range sortedKeys(st) {
+		v := st[k]
 		if p.quar[k] != nil {
 			continue
 		}
@@ -102,10 +111,17 @@ func (p *persistence) reload() {
 		case strings.HasPrefix(k, "ep/"):
 			id, body, err := decodeEndpoint(v)
 			if err != nil {
-				continue
+				continue // quarantined by openPersistence
 			}
 			r := newRemapper(id.Namespaces, cur)
 			if !r.identity() && (r.remap(id) != nil || r.remap(body) != nil) {
+				if body.State != stateActive {
+					// As written: the remap may have changed some.
+					id, body, _ = decodeEndpoint(v)
+					p.eps[k] = &epRecord{key: k, id: id, body: body}
+					continue
+				}
+				unmapped[k] = "a namespace of the record is not in the server: " + strings.Join(missingOf(v, cur), ", ")
 				continue
 			}
 			id.Namespaces = cur
@@ -113,16 +129,83 @@ func (p *persistence) reload() {
 		case strings.HasPrefix(k, "pc/"):
 			cr, err := decodeComponent(v)
 			if err != nil {
-				continue
+				continue // quarantined by openPersistence
 			}
 			r := newRemapper(cr.Namespaces, cur)
 			if !r.identity() && r.remap(cr) != nil {
+				fresh, _ := decodeComponent(v)
+				reason := "a namespace of the component record " + k + " is not in the server: " + strings.Join(usedMissing(fresh.Namespaces, cur, fresh), ", ")
+				for _, ref := range cr.Refs {
+					if _, ok := unmapped[ref]; !ok {
+						unmapped[ref] = reason
+					}
+				}
 				continue
 			}
 			cr.Namespaces = cur
 			p.comps[k] = cr
 		}
 	}
+	for k, reason := range unmapped {
+		if er := p.eps[k]; er != nil && er.body.State != stateActive {
+			continue // a removal: completed without its components
+		}
+		delete(p.eps, k)
+		v := st[k]
+		idn, _, err := decodeEndpoint(v)
+		if err != nil {
+			continue
+		}
+		q := (&quarantined{key: k, value: v, reason: reason, retryable: true}).withIdentity(idn, cur)
+		p.quar[k] = q
+		for _, n := range q.nodes {
+			p.nodes[n] = true
+		}
+	}
+}
+
+// reconcileQuarLocked makes the quarantine follow the committed state st:
+// a write with an unknown outcome that moved a record to q/ (quarantine),
+// back from it (RetryRestore) or deleted it (Discard) may have committed
+// after all, which a settled domain shows. A quarantined record is where
+// st has it, under q/ or ep/; one st no longer has was discarded, and what
+// it reserved is released. The caller holds p.mu.
+func (p *persistence) reconcileQuarLocked(st map[string][]byte) {
+	for _, k := range sortedKeys(p.quar) {
+		q := p.quar[k]
+		if _, ok := st[k]; ok {
+			continue
+		}
+		where := ""
+		if !q.component {
+			suffix := strings.TrimPrefix(strings.TrimPrefix(k, "q/"), "ep/")
+			for _, alt := range []string{"q/" + suffix, "ep/" + suffix} {
+				if _, ok := st[alt]; ok {
+					where = alt
+					break
+				}
+			}
+		}
+		delete(p.quar, k)
+		if where == "" {
+			for _, n := range q.nodes {
+				delete(p.nodes, n)
+			}
+			continue
+		}
+		q.key = where
+		p.quar[where] = q
+	}
+}
+
+// missingOf returns the namespaces the endpoint record v uses that cur
+// does not have.
+func missingOf(v []byte, cur []string) []string {
+	id, body, err := decodeEndpoint(v)
+	if err != nil {
+		return nil
+	}
+	return usedMissing(id.Namespaces, cur, id, body)
 }
 
 // --- staged batches ---------------------------------------------------------

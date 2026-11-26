@@ -324,8 +324,18 @@ func (d *Domain) Settle(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
+// maxConfirms bounds the confirming Applies with an unknown outcome one
+// unresolved write keeps the evidence of. Past it Settle stops confirming
+// and the domain stays fenced until it is opened again: dropping the
+// evidence of a confirmation that may still land would let a later
+// settlement misjudge the store.
+const maxConfirms = 64
+
 // confirmLocked runs one confirmation of u.
 func (d *Domain) confirmLocked(ctx context.Context, u *unresolved) error {
+	if len(u.confirms) >= maxConfirms {
+		return fmt.Errorf("fxstore: settle: %d confirmations with an unknown outcome; the domain stays fenced until it is opened again", len(u.confirms))
+	}
 	loaded, err := d.s.Load(ctx)
 	if err != nil {
 		return fmt.Errorf("fxstore: settle: load: %w", err)

@@ -117,8 +117,10 @@ func TestKeyGateRotation(t *testing.T) {
 	k, err = p.KeySource("g").KeysForToken(3)
 	require.NoError(t, err)
 	require.Equal(t, uint32(3), k.TokenID)
-	// Later keys are fresh as they become current.
+	// Later keys are fresh as they become current, when seen coming.
 	src.set(gkey(3, 0xa3), gkey(4, 0xa4))
+	_, err = current(p, "g")
+	require.NoError(t, err)
 	src.set(gkey(4, 0xa4), nil)
 	k, err = current(p, "g")
 	require.NoError(t, err)
@@ -228,4 +230,98 @@ func TestKeyGateSurvivesKeySource(t *testing.T) {
 	k, err := p.KeySource("free").CurrentKeys()
 	require.NoError(t, err)
 	require.Equal(t, uint32(10), k.TokenID)
+}
+
+// TestKeyGateUnseenKeyAfterOpen: once the gate opened, a current key it
+// never saw coming is not trusted either: a key that predates the restart
+// and was never seen by this process (an SKS restored from a backup) is
+// tainted and closes the gate, which opens again only on a key seen as a
+// future key after that.
+func TestKeyGateUnseenKeyAfterOpen(t *testing.T) {
+	t.Parallel()
+	p, src := gated(t)
+	src.set(gkey(2, 0xb), gkey(3, 0xc)) // B current at the restart: tainted
+	_, err := current(p, "g")
+	require.Error(t, err)
+	src.set(gkey(3, 0xc), gkey(4, 0xd)) // C seen coming: fresh, open
+	_, err = current(p, "g")
+	require.NoError(t, err)
+	// The SKS comes back from a backup: A, used before the restart, never
+	// seen here, with its own next key.
+	src.set(gkey(1, 0xa), gkey(2, 0xe))
+	_, err = current(p, "g")
+	require.ErrorIs(t, err, security.ErrNoKeys, "an unseen key is not trusted because the gate was open")
+	_, open := p.SecurityGroupGate("g")
+	require.False(t, open)
+	_, err = p.KeySource("g").KeysForToken(3)
+	require.Error(t, err, "a closed gate accepts nothing, not even a fresh key")
+	// The continuity is lost: D, a future key of before, is not fresh.
+	src.set(gkey(4, 0xd), gkey(5, 0xf))
+	_, err = current(p, "g")
+	require.Error(t, err, "a future key seen before the continuity was lost proves nothing")
+	// F, seen coming after that, is.
+	src.set(gkey(5, 0xf), nil)
+	k, err := current(p, "g")
+	require.NoError(t, err)
+	require.Equal(t, uint32(5), k.TokenID)
+	// A key proven fresh in this process stays usable when current again.
+	src.set(gkey(3, 0xc), nil)
+	_, err = current(p, "g")
+	require.NoError(t, err)
+}
+
+// TestKeyGateMissedRotation: a rotation the gate does not see coming closes
+// it until the next one; future keys are looked at maxFutureKeys ahead.
+func TestKeyGateMissedRotation(t *testing.T) {
+	t.Parallel()
+	p, src := gated(t)
+	src.set(gkey(1, 1), gkey(2, 2))
+	_, _ = current(p, "g")
+	src.set(gkey(2, 2), nil)
+	_, err := current(p, "g")
+	require.NoError(t, err)
+	src.set(gkey(3, 3), gkey(4, 4)) // not seen coming
+	_, err = current(p, "g")
+	require.Error(t, err)
+	src.set(gkey(4, 4), nil)
+	_, err = current(p, "g")
+	require.NoError(t, err)
+
+	// Several future keys: the second one ahead is seen too.
+	p, ring := gated(t)
+	ring.set(gkey(1, 1), gkey(2, 2))
+	ring.mu.Lock()
+	ring.past = append(ring.past, gkey(3, 3))
+	ring.mu.Unlock()
+	_, _ = current(p, "g")
+	ring.set(gkey(3, 3), nil)
+	_, err = current(p, "g")
+	require.NoError(t, err)
+}
+
+// TestKeyGateKeySourceReplaced: replacing the KeySource forgets the future
+// keys of the old source: a key announced only by the old source and
+// current under the new one is not fresh; keys proven fresh stay usable.
+func TestKeyGateKeySourceReplaced(t *testing.T) {
+	t.Parallel()
+	p, old := gated(t)
+	old.set(gkey(1, 1), gkey(2, 2))
+	_, _ = current(p, "g")
+	old.set(gkey(2, 2), gkey(3, 3)) // 2 fresh, 3 announced by old
+	_, err := current(p, "g")
+	require.NoError(t, err)
+	next := &gateSource{}
+	next.set(gkey(3, 3), gkey(4, 4))
+	p.SetKeySource("g", next)
+	_, err = current(p, "g")
+	require.Error(t, err, "a future key of the replaced source proves nothing")
+	next.set(gkey(4, 4), nil)
+	_, err = current(p, "g")
+	require.NoError(t, err)
+	// A key proven fresh under the old source stays usable under the new.
+	other := &gateSource{}
+	other.set(gkey(2, 2), nil)
+	p.SetKeySource("g", other)
+	_, err = current(p, "g")
+	require.NoError(t, err)
 }

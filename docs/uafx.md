@@ -519,7 +519,15 @@ changes nothing and is `Bad_ResourceUnavailable`; one with an unknown
 outcome acts anyway in the safe direction (disable, remove) and is
 `Bad_InternalError`, and the write is owed until it commits. Once a disable
 or removal is durable, no restart brings the communication back; a
-RemovePending record is completed at the next start, never restored.
+RemovePending record is completed at the next start, never restored. A
+DataSetReader or DataSetWriter that endpoints share is disabled once none
+of the endpoints that reference it demands it (EnableCommunicationCmd
+enabled it and no CloseConnections disabled it since), whichever closes
+last, and removed with the last endpoint that references it; an endpoint
+whose call created it hands that over when it goes first (§6.2.5.2: "all
+related communication model Objects if not referenced from other
+ConnectionEndpoints"). The demand of a persistent endpoint is its stored
+enablement; that of a non-persistent one ends with the process.
 
 **Restore** (design §4.6). Each record is restored whole or not at all: its
 PubSub components (one of the same path that is equal is adopted, one that
@@ -528,12 +536,23 @@ its stored NodeIds, its References, the control of its ControlGroups (the
 endpoint is the owner; G4, library interpretation) and its enablement.
 NodeIds are stored with the NamespaceArray of the record and mapped to the
 server's at load, also inside the PubSub structures (design §4.8). The
-Status then follows the readers and writers (§6.6.3).
+Status then follows the readers and writers (§6.6.3). Every record ends
+the start accounted for: restored, completed (a RemovePending record,
+which needs no NodeId), or quarantined.
 
 **Quarantine** (design §4.7, C3-D10). A record that fails is neither
 restored nor deleted. `Quarantined` lists them (`QuarantinedEndpoint`:
 the reason, `Retryable`, the reserved Name, NodeIds and PubSub ids, and
 `Fences`), `RetryRestore` tries one again, `Discard` deletes it. A record
+with a NodeId in a namespace the server does not have (its own, or one of
+a component record it references) is quarantined, `Retryable`, with the
+namespace URIs in `MissingNamespaces`; it reserves its NodeIds by
+namespace URI, so they stay reserved while the namespace is missing and
+when it comes, and `RetryRestore` (or the next start that has the
+namespace) restores it. When the move of a record to quarantine or a
+Discard has an unknown outcome, the quarantine follows the store once it
+is settled: the record is listed where the store has it (`ID`), and one
+the store no longer has is gone with its reservations. A record
 whose identity still reads reserves its Name in its FunctionalEntity
 (`Bad_BrowseNameDuplicated`), its NodeIds and its WriterGroupIds and
 DataSetWriterIds (ReserveIds and CloseAndUpdate do not hand them out, on
@@ -551,27 +570,58 @@ the change returns. A change the store refuses is undone and fails
 (`Bad_ResourceUnavailable`); 0:NotPersisted TRUE on such a component is
 `Bad_InvalidState`; a removed component is marked removed and not
 re-created after a restart (the latest configuration wins, Part 14 §9.1.2).
-While the store is fenced, new components and ReserveIds are refused.
+A change that only removes or disables components (CloseConnections' own,
+or one by another mechanism) is never refused for a record that does not
+commit: it stands and the record is owed, as for a close (library
+interpretation). While the store is fenced, new components and ReserveIds
+are refused, and so is a new WriterGroupId or DataSetWriterId on an
+existing component (a modify, Part 14 §9.1.3.7.4) that a quarantined
+record reserves. When a hook refuses a change, the server reconciles the
+runtime back to the configuration before it by name: what the change
+removed or changed comes back under a new ComponentID and node, and the
+endpoints' References, what they created and what they have left to
+remove follow it by path, so that the endpoint stays consistent with the
+restored configuration (a refused close fails and can be repeated).
+Enable and Disable of a component with the Methods of its Status Object
+(PubSubStatusType) are runtime only: they are not written to the store, and after a
+restart the enablement of a persisted reader or writer follows its
+endpoints' control state, which is what is durable.
 
 **Secure restart** (design §4.10, PS-3). No keys or sequence numbers are
 stored. A restored secured WriterGroup, ReaderGroup or DataSetReader gates
 its SecurityGroup in the PubSub runtime (`pubsub.PubSub.GateSecurityGroup`):
 it neither secures nor accepts messages under a key that may have been in
-use before the restart (Part 14 §7.2.3, §7.2.4.4.3). A key is fresh when
-the runtime saw it as the next key of its source and then saw it become
-current; keys are told apart by a fingerprint of their material, never by
-SecurityTokenId (ids wrap around, and a restarted SKS may issue them
-again). A rotating source opens the gate after one key change; a static or
-unavailable one never does, and the endpoint stays non-operational. The
-gate lasts for the life of the runtime: a group recreated under the same
-SecurityGroup is gated too. `SecurityGroupGate` reports it.
+use before the restart (Part 14 §7.2.3, §7.2.4.4.3). A key is fresh only
+when the runtime saw it as a future key of its source (up to 8 ahead) and
+then saw it become current; keys are told apart by a fingerprint of their
+material, never by SecurityTokenId (ids wrap around, and a restarted SKS
+may issue them again), and new material alone is not proof. That holds
+for every key, also after the gate opened: a current key the runtime did
+not see coming (keys restored from a backup, an SKS that lost its state,
+a rotation it missed) is tainted and closes the gate, and the future keys
+seen before it are no longer trusted; replacing the KeySource
+(`SetKeySource`) forgets the future keys of the old source too. The gate
+opens again when a future key seen after that becomes current. A rotating
+source opens the gate after one key change; a static or unavailable one
+never does, and the endpoint stays non-operational. The gate lasts for the
+life of the runtime: a group recreated under the same SecurityGroup is
+gated too. `SecurityGroupGate` reports it. Library interpretation: the
+gate relies on the key source never offering as a future key one that was
+current before. A source restored from a backup whose future keys were
+used before the restart, and that this process never saw current, cannot
+be told apart from a genuine one without durable evidence of key use,
+which is not kept: the gate is not protection against an arbitrary SKS
+rollback ([Limits](#limits)).
 
 **Durability.** `Connections.Persistence` reports the store state, the
 restored endpoints and the quarantine. `FileStore` reports
 `DurabilityPowerLoss` on Unix systems (where the file system honours
 fsync), and `DurabilityProcessCrash` on Windows, where a directory cannot be
 fsynced, so a committed write survives a crash of the process but a power
-loss only as far as the file system's metadata journal goes. Network file
+loss only as far as the file system's metadata journal goes. A write with
+an unknown outcome keeps the evidence of at most 64 confirmations with an
+unknown outcome; past that the store stays fenced until it is opened again.
+Network file
 systems and file systems that ignore fsync or advisory locks are not
 supported; platforms without flock cannot open a FileStore. `MemoryStore` survives no restart.
 An application can supply its own `Store`; `storetest.Run` checks it
@@ -1205,7 +1255,10 @@ The test address space is `internal/testutil/fxtest`.
   PublishSubscribe itself is not checked. Enable and Disable of a
   component with the PubSub Methods are not written to the store: after a
   restart enablement follows the endpoints. The gate of a secure restart
-  holds the whole SecurityGroup, also groups of it that were not restored.
+  holds the whole SecurityGroup, also groups of it that were not restored,
+  and is not protection against an SKS rolled back to keys used before
+  the restart that the process never saw current (no durable evidence of
+  key use is kept).
 - The ConnectionManager (`uafx/fxcm`, served by `EnableConnectionManager`)
   keeps its sets, their Versions and the records of its endpoints in
   memory. It does not configure a SecurityKeyServer, ask a GDS (no

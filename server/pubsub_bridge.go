@@ -142,9 +142,10 @@ type PubSubConfigurationHook interface {
 	// PubSubConfigurationChanged is called in the PubSub transaction after
 	// a change was applied to the runtime, before the Method or function
 	// that made it returns. An error undoes the change (the runtime is
-	// reconciled back to ch.Before) and fails it with the error's
-	// ua.StatusCode, or Bad_InternalError. It must not change the PubSub
-	// configuration itself.
+	// reconciled back to ch.Before, by name: a component the change
+	// removed or changed comes back under a new ComponentID and node) and
+	// fails it with the error's ua.StatusCode, or Bad_InternalError. It
+	// must not change the PubSub configuration itself.
 	PubSubConfigurationChanged(ch *PubSubChange) error
 	// HeldPubSubIDs returns WriterGroupIds and DataSetWriterIds that
 	// ReserveIds does not hand out and CloseAndUpdate does not assign to

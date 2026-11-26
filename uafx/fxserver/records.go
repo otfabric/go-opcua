@@ -295,6 +295,9 @@ var errNamespace = errors.New("fxserver: a namespace of the record is not in the
 type remapper struct {
 	m    map[uint16]uint16
 	miss map[uint16]bool
+	// used, when set, collects the missing indexes the NodeIds use
+	// instead of failing.
+	used map[uint16]bool
 }
 
 func newRemapper(from, to []string) *remapper {
@@ -418,11 +421,12 @@ func (r *remapper) remap(v any) error {
 func (r *remapper) node(rv reflect.Value) error {
 	n := rv.Interface().(*ua.NodeID)
 	ns := n.Namespace()
-	if r.miss[ns] {
-		return fmt.Errorf("%w: index %d", errNamespace, ns)
-	}
 	to, ok := r.m[ns]
-	if !ok {
+	if r.miss[ns] || !ok {
+		if r.used != nil {
+			r.used[ns] = true
+			return nil
+		}
 		return fmt.Errorf("%w: index %d", errNamespace, ns)
 	}
 	if to == ns {
@@ -437,6 +441,24 @@ func (r *remapper) node(rv reflect.Value) error {
 	}
 	rv.Set(reflect.ValueOf(m))
 	return nil
+}
+
+// usedMissing returns the URIs of the namespaces of from, the
+// NamespaceArray the values vs were written with, that the NodeIds of vs
+// use and to does not have. It changes vs.
+func usedMissing(from, to []string, vs ...any) []string {
+	r := newRemapper(from, to)
+	r.used = map[uint16]bool{}
+	for _, v := range vs {
+		_ = r.remap(v)
+	}
+	var out []string
+	for i, u := range from {
+		if i <= math.MaxUint16 && r.used[uint16(i)] {
+			out = append(out, u)
+		}
+	}
+	return out
 }
 
 // withNamespace returns n in the namespace ns, in an encoding that holds it.

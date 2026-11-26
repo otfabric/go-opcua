@@ -43,6 +43,13 @@ type endpoint struct {
 	// CloseConnections with Remove removes it unless another endpoint
 	// references it (Part 81 §6.2.5.2).
 	ownReader, ownWriter bool
+	// demand: the endpoint wants its reader and writer enabled:
+	// EnableCommunicationCmd enabled it (or the restore of an enabled
+	// record, or a preconfigured endpoint whose reader or writer was
+	// enabled), and no CloseConnections disabled it since. A reader or
+	// writer endpoints share is disabled once none of them demands it,
+	// whatever references it (design §4.4).
+	demand bool
 	// pending are the groups, PubSubConnections and PublishedDataSets of a
 	// removed reader or writer that CloseConnections with Remove has still
 	// to remove (prune); the endpoint stays until they are gone.
@@ -100,6 +107,13 @@ func (c *Connections) adopt(ac *automationComponent, fe *ua.NodeID) {
 		e.outputs, _ = val(c.value(c.childID(n, "OutputVariables"))).([]*ua.NodeID)
 		e.reader = c.target(n, fxacid.ToDataSetReader)
 		e.writer = c.target(n, fxacid.ToDataSetWriter)
+		for _, x := range []*ua.NodeID{e.reader, e.writer} {
+			if cid, ok := c.componentOf(x); ok {
+				if info, err := c.srv.PubSub().Component(cid); err == nil && info.Enabled {
+					e.demand = true
+				}
+			}
+		}
 		e.status.Store(int32(c.derive(e)))
 		c.ownStatus(e)
 		c.mu.Lock()
@@ -669,6 +683,40 @@ func (c *Connections) shared(e *endpoint, n *ua.NodeID) bool {
 		}
 	}
 	return false
+}
+
+// needed reports whether an endpoint other than e that references the
+// DataSetReader or DataSetWriter n demands it enabled.
+func (c *Connections) needed(e *endpoint, n *ua.NodeID) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, o := range c.endpoints {
+		if o != e && o.demand && (o.reader != nil && o.reader.Equal(n) || o.writer != nil && o.writer.Equal(n)) {
+			return true
+		}
+	}
+	return false
+}
+
+// handOver gives the other endpoints that reference the DataSetReader or
+// DataSetWriter n the ownership e has of it: the configuration came with
+// an EstablishConnections call, so the last endpoint that references it
+// removes it (Part 81 §6.2.5.2: "all related communication model Objects
+// if not referenced from other ConnectionEndpoints").
+func (c *Connections) handOver(e *endpoint, n *ua.NodeID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, o := range c.endpoints {
+		if o == e {
+			continue
+		}
+		if o.reader != nil && o.reader.Equal(n) {
+			o.ownReader = true
+		}
+		if o.writer != nil && o.writer.Equal(n) {
+			o.ownWriter = true
+		}
+	}
 }
 
 // componentOf returns the PubSub component of the node n.

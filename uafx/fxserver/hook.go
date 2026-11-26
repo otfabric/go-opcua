@@ -3,6 +3,7 @@
 package fxserver
 
 import (
+	"reflect"
 	"slices"
 
 	"github.com/otfabric/go-opcua/pubsub"
@@ -21,7 +22,9 @@ var _ server.PubSubConfigurationHook = (*persistence)(nil)
 
 // PubSubConfigurationChanged checks the change ch and writes the component
 // records it changes. A change of an EstablishConnections call itself is
-// written at the call's commit point; a Revert is never refused.
+// written at the call's commit point; a Revert, and a change that only
+// removes or disables components, is never refused for a record that is
+// not committed: its record is owed.
 func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) error {
 	added := addedComponents(ch.Before, ch.After)
 	p.mu.Lock()
@@ -53,13 +56,16 @@ func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) error 
 	case o == fxstore.Committed:
 		p.reload()
 		return nil
-	case o == fxstore.NotCommitted && !ch.Revert:
+	case o == fxstore.NotCommitted && !ch.Revert && !safeDirection(ch.Before, ch.After):
 		// The store and the runtime must agree: the change is refused
 		// (library interpretation, design §4.5).
 		p.c.log.Warn("uafx: a PubSub change to a persisted component is refused: its record was not committed", "error", err)
 		return ua.StatusBadResourceUnavailable
 	default:
-		// Unknown, or a Revert: the change stands and the store follows.
+		// Unknown, a Revert, or a change in the safe direction (it only
+		// removes or disables components, as CloseConnections does, also
+		// while the store is fenced by its own intent; design §4.4): the
+		// change stands and the store follows.
 		_, _ = p.d.Require(ctx, b)
 		p.c.log.Warn("uafx: the record of a changed PubSub component is owed; the store is fenced until it is written", "error", err)
 		return nil
@@ -104,15 +110,19 @@ type added struct {
 	ids    bool   // a WriterGroup or a DataSetWriter
 }
 
-// addedComponents returns the components in after that are not in before.
+// addedComponents returns the components in after that are not in
+// before, and the WriterGroups and DataSetWriters whose WriterGroupId or
+// DataSetWriterId changed: a new id on an existing component is an
+// allocation too (a modify of Part 14 §9.1.3.7.4, or a replacement by
+// UpdatePubSubConfiguration).
 func addedComponents(before, after *ua.PubSubConfigurationDataType) []added {
-	have := map[string]bool{}
+	have := map[string]added{}
 	for _, a := range componentsIn(before) {
-		have[a.path] = true
+		have[a.path] = a
 	}
 	var out []added
 	for _, a := range componentsIn(after) {
-		if !have[a.path] {
+		if b, ok := have[a.path]; !ok || a.group != b.group || a.writer != b.writer {
 			out = append(out, a)
 		}
 	}
@@ -268,4 +278,108 @@ func notPersisted(props []*ua.KeyValuePair) bool {
 		}
 	}
 	return false
+}
+
+// safeDirection reports whether after only removes or disables components
+// of before: every component of after is in before, the same but for an
+// Enabled that went from TRUE to FALSE.
+func safeDirection(before, after *ua.PubSubConfigurationDataType) bool {
+	if after == nil {
+		return true
+	}
+	if before == nil {
+		return len(after.Connections) == 0 && len(after.PublishedDataSets) == 0
+	}
+	for _, a := range after.PublishedDataSets {
+		if a == nil {
+			continue
+		}
+		i := slices.IndexFunc(before.PublishedDataSets, func(b *ua.PublishedDataSetDataType) bool { return b != nil && b.Name == a.Name })
+		if i < 0 || !reflect.DeepEqual(a, before.PublishedDataSets[i]) {
+			return false
+		}
+	}
+	for _, a := range after.Connections {
+		if a == nil {
+			continue
+		}
+		i := slices.IndexFunc(before.Connections, func(b *ua.PubSubConnectionDataType) bool { return b != nil && b.Name == a.Name })
+		if i < 0 || !safeConnection(before.Connections[i], a) {
+			return false
+		}
+	}
+	return true
+}
+
+func safeConnection(b, a *ua.PubSubConnectionDataType) bool {
+	bc, ac := *b, *a
+	bc.WriterGroups, bc.ReaderGroups, ac.WriterGroups, ac.ReaderGroups = nil, nil, nil, nil
+	if !offOnly(&bc.Enabled, &ac.Enabled) || !reflect.DeepEqual(bc, ac) {
+		return false
+	}
+	for _, x := range a.WriterGroups {
+		if x == nil {
+			continue
+		}
+		i := slices.IndexFunc(b.WriterGroups, func(y *ua.WriterGroupDataType) bool { return y != nil && y.Name == x.Name })
+		if i < 0 {
+			return false
+		}
+		bg, ag := *b.WriterGroups[i], *x
+		bg.DataSetWriters, ag.DataSetWriters = nil, nil
+		if !offOnly(&bg.Enabled, &ag.Enabled) || !reflect.DeepEqual(bg, ag) {
+			return false
+		}
+		for _, w := range x.DataSetWriters {
+			if w == nil {
+				continue
+			}
+			j := slices.IndexFunc(b.WriterGroups[i].DataSetWriters, func(y *ua.DataSetWriterDataType) bool { return y != nil && y.Name == w.Name })
+			if j < 0 {
+				return false
+			}
+			bw, aw := *b.WriterGroups[i].DataSetWriters[j], *w
+			if !offOnly(&bw.Enabled, &aw.Enabled) || !reflect.DeepEqual(bw, aw) {
+				return false
+			}
+		}
+	}
+	for _, x := range a.ReaderGroups {
+		if x == nil {
+			continue
+		}
+		i := slices.IndexFunc(b.ReaderGroups, func(y *ua.ReaderGroupDataType) bool { return y != nil && y.Name == x.Name })
+		if i < 0 {
+			return false
+		}
+		bg, ag := *b.ReaderGroups[i], *x
+		bg.DataSetReaders, ag.DataSetReaders = nil, nil
+		if !offOnly(&bg.Enabled, &ag.Enabled) || !reflect.DeepEqual(bg, ag) {
+			return false
+		}
+		for _, r := range x.DataSetReaders {
+			if r == nil {
+				continue
+			}
+			j := slices.IndexFunc(b.ReaderGroups[i].DataSetReaders, func(y *ua.DataSetReaderDataType) bool { return y != nil && y.Name == r.Name })
+			if j < 0 {
+				return false
+			}
+			br, ar := *b.ReaderGroups[i].DataSetReaders[j], *r
+			if !offOnly(&br.Enabled, &ar.Enabled) || !reflect.DeepEqual(br, ar) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// offOnly reports whether Enabled stayed or went from TRUE to FALSE, and
+// then makes the two equal for the comparison of the rest.
+func offOnly(before, after *bool) bool {
+	if *after && !*before {
+		return false
+	}
+	*after = *before
+	return true
 }

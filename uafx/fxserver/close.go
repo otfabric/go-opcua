@@ -117,6 +117,8 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 	c.mu.Lock()
 	e.cleanupOff = true
 	e.deadline = timeZero
+	demand := e.demand
+	e.demand = false
 	reader, writer, ownReader, ownWriter := e.reader, e.writer, e.ownReader, e.ownWriter
 	c.mu.Unlock()
 	status := ua.StatusOK
@@ -131,7 +133,37 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 		own    bool
 		reader bool
 	}{{reader, ownReader, true}, {writer, ownWriter, false}} {
-		if x.n == nil || c.shared(e, x.n) {
+		if x.n == nil {
+			continue
+		}
+		if c.shared(e, x.n) {
+			// Another endpoint references it: it is not removed, and
+			// it is disabled once no endpoint that references it
+			// demands it. A removed owner hands over its ownership.
+			if remove && x.own {
+				c.handOver(e, x.n)
+				c.setLinkLocked(e, x.reader, nil, false)
+			}
+			if c.needed(e, x.n) {
+				continue
+			}
+			cid, ok := c.componentOf(x.n)
+			if !ok {
+				continue
+			}
+			var derr error
+			if terr := c.change(func(*pubsub.PubSub) error {
+				derr = c.ops.disable(cid)
+				if errors.Is(derr, ua.StatusBadInvalidState) {
+					derr = nil
+				}
+				return nil
+			}); terr != nil {
+				derr = terr
+			}
+			if derr != nil {
+				fail("disable", cid, derr)
+			}
 			continue
 		}
 		cid, ok := c.componentOf(x.n)
@@ -147,7 +179,12 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 		// before them puts the component back.
 		var derr, rerr error
 		var it pruneItem
-		_ = c.srv.ChangePubSubConfiguration(func(*pubsub.PubSub) error {
+		// The transaction can fail after the callback succeeded: the
+		// PubSub configuration hook (the persistence of this package)
+		// refused it and the runtime is back to where it was, the
+		// disable and the removal undone. Then nothing changed here
+		// either.
+		terr := c.change(func(*pubsub.PubSub) error {
 			derr = c.ops.disable(cid)
 			if errors.Is(derr, ua.StatusBadInvalidState) {
 				derr = nil // disabled already
@@ -165,6 +202,14 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 			rerr = remover(cid)
 			return nil
 		})
+		if terr != nil {
+			op := "disable"
+			if remove && x.own {
+				op = "remove"
+			}
+			fail(op, cid, terr)
+			continue
+		}
 		if !remove || !x.own {
 			if derr != nil {
 				fail("disable", cid, derr)
@@ -184,6 +229,12 @@ func (c *Connections) closeEndpoint(e *endpoint, remove bool) ua.StatusCode {
 		status = c.prune(e)
 	}
 	if status != ua.StatusOK {
+		if !remove {
+			// Not disabled after all: it still demands what is left.
+			c.mu.Lock()
+			e.demand = demand
+			c.mu.Unlock()
+		}
 		return status
 	}
 	switch {
@@ -236,33 +287,58 @@ type pruneItem struct {
 // CloseConnections tries again.
 func (c *Connections) prune(e *endpoint) ua.StatusCode {
 	c.mu.Lock()
-	items := e.pending
+	n := len(e.pending)
 	c.mu.Unlock()
 	status := ua.StatusOK
-	var left []pruneItem
-	for _, it := range items {
+	var left []int // indexes into e.pending, whose items change may move
+	for i := range n {
+		// The item as it is now: a refused transaction before it may
+		// have moved its components (change).
+		c.mu.Lock()
+		it := e.pending[i]
+		c.mu.Unlock()
 		// What is in use and what goes is decided and done in one PubSub
 		// transaction: a component another client adds meanwhile is
 		// neither removed with it nor lost (Part 14 §9.1.3.7.4).
+		// The provenance of what goes (c.created) changes only once the
+		// transaction succeeded: a hook that refuses it puts the
+		// components back, created by the endpoints as before.
 		var sc ua.StatusCode
-		_ = c.srv.ChangePubSubConfiguration(func(*pubsub.PubSub) error {
-			sc = c.pruneOne(e, it)
+		var gone []pubsub.ComponentID
+		terr := c.change(func(*pubsub.PubSub) error {
+			sc = c.pruneOne(e, it, &gone)
 			return nil
 		})
+		if terr != nil {
+			c.log.Warn("uafx: CloseConnections: prune", "endpoint", e.id, "error", terr)
+			sc = badStatusOf(terr)
+		} else {
+			c.mu.Lock()
+			for _, id := range gone {
+				delete(c.created, id)
+			}
+			c.mu.Unlock()
+		}
 		if sc != ua.StatusOK {
-			left = append(left, it)
+			left = append(left, i)
 			if status == ua.StatusOK {
 				status = sc
 			}
 		}
 	}
 	c.mu.Lock()
-	e.pending = left
+	kept := make([]pruneItem, 0, len(left))
+	for _, i := range left {
+		kept = append(kept, e.pending[i])
+	}
+	e.pending = kept
 	c.mu.Unlock()
 	return status
 }
 
-func (c *Connections) pruneOne(e *endpoint, it pruneItem) ua.StatusCode {
+// pruneOne prunes it in the PubSub transaction; what it removed is added
+// to gone.
+func (c *Connections) pruneOne(e *endpoint, it pruneItem, gone *[]pubsub.ComponentID) ua.StatusCode {
 	rt := c.srv.PubSub()
 	created := func(id pubsub.ComponentID) bool {
 		c.mu.Lock()
@@ -286,9 +362,7 @@ func (c *Connections) pruneOne(e *endpoint, it pruneItem) ua.StatusCode {
 			c.log.Warn("uafx: CloseConnections: "+op, "endpoint", e.id, "component", id, "error", err)
 			return badStatusOf(err)
 		}
-		c.mu.Lock()
-		delete(c.created, id)
-		c.mu.Unlock()
+		*gone = append(*gone, id)
 		return ua.StatusOK
 	}
 	// A group still in use stays, and so does its connection; the

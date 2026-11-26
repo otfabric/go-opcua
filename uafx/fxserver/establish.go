@@ -141,6 +141,7 @@ type call struct {
 	linkUndo   []func()             // SetCommunicationConfigurationCmd
 	enabled    []pubsub.ComponentID // EnableCommunicationCmd
 	cleanupsOn []*endpoint
+	demandsOn  []*endpoint     // EnableCommunicationCmd made them demand
 	controlled []*controlGroup // EstablishControlCmd
 
 	// persisted: the commit point ran (persist); compensate puts back
@@ -296,13 +297,18 @@ func (x *call) validatePersistence() bool {
 // an endpoint undoes it.
 func (x *call) rollback() {
 	for i := len(x.enabled) - 1; i >= 0; i-- {
-		if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Disable(x.enabled[i]) }); err != nil {
+		if err := x.c.change(func(rt *pubsub.PubSub) error { return rt.Disable(x.enabled[i]) }); err != nil {
 			x.c.log.Warn("uafx: rollback: disable", "component", x.enabled[i], "error", err)
 		}
 	}
 	for _, e := range x.cleanupsOn {
 		x.c.mu.Lock()
 		e.cleanupOff = true
+		x.c.mu.Unlock()
+	}
+	for _, e := range x.demandsOn {
+		x.c.mu.Lock()
+		e.demand = false
 		x.c.mu.Unlock()
 	}
 	for i := len(x.linkUndo) - 1; i >= 0; i-- {
@@ -1570,7 +1576,7 @@ func (x *call) enableOne(rt *pubsub.PubSub, e *endpoint) ua.StatusCode {
 				return ua.StatusBadInvalidState
 			}
 			if !info.Enabled {
-				if err := x.c.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
+				if err := x.c.change(func(rt *pubsub.PubSub) error { return rt.Enable(id) }); err != nil {
 					return pubsub.StatusCodeOf(err)
 				}
 				x.enabled = append(x.enabled, id)
@@ -1582,6 +1588,10 @@ func (x *call) enableOne(rt *pubsub.PubSub, e *endpoint) ua.StatusCode {
 	if e.cleanupOff {
 		e.cleanupOff = false
 		x.cleanupsOn = append(x.cleanupsOn, e)
+	}
+	if !e.demand {
+		e.demand = true
+		x.demandsOn = append(x.demandsOn, e)
 	}
 	x.c.mu.Unlock()
 	return ua.StatusOK

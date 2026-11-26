@@ -327,7 +327,9 @@ func (p *PubSub) Running() bool {
 }
 
 // SetKeySource sets (or, with nil, removes) the keys of a SecurityGroup at
-// run time, for example when a Security Key Service pushes new keys.
+// run time, for example when a Security Key Service pushes new keys. The
+// restart gate of the SecurityGroup (GateSecurityGroup) stays; it forgets
+// the future keys it saw from the old source.
 func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource) {
 	p.ksMu.Lock()
 	if ks == nil {
@@ -335,7 +337,12 @@ func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource) {
 	} else {
 		p.keySources[securityGroupID] = ks
 	}
+	g := p.gates[securityGroupID]
 	p.ksMu.Unlock()
+	if g != nil {
+		// A new source: the future keys of the old one prove nothing.
+		g.rebase()
+	}
 }
 
 // KeySource returns the keys of a SecurityGroup, nil if none are known. The

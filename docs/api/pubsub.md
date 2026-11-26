@@ -1502,7 +1502,7 @@ Enable enables a component (or, with Root, the runtime). Like the Enable method 
 func (p *PubSub) GateSecurityGroup(securityGroupID string)
 ```
 
-GateSecurityGroup sets the restart gate of a SecurityGroup: from now on its writer groups secure messages, and its reader groups accept them, only with a key that became current after the gate was set (see the package documentation of the gate in keygate.go). An application that restores secured groups after a restart, as the persistent ConnectionEndpoints of OPC UA FX do, sets it before it enables them. The gate stays for the life of the runtime; setting it again does nothing.
+GateSecurityGroup sets the restart gate of a SecurityGroup: from now on its writer groups secure messages, and its reader groups accept them, only with a key it saw coming before it became current (see the package documentation of the gate in keygate.go). An application that restores secured groups after a restart, as the persistent ConnectionEndpoints of OPC UA FX do, sets it before it enables them. The gate stays for the life of the runtime; setting it again does nothing.
 
 #### func (PubSub) KeySource
 
@@ -1648,7 +1648,7 @@ SetDiagnosticsLevel sets the DiagnosticsLevel of the diagnostics object of a com
 func (p *PubSub) SetKeySource(securityGroupID string, ks security.KeySource)
 ```
 
-SetKeySource sets (or, with nil, removes) the keys of a SecurityGroup at run time, for example when a Security Key Service pushes new keys.
+SetKeySource sets (or, with nil, removes) the keys of a SecurityGroup at run time, for example when a Security Key Service pushes new keys. The restart gate of the SecurityGroup (GateSecurityGroup) stays; it forgets the future keys it saw from the old source.
 
 #### func (PubSub) Start
 
