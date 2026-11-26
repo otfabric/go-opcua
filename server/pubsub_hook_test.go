@@ -439,7 +439,22 @@ func TestPubSubUpdateMoved(t *testing.T) {
 	require.Len(t, ch, 1)
 	require.Equal(t, want, ch[0].Moved, "the hook sees the moves")
 
+	// A revert the runtime refuses changes nothing and reports no moves.
+	bad := rt.Configuration()
+	bad.Connections = append(bad.Connections, &ua.PubSubConnectionDataType{Name: "Bad"})
+	server.SetPubSubUpdateBefore(u, bad)
 	moved, err := u.RevertMoves()
+	require.ErrorContains(t, err, "revert the PubSub configuration")
+	require.Nil(t, moved)
+	gb, _ := group()
+	require.Equal(t, g1, gb, "the refused revert left the group")
+	_, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, "Bad")
+	require.False(t, ok)
+
+	u = update(bridgeConfig("A"), &ua.PubSubConfigurationRefDataType{ConfigurationMask: ua.PubSubConfigurationRefMaskElementModify | refWG})
+	require.Len(t, u.Moved, 1)
+	g1, n1 = group()
+	moved, err = u.RevertMoves()
 	require.NoError(t, err)
 	g2, n2 := group()
 	require.Equal(t, []server.PubSubComponentMove{{From: g1, To: g2, FromNode: n1, ToNode: n2}}, moved)

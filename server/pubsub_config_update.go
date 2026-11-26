@@ -209,13 +209,10 @@ func (u *configUpdate) apply(r *ua.PubSubConfigurationRefDataType) (ua.StatusCod
 		if undo = e.remove(); undo == nil {
 			return ua.StatusBadNoMatch, configPath{}, nil, nil
 		}
-		gone := configPath{kind: e.path.kind, names: slices.Clone(e.path.names)}
-		u.removed = append(u.removed, gone)
-		restore := undo
-		undo = func() {
-			restore()
-			u.removed = slices.DeleteFunc(u.removed, func(p configPath) bool { return p.kind == gone.kind && slices.Equal(p.names, gone.names) })
-		}
+		// An undone removal stays listed: removals apply first and are
+		// undone last, so what came after it is undone too and the element
+		// it restores keeps its ComponentID, which no move lists.
+		u.removed = append(u.removed, configPath{kind: e.path.kind, names: slices.Clone(e.path.names)})
 		e.path.names = nil
 	case ua.PubSubConfigurationRefMaskElementModify:
 		if undo = e.modify(); undo == nil {
