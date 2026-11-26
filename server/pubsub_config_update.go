@@ -46,6 +46,10 @@ type configUpdate struct {
 	matched         bool // set by apply when it matched an element
 	values          []*ua.PubSubConfigurationValueDataType
 	paths           []configPath
+	// removed are the paths of the elements ElementRemove removed: a
+	// component the update adds again under one of them is a new one, not
+	// the same element replaced.
+	removed []configPath
 }
 
 func newConfigUpdate(file *ua.PubSubConfiguration2DataType, cfg *ua.PubSubConfigurationDataType, pub *ua.Variant, usedGroups, usedWriters map[uint16]bool) *configUpdate {
@@ -205,6 +209,10 @@ func (u *configUpdate) apply(r *ua.PubSubConfigurationRefDataType) (ua.StatusCod
 		if undo = e.remove(); undo == nil {
 			return ua.StatusBadNoMatch, configPath{}, nil, nil
 		}
+		// An undone removal stays listed: removals apply first and are
+		// undone last, so what came after it is undone too and the element
+		// it restores keeps its ComponentID, which no move lists.
+		u.removed = append(u.removed, configPath{kind: e.path.kind, names: slices.Clone(e.path.names)})
 		e.path.names = nil
 	case ua.PubSubConfigurationRefMaskElementModify:
 		if undo = e.modify(); undo == nil {

@@ -37,7 +37,11 @@ behaviour you may notice, and the deviations of peers are in
   rest of the server's PubSub configuration (OPC 10000-14 §9.1.2); the
   ConnectionManager persists nothing. Enable and Disable of a persisted
   component with the Methods of its Status Object are not persisted: after
-  a restart its enablement follows its endpoints. The restart gate of a
+  a restart its enablement follows its endpoints. Without a Store, an
+  ElementModify by another client (CloseAndUpdate) of a reader or writer
+  an endpoint references is not followed: the endpoint keeps a Reference
+  to the replaced component until it is closed (EstablishConnections calls
+  are followed with or without a Store). The restart gate of a
   secured SecurityGroup is not protection against a key source rolled back
   to keys used before the restart that the process never saw current. `fxstore.FileStore` survives a power
   loss on Unix systems, only a crash of the process on Windows (no

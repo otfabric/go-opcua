@@ -349,9 +349,15 @@ func TestSecuredGroup(t *testing.T) {
 	}, 2*time.Second, time.Millisecond)
 	require.Empty(t, noKeys.dataSets())
 
-	// Keys gone: back to PreOperational.
+	// Keys gone: back to PreOperational. A publish cycle checks the keys
+	// under the publish lock of its group and the state follows that
+	// check, so the last secured message was sent and delivered before
+	// the state changed; the subscribers may still be handling it on their
+	// own goroutines: wait for them to have handled every message before
+	// counting.
 	keys.setFail(true)
 	waitState(t, pub, wgID, ua.PubSubStatePreOperational)
+	require.Eventually(t, func() bool { return bus.settled(url) }, 2*time.Second, time.Millisecond)
 
 	// An unsecured publisher is refused by the secure reader.
 	before := len(rec.dataSets())

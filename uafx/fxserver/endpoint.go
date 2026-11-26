@@ -698,6 +698,19 @@ func (c *Connections) needed(e *endpoint, n *ua.NodeID) bool {
 	return false
 }
 
+// demanded reports whether an endpoint that references the DataSetReader
+// or DataSetWriter n demands it enabled.
+func (c *Connections) demanded(n *ua.NodeID) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, o := range c.endpoints {
+		if o.demand && (o.reader != nil && o.reader.Equal(n) || o.writer != nil && o.writer.Equal(n)) {
+			return true
+		}
+	}
+	return false
+}
+
 // handOver gives the other endpoints that reference the DataSetReader or
 // DataSetWriter n the ownership e has of it: the configuration came with
 // an EstablishConnections call, so the last endpoint that references it

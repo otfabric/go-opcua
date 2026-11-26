@@ -3,10 +3,13 @@
 package server
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"reflect"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
@@ -42,6 +45,13 @@ type PubSubConfigurationUpdate struct {
 	ReferenceResults     []ua.StatusCode
 	ConfigurationValues  []*ua.PubSubConfigurationValueDataType
 	ConfigurationObjects []*ua.NodeID
+	// Moved are the components the update replaced in place: the runtime
+	// applies a changed element (ElementModify, or a changed parent) by
+	// removing it and adding it again with the same Name, so it is the
+	// same element under a new ComponentID and node. A component added
+	// under the path of an element the update removed (ElementRemove) is a
+	// new one and not listed. Computed in the PubSub transaction.
+	Moved []PubSubComponentMove
 
 	f             *configFile
 	before, after *ua.PubSubConfigurationDataType
@@ -73,32 +83,43 @@ var ErrPubSubChanged = errors.New("server: the PubSub configuration changed afte
 // PubSub transaction, and those after the first that restored the
 // configuration do nothing.
 func (u *PubSubConfigurationUpdate) Revert() error {
+	_, err := u.RevertMoves()
+	return err
+}
+
+// RevertMoves is Revert that also returns the components the revert put
+// back under a new ComponentID and node (the runtime reconciles by name:
+// what the update changed or removed comes back as new components), as
+// [PubSubConfigurationUpdate.Moved] does for the update. Computed in the
+// PubSub transaction.
+func (u *PubSubConfigurationUpdate) RevertMoves() ([]PubSubComponentMove, error) {
 	if u == nil || !u.ChangesApplied || u.f == nil {
-		return nil
+		return nil, nil
 	}
 	f := u.f
 	f.m.s.ps.txn.Lock()
 	defer f.m.s.ps.txn.Unlock()
 	if u.before == nil {
-		return nil // reverted already
+		return nil, nil // reverted already
 	}
 	if !reflect.DeepEqual(f.m.rt.Configuration(), u.after) {
-		return ErrPubSubChanged
+		return nil, ErrPubSubChanged
 	}
 	h := f.m.s.pubsubHook()
-	ids := f.m.s.restorerSnapshot(h)
+	ids := f.m.s.componentsByPath()
 	if err := reconcilePubSub(f.m.rt, u.before); err != nil {
-		return fmt.Errorf("server: revert the PubSub configuration: %w", err)
+		return nil, fmt.Errorf("server: revert the PubSub configuration: %w", err)
 	}
+	moved := movesBetween(ids, f.m.s.componentsByPath(), nil)
 	if h != nil {
-		if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: u.after, Revert: true, ids: ids}); err != nil {
-			return fmt.Errorf("server: revert the PubSub configuration: %w", err)
+		if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: u.after, Revert: true, ids: f.m.s.restorerOnly(h, ids)}); err != nil {
+			return nil, fmt.Errorf("server: revert the PubSub configuration: %w", err)
 		}
 	}
 	u.before = nil
 	f.modified.Store(time.Now().UnixNano())
 	go f.changed()
-	return nil
+	return moved, nil
 }
 
 // ChangePubSubConfiguration calls fn with the PubSub runtime of the server
@@ -190,6 +211,10 @@ type PubSubChange struct {
 	// Revert: the change is [PubSubConfigurationUpdate.Revert] undoing an
 	// update.
 	Revert bool
+	// Moved are the components a CloseAndUpdate or
+	// [Server.UpdatePubSubConfiguration] replaced in place, as
+	// [PubSubConfigurationUpdate.Moved]; nil for the other changes.
+	Moved []PubSubComponentMove
 
 	// ids are the components before the change by path, for a
 	// PubSubConfigurationRestorer; nil for another hook.
@@ -218,8 +243,10 @@ type PubSubComponentMove struct {
 
 // componentAt is a component of the runtime at a path.
 type componentAt struct {
-	id   pubsub.ComponentID
-	node *ua.NodeID
+	id    pubsub.ComponentID
+	node  *ua.NodeID
+	kind  pubsub.ComponentKind
+	names []string // from the PubSubConnection (or the PublishedDataSet) down
 }
 
 // restorerSnapshot returns the components of the runtime by path when h is
@@ -229,6 +256,51 @@ func (s *Server) restorerSnapshot(h PubSubConfigurationHook) map[string]componen
 		return nil
 	}
 	return s.componentsByPath()
+}
+
+// restorerOnly returns ids when h is a PubSubConfigurationRestorer, else nil.
+func (s *Server) restorerOnly(h PubSubConfigurationHook, ids map[string]componentAt) map[string]componentAt {
+	if _, ok := h.(PubSubConfigurationRestorer); !ok {
+		return nil
+	}
+	return ids
+}
+
+// componentPathKey is the key of componentsByPath for a kind and the names
+// from the PubSubConnection (or the PublishedDataSet) down.
+func componentPathKey(kind pubsub.ComponentKind, names []string) string {
+	return fmt.Sprint(kind) + "\x00" + strings.Join(names, "\x00")
+}
+
+// movesBetween returns the components at the same path in before and after
+// under another ComponentID, but those at or under a path of removed.
+func movesBetween(before, after map[string]componentAt, removed []configPath) []PubSubComponentMove {
+	var out []PubSubComponentMove
+	for key, cur := range after {
+		old, ok := before[key]
+		if !ok || old.id == cur.id || underRemoved(cur, removed) {
+			continue
+		}
+		out = append(out, PubSubComponentMove{From: old.id, To: cur.id, FromNode: old.node, ToNode: cur.node})
+	}
+	slices.SortFunc(out, func(a, b PubSubComponentMove) int { return cmp.Compare(a.From, b.From) })
+	return out
+}
+
+// underRemoved reports whether the component c is at a removed path or, for
+// a removed PubSubConnection or group, below one.
+func underRemoved(c componentAt, removed []configPath) bool {
+	for _, r := range removed {
+		switch {
+		case r.kind == pubsub.KindPublishedDataSet || c.kind == pubsub.KindPublishedDataSet:
+			if r.kind == c.kind && slices.Equal(r.names, c.names) {
+				return true
+			}
+		case len(c.names) >= len(r.names) && slices.Equal(c.names[:len(r.names)], r.names):
+			return true
+		}
+	}
+	return false
 }
 
 // componentsByPath returns the components of the runtime by kind and path
@@ -242,12 +314,12 @@ func (s *Server) componentsByPath() map[string]componentAt {
 	}
 	out := make(map[string]componentAt, len(comps))
 	for _, ci := range comps {
-		path := fmt.Sprint(ci.Kind)
+		var names []string
 		for x, ok := ci, true; ok && x.ID != pubsub.Root; x, ok = byID[x.Parent] {
-			path += "\x00" + x.Name
+			names = append([]string{x.Name}, names...)
 		}
 		n, _ := s.PubSubNodeID(ci.ID)
-		out[path] = componentAt{id: ci.ID, node: n}
+		out[componentPathKey(ci.Kind, names)] = componentAt{id: ci.ID, node: n, kind: ci.Kind, names: names}
 	}
 	return out
 }
@@ -291,13 +363,7 @@ func (s *Server) pubsubChanged(h PubSubConfigurationHook, ch *PubSubChange) erro
 		s.cfg.logger.Error("pubsub: restoring the configuration a hook refused failed", "error", rerr)
 	}
 	if r, ok := h.(PubSubConfigurationRestorer); ok && ch.ids != nil {
-		var moved []PubSubComponentMove
-		for path, cur := range s.componentsByPath() {
-			if old, ok := ch.ids[path]; ok && old.id != cur.id {
-				moved = append(moved, PubSubComponentMove{From: old.id, To: cur.id, FromNode: old.node, ToNode: cur.node})
-			}
-		}
-		if len(moved) > 0 {
+		if moved := movesBetween(ch.ids, s.componentsByPath(), nil); len(moved) > 0 {
 			r.PubSubConfigurationRestored(ch, moved)
 		}
 	}

@@ -554,8 +554,9 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 	if f.beforeReconcile != nil {
 		f.beforeReconcile()
 	}
+	var moved []PubSubComponentMove
 	if applied {
-		ids := f.m.s.restorerSnapshot(f.m.s.pubsubHook())
+		ids := f.m.s.componentsByPath()
 		if err := reconcilePubSubRecord(f.m.rt, u.cfg, func(id pubsub.ComponentID) { created[id] = true }); err != nil {
 			f.m.s.cfg.logger.Warn("pubsub: CloseAndUpdate failed, restoring the configuration", "error", err)
 			if rerr := reconcilePubSub(f.m.rt, old); rerr != nil {
@@ -563,8 +564,9 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 			}
 			return nil, statusOf(err)
 		}
+		moved = movesBetween(ids, f.m.s.componentsByPath(), u.removed)
 		if h := f.m.s.pubsubHook(); h != nil {
-			if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: old, ids: ids}); err != nil {
+			if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: ctx, Before: old, Moved: moved, ids: f.m.s.restorerOnly(h, ids)}); err != nil {
 				return nil, statusOf(err)
 			}
 		}
@@ -580,7 +582,7 @@ func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfigurati
 	}
 	r := &PubSubConfigurationUpdate{ChangesApplied: applied, ReferenceResults: results, ConfigurationObjects: objs, f: f}
 	if applied {
-		r.ConfigurationValues, r.created = u.values, created
+		r.ConfigurationValues, r.created, r.Moved = u.values, created, moved
 		r.before, r.after = old, f.m.rt.Configuration()
 	}
 	return r, ua.StatusOK

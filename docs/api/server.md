@@ -3242,6 +3242,10 @@ type PubSubChange struct {
 	// Revert: the change is [PubSubConfigurationUpdate.Revert] undoing an
 	// update.
 	Revert bool
+	// Moved are the components a CloseAndUpdate or
+	// [Server.UpdatePubSubConfiguration] replaced in place, as
+	// [PubSubConfigurationUpdate.Moved]; nil for the other changes.
+	Moved []PubSubComponentMove
 
 	// ids are the components before the change by path, for a
 	// PubSubConfigurationRestorer; nil for another hook.
@@ -3303,7 +3307,14 @@ type PubSubConfigurationUpdate struct {
 	ReferenceResults     []ua.StatusCode
 	ConfigurationValues  []*ua.PubSubConfigurationValueDataType
 	ConfigurationObjects []*ua.NodeID
-	// contains filtered or unexported fields
+	// Moved are the components the update replaced in place: the runtime
+	// applies a changed element (ElementModify, or a changed parent) by
+	// removing it and adding it again with the same Name, so it is the
+	// same element under a new ComponentID and node. A component added
+	// under the path of an element the update removed (ElementRemove) is a
+	// new one and not listed. Computed in the PubSub transaction.
+	Moved []PubSubComponentMove
+
 }
 ```
 
@@ -3326,6 +3337,14 @@ func (u *PubSubConfigurationUpdate) Revert() error
 Revert restores the configuration the update replaced, provided the configuration is still the one the update applied: else it changes nothing and returns ErrPubSubChanged. It does nothing for an update that applied no changes. The ids the update used stay released.
 
 Revert is safe for concurrent use: calls run one after the other in the PubSub transaction, and those after the first that restored the configuration do nothing.
+
+#### func (PubSubConfigurationUpdate) RevertMoves
+
+```go
+func (u *PubSubConfigurationUpdate) RevertMoves() ([]PubSubComponentMove, error)
+```
+
+RevertMoves is Revert that also returns the components the revert put back under a new ComponentID and node (the runtime reconciles by name: what the update changed or removed comes back as new components), as [PubSubConfigurationUpdate.Moved](#func-pubsubconfigurationupdate-moved) does for the update. Computed in the PubSub transaction.
 
 ### type PubSubIDReservation
 

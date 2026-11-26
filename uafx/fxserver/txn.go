@@ -93,6 +93,11 @@ func (c *Connections) follow(before, after, links map[string]pubsub.ComponentID)
 // any mechanism brought back (server.PubSubConfigurationRestorer), in the
 // PubSub transaction: as change does for the package's own changes.
 func (p *persistence) PubSubConfigurationRestored(_ *server.PubSubChange, moves []server.PubSubComponentMove) {
+	p.c.followMoves(moves)
+}
+
+// followMoves is followMoved for the moves the server reports.
+func (c *Connections) followMoves(moves []server.PubSubComponentMove) {
 	moved := make(map[pubsub.ComponentID]pubsub.ComponentID, len(moves))
 	links := make(map[string]pubsub.ComponentID, len(moves))
 	for _, m := range moves {
@@ -101,7 +106,7 @@ func (p *persistence) PubSubConfigurationRestored(_ *server.PubSubChange, moves 
 			links[m.FromNode.String()] = m.From
 		}
 	}
-	p.c.followMoved(moved, links)
+	c.followMoved(moved, links)
 }
 
 // followMoved moves the provenance, the pending prune items and the
