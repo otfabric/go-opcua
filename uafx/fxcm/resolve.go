@@ -67,6 +67,33 @@ type target struct {
 	// cache are the resolutions of identifiers on this server, valid for
 	// its NamespaceArray and publication dates (CL-6, CL-8).
 	cache *resolutionCache
+	// server is the identity of the server, read by identify.
+	server     serverEvidence
+	identified bool
+}
+
+// identify reads the identity of the server of t (design §6.5): from an
+// IdentifiedSession, else the ApplicationUri from Server.ServerArray[0]
+// (OPC 10000-5 §6.3.1: the first entry is the server itself). A failed
+// read leaves it empty: an identity is evidence, its absence is recorded.
+func (t *target) identify(ctx context.Context) {
+	if t.identified {
+		return
+	}
+	t.identified = true
+	t.server = serverEvidence{Secured: t.addr.SecurityMode != ua.MessageSecurityModeNone && t.addr.SecurityMode != ua.MessageSecurityModeInvalid}
+	if is, ok := t.sess.(IdentifiedSession); ok {
+		id := is.ServerIdentity()
+		t.server.ApplicationURI, t.server.Thumbprint = id.ApplicationURI, slices.Clone(id.CertificateThumbprint)
+		return
+	}
+	res, err := t.sess.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{NodeID: ua.NewNumericNodeID(0, id.ServerServerArray), AttributeID: ua.AttributeIDValue}}})
+	if err != nil || len(res.Results) != 1 {
+		return
+	}
+	if uris, ok := dvValue(res.Results[0]).([]string); ok && len(uris) > 0 {
+		t.server.ApplicationURI = uris[0]
+	}
 }
 
 // ns returns the index of uri on the server.

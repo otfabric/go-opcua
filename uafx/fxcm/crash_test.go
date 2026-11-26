@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,7 +43,9 @@ type cmFX struct {
 }
 
 type cmCrashScenario struct {
-	point        string
+	point string
+	// nth is the occurrence of point to stop at, 0 the first.
+	nth          int
 	prepare, act func(t *testing.T, f *cmFX)
 	check        func(t *testing.T, m *fxcm.Manager)
 }
@@ -124,12 +127,42 @@ var cmCrashScenarios = map[string]cmCrashScenario{
 	"add after the set write":  {point: "set.after-apply", act: addSet, check: readyNothingOwed},
 	"establish before the first intent": {point: "call.before-intent", prepare: addSet, act: processSet,
 		check: readyNothingOwed},
-	"establish with an intent written": {point: "call.after-intent", prepare: addSet, act: processSet,
-		check: owes(fxcm.OwedCall, fxcm.OwedRollback)},
+	// The third intent is of the first call that creates endpoints: the
+	// first two reserve ids, one on each AutomationComponent.
+	"establish with an intent written": {point: "call.after-intent", nth: 2, prepare: addSet, act: processSet,
+		check: func(t *testing.T, m *fxcm.Manager) {
+			owes(fxcm.OwedCall, fxcm.OwedRollback)(t, m)
+			st, _ := m.Status(crashKey())
+			assert.NotEmpty(t, st.Endpoints, "the Names of the intent are held, Unverified")
+			started := m.Process(uafx.ActionEstablishConnectionsEnabled, crashKey())
+			assert.Equal(t, ua.StatusBadInvalidState, fxcm.StatusOf(started[0].Err), "owed work blocks an establish")
+		}},
 	"establish with a call sent": {point: "call.after-send", prepare: addSet, act: processSet,
 		check: owes(fxcm.OwedCall, fxcm.OwedRollback)},
 	"rollback before its first close": {point: "rollback.started", prepare: abortingSet, act: processSet,
 		check: owes(fxcm.OwedRollback)},
+	"update between its closes and the switch": {point: "set.before-apply", prepare: establishSet,
+		act: func(t *testing.T, f *cmFX) {
+			_, _ = f.m.Update(context.Background(), []fxcm.Operation{
+				{Op: uafx.ElementReplace, Conf: e2eConf(t, "Crash", f.a, f.b)},
+				{Op: uafx.ElementAdd, Conf: e2eConf(t, "CrashNew", f.a, f.b)},
+			}, true)
+		},
+		check: func(t *testing.T, m *fxcm.Manager) {
+			owes(fxcm.OwedSetChange)(t, m)
+			st, _ := m.Status(crashKey())
+			for _, w := range st.Recovery.Owed {
+				if w.Kind == fxcm.OwedSetChange {
+					assert.Len(t, w.Changes, 2, "the parent transaction of the Update")
+				}
+			}
+			_, ok := m.Status(fxcm.SetKey{Name: "CrashNew"})
+			assert.False(t, ok)
+			// Stand-ins: the child's AutomationComponents died with it.
+			_, err := m.Add(e2eConf(t, "CrashNew", &ac{uri: "urn:go-opcua:fxcm:gone1", url: "opc.tcp://localhost:1"},
+				&ac{uri: "urn:go-opcua:fxcm:gone2", url: "opc.tcp://localhost:2"}))
+			assert.Equal(t, ua.StatusBadInvalidState, fxcm.StatusOf(err), "the key the owed change adds is held: %v", err)
+		}},
 	"replace during the closes": {point: "set.before-apply", prepare: establishSet,
 		act: func(t *testing.T, f *cmFX) {
 			_, _ = f.m.Replace(context.Background(), e2eConf(t, "Crash", f.a, f.b))
@@ -207,8 +240,17 @@ func TestCrashChild(t *testing.T) {
 	if sc.prepare != nil {
 		sc.prepare(t, f)
 	}
+	var mu sync.Mutex
+	seen := 0
 	fxcm.SetCrashPoint(f.m, func(p string) {
 		if p != sc.point {
+			return
+		}
+		mu.Lock()
+		n := seen
+		seen++
+		mu.Unlock()
+		if n != sc.nth {
 			return
 		}
 		fmt.Println("FXCMCRASH " + p)

@@ -202,14 +202,24 @@ type record struct {
 	// state is the last Status the monitor read, valid with monitored.
 	state     uafx.ConnectionEndpointStatus
 	monitored bool
-	// nsa is the NamespaceArray of the server the NodeIds are of; gen and
-	// fp the generation and fingerprint of the set configuration the
-	// endpoint was made from (design §6.1). stored is the class a loaded
-	// Unverified record was written with.
-	nsa    []string
-	gen    uint64
-	fp     []byte
-	stored Ownership
+	// The evidence of design §6.1 and §6.5, with a Store. nsa is the
+	// NamespaceArray of the server the NodeIds are of; gen and fp the
+	// generation and fingerprint of the set configuration of the run that
+	// made or found the endpoint, epfp the SHA-256 of the
+	// ConnectionEndpointConfiguration it sent; server the identity of the
+	// server; created the Diagnostics CreationTime of the endpoint (zero
+	// when not exposed); cmURI the ConnectionManagerApplicationUri read
+	// from it, with cmObserved. stored is the class a loaded Unverified
+	// record was written with.
+	nsa        []string
+	gen        uint64
+	fp         []byte
+	epfp       []byte
+	server     serverEvidence
+	created    time.Time
+	cmURI      string
+	cmObserved bool
+	stored     Ownership
 }
 
 func recordKey(addr ServerAddress, fe *ua.NodeID, name string) string {
@@ -548,12 +558,20 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 		return nil, err
 	}
 	defer m.wg.Done()
-	run, err := m.removeConnections(ctx, s, cfg)
+	cs := []setChange{{key: cfg.key, next: cfg, existing: true}}
+	tx, err := m.plan(cs, []uafx.ConnectionConfigurationSetOperation{uafx.ElementReplace})
+	if err != nil {
+		m.release(s)
+		return nil, err
+	}
+	run, err := m.removeConnections(ctx, s, tx)
 	if err != nil {
 		return nil, err
 	}
 	if m.p != nil {
-		gens, fps, err := m.p.switchSets([]setChange{{key: cfg.key, next: cfg, existing: true}}, []RunID{run})
+		defer m.endRuns(run)
+		cs[0].gen = tx.ops[0].New
+		gens, fps, err := m.p.switchSets(cs, []RunID{run})
 		if err != nil {
 			// The Connections are closed; the old set stays, as the
 			// store has it, and its run record shows the switch owed.
@@ -590,12 +608,19 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 		return err
 	}
 	defer m.wg.Done()
-	run, err := m.removeConnections(ctx, s, nil)
+	cs := []setChange{{key: key, existing: true}}
+	tx, err := m.plan(cs, []uafx.ConnectionConfigurationSetOperation{uafx.ElementRemove})
+	if err != nil {
+		m.release(s)
+		return err
+	}
+	run, err := m.removeConnections(ctx, s, tx)
 	if err != nil {
 		return err
 	}
 	if m.p != nil {
-		if _, _, err := m.p.switchSets([]setChange{{key: key, existing: true}}, []RunID{run}); err != nil {
+		defer m.endRuns(run)
+		if _, _, err := m.p.switchSets(cs, []RunID{run}); err != nil {
 			m.release(s)
 			return err
 		}
@@ -621,6 +646,11 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 // caller calls m.wg.Done when it is finished; a closed Manager is
 // ua.StatusBadShutdown.
 func (m *Manager) claim(key SetKey) (*set, error) {
+	if m.p != nil {
+		if err := m.p.checkRemote(key, false); err != nil {
+			return nil, err
+		}
+	}
 	m.mu.Lock()
 	closed := m.closed
 	s := m.sets[keyString(key)]
@@ -672,18 +702,46 @@ func (m *Manager) beginRemove(s *set) (*Run, State) {
 // removeConnections runs the remove run of the claimed set s for a Replace
 // or Remove: it closes the endpoints of s. On a failure the set stays in
 // Error and the claim is released. Close stops it as it stops a run.
-func (m *Manager) removeConnections(ctx context.Context, s *set, next *Config) (RunID, error) {
+func (m *Manager) removeConnections(ctx context.Context, s *set, tx *txPlan) (RunID, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer context.AfterFunc(m.ctx, cancel)()
 	r, prev := m.beginRemove(s)
-	r.next = next
+	r.tx = tx
 	res := m.execute(ctx, s, r, prev)
 	if res.State == StateError {
 		m.release(s)
 		return r.id, managerError(firstStatus(res.Failures), "the Connections of the set %s were not all closed", r.key)
 	}
 	return r.id, nil
+}
+
+// plan is, with a Store, the set change cs (operations ops) as the run
+// that closes the first closing set journals it (design §6.2); nil
+// without a Store.
+func (m *Manager) plan(cs []setChange, ops []uafx.ConnectionConfigurationSetOperation) (*txPlan, error) {
+	if m.p == nil {
+		return nil, nil
+	}
+	tp, err := m.planOps(cs, ops)
+	if err != nil {
+		return nil, managerError(ua.StatusBadEncodingError, "the set change does not encode: %v", err)
+	}
+	return tp, nil
+}
+
+// endRuns ends the remove runs a set change kept active until its switch
+// was written or failed: what they leave in the store is owed work.
+func (m *Manager) endRuns(runs ...RunID) {
+	if m.p == nil {
+		return
+	}
+	for _, r := range runs {
+		m.p.activate(r, false)
+	}
+	m.p.mu.Lock()
+	m.p.refreshOwed()
+	m.p.mu.Unlock()
 }
 
 // release ends the claim of s without a change.
@@ -891,13 +949,44 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 		}
 		m.mu.Unlock()
 	}
-	var runs []RunID
-	for _, h := range closing {
-		var next *Config
-		if ops[h.i].Op == uafx.ElementReplace {
-			next = cfgs[h.i]
+	cs := make([]setChange, len(ops))
+	opKinds := make([]uafx.ConnectionConfigurationSetOperation, len(ops))
+	for i, op := range ops {
+		opKinds[i] = op.Op
+		switch op.Op {
+		case uafx.ElementAdd:
+			cs[i] = setChange{key: cfgs[i].key, next: cfgs[i]}
+		case uafx.ElementRemove:
+			cs[i] = setChange{key: KeyOf(op.Conf), existing: true}
+		case uafx.ElementReplace:
+			cs[i] = setChange{key: cfgs[i].key, next: cfgs[i], existing: true}
 		}
-		run, err := m.removeConnections(ctx, h.s, next)
+	}
+	var tx *txPlan
+	if len(closing) > 0 {
+		// The whole change is the parent transaction, journaled by the
+		// first remove run before any close (design §6.2): a crash
+		// between the closes and the switch leaves it owed.
+		var err error
+		if tx, err = m.plan(cs, opKinds); err != nil {
+			unreserve()
+			for j := range results {
+				results[j] = err
+			}
+			for _, h := range held {
+				m.unclaim(h.s)
+			}
+			return false, results
+		}
+	}
+	var runs []RunID
+	defer func() { m.endRuns(runs...) }()
+	for n, h := range closing {
+		var t *txPlan
+		if n == 0 {
+			t = tx
+		}
+		run, err := m.removeConnections(ctx, h.s, t)
 		runs = append(runs, run)
 		if err != nil {
 			// The close left h in Error and released it; the other
@@ -924,16 +1013,10 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 	var fps [][]byte
 	if m.p != nil {
 		// The whole batch in one write, before any of it is visible
-		// (design §6.2).
-		cs := make([]setChange, len(ops))
-		for i, op := range ops {
-			switch op.Op {
-			case uafx.ElementAdd:
-				cs[i] = setChange{key: cfgs[i].key, next: cfgs[i]}
-			case uafx.ElementRemove:
-				cs[i] = setChange{key: KeyOf(op.Conf), existing: true}
-			case uafx.ElementReplace:
-				cs[i] = setChange{key: cfgs[i].key, next: cfgs[i], existing: true}
+		// (design §6.2), with the generations its transaction reserved.
+		if tx != nil {
+			for i := range cs {
+				cs[i].gen = tx.ops[i].New
 			}
 		}
 		var err error
@@ -1150,6 +1233,14 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 	if action != ActionReconcile && Activity(action) == 0 {
 		return Started{Err: managerError(ua.StatusBadNotSupported, "the action %v", action)}
 	}
+	if m.p != nil {
+		// Owed work of the journal blocks what would act on its
+		// endpoints, except a close (design §6.3, stage C3.3 settles it).
+		closeOnly := action == ActionReconcile || action == uafx.ActionRemoveConnections
+		if err := m.p.checkRemote(k, closeOnly); err != nil {
+			return Started{Err: err}
+		}
+	}
 	// The run is counted under m.mu, so that Close, which sets closed
 	// under it and then waits, sees it.
 	m.mu.Lock()
@@ -1248,7 +1339,7 @@ func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error {
 	}
 	if m.p != nil {
 		// The verdict is durable before it is the record's (design §6.4).
-		if err := m.p.settleRecord(s, fk, found, verdict); err != nil {
+		if err := m.p.settleRecord(s, found, verdict); err != nil {
 			s.mu.Unlock()
 			return err
 		}

@@ -184,3 +184,34 @@ func TestStoreOpen(t *testing.T) {
 	_, err = m2.Add(named("b"))
 	require.NoError(t, err)
 }
+
+// TestStoreFollowWaits (design §3.3): memory follows the store only when
+// no set is being processed, replaced or removed and no Add holds the key
+// of a stored set; until then the fence stays.
+func TestStoreFollowWaits(t *testing.T) {
+	t.Parallel()
+	mem := &fxstore.MemoryStore{}
+	m := storeManager(t, mem)
+	_, err := m.Add(named("a"))
+	require.NoError(t, err)
+	s := m.lookup(KeyOf(named("a")))
+	s.mu.Lock()
+	s.current = &Run{done: make(chan struct{})}
+	s.mu.Unlock()
+	assert.False(t, m.p.follow(), "a set is being processed")
+	s.mu.Lock()
+	s.current, s.held = nil, true
+	s.mu.Unlock()
+	assert.False(t, m.p.follow(), "a set is held")
+	s.mu.Lock()
+	s.held = false
+	s.mu.Unlock()
+	m.mu.Lock()
+	m.reserved = map[string]bool{keyString(KeyOf(named("a"))): true}
+	m.mu.Unlock()
+	assert.False(t, m.p.follow(), "an Add holds the key of a stored set")
+	m.mu.Lock()
+	m.reserved = nil
+	m.mu.Unlock()
+	assert.True(t, m.p.follow())
+}

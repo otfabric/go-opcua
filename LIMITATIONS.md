@@ -35,9 +35,11 @@ behaviour you may notice, and the deviations of peers are in
   their control and the PubSub components they reference, not
   ConfigurationData or the VariableStorage Methods (§6.4.6), and not the
   rest of the server's PubSub configuration (OPC 10000-14 §9.1.2). With a
-  Store the ConnectionManager keeps its sets, endpoint records and run
-  journal, but after a restart verifies no record (all are Unverified and
-  never closed or adopted) and executes no owed work: it reports it
+  Store the ConnectionManager keeps its sets, endpoint records with their
+  evidence and run journal, but after a restart verifies no record (all
+  are Unverified and never closed or adopted) and executes no owed work:
+  it reports it and refuses what would act on the endpoints of a set
+  that owes work until it is settled (C3.3)
   ([docs/uafx.md](docs/uafx.md#persistence-of-the-connectionmanager)).
   Enable and Disable of a persisted
   component with the Methods of its Status Object are not persisted: after

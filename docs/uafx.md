@@ -1040,10 +1040,21 @@ with `Bad_ResourceUnavailable` and changes nothing; one whose outcome is
 unknown fails with `Bad_InternalError` (library interpretation C3-D13),
 changes nothing in memory and fences the store: later changes and the
 journal writes of runs already in flight are refused until the store is
-settled, in the background with backoff, after which memory follows what
-the store committed. A commit that fails leaves the edit open. `Replace`
-and `Remove` write the switch to the new set, or its removal, after their
-closes, in the same write that ends their run.
+settled, in the background with backoff, and memory has followed what
+the store committed (`StoreStatus().Reconciling` until then; memory
+follows once no set is being processed, replaced or removed and no Add
+holds the key of a stored set). A write that landed is then the
+Manager's state, one that did not is not, and the generations it would
+have used are never handed out again. A commit that fails leaves the edit
+open, also one whose Version landed: a commit again is a new Version.
+`Replace`, `Remove` and an `Update` with complete TRUE that closes sets
+first write the whole change, with the generations it reserves, as the
+set change of the first run that closes (a `tx/` record); the switch to
+the new sets, or their removal, takes those generations in the same write
+that ends the runs. A change whose switch was not written stays owed
+(`OwedWork.Changes`, one `PlannedChange` per operation), and the key of
+a set it adds is held: an `Add` of it is `Bad_InvalidState`
+(`StoreStatus().Orphaned`).
 
 **The journal** (design §6.3). A run writes its run record before its
 first call, an intent before each EstablishConnections and
@@ -1054,7 +1065,69 @@ with FxErrorRuntimeError and the StatusCode of the write (library
 interpretation). When a completion is not written, the records it would
 have written that claim ownership become Unresolved in memory, and the
 intents stay in the store with the run record, as evidence of calls whose
-outcome is unknown.
+outcome is unknown. Completions are serialized with the snapshot of the
+store they compare against: each writes only the records of its own step
+that differ from the store, and a completion that fails downgrades only
+the records it tried to write. A run record stays after the run while it
+owes work: a rollback that did not close every endpoint the run made, or
+an intent whose outcome is not proven. A rollback writes its
+rollback-required phase before its first close; when that write fails it
+sends no close and the rollback is owed.
+
+**Evidence** (design §6.5). An endpoint record, written when its step
+completes, holds the identity of the server (the ApplicationUri the
+session reported, the SHA-1 thumbprint of its certificate when the channel
+is secured, OPC 10000-6 §6.7.4; a `Session` that is no
+`IdentifiedSession` is read Server.ServerArray[0]), its NamespaceArray,
+the AutomationComponent, FunctionalEntity and endpoint NodeIds qualified
+by namespace URI, the ConnectionManagerApplicationUri and the Diagnostics
+CreationTime read from the endpoint (§6.6.2 Table 74; what the
+AutomationComponent does not expose stays empty: evidence absent, not
+evidence of absence), the SHA-256 of the ConnectionEndpointConfiguration
+it was established with, and the generation and fingerprint of the
+configuration the run started with, not of one committed while it ran.
+The store key of an endpoint depends on namespace URIs, not indexes. An
+intent holds the same identity and NodeIds and one fingerprint per
+endpoint configuration. C3.2 writes the evidence; C3.3 verifies it.
+
+**Ambiguous results** (design §6.7, decision C3-D13). A state-changing
+call whose result does not prove its outcome keeps its intent in the
+store, and its Names are Unresolved: a call status or an operation status
+among Bad_InternalError, Bad_UnexpectedError, Bad_OutOfMemory,
+Bad_Timeout, Bad_RequestTimeout, Bad_CommunicationError,
+Bad_ConnectionClosed, Bad_SecureChannelClosed, Bad_ServerHalted,
+Bad_Shutdown and Bad_DecodingError (library interpretation of the set), a
+result that does not decode, or one that does not answer the call (not
+one result per endpoint configuration, no communication result, a created
+endpoint without its NodeId). After such a result, or after a lost
+response for a persistent endpoint, an endpoint the Manager does not find
+is not proven absent (an AutomationComponent whose store had an unknown
+outcome may restore it) and its Name stays Unresolved.
+Bad_ResourceUnavailable is a definite failure: from a persistent
+AutomationComponent (C3.1) it means its store did not commit and the call
+was undone. ReserveCommunicationIds reserves for the session only (CL-2)
+and owes nothing.
+
+**Owed work is enforced** (design §6.3). While the journal owes work for
+a set, the Manager refuses what would create, take or forget an endpoint
+of it: an establish (`Process`), `Replace`, `Remove` and an `Update` that
+names it are `Bad_InvalidState`. A close is allowed: RemoveConnections
+and `Reconcile` run. The Names of an establish intent that did not end
+are held by Unverified records without a NodeId, after a restart and in
+the running Manager, so that no run creates an endpoint under them.
+
+**Records are validated** (design §3.2, §6.1). A record that decodes but
+is not valid — its key does not match its content, a generation or RunID
+above the counters, a class, phase or Action out of range, a fingerprint
+that is not of its configuration, a NodeId in a namespace its record does
+not list, an endpoint record of no set, an intent of no run of its set, a
+set change of no set-change run, a key outside the record layout — is
+reported in `StoreStatus().Failed`, kept, and blocks what it could be
+about: its set (`Recovery.Blocked`, the set in Error, every operation on
+it but a close refused), or every set when it names none
+(`StoreStatus().BlockedAll`). Counters that do not decode or are below a
+record make the store read-only (`StoreStatus().ReadOnly`): every write is
+refused.
 
 **Restart** (design §6.4, decision C3-D9). `New` loads the sets with their
 Versions and every endpoint record as `Unverified`: whatever class it was

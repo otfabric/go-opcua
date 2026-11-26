@@ -7,6 +7,7 @@ import (
 	"hash/crc32"
 	"math"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -21,9 +22,14 @@ func TestRecordsRoundTrip(t *testing.T) {
 		&countersRecord{Generation: 7, RunID: 9},
 		&setRecord{Folder: []string{"a"}, Name: "s", Version: 3, Generation: 4, Fingerprint: []byte{1, 2}, Conf: []byte{3}},
 		&epStored{Folder: []string{"f"}, SetName: "s", Connection: "c", Endpoint: 1, Address: "opc.tcp://x", Namespaces: []string{"http://opcfoundation.org/UA/", "urn:x"},
-			ServerURI: "urn:x", ACNode: ua.NewNumericNodeID(1, 5), FunctionalEntity: ua.NewStringNodeID(1, "fe"), Name: "n", NodeID: ua.NewNumericNodeID(1, 6), Class: int64(KnownOwned), Run: 2, Version: 1},
+			ServerURIConf: "urn:x", Server: serverEvidence{ApplicationURI: "urn:x", Secured: true, Thumbprint: []byte{9}},
+			ACNode: &qualifiedID{NamespaceURI: "urn:x", ID: "i=5"}, FunctionalEntity: &qualifiedID{NamespaceURI: "urn:x", ID: "s=fe"}, Name: "n", NodeID: &qualifiedID{NamespaceURI: "urn:x", ID: "i=6"},
+			CreationTime: time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC), CMApplicationURI: "urn:cm", CMObserved: true,
+			Class: int64(KnownOwned), Run: 2, Version: 1, Generation: 4, Fingerprint: []byte{1}, EndpointFingerprint: []byte{2}},
 		&runRecord{Run: 2, SetName: "s", Generation: 4, Action: 1, RollbackOnError: true, Phase: phaseExecuting, Endpoints: []string{"ep/x"}},
-		&callRecord{Run: 2, Kind: callEstablish, ACNode: ua.NewNumericNodeID(1, 5), Names: []string{"n"}, FunctionalEntities: []*ua.NodeID{ua.NewStringNodeID(1, "fe")}, Request: []byte{1}, AbsentBefore: []bool{true}, Preconfigured: []*ua.NodeID{ua.NewTwoByteNodeID(0)}},
+		&txRecord{Run: 2, Ops: []txOp{{Op: 4, Name: "s", Version: 1, Old: 3, New: 5, Fingerprint: []byte{1}, Conf: []byte{2}}}},
+		&callRecord{Run: 2, Kind: callEstablish, ACNode: &qualifiedID{NamespaceURI: "urn:x", ID: "i=5"}, Names: []string{"n"}, FunctionalEntities: []*qualifiedID{{NamespaceURI: "urn:x", ID: "s=fe"}},
+			EndpointFingerprints: [][]byte{{1}}, Request: []byte{1}, AbsentBefore: []bool{true}, Preconfigured: []*qualifiedID{{}}},
 	} {
 		b, err := encodeRecord(v)
 		require.NoError(t, err)
@@ -52,6 +58,8 @@ func newLike(v any) any {
 		return new(runRecord)
 	case *callRecord:
 		return new(callRecord)
+	case *txRecord:
+		return new(txRecord)
 	}
 	panic("unknown record")
 }
@@ -66,9 +74,10 @@ func FuzzDecodeRecord(f *testing.F) {
 	for _, v := range []any{
 		&countersRecord{Generation: 7, RunID: 9},
 		&setRecord{Folder: []string{"a"}, Name: "s", Version: 3, Generation: 4, Fingerprint: []byte{1, 2}, Conf: conf},
-		&epStored{SetName: "s", Connection: "c", Namespaces: []string{"urn:x"}, ACNode: ua.NewNumericNodeID(1, 5), Class: int64(KnownOwned)},
+		&epStored{SetName: "s", Connection: "c", Namespaces: []string{"urn:x"}, ACNode: &qualifiedID{NamespaceURI: "urn:x", ID: "i=5"}, Class: int64(KnownOwned)},
 		&runRecord{Run: 2, SetName: "s", Phase: phaseExecuting, Endpoints: []string{"ep/x"}},
-		&callRecord{Run: 2, Kind: callEstablish, Names: []string{"n"}, AbsentBefore: []bool{true}, Preconfigured: []*ua.NodeID{ua.NewTwoByteNodeID(0)}},
+		&txRecord{Run: 2, Ops: []txOp{{Op: 1, Name: "s", Version: 1, New: 5, Conf: conf}}},
+		&callRecord{Run: 2, Kind: callEstablish, Names: []string{"n"}, AbsentBefore: []bool{true}, Preconfigured: []*qualifiedID{{ID: "i=0"}}},
 	} {
 		b, err := ua.Encode(v)
 		require.NoError(f, err)
@@ -85,7 +94,7 @@ func FuzzDecodeRecord(f *testing.F) {
 		val = binary.LittleEndian.AppendUint32(val, crc32.Checksum(part, crcTable))
 		for _, v := range []func() any{
 			func() any { return new(countersRecord) }, func() any { return new(setRecord) }, func() any { return new(epStored) },
-			func() any { return new(runRecord) }, func() any { return new(callRecord) },
+			func() any { return new(runRecord) }, func() any { return new(callRecord) }, func() any { return new(txRecord) },
 		} {
 			out := v()
 			if decodeRecord(val, out) != nil {

@@ -32,3 +32,25 @@ func SetCrashPoint(m *Manager, f func(string)) {
 	}
 	m.crash.Store(&f)
 }
+
+// The records of the store, for the tests of what a Manager writes.
+type (
+	StoredSet      = setRecord
+	StoredEndpoint = epStored
+	StoredRun      = runRecord
+	StoredCall     = callRecord
+	StoredTx       = txRecord
+)
+
+// PhaseRollbackRequired is the phase of a run record whose rollback is
+// owed.
+const PhaseRollbackRequired = phaseRollbackRequired
+
+// DecodeStored decodes the record b of the store.
+func DecodeStored[T any](b []byte) (*T, error) {
+	v := new(T)
+	if err := decodeRecord(b, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}

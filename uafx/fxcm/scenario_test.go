@@ -33,6 +33,9 @@ type hookDialer struct {
 	// fault fails a service of a session before it is sent; "Dial" fails
 	// the dial.
 	fault func(method string, addr fxcm.ServerAddress) error
+	// result, when not nil, replaces the result of a Call that was sent
+	// and answered: a mangled or ambiguous response.
+	result func(addr fxcm.ServerAddress, req *ua.CallMethodRequest, out *ua.CallMethodResult) (*ua.CallMethodResult, error)
 }
 
 func newHookDialer() *hookDialer {
@@ -114,7 +117,11 @@ func (s *hookSession) Call(ctx context.Context, req *ua.CallMethodRequest) (*ua.
 			return nil, err
 		}
 	}
-	return s.Session.Call(ctx, req)
+	out, err := s.Session.Call(ctx, req)
+	if err == nil && s.d.result != nil {
+		return s.d.result(s.addr, req, out)
+	}
+	return out, err
 }
 
 // commandMask returns the CommandMask of an EstablishConnections call.

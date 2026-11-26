@@ -10,7 +10,10 @@ import (
 	"fmt"
 	"hash/crc32"
 	"math"
+	"slices"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
@@ -21,16 +24,18 @@ import (
 //
 //	counters        the generation and RunID counters
 //	set/<set>       a ConnectionConfigurationSet as committed
-//	ep/<endpoint>   an EndpointRecord with its evidence
+//	ep/<endpoint>   an EndpointRecord with its evidence (§6.1, §6.5)
 //	run/<run>       the journal of a run (§6.3)
-//	next/<run>      the set a Replace in run <run> switches to
+//	tx/<run>        the set change a Replace, Remove or complete Update
+//	                in run <run> makes after its closes (§6.2)
 //	call/<run>/<n>  the intent of an EstablishConnections or CloseConnections
 //
 // <set> and <endpoint> are hex SHA-256 prefixes of the SetKey and of the
-// place of the endpoint (server, FunctionalEntity, Name), so that a key
-// never depends on a namespace index; <run> is the RunID in hex. Remote
-// NodeIds are stored with the NamespaceArray of their server (§6.1:
-// "Remote NodeIds are stored URI-qualified").
+// place of the endpoint (server, FunctionalEntity by namespace URI, Name),
+// so that a key never depends on a namespace index; <run> is the RunID in
+// hex. Remote NodeIds are stored URI-qualified (qualifiedID; §6.1: "Remote
+// NodeIds are stored URI-qualified"), with the NamespaceArray of their
+// server, which the encoded arguments of an intent need.
 
 // recordSchema is the schema of the records (fxstore.DomainOptions.Schema).
 const recordSchema = 1
@@ -55,6 +60,65 @@ const (
 	callEstablish uint8 = 1
 	callClose     uint8 = 2
 )
+
+// qualifiedID is a remote NodeId with the URI of its namespace instead of
+// its index (§6.1). ID is the identifier in the NodeId string form without
+// a namespace ("i=5", "s=fe"); an index outside the NamespaceArray it was
+// qualified with keeps it ("ns=9;i=5") and an empty NamespaceURI.
+type qualifiedID struct {
+	NamespaceURI string
+	ID           string
+}
+
+// qualify returns n with the URI of its namespace in nsa; nil for nil.
+func qualify(n *ua.NodeID, nsa []string) *qualifiedID {
+	if n == nil {
+		return nil
+	}
+	idx := int(n.Namespace())
+	if idx >= len(nsa) {
+		return &qualifiedID{ID: n.String()}
+	}
+	c := *n
+	_ = c.SetNamespace(0) // namespace 0 is valid for every NodeId type
+	return &qualifiedID{NamespaceURI: nsa[idx], ID: c.String()}
+}
+
+// String is the namespace-independent form of q, for keys.
+func (q *qualifiedID) String() string {
+	if q == nil {
+		return ""
+	}
+	return "nsu=" + q.NamespaceURI + ";" + q.ID
+}
+
+// unqualify returns the NodeId of q on a server with the NamespaceArray
+// nsa; nil for nil.
+func unqualify(q *qualifiedID, nsa []string) (*ua.NodeID, error) {
+	if q == nil || q.ID == "" && q.NamespaceURI == "" {
+		return nil, nil
+	}
+	if q.NamespaceURI == "" {
+		return ua.ParseNodeID(q.ID)
+	}
+	idx := slices.Index(nsa, q.NamespaceURI)
+	if idx < 0 || idx > math.MaxUint16 {
+		return nil, fmt.Errorf("%w: the namespace %q is not in the NamespaceArray", errRecord, q.NamespaceURI)
+	}
+	if idx == 0 {
+		return ua.ParseNodeID(q.ID)
+	}
+	return ua.ParseNodeID("ns=" + strconv.Itoa(idx) + ";" + q.ID)
+}
+
+// serverEvidence is the identity of the server a record or intent was made
+// with (§6.5): its ApplicationUri as the session reported it, and the
+// thumbprint of its certificate when the channel was secured.
+type serverEvidence struct {
+	ApplicationURI string
+	Secured        bool
+	Thumbprint     []byte
+}
 
 // countersRecord holds the counters a crash must not reset (§3.5: never
 // reused).
@@ -89,22 +153,33 @@ type epStored struct {
 	SecurityPolicyURI string
 	ServerURIConf     string // ServerAddress.ServerURI
 
-	// Namespaces is the NamespaceArray of the server the NodeIds are of.
+	// Server is the identity of the server the endpoint is on.
+	Server serverEvidence
+	// Namespaces is the NamespaceArray of that server when the record was
+	// made.
 	Namespaces       []string
-	ServerURI        string // the ApplicationUri of the server
-	ACNode           *ua.NodeID
-	FunctionalEntity *ua.NodeID
+	ACNode           *qualifiedID
+	FunctionalEntity *qualifiedID
 	Name             string
-	NodeID           *ua.NodeID
+	NodeID           *qualifiedID
+	// CreationTime is the Diagnostics CreationTime of the endpoint (§6.6.2
+	// Table 74), zero when the AutomationComponent does not expose it.
+	CreationTime time.Time
+	// CMApplicationURI is the ConnectionManagerApplicationUri read from
+	// the endpoint; CMObserved that it was read.
+	CMApplicationURI string
+	CMObserved       bool
 
 	Class        int64
 	Run          uint64
 	Version      uint32
 	ClosePending bool
-	// Generation and Fingerprint are the set configuration the endpoint
-	// was made from.
-	Generation  uint64
-	Fingerprint []byte
+	// Generation and Fingerprint are the set configuration of the run that
+	// made the endpoint; EndpointFingerprint is the SHA-256 of the
+	// ConnectionEndpointConfiguration it sent for it.
+	Generation          uint64
+	Fingerprint         []byte
+	EndpointFingerprint []byte
 }
 
 // runRecord is the journal of a run (§6.3).
@@ -113,15 +188,37 @@ type runRecord struct {
 	Folder          []string
 	SetName         string
 	Generation      uint64
+	Fingerprint     []byte
 	Action          int32
 	RollbackOnError bool
 	Phase           uint8
-	// Next is the generation a set change switches to (Replace, Remove,
-	// Update), 0 for a Process.
+	// Next is the generation a Replace switches the set to, 0 for none.
+	// A set change has its tx record.
 	Next uint64
 	// Endpoints are the keys of the endpoint records the run made or
 	// closed so far.
 	Endpoints []string
+}
+
+// txOp is one operation of a set change (F.3.3.2).
+type txOp struct {
+	Op      int32 // uafx.ConnectionConfigurationSetOperation
+	Folder  []string
+	Name    string
+	Version uint32
+	// Old is the generation of the set it removes or replaces, 0 for an
+	// Add; New the generation it commits, 0 for a Remove.
+	Old, New    uint64
+	Fingerprint []byte
+	Conf        []byte
+}
+
+// txRecord is the set change a run closes the Connections for (§6.2): all
+// operations of a Replace, Remove or complete Update, which one write
+// switches after the closes (RequireCompleteUpdate, Table F.39).
+type txRecord struct {
+	Run uint64
+	Ops []txOp
 }
 
 // callRecord is the intent of a call (§6.3): what the proof of an unknown
@@ -136,25 +233,28 @@ type callRecord struct {
 	SecurityMode      uint32
 	SecurityPolicyURI string
 	ServerURIConf     string
+	Server            serverEvidence
 	Namespaces        []string
-	ServerURI         string
-	ACNode            *ua.NodeID
+	ACNode            *qualifiedID
 
 	// Names and FunctionalEntities of an establish, one per endpoint
-	// configuration; Request is the input arguments as sent (the
+	// configuration, with the SHA-256 of each configuration as sent;
+	// Request is the input arguments as sent (the
 	// ConnectionEndpointParameters among them), encoded with the indexes
 	// of Namespaces.
-	Names              []string
-	FunctionalEntities []*ua.NodeID
-	Request            []byte
+	Names                []string
+	FunctionalEntities   []*qualifiedID
+	EndpointFingerprints [][]byte
+	Request              []byte
 	// AbsentBefore is, per Name, that the browse before the call found no
 	// endpoint of it; Preconfigured the NodeId it takes otherwise.
 	AbsentBefore  []bool
-	Preconfigured []*ua.NodeID
+	Preconfigured []*qualifiedID
 	// Nodes and Remove of a close.
-	Nodes  []*ua.NodeID
+	Nodes  []*qualifiedID
 	Remove bool
 
+	// Generation and Fingerprint are the set configuration of the run.
 	Generation  uint64
 	Fingerprint []byte
 }
@@ -259,14 +359,17 @@ func hashKey(parts ...string) string {
 
 func setStoreKey(k SetKey) string { return "set/" + hashKey(keyString(k)) }
 
-// epStoreKey is the key of the record of an endpoint, by the key of the
-// set's map (recordKey) and the set: the same place in two sets is two
-// records.
-func epStoreKey(set SetKey, rk string) string { return "ep/" + hashKey(keyString(set), rk) }
+// epStoreKey is the key of the record of an endpoint: the set, the
+// ServerAddress, the FunctionalEntity by namespace URI and the Name. The
+// same place in two sets is two records; the key does not change with the
+// namespace index of the FunctionalEntity (§6.1).
+func epStoreKey(set SetKey, addr ServerAddress, fe *qualifiedID, name string) string {
+	return "ep/" + hashKey(keyString(set), addr.Address, strconv.Itoa(int(addr.SecurityMode)), addr.SecurityPolicyURI, addr.ServerURI, fe.String(), name)
+}
 
 func runStoreKey(id RunID) string { return "run/" + strconv.FormatUint(uint64(id), 16) }
 
-func nextStoreKey(id RunID) string { return "next/" + strconv.FormatUint(uint64(id), 16) }
+func txStoreKey(id RunID) string { return "tx/" + strconv.FormatUint(uint64(id), 16) }
 
 func callStoreKey(id RunID, n int) string {
 	return "call/" + strconv.FormatUint(uint64(id), 16) + "/" + strconv.Itoa(n)
@@ -286,4 +389,195 @@ func orNil(n *ua.NodeID) *ua.NodeID {
 	default:
 	}
 	return n
+}
+
+// The semantic checks of the records at load (design §3.2: a record that
+// does not decode or does not make sense is kept, reported and never
+// overwritten). A checksum proves the bytes are what was written, not that
+// what was written is a record of this key.
+
+// errSemantic reports a record that decodes but is not valid.
+func errSemantic(format string, args ...any) error {
+	return fmt.Errorf("%w: %s", errRecord, fmt.Sprintf(format, args...))
+}
+
+// check checks the set record r of key k against the counters c.
+func (r *setRecord) check(k string, c countersRecord) error {
+	sum := sha256.Sum256(r.Conf)
+	switch {
+	case setStoreKey(SetKey{Folder: r.Folder, Name: r.Name}) != k:
+		return errSemantic("the key is not of the set %s", SetKey{Folder: r.Folder, Name: r.Name})
+	case r.Name == "":
+		return errSemantic("a set without a Name")
+	case r.Version == 0:
+		return errSemantic("Version 0")
+	case r.Generation == 0 || r.Generation > c.Generation:
+		return errSemantic("the generation %d is not of the counters (%d)", r.Generation, c.Generation)
+	case string(r.Fingerprint) != string(sum[:]):
+		return errSemantic("the fingerprint is not of the configuration")
+	}
+	return nil
+}
+
+// check checks the endpoint record r of key k against the counters c.
+func (r *epStored) check(k string, c countersRecord) error {
+	addr := ServerAddress{Address: r.Address, SecurityMode: ua.MessageSecurityMode(r.SecurityMode), SecurityPolicyURI: r.SecurityPolicyURI, ServerURI: r.ServerURIConf}
+	switch {
+	case r.SetName == "" || r.Name == "" || r.Connection == "":
+		return errSemantic("an endpoint record without a set, Connection or Name")
+	case r.Endpoint < 0 || r.Endpoint > math.MaxInt32:
+		return errSemantic("the endpoint number %d", r.Endpoint)
+	case r.Class < int64(Foreign) || r.Class > int64(Unresolved):
+		return errSemantic("the class %d", r.Class)
+	case r.SecurityMode > math.MaxInt32:
+		return errSemantic("the SecurityMode %d", r.SecurityMode)
+	case epStoreKey(SetKey{Folder: r.Folder, Name: r.SetName}, addr, r.FunctionalEntity, r.Name) != k:
+		return errSemantic("the key is not of the endpoint %q", r.Name)
+	case r.Run == 0 || r.Run > c.RunID:
+		return errSemantic("the run %d is not of the counters (%d)", r.Run, c.RunID)
+	case r.Generation > c.Generation:
+		return errSemantic("the generation %d is not of the counters (%d)", r.Generation, c.Generation)
+	case len(r.Fingerprint) != 0 && len(r.Fingerprint) != sha256.Size, len(r.EndpointFingerprint) != 0 && len(r.EndpointFingerprint) != sha256.Size:
+		return errSemantic("a fingerprint of %d bytes", len(r.Fingerprint))
+	}
+	for _, q := range []*qualifiedID{r.ACNode, r.FunctionalEntity, r.NodeID} {
+		if _, err := unqualify(q, r.Namespaces); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validAction reports whether a is the Action of a run.
+func validAction(a int32) bool {
+	switch uafx.FxProcess(a) {
+	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled, uafx.ActionEstablishConnections,
+		uafx.ActionRemoveConnections, uafx.ActionEnableConnections, uafx.ActionDisableConnections, ActionReconcile, ActionRemoveSet:
+		return true
+	default:
+		return false
+	}
+}
+
+// check checks the run record r of key k against the counters c.
+func (r *runRecord) check(k string, c countersRecord) error {
+	switch {
+	case runStoreKey(RunID(r.Run)) != k:
+		return errSemantic("the key is not of the run %d", r.Run)
+	case r.Run == 0 || r.Run > c.RunID:
+		return errSemantic("the run %d is not of the counters (%d)", r.Run, c.RunID)
+	case r.SetName == "":
+		return errSemantic("a run record without a set")
+	case r.Phase < phasePlanned || r.Phase > phaseReconciling:
+		return errSemantic("the phase %d", r.Phase)
+	case !validAction(r.Action):
+		return errSemantic("the action %d", r.Action)
+	case r.Generation > c.Generation || r.Next > c.Generation:
+		return errSemantic("a generation that is not of the counters (%d)", c.Generation)
+	case r.Next != 0 && uafx.FxProcess(r.Action) != ActionRemoveSet:
+		return errSemantic("a switch of a run that is no set change")
+	}
+	for _, e := range r.Endpoints {
+		if len(e) <= len("ep/") || e[:3] != "ep/" {
+			return errSemantic("the endpoint key %q", e)
+		}
+	}
+	return nil
+}
+
+// check checks the set change r of key k against the counters c.
+func (r *txRecord) check(k string, c countersRecord) error {
+	if txStoreKey(RunID(r.Run)) != k || r.Run == 0 || r.Run > c.RunID {
+		return errSemantic("the key is not of the run %d", r.Run)
+	}
+	if len(r.Ops) == 0 {
+		return errSemantic("a set change without operations")
+	}
+	for _, o := range r.Ops {
+		sum := sha256.Sum256(o.Conf)
+		switch uafx.ConnectionConfigurationSetOperation(o.Op) {
+		case uafx.ElementAdd, uafx.ElementReplace:
+			if o.New == 0 || o.New > c.Generation || string(o.Fingerprint) != string(sum[:]) || o.Version == 0 {
+				return errSemantic("the operation on %s", SetKey{Folder: o.Folder, Name: o.Name})
+			}
+			if _, err := decodeConf(o.Conf); err != nil {
+				return err
+			}
+		case uafx.ElementRemove:
+			if o.New != 0 || len(o.Conf) != 0 {
+				return errSemantic("the removal of %s", SetKey{Folder: o.Folder, Name: o.Name})
+			}
+		default:
+			return errSemantic("the operation %d", o.Op)
+		}
+		if o.Name == "" || o.Old > c.Generation {
+			return errSemantic("the operation on %s", SetKey{Folder: o.Folder, Name: o.Name})
+		}
+	}
+	return nil
+}
+
+// runOfCall returns the run of the intent key k.
+func runOfCall(k string) (RunID, bool) {
+	rest, ok := strings.CutPrefix(k, "call/")
+	if !ok {
+		return 0, false
+	}
+	run, n, ok := strings.Cut(rest, "/")
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.ParseUint(run, 16, 64)
+	if err != nil || id == 0 {
+		return 0, false
+	}
+	if i, err := strconv.Atoi(n); err != nil || i <= 0 || callStoreKey(RunID(id), i) != k {
+		return 0, false
+	}
+	return RunID(id), true
+}
+
+// check checks the intent r of key k against the counters c.
+func (r *callRecord) check(k string, c countersRecord) error {
+	run, ok := runOfCall(k)
+	switch {
+	case !ok || uint64(run) != r.Run:
+		return errSemantic("the key is not of an intent of the run %d", r.Run)
+	case r.Run > c.RunID:
+		return errSemantic("the run %d is not of the counters (%d)", r.Run, c.RunID)
+	case r.SetName == "":
+		return errSemantic("an intent without a set")
+	case r.Generation > c.Generation:
+		return errSemantic("the generation %d is not of the counters (%d)", r.Generation, c.Generation)
+	case r.SecurityMode > math.MaxInt32:
+		return errSemantic("the SecurityMode %d", r.SecurityMode)
+	}
+	switch r.Kind {
+	case callEstablish:
+		n := len(r.Names)
+		if len(r.FunctionalEntities) != n || len(r.AbsentBefore) != n || len(r.Preconfigured) != n || len(r.EndpointFingerprints) != n || len(r.Nodes) != 0 {
+			return errSemantic("an establish intent with %d Names and %d FunctionalEntities", n, len(r.FunctionalEntities))
+		}
+		for i := range n {
+			if _, err := unqualify(r.FunctionalEntities[i], r.Namespaces); err != nil {
+				return err
+			}
+			if _, err := unqualify(r.Preconfigured[i], r.Namespaces); err != nil {
+				return err
+			}
+		}
+	case callClose:
+		if len(r.Nodes) == 0 || len(r.Names) != 0 {
+			return errSemantic("a close intent with %d nodes", len(r.Nodes))
+		}
+		for _, q := range r.Nodes {
+			if _, err := unqualify(q, r.Namespaces); err != nil {
+				return err
+			}
+		}
+	default:
+		return errSemantic("the call kind %d", r.Kind)
+	}
+	_, err := unqualify(r.ACNode, r.Namespaces)
+	return err
 }

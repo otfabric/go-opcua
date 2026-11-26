@@ -112,7 +112,7 @@ func TestStoreRestartE2E(t *testing.T) {
 	assert.Empty(t, b.endpoints())
 	assert.Empty(t, storedKeys(t, mem, "ep/"))
 	st, _ = m3.Status(k)
-	assert.True(t, st.Recovery.Done)
+	assert.True(t, st.Recovery.Done, "%+v", st.Recovery)
 }
 
 // failing is a store that gives a fault to the first Apply for which when
@@ -228,7 +228,10 @@ func TestStoreJournalE2E(t *testing.T) {
 		assert.True(t, slices.ContainsFunc(st.Endpoints, func(e fxcm.EndpointRecord) bool { return e.Class == fxcm.Unresolved }),
 			"an endpoint whose record was not written is not trusted: %+v", st.Endpoints)
 		require.Eventually(t, func() bool { ss, _ := m.StoreStatus(); return !ss.Store.Fenced }, 10*time.Second, 10*time.Millisecond)
-		assert.Len(t, storedKeys(t, mem, "call/"), 1, "the intent of the call whose outcome was not written stays")
+		// The other AutomationComponent's completion may come after the
+		// lost write: refused while the store is fenced, its intent stays
+		// too.
+		assert.NotEmpty(t, storedKeys(t, mem, "call/"), "the intent of the call whose outcome was not written stays")
 		assert.Len(t, storedKeys(t, mem, "run/"), 1, "and so does the run record")
 		require.NoError(t, m.Close())
 

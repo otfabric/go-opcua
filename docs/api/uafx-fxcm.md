@@ -539,6 +539,17 @@ Finding is one defect of a ConnectionConfigurationSet.
 func (f Finding) String() string
 ```
 
+### type IdentifiedSession
+
+```go
+type IdentifiedSession interface {
+	Session
+	ServerIdentity() ServerIdentity
+}
+```
+
+IdentifiedSession is a Session that knows the identity of its server. The sessions of ClientDialer are. Of another Session the Manager reads the ApplicationUri from Server.ServerArray (OPC 10000-5 §6.3.1), and has no thumbprint.
+
 ### type LockOwner
 
 ```go
@@ -949,12 +960,13 @@ const (
 	// OwedRollback: a run with RollbackOnError TRUE aborted, or was
 	// executing; its rollback (§6.7.3.2) did not finish.
 	OwedRollback
-	// OwedSetChange: a Replace or Remove was closing the Connections of
-	// the set; the remaining closes and the switch are owed (§6.2).
+	// OwedSetChange: a Replace, Remove or complete Update was closing the
+	// Connections of the set; the remaining closes and the switch are
+	// owed (§6.2).
 	OwedSetChange
 	// OwedCall: an EstablishConnections or CloseConnections was sent and
-	// its outcome was never recorded: unknown, re-proved and never resent
-	// (§6.3).
+	// its outcome was never recorded or never proven: unknown, re-proved
+	// and never resent (§6.3, decision C3-D13).
 	OwedCall
 )
 ```
@@ -981,10 +993,14 @@ type OwedWork struct {
 	Address string
 	// Names are the endpoint Names of an unended establish.
 	Names []string
+	// Changes are the operations of a set change (OwedSetChange): every
+	// operation of the Replace, Remove or complete Update, which are made
+	// together after the closes.
+	Changes []PlannedChange
 }
 ```
 
-OwedWork is work the journal of a Manager showed after a restart, which it exposes and does not execute (design §6.3): the next Process or Reconcile of the set does it (stage C3.3). In this version it is kept in the store and reported.
+OwedWork is work the journal of a Manager shows, which it exposes and does not execute (design §6.3): the next Process or Reconcile of the set does it (stage C3.3). In this version it is kept in the store, reported, and it fences the operations that could bypass it.
 
 ### type Ownership
 
@@ -1053,6 +1069,20 @@ MayClose reports whether a ConnectionManager may close an endpoint of the class 
 func (o Ownership) String() string
 ```
 
+### type PlannedChange
+
+```go
+type PlannedChange struct {
+	Op  uafx.ConnectionConfigurationSetOperation
+	Set SetKey
+	// Version is the Version of the set the operation commits, 0 for a
+	// removal.
+	Version uint32
+}
+```
+
+PlannedChange is one operation of a set change that is owed.
+
 ### type Recovery
 
 ```go
@@ -1060,16 +1090,22 @@ type Recovery struct {
 	// Pending is the number of records not yet verified.
 	Pending int
 	// Unverified are the endpoints whose records were loaded and not
-	// verified: reported, never closed, adopted or changed.
+	// verified: reported, never closed, adopted or changed. An unended
+	// establish intent without an endpoint record holds its Names with
+	// one (NodeID nil).
 	Unverified []EndpointRecord
-	// Owed is the work the journal shows.
+	// Owed is the work the journal shows. While it is owed, the set is
+	// not established, enabled, replaced or removed (Bad_InvalidState).
 	Owed []OwedWork
-	// Done: nothing is pending or owed.
+	// Blocked, when not empty, is why the remote operations of the set
+	// are refused: a record of it in the store is not valid.
+	Blocked string
+	// Done: nothing is pending, owed or blocked.
 	Done bool
 }
 ```
 
-Recovery is what a set owes after a restart and how far its records are verified (design §6.4).
+Recovery is what a set owes and how far its records are verified (design §6.4).
 
 ### type RetryPolicy
 
@@ -1088,8 +1124,8 @@ RetryPolicy is when a set in Error is processed again: after Initial, doubled af
 ```go
 type Run struct {
 
-	// next is the Config a Replace switches to after this run closed the
-	// Connections of the set (journaled with a Store).
+	// tx is, with a Store, the set change this remove run journals
+	// before its closes (design §6.2).
 
 }
 ```
@@ -1231,6 +1267,21 @@ type ServerAddress struct {
 
 ServerAddress is where a ConnectionManager reaches the server of an AutomationComponent (§9.2): the current values of the SelectionLists of a ServerAddressConf.
 
+### type ServerIdentity
+
+```go
+type ServerIdentity struct {
+	// ApplicationURI is the ApplicationUri of the server.
+	ApplicationURI string
+	// CertificateThumbprint is the SHA-1 thumbprint of the certificate of
+	// the server (OPC 10000-6 §6.7.4) over a secured channel, nil over
+	// SecurityMode None.
+	CertificateThumbprint []byte
+}
+```
+
+ServerIdentity is the identity of the server a Session is connected to, the evidence of design §6.5 that a ConnectionManager with a Store keeps with its endpoint records and call intents.
+
 ### type Session
 
 ```go
@@ -1360,9 +1411,21 @@ type StoreStatus struct {
 	Durability fxstore.Durability
 	// Store is the state of its domain.
 	Store fxstore.DomainStatus
-	// Failed are the records that did not decode at the start, by key:
-	// kept in the store, never overwritten.
+	// Reconciling: a write had an unknown outcome, and the Manager
+	// refuses writes until the store is settled and its memory follows
+	// what the store committed.
+	Reconciling bool
+	// Failed are the records that did not decode or are not valid, by
+	// key: kept in the store, never overwritten.
 	Failed map[string]error
+	// ReadOnly, when not empty, is why every write is refused.
+	ReadOnly string
+	// BlockedAll, when not empty, is why every remote operation is
+	// refused.
+	BlockedAll string
+	// Orphaned are the set keys an obligation of no current set holds:
+	// no Add takes them (SetKey.String to the reason).
+	Orphaned map[string]string
 }
 ```
 

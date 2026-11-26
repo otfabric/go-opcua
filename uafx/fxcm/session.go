@@ -9,6 +9,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // ServerAddress is where a ConnectionManager reaches the server of an
@@ -51,6 +52,27 @@ type Session interface {
 	TranslateBrowsePaths(ctx context.Context, req *ua.TranslateBrowsePathsToNodeIDsRequest) (*ua.TranslateBrowsePathsToNodeIDsResponse, error)
 	Call(ctx context.Context, req *ua.CallMethodRequest) (*ua.CallMethodResult, error)
 	Close(ctx context.Context) error
+}
+
+// ServerIdentity is the identity of the server a Session is connected to,
+// the evidence of design §6.5 that a ConnectionManager with a Store keeps
+// with its endpoint records and call intents.
+type ServerIdentity struct {
+	// ApplicationURI is the ApplicationUri of the server.
+	ApplicationURI string
+	// CertificateThumbprint is the SHA-1 thumbprint of the certificate of
+	// the server (OPC 10000-6 §6.7.4) over a secured channel, nil over
+	// SecurityMode None.
+	CertificateThumbprint []byte
+}
+
+// IdentifiedSession is a Session that knows the identity of its server.
+// The sessions of ClientDialer are. Of another Session the Manager reads
+// the ApplicationUri from Server.ServerArray (OPC 10000-5 §6.3.1), and has
+// no thumbprint.
+type IdentifiedSession interface {
+	Session
+	ServerIdentity() ServerIdentity
 }
 
 // ClientDialer is the default Dialer: GetEndpoints on the Address, the
@@ -96,7 +118,14 @@ func (d *ClientDialer) Dial(ctx context.Context, addr ServerAddress) (Session, e
 		_ = c.Close(context.WithoutCancel(ctx))
 		return nil, fmt.Errorf("fxcm: connect %s: %w", addr.Address, err)
 	}
-	return &clientSession{c: c}, nil
+	id := ServerIdentity{}
+	if ep.Server != nil {
+		id.ApplicationURI = ep.Server.ApplicationURI
+	}
+	if ep.SecurityMode != ua.MessageSecurityModeNone && len(ep.ServerCertificate) > 0 {
+		id.CertificateThumbprint = uapolicy.Thumbprint(ep.ServerCertificate)
+	}
+	return &clientSession{c: c, id: id}, nil
 }
 
 // checkServerURI checks the ServerUri of addr against the ApplicationUri of
@@ -117,7 +146,14 @@ func checkServerURI(addr ServerAddress, ep *ua.EndpointDescription) error {
 }
 
 // clientSession is a Session of an opcua.Client.
-type clientSession struct{ c *opcua.Client }
+type clientSession struct {
+	c  *opcua.Client
+	id ServerIdentity
+}
+
+// ServerIdentity implements IdentifiedSession: the identity of the
+// endpoint the client connected to, whose certificate the client checked.
+func (s *clientSession) ServerIdentity() ServerIdentity { return s.id }
 
 func (s *clientSession) NamespaceArray(ctx context.Context) ([]string, error) {
 	return s.c.NamespaceArray(ctx)
