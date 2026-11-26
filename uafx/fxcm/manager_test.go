@@ -497,7 +497,7 @@ func TestClaimReserves(t *testing.T) {
 	_, err = m.claim(cfg.Key())
 	assert.ErrorIs(t, err, ua.StatusBadInvalidState)
 
-	_, err = m.removeConnections(context.Background(), s)
+	_, err = m.removeConnections(context.Background(), s, nil)
 	require.NoError(t, err)
 	st, _ = m.Status(cfg.Key())
 	require.NotNil(t, st.Last)
@@ -533,7 +533,7 @@ func TestCloseWaitsForClaim(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	assert.Error(t, m.ctx.Err(), "Close stops what the claim does")
-	_, err = m.removeConnections(context.Background(), s)
+	_, err = m.removeConnections(context.Background(), s, nil)
 	require.NoError(t, err)
 	m.wg.Done()
 	<-closed

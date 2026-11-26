@@ -138,6 +138,8 @@ func Classify(rec *EndpointRecord, obs *Observed, appURI string) Ownership {
 			return TakenPreconfigured
 		case Unresolved:
 			return Unresolved
+		case Unverified:
+			return Unverified
 		case Foreign:
 		}
 	}

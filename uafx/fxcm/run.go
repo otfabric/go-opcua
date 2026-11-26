@@ -18,6 +18,9 @@ type Run struct {
 	action  uafx.FxProcess
 	done    chan struct{}
 	result  *RunResult
+	// next is the Config a Replace switches to after this run closed the
+	// Connections of the set (journaled with a Store).
+	next *Config
 }
 
 // ID returns the id of the run, unique and increasing within its Manager.

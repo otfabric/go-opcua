@@ -33,6 +33,8 @@ type run struct {
 	mu      sync.Mutex
 	stopped bool
 	res     RunResult
+	// j is the journal of the run, with a Store (journal.go).
+	j journal
 }
 
 // acRun is an AutomationComponent of a run.
@@ -59,6 +61,16 @@ type acRun struct {
 	// configured is set when the configure step of the AC returned, so
 	// its PubSubConnections have their PublisherIds (resolvePublishers).
 	configured bool
+	// intents are the keys of the intents of the calls on the AC whose
+	// results the step has not synced yet (journal.go).
+	intents []string
+}
+
+// takeIntents returns the intents of a and forgets them.
+func (a *acRun) takeIntents() []string {
+	ks := a.intents
+	a.intents = nil
+	return ks
 }
 
 // epRun is an endpoint configuration of a run.
@@ -141,6 +153,12 @@ func (m *Manager) execute(ctx context.Context, s *set, r *Run, prev State) *RunR
 	}
 	// EC-12: the AuditEntryId of the calls of the run.
 	ctx = opcua.WithAuditEntryID(ctx, fmt.Sprintf("fxcm:%s:run:%d", r.key, r.id))
+	x.j.next = r.next
+	if err := x.startJournal(); err != nil {
+		// No run record, no call (design §6.3).
+		x.extraFailure(failureOf(err, uafx.FxErrorRuntimeError))
+		return x.finish()
+	}
 	switch r.action {
 	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled, uafx.ActionEstablishConnections:
 		x.establishRun(ctx)
@@ -655,6 +673,16 @@ func (x *run) scan(ctx context.Context, a *acRun) {
 			recCopy = &c
 		}
 		x.s.mu.Unlock()
+		if recCopy != nil && recCopy.Class == Unverified {
+			// A record loaded at the start and not verified since holds
+			// the Name: the Connection fails, the record stays as it is
+			// (design §6.4: never closed, adopted or changed).
+			x.mu.Lock()
+			x.res.Unresolved = append(x.res.Unresolved, *recCopy)
+			x.mu.Unlock()
+			x.fail(ep, Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadInvalidState})
+			continue
+		}
 		if len(found) > 1 {
 			x.fail(ep, Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadBrowseNameDuplicated})
 			continue
@@ -713,7 +741,7 @@ func (x *run) remember(a *acRun, ep *epRun, n *ua.NodeID, class Ownership) {
 	cp := rec.EndpointRecord
 	x.mu.Lock()
 	switch class {
-	case Unresolved:
+	case Unresolved, Unverified:
 		x.res.Unresolved = append(x.res.Unresolved, cp)
 	case KnownOwned, TakenPreconfigured:
 		x.res.Created = append(x.res.Created, cp)
@@ -750,6 +778,7 @@ func (x *run) prepare(ctx context.Context, a *acRun) {
 			x.failAC(a, err)
 			return
 		}
+		x.fillNotPersisted(a)
 	}
 	if cm == nil {
 		for _, ep := range a.eps {
@@ -1033,6 +1062,7 @@ func disabledModel(cfg *ua.PubSubConfiguration2DataType) {
 // WriterGroupIds and DataSetWriterIds a's configuration leaves 0 and for
 // the DefaultPublisherId, with VerifyAssetCmd.
 func (x *run) reserve(ctx context.Context, a *acRun) {
+	defer func() { x.sync(a.takeIntents(), false) }()
 	if a.comm == nil {
 		return
 	}
@@ -1151,6 +1181,14 @@ func (x *run) call(ctx context.Context, a *acRun, req *uafx.EstablishConnections
 	if err != nil {
 		return nil, failure(uafx.FxErrorConnectionConfigurationSetInvalid, ua.StatusBadEncodingError, "%v", err), false
 	}
+	// The intent first: without it nothing is sent (design §6.3).
+	k, err := x.intend(x.establishIntent(a, req, args))
+	if err != nil {
+		return nil, err, false
+	}
+	if k != "" {
+		a.intents = append(a.intents, k)
+	}
 	cctx, cancel := context.WithTimeout(ctx, x.m.opts.CallTimeout)
 	defer cancel()
 	x.m.counters.establish.Add(1)
@@ -1188,6 +1226,7 @@ func (x *run) call(ctx context.Context, a *acRun, req *uafx.EstablishConnections
 // MaxConnectionsPerCall without separating the commands of one endpoint
 // (EC-4, EC-5).
 func (x *run) configure(ctx context.Context, a *acRun) {
+	defer func() { x.sync(a.takeIntents(), false) }()
 	var eps []*epRun
 	for _, ep := range a.eps {
 		if !ep.failed() {
@@ -1776,6 +1815,7 @@ func (x *run) adaptSubscribers(ctx context.Context) {
 
 // adaptOn modifies the DataSetReaders of eps on a (adaptSubscribers).
 func (x *run) adaptOn(ctx context.Context, a *acRun, eps []*epRun) {
+	defer func() { x.sync(a.takeIntents(), false) }()
 	failAll := func(st ua.StatusCode) {
 		for _, ep := range eps {
 			x.fail(ep, Failure{FxError: uafx.FxErrorSetCommunicationConfigurationError, Status: st})
@@ -1890,6 +1930,7 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 	}
 	errs := map[*record]error{}
 	closedGone := map[*record]bool{}
+	var intents []string
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	sem := make(chan struct{}, x.m.opts.Parallelism)
@@ -1899,9 +1940,12 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
-			results, err := x.closeOn(ctx, g.addr, g.ac, g.recs, remove)
+			results, k, err := x.closeOn(ctx, g.addr, g.ac, g.recs, remove)
 			mu.Lock()
 			defer mu.Unlock()
+			if k != "" {
+				intents = append(intents, k)
+			}
 			for i, r := range g.recs {
 				e := err
 				// Bad_NodeIdUnknown: the endpoint does not exist (Table 24),
@@ -1941,29 +1985,35 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 			x.m.observe(Event{Kind: EventEndpoint, Set: x.r.key, Run: x.r.id, Record: &cp, Closed: true})
 		}
 	}
+	x.sync(intents, false)
 	return errs
 }
 
 // closeOn calls CloseConnections on the AutomationComponent ac of addr.
-func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, recs []*record, remove bool) ([]ua.StatusCode, error) {
+func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, recs []*record, remove bool) ([]ua.StatusCode, string, error) {
 	sess, err := x.m.pool.get(ctx, addr)
 	if err != nil {
-		return nil, failure(uafx.FxErrorCloseConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err)
+		return nil, "", failure(uafx.FxErrorCloseConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err)
 	}
 	t := &target{addr: addr, sess: sess, cache: x.m.res.of(addr)}
 	if err := t.open(ctx); err != nil {
 		x.m.pool.drop(ctx, addr, sess)
 		f := failureOf(err, uafx.FxErrorCloseConnectionError)
-		return nil, failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
+		return nil, "", failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
 	}
 	_, closeM, _, err := methodsOf(ctx, t, ac)
 	if err != nil {
 		f := failureOf(err, uafx.FxErrorCloseConnectionError)
-		return nil, failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
+		return nil, "", failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
 	}
 	nodes := make([]*ua.NodeID, len(recs))
 	for i, r := range recs {
 		nodes[i] = r.NodeID
+	}
+	// The intent first: without it nothing is sent (design §6.3).
+	k, err := x.intend(closeIntent(addr, ac, t.nsa, nodes, remove))
+	if err != nil {
+		return nil, "", err
 	}
 	cctx, cancel := context.WithTimeout(ctx, x.m.opts.CallTimeout)
 	defer cancel()
@@ -1978,23 +2028,23 @@ func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, re
 		if errors.Is(err, context.DeadlineExceeded) {
 			f.Status = ua.StatusBadTimeout
 		}
-		return nil, failure(uafx.FxErrorCloseConnectionError, f.Status, "CloseConnections: %v", err)
+		return nil, k, failure(uafx.FxErrorCloseConnectionError, f.Status, "CloseConnections: %v", err)
 	}
 	ev.Status = out.StatusCode
 	if out.StatusCode != ua.StatusGood {
 		x.m.counters.closeFailed.Add(1)
 	}
 	if bad(out.StatusCode) {
-		return nil, failure(uafx.FxErrorCloseConnectionError, out.StatusCode, "CloseConnections")
+		return nil, k, failure(uafx.FxErrorCloseConnectionError, out.StatusCode, "CloseConnections")
 	}
 	var results []ua.StatusCode
 	if len(out.OutputArguments) == 1 && out.OutputArguments[0] != nil {
 		results, _ = out.OutputArguments[0].Value().([]ua.StatusCode)
 	}
 	if len(results) != len(recs) {
-		return nil, failure(uafx.FxErrorCloseConnectionError, ua.StatusBadUnexpectedError, "CloseConnections: %d results for %d endpoints", len(results), len(recs))
+		return nil, k, failure(uafx.FxErrorCloseConnectionError, ua.StatusBadUnexpectedError, "CloseConnections: %d results for %d endpoints", len(results), len(recs))
 	}
-	return results, nil
+	return results, k, nil
 }
 
 // closable returns the records of the set that may be closed and the
@@ -2006,7 +2056,7 @@ func (x *run) closable() (closable, unresolved []*record) {
 		switch {
 		case r.Class.MayClose() && r.NodeID != nil:
 			closable = append(closable, r)
-		case r.Class == Unresolved:
+		case r.Class == Unresolved, r.Class == Unverified:
 			unresolved = append(unresolved, r)
 		}
 	}
@@ -2191,6 +2241,7 @@ func (x *run) enableOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, r
 		failAll(failureOf(err, uafx.FxErrorEnableCommunicationError))
 		return
 	}
+	defer func() { x.sync(a.takeIntents(), false) }()
 	req := &uafx.EstablishConnectionsRequest{CommandMask: uafx.EnableCommunicationCmd}
 	for _, r := range recs {
 		req.ConnectionEndpointConfigurations = append(req.ConnectionEndpointConfigurations, &uafx.ConnectionEndpointConfiguration{
@@ -2256,6 +2307,14 @@ func (x *run) reconcileRun(ctx context.Context, prev State) {
 		}
 	}
 	for _, r := range unresolved {
+		if r.Class == Unverified {
+			// Reported, not rechecked: its verification is the
+			// re-proof of design §6.5.
+			x.mu.Lock()
+			x.res.Unresolved = append(x.res.Unresolved, r.EndpointRecord)
+			x.mu.Unlock()
+			continue
+		}
 		gone, err := x.recheck(ctx, r)
 		switch {
 		case err != nil || !gone:
@@ -2300,6 +2359,15 @@ func (x *run) recheck(ctx context.Context, r *record) (gone bool, err error) {
 // finish takes the transition at the end of the run (§6.9.2), updates the
 // diagnostics (§10.19) and the counters, and schedules a retry.
 func (x *run) finish() *RunResult {
+	if x.store() != nil {
+		// A Replace or Remove whose closes succeeded keeps its run
+		// record until the switch is written (design §6.2).
+		x.mu.Lock()
+		x.j.keep = x.r.action == ActionRemoveSet && len(x.res.Failures) == 0
+		x.mu.Unlock()
+		x.j.keep = x.j.keep && !x.anyFailed()
+		x.sync(nil, true)
+	}
 	x.mu.Lock()
 	stopped := x.stopped
 	for _, ep := range x.eps {
@@ -2346,7 +2414,7 @@ func (x *run) finish() *RunResult {
 	}
 	unresolved := 0
 	for _, r := range s.records {
-		if r.Class == Unresolved {
+		if r.Class == Unresolved || r.Class == Unverified {
 			unresolved++
 		}
 	}

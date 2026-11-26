@@ -20,7 +20,7 @@ func TestRecordsRoundTrip(t *testing.T) {
 		&epStored{Folder: []string{"f"}, SetName: "s", Connection: "c", Endpoint: 1, Address: "opc.tcp://x", Namespaces: []string{"http://opcfoundation.org/UA/", "urn:x"},
 			ServerURI: "urn:x", ACNode: ua.NewNumericNodeID(1, 5), FunctionalEntity: ua.NewStringNodeID(1, "fe"), Name: "n", NodeID: ua.NewNumericNodeID(1, 6), Class: int64(KnownOwned), Run: 2, Version: 1},
 		&runRecord{Run: 2, SetName: "s", Generation: 4, Action: 1, RollbackOnError: true, Phase: phaseExecuting, Endpoints: []string{"ep/x"}},
-		&callRecord{Run: 2, Kind: callEstablish, ACNode: ua.NewNumericNodeID(1, 5), Names: []string{"n"}, FunctionalEntities: []*ua.NodeID{ua.NewStringNodeID(1, "fe")}, Parameters: [][]byte{{1}}, AbsentBefore: []bool{true}, Preconfigured: []*ua.NodeID{ua.NewTwoByteNodeID(0)}},
+		&callRecord{Run: 2, Kind: callEstablish, ACNode: ua.NewNumericNodeID(1, 5), Names: []string{"n"}, FunctionalEntities: []*ua.NodeID{ua.NewStringNodeID(1, "fe")}, Request: []byte{1}, AbsentBefore: []bool{true}, Preconfigured: []*ua.NodeID{ua.NewTwoByteNodeID(0)}},
 	} {
 		b, err := encodeRecord(v)
 		require.NoError(t, err)

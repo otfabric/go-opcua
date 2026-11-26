@@ -23,6 +23,7 @@ import (
 //	set/<set>       a ConnectionConfigurationSet as committed
 //	ep/<endpoint>   an EndpointRecord with its evidence
 //	run/<run>       the journal of a run (§6.3)
+//	next/<run>      the set a Replace in run <run> switches to
 //	call/<run>/<n>  the intent of an EstablishConnections or CloseConnections
 //
 // <set> and <endpoint> are hex SHA-256 prefixes of the SetKey and of the
@@ -126,8 +127,10 @@ type runRecord struct {
 // callRecord is the intent of a call (§6.3): what the proof of an unknown
 // outcome needs after a restart.
 type callRecord struct {
-	Run  uint64
-	Kind uint8
+	Run     uint64
+	Folder  []string
+	SetName string
+	Kind    uint8
 
 	Address           string
 	SecurityMode      uint32
@@ -137,11 +140,13 @@ type callRecord struct {
 	ServerURI         string
 	ACNode            *ua.NodeID
 
-	// Names and FunctionalEntities of an establish, one per endpoint, and
-	// the ConnectionEndpointParameters as sent (encoded).
+	// Names and FunctionalEntities of an establish, one per endpoint
+	// configuration; Request is the input arguments as sent (the
+	// ConnectionEndpointParameters among them), encoded with the indexes
+	// of Namespaces.
 	Names              []string
 	FunctionalEntities []*ua.NodeID
-	Parameters         [][]byte
+	Request            []byte
 	// AbsentBefore is, per Name, that the browse before the call found no
 	// endpoint of it; Preconfigured the NodeId it takes otherwise.
 	AbsentBefore  []bool
@@ -261,6 +266,8 @@ func epStoreKey(set SetKey, rk string) string { return "ep/" + hashKey(keyString
 
 func runStoreKey(id RunID) string { return "run/" + strconv.FormatUint(uint64(id), 16) }
 
+func nextStoreKey(id RunID) string { return "next/" + strconv.FormatUint(uint64(id), 16) }
+
 func callStoreKey(id RunID, n int) string {
 	return "call/" + strconv.FormatUint(uint64(id), 16) + "/" + strconv.Itoa(n)
 }
@@ -276,6 +283,7 @@ func orNil(n *ua.NodeID) *ua.NodeID {
 		if n.Namespace() == 0 && n.IntID() == 0 {
 			return nil
 		}
+	default:
 	}
 	return n
 }

@@ -538,7 +538,7 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 		return nil, err
 	}
 	defer m.wg.Done()
-	run, err := m.removeConnections(ctx, s)
+	run, err := m.removeConnections(ctx, s, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -580,7 +580,7 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 		return err
 	}
 	defer m.wg.Done()
-	run, err := m.removeConnections(ctx, s)
+	run, err := m.removeConnections(ctx, s, nil)
 	if err != nil {
 		return err
 	}
@@ -662,11 +662,12 @@ func (m *Manager) beginRemove(s *set) (*Run, State) {
 // removeConnections runs the remove run of the claimed set s for a Replace
 // or Remove: it closes the endpoints of s. On a failure the set stays in
 // Error and the claim is released. Close stops it as it stops a run.
-func (m *Manager) removeConnections(ctx context.Context, s *set) (RunID, error) {
+func (m *Manager) removeConnections(ctx context.Context, s *set, next *Config) (RunID, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer context.AfterFunc(m.ctx, cancel)()
 	r, prev := m.beginRemove(s)
+	r.next = next
 	res := m.execute(ctx, s, r, prev)
 	if res.State == StateError {
 		m.release(s)
@@ -882,7 +883,11 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 	}
 	var runs []RunID
 	for _, h := range closing {
-		run, err := m.removeConnections(ctx, h.s)
+		var next *Config
+		if ops[h.i].Op == uafx.ElementReplace {
+			next = cfgs[h.i]
+		}
+		run, err := m.removeConnections(ctx, h.s, next)
 		runs = append(runs, run)
 		if err != nil {
 			// The close left h in Error and released it; the other
@@ -1224,12 +1229,19 @@ func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error {
 	case found == nil:
 		s.mu.Unlock()
 		return managerError(ua.StatusBadNoMatch, "no endpoint %v of the set %s", ep, key)
-	case found.Class != Unresolved:
+	case found.Class != Unresolved && found.Class != Unverified:
 		s.mu.Unlock()
 		return managerError(ua.StatusBadInvalidState, "the endpoint %v is %v", ep, found.Class)
 	case s.state == StateProcessing:
 		s.mu.Unlock()
 		return managerError(ua.StatusBadInvalidState, "the set %s is being processed", key)
+	}
+	if m.p != nil {
+		// The verdict is durable before it is the record's (design §6.4).
+		if err := m.p.settleRecord(s, fk, found, verdict); err != nil {
+			s.mu.Unlock()
+			return err
+		}
 	}
 	if verdict == SettleOwned {
 		found.Class = KnownOwned

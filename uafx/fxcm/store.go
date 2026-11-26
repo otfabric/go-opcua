@@ -270,13 +270,7 @@ func (p *persistence) load(st map[string][]byte) {
 		}
 		var r callRecord
 		_ = decodeRecord(st[k], &r)
-		var key SetKey
-		if rr, ok := st[runStoreKey(RunID(r.Run))]; ok {
-			var run runRecord
-			if decodeRecord(rr, &run) == nil {
-				key = SetKey{Folder: run.Folder, Name: run.SetName}
-			}
-		}
+		key := SetKey{Folder: r.Folder, Name: r.SetName}
 		p.owe(key, OwedWork{Kind: OwedCall, Run: RunID(r.Run), Address: r.Address, Names: slices.Clone(r.Names)})
 	}
 	for ks, owed := range p.owed {
@@ -639,10 +633,32 @@ func (p *persistence) switchSets(cs []setChange, runs []RunID) ([]uint64, [][]by
 		gens[i], fps[i] = gen, fp
 	}
 	for _, r := range runs {
-		b.Deletes = append(b.Deletes, runStoreKey(r))
+		b.Deletes = append(b.Deletes, runStoreKey(r), nextStoreKey(r))
 	}
 	if o, err := p.apply(b, gen); o != fxstore.Committed {
 		return nil, nil, storeError(o, err)
 	}
 	return gens, fps, nil
+}
+
+// settleRecord writes the verdict of Settle on the record rec of the set s
+// (key rk of its map). The caller holds s.mu.
+func (p *persistence) settleRecord(s *set, rk string, rec *record, v Verdict) error {
+	var b fxstore.Batch
+	k := epStoreKey(s.cfg.key, rk)
+	if v == SettleOwned {
+		cp := *rec
+		cp.Class = KnownOwned
+		val, err := encodeRecord(storedOf(s, &cp))
+		if err != nil {
+			return storeError(fxstore.NotCommitted, err)
+		}
+		b.Puts = map[string][]byte{k: val}
+	} else {
+		b.Deletes = []string{k}
+	}
+	if o, err := p.write(b, 0); o != fxstore.Committed {
+		return storeError(o, err)
+	}
+	return nil
 }
