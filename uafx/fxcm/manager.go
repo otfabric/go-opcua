@@ -599,22 +599,23 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 			m.release(s)
 			return nil, err
 		}
-		m.replaceSet(s, cfg)
-		s.mu.Lock()
-		s.gen, s.fp = gens[0], fps[0]
-		s.mu.Unlock()
+		m.replaceSet(s, cfg, gens[0], fps[0])
 	} else {
-		m.replaceSet(s, cfg)
+		m.replaceSet(s, cfg, 0, nil)
 	}
 	m.observe(Event{Kind: EventSetReplaced, Set: cfg.key, Version: cfg.version})
 	return cfg, nil
 }
 
-// replaceSet puts cfg in the claimed set s, whose Connections are closed,
-// and releases the claim.
-func (m *Manager) replaceSet(s *set, cfg *Config) {
+// replaceSet puts cfg, committed at generation gen with fingerprint fp
+// (0 and nil without a Store), in the claimed set s, whose Connections are
+// closed, and releases the claim: in one step under the lock of s, so that
+// nothing sees the new Config with the old generation, or the set
+// unclaimed before it has them.
+func (m *Manager) replaceSet(s *set, cfg *Config, gen uint64, fp []byte) {
 	s.mu.Lock()
 	s.cfg, s.state, s.diags, s.records, s.lastEstablish, s.retries = cfg, StateReady, newDiagnostics(cfg), map[string]*record{}, nil, 0
+	s.gen, s.fp = gen, fp
 	s.current, s.held = nil, false
 	s.mu.Unlock()
 }
@@ -1104,12 +1105,12 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 			h.s.removed, h.s.current, h.s.held = true, nil, false
 			h.s.mu.Unlock()
 		case uafx.ElementReplace:
-			m.replaceSet(h.s, cfgs[h.i])
+			var gen uint64
+			var fp []byte
 			if gens != nil {
-				h.s.mu.Lock()
-				h.s.gen, h.s.fp = gens[h.i], fps[h.i]
-				h.s.mu.Unlock()
+				gen, fp = gens[h.i], fps[h.i]
 			}
+			m.replaceSet(h.s, cfgs[h.i], gen, fp)
 		default:
 			// Only removes and replaces are claimed.
 		}
@@ -1428,6 +1429,11 @@ func (m *Manager) commitLocked(s *set, owner LockOwner) (*Config, bool, error) {
 	defer s.mu.Unlock()
 	if s.pending != nil {
 		return nil, false, errCommitPending(s.cfg.key)
+	}
+	if m.p != nil && s.edit.Editing() != nil && s.edit.Editing().owner == owner {
+		if err := m.p.checkConfig(s.cfg.key); err != nil {
+			return nil, false, err
+		}
 	}
 	e := s.edit.Editing()
 	if e != nil && e.owner == owner {

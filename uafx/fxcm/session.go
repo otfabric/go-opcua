@@ -127,17 +127,37 @@ func (d *ClientDialer) Dial(ctx context.Context, addr ServerAddress) (Session, e
 		_ = c.Close(context.WithoutCancel(ctx))
 		return nil, fmt.Errorf("fxcm: connect %s: %w", addr.Address, err)
 	}
-	id := ServerIdentity{}
+	uri := ""
 	if ep.Server != nil {
-		id.ApplicationURI = ep.Server.ApplicationURI
+		uri = ep.Server.ApplicationURI
 	}
-	if ep.SecurityMode != ua.MessageSecurityModeNone && len(ep.ServerCertificate) > 0 {
-		// The client opened the channel with this certificate and
-		// checked it is bound to the ApplicationUri.
-		id.CertificateThumbprint = uapolicy.Thumbprint(ep.ServerCertificate)
+	return &clientSession{c: c, peer: c, uri: uri}, nil
+}
+
+// peerSource is the part of an opcua.Client the identity is read from.
+type peerSource interface {
+	PeerCertificate() (opcua.PeerCertificate, bool)
+}
+
+// identityOf returns the ServerIdentity of the channel peer: authenticated
+// only when the client opened its active channel with message security
+// and validated the certificate of the server, bound to the ApplicationUri
+// of the endpoint (OPC 10000-6 §6.2.2, §6.7.4). The endpoint the client
+// selected is not that evidence: its Options may change the security, and
+// a reconnect opens another channel, possibly with a renewed certificate.
+// Anything less is the identity the server reported (uri), with the
+// thumbprint of the channel's certificate when it has one.
+func identityOf(src peerSource, uri string) ServerIdentity {
+	id := ServerIdentity{ApplicationURI: uri}
+	pc, ok := src.PeerCertificate()
+	if !ok || len(pc.Certificate) == 0 {
+		return id
+	}
+	id.CertificateThumbprint = uapolicy.Thumbprint(pc.Certificate)
+	if pc.Verified && pc.ApplicationURI != "" && pc.ApplicationURI == uri {
 		id.Authenticated = true
 	}
-	return &clientSession{c: c, id: id}, nil
+	return id
 }
 
 // checkServerURI checks the ServerUri of addr against the ApplicationUri of
@@ -159,13 +179,15 @@ func checkServerURI(addr ServerAddress, ep *ua.EndpointDescription) error {
 
 // clientSession is a Session of an opcua.Client.
 type clientSession struct {
-	c  *opcua.Client
-	id ServerIdentity
+	c    *opcua.Client
+	peer peerSource
+	uri  string // the ApplicationUri of the selected endpoint
 }
 
-// ServerIdentity implements IdentifiedSession: the identity of the
-// endpoint the client connected to, whose certificate the client checked.
-func (s *clientSession) ServerIdentity() ServerIdentity { return s.id }
+// ServerIdentity implements IdentifiedSession: the identity of the peer of
+// the client's active secure channel, read anew at every call
+// (identityOf).
+func (s *clientSession) ServerIdentity() ServerIdentity { return identityOf(s.peer, s.uri) }
 
 func (s *clientSession) NamespaceArray(ctx context.Context) ([]string, error) {
 	return s.c.NamespaceArray(ctx)

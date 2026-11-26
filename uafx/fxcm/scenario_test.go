@@ -36,6 +36,9 @@ type hookDialer struct {
 	// result, when not nil, replaces the result of a Call that was sent
 	// and answered: a mangled or ambiguous response.
 	result func(addr fxcm.ServerAddress, req *ua.CallMethodRequest, out *ua.CallMethodResult) (*ua.CallMethodResult, error)
+	// answer, when it returns a result, answers a Call with it without
+	// sending it: a definite refusal by the server.
+	answer func(addr fxcm.ServerAddress, req *ua.CallMethodRequest) *ua.CallMethodResult
 }
 
 func newHookDialer() *hookDialer {
@@ -108,6 +111,11 @@ func (s *hookSession) TranslateBrowsePaths(ctx context.Context, req *ua.Translat
 func (s *hookSession) Call(ctx context.Context, req *ua.CallMethodRequest) (*ua.CallMethodResult, error) {
 	if err := s.failed("Call"); err != nil {
 		return nil, err
+	}
+	if s.d.answer != nil {
+		if out := s.d.answer(s.addr, req); out != nil {
+			return out, nil
+		}
 	}
 	if s.d.hook != nil {
 		if send, err := s.d.hook(s.addr, req); err != nil {

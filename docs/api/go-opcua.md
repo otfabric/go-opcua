@@ -315,6 +315,8 @@ type Client struct {
 
 	// sechan is the open secure channel.
 	// *uasc.SecureChannel
+	// peer is the PeerCertificate of the channel it names, recorded when
+	// the client validated it (PeerCertificate).
 
 	// sechanErr receives the errors of the current secure channel. Every
 	// secure channel gets its own channel (see Dial) so that an error of a
@@ -894,6 +896,14 @@ func (c *Client) OneShotShelve2(ctx context.Context, conditionID *ua.NodeID, com
 ```
 
 OneShotShelve2 is OneShotShelve with a Comment.
+
+#### func (Client) PeerCertificate
+
+```go
+func (c *Client) PeerCertificate() (PeerCertificate, bool)
+```
+
+PeerCertificate returns the PeerCertificate of the active secure channel (SecureChannel), and false while there is none: before Connect, during a reconnect, after Close. A reconnect opens a new channel, validated anew, possibly with a new certificate of the server; read it again for each use.
 
 #### func (Client) PlaceInService
 
@@ -2436,6 +2446,31 @@ WithSubscriptionRecoveryHandler sets a callback that is invoked once per subscri
 The handler is called synchronously from the reconnect goroutine and must not block. It receives a [SubscriptionRecoveryEvent](#type-subscriptionrecoveryevent) describing the outcome for each subscription: whether it was transferred, republished, recreated, partially recovered, or lost due to an unrecoverable gap.
 
 This mirrors the [WithConnStateHandler](#func-withconnstatehandler) pattern and is the recommended way to implement observability for subscription recovery without polling.
+
+### type PeerCertificate
+
+```go
+type PeerCertificate struct {
+	// Certificate is the DER certificate the channel was opened with:
+	// the server proved it holds its private key by signing the
+	// OpenSecureChannel response (OPC 10000-6 §6.7.4). Nil without
+	// message security.
+	Certificate []byte
+	// SecurityMode and SecurityPolicyURI are those of the channel.
+	SecurityMode      ua.MessageSecurityMode
+	SecurityPolicyURI string
+	// Verified: the client validated Certificate when it opened the
+	// channel (trust list, validity, key usage, OPC 10000-4 §6.1.3);
+	// false with InsecureSkipVerify or without message security.
+	Verified bool
+	// ApplicationURI is the ApplicationUri the client verified the URI
+	// SAN of Certificate against (OPC 10000-6 §6.2.2), from the endpoint
+	// of SecurityFromEndpoint; empty when it checked none.
+	ApplicationURI string
+}
+```
+
+PeerCertificate is the server certificate of a secure channel of a Client as the client checked it when it opened that channel.
 
 ### type PublishNotificationData
 

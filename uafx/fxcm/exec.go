@@ -149,6 +149,27 @@ func (x *run) setOutcome(ep *epRun, k OutcomeKind) {
 	ep.outcome = &Outcome{Kind: k}
 }
 
+// remoteEffectLocked reports whether the run changed a server, or may
+// have: a close succeeded, a call's outcome is unknown (its intent is
+// retained), or a failure has an ambiguous status (decision C3-D13). The
+// caller holds x.mu.
+func (x *run) remoteEffectLocked() bool {
+	if len(x.res.Closed) > 0 || len(x.j.retained) > 0 {
+		return true
+	}
+	for _, f := range x.res.Failures {
+		if ambiguousStatus(f.Status) {
+			return true
+		}
+	}
+	for _, ep := range x.eps {
+		if ep.outcome != nil && ep.outcome.Kind == Failed && ambiguousStatus(ep.outcome.Status) {
+			return true
+		}
+	}
+	return false
+}
+
 func (x *run) anyFailed() bool {
 	x.mu.Lock()
 	defer x.mu.Unlock()
@@ -758,7 +779,7 @@ func (x *run) remember(a *acRun, ep *epRun, n *ua.NodeID, class Ownership) {
 		NodeID: n, Class: class, Run: x.r.id, Version: x.r.version,
 	}, addr: a.addr, acNode: a.node, gen: x.gen, fp: x.fp, epfp: ep.sent}
 	if a.t != nil {
-		rec.nsa, rec.server = a.t.nsa, a.t.server
+		rec.nsa, rec.server = a.t.nsa, a.t.evidenceNow()
 	}
 	if ep.obs != nil && n != nil && ep.obs.NodeID.Equal(n) && ep.obs.CMApplicationURI != nil {
 		rec.cmURI, rec.cmObserved = *ep.obs.CMApplicationURI, true
@@ -2736,19 +2757,24 @@ func (x *run) recheck(ctx context.Context, r *record) (gone bool, err error) {
 func (x *run) finish() *RunResult {
 	if x.store() != nil {
 		// A Replace or Remove whose closes succeeded keeps its run
-		// record until the switch is written (design §6.2).
+		// record until the switch is written (design §6.2). One whose
+		// closes failed after some had a remote effect (a close that
+		// succeeded, or one whose outcome is unknown) keeps it too,
+		// with its set change, as owed work: what it closed cannot be
+		// undone (Table 24), so the transaction is not abandoned.
+		// Only one that failed before any remote effect is.
+		removeSet := x.r.action == ActionRemoveSet
+		failed := x.anyFailed()
 		x.mu.Lock()
-		x.j.keep = x.r.action == ActionRemoveSet && len(x.res.Failures) == 0
-		x.mu.Unlock()
-		keep := x.j.keep && !x.anyFailed()
-		x.mu.Lock()
-		x.j.keep = keep
+		failed = failed || len(x.res.Failures) > 0
+		switching := removeSet && !failed
+		x.j.keep = switching || removeSet && x.remoteEffectLocked()
 		x.mu.Unlock()
 		x.sync(nil, nil, true)
-		if !keep {
+		if !switching {
 			// What the run leaves in the store is owed work now; a
-			// kept RemoveSet record stays the Manager's until it
-			// writes the switch.
+			// RemoveSet record whose closes all succeeded stays the
+			// Manager's until it writes the switch.
 			p := x.store()
 			p.activate(x.r.id, false)
 			unlock := p.lockJournal(x.s)

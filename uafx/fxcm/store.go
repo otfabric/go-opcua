@@ -69,7 +69,10 @@ type persistence struct {
 	owedMu  sync.Mutex
 	owed    map[string][]OwedWork
 	orphans map[string]string
-	active  map[RunID]bool
+	// fenced is, by set key, the work other sets owe that the set takes
+	// part in or shares a server with (fencedOf).
+	fenced map[string][]OwedWork
+	active map[RunID]bool
 
 	settleMu sync.Mutex
 	settling bool
@@ -169,6 +172,12 @@ type Recovery struct {
 	// Owed is the work the journal shows. While it is owed, the set is
 	// not established, enabled, replaced or removed (Bad_InvalidState).
 	Owed []OwedWork
+	// Fenced is the work other sets owe that this set takes part in (an
+	// operation of their set change) or shares a server with. While it
+	// is owed, the remote operations of the set and its CommitEdit are
+	// refused (Bad_InvalidState): whether they are independent of it is
+	// what recovery proves (stage C3.3; library interpretation).
+	Fenced []OwedWork
 	// Blocked, when not empty, is why the remote operations of the set
 	// are refused: a record of it in the store is not valid.
 	Blocked string
@@ -473,7 +482,7 @@ func (p *persistence) load(st map[string][]byte) {
 		runs = max(runs, r.Run)
 	}
 	m.runs.Store(runs)
-	p.owed, p.orphans = owedOf(l, p.active)
+	p.owed, p.orphans, p.fenced = owedOf(l, p.active)
 	for ks, s := range m.sets {
 		attachIntents(s, l, p.active)
 		if len(p.owed[ks]) > 0 || p.blockedSets[ks] != "" {
@@ -482,10 +491,98 @@ func (p *persistence) load(st map[string][]byte) {
 	}
 }
 
-// owedOf returns the work the journal l shows, by set, and the keys of the
-// obligations of no set l has: an Add of a set change, a run whose set
-// record is gone. The runs in active are running: what they owe is theirs.
-func owedOf(l *loaded, active map[RunID]bool) (map[string][]OwedWork, map[string]string) {
+// owedOf returns the work the journal l shows, by set, the keys of the
+// obligations of no set l has (an Add of a set change, a run whose set
+// record is gone) and, by set, the work of other sets that fences it
+// (fencedOf). The runs in active are running: what they owe is theirs.
+func owedOf(l *loaded, active map[RunID]bool) (owed map[string][]OwedWork, orphans map[string]string, fenced map[string][]OwedWork) {
+	owed, orphans = journalOwed(l, active)
+	return owed, orphans, fencedOf(l, owed)
+}
+
+// fencedOf returns, by set key, the work other sets owe that the set may
+// depend on, conservatively (library interpretation of design §6.3):
+//   - the set takes part in an owed set change (an operation of its
+//     Replace, Remove or complete Update), or
+//   - the set has a server (by its ServerAddress Address, or the server of
+//     one of its endpoint records or call intents) in the domain of the
+//     owed work: the servers of the set that owes it, of the sets of its
+//     set change, and the server of an owed call.
+//
+// Whether such a set is independent of the obligation (other
+// AutomationComponents, other PubSub components) is what recovery proves
+// (stage C3.3); until then its remote operations and configuration changes
+// are refused like those of the set that owes it.
+func fencedOf(l *loaded, owed map[string][]OwedWork) map[string][]OwedWork {
+	servers := map[string]map[string]bool{}
+	serve := func(k SetKey, addr string) {
+		ks := keyString(k)
+		if servers[ks] == nil {
+			servers[ks] = map[string]bool{}
+		}
+		if addr != "" {
+			servers[ks][addr] = true
+		}
+	}
+	for _, r := range l.sets {
+		k := SetKey{Folder: r.Folder, Name: r.Name}
+		serve(k, "")
+		if conf, err := decodeConf(r.Conf); err == nil {
+			for _, sa := range conf.ServerAddresses {
+				if sa != nil {
+					serve(k, sa.Address)
+				}
+			}
+		}
+	}
+	for _, r := range l.eps {
+		serve(SetKey{Folder: r.Folder, Name: r.SetName}, r.Address)
+	}
+	for _, r := range l.calls {
+		serve(SetKey{Folder: r.Folder, Name: r.SetName}, r.Address)
+	}
+	fenced := map[string][]OwedWork{}
+	for _, oks := range sortedRecordKeys(owed) {
+		for _, w := range owed[oks] {
+			parts := map[string]bool{oks: true}
+			for _, c := range w.Changes {
+				parts[keyString(c.Set)] = true
+			}
+			domain := map[string]bool{}
+			if w.Address != "" {
+				domain[w.Address] = true
+			}
+			for ks := range parts {
+				for a := range servers[ks] {
+					domain[a] = true
+				}
+			}
+			cands := map[string]bool{}
+			for ks := range servers {
+				cands[ks] = true
+			}
+			for ks := range parts {
+				cands[ks] = true
+			}
+			for _, ks := range sortedRecordKeys(cands) {
+				if ks == oks {
+					continue
+				}
+				shares := false
+				for a := range servers[ks] {
+					shares = shares || domain[a]
+				}
+				if parts[ks] || shares {
+					fenced[ks] = append(fenced[ks], w)
+				}
+			}
+		}
+	}
+	return fenced
+}
+
+// journalOwed is the owed work and the orphans of owedOf.
+func journalOwed(l *loaded, active map[RunID]bool) (map[string][]OwedWork, map[string]string) {
 	sets := map[string]bool{}
 	for _, r := range l.sets {
 		sets[keyString(SetKey{Folder: r.Folder, Name: r.Name})] = true
@@ -678,7 +775,7 @@ func (p *persistence) apply(b fxstore.Batch, gen uint64) (fxstore.Outcome, error
 func (p *persistence) refreshOwed() {
 	l := decodeState(p.d.State())
 	p.owedMu.Lock()
-	p.owed, p.orphans = owedOf(l, p.active)
+	p.owed, p.orphans, p.fenced = owedOf(l, p.active)
 	p.owedMu.Unlock()
 }
 
@@ -792,6 +889,14 @@ func (p *persistence) follow() bool {
 	p.owedMu.Lock()
 	active := maps.Clone(p.active)
 	p.owedMu.Unlock()
+	var events []Event
+	defer func() {
+		// Registered before the unlock of m.mu, so run after it (LIFO):
+		// an observer may call into the Manager.
+		for _, e := range events {
+			m.observe(e)
+		}
+	}()
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, s := range m.sets {
@@ -807,13 +912,6 @@ func (p *persistence) follow() bool {
 			return false
 		}
 	}
-	var events []Event
-	defer func() {
-		// After m.mu is released (deferred later, run first).
-		for _, e := range events {
-			m.observe(e)
-		}
-	}()
 	var gen uint64
 	for _, r := range l.sets {
 		gen = max(gen, r.Generation)
@@ -882,7 +980,7 @@ func (p *persistence) follow() bool {
 		}
 		s.mu.Unlock()
 	}
-	owed, orphans := owedOf(l, active)
+	owed, orphans, fenced := owedOf(l, active)
 	for ks, s := range m.sets {
 		s.mu.Lock()
 		attachIntents(s, l, active)
@@ -892,7 +990,7 @@ func (p *persistence) follow() bool {
 		s.mu.Unlock()
 	}
 	p.owedMu.Lock()
-	p.owed, p.orphans = owed, orphans
+	p.owed, p.orphans, p.fenced = owed, orphans, fenced
 	p.owedMu.Unlock()
 	return true
 }
@@ -977,8 +1075,9 @@ func (p *persistence) recovery(s *set) Recovery {
 	p.mu.Unlock()
 	p.owedMu.Lock()
 	r.Owed = slices.Clone(p.owed[ks])
+	r.Fenced = slices.Clone(p.fenced[ks])
 	p.owedMu.Unlock()
-	r.Done = r.Pending == 0 && len(r.Owed) == 0 && r.Blocked == ""
+	r.Done = r.Pending == 0 && len(r.Owed) == 0 && len(r.Fenced) == 0 && r.Blocked == ""
 	return r
 }
 
@@ -1022,6 +1121,7 @@ func (p *persistence) checkRemote(key SetKey) error {
 	p.mu.Unlock()
 	p.owedMu.Lock()
 	owed := slices.Clone(p.owed[ks])
+	fenced := slices.Clone(p.fenced[ks])
 	p.owedMu.Unlock()
 	switch {
 	case all != "":
@@ -1030,6 +1130,27 @@ func (p *persistence) checkRemote(key SetKey) error {
 		return managerError(ua.StatusBadInvalidState, "the store holds a record of the set %s that is not valid: %s", key, blocked)
 	case len(owed) > 0:
 		return managerError(ua.StatusBadInvalidState, "the set %s owes %v of run %d (recovery, stage C3.3)", key, owed[0].Kind, owed[0].Run)
+	case len(fenced) > 0:
+		return managerError(ua.StatusBadInvalidState, "the set %s takes part in, or shares a server with, %v owed by run %d (recovery, stage C3.3)", key, fenced[0].Kind, fenced[0].Run)
+	}
+	return nil
+}
+
+// checkConfig refuses a change of the configuration of the set key (a
+// CommitEdit) while it takes part in, or shares a server with, work
+// another set owes (fencedOf), or owes a set change itself: the owed
+// change commits Versions of its sets, which a commit would overtake.
+func (p *persistence) checkConfig(key SetKey) error {
+	ks := keyString(key)
+	p.owedMu.Lock()
+	defer p.owedMu.Unlock()
+	if f := p.fenced[ks]; len(f) > 0 {
+		return managerError(ua.StatusBadInvalidState, "the set %s takes part in, or shares a server with, %v owed by run %d (recovery, stage C3.3)", key, f[0].Kind, f[0].Run)
+	}
+	for _, w := range p.owed[ks] {
+		if w.Kind == OwedSetChange {
+			return managerError(ua.StatusBadInvalidState, "the set %s owes %v of run %d (recovery, stage C3.3)", key, w.Kind, w.Run)
+		}
 	}
 	return nil
 }

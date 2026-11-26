@@ -120,6 +120,9 @@ type Client struct {
 
 	// sechan is the open secure channel.
 	atomicSechan atomic.Value // *uasc.SecureChannel
+	// peer is the PeerCertificate of the channel it names, recorded when
+	// the client validated it (PeerCertificate).
+	peer atomic.Pointer[channelPeer]
 
 	// sechanErr receives the errors of the current secure channel. Every
 	// secure channel gets its own channel (see Dial) so that an error of a
@@ -902,6 +905,7 @@ func (c *Client) Dial(ctx context.Context) error {
 		c.setSecureChannel(nil)
 		return err
 	}
+	c.recordPeer(sc)
 
 	return nil
 }
@@ -970,6 +974,7 @@ func (c *Client) useDirectChannel(sc *uasc.SecureChannel, errCh chan error) erro
 		_ = sc.Close()
 		return err
 	}
+	c.recordPeer(sc)
 	c.connMu.Lock()
 	c.conn = nil
 	c.activeEndpoint = c.endpointURL
@@ -1238,6 +1243,65 @@ func (c *Client) SecureChannel() *uasc.SecureChannel {
 		return nil
 	}
 	return s
+}
+
+// PeerCertificate is the server certificate of a secure channel of a
+// Client as the client checked it when it opened that channel.
+type PeerCertificate struct {
+	// Certificate is the DER certificate the channel was opened with:
+	// the server proved it holds its private key by signing the
+	// OpenSecureChannel response (OPC 10000-6 §6.7.4). Nil without
+	// message security.
+	Certificate []byte
+	// SecurityMode and SecurityPolicyURI are those of the channel.
+	SecurityMode      ua.MessageSecurityMode
+	SecurityPolicyURI string
+	// Verified: the client validated Certificate when it opened the
+	// channel (trust list, validity, key usage, OPC 10000-4 §6.1.3);
+	// false with InsecureSkipVerify or without message security.
+	Verified bool
+	// ApplicationURI is the ApplicationUri the client verified the URI
+	// SAN of Certificate against (OPC 10000-6 §6.2.2), from the endpoint
+	// of SecurityFromEndpoint; empty when it checked none.
+	ApplicationURI string
+}
+
+type channelPeer struct {
+	sc *uasc.SecureChannel
+	pc PeerCertificate
+}
+
+// recordPeer records the PeerCertificate of sc, whose server certificate
+// the client has just validated.
+func (c *Client) recordPeer(sc *uasc.SecureChannel) {
+	pc := PeerCertificate{
+		SecurityMode:      c.cfg.sechan.SecurityMode,
+		SecurityPolicyURI: c.cfg.sechan.SecurityPolicyURI,
+	}
+	if pc.SecurityMode != ua.MessageSecurityModeNone && pc.SecurityMode != ua.MessageSecurityModeInvalid {
+		pc.Certificate = slices.Clone(c.cfg.sechan.RemoteCertificate)
+		pc.Verified = !c.cfg.certValidator.insecureSkipVerify && len(pc.Certificate) > 0
+		if pc.Verified {
+			pc.ApplicationURI = c.cfg.certValidator.serverApplicationURI
+		}
+	}
+	c.peer.Store(&channelPeer{sc: sc, pc: pc})
+}
+
+// PeerCertificate returns the PeerCertificate of the active secure channel
+// (SecureChannel), and false while there is none: before Connect, during a
+// reconnect, after Close. A reconnect opens a new channel, validated anew,
+// possibly with a new certificate of the server; read it again for each
+// use.
+func (c *Client) PeerCertificate() (PeerCertificate, bool) {
+	p := c.peer.Load()
+	sc := c.SecureChannel()
+	if p == nil || sc == nil || p.sc != sc {
+		return PeerCertificate{}, false
+	}
+	pc := p.pc
+	pc.Certificate = slices.Clone(pc.Certificate)
+	return pc, true
 }
 
 func (c *Client) setSecureChannel(sc *uasc.SecureChannel) {

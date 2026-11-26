@@ -10,9 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // semanticState is a valid journal: the counters, the set s, the record of
@@ -347,6 +349,72 @@ func TestIdentitySources(t *testing.T) {
 	} {
 		assert.ErrorIs(t, bad.check(), errRecord, "%+v", bad)
 	}
+}
+
+// fakePeer is a peerSource whose channel the test changes, as a reconnect
+// does.
+type fakePeer struct {
+	pc opcua.PeerCertificate
+	ok bool
+}
+
+func (f *fakePeer) PeerCertificate() (opcua.PeerCertificate, bool) { return f.pc, f.ok }
+
+// TestIdentityOfChannel (final C3.2 review): the identity of a
+// ClientDialer session comes from the peer of its active channel, read at
+// every call: authenticated only when the client verified the certificate
+// bound to the endpoint's ApplicationUri, reported otherwise, and it
+// follows a reconnect to another channel.
+func TestIdentityOfChannel(t *testing.T) {
+	t.Parallel()
+	certA, certB := []byte("certificate A"), []byte("certificate B")
+	verified := func(cert []byte, uri string) opcua.PeerCertificate {
+		return opcua.PeerCertificate{Certificate: cert, SecurityMode: ua.MessageSecurityModeSignAndEncrypt, Verified: true, ApplicationURI: uri}
+	}
+	for _, tc := range []struct {
+		name string
+		peer fakePeer
+		want ServerIdentity
+	}{
+		{"no channel", fakePeer{}, ServerIdentity{ApplicationURI: "urn:s"}},
+		{"no certificate (None, or Options overrode the endpoint)", fakePeer{ok: true, pc: opcua.PeerCertificate{SecurityMode: ua.MessageSecurityModeNone}},
+			ServerIdentity{ApplicationURI: "urn:s"}},
+		{"not verified (InsecureSkipVerify)", fakePeer{ok: true, pc: opcua.PeerCertificate{Certificate: certA, SecurityMode: ua.MessageSecurityModeSign}},
+			ServerIdentity{ApplicationURI: "urn:s", CertificateThumbprint: uapolicy.Thumbprint(certA)}},
+		{"verified without the ApplicationUri binding", fakePeer{ok: true, pc: verified(certA, "")},
+			ServerIdentity{ApplicationURI: "urn:s", CertificateThumbprint: uapolicy.Thumbprint(certA)}},
+		{"verified for another ApplicationUri", fakePeer{ok: true, pc: verified(certA, "urn:other")},
+			ServerIdentity{ApplicationURI: "urn:s", CertificateThumbprint: uapolicy.Thumbprint(certA)}},
+		{"authenticated", fakePeer{ok: true, pc: verified(certA, "urn:s")},
+			ServerIdentity{ApplicationURI: "urn:s", CertificateThumbprint: uapolicy.Thumbprint(certA), Authenticated: true}},
+	} {
+		assert.Equal(t, tc.want, identityOf(&tc.peer, "urn:s"), tc.name)
+	}
+
+	// A session's identity follows its channel: a reconnect with a renewed
+	// certificate, a reconnect in progress.
+	peer := &fakePeer{ok: true, pc: verified(certA, "urn:s")}
+	s := &clientSession{peer: peer, uri: "urn:s"}
+	tg := &target{addr: ServerAddress{Address: "opc.tcp://x", SecurityMode: ua.MessageSecurityModeSignAndEncrypt}, sess: s}
+	tg.identify(context.Background())
+	assert.Equal(t, identityAuthenticated, tg.server.Source)
+	assert.Equal(t, uapolicy.Thumbprint(certA), tg.server.Thumbprint)
+	peer.pc = verified(certB, "urn:s")
+	now := tg.evidenceNow()
+	assert.Equal(t, identityAuthenticated, now.Source)
+	assert.Equal(t, uapolicy.Thumbprint(certB), now.Thumbprint, "the renewed certificate")
+	assert.Equal(t, uapolicy.Thumbprint(certA), tg.server.Thumbprint, "evidenceNow changes nothing in the target")
+	peer.ok = false
+	now = tg.evidenceNow()
+	assert.Equal(t, identityReported, now.Source, "no channel: not authenticated")
+	assert.Nil(t, now.Thumbprint)
+	assert.NoError(t, now.check())
+
+	// A target not identified yet, and one of another Session.
+	assert.Equal(t, serverEvidence{}, (&target{sess: s}).evidenceNow())
+	plain := &target{sess: serverArray{uris: []string{"urn:s"}}}
+	plain.identify(context.Background())
+	assert.Equal(t, plain.server, plain.evidenceNow())
 }
 
 // TestSessionScoped: only reservations and verifications are exempt from

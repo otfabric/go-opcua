@@ -1059,7 +1059,13 @@ the new sets, or their removal, takes those generations in the same write
 that ends the runs. A change whose switch was not written stays owed
 (`OwedWork.Changes`, one `PlannedChange` per operation), and the key of
 a set it adds is held: an `Add` of it is `Bad_InvalidState`
-(`StoreStatus().Orphaned`).
+(`StoreStatus().Orphaned`). A change whose closes failed is owed too,
+with its whole transaction, once one of its closes may have had an
+effect (a close succeeded, its outcome is unknown, or it failed with an
+ambiguous status): what was closed cannot be undone (§6.2.5.2 Table 24).
+Only a change that failed before any remote effect is abandoned. A
+Replace publishes the new Config with its generation and fingerprint and
+releases its claim on the set in one step.
 
 **The journal** (design §6.3). A run writes its run record before its
 first call, an intent before each EstablishConnections and
@@ -1085,10 +1091,18 @@ taken for each other: the configured one (the ServerAddress), the
 ApplicationUri the server reported, and, when the channel is secured,
 the SHA-1 thumbprint of the certificate it was opened with (OPC 10000-6
 §6.7.4), with where the identity comes from: authenticated (the peer of
-the secure channel, `ServerIdentity.Authenticated`, as the sessions of
-`ClientDialer` report), reported (a `Session` that is no
-`IdentifiedSession` is read Server.ServerArray[0], which is no proof), or
-unavailable. Missing certificate evidence is recorded as missing; C3.3
+the secure channel, `ServerIdentity.Authenticated`), reported (a
+`Session` that is no `IdentifiedSession` is read Server.ServerArray[0],
+which is no proof), or unavailable. The sessions of `ClientDialer` read
+it from the active channel of their client (`opcua.Client.PeerCertificate`)
+for each record and intent, not from the endpoint they selected: the
+Options may change the security of the endpoint, and a reconnect opens
+another channel, possibly with a renewed certificate. It is authenticated
+only when that channel has message security and the client validated the
+certificate against its trust list and its URI SAN against the
+ApplicationUri of the endpoint (OPC 10000-6 §6.2.2); with
+InsecureSkipVerify, without security or without a channel it is
+reported. Missing certificate evidence is recorded as missing; C3.3
 must not take a reported identity for an authenticated one. It holds its NamespaceArray,
 the AutomationComponent, FunctionalEntity and endpoint NodeIds qualified
 by namespace URI, the ConnectionManagerApplicationUri and the Diagnostics
@@ -1132,10 +1146,19 @@ a set, the Manager refuses everything that acts on its endpoints: every
 `Update` that names it and `Settle` are `Bad_InvalidState`. A close or a
 verdict could invalidate the evidence of an unproven call, a component
 it shares or a pending set change; proving that it cannot is recovery
-(C3.3), so C3.2 refuses it. The Names of an establish intent that did
-not end are held by Unverified records without a NodeId, after a restart
-and in the running Manager, so that no run creates an endpoint under
-them.
+(C3.3), so C3.2 refuses it. The fence is wider than the set
+(`Recovery.Fenced`, library interpretation, conservative): a set that an
+owed set change operates on, and a set that shares a server (by its
+ServerAddress Address, or the server of an endpoint record or call
+intent) with the set that owes work, with the sets of its change or with
+an owed call, has the same operations refused, and its `CommitEdit` too;
+a set that owes a set change cannot commit an edit. Whether such a set
+is independent of the obligation is what recovery proves (C3.3). The
+Names of an establish intent that did not end are held by Unverified
+records without a NodeId, after a restart and in the running Manager, so
+that no run creates an endpoint under them. The Observer receives the
+events of following a settled store after the Manager lock is released,
+so it may call into the Manager.
 
 **Records are validated** (design §3.2, §6.1). A record that decodes but
 is not valid — its key does not match its content, a generation or RunID

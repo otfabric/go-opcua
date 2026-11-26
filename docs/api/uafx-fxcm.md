@@ -1097,6 +1097,12 @@ type Recovery struct {
 	// Owed is the work the journal shows. While it is owed, the set is
 	// not established, enabled, replaced or removed (Bad_InvalidState).
 	Owed []OwedWork
+	// Fenced is the work other sets owe that this set takes part in (an
+	// operation of their set change) or shares a server with. While it
+	// is owed, the remote operations of the set and its CommitEdit are
+	// refused (Bad_InvalidState): whether they are independent of it is
+	// what recovery proves (stage C3.3; library interpretation).
+	Fenced []OwedWork
 	// Blocked, when not empty, is why the remote operations of the set
 	// are refused: a record of it in the store is not valid.
 	Blocked string

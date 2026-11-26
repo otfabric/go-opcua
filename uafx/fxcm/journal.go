@@ -285,7 +285,7 @@ func fingerprint(v any) []byte {
 // establishIntent is the intent of an EstablishConnections of req on a.
 func (x *run) establishIntent(a *acRun, req *uafx.EstablishConnectionsRequest, args []*ua.Variant) *callRecord {
 	nsa := a.t.nsa
-	c := &callRecord{Kind: callEstablish, ACNode: qualify(a.node, nsa), Namespaces: nsa, Server: a.t.server}
+	c := &callRecord{Kind: callEstablish, ACNode: qualify(a.node, nsa), Namespaces: nsa, Server: a.t.evidenceNow()}
 	c.Address, c.SecurityMode, c.SecurityPolicyURI, c.ServerURIConf = a.addr.Address, uint32(a.addr.SecurityMode), a.addr.SecurityPolicyURI, a.addr.ServerURI
 	if b, err := ua.Encode(args); err == nil {
 		c.Request = b
@@ -318,7 +318,7 @@ func (x *run) establishIntent(a *acRun, req *uafx.EstablishConnectionsRequest, a
 // server t.
 func closeIntent(t *target, ac *ua.NodeID, nodes []*ua.NodeID, remove bool) *callRecord {
 	c := &callRecord{
-		Kind: callClose, ACNode: qualify(ac, t.nsa), Namespaces: t.nsa, Remove: remove, Server: t.server,
+		Kind: callClose, ACNode: qualify(ac, t.nsa), Namespaces: t.nsa, Remove: remove, Server: t.evidenceNow(),
 		Address: t.addr.Address, SecurityMode: uint32(t.addr.SecurityMode), SecurityPolicyURI: t.addr.SecurityPolicyURI, ServerURIConf: t.addr.ServerURI,
 	}
 	for _, n := range nodes {

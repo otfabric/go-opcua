@@ -81,18 +81,11 @@ func (t *target) identify(ctx context.Context) {
 		return
 	}
 	t.identified = true
-	t.server = serverEvidence{Secured: t.addr.SecurityMode != ua.MessageSecurityModeNone && t.addr.SecurityMode != ua.MessageSecurityModeInvalid}
 	if is, ok := t.sess.(IdentifiedSession); ok {
-		id := is.ServerIdentity()
-		t.server.ApplicationURI, t.server.Thumbprint = id.ApplicationURI, slices.Clone(id.CertificateThumbprint)
-		switch {
-		case id.Authenticated && t.server.Secured && len(id.CertificateThumbprint) == thumbprintSize:
-			t.server.Source = identityAuthenticated
-		case id.ApplicationURI != "" || len(id.CertificateThumbprint) > 0:
-			t.server.Source = identityReported
-		}
+		t.server = evidenceOf(t.addr, is.ServerIdentity())
 		return
 	}
+	t.server = serverEvidence{Secured: secured(t.addr)}
 	res, err := t.sess.Read(ctx, &ua.ReadRequest{NodesToRead: []*ua.ReadValueID{{NodeID: ua.NewNumericNodeID(0, id.ServerServerArray), AttributeID: ua.AttributeIDValue}}})
 	if err != nil || len(res.Results) != 1 {
 		return
@@ -100,6 +93,39 @@ func (t *target) identify(ctx context.Context) {
 	if uris, ok := dvValue(res.Results[0]).([]string); ok && len(uris) > 0 && uris[0] != "" {
 		t.server.ApplicationURI, t.server.Source = uris[0], identityReported
 	}
+}
+
+// secured reports whether addr asks for message security.
+func secured(addr ServerAddress) bool {
+	return addr.SecurityMode != ua.MessageSecurityModeNone && addr.SecurityMode != ua.MessageSecurityModeInvalid
+}
+
+// evidenceOf is the serverEvidence of the identity id of an
+// IdentifiedSession on addr.
+func evidenceOf(addr ServerAddress, id ServerIdentity) serverEvidence {
+	e := serverEvidence{Secured: secured(addr), ApplicationURI: id.ApplicationURI, Thumbprint: slices.Clone(id.CertificateThumbprint)}
+	switch {
+	case id.Authenticated && e.Secured && len(id.CertificateThumbprint) == thumbprintSize:
+		e.Source = identityAuthenticated
+	case id.ApplicationURI != "" || len(id.CertificateThumbprint) > 0:
+		e.Source = identityReported
+	}
+	return e
+}
+
+// evidenceNow is the identity of the server of t for a record written now:
+// of an IdentifiedSession read again, since a reconnect may have opened
+// another channel (another certificate, or none verified) since identify;
+// else what identify read. It changes nothing in t, which runs on several
+// AutomationComponents of the server share.
+func (t *target) evidenceNow() serverEvidence {
+	if !t.identified {
+		return t.server
+	}
+	if is, ok := t.sess.(IdentifiedSession); ok {
+		return evidenceOf(t.addr, is.ServerIdentity())
+	}
+	return t.server
 }
 
 // ns returns the index of uri on the server.

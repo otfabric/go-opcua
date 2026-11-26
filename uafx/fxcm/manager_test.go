@@ -541,3 +541,21 @@ func TestCloseWaitsForClaim(t *testing.T) {
 	_, err = m.Replace(context.Background(), named("B"))
 	assert.ErrorIs(t, err, ua.StatusBadShutdown)
 }
+
+// TestReplaceSetOneStep: replaceSet publishes the new Config, its
+// generation and fingerprint, and releases the claim in one step: no
+// reader sees the set unclaimed with the old generation.
+func TestReplaceSetOneStep(t *testing.T) {
+	old, err := NewConfig(validConf())
+	require.NoError(t, err)
+	s := newSet(old)
+	s.gen, s.fp, s.held = 3, []byte{3}, true
+	next, err := NewConfig(validConf())
+	require.NoError(t, err)
+	(&Manager{}).replaceSet(s, next, 7, []byte{7})
+	assert.Same(t, next, s.cfg)
+	assert.Equal(t, uint64(7), s.gen)
+	assert.Equal(t, []byte{7}, s.fp)
+	assert.False(t, s.held)
+	assert.Nil(t, s.current)
+}
