@@ -15,8 +15,10 @@ Connections on AutomationComponents
 Methods, events and file
 ([Serving a ConnectionManager](#serving-a-connectionmanager)). With a
 store, an AutomationComponent also keeps persistent ConnectionEndpoints
-across a restart ([Persistence](#persistence)); the ConnectionManager does
-not persist its sets yet. None of the profiles of Part 84 is claimed. What is missing is listed under [Limits](#limits).
+across a restart ([Persistence](#persistence)), and a ConnectionManager
+keeps its sets, its endpoint records and the journal of its runs
+([Persistence of the ConnectionManager](#persistence-of-the-connectionmanager)).
+None of the profiles of Part 84 is claimed. What is missing is listed under [Limits](#limits).
 
 | Package | What it holds |
 |---|---|
@@ -1017,6 +1019,71 @@ with an unknown outcome and its run ends in Error.
   collides with them.
 - The monitor polls the Status with Read; it does not subscribe.
 
+### Persistence of the ConnectionManager
+
+With `Options.Store` the Manager keeps its sets, the records of its
+endpoints, the journal of its runs and the intents of its calls in the
+namespace `cm` of the store, owned by its ApplicationURI (design §6,
+stage C3.2). `StoreTimeout` bounds each store operation (10 s).
+
+```go
+store, err := fxstore.OpenFile("/var/lib/myapp/cm", fxstore.Limits{})
+m, err := fxcm.New(fxcm.Options{Dialer: dialer, ApplicationURI: "urn:example:cm", Store: store})
+st, _ := m.Status(key) // st.Recovery: what the set owes after a restart
+ss, _ := m.StoreStatus()
+```
+
+**Set changes** (design §6.2). `Add`, `Replace`, `Remove`, `Update` and a
+commit of an edit are written before memory changes; an `Update` with
+complete TRUE is one write. A write that definitely did not commit fails
+with `Bad_ResourceUnavailable` and changes nothing; one whose outcome is
+unknown fails with `Bad_InternalError` (library interpretation C3-D13),
+changes nothing in memory and fences the store: later changes and the
+journal writes of runs already in flight are refused until the store is
+settled, in the background with backoff, after which memory follows what
+the store committed. A commit that fails leaves the edit open. `Replace`
+and `Remove` write the switch to the new set, or its removal, after their
+closes, in the same write that ends their run.
+
+**The journal** (design §6.3). A run writes its run record before its
+first call, an intent before each EstablishConnections and
+CloseConnections, and completes the intents of a step in one write with
+the endpoint records they produced. A call whose intent was not written
+is not sent; a run whose record was not written makes no call. Both fail
+with FxErrorRuntimeError and the StatusCode of the write (library
+interpretation). When a completion is not written, the records it would
+have written that claim ownership become Unresolved in memory, and the
+intents stay in the store with the run record, as evidence of calls whose
+outcome is unknown.
+
+**Restart** (design §6.4, decision C3-D9). `New` loads the sets with their
+Versions and every endpoint record as `Unverified`: whatever class it was
+written with, no record is trusted until it is verified, which C3.2 does
+not do. An Unverified endpoint is treated as Unresolved: a run fails its
+Connection with CreateConnectionEndpointError and `Bad_InvalidState`,
+never closes, adopts or changes it, and a set with one never retries.
+`Settle` decides one, as for Unresolved, and writes the verdict. The
+journal of runs that did not end is reported in `Status.Recovery.Owed`
+(`OwedWork`: Reconcile, Rollback, SetChange, Call) and the set is in
+Error; the work is exposed, not executed, and no call is resent. A run
+that crashed before its first intent owes nothing. A record that does not
+decode is reported in `StoreStatus().Failed`, kept, and holds its key: an
+Add of that set is `Bad_InvalidState`. A store of another ApplicationURI
+or with a newer schema fails `New`.
+
+**NotPersisted** (design §6.7, decision C3-D2). Where the PubSub
+configuration of an endpoint does not state 0:NotPersisted (OPC 10000-14
+§6.2.2 Table 4) for its DataSetReader or DataSetWriter, the Manager sets it
+from IsPersistent before the call, and FALSE on the group and the
+PubSubConnection above the reader or writer of a persistent endpoint, so
+that the persisted check of SetCommunicationConfigurationCmd holds
+(§6.2.4.3.9.2). An explicit value that contradicts IsPersistent, and a
+reader or writer shared by a persistent and a non-persistent endpoint,
+fail those Connections with ConnectionConfigurationSetInvalid and
+`Bad_ConfigurationError`. An endpoint with IsPersistent TRUE and a
+CleanupTimeout that is not negative is refused by validation (§6.6.2,
+§6.12; library interpretation C3-D4).
+
 ## Serving a ConnectionManager
 
 `fxserver.EnableConnectionManager` exposes a `Manager` on a server with the
@@ -1253,7 +1320,9 @@ go run ./examples/uafx/cm -port 4856
 | The mandatory members of the inspector against the ModellingRules of the embedded NodeSets | `uafx` (`TestMandatoryMatchesModel`) |
 | Every generated structure: the Binary Schemas, hand-written byte fixtures, the bytes of v1.37.0, a round trip of each with its optional fields and union options, the errors of the decoder | `uafx` (`TestSchemaMatchesBinarySchema`, `TestStructureFixtures`, `TestGoldenReleaseB`, `TestStructuresRoundTrip`, `TestStructureErrors`) |
 | The configuration model of a ConnectionManager: each validation rule, the file of F.2 in both namespace layouts and its errors, the edit, the state machine, the ownership and retry rules, the diagnostics and the ConnectionState | `uafx/fxcm` |
-| Fuzz: the ConnectionConfigurationSet file (`FuzzDecodeFile`) | `uafx/fxcm` |
+| Fuzz: the ConnectionConfigurationSet file (`FuzzDecodeFile`) and the records of the store (`FuzzDecodeRecord`) | `uafx/fxcm` |
+| ConnectionManager persistence: sets, Versions and commits across a restart; every outcome of a set change (not committed, unknown and lost, unknown and landed) and the fence; a store of another owner and a corrupt record; an intent or a run record not written (nothing sent), a completion lost (Unresolved, the evidence kept and reported after a restart, nothing resent); a run already in flight fenced by an ambiguous write of another operation; Unverified records after a restart and Settle; NotPersisted filled for persistent and non-persistent endpoints against strict AutomationComponents | `uafx/fxcm` |
+| ConnectionManager crash: the Manager killed as a subprocess at seven points of Add, establish, rollback and Replace, then started on the same FileStore: the set as committed, the owed work reported, no record trusted and no call made (`TestCrash`) | `uafx/fxcm` |
 | The Manager end to end against `fxserver` AutomationComponents with UDP PubSub: establish, enable, disable, remove and re-establish, data flowing; BrowsePaths and placeholders, asset and FunctionalEntity verification, MaxConnectionsPerCall and CommandBundleRequired; preconfigured endpoints; the rollback; a PublishedDataSet name collision with other content and the comparison of every item and field member; a DataSetReader that names its publisher's PublisherId adapted; a SecurityKeyServer refused; the PublisherId adaptation, with CommandBundleRequired after the publisher, its nested results and a failing call; Close waiting for a Remove; every use of every service failed in turn; every call's response lost; two Managers with the same ApplicationUri; the monitor re-establishing; the retry policy; the ClientDialer | `uafx/fxcm` |
 | The ConnectionManager server: the nodes and References of a set, the SelectionList writes and their RestrictToList, the PortableNodeIdentifier view, the Lock (ownership, renewal, expiry on the clock of the test, the end of a session, BreakLock), commit with CS-19 reflection and its conflicts, Process and its events, the audit events (also of calls refused early), the file and its argument errors, ChangesApplied of a partial update, handles dropped at the end of their session, the Lock deadline between two checks, escaped NodeIds, the authorizer, the nodes following the Manager; on a SignAndEncrypt Basic256Sha256 endpoint with user names, an authorized user and a viewer, and a right revoked between Open and CloseAndUpdate (`TestConnectionManagerSecure`) | `uafx/fxserver` |
 | Headline (design §7.1): AC1, AC2 and a ConnectionManager server, each its own server, driven only through the Methods, the SelectionList Variables and the file, over SignAndEncrypt sessions with a ConnectionAdmin user: add by file, establish, disable, enable, edit the PublishingInterval and see it on the AC after a new establish, remove (`TestConnectionManagerLifecycle`) | `uafx/fxcm` |
@@ -1296,7 +1365,10 @@ The test address space is `internal/testutil/fxtest`.
   key use is kept).
 - The ConnectionManager (`uafx/fxcm`, served by `EnableConnectionManager`)
   keeps its sets, their Versions and the records of its endpoints in
-  memory. It does not configure a SecurityKeyServer, ask a GDS (no
+  memory, or with a Store also durably; after a restart it verifies no
+  record and executes no owed work, it reports both
+  ([Persistence of the ConnectionManager](#persistence-of-the-connectionmanager);
+  recovery is stage C3.3). It does not configure a SecurityKeyServer, ask a GDS (no
   GlobalDiscoveryServers), resolve AliasNames (AliasNameProcessingError),
   generate a PubSub configuration from the flows
   ([Running a ConnectionManager](#running-a-connectionmanager)), or

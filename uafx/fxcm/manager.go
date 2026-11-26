@@ -151,6 +151,16 @@ type Manager struct {
 
 	// p keeps the Manager in Options.Store; nil without one.
 	p *persistence
+	// crash, when set by a test, runs at the points of the journal
+	// (crash_test.go).
+	crash atomic.Pointer[func(string)]
+}
+
+// crashPoint runs the crash hook of the tests at a point of the journal.
+func (m *Manager) crashPoint(name string) {
+	if f := m.crash.Load(); f != nil {
+		(*f)(name)
+	}
 }
 
 // set is a ConnectionConfigurationSet of a Manager.

@@ -54,15 +54,16 @@ func errNoIntent(err error) error {
 	return failure(uafx.FxErrorRuntimeError, StatusOf(err), "the intent of the call was not written to the store, nothing was sent: %v", err)
 }
 
-// startJournal writes the run record, phase executing, before the run
-// makes any call. A run whose record is not written makes no call: it
-// fails with the error of the write.
+// startJournal writes the run record, phase planned, before the run makes
+// any call; the first intent moves it to executing (design §6.3: a crash
+// before the first intent owes nothing). A run whose record is not written
+// makes no call: it fails with the error of the write.
 func (x *run) startJournal() error {
 	p := x.store()
 	if p == nil {
 		return nil
 	}
-	if err := x.writeRun(phaseExecuting, nil); err != nil {
+	if err := x.writeRun(phasePlanned, nil); err != nil {
 		return err
 	}
 	x.j.started = true
@@ -103,7 +104,7 @@ func (x *run) writeRun(phase uint8, b *fxstore.Batch) error {
 		b.Puts = map[string][]byte{}
 	}
 	b.Puts[runStoreKey(x.r.id)] = v
-	if x.j.next != nil && phase == phaseExecuting {
+	if x.j.next != nil && phase == phasePlanned {
 		// A Replace: the switch it owes needs the next Config.
 		conf, fp, err := encodeConf(x.j.next.conf)
 		if err != nil {
@@ -118,15 +119,24 @@ func (x *run) writeRun(phase uint8, b *fxstore.Batch) error {
 	if o, err := p.write(*b, 0); o != fxstore.Committed {
 		return storeError(o, err)
 	}
+	x.mu.Lock()
 	x.j.phase = phase
+	x.mu.Unlock()
 	return nil
+}
+
+// phase returns the phase of the run record.
+func (x *run) phase() uint8 {
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	return x.j.phase
 }
 
 // setPhase moves the run record to phase. A write that fails is logged:
 // the intents of the calls the phase makes are written before each, and
 // a run whose record says less than it owes is still in the store.
 func (x *run) setPhase(phase uint8) {
-	if x.store() == nil || !x.j.started || x.j.phase == phase {
+	if x.store() == nil || !x.j.started || x.phase() == phase {
 		return
 	}
 	if err := x.writeRun(phase, nil); err != nil {
@@ -155,14 +165,36 @@ func (x *run) intend(c *callRecord) (string, error) {
 	x.mu.Lock()
 	x.j.n++
 	k := callStoreKey(x.r.id, x.j.n)
+	planned := x.j.phase == phasePlanned
 	x.mu.Unlock()
-	if o, err := p.write(fxstore.Batch{Puts: map[string][]byte{k: v}}, 0); o != fxstore.Committed {
+	b := fxstore.Batch{Puts: map[string][]byte{k: v}}
+	if planned {
+		// The first intent: the run is executing from this write on.
+		rv, err := encodeRecord(x.runRecord(phaseExecuting))
+		if err != nil {
+			return "", errNoIntent(err)
+		}
+		b.Puts[runStoreKey(x.r.id)] = rv
+	}
+	x.crashPoint("call.before-intent")
+	if o, err := p.write(b, 0); o != fxstore.Committed {
 		return "", errNoIntent(storeError(o, err))
 	}
+	x.crashPoint("call.after-intent")
 	x.mu.Lock()
 	x.j.intents = append(x.j.intents, k)
+	if planned && x.j.phase == phasePlanned {
+		x.j.phase = phaseExecuting
+	}
 	x.mu.Unlock()
 	return k, nil
+}
+
+// crashPoint runs the crash hook of the tests.
+func (x *run) crashPoint(name string) {
+	if x.m != nil {
+		x.m.crashPoint(name)
+	}
 }
 
 // establishIntent is the intent of an EstablishConnections of req on a.
@@ -268,7 +300,7 @@ func (x *run) sync(keys []string, end bool) {
 			err = storeError(o, err)
 		}
 	} else {
-		err = x.writeRun(x.j.phase, &b)
+		err = x.writeRun(x.phase(), &b)
 	}
 	if err == nil {
 		x.mu.Lock()

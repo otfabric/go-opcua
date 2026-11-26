@@ -50,6 +50,10 @@ type persistence struct {
 
 	settleMu sync.Mutex
 	settling bool
+
+	// stale are the run records of runs that never called (phase
+	// planned), which the start deletes.
+	stale []string
 }
 
 // defaultStoreTimeout bounds one store operation.
@@ -167,6 +171,16 @@ func openPersistence(m *Manager, opts Options) (*persistence, error) {
 	}
 	p.d = d
 	p.load(d.State())
+	if len(p.stale) > 0 {
+		b := fxstore.Batch{}
+		for _, k := range p.stale {
+			b.Deletes = append(b.Deletes, k, "next/"+strings.TrimPrefix(k, "run/"))
+		}
+		if o, err := p.write(b, 0); o != fxstore.Committed {
+			// Kept: a planned run owes nothing, the next start tries again.
+			m.log.Warn("fxcm: the records of runs that never called were not deleted", "error", err)
+		}
+	}
 	return p, nil
 }
 
@@ -251,7 +265,8 @@ func (p *persistence) load(st map[string][]byte) {
 			}
 			runs = max(runs, r.Run)
 			if r.Phase == phasePlanned {
-				continue // nothing owed
+				p.stale = append(p.stale, k) // nothing owed: deleted
+				continue
 			}
 			p.owe(SetKey{Folder: r.Folder, Name: r.SetName}, r.owed())
 		case strings.HasPrefix(k, "call/"):
@@ -293,10 +308,12 @@ func (p *persistence) owe(k SetKey, w OwedWork) {
 func (r *runRecord) owed() OwedWork {
 	w := OwedWork{Run: RunID(r.Run), Action: uafx.FxProcess(r.Action)}
 	switch {
+	case uafx.FxProcess(r.Action) == ActionRemoveSet:
+		// The closes of a Replace or Remove are never rolled back: what
+		// is owed is the rest of the closes and the switch.
+		w.Kind = OwedSetChange
 	case r.Phase == phaseRollbackRequired, r.Phase == phaseExecuting && r.RollbackOnError:
 		w.Kind = OwedRollback
-	case uafx.FxProcess(r.Action) == ActionRemoveSet:
-		w.Kind = OwedSetChange
 	default:
 		w.Kind = OwedReconcile
 	}
@@ -342,7 +359,20 @@ func (p *persistence) apply(b fxstore.Batch, gen uint64) (fxstore.Outcome, error
 	b.Puts["counters"] = cv
 	ctx, cancel := p.ctx()
 	defer cancel()
+	sets := false
+	for k := range b.Puts {
+		sets = sets || strings.HasPrefix(k, "set/")
+	}
+	for _, k := range b.Deletes {
+		sets = sets || strings.HasPrefix(k, "set/")
+	}
+	if sets {
+		p.m.crashPoint("set.before-apply")
+	}
 	o, err := p.d.Apply(ctx, b)
+	if sets && o == fxstore.Committed {
+		p.m.crashPoint("set.after-apply")
+	}
 	switch o {
 	case fxstore.Committed:
 		p.gen = max(p.gen, gen)

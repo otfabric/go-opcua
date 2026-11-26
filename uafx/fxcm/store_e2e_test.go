@@ -4,6 +4,7 @@ package fxcm_test
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strings"
 	"sync"
@@ -246,4 +247,113 @@ func TestStoreJournalE2E(t *testing.T) {
 		assert.Zero(t, m2.Counters().EstablishCallCount, "nothing is resent")
 		assert.Positive(t, calls)
 	})
+}
+
+// TestStorePersistentE2E: against AutomationComponents with a store and
+// StrictNotPersisted, a set of persistent endpoints and a set of
+// non-persistent ones are both established: the ConnectionManager fills
+// NotPersisted from IsPersistent, which the persisted check of
+// SetCommunicationConfigurationCmd needs (Part 81 §6.2.4.3.9.2; design §6.7).
+func TestStorePersistentE2E(t *testing.T) {
+	t.Parallel()
+	for _, persistent := range []bool{true, false} {
+		t.Run(map[bool]string{true: "persistent", false: "non-persistent"}[persistent], func(t *testing.T) {
+			t.Parallel()
+			opts := func() fxserver.ConnectionOptions {
+				return fxserver.ConnectionOptions{Store: &fxstore.MemoryStore{}, StrictNotPersisted: true}
+			}
+			a, b := newAC(t, "a", opts()), newAC(t, "b", opts())
+			m := newManager(t, fxcm.Options{Store: &fxstore.MemoryStore{}})
+			conf := e2eConf(t, "Persist", a, b)
+			conf.Connections[0].Endpoint1.IsPersistent = persistent
+			conf.Connections[0].Endpoint2.IsPersistent = persistent
+			cfg, err := m.Add(conf)
+			require.NoError(t, err)
+			res := process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
+			require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
+			assert.Equal(t, []string{"ToB"}, a.endpoints())
+			var notPersisted []bool
+			for _, c := range a.srv.PubSub().Configuration().Connections {
+				for _, g := range c.WriterGroups {
+					for _, w := range g.DataSetWriters {
+						for _, kv := range w.DataSetWriterProperties {
+							if kv.Key.Name == "NotPersisted" {
+								notPersisted = append(notPersisted, kv.Value.Value().(bool))
+							}
+						}
+					}
+				}
+			}
+			assert.Equal(t, []bool{!persistent}, notPersisted, "the writer carries NotPersisted as IsPersistent says")
+		})
+	}
+}
+
+// TestStoreFenceInFlightE2E: an operation already in flight when another
+// gets an ambiguous result is fenced too. A run has written its first
+// intent when an Add's write has an unknown outcome; from then on the run
+// writes no intent, so it sends no call, until the store is settled, and
+// every call it sent had its intent committed before the fence (design
+// §3.5, §6.3).
+func TestStoreFenceInFlightE2E(t *testing.T) {
+	t.Parallel()
+	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
+	mem := &fxstore.MemoryStore{}
+	f := storetest.NewFaulty(mem)
+	lost := &failing{Store: f} // the Add's write, and only it, is lost
+	var mu sync.Mutex
+	fenced, intents, late := false, 0, 0
+	f.OnApply = func(bt fxstore.Batch) {
+		mu.Lock()
+		defer mu.Unlock()
+		// The Applies are serialised: one after the Add whose outcome
+		// is unknown would be a write past the fence.
+		switch {
+		case !putsPrefix("call/")(bt):
+		case fenced:
+			late++
+		default:
+			intents++
+		}
+	}
+	m := newManager(t, fxcm.Options{Store: lost})
+	cfg, err := m.Add(e2eConf(t, "InFlight", a, b))
+	require.NoError(t, err)
+	var once sync.Once
+	addErr := make(chan error, 1)
+	fxcm.SetCrashPoint(m, func(p string) {
+		if p != "call.after-intent" {
+			return
+		}
+		once.Do(func() {
+			f.FailLoadsWith(errors.New("load down")) // keep the store fenced
+			lost.arm(storetest.FailLost, putsPrefix("set/"))
+			_, err := m.Add(e2eConf(t, "Other", a, b))
+			// A write that reaches the store from here on passed the
+			// fence: the Add's was the last before it.
+			mu.Lock()
+			fenced = true
+			mu.Unlock()
+			addErr <- err
+		})
+	})
+	st := m.Process(uafx.ActionEstablishConnectionsEnabled, cfg.Key())
+	require.Len(t, st, 1)
+	require.NoError(t, st[0].Err)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	res, err := st[0].Run.Wait(ctx)
+	require.NoError(t, err)
+	require.ErrorIs(t, <-addErr, ua.StatusBadInternalError)
+	assert.Equal(t, fxcm.StateError, res.State)
+	ss, _ := m.StoreStatus()
+	assert.True(t, ss.Store.Fenced)
+	mu.Lock()
+	assert.Zero(t, late, "no intent reaches the store while it is fenced")
+	sent := m.Counters().EstablishCallCount + m.Counters().CloseCallCount
+	assert.LessOrEqual(t, sent, uint32(intents), "every call sent had its intent committed")
+	mu.Unlock()
+	f.FailLoadsWith(nil)
+	require.Eventually(t, func() bool { ss, _ := m.StoreStatus(); return !ss.Store.Fenced }, 10*time.Second, 10*time.Millisecond)
+	assert.Equal(t, sent, m.Counters().EstablishCallCount+m.Counters().CloseCallCount)
 }

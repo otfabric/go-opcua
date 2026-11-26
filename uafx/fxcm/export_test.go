@@ -22,3 +22,13 @@ func DropSessions(m *Manager) {
 
 // NewPendingRun is a Run that never ends.
 func NewPendingRun() *Run { return &Run{done: make(chan struct{})} }
+
+// SetCrashPoint makes f run at every point of the journal of m; nil
+// removes it.
+func SetCrashPoint(m *Manager, f func(string)) {
+	if f == nil {
+		m.crash.Store(nil)
+		return
+	}
+	m.crash.Store(&f)
+}

@@ -1193,6 +1193,7 @@ func (x *run) call(ctx context.Context, a *acRun, req *uafx.EstablishConnections
 	defer cancel()
 	x.m.counters.establish.Add(1)
 	out, err := a.t.sess.Call(cctx, &ua.CallMethodRequest{ObjectID: a.node, MethodID: a.establish, InputArguments: args})
+	x.crashPoint("call.after-send")
 	ev := Event{Kind: EventCall, Set: x.r.key, Run: x.r.id, Method: "EstablishConnections", Address: a.addr.Address}
 	defer func() { x.m.observe(ev) }()
 	if err != nil {
@@ -2097,6 +2098,8 @@ func (x *run) epOf(ref EndpointRef) *epRun {
 // (§6.8.2, F.1.3, EC-11), within RollbackTimeout. Unresolved endpoints are
 // reported, never closed (design §5.5).
 func (x *run) rollback(ctx context.Context) {
+	x.setPhase(phaseRollbackRequired)
+	x.crashPoint("rollback.started")
 	recs, unresolved := x.closable()
 	x.mu.Lock()
 	for _, r := range unresolved {
@@ -2286,6 +2289,7 @@ func (x *run) enableOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, r
 // survivors of a failed run), and checks the Unresolved ones again: one
 // that disappeared is forgotten.
 func (x *run) reconcileRun(ctx context.Context, prev State) {
+	x.setPhase(phaseReconciling)
 	recs, unresolved := x.closable()
 	var toClose []*record
 	for _, r := range recs {

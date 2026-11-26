@@ -585,6 +585,11 @@ type Manager struct {
 	// statusOf reads the Status of an endpoint for the monitor
 	// (readStatus; a test replaces it before the monitor starts).
 
+	// p keeps the Manager in Options.Store; nil without one.
+
+	// crash, when set by a test, runs at the points of the journal
+	// (crash_test.go).
+
 }
 ```
 
@@ -734,6 +739,14 @@ func (m *Manager) Status(key SetKey) (Status, bool)
 
 Status returns the live state of a set.
 
+#### func (Manager) StoreStatus
+
+```go
+func (m *Manager) StoreStatus() (StoreStatus, bool)
+```
+
+StoreStatus returns the state of the store of the Manager, false without a Store.
+
 #### func (Manager) Update
 
 ```go
@@ -860,6 +873,16 @@ type Options struct {
 	// Logger logs at Debug what the Observer receives, and failures. Nil:
 	// slog.Default().
 	Logger *slog.Logger
+	// Store makes the Manager keep its sets, the records of its
+	// endpoints, the journal of its runs and the intents of its calls
+	// (design docs/design/uafx-persistent-connections.md §6): a set
+	// change is durable before it is visible, and New loads them, every
+	// endpoint record Unverified. A store that cannot be loaded, belongs
+	// to another ApplicationURI or has a newer schema fails New. Nil:
+	// memory only.
+	Store fxstore.Store
+	// StoreTimeout bounds each store operation. 0: 10 s.
+	StoreTimeout time.Duration
 }
 ```
 
@@ -910,6 +933,59 @@ const (
 
 The kinds of Outcome.
 
+### type OwedKind
+
+```go
+type OwedKind int
+```
+
+OwedKind is a kind of OwedWork.
+
+```go
+const (
+	// OwedReconcile: a run was executing; its calls that did not end are
+	// unknown outcomes (C2 §5.4).
+	OwedReconcile OwedKind = iota + 1
+	// OwedRollback: a run with RollbackOnError TRUE aborted, or was
+	// executing; its rollback (§6.7.3.2) did not finish.
+	OwedRollback
+	// OwedSetChange: a Replace or Remove was closing the Connections of
+	// the set; the remaining closes and the switch are owed (§6.2).
+	OwedSetChange
+	// OwedCall: an EstablishConnections or CloseConnections was sent and
+	// its outcome was never recorded: unknown, re-proved and never resent
+	// (§6.3).
+	OwedCall
+)
+```
+
+The kinds of OwedWork.
+
+#### func (OwedKind) String
+
+```go
+func (k OwedKind) String() string
+```
+
+### type OwedWork
+
+```go
+type OwedWork struct {
+	// Kind says what is owed.
+	Kind OwedKind
+	// Run is the run that owes it.
+	Run RunID
+	// Action is the action of that run.
+	Action uafx.FxProcess
+	// Address is the server of an unended call; empty otherwise.
+	Address string
+	// Names are the endpoint Names of an unended establish.
+	Names []string
+}
+```
+
+OwedWork is work the journal of a Manager showed after a restart, which it exposes and does not execute (design §6.3): the next Process or Reconcile of the set does it (stage C3.3). In this version it is kept in the store and reported.
+
 ### type Ownership
 
 ```go
@@ -932,6 +1008,13 @@ const (
 	// Unresolved: this ConnectionManager may have made it, without proof.
 	// Reported, never closed, until a Reconcile or Settle decides it.
 	Unresolved
+	// Unverified: a record a Manager with a Store loaded at its start, not
+	// verified against its AutomationComponent since (design
+	// docs/design/uafx-persistent-connections.md §6.4, decision C3-D9).
+	// Treated like Unresolved: reported, never closed, adopted or changed;
+	// an establish fails the Connection whose Name it holds. Settle
+	// decides it as it decides an Unresolved one.
+	Unverified
 )
 ```
 
@@ -970,6 +1053,24 @@ MayClose reports whether a ConnectionManager may close an endpoint of the class 
 func (o Ownership) String() string
 ```
 
+### type Recovery
+
+```go
+type Recovery struct {
+	// Pending is the number of records not yet verified.
+	Pending int
+	// Unverified are the endpoints whose records were loaded and not
+	// verified: reported, never closed, adopted or changed.
+	Unverified []EndpointRecord
+	// Owed is the work the journal shows.
+	Owed []OwedWork
+	// Done: nothing is pending or owed.
+	Done bool
+}
+```
+
+Recovery is what a set owes after a restart and how far its records are verified (design §6.4).
+
 ### type RetryPolicy
 
 ```go
@@ -986,7 +1087,10 @@ RetryPolicy is when a set in Error is processed again: after Initial, doubled af
 
 ```go
 type Run struct {
-	// contains filtered or unexported fields
+
+	// next is the Config a Replace switches to after this run closed the
+	// Connections of the set (journaled with a Store).
+
 }
 ```
 
@@ -1240,10 +1344,29 @@ type Status struct {
 	// Endpoints are the endpoints the Manager made, took or may have made
 	// for the set (design §5.3).
 	Endpoints []EndpointRecord
+	// Recovery is what the set owes after a restart and how far its
+	// records are verified, with a Store (design §6.4); nil without one.
+	Recovery *Recovery
 }
 ```
 
 Status is a copy of the live state of a set.
+
+### type StoreStatus
+
+```go
+type StoreStatus struct {
+	// Durability is what the store guarantees, when it says.
+	Durability fxstore.Durability
+	// Store is the state of its domain.
+	Store fxstore.DomainStatus
+	// Failed are the records that did not decode at the start, by key:
+	// kept in the store, never overwritten.
+	Failed map[string]error
+}
+```
+
+StoreStatus is the state of the store of a Manager.
 
 ### type Transition
 
