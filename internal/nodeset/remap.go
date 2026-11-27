@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: MIT
 
-// Package nodeset prepares NodeSet2 documents for import into a server
-// whose namespace table differs from the table of the document.
+// Package nodeset reads NodeSet2 documents (OPC 10000-6 Annex F) and
+// prepares them for import into a server whose namespace table differs
+// from the table of the document.
+//
+// [Parse] reads a document into a [Set]: its namespaces, models and their
+// RequiredModels, aliases and every node with all the attributes of its
+// class, its references, the DataType definitions and the values, with the
+// defaults of UANodeSet.xsd applied. Its queries ([Set.Related],
+// [Set.Children], [Set.ModellingRule], [Set.MethodArguments] and others)
+// serve the code generators (cmd/uafx) and the server import
+// (server.ImportNodeSetXML), which share this one reader.
 //
 // A NodeSet2 document carries its own namespace table, NamespaceUris: a
 // NamespaceIndex in a NodeId or a QualifiedName of the document is an index

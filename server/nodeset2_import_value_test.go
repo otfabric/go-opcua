@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/nodeset"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/stretchr/testify/require"
 )
@@ -217,14 +218,14 @@ func TestImportNodeSet_StandardValues(t *testing.T) {
 
 	// Every imported value can be put on the wire.
 	n := 0
-	for _, v := range builtinNodeSet.UAVariable {
+	for _, v := range builtinNodeSet.OfClass(nodeset.Variable) {
 		if v.Value == nil {
 			continue
 		}
 		val := builtinNodeSetValues[v.Value]
-		require.NotNil(t, val, "%s: value not decoded", v.NodeIDAttr)
+		require.NotNil(t, val, "%s: value not decoded", v.NodeID)
 		_, err := ua.Encode(val)
-		require.NoError(t, err, v.NodeIDAttr)
+		require.NoError(t, err, v.NodeID)
 		n++
 	}
 	require.Greater(t, n, 1000)

@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/tls"
-	"encoding/xml"
 	stderrors "errors"
 	"fmt"
 	"log/slog"
@@ -22,6 +21,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/nodeset"
 	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -33,13 +33,13 @@ const defaultListenAddr = "opc.tcp://localhost:0"
 
 var (
 	builtinNodeSetOnce sync.Once
-	builtinNodeSet     schema.UANodeSet
+	builtinNodeSet     *nodeset.Set
 	// builtinNodeSetValues holds the decoded <Value> of the variables of
 	// the built-in node set (nil if it cannot be decoded). It is written
 	// once, under builtinNodeSetOnce. The Variants are prototypes: they
 	// tell which values decode and are never handed to a server, see
 	// importVariableValue.
-	builtinNodeSetValues map[*schema.Value]*ua.Variant
+	builtinNodeSetValues map[*nodeset.Value]*ua.Variant
 	builtinNodeSetErr    error
 )
 
@@ -379,13 +379,16 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	builtinNodeSetOnce.Do(func() {
-		builtinNodeSetErr = xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet)
+		builtinNodeSet, builtinNodeSetErr = nodeset.Parse(schema.OpcUaNodeSet2)
+		if builtinNodeSetErr != nil {
+			return
+		}
 		// The values of the standard node set are decoded once, to know
 		// which of them a server can serve. A server does not get these
 		// Variants themselves: importVariableValue gives every node a
 		// copy of its own.
-		builtinNodeSetValues = make(map[*schema.Value]*ua.Variant)
-		for _, v := range builtinNodeSet.UAVariable {
+		builtinNodeSetValues = make(map[*nodeset.Value]*ua.Variant)
+		for _, v := range builtinNodeSet.OfClass(nodeset.Variable) {
 			if v.Value != nil {
 				builtinNodeSetValues[v.Value] = decodeNodeSetValue(v.Value)
 			}
@@ -411,7 +414,7 @@ func New(opts ...Option) (*Server, error) {
 	if rbac, ok := cfg.accessController.(*RBACAccessController); ok && rbac != nil && rbac.srv == nil {
 		rbac.srv = s
 	}
-	if err := s.importNodeSet(&builtinNodeSet); err != nil {
+	if err := s.importNodeSet(builtinNodeSet); err != nil {
 		return nil, fmt.Errorf("server: import built-in node set: %w", err)
 	}
 

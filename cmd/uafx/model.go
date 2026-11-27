@@ -3,7 +3,6 @@
 package main
 
 import (
-	"encoding/xml"
 	"fmt"
 	"os"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/otfabric/go-opcua/internal/goname"
+	"github.com/otfabric/go-opcua/internal/nodeset"
 )
 
 // The namespaces of the UAFX model, by the key the generated code uses.
@@ -22,55 +22,6 @@ var namespaces = []struct{ key, uri, file string }{
 }
 
 const uaURI = "http://opcfoundation.org/UA/"
-
-// --- NodeSet2 XML (Part 6 Annex F) ------------------------------------------
-
-type xmlNodeSet struct {
-	NamespaceURIs []string   `xml:"NamespaceUris>Uri"`
-	Aliases       []xmlAlias `xml:"Aliases>Alias"`
-	DataTypes     []xmlType  `xml:"UADataType"`
-	Objects       []xmlNode  `xml:"UAObject"`
-}
-
-type xmlAlias struct {
-	Alias string `xml:"Alias,attr"`
-	ID    string `xml:",chardata"`
-}
-
-type xmlNode struct {
-	NodeID     string `xml:"NodeId,attr"`
-	BrowseName string `xml:"BrowseName,attr"`
-}
-
-type xmlType struct {
-	NodeID        string         `xml:"NodeId,attr"`
-	BrowseName    string         `xml:"BrowseName,attr"`
-	IsAbstract    bool           `xml:"IsAbstract,attr"`
-	Documentation string         `xml:"Documentation"`
-	References    []xmlReference `xml:"References>Reference"`
-	Definition    *xmlDefinition `xml:"Definition"`
-}
-
-type xmlReference struct {
-	Type      string `xml:"ReferenceType,attr"`
-	IsForward string `xml:"IsForward,attr"`
-	Target    string `xml:",chardata"`
-}
-
-type xmlDefinition struct {
-	IsUnion     bool       `xml:"IsUnion,attr"`
-	IsOptionSet bool       `xml:"IsOptionSet,attr"`
-	Fields      []xmlField `xml:"Field"`
-}
-
-type xmlField struct {
-	Name          string `xml:"Name,attr"`
-	DataType      string `xml:"DataType,attr"`
-	ValueRank     string `xml:"ValueRank,attr"`
-	IsOptional    bool   `xml:"IsOptional,attr"`
-	AllowSubTypes bool   `xml:"AllowSubTypes,attr"`
-	Value         *int64 `xml:"Value,attr"`
-}
 
 // --- model ------------------------------------------------------------------
 
@@ -139,8 +90,8 @@ func load(dir string) (*model, error) {
 		if err != nil {
 			return nil, err
 		}
-		var doc xmlNodeSet
-		if err := xml.Unmarshal(raw, &doc); err != nil {
+		doc, err := nodeset.Parse(raw)
+		if err != nil {
 			return nil, fmt.Errorf("%s: %w", n.file, err)
 		}
 		if len(doc.NamespaceURIs) == 0 || doc.NamespaceURIs[0] != n.uri {
@@ -148,15 +99,15 @@ func load(dir string) (*model, error) {
 		}
 		r := resolver{uris: doc.NamespaceURIs, aliases: map[string]string{}}
 		for _, a := range doc.Aliases {
-			r.aliases[a.Alias] = strings.TrimSpace(a.ID)
+			r.aliases[a.Alias] = strings.TrimSpace(a.NodeID)
 		}
 		binary := map[string]bool{}
-		for _, o := range doc.Objects {
+		for _, o := range doc.OfClass(nodeset.Object) {
 			if o.BrowseName == "Default Binary" {
 				binary[o.NodeID] = true
 			}
 		}
-		for _, x := range doc.DataTypes {
+		for _, x := range doc.OfClass(nodeset.DataType) {
 			id, err := r.resolve(x.NodeID)
 			if err != nil {
 				return nil, fmt.Errorf("%s: %s: %w", n.file, x.BrowseName, err)
@@ -167,7 +118,7 @@ func load(dir string) (*model, error) {
 			}
 			for _, rf := range x.References {
 				switch {
-				case rf.Type == "HasSubtype" && rf.IsForward == "false":
+				case rf.Type == "HasSubtype" && !rf.IsForward:
 					if t.base, err = r.resolve(strings.TrimSpace(rf.Target)); err != nil {
 						return nil, err
 					}
@@ -194,26 +145,29 @@ func load(dir string) (*model, error) {
 			}
 			for _, f := range d.Fields {
 				if t.kind == kEnum || t.kind == kOptionSet {
-					if f.Value == nil {
+					// A Field without a Value has -1 (UANodeSet.xsd), which
+					// no vendored enumeration or OptionSet uses: refuse it,
+					// as the reader of the XML types did.
+					if f.Value == -1 {
 						return nil, fmt.Errorf("%s: %s.%s has no Value", n.file, t.name, f.Name)
 					}
-					t.values = append(t.values, value{f.Name, *f.Value})
+					t.values = append(t.values, value{f.Name, f.Value})
 					continue
 				}
 				dt := f.DataType
 				if dt == "" {
-					dt = "i=24" // BaseDataType (Part 6 §F.12)
+					dt = nodeset.DefaultDataType // BaseDataType (Part 6 §F.12)
 				}
 				fr, err := r.resolve(dt)
 				if err != nil {
 					return nil, fmt.Errorf("%s: %s.%s: %w", n.file, t.name, f.Name, err)
 				}
 				switch f.ValueRank {
-				case "", "-1", "1":
+				case -1, 1:
 				default:
-					return nil, fmt.Errorf("%s: %s.%s: ValueRank %s is not supported", n.file, t.name, f.Name, f.ValueRank)
+					return nil, fmt.Errorf("%s: %s.%s: ValueRank %d is not supported", n.file, t.name, f.Name, f.ValueRank)
 				}
-				t.own = append(t.own, &field{name: f.Name, dt: fr, array: f.ValueRank == "1", optional: f.IsOptional, allowSub: f.AllowSubTypes})
+				t.own = append(t.own, &field{name: f.Name, dt: fr, array: f.ValueRank == 1, optional: f.IsOptional, allowSub: f.AllowSubTypes})
 			}
 			key := n.key + ":" + t.name
 			t.cfg = config[key]

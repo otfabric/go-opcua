@@ -68,7 +68,7 @@ Packages are tiered by intended audience and stability commitment:
 
 | Package | Responsibility |
 |---------|---------------|
-| `internal/schema/` | NodeSet2 XML types, parser, and embedded spec data |
+| `internal/schema/` | The embedded NodeSets the server imports itself: namespace 0 and the GDS |
 | `internal/stats/` | Metrics collection (experimental, `expvar`-based) |
 | `internal/testutil/` | Test server/client helpers for integration tests |
 | `internal/goname/` | Shared identifier normalization for code generators |
@@ -76,7 +76,7 @@ Packages are tiered by intended audience and stability commitment:
 | `internal/mqtt/`, `internal/amqp/`, `internal/mdns/` | MQTT 3.1.1 / 5.0 and AMQP 1.0 clients of the PubSub transports; the mDNS responder of multicast discovery |
 | `internal/cmd/schemamanifest/` | Pins, downloads and verifies the schema inputs (`schema/manifest.json`) |
 | `internal/cmd/gen/` | Go-based code generation driver |
-| `internal/nodeset/` | Maps the namespace indexes of a NodeSet2 document to those of a server |
+| `internal/nodeset/` | The one NodeSet2 reader (`Parse`: nodes, attributes with the XSD defaults, references, DataType definitions, Method arguments, models), used by the code generators and the server import; maps the namespace indexes of a document to those of a server (`Remap`) |
 
 ---
 
