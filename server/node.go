@@ -225,6 +225,10 @@ func (n *Node) attribute(id ua.AttributeID) (*AttrValue, error) {
 		}
 		return nil, ua.StatusBadAttributeIDInvalid
 	case id == ua.AttributeIDRolePermissions || id == ua.AttributeIDUserRolePermissions:
+		// The node does not know the session: for UserRolePermissions it
+		// returns all RolePermissions, and the Read service and the
+		// monitored items reduce them to the roles of the session
+		// (forSessionRoles, Part 3 §5.2.10).
 		if len(n.rolePermissions) > 0 {
 			extObjs := make([]*ua.ExtensionObject, len(n.rolePermissions))
 			for i, rp := range n.rolePermissions {

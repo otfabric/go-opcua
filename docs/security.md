@@ -699,6 +699,8 @@ s, err := server.New(
 
 The `DefaultAccessController` allows all operations. Override it to enforce your security model.
 
+Reading the UserRolePermissions Attribute of a node (with Read or a monitored item) returns the entries of its RolePermissions for the roles of the session only (Part 3 §5.2.10); a request without a session, or a session the `RoleMapper` gave no role, has the Anonymous role, as for the `RBACAccessController`. RolePermissions lists every role.
+
 ### Writable Attributes
 
 The `AccessController` decides who may write a node; the node decides which of its attributes can be written at all:

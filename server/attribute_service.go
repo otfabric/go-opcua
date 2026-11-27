@@ -78,6 +78,9 @@ func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r u
 		}
 
 		dv := ns.Attribute(n.NodeID, n.AttributeID)
+		if n.AttributeID == ua.AttributeIDUserRolePermissions {
+			dv = forSessionRoles(dv, sess)
+		}
 
 		if n.IndexRange != "" {
 			if n.AttributeID != ua.AttributeIDValue || dv == nil || dv.Status != ua.StatusOK || dv.Value == nil {

@@ -378,6 +378,10 @@ func (s *MonitoredItemService) readSample(item *MonitoredItem) *ua.DataValue {
 	if dv == nil {
 		return nil
 	}
+	if rv.AttributeID == ua.AttributeIDUserRolePermissions && item.Sub != nil {
+		sess, _ := item.Sub.sessionChannel()
+		dv = forSessionRoles(dv, sess)
+	}
 	// Copy so timestamp filtering / overflow bits do not mutate the node store.
 	cp := *dv
 	if item.indexRange == "" || cp.Value == nil {

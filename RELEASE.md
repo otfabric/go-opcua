@@ -1,5 +1,21 @@
 # go-opcua Releases
 
+## v1.42.0
+
+**Date:** 2026-11-27
+**Previous release:** v1.41.0
+
+Correctness fixes of phase 0 of docs/roadmap.md, each against the clause of the specification it follows.
+
+### Fixed
+
+- server: the UserRolePermissions Attribute lists the RolePermissions of the roles granted to the session that reads it, with Read and with a monitored item (Part 3 §5.2.10: "the Permissions that apply to a Node for all Roles granted to current Session"). Before, it returned every entry of RolePermissions. A request without a session, or a session that the `RoleMapper` gave no role, has the Anonymous role, as for the `RBACAccessController`.
+
+### Tests
+
+- `TestRead_UserRolePermissions`, `TestForSessionRoles_Edges` and `TestReadSample_UserRolePermissions` (`server`): sessions with one, two, an unlisted and no role, a node without RolePermissions, malformed entries and a monitored item.
+
+---
 ## v1.41.0
 
 **Date:** 2026-11-27

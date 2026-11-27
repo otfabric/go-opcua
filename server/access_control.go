@@ -188,13 +188,11 @@ func (ac *RBACAccessController) checkPermission(sess *Session, nodeID *ua.NodeID
 	if len(n.rolePermissions) == 0 {
 		return ua.StatusOK
 	}
-	var roles []*ua.NodeID
+	var s *session
 	if sess != nil {
-		roles = sess.s.roles
+		s = sess.s
 	}
-	if len(roles) == 0 {
-		roles = []*ua.NodeID{ua.RoleAnonymous.NodeID()}
-	}
+	roles := sessionRoles(s)
 	for _, rp := range n.rolePermissions {
 		for _, role := range roles {
 			if rp.RoleID != nil && rp.RoleID.String() == role.String() {
