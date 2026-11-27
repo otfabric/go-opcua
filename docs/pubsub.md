@@ -345,6 +345,11 @@ ActiveMQ Artemis.
   keeps the real value. The PubSubConfiguration file returns the full
   configuration: restrict it with RBAC or `WithPubSubAuthorizer`.
 
+The configuration lives in memory: what clients change with these Methods or
+the PubSubConfiguration file is gone after a restart (see LIMITATIONS.md).
+`server.SetPubSubConfigurationHook` sees every change, in its transaction, for
+an application that stores it itself.
+
 `(*Server).PubSub()` returns the runtime; `PubSubNodeID` and
 `PubSubComponentID` map between components and their nodes. See
 `examples/pubsub/server`.

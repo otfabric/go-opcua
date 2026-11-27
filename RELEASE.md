@@ -2,7 +2,7 @@
 
 ## v1.41.0
 
-**Date:** unreleased
+**Date:** 2026-11-27
 **Previous release:** v1.40.0
 
 `uafx.Inspect` reports the persistence of an AutomationComponent and its ConnectionEndpoints (OPC 10000-81 §6.2.6, §6.6.2), so that a client can see what v1.40.0 servers announce: SupportsPersistence and the other ComponentCapabilities, the CleanupTimeout of an endpoint as the server holds it, and the CreationTime and ModificationTime of its Diagnostics, which a restored endpoint keeps across a restart. None of the pinned references of opcua-interop implements UAFX, so this is tested against go-opcua only. Two new findings can appear in a Report; see Behaviour changes.
