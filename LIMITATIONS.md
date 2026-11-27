@@ -70,8 +70,6 @@ behaviour you may notice, and the deviations of peers are in
   Methods and the PubSubConfiguration file) lives in memory: it is not
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
-- Triggering links are not restored when the client re-creates a subscription
-  after a reconnect.
 - mDNS has no probing or conflict resolution.
 
 ## Verification

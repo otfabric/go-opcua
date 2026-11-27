@@ -672,7 +672,10 @@ recovery that attempts, per subscription:
 
 1. **TransferSubscriptions** onto the new session
 2. **Republish** of available sequence numbers
-3. **Recreate** the subscription if transfer fails
+3. **Recreate** the subscription if transfer fails, with its parameters, the
+   publishing mode last set with `SetPublishingMode`, its monitored items (in
+   their monitoring mode) and the triggering links of `SetTriggering`, which
+   are created again with the new server ids of the items
 
 Applications observe the result via `WithSubscriptionRecoveryHandler`:
 
@@ -709,7 +712,7 @@ type SubscriptionRecoveryEvent struct {
 | `SubscriptionRecoveryTransferred` | Transfer succeeded; nothing needed to republish |
 | `SubscriptionRecoveryRepublished` | Transfer succeeded and buffered notifications were republished |
 | `SubscriptionRecoveryRecreated` | Transfer failed; a new subscription was created |
-| `SubscriptionRecoveryPartial` | Some sequence numbers republished; a gap remains |
+| `SubscriptionRecoveryPartial` | Some sequence numbers republished; a gap remains. Or: a new subscription was created, but the server did not create all of its triggering links again (`Detail` names them; they are tried again with the next recreation) |
 | `SubscriptionRecoveryUnrecoverableGap` | Expected next sequence is absent from the server retransmission buffer; notifications are permanently lost |
 
 Manual `Client.Republish` / `Client.TransferSubscriptions` do not emit these events.

@@ -2692,6 +2692,16 @@ type Subscription struct {
 	// recreated after a reconnect while other goroutines use it. Code in
 	// this package reads it through id().
 
+	// publishingDisabled is the publishing mode SetPublishingMode last set
+	// on the server: a recreated subscription is created with it (Part 4
+	// §5.14.2.2, publishingEnabled). Guarded by paramsMu.
+
+	// triggers holds the triggering links SetTriggering created on the
+	// server, by the ids the caller knows the items by: triggering item ->
+	// items to report. A recreation gives the items new server ids and the
+	// new subscription has no links, so they are created again (Part 4
+	// §5.13.5). Guarded by itemsMu.
+
 	// needsRecreate is set when recreating the subscription after a
 	// reconnect failed. The next recovery then recreates it instead of
 	// trying to transfer and republish it. Guarded by Client.subMux.
@@ -3005,7 +3015,10 @@ const (
 	SubscriptionRecoveryRecreated SubscriptionRecoveryOutcome = "recreated"
 
 	// SubscriptionRecoveryPartial means recovery was only partially successful:
-	// some sequence numbers were republished but a gap remains.
+	// some sequence numbers were republished but a gap remains, or the
+	// subscription was recreated but the server did not create all of its
+	// triggering links again (Detail names them; the next recreation tries
+	// them again).
 	SubscriptionRecoveryPartial SubscriptionRecoveryOutcome = "partially_recovered"
 
 	// SubscriptionRecoveryUnrecoverableGap means the client's expected next

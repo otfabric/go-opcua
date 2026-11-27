@@ -778,18 +778,16 @@ func (c *Client) monitor(ctx context.Context) {
 						}
 
 						for _, subID := range subsToRecreate {
-							if err := c.recreateSubscription(ctx, subID); err != nil {
+							missing, err := c.recreateSubscription(ctx, subID)
+							if err != nil {
 								c.cfg.logger.Debug("monitor: recreate subscriptions failed", "error", err)
 								// The subscription stays registered so that the
 								// next recovery tries again; tell its consumer.
 								c.notifySubscriptionOfError(ctx, subID, err)
 								continue
 							}
-							c.notifyRecoveryFromMonitor(SubscriptionRecoveryEvent{
-								SubscriptionID: subID,
-								Outcome:        SubscriptionRecoveryRecreated,
-								Detail:         "subscription recreated as new; previous notification history lost",
-							})
+							c.notifyRecoveryFromMonitor(recreatedEvent(subID,
+								"subscription recreated as new; previous notification history lost", missing))
 							activeSubs++
 						}
 
@@ -2249,7 +2247,22 @@ func (c *Client) SetPublishingMode(ctx context.Context, publishingEnabled bool, 
 		SubscriptionIDs:   subscriptionIDs,
 	}
 
-	return send[ua.SetPublishingModeResponse](ctx, c, req)
+	res, err := send[ua.SetPublishingModeResponse](ctx, c, req)
+	if err != nil {
+		return nil, err
+	}
+	// A subscription of this client that the server switched keeps the
+	// mode when it is recreated after a reconnect.
+	c.subMux.RLock()
+	for i, id := range subscriptionIDs {
+		if i < len(res.Results) && res.Results[i] == ua.StatusOK {
+			if sub, ok := c.subs[id]; ok {
+				sub.setPublishingEnabled(publishingEnabled)
+			}
+		}
+	}
+	c.subMux.RUnlock()
+	return res, nil
 }
 
 // AddNodes adds one or more nodes to the server address space.

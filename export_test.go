@@ -12,7 +12,8 @@ import (
 // Testing helpers exported only to external tests (package opcua_test).
 
 func (c *Client) TestingRecreateSubscription(ctx context.Context, id uint32) error {
-	return c.recreateSubscription(ctx, id)
+	_, err := c.recreateSubscription(ctx, id)
+	return err
 }
 
 func (s *Subscription) TestingRecreateDelete(ctx context.Context) error {
@@ -65,4 +66,17 @@ func (c *Client) TestingSubscriptionGeneration() uint64 {
 // TestingMarkSubscriptionsBrokenSince is markSubscriptionsBrokenSince.
 func (c *Client) TestingMarkSubscriptionsBrokenSince(gen uint64) int {
 	return c.markSubscriptionsBrokenSince(gen)
+}
+
+// TestingSetItemServerID makes the monitored item the caller knows by id
+// known to the server by serverID, as a recreation does.
+func (s *Subscription) TestingSetItemServerID(id, serverID uint32) {
+	s.itemsMu.Lock()
+	defer s.itemsMu.Unlock()
+	s.items[id].serverID = serverID
+}
+
+// TestingRestoreTriggering is restoreTriggering.
+func (s *Subscription) TestingRestoreTriggering(ctx context.Context) error {
+	return s.restoreTriggering(ctx)
 }

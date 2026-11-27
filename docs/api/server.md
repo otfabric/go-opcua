@@ -4797,7 +4797,9 @@ ActivateSession implements the OPC UA ActivateSession service. [https://referenc
 func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error)
 ```
 
-Cancel implements the OPC UA Cancel service. [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.5](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.5)
+Cancel implements the OPC UA Cancel service. [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5)
+
+"All outstanding requests with the matching requestHandle shall be cancelled", and "Successfully cancelled service requests shall respond with Bad\_RequestCancelledByClient"; cancelCount is the number of requests that were cancelled (Part 4 §5.7.5). The server handles every request but Publish before it reads the next one, so the outstanding requests are the Publish requests queued on the session. Each one that is cancelled is answered with a ServiceFault; the others stay queued.
 
 #### func (SessionService) CloseSession
 
