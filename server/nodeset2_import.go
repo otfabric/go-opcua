@@ -51,11 +51,8 @@ func (s *Server) ImportNodeSetXML(data []byte) error {
 	if err != nil {
 		return fmt.Errorf("server: map the namespaces of the NodeSet: %w", err)
 	}
-	var remapped schema.UANodeSet
-	if err := xml.Unmarshal(out, &remapped); err != nil {
-		return fmt.Errorf("server: unmarshal NodeSet XML: %w", err)
-	}
-	return s.importNodeSet(&remapped)
+	// The rewritten document has no NamespaceUris: it is imported as it is.
+	return s.ImportNodeSetXML(out)
 }
 
 // namespaceLookup returns the index of the first namespace of the server

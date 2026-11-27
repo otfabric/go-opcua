@@ -112,6 +112,17 @@ func TestImportNodeSetXML_MatchingNamespaces(t *testing.T) {
 	require.NotNil(t, srv.Node(ua.NewNumericNodeID(2, 7100)))
 }
 
+// TestImportNodeSetXML_DuplicateURI: a document that lists a URI twice has
+// both of its indexes in the one namespace of the server.
+func TestImportNodeSetXML_DuplicateURI(t *testing.T) {
+	srv := newTestServer()
+	require.NoError(t, srv.ImportNodeSetXML(remapDoc("urn:test:twice", "urn:test:twice")))
+	require.Equal(t, []string{"http://opcfoundation.org/UA/", "urn:test:twice"}, namespaceNames(srv))
+	tank, level := ua.NewNumericNodeID(1, 7000), ua.NewNumericNodeID(1, 7001)
+	require.NotNil(t, srv.Node(tank))
+	require.True(t, hasRef(srv.Node(tank), level, id.HasComponent, true))
+}
+
 // TestImportNodeSetXML_RemapErrors: an index outside the namespace table
 // of a document that needs to be rewritten fails the import.
 func TestImportNodeSetXML_RemapErrors(t *testing.T) {
