@@ -4,6 +4,7 @@ package ua
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -159,7 +160,7 @@ func TestBinaryNilSafety(t *testing.T) {
 	}
 
 	t.Run("DateTime range", func(t *testing.T) {
-		for _, s := range []string{"1601-01-01T00:00:00.0000001Z", "1677-01-01T00:00:00Z", "2263-01-01T00:00:00.1234567Z", "9999-12-31T23:59:59.9999999Z"} {
+		for _, s := range []string{"1601-01-01T00:00:00.0000001Z", "1677-01-01T00:00:00Z", "2263-01-01T00:00:00.1234567Z", "9999-12-31T23:59:58.9999999Z"} {
 			in := mustTime(s)
 			buf := NewBuffer(nil)
 			buf.WriteTime(in)
@@ -170,5 +171,19 @@ func TestBinaryNilSafety(t *testing.T) {
 		buf := NewBuffer(nil)
 		buf.WriteTime(mustTime("1500-06-01T00:00:00Z"))
 		require.Equal(t, make([]byte, 8), buf.Bytes(), "before the epoch is the null DateTime")
+		// Part 6 §5.2.2.5: at or after 9999-12-31 23:59:59 UTC is MaxInt64,
+		// and MaxInt64 decodes to a time that encodes as MaxInt64 again.
+		maxBytes := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f}
+		for _, v := range []time.Time{mustTime("9999-12-31T23:59:59Z"), mustTime("9999-12-31T23:59:59.9999999Z"), time.Date(12000, 1, 1, 0, 0, 0, 0, time.UTC)} {
+			buf := NewBuffer(nil)
+			buf.WriteTime(v)
+			require.Equal(t, maxBytes, buf.Bytes(), v.String())
+		}
+		buf = NewBuffer(nil)
+		buf.WriteTime(NewBuffer(maxBytes).ReadTime())
+		require.Equal(t, maxBytes, buf.Bytes(), "MaxInt64 round-trips")
+		buf = NewBuffer(nil)
+		buf.WriteTime(mustTime("1601-01-01T00:00:00Z"))
+		require.Equal(t, make([]byte, 8), buf.Bytes(), "the epoch itself is the null DateTime")
 	})
 }
