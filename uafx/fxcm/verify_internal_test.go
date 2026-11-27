@@ -3,6 +3,7 @@
 package fxcm
 
 import (
+	"context"
 	"errors"
 	"math"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
+	"github.com/otfabric/go-opcua/uafx/fxstore"
 )
 
 // TestSameServer: the identity of a server is compared like for like
@@ -146,4 +148,73 @@ func TestCommOf(t *testing.T) {
 	for s, want := range map[commState]string{commUnknown: "unknown", commNone: "absent", commEnabled: "enabled", commDisabled: "disabled", commMixed: "partly enabled"} {
 		assert.Equal(t, want, s.String())
 	}
+}
+
+// TestVerifySkipKeepsUnreachable (design §6.4): Recovery.Unreachable is
+// the error of the last verification attempt on a server. A background pass
+// that skips the set a run holds contacts no server and proves nothing: it
+// keeps the report (the flake of TestCrash "establish with an intent
+// written", where such a pass cleared the error the run had just recorded).
+// The attempt of the run itself is recorded; the report goes once nothing on
+// the server is Unverified any more.
+func TestVerifySkipKeepsUnreachable(t *testing.T) {
+	t.Parallel()
+	m := offlineManager(t, Options{Store: &fxstore.MemoryStore{}, Verify: VerifyOptions{Manual: true}})
+	cfgA, err := m.Add(named("a"))
+	require.NoError(t, err)
+	cfgB, err := m.Add(named("b"))
+	require.NoError(t, err)
+	ka := cfgA.Key()
+	sa, sb := m.lookup(ka), m.lookup(cfgB.Key())
+	addr := ServerAddress{Address: "opc.tcp://gone:4840"}
+	sa.mu.Lock()
+	sa.records["ep"] = &record{EndpointRecord: EndpointRecord{Name: "ToB", Class: Unverified}, addr: addr}
+	sa.mu.Unlock()
+	unreachable := func() map[string]string {
+		t.Helper()
+		st, ok := m.Status(ka)
+		require.True(t, ok)
+		return st.Recovery.Unreachable
+	}
+	hold := func(held bool) {
+		sa.mu.Lock()
+		sa.held = held
+		sa.mu.Unlock()
+	}
+	ctx := context.Background()
+
+	busy, err := m.verifyServer(ctx, addr, nil)
+	require.ErrorIs(t, err, ua.StatusBadCommunicationError)
+	assert.False(t, busy)
+	why := unreachable()[addr.Address]
+	require.NotEmpty(t, why, "the failed attempt is reported")
+
+	hold(true)
+	busy, err = m.verifyServer(ctx, addr, nil)
+	require.NoError(t, err)
+	assert.True(t, busy)
+	assert.Equal(t, why, unreachable()[addr.Address], "a pass that skipped the held set is not an attempt")
+
+	_, err = m.verifyServer(ctx, addr, sb)
+	require.NoError(t, err)
+	assert.Equal(t, why, unreachable()[addr.Address], "a run of another set has no work on the server: no attempt")
+
+	m.p.owedMu.Lock()
+	m.p.verifyErr[addr.Address] = "stale"
+	m.p.owedMu.Unlock()
+	_, err = m.verifyServer(ctx, addr, sa)
+	require.ErrorIs(t, err, ua.StatusBadCommunicationError)
+	assert.Equal(t, why, unreachable()[addr.Address], "the attempt of the run on its set is recorded")
+	hold(false)
+
+	sa.mu.Lock()
+	delete(sa.records, "ep")
+	sa.mu.Unlock()
+	busy, err = m.verifyServer(ctx, addr, nil)
+	require.NoError(t, err)
+	assert.False(t, busy)
+	m.p.owedMu.Lock()
+	_, left := m.p.verifyErr[addr.Address]
+	m.p.owedMu.Unlock()
+	assert.False(t, left, "nothing on the server is Unverified: the error is forgotten")
 }

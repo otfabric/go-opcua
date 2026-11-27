@@ -1,5 +1,21 @@
 # go-opcua Releases
 
+## v1.41.1
+
+**Date:** 2026-11-28
+**Previous release:** v1.41.0
+
+A fix of the recovery status of the UAFX ConnectionManager (`uafx/fxcm`, design §6.4): `Recovery.Unreachable` could lose the error of a server that cannot be reached while a run of the set was in progress.
+
+### Fixed
+
+- `fxcm`: a background verification pass that skipped a set because a run held it (the run verifies that set as its first step) recorded the skip as a successful attempt and cleared the error the run had just recorded, so `Status(k).Recovery.Unreachable` was empty while the records stayed Unverified and the server was down, until the next background retry (up to `VerifyOptions.RetryMax`, 1 min by default). A pass that contacts no server now keeps the last error; an attempt of a run on its own set is recorded, and the error is forgotten once no set has an Unverified record on the server. This was the intermittent failure of `TestCrash` "establish with an intent written".
+
+### Tests
+
+- `TestVerifySkipKeepsUnreachable` (`uafx/fxcm`): a failed attempt is reported, a pass that skips the held set and the run of another set keep the report, the run's attempt on its set is recorded, and the report goes when nothing on the server is Unverified.
+
+---
 ## v1.41.0
 
 **Date:** 2026-11-27
