@@ -59,6 +59,9 @@ const (
 const (
 	callEstablish uint8 = 1
 	callClose     uint8 = 2
+	// callEnable is an EstablishConnections with EnableCommunicationCmd
+	// alone (§6.2.4.3.10.2) on existing endpoints, addressed by NodeId.
+	callEnable uint8 = 3
 )
 
 // qualifiedID is a remote NodeId with the URI of its namespace instead of
@@ -209,6 +212,27 @@ type epStored struct {
 	Generation          uint64
 	Fingerprint         []byte
 	EndpointFingerprint []byte
+	// Param is the ConnectionEndpointParameter the endpoint was
+	// established or taken with, or the one its re-proof read (design
+	// §6.5: the configuration check after a restart).
+	Param storedParam
+}
+
+// storedParam is the part of a PubSubConnectionEndpointParameter
+// (§10.37) an AutomationComponent exposes as Variables of the endpoint
+// (§6.6.2 Table 73, §6.6.3): Mode, InputVariables, OutputVariables,
+// IsPersistent, CleanupTimeout and RelatedEndpoint. NodeIds are
+// URI-qualified with the Namespaces of the record. Set is false for a
+// record without one.
+type storedParam struct {
+	Set            bool
+	Mode           int32
+	Inputs         []*qualifiedID
+	Outputs        []*qualifiedID
+	IsPersistent   bool
+	CleanupTimeout float64
+	// Related is the RelatedEndpoint encoded (ua.Encode), empty for none.
+	Related []byte
 }
 
 // runRecord is the journal of a run (§6.3).
@@ -282,6 +306,18 @@ type callRecord struct {
 	// Nodes and Remove of a close.
 	Nodes  []*qualifiedID
 	Remove bool
+	// Command is the CommandMask of an establish or enablement. Params
+	// are, per Name of an establish, the ConnectionEndpointParameter it
+	// sent (URI-qualified), unset for an endpoint configuration without
+	// one: the configuration the re-proof of its outcome compares.
+	Command uint32
+	Params  []storedParam
+	// Targets are the existing endpoints an enablement addresses, one per
+	// endpoint configuration. Prior is, per Target of an enablement or per
+	// Node of a close, the class of its record before the call: the
+	// ownership the re-proof of the outcome starts from (design §6.3).
+	Targets []*qualifiedID
+	Prior   []int64
 
 	// Generation and Fingerprint are the set configuration of the run.
 	Generation  uint64
@@ -474,7 +510,70 @@ func (r *epStored) check(k string, c countersRecord) error {
 			return err
 		}
 	}
+	if err := r.Param.check(r.Namespaces); err != nil {
+		return err
+	}
 	return r.Server.check()
+}
+
+// check checks the parameter p of a record with the NamespaceArray nsa.
+func (p *storedParam) check(nsa []string) error {
+	if !p.Set {
+		if p.Mode != 0 || len(p.Inputs)+len(p.Outputs)+len(p.Related) != 0 || p.IsPersistent || p.CleanupTimeout != 0 {
+			return errSemantic("a parameter that is not set")
+		}
+		return nil
+	}
+	if math.IsNaN(p.CleanupTimeout) {
+		return errSemantic("a CleanupTimeout NaN")
+	}
+	for _, q := range append(slices.Clone(p.Inputs), p.Outputs...) {
+		if q == nil {
+			return errSemantic("a null Variable of the parameter")
+		}
+		if _, err := unqualify(q, nsa); err != nil {
+			return err
+		}
+	}
+	if len(p.Related) > 0 {
+		if _, err := p.related(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// related returns the RelatedEndpoint of p, nil for none.
+func (p *storedParam) related() (*uafx.RelatedEndpoint, error) {
+	if len(p.Related) == 0 {
+		return nil, nil
+	}
+	r := &uafx.RelatedEndpoint{}
+	if err := decodeExact(p.Related, r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// paramOf returns the stored form of the parameter p, whose NodeIds are of
+// a server with the NamespaceArray nsa; the zero storedParam for nil.
+func paramOf(p *uafx.PubSubConnectionEndpointParameter, nsa []string) storedParam {
+	if p == nil {
+		return storedParam{}
+	}
+	sp := storedParam{Set: true, Mode: int32(p.Mode), IsPersistent: p.IsPersistent, CleanupTimeout: p.CleanupTimeout}
+	for _, n := range p.InputVariableIDs {
+		sp.Inputs = append(sp.Inputs, qualify(n, nsa))
+	}
+	for _, n := range p.OutputVariableIDs {
+		sp.Outputs = append(sp.Outputs, qualify(n, nsa))
+	}
+	if p.RelatedEndpoint != nil {
+		if b, err := ua.Encode(p.RelatedEndpoint); err == nil {
+			sp.Related = b
+		}
+	}
+	return sp
 }
 
 // validAction reports whether a is the Action of a run.
@@ -587,7 +686,8 @@ func (r *callRecord) check(k string, c countersRecord) error {
 	switch r.Kind {
 	case callEstablish:
 		n := len(r.Names)
-		if len(r.FunctionalEntities) != n || len(r.AbsentBefore) != n || len(r.Preconfigured) != n || len(r.EndpointFingerprints) != n || len(r.Nodes) != 0 {
+		if len(r.FunctionalEntities) != n || len(r.AbsentBefore) != n || len(r.Preconfigured) != n || len(r.EndpointFingerprints) != n || len(r.Nodes) != 0 ||
+			len(r.Params) != 0 && len(r.Params) != n || len(r.Targets) != 0 || len(r.Prior) != 0 {
 			return errSemantic("an establish intent with %d Names and %d FunctionalEntities", n, len(r.FunctionalEntities))
 		}
 		for i := range n {
@@ -599,11 +699,23 @@ func (r *callRecord) check(k string, c countersRecord) error {
 			}
 		}
 	case callClose:
-		if len(r.Nodes) == 0 || len(r.Names) != 0 {
+		if len(r.Nodes) == 0 || len(r.Names) != 0 || len(r.Targets) != 0 || len(r.Prior) != 0 && len(r.Prior) != len(r.Nodes) {
 			return errSemantic("a close intent with %d nodes", len(r.Nodes))
 		}
 		for _, q := range r.Nodes {
 			if _, err := unqualify(q, r.Namespaces); err != nil {
+				return err
+			}
+		}
+	case callEnable:
+		if len(r.Targets) == 0 || len(r.Names) != 0 || len(r.Nodes) != 0 || len(r.Prior) != len(r.Targets) || len(r.FunctionalEntities) != len(r.Targets) {
+			return errSemantic("an enablement intent with %d targets", len(r.Targets))
+		}
+		for i, q := range r.Targets {
+			if _, err := unqualify(q, r.Namespaces); err != nil {
+				return err
+			}
+			if _, err := unqualify(r.FunctionalEntities[i], r.Namespaces); err != nil {
 				return err
 			}
 		}

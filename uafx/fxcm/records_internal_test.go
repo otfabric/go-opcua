@@ -75,6 +75,8 @@ func FuzzDecodeRecord(f *testing.F) {
 		&countersRecord{Generation: 7, RunID: 9},
 		&setRecord{Folder: []string{"a"}, Name: "s", Version: 3, Generation: 4, Fingerprint: []byte{1, 2}, Conf: conf},
 		&epStored{SetName: "s", Connection: "c", Namespaces: []string{"urn:x"}, ACNode: &qualifiedID{NamespaceURI: "urn:x", ID: "i=5"}, Class: int64(KnownOwned)},
+		&epStored{SetName: "s", Connection: "c", Namespaces: []string{"urn:x"}, ACNode: &qualifiedID{NamespaceURI: "urn:x", ID: "i=5"}, Class: int64(KnownOwned),
+			Param: storedParam{Set: true, Mode: 3, Inputs: []*qualifiedID{{NamespaceURI: "urn:x", ID: "i=7"}}, Outputs: []*qualifiedID{{NamespaceURI: "urn:x", ID: "i=8"}}, IsPersistent: true, CleanupTimeout: -1, Related: []byte{0, 0}}},
 		&runRecord{Run: 2, SetName: "s", Phase: phaseExecuting, Endpoints: []string{"ep/x"}},
 		&txRecord{Run: 2, Ops: []txOp{{Op: 1, Name: "s", Version: 1, New: 5, Conf: conf}}},
 		&callRecord{Run: 2, Kind: callEstablish, Names: []string{"n"}, AbsentBefore: []bool{true}, Preconfigured: []*qualifiedID{{ID: "i=0"}}},

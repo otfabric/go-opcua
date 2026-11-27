@@ -22,6 +22,7 @@ import (
 	"github.com/otfabric/go-opcua/uafx/fxcm"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
+	"github.com/otfabric/go-opcua/uafx/fxstore/storetest"
 )
 
 // The crash tests of the ConnectionManager (design §7.2, §9.1): the test
@@ -40,6 +41,7 @@ type cmFX struct {
 	m    *fxcm.Manager
 	a, b *ac
 	key  fxcm.SetKey
+	fail *failing // the store of m, when the scenario wraps it
 }
 
 type cmCrashScenario struct {
@@ -48,6 +50,11 @@ type cmCrashScenario struct {
 	nth          int
 	prepare, act func(t *testing.T, f *cmFX)
 	check        func(t *testing.T, m *fxcm.Manager)
+	// restart: after prepare the child closes its Manager and opens
+	// another on the same store (Verify Manual), whose run act starts.
+	restart bool
+	// wrap: the store of the child is a failing store (cmFX.fail).
+	wrap bool
 }
 
 func addSet(t *testing.T, f *cmFX) {
@@ -122,7 +129,79 @@ func owes(kinds ...fxcm.OwedKind) func(t *testing.T, m *fxcm.Manager) {
 	}
 }
 
+// unverifiedNothingSent: the records of the established set are loaded,
+// Unverified, and the restarted Manager sent nothing.
+func unverifiedNothingSent(t *testing.T, m *fxcm.Manager) {
+	st, ok := m.Status(crashKey())
+	require.True(t, ok)
+	require.Len(t, st.Endpoints, 2, "no record is lost")
+	for _, e := range st.Endpoints {
+		assert.Equal(t, fxcm.Unverified, e.Class, "no loaded record is trusted")
+	}
+	assert.Zero(t, m.Counters().EstablishCallCount+m.Counters().CloseCallCount)
+}
+
+func reconcileSet(t *testing.T, f *cmFX) {
+	started := f.m.Reconcile(f.key)
+	require.NoError(t, started.Err)
+	_, _ = started.Run.Wait(context.Background())
+}
+
 var cmCrashScenarios = map[string]cmCrashScenario{
+	// C3.3 (design §7.2): the verification of a restarted Manager, before
+	// and after the write of its verdicts; nothing it decided is trusted
+	// after another restart, and nothing is lost.
+	"verification before its write": {point: "verify.before-write", prepare: establishSet, restart: true, act: processSet,
+		check: unverifiedNothingSent},
+	"verification after its write": {point: "verify.after-write", prepare: establishSet, restart: true, act: processSet,
+		check: unverifiedNothingSent},
+	// An adoption before the enablement of what it kept has sent nothing:
+	// the endpoints are as they were, the records kept, nothing is owed;
+	// the next establish adopts them again.
+	"adoption before the enablement": {point: "adopt.before-enablement", prepare: establishSet, restart: true, act: processSet,
+		check: func(t *testing.T, m *fxcm.Manager) {
+			unverifiedNothingSent(t, m)
+			st, _ := m.Status(crashKey())
+			assert.Empty(t, st.Recovery.Owed)
+		}},
+	// The owed rollback of an earlier run, done by the first step of the
+	// next one, before its closes: still owed.
+	"owed rollback before its closes": {point: "recover.rollback", wrap: true,
+		prepare: func(t *testing.T, f *cmFX) {
+			abortingSet(t, f)
+			f.fail.arm(storetest.FailNotCommitted, func(b fxstore.Batch) bool {
+				for key, v := range b.Puts {
+					if strings.HasPrefix(key, "cm/run/") {
+						r, err := fxcm.DecodeStored[fxcm.StoredRun](v)
+						if err == nil && r.Phase == fxcm.PhaseRollbackRequired {
+							return true
+						}
+					}
+				}
+				return false
+			})
+			res := process(t, f.m, uafx.ActionEstablishConnectionsEnabled, f.key)
+			require.Equal(t, fxcm.StateError, res.State)
+		},
+		act:   processSet,
+		check: owes(fxcm.OwedRollback)},
+	// The owed switch of a set change, completed by a Reconcile, before
+	// its write: still owed.
+	"owed set change before its switch": {point: "recover.before-switch", wrap: true,
+		prepare: func(t *testing.T, f *cmFX) {
+			establishSet(t, f)
+			f.fail.arm(storetest.FailLost, func(b fxstore.Batch) bool { return putsPrefix("set/")(b) })
+			_, err := f.m.Replace(context.Background(), e2eConf(t, "Crash", f.a, f.b))
+			require.Error(t, err)
+			waitUnfenced(t, f.m)
+		},
+		act: reconcileSet,
+		check: func(t *testing.T, m *fxcm.Manager) {
+			owes(fxcm.OwedSetChange)(t, m)
+			st, _ := m.Status(crashKey())
+			assert.Empty(t, st.Endpoints, "the closes completed with their records")
+		}},
+
 	"add before the set write": {point: "set.before-apply", act: addSet, check: noSet},
 	"add after the set write":  {point: "set.after-apply", act: addSet, check: readyNothingOwed},
 	"establish before the first intent": {point: "call.before-intent", prepare: addSet, act: processSet,
@@ -134,8 +213,18 @@ var cmCrashScenarios = map[string]cmCrashScenario{
 			owes(fxcm.OwedCall, fxcm.OwedRollback)(t, m)
 			st, _ := m.Status(crashKey())
 			assert.NotEmpty(t, st.Endpoints, "the Names of the intent are held, Unverified")
-			started := m.Process(uafx.ActionEstablishConnectionsEnabled, crashKey())
-			assert.Equal(t, ua.StatusBadInvalidState, fxcm.StatusOf(started[0].Err), "owed work blocks an establish")
+			// The AutomationComponents died with the child: the run
+			// starts, its first step cannot verify, and the Names stay
+			// held; nothing is sent (design §6.4).
+			res := process(t, m, uafx.ActionEstablishConnectionsEnabled, crashKey())
+			assert.Equal(t, fxcm.StateError, res.State)
+			assert.Empty(t, res.Created)
+			assert.Zero(t, m.Counters().EstablishCallCount+m.Counters().CloseCallCount)
+			st, _ = m.Status(crashKey())
+			for _, e := range st.Endpoints {
+				assert.Equal(t, fxcm.Unverified, e.Class)
+			}
+			assert.NotEmpty(t, st.Recovery.Unreachable, "the verification attempt is reported")
 		}},
 	"establish with a call sent": {point: "call.after-send", prepare: addSet, act: processSet,
 		check: owes(fxcm.OwedCall, fxcm.OwedRollback)},
@@ -233,12 +322,21 @@ func TestCrashChild(t *testing.T) {
 		t.Skip("the child of TestCrash")
 	}
 	sc := cmCrashScenarios[name]
-	store, err := fxstore.OpenFile(os.Getenv(cmCrashDirEnv), fxstore.Limits{})
+	file, err := fxstore.OpenFile(os.Getenv(cmCrashDirEnv), fxstore.Limits{})
 	require.NoError(t, err)
+	var store fxstore.Store = file
 	f := &cmFX{a: newAC(t, "a", fxserver.ConnectionOptions{}), b: newAC(t, "b", fxserver.ConnectionOptions{})}
+	if sc.wrap {
+		f.fail = &failing{Store: file}
+		store = f.fail
+	}
 	f.m = newManager(t, fxcm.Options{Store: store})
 	if sc.prepare != nil {
 		sc.prepare(t, f)
+	}
+	if sc.restart {
+		require.NoError(t, f.m.Close())
+		f.m = newManager(t, fxcm.Options{Store: store, Verify: fxcm.VerifyOptions{Manual: true}})
 	}
 	var mu sync.Mutex
 	seen := 0

@@ -233,6 +233,12 @@ func TestRecordChecks(t *testing.T) {
 		f(r)
 		return r
 	}
+	ena := func(f func(r *callRecord)) *callRecord {
+		r := &callRecord{Run: 3, SetName: "s", Kind: callEnable, Namespaces: nsa, ACNode: &qualifiedID{NamespaceURI: "urn:x", ID: "i=1"},
+			Targets: []*qualifiedID{{NamespaceURI: "urn:x", ID: "i=2"}}, FunctionalEntities: []*qualifiedID{fe}, Prior: []int64{int64(KnownOwned)}}
+		f(r)
+		return r
+	}
 	type checker interface {
 		check(k string, c countersRecord) error
 	}
@@ -281,6 +287,21 @@ func TestRecordChecks(t *testing.T) {
 		{"close without nodes", callStoreKey(3, 1), cls(func(r *callRecord) { r.Nodes = nil }), false},
 		{"close node", callStoreKey(3, 1), cls(func(r *callRecord) { r.Nodes[0].NamespaceURI = "urn:y" }), false},
 		{"call kind", callStoreKey(3, 1), cls(func(r *callRecord) { r.Kind = 9 }), false},
+		{"establish with params", callStoreKey(3, 1), est(func(r *callRecord) { r.Params = []storedParam{{Set: true}} }), true},
+		{"establish params", callStoreKey(3, 1), est(func(r *callRecord) { r.Params = []storedParam{{}, {}} }), false},
+		{"establish with targets", callStoreKey(3, 1), est(func(r *callRecord) { r.Targets = []*qualifiedID{fe} }), false},
+		{"establish with prior", callStoreKey(3, 1), est(func(r *callRecord) { r.Prior = []int64{1} }), false},
+		{"close with prior", callStoreKey(3, 1), cls(func(r *callRecord) { r.Prior = []int64{int64(KnownOwned)} }), true},
+		{"close prior", callStoreKey(3, 1), cls(func(r *callRecord) { r.Prior = []int64{1, 2} }), false},
+		{"close with targets", callStoreKey(3, 1), cls(func(r *callRecord) { r.Targets = []*qualifiedID{fe} }), false},
+		{"enable valid", callStoreKey(3, 1), ena(func(*callRecord) {}), true},
+		{"enable without targets", callStoreKey(3, 1), ena(func(r *callRecord) { r.Targets, r.FunctionalEntities, r.Prior = nil, nil, nil }), false},
+		{"enable with names", callStoreKey(3, 1), ena(func(r *callRecord) { r.Names = []string{"n"} }), false},
+		{"enable with nodes", callStoreKey(3, 1), ena(func(r *callRecord) { r.Nodes = r.Targets }), false},
+		{"enable prior", callStoreKey(3, 1), ena(func(r *callRecord) { r.Prior = nil }), false},
+		{"enable FunctionalEntities", callStoreKey(3, 1), ena(func(r *callRecord) { r.FunctionalEntities = nil }), false},
+		{"enable target", callStoreKey(3, 1), ena(func(r *callRecord) { r.Targets[0].NamespaceURI = "urn:y" }), false},
+		{"enable FunctionalEntity", callStoreKey(3, 1), ena(func(r *callRecord) { r.FunctionalEntities[0] = &qualifiedID{NamespaceURI: "urn:y", ID: "i=1"} }), false},
 	} {
 		err := tc.r.check(tc.k, c)
 		if tc.ok {

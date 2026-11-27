@@ -36,12 +36,21 @@ behaviour you may notice, and the deviations of peers are in
   ConfigurationData or the VariableStorage Methods (§6.4.6), and not the
   rest of the server's PubSub configuration (OPC 10000-14 §9.1.2). With a
   Store the ConnectionManager keeps its sets, endpoint records with their
-  evidence and run journal, but after a restart verifies no record (all
-  are Unverified and never closed or adopted) and executes no owed work:
-  it reports it and refuses everything that acts on the endpoints of a
-  set that owes work, closes and Settle included, and of every set that
-  takes part in its set change or shares a server with it (a CommitEdit
-  too), until recovery (C3.3) tells which are independent
+  evidence and run journal; after a restart it re-proves the records
+  (what it cannot prove stays Unverified or Unresolved and is never
+  closed or adopted), does the owed work in the first step of the next
+  Process or Reconcile (an owed set change by Reconcile only, nothing
+  resent) and keeps proven endpoints of an unchanged configuration in
+  place; an endpoint whose record was lost is Unresolved, never adopted,
+  and adoption is all or nothing for a run. A close or enable whose
+  outcome cannot be proven by its postcondition stays Unresolved until
+  `Settle`, and is never resent. Two ServerAddresses of one server are
+  fenced as one only once a record or intent made over each shows the
+  same ApplicationUri; adoption compares the PubSub properties of the
+  endpoint's own reader, writer, groups and connections, not the rest of
+  the server's PubSub configuration, and never adopts a configuration
+  with transport or broker settings, group or connection properties,
+  key services or a PublishingOffset, which it cannot compare
   ([docs/uafx.md](docs/uafx.md#persistence-of-the-connectionmanager)).
   Enable and Disable of a persisted
   component with the Methods of its Status Object are not persisted: after

@@ -79,6 +79,10 @@ type Options struct {
 	Store fxstore.Store
 	// StoreTimeout bounds each store operation. 0: 10 s.
 	StoreTimeout time.Duration
+	// Verify configures the verification of the records loaded from the
+	// Store (design §6.4, §6.5): in the background after New, and as the
+	// first step of every run of a set.
+	Verify VerifyOptions
 }
 
 // RetryPolicy is when a set in Error is processed again: after Initial,
@@ -241,6 +245,9 @@ type record struct {
 	cmURI      string
 	cmObserved bool
 	stored     Ownership
+	// param is the parameter the endpoint was established, taken or
+	// re-proved with (storedParam), qualified with nsa.
+	param storedParam
 }
 
 func recordKey(addr ServerAddress, fe *ua.NodeID, name string) string {
@@ -291,6 +298,20 @@ func New(opts Options) (*Manager, error) {
 		}
 		opts.Monitor = &cp
 	}
+	v := &opts.Verify
+	if v.Timeout <= 0 {
+		v.Timeout = DefaultVerifyTimeout
+	}
+	if v.Parallelism <= 0 {
+		v.Parallelism = opts.Parallelism
+	}
+	if v.RetryInitial <= 0 {
+		v.RetryInitial = DefaultVerifyRetryInitial
+	}
+	if v.RetryMax <= 0 {
+		v.RetryMax = DefaultVerifyRetryMax
+	}
+	v.RetryMax = max(v.RetryMax, v.RetryInitial)
 	log := opts.Logger
 	if log == nil {
 		log = slog.Default()
@@ -315,6 +336,9 @@ func New(opts Options) (*Manager, error) {
 		m.wg.Add(1)
 		go m.monitor()
 	}
+	// The verification of the loaded records starts now; no
+	// AutomationComponent needs to be reachable for New (design §6.4).
+	m.startVerify()
 	return m, nil
 }
 
@@ -1256,11 +1280,11 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 		return Started{Err: managerError(ua.StatusBadNotSupported, "the action %v", action)}
 	}
 	if m.p != nil {
-		// Owed work of the journal blocks every run of its set, closes
-		// included: a close could invalidate the evidence of an
-		// unproven call, a component it shares or a pending set change,
-		// and proving it cannot is recovery (design §6.3, stage C3.3).
-		if err := m.p.checkRemote(k); err != nil {
+		// The owed work of the set is done by the first step of the run
+		// (recover); an owed set change only by a Reconcile, and the work
+		// other sets owe fences the run until its independence is
+		// proven (design §6.3, §6.4).
+		if err := m.p.checkRun(k, action); err != nil {
 			return Started{Err: err}
 		}
 	}
@@ -1338,10 +1362,11 @@ func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error {
 		return managerError(ua.StatusBadInvalidArgument, "the verdict %d", verdict)
 	}
 	if m.p != nil {
-		// A verdict while the set owes work could contradict the
-		// evidence of an unproven call (design §6.3): refused until
-		// recovery (stage C3.3).
-		if err := m.p.checkRemote(key); err != nil {
+		// A verdict on a set fenced by the work of another is refused
+		// (fencedOf); on a set that owes work it is the administrative
+		// decision of an unproven call, which completes its intent once
+		// every place of it is decided (design §6.3).
+		if err := m.p.checkBlocked(key); err != nil {
 			return err
 		}
 	}

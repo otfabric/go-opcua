@@ -1102,8 +1102,8 @@ only when that channel has message security and the client validated the
 certificate against its trust list and its URI SAN against the
 ApplicationUri of the endpoint (OPC 10000-6 §6.2.2); with
 InsecureSkipVerify, without security or without a channel it is
-reported. Missing certificate evidence is recorded as missing; C3.3
-must not take a reported identity for an authenticated one. It holds its NamespaceArray,
+reported. Missing certificate evidence is recorded as missing, and the
+verification never takes a reported identity for an authenticated one. It holds its NamespaceArray,
 the AutomationComponent, FunctionalEntity and endpoint NodeIds qualified
 by namespace URI, the ConnectionManagerApplicationUri and the Diagnostics
 CreationTime read from the endpoint (§6.6.2 Table 74; what the
@@ -1113,7 +1113,8 @@ it was established with, and the generation and fingerprint of the
 configuration the run started with, not of one committed while it ran.
 The store key of an endpoint depends on namespace URIs, not indexes. An
 intent holds the same identity and NodeIds and one fingerprint per
-endpoint configuration. C3.2 writes the evidence; C3.3 verifies it.
+endpoint configuration. The verification after a restart re-proves it
+(below).
 
 **Ambiguous results** (design §6.7, decision C3-D13). A state-changing
 call whose result does not prove its outcome keeps its intent in the
@@ -1140,25 +1141,70 @@ the verifications reserves for the session (CL-2) and owes nothing; any
 other command in the call keeps the rule. A null NodeId in a result is
 no NodeId.
 
-**Owed work is enforced** (design §6.3). While the journal owes work for
-a set, the Manager refuses everything that acts on its endpoints: every
-`Process` action (closes included), `Reconcile`, `Replace`, `Remove`, an
-`Update` that names it and `Settle` are `Bad_InvalidState`. A close or a
-verdict could invalidate the evidence of an unproven call, a component
-it shares or a pending set change; proving that it cannot is recovery
-(C3.3), so C3.2 refuses it. The fence is wider than the set
-(`Recovery.Fenced`, library interpretation, conservative): a set that an
-owed set change operates on, and a set that shares a server (by its
-ServerAddress Address, or the server of an endpoint record or call
-intent) with the set that owes work, with the sets of its change or with
-an owed call, has the same operations refused, and its `CommitEdit` too;
-a set that owes a set change cannot commit an edit. Whether such a set
-is independent of the obligation is what recovery proves (C3.3). The
-Names of an establish intent that did not end are held by Unverified
-records without a NodeId, after a restart and in the running Manager, so
-that no run creates an endpoint under them. The Observer receives the
-events of following a settled store after the Manager lock is released,
-so it may call into the Manager.
+**Owed work** (design §6.3, stage C3.3). The journal of runs that did
+not end is reported in `Status.Recovery.Owed` (`OwedWork`: Reconcile,
+Rollback, SetChange, Call) and the set is in Error. The first step of the
+next `Process` or `Reconcile` of the set does it, before the action of the
+run: it verifies the records of the set and resolves its unended calls
+(below), closes every closable endpoint of the set with Remove TRUE when a
+rollback is owed (§6.7.3.2, CR-4: an aborted run, or one that was executing
+with RollbackOnError TRUE), and ends the run records whose work is done.
+Nothing is resent: a call whose outcome is unknown is re-proved, never
+repeated, and what stays Unverified or Unresolved is never closed. A set
+change (Replace, Remove, complete Update) whose closes or switch were
+interrupted is completed by a `Reconcile` only: its closes, then its
+switch with the generations it reserved, the Adds of an Update included; a
+`Process` of such a set is `Bad_InvalidState`. The recovery gates the
+run: when an owed rollback or the end of an owed run fails, the action is
+not executed, the run fails with FxErrorRuntimeError and
+`Bad_InvalidState` and the set stays in Error. A server on which a call
+of an earlier run of the set still has an unknown outcome is blocked for
+the run: nothing is sent there (its endpoints fail with
+FxErrorRuntimeError and `Bad_InvalidState`) until the call is proven or
+settled, and an establish that has an endpoint there stops before its
+first call. Closes and rollbacks elsewhere keep the semantics of C2. While work is owed, `Replace`, `Remove` and an
+`Update` that names the set are `Bad_InvalidState`; `Settle` is allowed:
+it is the administrative decision that completes an intent whose Names it
+decides. The Names of an establish intent that did not end are held by
+Unverified records without a NodeId, after a restart and in the running
+Manager, so that no run creates an endpoint under them; a scan never
+forgets a Name an intent holds, also when it finds nothing there.
+
+**The fence** (`Recovery.Fenced`, library interpretation of design §6.3).
+Owed work of one set may concern another: the sets an owed set change
+operates on are fenced until the change is made; an owed call fences
+every set that shares its server (by ServerAddress Address, or the server
+of an endpoint record or call intent) until its intent is resolved; other
+owed work fences the sets that share a server of the owing set, or of the
+sets of its change, only while a record on that server is Unverified. A
+fenced set has its runs, `Reconcile`, `Replace`, `Remove`, `Update`,
+`Settle` and `CommitEdit` refused (`Bad_InvalidState`). The narrowing is
+the proof of independence: once every record of a server is decided by
+the re-proof (KnownOwned, TakenPreconfigured or Unresolved, the last never
+closed) and no call on it has an unknown outcome, a run of another set on
+it closes only the endpoints of its own records and creates only under
+Names its scan proves free, and the owed work of the first set touches
+only the endpoints of its own records. The Observer receives the events of
+following a settled store after the Manager lock is released, so it may
+call into the Manager.
+
+The fence is checked again before every state-changing call is
+journaled, under the lock every intent is written with, so that no other
+set writes an intent between the check and the write: an intent is not
+written, and its call not sent, while another set has unended work on its
+server (by Address, or by the ApplicationUri the intent records),
+including a call of a run still active whose outcome is unknown. Two
+FunctionalEntities of one AutomationComponent may share PubSub
+components: an ambiguous call fences the whole server, and the calls in
+flight of runs on other FunctionalEntities are serialized by the
+AutomationComponent, which changes its PubSub configuration one
+transaction at a time (library interpretation). Addresses are aliases of one server when records or
+intents made over them have the same ApplicationUri: an owed call on one
+fences the sets on every other. An alias that no record or intent of the
+store has made yet is not known as one (LIMITATIONS.md). The background
+verification of a server takes the lock of each FunctionalEntity whose
+endpoints it decides, as a run does, so that it never decides a record
+while a run changes the endpoints there.
 
 **Records are validated** (design §3.2, §6.1). A record that decodes but
 is not valid — its key does not match its content, a generation or RunID
@@ -1175,18 +1221,172 @@ refused.
 
 **Restart** (design §6.4, decision C3-D9). `New` loads the sets with their
 Versions and every endpoint record as `Unverified`: whatever class it was
-written with, no record is trusted until it is verified, which C3.2 does
-not do. An Unverified endpoint is treated as Unresolved: a run fails its
-Connection with CreateConnectionEndpointError and `Bad_InvalidState`,
-never closes, adopts or changes it, and a set with one never retries.
-`Settle` decides one, as for Unresolved, and writes the verdict. The
-journal of runs that did not end is reported in `Status.Recovery.Owed`
-(`OwedWork`: Reconcile, Rollback, SetChange, Call) and the set is in
-Error; the work is exposed, not executed, and no call is resent. A run
+written with, no record is trusted until it is verified. An Unverified
+endpoint is treated as Unresolved: a run fails its Connection with
+CreateConnectionEndpointError and `Bad_InvalidState`, never closes, adopts
+or changes it (a rollback included), and a set with one never retries.
+`Settle` decides one, as for Unresolved, and writes the verdict. A run
 that crashed before its first intent owes nothing. A record that does not
 decode is reported in `StoreStatus().Failed`, kept, and holds its key: an
 Add of that set is `Bad_InvalidState`. A store of another ApplicationURI
 or with a newer schema fails `New`.
+
+**Verification** (design §6.4, stage C3.3). After `New`, the Manager
+verifies the Unverified records in the background, one pass per server
+address, at most `VerifyOptions.Parallelism` servers at once (by default
+`Options.Parallelism`), each attempt bounded by `VerifyOptions.Timeout`
+(30 s). A server that cannot be reached keeps its records Unverified, is
+reported in `Recovery.Unreachable` with the error, and is tried again
+with a backoff from `RetryInitial` (1 s) to `RetryMax` (1 min). `Close`
+cancels the pass; what it had not written stays as it was stored.
+`VerifyOptions.Manual` turns the background pass off. Every run with a
+Store verifies the records of its set as its first step, also in Manual
+mode. The Observer receives `EventVerified`: one per decided record
+(`Record`, `Closed` when it was dropped) and one per failed attempt of a
+server (`Address`, `Err`). The verdicts for a set are written in one
+write before memory changes; after a crash the stored classes are loaded
+Unverified again.
+
+**Re-proof** (design §6.5, library interpretation of the evidence). A
+record stored KnownOwned or TakenPreconfigured is proven against the
+server when all of these hold; a record stored Unresolved stays
+Unresolved:
+- the server: the same ApplicationUri, and for a record made over an
+  authenticated channel the same certificate thumbprint over an
+  authenticated channel now; a session that cannot show the evidence the
+  record has leaves it Unverified (retried), another server makes it
+  Unresolved; a record made over a secured channel without an
+  authenticated identity is never re-proved by its ApplicationUri alone;
+- the endpoint: exactly one endpoint of its Name under its
+  FunctionalEntity (the NodeIds mapped by namespace URI to the
+  NamespaceArray of the server now), at the NodeId of the record. None:
+  the record is dropped. More than one, or another NodeId with our
+  ConnectionManagerApplicationUri: Unresolved. Another NodeId without it,
+  or a ConnectionManagerApplicationUri that is another's: the endpoint is
+  not ours, the record is dropped and nothing is closed (§6.6.2); the
+  ConnectionManagerApplicationUri read with the Diagnostics is checked as
+  well, so that one that changed between the two reads drops the record;
+- the incarnation: the Diagnostics CreationTime (§6.6.2 Table 74) equal
+  to the recorded one; one of them missing is Unresolved; neither is
+  proven only with `ExclusiveApplicationURI` and our
+  ConnectionManagerApplicationUri on the endpoint;
+- the configuration: Mode, InputVariables, OutputVariables, IsPersistent,
+  CleanupTimeout and RelatedEndpoint of the endpoint (§6.6.2 Table 73)
+  equal to the parameter the record was made with (Variables compared by
+  namespace URI; every negative CleanupTimeout alike; a null
+  RelatedEndpoint like none); else Unresolved;
+- a TakenPreconfigured endpoint must still be preconfigured and free.
+
+A read that fails leaves the record Unverified. The Names of an unended
+establish intent are re-proved as a lost response (`ResolveLostResponse`
+with the evidence of the intent; the call was serialized and the fence
+kept every other run off its server since): against the server identity
+the intent recorded, never the one of the session now (another server is
+Unresolved); an endpoint found is ours only at the preconfigured NodeId
+the intent named, if any, and with the parameter the intent sent (Mode,
+Variables, IsPersistent, CleanupTimeout, RelatedEndpoint), else
+Unresolved. Absent proves nothing for a persistent endpoint, whose
+AutomationComponent may restore it (C3-D13), nor when the configuration
+of the set is not the one of the call, and the Name stays Unresolved. An
+intent is complete, and deleted, once none of its Names has an undecided
+record; `Settle` completes it the same way.
+
+The intent of a CloseConnections or of an EstablishConnections with
+EnableCommunicationCmd only (§6.2.4.3.10.2) records the endpoints it
+targets, their class before the call and, for a close, Remove. Its
+outcome is proven by the postcondition of that operation, never by the
+ownership of the endpoint: Remove TRUE by the endpoint being gone (a
+TakenPreconfigured endpoint by being released, its RelatedEndpoint null
+and its communication disabled or absent, §6.2.5.2); Remove FALSE by
+every DataSetReader and DataSetWriter of the endpoint being Disabled (OPC
+10000-14 §9.1.10, State 0); EnableCommunicationCmd by every one not being
+Disabled. Each needs positive evidence: a reader and a writer in
+different states, or a State that cannot be read, proves neither. An
+endpoint whose postcondition does not hold, or cannot be read, is
+Unresolved, the intent stays, and nothing is sent again: neither the next
+run, a rollback nor a `Reconcile` resends the call (C3-D13); `Settle` is
+the administrative decision. A close or enable that failed or whose
+result was lost in the running Manager does the same. Such an intent is
+complete only when every endpoint it targets has its outcome proven in
+one verification, whatever the class of the record there (a KnownOwned
+record proves nothing about the call, as after a completion that was not
+written), or when the server shows no node at a target no record holds
+(Browse answers `Bad_NodeIdUnknown`).
+
+**Adoption** (design §6.6, decision C3-D6). An establish run of a Manager
+with a Store keeps in place the endpoints its step 0 finds, instead of
+closing and creating them again, when every endpoint of the run is
+adoptable: its record is KnownOwned (made by this Manager or proven by
+the re-proof, never Unverified or Unresolved), has the generation and
+fingerprint of the configuration the run processes, the CreationTime it
+was recorded with (§6.6.2 Table 74) and no other
+ConnectionManagerApplicationUri, and the endpoint has the configuration
+the run would create: the parameter, a DataSetReader and a DataSetWriter
+as its Mode needs, of the configured Names (ToDataSetReader,
+ToDataSetWriter), the ControlGroups it controls (Controls, §6.5.2), and
+the PubSub configuration of the run (OPC 10000-14 §9.1.4–§9.1.8) as the
+address space shows it: of the DataSetWriter (DataSetWriterId,
+DataSetFieldContentMask, KeyFrameCount), its WriterGroup (WriterGroupId,
+PublishingInterval, KeepAliveTime, Priority, HeaderLayoutUri,
+SecurityMode, SecurityGroupId) and PubSubConnection (PublisherId,
+TransportProfileUri, Address), the Variables of its PublishedDataSet, and
+of the DataSetReader (PublisherId, WriterGroupId, DataSetWriterId,
+DataSetFieldContentMask, MessageReceiveTimeout, KeyFrameCount,
+HeaderLayoutUri, SecurityMode, SecurityGroupId), the PubSubConnection of
+its ReaderGroup, and its TargetVariables. Also compared: the
+MaxNetworkMessageSize and the UADP MessageSettings (GroupVersion when the
+configuration sets it, DataSetOrdering, NetworkMessageContentMask,
+SamplingOffset) of the WriterGroup, the SecurityMode, SecurityGroupId and
+MaxNetworkMessageSize of the ReaderGroup, the fields of the reader's
+DataSetMetaData (Name, BuiltInType, DataType, ValueRank), and the
+NetworkInterface of each PubSubConnection. A configuration with a setting
+adoption cannot prove equal is never adopted, and its endpoints are
+closed and created again: TransportSettings or ConnectionProperties of a
+PubSubConnection, an Address that is not a NetworkAddressUrl, WriterGroup
+MessageSettings that are not UADP or have a PublishingOffset,
+TransportSettings, GroupProperties, LocaleIds or SecurityKeyServices of a
+group, and TransportSettings, MessageSettings or SecurityKeyServices of a
+reader or writer. An id the Manager allocates is
+compared with the one the AC has where the configuration leaves it to
+the AC, and a reader is adopted only with the ids of the writer it
+subscribes to as adopted. A writer or reader changed, or replaced, under
+the same Name is not adopted. Adoption is all or nothing for the run (library
+interpretation): when one endpoint is not adoptable, every endpoint
+follows C2, closed first and created again, so that the PubSub
+configuration of each AutomationComponent is built and sent as one
+(§6.16.3); when step 0 fails a Connection, the run stops and the
+adoptable endpoints are left as they are, neither adopted nor closed. The
+adopted endpoints are reported in `RunResult.Adopted` and belong to the
+run: with RollbackOnError TRUE an abort closes them too (CR-4). What they
+get follows the action (§6.7.5.3): ActionEstablishConnectionsEnabled
+sends EnableCommunicationCmd (§6.2.4.3.10.2, a command of
+EstablishConnections), ActionEstablishConnectionsDisabled sends
+CloseConnections with Remove FALSE (§6.2.5.2), and
+ActionEstablishConnections applies the enablement the configuration gives
+their DataSetWriter or DataSetReader. A crash before that call has sent
+nothing and owes nothing: the next establish adopts them again.
+
+**Sessions.** A run, and each close and enable step, reads the
+NamespaceArray first on the session the pool holds for a server; when
+that session was dialed by an earlier run and the read fails (the server
+restarted while it was idle), the read is made once more on a new session
+before anything is sent. A call is never repeated (C3-D13).
+
+**Incarnation before every change** (§6.5, §6.6.2 Table 74). Before the
+close-first or the adoption of an establish, and before a
+CloseConnections or EnableCommunicationCmd of a recorded endpoint, the
+Manager reads the Diagnostics CreationTime and the
+ConnectionManagerApplicationUri of the endpoint at the record's NodeId.
+Another CreationTime, none, or another ConnectionManagerApplicationUri is
+another incarnation (an AutomationComponent that restarted and made a new
+endpoint under the same Name and NodeId): the record becomes Unresolved;
+evidence that cannot be read makes it Unverified. Either way the endpoint
+is not closed, adopted or enabled, by that step, a rollback
+(RollbackOnError TRUE) or a later run, until it is proven or settled, and
+its Connection fails with `Bad_InvalidState`. An endpoint that is gone is
+closed as before (nothing is changed there). Not being adoptable is not a
+reason to close: only a proven endpoint whose configuration differs is
+closed and created again.
 
 **NotPersisted** (design §6.7, decision C3-D2). Where the PubSub
 configuration of an endpoint does not state 0:NotPersisted (OPC 10000-14
@@ -1438,7 +1638,7 @@ go run ./examples/uafx/cm -port 4856
 | Every generated structure: the Binary Schemas, hand-written byte fixtures, the bytes of v1.37.0, a round trip of each with its optional fields and union options, the errors of the decoder | `uafx` (`TestSchemaMatchesBinarySchema`, `TestStructureFixtures`, `TestGoldenReleaseB`, `TestStructuresRoundTrip`, `TestStructureErrors`) |
 | The configuration model of a ConnectionManager: each validation rule, the file of F.2 in both namespace layouts and its errors, the edit, the state machine, the ownership and retry rules, the diagnostics and the ConnectionState | `uafx/fxcm` |
 | Fuzz: the ConnectionConfigurationSet file (`FuzzDecodeFile`) and the records of the store (`FuzzDecodeRecord`) | `uafx/fxcm` |
-| ConnectionManager persistence: sets, Versions and commits across a restart; every outcome of a set change (not committed, unknown and lost, unknown and landed) and the fence; a store of another owner and a corrupt record; an intent or a run record not written (nothing sent), a completion lost (Unresolved, the evidence kept and reported after a restart, nothing resent); a run already in flight fenced by an ambiguous write of another operation; Unverified records after a restart and Settle; NotPersisted filled for persistent and non-persistent endpoints against strict AutomationComponents | `uafx/fxcm` |
+| ConnectionManager persistence: sets, Versions and commits across a restart; every outcome of a set change (not committed, unknown and lost, unknown and landed) and the fence; a store of another owner and a corrupt record; an intent or a run record not written (nothing sent), a completion lost (Unresolved, the evidence kept and reported after a restart, nothing resent); a run already in flight fenced by an ambiguous write of another operation; Unverified records after a restart and Settle; the verification after a restart (proven, unreachable with backoff, cancelled by Close, absent, foreign, a changed parameter) and the fence narrowed by it; owed rollbacks, intents and set changes (an Update with an Add) completed by Process and Reconcile; adoption (enabled, disabled, as configured, the fallback to close-first, RollbackOnError) and crashes in the verification, the adoption, the owed rollback and the owed switch; NotPersisted filled for persistent and non-persistent endpoints against strict AutomationComponents | `uafx/fxcm` |
 | ConnectionManager crash: the Manager killed as a subprocess at seven points of Add, establish, rollback and Replace, then started on the same FileStore: the set as committed, the owed work reported, no record trusted and no call made (`TestCrash`) | `uafx/fxcm` |
 | The Manager end to end against `fxserver` AutomationComponents with UDP PubSub: establish, enable, disable, remove and re-establish, data flowing; BrowsePaths and placeholders, asset and FunctionalEntity verification, MaxConnectionsPerCall and CommandBundleRequired; preconfigured endpoints; the rollback; a PublishedDataSet name collision with other content and the comparison of every item and field member; a DataSetReader that names its publisher's PublisherId adapted; a SecurityKeyServer refused; the PublisherId adaptation, with CommandBundleRequired after the publisher, its nested results and a failing call; Close waiting for a Remove; every use of every service failed in turn; every call's response lost; two Managers with the same ApplicationUri; the monitor re-establishing; the retry policy; the ClientDialer | `uafx/fxcm` |
 | The ConnectionManager server: the nodes and References of a set, the SelectionList writes and their RestrictToList, the PortableNodeIdentifier view, the Lock (ownership, renewal, expiry on the clock of the test, the end of a session, BreakLock), commit with CS-19 reflection and its conflicts, Process and its events, the audit events (also of calls refused early), the file and its argument errors, ChangesApplied of a partial update, handles dropped at the end of their session, the Lock deadline between two checks, escaped NodeIds, the authorizer, the nodes following the Manager; on a SignAndEncrypt Basic256Sha256 endpoint with user names, an authorized user and a viewer, and a right revoked between Open and CloseAndUpdate (`TestConnectionManagerSecure`) | `uafx/fxserver` |
@@ -1482,10 +1682,14 @@ The test address space is `internal/testutil/fxtest`.
   key use is kept).
 - The ConnectionManager (`uafx/fxcm`, served by `EnableConnectionManager`)
   keeps its sets, their Versions and the records of its endpoints in
-  memory, or with a Store also durably; after a restart it verifies no
-  record and executes no owed work, it reports both
-  ([Persistence of the ConnectionManager](#persistence-of-the-connectionmanager);
-  recovery is stage C3.3). It does not configure a SecurityKeyServer, ask a GDS (no
+  memory, or with a Store also durably; after a restart it re-proves its
+  records against the AutomationComponents, does its owed work in the
+  next Process or Reconcile and keeps proven endpoints in place
+  ([Persistence of the ConnectionManager](#persistence-of-the-connectionmanager)).
+  What it cannot prove it reports and never closes; it does not take over
+  an endpoint it did not record (no adoption of a lost record, Classify
+  makes it Unresolved), and a set change is completed by Reconcile only.
+  It does not configure a SecurityKeyServer, ask a GDS (no
   GlobalDiscoveryServers), resolve AliasNames (AliasNameProcessingError),
   generate a PubSub configuration from the flows
   ([Running a ConnectionManager](#running-a-connectionmanager)), or

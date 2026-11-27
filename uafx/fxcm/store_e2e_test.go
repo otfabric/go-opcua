@@ -47,10 +47,12 @@ func classes(st fxcm.Status) []fxcm.Ownership {
 
 // TestStoreRestartE2E: a Manager with a Store keeps its set and the
 // records of the endpoints it established across a restart, and trusts
-// none of them: after the restart every record is Unverified, an establish
-// fails the Connections whose Names they hold and a removal closes nothing
-// (design §6.4, decision C3-D9). Settle decides them; then the removal
-// closes them.
+// none of them until it re-proves them (design §6.4, §6.5, decision C3-D9):
+// loaded, every record is Unverified. An establish verifies them as its
+// first step and keeps them in place (§6.6, C3-D6): no CloseConnections, no
+// EstablishConnections, the same NodeIds. A restarted Manager whose
+// verification runs in the background proves them KnownOwned by itself;
+// then a removal closes them.
 func TestStoreRestartE2E(t *testing.T) {
 	t.Parallel()
 	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
@@ -67,9 +69,10 @@ func TestStoreRestartE2E(t *testing.T) {
 	assert.Empty(t, storedKeys(t, mem, "call/"), "every intent completed")
 	ss, _ := m.StoreStatus()
 	assert.False(t, ss.Store.Fenced)
+	nodes := append(a.conns.Endpoints(), b.conns.Endpoints()...)
 
 	require.NoError(t, m.Close())
-	m2 := newManager(t, fxcm.Options{Store: mem})
+	m2 := newManager(t, fxcm.Options{Store: mem, Verify: fxcm.VerifyOptions{Manual: true}})
 	st, ok := m2.Status(k)
 	require.True(t, ok)
 	assert.Equal(t, fxcm.StateReady, st.State, "nothing owed")
@@ -80,39 +83,37 @@ func TestStoreRestartE2E(t *testing.T) {
 	assert.Empty(t, st.Recovery.Owed)
 	assert.False(t, st.Recovery.Done)
 
-	// An establish fails the Connections their Names hold; nothing on the
-	// AutomationComponents changes.
+	// The establish re-proves them and keeps them in place.
+	before := m2.Counters()
 	res = process(t, m2, uafx.ActionEstablishConnectionsEnabled, k)
-	require.Equal(t, fxcm.StateError, res.State)
+	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.Empty(t, res.Created)
-	assert.Equal(t, []string{"ToB"}, a.endpoints())
-	assert.Equal(t, []string{"ToA"}, b.endpoints())
-	// A removal closes none of them.
-	res = process(t, m2, uafx.ActionRemoveConnections, k)
-	require.Equal(t, fxcm.StateError, res.State)
 	assert.Empty(t, res.Closed)
-	assert.Equal(t, []string{"ToB"}, a.endpoints())
+	assert.Len(t, res.Adopted, 2)
+	after := m2.Counters()
+	assert.Equal(t, before.CloseCallCount, after.CloseCallCount, "no CloseConnections")
+	// EnableCommunicationCmd is a command of EstablishConnections
+	// (§6.2.4.3.10.2): one call per AutomationComponent, nothing created.
+	assert.Equal(t, before.EstablishCallCount+2, after.EstablishCallCount, "only the enablement")
+	assert.Equal(t, nodeSet(nodes), nodeSet(endpointsOf(a, b)), "the same endpoints")
 	st, _ = m2.Status(k)
-	assert.Equal(t, []fxcm.Ownership{fxcm.Unverified, fxcm.Unverified}, classes(st), "unchanged")
-
-	// Settle decides them; the verdict is durable.
-	for _, e := range st.Endpoints {
-		require.NoError(t, m2.Settle(k, e.Endpoint, fxcm.SettleOwned))
-	}
+	assert.Equal(t, []fxcm.Ownership{fxcm.KnownOwned, fxcm.KnownOwned}, classes(st))
+	assert.True(t, st.Recovery == nil || st.Recovery.Done, "%+v", st.Recovery)
 	require.NoError(t, m2.Close())
+
+	// The background verification of a restarted Manager proves them.
 	m3 := newManager(t, fxcm.Options{Store: mem})
-	st, _ = m3.Status(k)
-	assert.Equal(t, []fxcm.Ownership{fxcm.Unverified, fxcm.Unverified}, classes(st), "loaded again: unverified again")
-	for _, e := range st.Endpoints {
-		require.NoError(t, m3.Settle(k, e.Endpoint, fxcm.SettleOwned))
-	}
+	require.Eventually(t, func() bool {
+		st, _ := m3.Status(k)
+		return slices.Equal([]fxcm.Ownership{fxcm.KnownOwned, fxcm.KnownOwned}, classes(st))
+	}, 10*time.Second, 10*time.Millisecond)
 	res = process(t, m3, uafx.ActionRemoveConnections, k)
 	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 	assert.Empty(t, a.endpoints())
 	assert.Empty(t, b.endpoints())
 	assert.Empty(t, storedKeys(t, mem, "ep/"))
 	st, _ = m3.Status(k)
-	assert.True(t, st.Recovery.Done, "%+v", st.Recovery)
+	assert.True(t, st.Recovery == nil || st.Recovery.Done, "%+v", st.Recovery)
 }
 
 // failing is a store that gives a fault to the first Apply for which when
@@ -123,14 +124,17 @@ type failing struct {
 	when  func(b fxstore.Batch) bool
 	fault storetest.Fault
 	hit   int
+	times int // the batches when fails before it is disarmed; 0 is 1
 }
 
 func (f *failing) Apply(ctx context.Context, b fxstore.Batch) error {
 	f.mu.Lock()
 	hit := f.when != nil && f.when(b)
 	if hit {
-		f.when = nil
 		f.hit++
+		if f.hit >= max(f.times, 1) {
+			f.when = nil
+		}
 	}
 	fault := f.fault
 	f.mu.Unlock()
@@ -143,9 +147,14 @@ func (f *failing) Apply(ctx context.Context, b fxstore.Batch) error {
 }
 
 func (f *failing) arm(fault storetest.Fault, when func(b fxstore.Batch) bool) {
+	f.armN(fault, 1, when)
+}
+
+// armN fails the next n batches when matches.
+func (f *failing) armN(fault storetest.Fault, n int, when func(b fxstore.Batch) bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.fault, f.when = fault, when
+	f.fault, f.when, f.times, f.hit = fault, when, n, 0
 }
 
 func putsPrefix(prefix string) func(b fxstore.Batch) bool {

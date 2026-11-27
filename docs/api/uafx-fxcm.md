@@ -30,6 +30,16 @@ const (
 Defaults of Options (design §4.3, decision Q3).
 
 ```go
+const (
+	DefaultVerifyTimeout      = 30 * time.Second
+	DefaultVerifyRetryInitial = time.Second
+	DefaultVerifyRetryMax     = time.Minute
+)
+```
+
+Defaults of VerifyOptions (design §6.4).
+
+```go
 const ActionReconcile uafx.FxProcess = -1
 ```
 
@@ -493,6 +503,12 @@ const (
 	// EventEditEnded: the edit of a set ended without a commit
 	// (DiscardUpdates, or its Lock went, §6.7.4).
 	EventEditEnded
+	// EventVerified: the verification of the records a Manager with a
+	// Store loaded (design §6.4) decided Record (its new Class; Closed
+	// when the record was dropped: its endpoint is absent or Foreign,
+	// nothing was closed), or an attempt on the server at Address failed
+	// (Err; Record nil).
+	EventVerified
 )
 ```
 
@@ -894,6 +910,10 @@ type Options struct {
 	Store fxstore.Store
 	// StoreTimeout bounds each store operation. 0: 10 s.
 	StoreTimeout time.Duration
+	// Verify configures the verification of the records loaded from the
+	// Store (design §6.4, §6.5): in the background after New, and as the
+	// first step of every run of a set.
+	Verify VerifyOptions
 }
 ```
 
@@ -1000,7 +1020,7 @@ type OwedWork struct {
 }
 ```
 
-OwedWork is work the journal of a Manager shows, which it exposes and does not execute (design §6.3): the next Process or Reconcile of the set does it (stage C3.3). In this version it is kept in the store, reported, and it fences the operations that could bypass it.
+OwedWork is work the journal of a Manager shows, which it exposes and does not execute by itself (design §6.3): the first step of the next Process or Reconcile of the set does it (recover), and a Reconcile completes an owed set change. Until then it is reported and fences the operations that could bypass it.
 
 ### type Ownership
 
@@ -1094,15 +1114,21 @@ type Recovery struct {
 	// establish intent without an endpoint record holds its Names with
 	// one (NodeID nil).
 	Unverified []EndpointRecord
-	// Owed is the work the journal shows. While it is owed, the set is
-	// not established, enabled, replaced or removed (Bad_InvalidState).
+	// Owed is the work the journal shows. The first step of the next
+	// Process or Reconcile of the set does it (a set change: a Reconcile
+	// only); until then the set is not replaced, removed or updated
+	// (Bad_InvalidState).
 	Owed []OwedWork
 	// Fenced is the work other sets owe that this set takes part in (an
-	// operation of their set change) or shares a server with. While it
-	// is owed, the remote operations of the set and its CommitEdit are
-	// refused (Bad_InvalidState): whether they are independent of it is
-	// what recovery proves (stage C3.3; library interpretation).
+	// operation of their set change), or that holds a server of this set
+	// whose independence is not proven yet (fencedOf). While it is owed,
+	// the remote operations of the set and its CommitEdit are refused
+	// (Bad_InvalidState; library interpretation).
 	Fenced []OwedWork
+	// Unreachable are the servers (by Address) of Unverified records whose
+	// last verification attempt failed, with its error; they are tried
+	// again with a bounded backoff (VerifyOptions).
+	Unreachable map[string]string
 	// Blocked, when not empty, is why the remote operations of the set
 	// are refused: a record of it in the store is not valid.
 	Blocked string
@@ -1217,6 +1243,11 @@ type RunResult struct {
 	// close of the rollback succeeded.
 	RolledBack       bool
 	RollbackComplete bool
+	// Adopted are the endpoints an establish run kept in place: proven
+	// its own, of the configuration it processed and as configured
+	// (design docs/design/uafx-persistent-connections.md §6.6), with a
+	// Store.
+	Adopted []EndpointRecord
 }
 ```
 
@@ -1535,3 +1566,25 @@ const (
 ```
 
 The verdicts of Settle.
+
+### type VerifyOptions
+
+```go
+type VerifyOptions struct {
+	// Timeout bounds one attempt on one server. 0: DefaultVerifyTimeout.
+	Timeout time.Duration
+	// Parallelism bounds the servers verified at the same time. 0:
+	// Options.Parallelism.
+	Parallelism int
+	// RetryInitial and RetryMax bound the backoff between the attempts on
+	// a server that could not be verified: doubled after each attempt up
+	// to RetryMax. 0: DefaultVerifyRetryInitial, DefaultVerifyRetryMax.
+	RetryInitial time.Duration
+	RetryMax     time.Duration
+	// Manual: no verification in the background; the records of a set are
+	// verified by the first step of a run on it (Process, Reconcile).
+	Manual bool
+}
+```
+
+VerifyOptions configure the verification of the endpoint records a Manager with a Store loads (design §6.4).

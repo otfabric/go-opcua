@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -303,6 +304,21 @@ func TestStoreFenceFollowE2E(t *testing.T) {
 				_, err = m.Replace(context.Background(), e2eConf(t, "Added", a, b))
 				requireInvalidState(t, err)
 				requireInvalidState(t, m.Remove(context.Background(), k))
+				// A Process does not complete a set change; a Reconcile
+				// does: it switches to the replacement.
+				ps := m.Process(uafx.ActionEstablishConnectionsEnabled, k)
+				require.Len(t, ps, 1)
+				requireInvalidState(t, ps[0].Err)
+				started := m.Reconcile(k)
+				require.NoError(t, started.Err)
+				_, err = started.Run.Wait(context.Background())
+				require.NoError(t, err)
+				c, _ = m.Config(k)
+				assert.Equal(t, uint32(1), c.Version(), "the replacement")
+				st, _ = m.Status(k)
+				assert.Empty(t, st.Recovery.Owed)
+				assert.Empty(t, storedKeys(t, mem, "run/"))
+				assert.Empty(t, storedKeys(t, mem, "tx/"))
 				return
 			}
 
@@ -317,17 +333,23 @@ func TestStoreFenceFollowE2E(t *testing.T) {
 	}
 }
 
-// TestStoreOwedEnforcedE2E (design §6.3): a call whose completion was not
-// written owes its intent, live and after a restart: nothing that acts on
-// the endpoints of the set runs, closes (RemoveConnections, Reconcile) and
-// Settle included, until recovery (C3.3). A restarted Manager holds the
-// Names of the intent with Unverified records.
+// TestStoreOwedEnforcedE2E (design §6.3, §6.4): a call whose completion
+// was not written owes its intent, live and after a restart. Nothing that
+// bypasses the owed work runs (Replace, Remove: Bad_InvalidState); a
+// Process or Reconcile starts, and its first step re-proves the Names of
+// the intent. Without ExclusiveApplicationURI the endpoints the call made
+// are not proven ours: they stay Unresolved, nothing is closed or created
+// again, the intent and the set stay owed (Error). Settle is the
+// administrative decision that completes the intent; a Reconcile then ends
+// the run record, and nothing is owed. A restarted Manager holds the Names
+// of the intent with Unverified records until its verification decides
+// them the same way.
 func TestStoreOwedEnforcedE2E(t *testing.T) {
 	t.Parallel()
 	a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
 	mem := &fxstore.MemoryStore{}
 	f := &failing{Store: mem}
-	m := newManager(t, fxcm.Options{Store: f})
+	m := newManager(t, fxcm.Options{Store: f, Verify: fxcm.VerifyOptions{Manual: true}})
 	conf := e2eConf(t, "Owed", a, b)
 	conf.RollbackOnError = false
 	cfg, err := m.Add(conf)
@@ -346,26 +368,38 @@ func TestStoreOwedEnforcedE2E(t *testing.T) {
 		w := owedWork(st.Recovery.Owed, fxcm.OwedCall)
 		require.NotNil(t, w, "%+v", st.Recovery.Owed)
 		assert.NotEmpty(t, w.Names)
-		started := m.Process(uafx.ActionEstablishConnectionsEnabled, k)
-		require.Len(t, started, 1)
-		requireInvalidState(t, started[0].Err)
 		_, err := m.Replace(context.Background(), conf)
 		requireInvalidState(t, err)
 		requireInvalidState(t, m.Remove(context.Background(), k))
-		// Closes and verdicts too: whether they conflict with the
-		// obligation is what recovery proves (C3.3).
-		requireInvalidState(t, m.Reconcile(k).Err)
-		started = m.Process(uafx.ActionRemoveConnections, k)
-		requireInvalidState(t, started[0].Err)
-		for _, e := range st.Endpoints {
-			requireInvalidState(t, m.Settle(k, e.Endpoint, fxcm.SettleForeign))
+		before := m.Counters()
+		for _, action := range []uafx.FxProcess{uafx.ActionEstablishConnectionsEnabled, uafx.ActionRemoveConnections, fxcm.ActionReconcile} {
+			var res *fxcm.RunResult
+			if action == fxcm.ActionReconcile {
+				started := m.Reconcile(k)
+				require.NoError(t, started.Err)
+				res, err = started.Run.Wait(context.Background())
+				require.NoError(t, err)
+			} else {
+				res = process(t, m, action, k)
+			}
+			assert.Equal(t, fxcm.StateError, res.State, "%v leaves the call owed", action)
+			assert.Empty(t, res.Closed, "%v closes nothing unproven", action)
+			assert.Empty(t, res.Created, "%v creates nothing under a held Name", action)
 		}
-		assert.Zero(t, m.Counters().CloseCallCount, "no close while the set owes work")
+		assert.Equal(t, before, m.Counters(), "no call while the outcome is unproven: re-proved, never resent")
+		assert.Equal(t, []string{"ToB"}, a.endpoints())
+		assert.Equal(t, []string{"ToA"}, b.endpoints())
+		st, _ = m.Status(k)
+		assert.Equal(t, fxcm.StateError, st.State)
+		require.NotNil(t, owedWork(st.Recovery.Owed, fxcm.OwedCall), "%+v", st.Recovery.Owed)
+		for _, e := range st.Endpoints {
+			assert.Equal(t, fxcm.Unresolved, e.Class, "%+v %+v", e, st.Recovery)
+		}
 	}
 	check(m)
 	require.NoError(t, m.Close())
 
-	m2 := newManager(t, fxcm.Options{Store: mem})
+	m2 := newManager(t, fxcm.Options{Store: mem, Verify: fxcm.VerifyOptions{Manual: true}})
 	st, _ := m2.Status(k)
 	names := map[string]bool{}
 	for _, e := range st.Endpoints {
@@ -378,6 +412,24 @@ func TestStoreOwedEnforcedE2E(t *testing.T) {
 		assert.True(t, names[n], "the Name %s of the intent is held", n)
 	}
 	check(m2)
+
+	// Settle decides the Names (the endpoints are ours): the intent is
+	// complete with the last verdict, and a Reconcile ends the run.
+	st, _ = m2.Status(k)
+	for _, e := range st.Endpoints {
+		require.NoError(t, m2.Settle(k, e.Endpoint, fxcm.SettleOwned))
+	}
+	assert.Empty(t, storedKeys(t, mem, "call/"), "the intent completed with the verdicts")
+	st, _ = m2.Status(k)
+	assert.Nil(t, owedWork(st.Recovery.Owed, fxcm.OwedCall), "%+v", st.Recovery.Owed)
+	started := m2.Reconcile(k)
+	require.NoError(t, started.Err)
+	_, err = started.Run.Wait(context.Background())
+	require.NoError(t, err)
+	st, _ = m2.Status(k)
+	assert.Empty(t, st.Recovery.Owed, "%+v", st.Recovery.Owed)
+	assert.Empty(t, storedKeys(t, mem, "run/"))
+	assert.True(t, st.Recovery.Done, "%+v", st.Recovery)
 }
 
 // TestStoreRollbackObligationE2E (design §6.3): a rollback whose
@@ -415,14 +467,25 @@ func TestStoreRollbackObligationE2E(t *testing.T) {
 		assert.Len(t, storedKeys(t, mem, "run/"), 1)
 		st, _ := m.Status(cfg.Key())
 		assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedRollback), "%+v", st.Recovery.Owed)
+
+		// The next Process does the owed rollback first (§6.7.3.2): the
+		// endpoint is closed and the run record ends.
+		res = process(t, m, uafx.ActionRemoveConnections, cfg.Key())
+		require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
+		assert.Empty(t, a.endpoints())
+		assert.Empty(t, b.endpoints())
+		assert.Empty(t, storedKeys(t, mem, "run/"))
+		st, _ = m.Status(cfg.Key())
+		assert.Empty(t, st.Recovery.Owed)
 	})
 	t.Run("close fails", func(t *testing.T) {
 		t.Parallel()
 		a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
 		mem := &fxstore.MemoryStore{}
 		d := newHookDialer()
+		var closeOK atomic.Bool
 		d.hook = func(_ fxcm.ServerAddress, req *ua.CallMethodRequest) (bool, error) {
-			if len(req.InputArguments) == 2 {
+			if len(req.InputArguments) == 2 && !closeOK.Load() {
 				return false, ua.StatusBadCommunicationError // CloseConnections
 			}
 			return true, nil
@@ -442,6 +505,43 @@ func TestStoreRollbackObligationE2E(t *testing.T) {
 		}
 		st, _ := m.Status(cfg.Key())
 		assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedRollback), "%+v", st.Recovery.Owed)
+
+		// The close of the rollback has an unknown outcome (decision
+		// C3-D13): its endpoints are Unresolved and its intent stays, so
+		// that no run sends it again, even once the AC would answer. The
+		// re-proof finds them in place: the postcondition of Remove TRUE
+		// does not hold.
+		closeOK.Store(true)
+		var closes atomic.Int32
+		d.hook = func(_ fxcm.ServerAddress, req *ua.CallMethodRequest) (bool, error) {
+			if len(req.InputArguments) == 2 {
+				closes.Add(1)
+			}
+			return true, nil
+		}
+		res = process(t, m, uafx.ActionRemoveConnections, cfg.Key())
+		require.Equal(t, fxcm.StateError, res.State)
+		assert.Zero(t, closes.Load(), "an ambiguous close is never sent again")
+		assert.NotEmpty(t, stored[fxcm.StoredCall](t, mem, "call/"))
+		st, _ = m.Status(cfg.Key())
+		assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedRollback), "%+v", st.Recovery.Owed)
+		require.True(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
+		assert.NotEmpty(t, append(a.endpoints(), b.endpoints()...))
+
+		// Settle, the administrative decision, makes them KnownOwned and
+		// completes the intent: the next Process does the owed rollback.
+		for _, e := range st.Endpoints {
+			if e.Class == fxcm.Unresolved {
+				require.NoError(t, m.Settle(cfg.Key(), e.Endpoint, fxcm.SettleOwned))
+			}
+		}
+		res = process(t, m, uafx.ActionRemoveConnections, cfg.Key())
+		require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
+		assert.Empty(t, a.endpoints())
+		assert.Empty(t, b.endpoints())
+		assert.Empty(t, storedKeys(t, mem, "run/"))
+		st, _ = m.Status(cfg.Key())
+		assert.Empty(t, st.Recovery.Owed)
 	})
 }
 
@@ -530,6 +630,25 @@ func TestStoreUpdateTransactionE2E(t *testing.T) {
 					assert.Greater(t, r.Generation, max(tx.Ops[0].New, tx.Ops[1].New), "reserved generations are not reused")
 				}
 			}
+
+			// A Reconcile of the set that owes it completes the change
+			// with the generations it reserved: the Replace and the Add.
+			started := m.Reconcile(fxcm.SetKey{Name: "Old"})
+			require.NoError(t, started.Err)
+			_, err = started.Run.Wait(context.Background())
+			require.NoError(t, err)
+			_, ok = m.Status(fxcm.SetKey{Name: "New"})
+			assert.True(t, ok, "the Add of the change")
+			st, _ = m.Status(fxcm.SetKey{Name: "Old"})
+			assert.Empty(t, st.Recovery.Owed, "%+v", st.Recovery.Owed)
+			gens := map[string]uint64{}
+			for _, r := range stored[fxcm.StoredSet](t, mem, "set/") {
+				gens[r.Name] = r.Generation
+			}
+			assert.Equal(t, tx.Ops[0].New, gens["Old"])
+			assert.Equal(t, tx.Ops[1].New, gens["New"])
+			assert.Empty(t, storedKeys(t, mem, "tx/"))
+			assert.Empty(t, storedKeys(t, mem, "run/"))
 		})
 	}
 }
@@ -638,11 +757,33 @@ func TestStoreAmbiguousE2E(t *testing.T) {
 			}
 			require.Len(t, calls, 1, "the intent of the unproven call stays")
 			assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedCall), "%+v", st.Recovery.Owed)
-			started := m.Process(uafx.ActionEstablishConnectionsEnabled, k)
-			requireInvalidState(t, started[0].Err)
-			if !tc.method(&ua.CallMethodRequest{InputArguments: make([]*ua.Variant, 2)}) {
+			isClose := tc.method(&ua.CallMethodRequest{InputArguments: make([]*ua.Variant, 2)})
+			if !isClose {
 				assert.True(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
 			}
+			// The next Process re-proves the unproven call first (design
+			// §6.3), never resends it.
+			d.result = nil
+			res := process(t, m, uafx.ActionEstablishConnectionsEnabled, k)
+			st, _ = m.Status(k)
+			if isClose {
+				// The AC did close them: the re-proof finds them
+				// verifiably absent, the postcondition of Remove TRUE
+				// (decision C3-D13), so the intent is complete and the
+				// run creates them again.
+				assert.Empty(t, stored[fxcm.StoredCall](t, mem, "call/"))
+				assert.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
+				assert.Len(t, a.endpoints(), 1)
+				assert.Len(t, b.endpoints(), 1)
+				return
+			}
+			// The Names of the establish stay Unresolved: the run fails
+			// them, creates nothing again and the intent stays.
+			assert.Equal(t, fxcm.StateError, res.State)
+			assert.Empty(t, res.Created)
+			assert.Len(t, stored[fxcm.StoredCall](t, mem, "call/"), 1)
+			assert.True(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
+			assert.LessOrEqual(t, len(a.endpoints())+len(b.endpoints()), 2, "nothing created twice")
 		})
 	}
 }
@@ -712,10 +853,16 @@ func TestStorePersistentACE2E(t *testing.T) {
 			}
 			_, err = m.Replace(context.Background(), conf)
 			requireInvalidState(t, err)
-			// No Reconcile may forget it either.
-			requireInvalidState(t, m.Reconcile(k).Err)
+			// No Reconcile may forget it either: it re-proves the Name,
+			// and absence proves nothing for a persistent endpoint.
+			started := m.Reconcile(k)
+			require.NoError(t, started.Err)
+			rres, err := started.Run.Wait(context.Background())
+			require.NoError(t, err)
+			assert.Equal(t, fxcm.StateError, rres.State, "the call stays owed")
 			st, _ = m.Status(k)
 			assert.True(t, hasName(st, "ToA", fxcm.Unresolved), "%+v", st.Endpoints)
+			assert.Len(t, stored[fxcm.StoredCall](t, mem, "call/"), 1)
 		})
 	}
 }
