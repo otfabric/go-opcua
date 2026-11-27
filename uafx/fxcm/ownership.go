@@ -30,6 +30,13 @@ const (
 	// Unresolved: this ConnectionManager may have made it, without proof.
 	// Reported, never closed, until a Reconcile or Settle decides it.
 	Unresolved
+	// Unverified: a record a Manager with a Store loaded at its start, not
+	// verified against its AutomationComponent since (design
+	// docs/design/uafx-persistent-connections.md §6.4, decision C3-D9).
+	// Treated like Unresolved: reported, never closed, adopted or changed;
+	// an establish fails the Connection whose Name it holds. Settle
+	// decides it as it decides an Unresolved one.
+	Unverified
 )
 
 func (o Ownership) String() string {
@@ -42,6 +49,8 @@ func (o Ownership) String() string {
 		return "TakenPreconfigured"
 	case Unresolved:
 		return "Unresolved"
+	case Unverified:
+		return "Unverified"
 	}
 	return "Ownership(" + strconv.Itoa(int(o)) + ")"
 }
@@ -129,6 +138,8 @@ func Classify(rec *EndpointRecord, obs *Observed, appURI string) Ownership {
 			return TakenPreconfigured
 		case Unresolved:
 			return Unresolved
+		case Unverified:
+			return Unverified
 		case Foreign:
 		}
 	}

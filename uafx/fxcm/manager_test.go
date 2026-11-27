@@ -497,7 +497,8 @@ func TestClaimReserves(t *testing.T) {
 	_, err = m.claim(cfg.Key())
 	assert.ErrorIs(t, err, ua.StatusBadInvalidState)
 
-	require.NoError(t, m.removeConnections(context.Background(), s))
+	_, err = m.removeConnections(context.Background(), s, nil)
+	require.NoError(t, err)
 	st, _ = m.Status(cfg.Key())
 	require.NotNil(t, st.Last)
 	assert.Equal(t, ActionRemoveSet, st.Last.Action())
@@ -532,10 +533,29 @@ func TestCloseWaitsForClaim(t *testing.T) {
 	case <-time.After(50 * time.Millisecond):
 	}
 	assert.Error(t, m.ctx.Err(), "Close stops what the claim does")
-	require.NoError(t, m.removeConnections(context.Background(), s))
+	_, err = m.removeConnections(context.Background(), s, nil)
+	require.NoError(t, err)
 	m.wg.Done()
 	<-closed
 	assert.ErrorIs(t, m.Remove(context.Background(), KeyOf(named("B"))), ua.StatusBadShutdown)
 	_, err = m.Replace(context.Background(), named("B"))
 	assert.ErrorIs(t, err, ua.StatusBadShutdown)
+}
+
+// TestReplaceSetOneStep: replaceSet publishes the new Config, its
+// generation and fingerprint, and releases the claim in one step: no
+// reader sees the set unclaimed with the old generation.
+func TestReplaceSetOneStep(t *testing.T) {
+	old, err := NewConfig(validConf())
+	require.NoError(t, err)
+	s := newSet(old)
+	s.gen, s.fp, s.held = 3, []byte{3}, true
+	next, err := NewConfig(validConf())
+	require.NoError(t, err)
+	(&Manager{}).replaceSet(s, next, 7, []byte{7})
+	assert.Same(t, next, s.cfg)
+	assert.Equal(t, uint64(7), s.gen)
+	assert.Equal(t, []byte{7}, s.fp)
+	assert.False(t, s.held)
+	assert.Nil(t, s.current)
 }

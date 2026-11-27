@@ -23,7 +23,7 @@ behaviour you may notice, and the deviations of peers are in
   server does not have).
   The ConnectionManager (`uafx/fxcm`, served by
   `fxserver.EnableConnectionManager`) keeps its sets and the records of its
-  endpoints in memory; it has no ConnectionManagerLog, lists no
+  endpoints in memory, and with a Store also durably; it has no ConnectionManagerLog, lists no
   GlobalDiscoveryServers, reflects no Qos or ReceiveQos of an edited flow
   onto the PubSub configuration; it configures no SecurityKeyServer,
   asks no GDS, resolves no AliasNames, generates no PubSub configuration
@@ -34,8 +34,16 @@ behaviour you may notice, and the deviations of peers are in
   AutomationComponent (with `ConnectionOptions.Store`) keep the endpoints,
   their control and the PubSub components they reference, not
   ConfigurationData or the VariableStorage Methods (§6.4.6), and not the
-  rest of the server's PubSub configuration (OPC 10000-14 §9.1.2); the
-  ConnectionManager persists nothing. Enable and Disable of a persisted
+  rest of the server's PubSub configuration (OPC 10000-14 §9.1.2). With a
+  Store the ConnectionManager keeps its sets, endpoint records with their
+  evidence and run journal, but after a restart verifies no record (all
+  are Unverified and never closed or adopted) and executes no owed work:
+  it reports it and refuses everything that acts on the endpoints of a
+  set that owes work, closes and Settle included, and of every set that
+  takes part in its set change or shares a server with it (a CommitEdit
+  too), until recovery (C3.3) tells which are independent
+  ([docs/uafx.md](docs/uafx.md#persistence-of-the-connectionmanager)).
+  Enable and Disable of a persisted
   component with the Methods of its Status Object are not persisted: after
   a restart its enablement follows its endpoints. Without a Store, an
   ElementModify by another client (CloseAndUpdate) of a reader or writer

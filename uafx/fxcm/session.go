@@ -9,6 +9,7 @@ import (
 
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uapolicy"
 )
 
 // ServerAddress is where a ConnectionManager reaches the server of an
@@ -51,6 +52,36 @@ type Session interface {
 	TranslateBrowsePaths(ctx context.Context, req *ua.TranslateBrowsePathsToNodeIDsRequest) (*ua.TranslateBrowsePathsToNodeIDsResponse, error)
 	Call(ctx context.Context, req *ua.CallMethodRequest) (*ua.CallMethodResult, error)
 	Close(ctx context.Context) error
+}
+
+// ServerIdentity is the identity of the server a Session is connected to,
+// the evidence of design §6.5 that a ConnectionManager with a Store keeps
+// with its endpoint records and call intents.
+type ServerIdentity struct {
+	// ApplicationURI is the ApplicationUri of the server.
+	ApplicationURI string
+	// CertificateThumbprint is the SHA-1 thumbprint of the certificate of
+	// the server (OPC 10000-6 §6.7.4) over a secured channel, nil over
+	// SecurityMode None.
+	CertificateThumbprint []byte
+	// Authenticated reports that CertificateThumbprint is of the
+	// certificate the secure channel was opened with, whose private key
+	// the server proved it holds (OPC 10000-6 §6.7.4: the
+	// OpenSecureChannel response is signed with it), and that
+	// ApplicationURI is bound to it. Without it the identity is what the
+	// server reported, which is evidence but not proof.
+	Authenticated bool
+}
+
+// IdentifiedSession is a Session that knows the identity of its server.
+// The sessions of ClientDialer are. Of another Session the Manager reads
+// the ApplicationUri from Server.ServerArray (OPC 10000-5 §6.3.1): the
+// identity the server reports, never authenticated, with no thumbprint.
+// The records keep which of the two they have (design §6.5); certificate
+// evidence that is unavailable is recorded as such, not left out.
+type IdentifiedSession interface {
+	Session
+	ServerIdentity() ServerIdentity
 }
 
 // ClientDialer is the default Dialer: GetEndpoints on the Address, the
@@ -96,7 +127,37 @@ func (d *ClientDialer) Dial(ctx context.Context, addr ServerAddress) (Session, e
 		_ = c.Close(context.WithoutCancel(ctx))
 		return nil, fmt.Errorf("fxcm: connect %s: %w", addr.Address, err)
 	}
-	return &clientSession{c: c}, nil
+	uri := ""
+	if ep.Server != nil {
+		uri = ep.Server.ApplicationURI
+	}
+	return &clientSession{c: c, peer: c, uri: uri}, nil
+}
+
+// peerSource is the part of an opcua.Client the identity is read from.
+type peerSource interface {
+	PeerCertificate() (opcua.PeerCertificate, bool)
+}
+
+// identityOf returns the ServerIdentity of the channel peer: authenticated
+// only when the client opened its active channel with message security
+// and validated the certificate of the server, bound to the ApplicationUri
+// of the endpoint (OPC 10000-6 §6.2.2, §6.7.4). The endpoint the client
+// selected is not that evidence: its Options may change the security, and
+// a reconnect opens another channel, possibly with a renewed certificate.
+// Anything less is the identity the server reported (uri), with the
+// thumbprint of the channel's certificate when it has one.
+func identityOf(src peerSource, uri string) ServerIdentity {
+	id := ServerIdentity{ApplicationURI: uri}
+	pc, ok := src.PeerCertificate()
+	if !ok || len(pc.Certificate) == 0 {
+		return id
+	}
+	id.CertificateThumbprint = uapolicy.Thumbprint(pc.Certificate)
+	if pc.Verified && pc.ApplicationURI != "" && pc.ApplicationURI == uri {
+		id.Authenticated = true
+	}
+	return id
 }
 
 // checkServerURI checks the ServerUri of addr against the ApplicationUri of
@@ -117,7 +178,16 @@ func checkServerURI(addr ServerAddress, ep *ua.EndpointDescription) error {
 }
 
 // clientSession is a Session of an opcua.Client.
-type clientSession struct{ c *opcua.Client }
+type clientSession struct {
+	c    *opcua.Client
+	peer peerSource
+	uri  string // the ApplicationUri of the selected endpoint
+}
+
+// ServerIdentity implements IdentifiedSession: the identity of the peer of
+// the client's active secure channel, read anew at every call
+// (identityOf).
+func (s *clientSession) ServerIdentity() ServerIdentity { return identityOf(s.peer, s.uri) }
 
 func (s *clientSession) NamespaceArray(ctx context.Context) ([]string, error) {
 	return s.c.NamespaceArray(ctx)

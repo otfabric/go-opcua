@@ -779,6 +779,14 @@ c, _ := opcua.NewClient(endpoint,
 
 > **Warning:** `InsecureSkipVerify` disables all certificate validation. The certificate is still parsed for its public key, but trust chain, expiration, and usage are not checked. Never use this in production.
 
+`Client.PeerCertificate` returns the server certificate of the active
+secure channel as the client checked it when it opened that channel: the
+certificate, the security mode and policy, whether it was validated
+(`Verified`, false with `InsecureSkipVerify` or without message security)
+and the ApplicationUri its URI SAN was checked against (OPC 10000-6
+§6.2.2). A reconnect opens a new channel, validated anew, possibly with a
+renewed certificate: read it again for each use.
+
 ---
 
 ## Reverse Connect

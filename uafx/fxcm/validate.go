@@ -5,6 +5,7 @@ package fxcm
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"slices"
 
 	"github.com/otfabric/go-opcua/ua"
@@ -239,6 +240,12 @@ func (c *Config) buildEndpoint(k *checker, p string, cn *connection, number int,
 	}
 	if ep.Name == "" {
 		k.add(p+".Name", "§6.12", "empty: the BrowseName of the ConnectionEndpoint to create")
+	}
+	if t := ep.CleanupTimeout; ep.IsPersistent && (t >= 0 || math.IsNaN(t) || math.IsInf(t, 0)) {
+		// A persistent endpoint is never cleaned up (§6.6.2: a negative
+		// CleanupTimeout disables the cleanup); zero, positive, NaN and
+		// infinite values are refused, never normalized (decision C3-D4).
+		k.add(p+".CleanupTimeout", libInterp+": §6.6.2, §6.12", "%v with IsPersistent TRUE: a persistent endpoint needs a negative, finite CleanupTimeout", t)
 	}
 	selection(k, p+".Name", ep.Name, ep.NameSelection, flag(ep.NameModify))
 	if ep.ConnectionEndpointTypeID == nil {

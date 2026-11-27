@@ -4,6 +4,8 @@ package fxcm
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 	"sort"
@@ -15,6 +17,7 @@ import (
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
+	"github.com/otfabric/go-opcua/uafx/fxstore"
 )
 
 // Defaults of Options (design §4.3, decision Q3).
@@ -66,6 +69,16 @@ type Options struct {
 	// Logger logs at Debug what the Observer receives, and failures. Nil:
 	// slog.Default().
 	Logger *slog.Logger
+	// Store makes the Manager keep its sets, the records of its
+	// endpoints, the journal of its runs and the intents of its calls
+	// (design docs/design/uafx-persistent-connections.md §6): a set
+	// change is durable before it is visible, and New loads them, every
+	// endpoint record Unverified. A store that cannot be loaded, belongs
+	// to another ApplicationURI or has a newer schema fails New. Nil:
+	// memory only.
+	Store fxstore.Store
+	// StoreTimeout bounds each store operation. 0: 10 s.
+	StoreTimeout time.Duration
 }
 
 // RetryPolicy is when a set in Error is processed again: after Initial,
@@ -136,6 +149,19 @@ type Manager struct {
 	// statusOf reads the Status of an endpoint for the monitor
 	// (readStatus; a test replaces it before the monitor starts).
 	statusOf func(ctx context.Context, r *record) (uafx.ConnectionEndpointStatus, bool, error)
+
+	// p keeps the Manager in Options.Store; nil without one.
+	p *persistence
+	// crash, when set by a test, runs at the points of the journal
+	// (crash_test.go).
+	crash atomic.Pointer[func(string)]
+}
+
+// crashPoint runs the crash hook of the tests at a point of the journal.
+func (m *Manager) crashPoint(name string) {
+	if f := m.crash.Load(); f != nil {
+		(*f)(name)
+	}
 }
 
 // set is a ConnectionConfigurationSet of a Manager.
@@ -163,6 +189,30 @@ type set struct {
 	// held: a Replace, Remove or Update claimed the set (claim); no run or
 	// edit starts on it until the change is made or the claim released.
 	held bool
+	// gen and fp are the generation and the fingerprint of the committed
+	// record of cfg, with a Store (design §6.1).
+	gen uint64
+	fp  []byte
+	// pending is a commit whose write had an unknown outcome, until the
+	// Manager has followed the store.
+	pending *pendingCommit
+}
+
+// pendingCommit is the commit of the edit edit as cfg, written at
+// generation gen with fingerprint fp, whose outcome is unknown: when the
+// store shows it, the edit ends with that Version; otherwise it stays
+// open.
+type pendingCommit struct {
+	cfg  *Config
+	gen  uint64
+	fp   []byte
+	edit *Edit
+}
+
+// errCommitPending refuses a change of an edit whose commit is being
+// settled.
+func errCommitPending(key SetKey) error {
+	return managerError(ua.StatusBadInvalidState, "the outcome of the commit of the set %s is being settled", key)
 }
 
 // record is an EndpointRecord with what closing the endpoint needs.
@@ -173,6 +223,24 @@ type record struct {
 	// state is the last Status the monitor read, valid with monitored.
 	state     uafx.ConnectionEndpointStatus
 	monitored bool
+	// The evidence of design §6.1 and §6.5, with a Store. nsa is the
+	// NamespaceArray of the server the NodeIds are of; gen and fp the
+	// generation and fingerprint of the set configuration of the run that
+	// made or found the endpoint, epfp the SHA-256 of the
+	// ConnectionEndpointConfiguration it sent; server the identity of the
+	// server; created the Diagnostics CreationTime of the endpoint (zero
+	// when not exposed); cmURI the ConnectionManagerApplicationUri read
+	// from it, with cmObserved. stored is the class a loaded Unverified
+	// record was written with.
+	nsa        []string
+	gen        uint64
+	fp         []byte
+	epfp       []byte
+	server     serverEvidence
+	created    time.Time
+	cmURI      string
+	cmObserved bool
+	stored     Ownership
 }
 
 func recordKey(addr ServerAddress, fe *ua.NodeID, name string) string {
@@ -234,6 +302,14 @@ func New(opts Options) (*Manager, error) {
 		sets: map[string]*set{},
 	}
 	m.places.m = map[string]chan struct{}{}
+	if opts.Store != nil {
+		p, err := openPersistence(m, opts)
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("fxcm: the store: %w", err)
+		}
+		m.p = p
+	}
 	if opts.Monitor != nil {
 		m.monitorStop = make(chan struct{})
 		m.wg.Add(1)
@@ -338,6 +414,9 @@ type Status struct {
 	// Endpoints are the endpoints the Manager made, took or may have made
 	// for the set (design §5.3).
 	Endpoints []EndpointRecord
+	// Recovery is what the set owes after a restart and how far its
+	// records are verified, with a Store (design §6.4); nil without one.
+	Recovery *Recovery
 }
 
 // Status returns the live state of a set.
@@ -348,7 +427,21 @@ func (m *Manager) Status(key SetKey) (Status, bool) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.status(m.opts.Monitor != nil), true
+	st := s.status(m.opts.Monitor != nil)
+	if m.p != nil {
+		r := m.p.recovery(s)
+		st.Recovery = &r
+	}
+	return st, true
+}
+
+// StoreStatus returns the state of the store of the Manager, false without
+// a Store.
+func (m *Manager) StoreStatus() (StoreStatus, bool) {
+	if m.p == nil {
+		return StoreStatus{}, false
+	}
+	return m.p.status(), true
 }
 
 func (s *set) status(monitored bool) Status {
@@ -486,19 +579,43 @@ func (m *Manager) Replace(ctx context.Context, conf *uafx.ConnectionConfiguratio
 		return nil, err
 	}
 	defer m.wg.Done()
-	if err := m.removeConnections(ctx, s); err != nil {
+	cs := []setChange{{key: cfg.key, next: cfg, existing: true}}
+	tx, err := m.plan(cs, []uafx.ConnectionConfigurationSetOperation{uafx.ElementReplace})
+	if err != nil {
+		m.release(s)
 		return nil, err
 	}
-	m.replaceSet(s, cfg)
+	run, err := m.removeConnections(ctx, s, tx)
+	if err != nil {
+		return nil, err
+	}
+	if m.p != nil {
+		defer m.endRuns(run)
+		cs[0].gen = tx.ops[0].New
+		gens, fps, err := m.p.switchSets(cs, []RunID{run})
+		if err != nil {
+			// The Connections are closed; the old set stays, as the
+			// store has it, and its run record shows the switch owed.
+			m.release(s)
+			return nil, err
+		}
+		m.replaceSet(s, cfg, gens[0], fps[0])
+	} else {
+		m.replaceSet(s, cfg, 0, nil)
+	}
 	m.observe(Event{Kind: EventSetReplaced, Set: cfg.key, Version: cfg.version})
 	return cfg, nil
 }
 
-// replaceSet puts cfg in the claimed set s, whose Connections are closed,
-// and releases the claim.
-func (m *Manager) replaceSet(s *set, cfg *Config) {
+// replaceSet puts cfg, committed at generation gen with fingerprint fp
+// (0 and nil without a Store), in the claimed set s, whose Connections are
+// closed, and releases the claim: in one step under the lock of s, so that
+// nothing sees the new Config with the old generation, or the set
+// unclaimed before it has them.
+func (m *Manager) replaceSet(s *set, cfg *Config, gen uint64, fp []byte) {
 	s.mu.Lock()
 	s.cfg, s.state, s.diags, s.records, s.lastEstablish, s.retries = cfg, StateReady, newDiagnostics(cfg), map[string]*record{}, nil, 0
+	s.gen, s.fp = gen, fp
 	s.current, s.held = nil, false
 	s.mu.Unlock()
 }
@@ -513,8 +630,22 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 		return err
 	}
 	defer m.wg.Done()
-	if err := m.removeConnections(ctx, s); err != nil {
+	cs := []setChange{{key: key, existing: true}}
+	tx, err := m.plan(cs, []uafx.ConnectionConfigurationSetOperation{uafx.ElementRemove})
+	if err != nil {
+		m.release(s)
 		return err
+	}
+	run, err := m.removeConnections(ctx, s, tx)
+	if err != nil {
+		return err
+	}
+	if m.p != nil {
+		defer m.endRuns(run)
+		if _, _, err := m.p.switchSets(cs, []RunID{run}); err != nil {
+			m.release(s)
+			return err
+		}
 	}
 	m.mu.Lock()
 	delete(m.sets, keyString(key))
@@ -537,6 +668,11 @@ func (m *Manager) Remove(ctx context.Context, key SetKey) error {
 // caller calls m.wg.Done when it is finished; a closed Manager is
 // ua.StatusBadShutdown.
 func (m *Manager) claim(key SetKey) (*set, error) {
+	if m.p != nil {
+		if err := m.p.checkRemote(key); err != nil {
+			return nil, err
+		}
+	}
 	m.mu.Lock()
 	closed := m.closed
 	s := m.sets[keyString(key)]
@@ -588,17 +724,46 @@ func (m *Manager) beginRemove(s *set) (*Run, State) {
 // removeConnections runs the remove run of the claimed set s for a Replace
 // or Remove: it closes the endpoints of s. On a failure the set stays in
 // Error and the claim is released. Close stops it as it stops a run.
-func (m *Manager) removeConnections(ctx context.Context, s *set) error {
+func (m *Manager) removeConnections(ctx context.Context, s *set, tx *txPlan) (RunID, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer context.AfterFunc(m.ctx, cancel)()
 	r, prev := m.beginRemove(s)
+	r.tx = tx
 	res := m.execute(ctx, s, r, prev)
 	if res.State == StateError {
 		m.release(s)
-		return managerError(firstStatus(res.Failures), "the Connections of the set %s were not all closed", r.key)
+		return r.id, managerError(firstStatus(res.Failures), "the Connections of the set %s were not all closed", r.key)
 	}
-	return nil
+	return r.id, nil
+}
+
+// plan is, with a Store, the set change cs (operations ops) as the run
+// that closes the first closing set journals it (design §6.2); nil
+// without a Store.
+func (m *Manager) plan(cs []setChange, ops []uafx.ConnectionConfigurationSetOperation) (*txPlan, error) {
+	if m.p == nil {
+		return nil, nil
+	}
+	tp, err := m.planOps(cs, ops)
+	if err != nil {
+		return nil, managerError(ua.StatusBadEncodingError, "the set change does not encode: %v", err)
+	}
+	return tp, nil
+}
+
+// endRuns ends the remove runs a set change kept active until its switch
+// was written or failed: what they leave in the store is owed work.
+func (m *Manager) endRuns(runs ...RunID) {
+	if m.p == nil {
+		return
+	}
+	for _, r := range runs {
+		m.p.activate(r, false)
+	}
+	m.p.mu.Lock()
+	m.p.refreshOwed()
+	m.p.mu.Unlock()
 }
 
 // release ends the claim of s without a change.
@@ -806,8 +971,46 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 		}
 		m.mu.Unlock()
 	}
-	for _, h := range closing {
-		if err := m.removeConnections(ctx, h.s); err != nil {
+	cs := make([]setChange, len(ops))
+	opKinds := make([]uafx.ConnectionConfigurationSetOperation, len(ops))
+	for i, op := range ops {
+		opKinds[i] = op.Op
+		switch op.Op {
+		case uafx.ElementAdd:
+			cs[i] = setChange{key: cfgs[i].key, next: cfgs[i]}
+		case uafx.ElementRemove:
+			cs[i] = setChange{key: KeyOf(op.Conf), existing: true}
+		case uafx.ElementReplace:
+			cs[i] = setChange{key: cfgs[i].key, next: cfgs[i], existing: true}
+		}
+	}
+	var tx *txPlan
+	if len(closing) > 0 {
+		// The whole change is the parent transaction, journaled by the
+		// first remove run before any close (design §6.2): a crash
+		// between the closes and the switch leaves it owed.
+		var err error
+		if tx, err = m.plan(cs, opKinds); err != nil {
+			unreserve()
+			for j := range results {
+				results[j] = err
+			}
+			for _, h := range held {
+				m.unclaim(h.s)
+			}
+			return false, results
+		}
+	}
+	var runs []RunID
+	defer func() { m.endRuns(runs...) }()
+	for n, h := range closing {
+		var t *txPlan
+		if n == 0 {
+			t = tx
+		}
+		run, err := m.removeConnections(ctx, h.s, t)
+		runs = append(runs, run)
+		if err != nil {
 			// The close left h in Error and released it; the other
 			// claims are undone by fail.
 			unreserve()
@@ -819,16 +1022,51 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 	if m.beforeCommit != nil {
 		m.beforeCommit()
 	}
+	m.mu.Lock()
+	closed := m.closed
+	m.mu.Unlock()
+	if closed && len(closing) == 0 {
+		// Close began while the update ran and nothing irreversible
+		// happened yet: nothing is applied.
+		unreserve()
+		return fail(0, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed"))
+	}
+	var gens []uint64
+	var fps [][]byte
+	if m.p != nil {
+		// The whole batch in one write, before any of it is visible
+		// (design §6.2), with the generations its transaction reserved.
+		if tx != nil {
+			for i := range cs {
+				cs[i].gen = tx.ops[i].New
+			}
+		}
+		var err error
+		for _, c := range cs {
+			if c.next != nil && !c.existing {
+				if err = m.p.checkKey(c.key); err != nil {
+					break
+				}
+			}
+		}
+		if err == nil {
+			gens, fps, err = m.p.switchSets(cs, runs)
+		}
+		if err != nil {
+			unreserve()
+			for j := range results {
+				results[j] = err
+			}
+			for _, h := range held {
+				m.unclaim(h.s)
+			}
+			return false, results
+		}
+	}
 	var events []Event
 	m.mu.Lock()
 	for _, a := range adds {
 		delete(m.reserved, a)
-	}
-	if m.closed && len(closing) == 0 {
-		// Close began while the update ran and nothing irreversible
-		// happened yet: nothing is applied.
-		m.mu.Unlock()
-		return fail(0, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed"))
 	}
 	for _, h := range held {
 		if ops[h.i].Op == uafx.ElementRemove {
@@ -837,7 +1075,11 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 	}
 	for i, op := range ops {
 		if op.Op == uafx.ElementAdd {
-			m.sets[keyString(cfgs[i].key)] = newSet(cfgs[i])
+			ns := newSet(cfgs[i])
+			if gens != nil {
+				ns.gen, ns.fp = gens[i], fps[i]
+			}
+			m.sets[keyString(cfgs[i].key)] = ns
 		}
 	}
 	m.mu.Unlock()
@@ -863,7 +1105,12 @@ func (m *Manager) updateComplete(ctx context.Context, ops []Operation, cfgs []*C
 			h.s.removed, h.s.current, h.s.held = true, nil, false
 			h.s.mu.Unlock()
 		case uafx.ElementReplace:
-			m.replaceSet(h.s, cfgs[h.i])
+			var gen uint64
+			var fp []byte
+			if gens != nil {
+				gen, fp = gens[h.i], fps[h.i]
+			}
+			m.replaceSet(h.s, cfgs[h.i], gen, fp)
 		default:
 			// Only removes and replaces are claimed.
 		}
@@ -891,13 +1138,34 @@ func (m *Manager) finishClaim(s *set) {
 	m.observe(Event{Kind: EventTransition, Set: r.key, Run: r.id, Transition: tr, Action: r.action})
 }
 
+// addConfig adds the set of cfg. With a Store the set record is committed
+// before the set is visible (design §6.2); the key is reserved meanwhile.
 func (m *Manager) addConfig(cfg *Config) error {
+	k := keyString(cfg.key)
 	m.mu.Lock()
 	if err := m.addCheckLocked(cfg.key); err != nil {
 		m.mu.Unlock()
 		return err
 	}
-	m.sets[keyString(cfg.key)] = newSet(cfg)
+	s := newSet(cfg)
+	if m.p != nil {
+		if m.reserved == nil {
+			m.reserved = map[string]bool{}
+		}
+		m.reserved[k] = true
+		m.mu.Unlock()
+		err := m.p.checkKey(cfg.key)
+		if err == nil {
+			s.gen, s.fp, err = m.p.putConfig(cfg)
+		}
+		m.mu.Lock()
+		delete(m.reserved, k)
+		if err != nil {
+			m.mu.Unlock()
+			return err
+		}
+	}
+	m.sets[k] = s
 	m.mu.Unlock()
 	m.observe(Event{Kind: EventSetAdded, Set: cfg.key, Version: cfg.version})
 	return nil
@@ -987,6 +1255,15 @@ func (m *Manager) start(k SetKey, action uafx.FxProcess, auto bool) Started {
 	if action != ActionReconcile && Activity(action) == 0 {
 		return Started{Err: managerError(ua.StatusBadNotSupported, "the action %v", action)}
 	}
+	if m.p != nil {
+		// Owed work of the journal blocks every run of its set, closes
+		// included: a close could invalidate the evidence of an
+		// unproven call, a component it shares or a pending set change,
+		// and proving it cannot is recovery (design §6.3, stage C3.3).
+		if err := m.p.checkRemote(k); err != nil {
+			return Started{Err: err}
+		}
+	}
 	// The run is counted under m.mu, so that Close, which sets closed
 	// under it and then waits, sees it.
 	m.mu.Lock()
@@ -1060,6 +1337,14 @@ func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error {
 	if verdict != SettleOwned && verdict != SettleForeign {
 		return managerError(ua.StatusBadInvalidArgument, "the verdict %d", verdict)
 	}
+	if m.p != nil {
+		// A verdict while the set owes work could contradict the
+		// evidence of an unproven call (design §6.3): refused until
+		// recovery (stage C3.3).
+		if err := m.p.checkRemote(key); err != nil {
+			return err
+		}
+	}
 	s := m.lookup(key)
 	if s == nil {
 		return managerError(ua.StatusBadNoMatch, "no set %s", key)
@@ -1076,12 +1361,19 @@ func (m *Manager) Settle(key SetKey, ep EndpointRef, verdict Verdict) error {
 	case found == nil:
 		s.mu.Unlock()
 		return managerError(ua.StatusBadNoMatch, "no endpoint %v of the set %s", ep, key)
-	case found.Class != Unresolved:
+	case found.Class != Unresolved && found.Class != Unverified:
 		s.mu.Unlock()
 		return managerError(ua.StatusBadInvalidState, "the endpoint %v is %v", ep, found.Class)
 	case s.state == StateProcessing:
 		s.mu.Unlock()
 		return managerError(ua.StatusBadInvalidState, "the set %s is being processed", key)
+	}
+	if m.p != nil {
+		// The verdict is durable before it is the record's (design §6.4).
+		if err := m.p.settleRecord(s, found, verdict); err != nil {
+			s.mu.Unlock()
+			return err
+		}
 	}
 	if verdict == SettleOwned {
 		found.Class = KnownOwned
@@ -1135,6 +1427,14 @@ func (m *Manager) CommitEdit(key SetKey, owner LockOwner) (*Config, bool, error)
 func (m *Manager) commitLocked(s *set, owner LockOwner) (*Config, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.pending != nil {
+		return nil, false, errCommitPending(s.cfg.key)
+	}
+	if m.p != nil && s.edit.Editing() != nil && s.edit.Editing().owner == owner {
+		if err := m.p.checkConfig(s.cfg.key); err != nil {
+			return nil, false, err
+		}
+	}
 	e := s.edit.Editing()
 	if e != nil && e.owner == owner {
 		if next, err := newConfig(e.work, s.cfg.version+1); err == nil {
@@ -1145,9 +1445,25 @@ func (m *Manager) commitLocked(s *set, owner LockOwner) (*Config, bool, error) {
 			}
 		}
 	}
+	open := s.edit.Editing()
 	cfg, ok, err := s.edit.Commit(owner)
 	if err != nil || !ok {
 		return cfg, ok, err
+	}
+	if m.p != nil {
+		// The next Version is durable before it is the set's (design
+		// §6.2); a failed write leaves the edit open.
+		gen, fp, err := m.p.putConfig(cfg)
+		if err != nil {
+			s.edit.edit = open
+			if errors.Is(err, ua.StatusBadInternalError) {
+				// Unknown: the edit and what it committed are kept
+				// until the Manager has followed the store.
+				s.pending = &pendingCommit{cfg: cfg, gen: gen, fp: fp, edit: open}
+			}
+			return nil, false, err
+		}
+		s.gen, s.fp = gen, fp
 	}
 	s.cfg = cfg
 	s.diags = remapDiagnostics(s.diags, cfg)
@@ -1175,6 +1491,10 @@ func (m *Manager) DiscardEdit(key SetKey, owner LockOwner) (bool, error) {
 		return false, managerError(ua.StatusBadNodeIDUnknown, "no set %s", key)
 	}
 	s.mu.Lock()
+	if s.pending != nil {
+		s.mu.Unlock()
+		return false, errCommitPending(key)
+	}
 	ok, err := s.edit.Discard(owner)
 	s.mu.Unlock()
 	if ok {

@@ -94,6 +94,12 @@ func TestMisc_ClientAccessors(t *testing.T) {
 	require.Equal(t, ua.MessageSecurityModeNone, c.SecurityMode())
 	require.Equal(t, opcua.Connected, c.State())
 	require.NotNil(t, c.SecureChannel())
+	// Without message security the channel has no certificate to verify.
+	pc, ok := c.PeerCertificate()
+	require.True(t, ok)
+	require.Nil(t, pc.Certificate)
+	require.False(t, pc.Verified)
+	require.Equal(t, ua.MessageSecurityModeNone, pc.SecurityMode)
 	require.NotNil(t, c.Session())
 	require.NotNil(t, c.Node(f.Int32))
 	require.NotNil(t, c.NodeFromExpandedNodeID(ua.NewExpandedNodeID(f.Int32, "", 0)))

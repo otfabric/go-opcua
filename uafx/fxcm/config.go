@@ -236,3 +236,15 @@ func multicastAddress(eo *ua.ExtensionObject) *bool {
 	m := ip.IsMulticast()
 	return &m
 }
+
+// endpointNamed returns the endpoint configuration of c whose Name is name.
+func (c *Config) endpointNamed(name string) (EndpointRef, bool) {
+	for _, cn := range c.conns {
+		for _, e := range cn.endpoints {
+			if e.conf.Name == name {
+				return EndpointRef{Connection: cn.name, Endpoint: e.number}, true
+			}
+		}
+	}
+	return EndpointRef{}, false
+}

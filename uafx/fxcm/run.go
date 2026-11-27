@@ -18,6 +18,9 @@ type Run struct {
 	action  uafx.FxProcess
 	done    chan struct{}
 	result  *RunResult
+	// tx is, with a Store, the set change this remove run journals
+	// before its closes (design §6.2).
+	tx *txPlan
 }
 
 // ID returns the id of the run, unique and increasing within its Manager.

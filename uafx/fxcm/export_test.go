@@ -22,3 +22,38 @@ func DropSessions(m *Manager) {
 
 // NewPendingRun is a Run that never ends.
 func NewPendingRun() *Run { return &Run{done: make(chan struct{})} }
+
+// SetCrashPoint makes f run at every point of the journal of m; nil
+// removes it.
+func SetCrashPoint(m *Manager, f func(string)) {
+	if f == nil {
+		m.crash.Store(nil)
+		return
+	}
+	m.crash.Store(&f)
+}
+
+// The records of the store, for the tests of what a Manager writes.
+type (
+	StoredSet      = setRecord
+	StoredEndpoint = epStored
+	StoredRun      = runRecord
+	StoredCall     = callRecord
+	StoredTx       = txRecord
+)
+
+// PhaseRollbackRequired is the phase of a run record whose rollback is
+// owed.
+const PhaseRollbackRequired = phaseRollbackRequired
+
+// IdentityReported is the source of an identity the server reported.
+const IdentityReported = identityReported
+
+// DecodeStored decodes the record b of the store.
+func DecodeStored[T any](b []byte) (*T, error) {
+	v := new(T)
+	if err := decodeRecord(b, v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
