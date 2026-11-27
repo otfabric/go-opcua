@@ -122,6 +122,14 @@ func TestDiagnostics_RejectedSessions(t *testing.T) {
 	require.Error(t, err)
 
 	c := login("admin")
+	// The channel of a trusted server certificate, bound to its
+	// ApplicationUri (OPC 10000-6 §6.2.2).
+	pc, ok := c.PeerCertificate()
+	require.True(t, ok)
+	require.True(t, pc.Verified)
+	require.NotEmpty(t, pc.Certificate)
+	require.NotEmpty(t, pc.ApplicationURI)
+	require.Equal(t, ua.MessageSecurityModeSignAndEncrypt, pc.SecurityMode)
 	sum, err := c.ServerDiagnosticsSummary(ctx)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, sum.RejectedSessionCount, uint32(1))
