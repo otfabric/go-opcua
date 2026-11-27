@@ -278,8 +278,19 @@ type ConnectionOptions struct {
 	// be opened, has another owner or a newer format fails
 	// EnableConnections. nil: IsPersistent TRUE fails with
 	// Bad_NotSupported.
+	//
+	// The application owns the Store: it opens it, and it closes it after
+	// Connections.Close returns, which is when nothing writes it any more.
 	Store fxstore.Store
-	// StoreTimeout bounds each store operation; 0 is 10 s.
+	// StoreTimeout bounds each store operation; 0 is 10 s. The store
+	// calls run with a context of their own, bounded by StoreTimeout, not
+	// with the context of the Method call that causes them (a record must
+	// not be cut off half-way by a client that goes away). They run in the
+	// PubSub configuration transaction of the server or under the lock of
+	// the connection Methods: a slow store holds up every change of the
+	// PubSub configuration (CloseAndUpdate, the PubSub Methods,
+	// ChangePubSubConfiguration) and the connection Methods for up to
+	// StoreTimeout each.
 	StoreTimeout time.Duration
 	// StrictNotPersisted enforces the persisted check of
 	// SetCommunicationConfigurationCmd for non-persistent endpoints (Part 81
@@ -292,6 +303,9 @@ type ConnectionOptions struct {
 	// It applies with a Store only.
 	StrictNotPersisted bool
 	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
+
+	// failCapabilities, set by tests, makes setSupportsPersistence fail
+	// with it.
 
 	// Logger logs what the connections do; nil is slog.Default().
 	Logger *slog.Logger
@@ -308,6 +322,9 @@ type Connections struct {
 
 	// call serializes EstablishConnections and CloseConnections, which Part
 	// 81 makes atomic (§6.2.4.3.9.1, §6.2.4.3.10.1, §6.2.5.2).
+
+	// closed: Close ran; the Methods that write the store are refused.
+	// Set with call held.
 
 	// by NodeId
 
@@ -358,7 +375,7 @@ Call it before the server starts; Close stops the Status updates.
 func (c *Connections) Close() error
 ```
 
-Close stops the Status updates. The Methods stay registered.
+Close stops the Status updates, the CleanupTimeout of the endpoints and the settling of the store, and removes the PubSub configuration hook. The Methods stay registered, but once Close returns EstablishConnections and CloseConnections fail with Bad\_InvalidState (Part 81 Table 9: the AutomationComponent cannot process them in its current state), and RetryRestore and Discard return an error: nothing writes the Store afterwards. A call that runs when Close starts finishes first. The application owns the Store and closes it after Close returns.
 
 #### func (Connections) Discard
 
@@ -366,7 +383,7 @@ Close stops the Status updates. The Methods stay registered.
 func (c *Connections) Discard(ctx context.Context, id string) error
 ```
 
-Discard deletes the quarantined record id and releases what it reserves, in one committed Apply. It removes nothing at runtime: a quarantined record restored nothing (design §4.7).
+Discard deletes the quarantined record id and releases what it reserves, in one committed Apply. It removes nothing at runtime: a quarantined record restored nothing (design §4.7). After Close it returns an error.
 
 #### func (Connections) Endpoints
 
@@ -406,7 +423,7 @@ RefreshHealth recomputes the AggregatedOperationalHealth of every AutomationComp
 func (c *Connections) RetryRestore(ctx context.Context, id string) error
 ```
 
-RetryRestore restores the quarantined record id again: when it is restored, its record goes back where the persistent endpoints are, in one committed Apply; else it stays quarantined with the new reason.
+RetryRestore restores the quarantined record id again: when it is restored, its record goes back where the persistent endpoints are, in one committed Apply; else it stays quarantined with the new reason. After Close it returns an error.
 
 #### func (Connections) Status
 
@@ -563,6 +580,11 @@ type PersistenceStatus struct {
 	Records int
 	// Quarantined is the number of quarantined records.
 	Quarantined int
+	// Diverged is the number of required writes the store refused for
+	// good since the start (fxstore.ErrLimit, fxstore.ErrInvalidKey): a
+	// change the runtime made that the records do not follow. The store
+	// is not fenced for them.
+	Diverged int
 }
 ```
 

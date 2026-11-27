@@ -2352,7 +2352,7 @@ func (x *run) adaptOn(ctx context.Context, a *acRun, eps []*epRun) {
 // the PubSubCommunicationConfigurationResult of the one configuration, its
 // ReferenceResult for the reader of each endpoint (one reference per
 // endpoint, in order, as CloseAndUpdate returns them, OPC 10000-14
-// §9.1.3.7.4), and the result of each endpoint. A result that is missing
+// §9.1.3.7.6), and the result of each endpoint. A result that is missing
 // is Bad_UnexpectedError.
 func (x *run) adapted(eps []*epRun, res *uafx.EstablishConnectionsResult) {
 	failEp := func(ep *epRun, fx uafx.FxError, st ua.StatusCode) {

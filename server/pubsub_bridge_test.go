@@ -53,7 +53,7 @@ func bridgeConfig(name string) *ua.PubSubConfiguration2DataType {
 }
 
 // TestPubSubBridge: ReservePubSubIDs and UpdatePubSubConfiguration act as
-// ReserveIds and CloseAndUpdate (Part 14 §9.1.3.7.4, §9.1.3.7.5) for the
+// ReserveIds and CloseAndUpdate (Part 14 §9.1.3.7.6, §9.1.3.7.5) for the
 // session of a Method call, and Revert undoes an update.
 func TestPubSubBridge(t *testing.T) {
 	t.Parallel()
@@ -224,7 +224,7 @@ func TestPubSubBridgeAccess(t *testing.T) {
 // TestPubSubConfigurationTransaction: an AddConnection Method call and a
 // ChangePubSubConfiguration that come while an update is between reading
 // the configuration and applying it wait for the update, so the update
-// does not remove what they add (Part 14 §9.1.3.7.4: elements the update
+// does not remove what they add (Part 14 §9.1.3.7.6 and §9.1.2: elements the update
 // does not reference are left alone).
 func TestPubSubConfigurationTransaction(t *testing.T) {
 	t.Parallel()

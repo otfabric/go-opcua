@@ -207,51 +207,72 @@ func TestWithNamespace(t *testing.T) {
 		require.NotNil(t, m, n.String())
 		require.Equal(t, uint16(400), m.Namespace())
 		require.Equal(t, n.Type() == ua.NodeIDTypeString, m.Type() == ua.NodeIDTypeString)
+		// The identifier is the same, whatever its type.
+		require.Equal(t, n.IntID(), m.IntID(), n.String())
+		require.Equal(t, n.StringID(), m.StringID(), n.String())
+		m2 := withNamespace(m, n.Namespace())
+		require.Equal(t, n.String(), m2.String(), "back in its namespace it is the same NodeId")
 	}
 }
 
 // FuzzDecodeEndpoint: an endpoint record from the store is untrusted: it
 // decodes or fails with errRecord, never panics, and what decodes encodes
-// again.
+// again. The fuzzer mutates the identity header and the body, which the
+// harness frames with their lengths and CRC-32C, so the mutations reach
+// the decoders rather than the checksum; the concatenation of the two is
+// tried as a whole record too, for the framing.
 func FuzzDecodeEndpoint(f *testing.F) {
 	id, body := sampleEndpoint()
-	b, err := encodeEndpoint(id, body)
+	ib, err := ua.Encode(id)
 	if err != nil {
 		f.Fatal(err)
 	}
-	f.Add(b)
-	f.Add(b[:len(b)/2])
-	f.Add([]byte{recordFormat})
-	f.Fuzz(func(t *testing.T, v []byte) {
-		gid, gbody, err := decodeEndpoint(v)
-		if err != nil {
-			require.ErrorIs(t, err, errRecord)
-			return
+	bb, err := ua.Encode(body)
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add(ib, bb)
+	f.Add(ib[:len(ib)/2], bb)
+	f.Add(ib, bb[:len(bb)/2])
+	f.Add([]byte{recordFormat}, []byte{})
+	f.Fuzz(func(t *testing.T, ib, bb []byte) {
+		check := func(v []byte) {
+			gid, gbody, err := decodeEndpoint(v)
+			if err != nil {
+				require.ErrorIs(t, err, errRecord)
+				return
+			}
+			_, err = encodeEndpoint(gid, gbody)
+			require.NoError(t, err)
+			_ = newRemapper(gid.Namespaces, id.Namespaces).remap(gid)
+			_ = newRemapper(gid.Namespaces, id.Namespaces).remap(gbody)
 		}
-		_, err = encodeEndpoint(gid, gbody)
-		require.NoError(t, err)
-		_ = newRemapper(gid.Namespaces, id.Namespaces).remap(gid)
+		check(appendPart(appendPart([]byte{recordFormat}, ib), bb))
+		check(append(append([]byte{}, ib...), bb...))
 	})
 }
 
-// FuzzDecodeComponent: a component record is untrusted as well.
+// FuzzDecodeComponent: a component record is untrusted as well; the
+// harness frames the mutated part with its length and CRC-32C.
 func FuzzDecodeComponent(f *testing.F) {
 	c := &compRecord{Namespaces: []string{"http://opcfoundation.org/UA/"}, Kind: uint8(pubsub.KindWriterGroup), Path: []string{"C", "G"},
 		Config: ua.NewExtensionObject(pubsub.WriterGroup("G", 0x8000, time.Second)), Provenance: provAdopted}
-	b, err := encodeComponent(c)
+	b, err := ua.Encode(c)
 	if err != nil {
 		f.Fatal(err)
 	}
 	f.Add(b)
 	f.Add(b[:len(b)-1])
-	f.Fuzz(func(t *testing.T, v []byte) {
-		r, err := decodeComponent(v)
-		if err != nil {
-			require.ErrorIs(t, err, errRecord)
-			return
+	f.Fuzz(func(t *testing.T, part []byte) {
+		for _, v := range [][]byte{appendPart([]byte{recordFormat}, part), part} {
+			r, err := decodeComponent(v)
+			if err != nil {
+				require.ErrorIs(t, err, errRecord)
+				continue
+			}
+			_, err = encodeComponent(r)
+			require.NoError(t, err)
+			_ = newRemapper(r.Namespaces, c.Namespaces).remap(r)
 		}
-		_, err = encodeComponent(r)
-		require.NoError(t, err)
-		_ = newRemapper(r.Namespaces, c.Namespaces).remap(r)
 	})
 }

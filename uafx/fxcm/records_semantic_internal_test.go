@@ -19,7 +19,7 @@ import (
 
 // semanticState is a valid journal: the counters, the set s, the record of
 // one endpoint, a run of s with one intent.
-func semanticState(t *testing.T) map[string]any {
+func semanticState(t testing.TB) map[string]any {
 	t.Helper()
 	cfg, err := NewConfig(named("s"))
 	require.NoError(t, err)

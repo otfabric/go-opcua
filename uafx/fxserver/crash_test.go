@@ -124,6 +124,10 @@ func runCrashChild(t *testing.T, name, dir, point string) {
 			reached = true
 			break
 		}
+		if strings.HasPrefix(line, "FXDONE") {
+			// The child missed its point: no need to wait for the timer.
+			break
+		}
 	}
 	_ = cmd.Process.Kill()
 	_ = cmd.Wait()
@@ -154,5 +158,6 @@ func TestCrashChild(t *testing.T) {
 	})
 	sc.act(t, f)
 	fmt.Println("FXDONE: the crash point was not reached")
-	select {}
+	_ = os.Stdout.Sync()
+	t.Fatalf("the crash point %s was not reached", sc.point)
 }

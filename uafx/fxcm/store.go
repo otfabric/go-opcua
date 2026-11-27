@@ -3,6 +3,7 @@
 package fxcm
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -908,7 +909,10 @@ func (p *persistence) startSettle() {
 		}()
 		wait := settleInitial
 		for {
-			ctx, cancel := p.ctx()
+			// Within the lifetime of the Manager: Close cancels an
+			// attempt that waits for the store, and the domain stays
+			// fenced (the next start settles it).
+			ctx, cancel := context.WithTimeout(p.m.ctx, p.timeout)
 			ok, err := p.d.Settle(ctx)
 			cancel()
 			if ok {
@@ -935,6 +939,10 @@ func (p *persistence) startSettle() {
 		p.refreshOwed()
 		p.mu.Unlock()
 		p.m.log.Info("fxcm: the Manager follows the store again")
+		// The records follow made Unverified, and the intents the
+		// settle left, are re-proved now (design §6.4), not only by the
+		// next run of their set.
+		p.m.startVerify()
 	}()
 }
 
@@ -952,10 +960,10 @@ func (p *persistence) sleep(d time.Duration) bool {
 // a settle: a set change whose write had an unknown outcome and committed
 // after all is made, one that did not is not; a set the store has at
 // another generation takes the stored Config (an open edit stays open);
-// endpoint records the store has and memory does not are added
-// Unverified, and so are the Names of unended establish intents; the sets
-// that owe work go to Error. It returns false, and changes nothing, while
-// a set is busy (a run or a claim) or a key the store has is reserved by
+// the endpoint records are rebuilt from the committed state
+// (followRecords), and the Names of unended establish intents without one
+// are added Unverified; the sets that owe work go to Error. It returns
+// false, and changes nothing, while a set is busy (a run or a claim) or a key the store has is reserved by
 // an Add or an Update in progress: those end without writing, and follow
 // is tried again.
 func (p *persistence) follow() bool {
@@ -1044,19 +1052,9 @@ func (p *persistence) follow() bool {
 			}
 		}
 	}
-	for _, r := range l.eps {
-		s := m.sets[keyString(SetKey{Folder: r.Folder, Name: r.SetName})]
-		if s == nil {
-			continue
-		}
-		rec := r.record()
-		rk := recordKey(rec.addr, rec.FunctionalEntity, rec.Name)
+	for _, s := range m.sets {
 		s.mu.Lock()
-		if s.records[rk] == nil {
-			s.records[rk] = rec
-			// Unverified again: so is its server (design §6.4).
-			unverified[rec.addr.Address] = true
-		}
+		followRecords(s, st, l, unverified)
 		s.mu.Unlock()
 	}
 	for _, c := range l.calls {
@@ -1077,6 +1075,49 @@ func (p *persistence) follow() bool {
 	p.owed, p.orphans, p.fenced, p.unverified = owed, orphans, fenced, unverified
 	p.owedMu.Unlock()
 	return true
+}
+
+// followRecords rebuilds the endpoint records of s from the committed
+// state st, decoded as l (design §3.3: once settled the in-memory state is
+// rebuilt from the Loaded state). A record the store has whose stored value
+// is not the one memory has (or that memory lacks) becomes the stored one,
+// Unverified, and so does its server (§6.4): a write with an unknown
+// outcome may have landed, so memory proves nothing the store does not
+// show. A record only memory has is dropped, unless an unended intent of
+// the set holds it (heldBy): that intent re-proves it. Memory is then what
+// a restart on the same store would load. The caller holds s.mu and m.mu.
+func followRecords(s *set, st map[string][]byte, l *loaded, unverified map[string]bool) {
+	ks := keyString(s.cfg.key)
+	intents := map[string]*callRecord{}
+	for k, c := range l.calls {
+		if keyString(SetKey{Folder: c.Folder, Name: c.SetName}) == ks {
+			intents[k] = c
+		}
+	}
+	committed := map[string]bool{}
+	for _, k := range sortedRecordKeys(l.eps) {
+		r := l.eps[k]
+		if keyString(SetKey{Folder: r.Folder, Name: r.SetName}) != ks {
+			continue
+		}
+		committed[k] = true
+		rec := r.record()
+		rk := recordKey(rec.addr, rec.FunctionalEntity, rec.Name)
+		if cur := s.records[rk]; cur != nil && epKeyOf(s.cfg.key, cur) == k {
+			if v, err := encodeRecord(storedOf(cur)); err == nil && bytes.Equal(v, st[k]) {
+				continue
+			}
+		}
+		s.records[rk] = rec
+		// Unverified again: so is its server (design §6.4).
+		unverified[rec.addr.Address] = true
+	}
+	for rk, rec := range s.records {
+		if committed[epKeyOf(s.cfg.key, rec)] || heldBy(rec, intents) != nil {
+			continue
+		}
+		delete(s.records, rk)
+	}
 }
 
 // putSet adds the record of cfg at generation gen to b.

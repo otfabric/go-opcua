@@ -75,9 +75,17 @@ type Options struct {
 	// change is durable before it is visible, and New loads them, every
 	// endpoint record Unverified. A store that cannot be loaded, belongs
 	// to another ApplicationURI or has a newer schema fails New. Nil:
-	// memory only.
+	// memory only. The application owns the Store: the Manager never
+	// closes it, and the application closes it after Close returns.
 	Store fxstore.Store
-	// StoreTimeout bounds each store operation. 0: 10 s.
+	// StoreTimeout bounds each store operation, which has a context of
+	// its own: the journal writes of a run are not cancelled by the
+	// context of the run or by Close, so that what a call did is
+	// recorded; only the settle of a fenced store ends with Close (the
+	// store stays fenced until the next New). The store writes are
+	// serialised: a slow store holds the other operations of the Manager
+	// for up to StoreTimeout each, and Close waits for a write in
+	// progress for up to StoreTimeout. 0: 10 s.
 	StoreTimeout time.Duration
 	// Verify configures the verification of the records loaded from the
 	// Store (design §6.4, §6.5): in the background after New, and as the

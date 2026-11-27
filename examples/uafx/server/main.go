@@ -106,7 +106,7 @@ func newApp(host string, port int) (*app, error) {
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI(applicationURI),
 		// The connections configure PubSub through the PubSub information
-		// model (Part 14 §9.1.3.7.4).
+		// model (Part 14 §9.1.3, CloseAndUpdate §9.1.3.7.6).
 		server.WithPubSub(nil),
 	)
 	if err != nil {

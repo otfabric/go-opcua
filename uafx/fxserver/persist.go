@@ -5,6 +5,7 @@ package fxserver
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -45,6 +46,9 @@ type persistence struct {
 	// own: the PubSub transaction running is one of this package's own
 	// (Connections.change), set and cleared in it.
 	own bool
+
+	// diverged counts the required writes the store refused for good.
+	diverged int
 
 	// backoff and next pace the settling of a fenced domain (monitor).
 	backoff time.Duration
@@ -663,6 +667,9 @@ func (x *call) persist() bool {
 	s := p.begin()
 	var first *element
 	now := time.Now()
+	// touched get the ModificationTime of their new records once they are
+	// committed, not before.
+	var touched []*endpoint
 	for _, el := range x.els {
 		e := el.ep
 		if e == nil || !e.persistent {
@@ -693,8 +700,13 @@ func (x *call) persist() bool {
 			nb, _ := encodeEndpoint(r.id, r.body)
 			if !bytes.Equal(ob, nb) {
 				r.body.ModificationTime = now
-				x.c.touch(e, now)
+				touched = append(touched, e)
 			}
+		} else if !e.created {
+			// A preconfigured endpoint the call made persistent: a
+			// modification (Part 81 Table 74).
+			r.body.ModificationTime = now
+			touched = append(touched, e)
 		}
 		s.putEndpoint(r, comps)
 	}
@@ -719,6 +731,18 @@ func (x *call) persist() bool {
 	case fxstore.Committed:
 		p.reload()
 		p.mu.Unlock()
+		for _, e := range touched {
+			x.c.mu.Lock()
+			old := e.modifiedAt
+			x.c.mu.Unlock()
+			if x.untouch == nil {
+				x.untouch = map[*endpoint]time.Time{}
+			}
+			if _, ok := x.untouch[e]; !ok {
+				x.untouch[e] = old
+			}
+			x.c.touch(e, now)
+		}
 		x.compensate = &undo
 		x.c.crashPoint("establish.after-commit")
 		return true
@@ -731,27 +755,42 @@ func (x *call) persist() bool {
 		// Unknown: the call is rolled back, and the store is made to
 		// follow once the outcome is known (design §4.3, §3.3).
 		ctx, cancel := p.ctx()
-		_, _ = p.d.Require(ctx, undo)
+		p.requireLocked(ctx, undo, "uafx: the outcome of the records of a call is unknown; the store is fenced until it is settled", "error", err)
 		cancel()
 		p.mu.Unlock()
-		x.c.log.Warn("uafx: the outcome of the records of a call is unknown; the store is fenced until it is settled", "error", err)
 		x.failPersist(first, ua.StatusBadInternalError)
 		return false
 	}
 }
 
 // failPersist sets the results of a call whose commit point failed: sc in
-// the ConnectionEndpointResult of the first persistent endpoint,
-// Bad_NothingToDo in those of the others (design §4.3, C3-D13).
+// the result of the first persistent endpoint, Bad_NothingToDo in those of
+// the others (design §4.3, C3-D13). The result is that of the command the
+// commit point stands for: ConnectionEndpointResult when the call has
+// CreateConnectionEndpointCmd (Part 81 Table 12), else
+// EnableCommunicationResult when it has EnableCommunicationCmd (Table 17;
+// the commit point comes right before it), else CommunicationLinksResult
+// for SetCommunicationConfigurationCmd (Table 16). A call with none of
+// them (control or ConfigurationData of an existing endpoint only) has its
+// failure in ConnectionEndpointResult, the result of the endpoint itself.
 func (x *call) failPersist(first *element, sc ua.StatusCode) {
+	m := x.req.CommandMask
 	for _, el := range x.els {
 		if el.ep == nil || !el.ep.persistent {
 			continue
 		}
+		r := &el.res.ConnectionEndpointResult
+		switch {
+		case m&uafx.CreateConnectionEndpointCmd != 0:
+		case m&uafx.EnableCommunicationCmd != 0:
+			r = &el.res.EnableCommunicationResult
+		case m&uafx.SetCommunicationConfigurationCmd != 0 && el.cfg.CommunicationLinks != nil:
+			r = &el.res.CommunicationLinksResult
+		}
 		if el == first {
-			el.res.ConnectionEndpointResult = sc
+			*r = sc
 		} else {
-			el.res.ConnectionEndpointResult = ua.StatusBadNothingToDo
+			*r = ua.StatusBadNothingToDo
 		}
 	}
 }
@@ -765,14 +804,18 @@ func (x *call) uncommit() {
 		return
 	}
 	p.mu.Lock()
-	defer p.mu.Unlock()
 	ctx, cancel := p.ctx()
-	defer cancel()
-	if o, err := p.d.Require(ctx, *x.compensate); o != fxstore.Committed {
-		x.c.log.Warn("uafx: the records of a rolled back call are owed; the store is fenced until they are written", "error", err)
-	}
+	p.requireLocked(ctx, *x.compensate, "uafx: the records of a rolled back call are owed; the store is fenced until they are written")
+	cancel()
 	p.reload()
 	x.compensate = nil
+	p.mu.Unlock()
+	// The records are back with their ModificationTimes, and so are the
+	// endpoints' (Part 81 Table 74: Diagnostics and the store agree).
+	for e, old := range x.untouch {
+		x.c.touch(e, old)
+	}
+	x.untouch = nil
 }
 
 // --- CloseConnections of a persistent endpoint ------------------------------
@@ -839,9 +882,7 @@ func (c *Connections) closePersistent(e *endpoint, remove bool) ua.StatusCode {
 	b, err := s.batch()
 	if err == nil && !b.Empty() {
 		ctx, cancel := p.ctx()
-		if o, err := p.d.Require(ctx, b); o != fxstore.Committed {
-			c.log.Warn("uafx: CloseConnections: the deletion of the record is owed", "endpoint", e.id, "error", err)
-		}
+		p.requireLocked(ctx, b, "uafx: CloseConnections: the deletion of the record is owed", "endpoint", e.id)
 		cancel()
 	}
 	p.reload()
@@ -906,9 +947,8 @@ func (c *Connections) disablePersistent(e *endpoint) ua.StatusCode {
 			// the outcome is known.
 			unknown = true
 			ctx, cancel := p.ctx()
-			_, _ = p.d.Require(ctx, b)
+			p.requireLocked(ctx, b, "uafx: CloseConnections: the outcome of the disable is unknown; disabled anyway", "endpoint", e.id, "error", err)
 			cancel()
-			c.log.Warn("uafx: CloseConnections: the outcome of the disable is unknown; disabled anyway", "endpoint", e.id, "error", err)
 		}
 	}
 	p.mu.Unlock()
@@ -936,6 +976,15 @@ func (p *persistence) settle(now time.Time) {
 	ctx, cancel := p.ctx()
 	ok, err := p.d.Settle(ctx)
 	cancel()
+	if !ok && permanentStoreError(err) {
+		// A required write that can never commit was dropped: the
+		// records do not follow the runtime there. The in-memory view
+		// follows the store; the remaining writes go on at once.
+		p.divergedLocked(err)
+		p.reload()
+		p.backoff, p.next = 0, time.Time{}
+		return
+	}
 	if ok {
 		p.backoff, p.next = 0, time.Time{}
 		p.reload()
@@ -945,6 +994,42 @@ func (p *persistence) settle(now time.Time) {
 	p.backoff = min(max(2*p.backoff, 100*time.Millisecond), 30*time.Second)
 	p.next = now.Add(p.backoff)
 	p.c.log.Warn("uafx: the persistent ConnectionEndpoints store is still fenced", "error", err, "retry", p.backoff)
+}
+
+// requireLocked writes b with Domain.Require and logs what does not
+// commit: owed (with attrs) for a write the store owes and settles, or, for
+// one it refuses for good (fxstore.ErrLimit, fxstore.ErrInvalidKey), that
+// the store diverges from the runtime (divergedLocked). The caller holds
+// p.mu.
+func (p *persistence) requireLocked(ctx context.Context, b fxstore.Batch, owed string, attrs ...any) {
+	o, err := p.d.Require(ctx, b)
+	switch {
+	case o == fxstore.Committed:
+	case permanentStoreError(err):
+		p.divergedLocked(err, attrs...)
+	default:
+		if err != nil {
+			attrs = append(attrs, "require", err)
+		}
+		p.c.log.Warn(owed, attrs...)
+	}
+}
+
+// permanentStoreError reports whether err is a write the store can never
+// commit: over its Limits (fxstore.ErrLimit) or with a key the domain does
+// not take (fxstore.ErrInvalidKey, a bug of this package). Such a write is
+// neither owed nor does it fence the domain.
+func permanentStoreError(err error) bool {
+	return errors.Is(err, fxstore.ErrLimit) || errors.Is(err, fxstore.ErrInvalidKey)
+}
+
+// divergedLocked reports a write the store refused for good: the records
+// no longer follow the runtime (PersistenceStatus.Diverged). The caller
+// holds p.mu.
+func (p *persistence) divergedLocked(err error, attrs ...any) {
+	p.diverged++
+	p.c.log.Error("uafx: a persistent ConnectionEndpoints record cannot be written; the store diverges from the runtime until a later write or a restart replaces it",
+		append(attrs, "error", err)...)
 }
 
 // fenced reports whether the domain is fenced.
@@ -966,6 +1051,11 @@ type PersistenceStatus struct {
 	Records int
 	// Quarantined is the number of quarantined records.
 	Quarantined int
+	// Diverged is the number of required writes the store refused for
+	// good since the start (fxstore.ErrLimit, fxstore.ErrInvalidKey): a
+	// change the runtime made that the records do not follow. The store
+	// is not fenced for them.
+	Diverged int
 }
 
 // Persistence returns the state of the persistent ConnectionEndpoints.
@@ -977,7 +1067,7 @@ func (c *Connections) Persistence() PersistenceStatus {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	st := PersistenceStatus{Enabled: true, Store: p.d.Status(), Restored: slices.Clone(p.restored),
-		Records: len(p.eps), Quarantined: len(p.quar)}
+		Records: len(p.eps), Quarantined: len(p.quar), Diverged: p.diverged}
 	if d, ok := c.opts.Store.(interface{ Durability() fxstore.Durability }); ok {
 		st.Durability = d.Durability()
 	}

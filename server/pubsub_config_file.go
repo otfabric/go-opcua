@@ -535,7 +535,7 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 	return []*ua.Variant{ua.MustVariant(u.ChangesApplied), ua.MustVariant(u.ReferenceResults), ua.MustVariant(values), ua.MustVariant(u.ConfigurationObjects)}, ua.StatusOK
 }
 
-// applyLocked applies file as CloseAndUpdate does (Part 14 §9.1.3.7.4).
+// applyLocked applies file as CloseAndUpdate does (Part 14 §9.1.3.7.6).
 // The caller holds the PubSub transaction (pubsubState.txn).
 func (f *configFile) applyLocked(ctx context.Context, file *ua.PubSubConfiguration2DataType, require bool, refs []*ua.PubSubConfigurationRefDataType) (*PubSubConfigurationUpdate, ua.StatusCode) {
 	if st := f.m.checkConnectionTargets(ctx, file.Connections...); st != ua.StatusOK {

@@ -59,6 +59,12 @@ var ErrForeignOwner = errors.New("fxstore: the store belongs to another owner")
 ErrForeignOwner reports a store whose meta key names another owner.
 
 ```go
+var ErrInvalidKey = errors.New("fxstore: invalid key")
+```
+
+ErrInvalidKey reports a batch of Domain.Apply or Domain.Require with an empty key or the reserved key "meta". From Apply and Require it wraps ErrNotCommitted.
+
+```go
 var ErrSchema = errors.New("fxstore: unsupported schema")
 ```
 
@@ -102,7 +108,10 @@ type Domain struct {
 
 	// committed state, full keys, meta included
 
-	// relative keys
+	// relative keys, owned by the domain
+
+	// snap is what State, Status and Schema read, published under mu
+	// whenever a write, a settlement or the fence changes it.
 
 }
 ```
@@ -111,7 +120,7 @@ Domain is one namespace of a Store as the library writes it: every Apply also wr
 
 An Apply with an unknown outcome fences the domain: later Applies fail with ErrFenced, without writing, until Settle establishes the outcome (design §3.3, §3.5). Settle loads the state, finds the revision it ends with, and confirms it with an Apply that writes only the meta key on top of it: when that commits, the loaded state is durable (prefix durability) and the unknown batch's outcome is known. A confirming Apply that is unknown itself is remembered with what its base contained, so repeated ambiguous confirmations never lose the identity or the evidence of the original batch.
 
-A Domain is safe for concurrent use; its writes are serialized. It starts no goroutines: the caller runs Settle, typically with a backoff.
+A Domain is safe for concurrent use; its writes are serialized. State, Status and Schema do not wait for a write in progress: they return what the domain knew before it (design §3.5: read-only access stays available). It starts no goroutines: the caller runs Settle, typically with a backoff.
 
 #### func OpenDomain
 
@@ -127,7 +136,7 @@ OpenDomain loads the namespace o.Namespace of s. It fails when the store cannot 
 func (d *Domain) Apply(ctx context.Context, b Batch) (Outcome, error)
 ```
 
-Apply writes b, its keys relative to the namespace, with the next revision. It returns the outcome and, unless committed, an error: a fenced domain is NotCommitted with ErrFenced.
+Apply writes b, its keys relative to the namespace, with the next revision. It returns the outcome and, unless committed, an error: a fenced domain is NotCommitted with ErrFenced, an empty or "meta" key NotCommitted with ErrInvalidKey, a state over the Limits NotCommitted with ErrLimit. Apply does not keep b.
 
 #### func (Domain) Require
 
@@ -135,7 +144,11 @@ Apply writes b, its keys relative to the namespace, with the next revision. It r
 func (d *Domain) Require(ctx context.Context, b Batch) (Outcome, error)
 ```
 
-Require writes b like Apply and, unless the write commits, owes it: the domain stays fenced until Settle has written it. It is for the writes that make the store follow a change the runtime made already (a removal), which must not be lost.
+Require writes b like Apply and, unless the write commits, owes it: the domain stays fenced until Settle has written it. It is for the writes that make the store follow a change the runtime made already (a removal), which must not be lost. While the domain is fenced b is owed without being written: NotCommitted with ErrFenced.
+
+A write that can never commit is not owed and does not fence the domain: a batch with an empty or "meta" key (ErrInvalidKey) or one that takes the state over the Limits of the domain or of the store (ErrLimit). Require returns NotCommitted with that error; the store does not follow the change.
+
+Require copies b: the caller may reuse it.
 
 #### func (Domain) Schema
 
@@ -153,13 +166,15 @@ func (d *Domain) Settle(ctx context.Context) (bool, error)
 
 Settle establishes the outcome of an unresolved write and writes the required ones. It returns true when the domain is no longer fenced, and the error of the step that kept it fenced. It writes nothing when the domain is not fenced.
 
+A required write that can never commit (ErrInvalidKey, ErrLimit: the unresolved write it followed may have grown the state) is dropped, not retried: that Settle returns false with its error, and the next one goes on with the remaining writes.
+
 #### func (Domain) State
 
 ```go
 func (d *Domain) State() map[string][]byte
 ```
 
-State returns the records of the domain as the domain knows them committed, by key relative to the namespace, without the meta key. While a write is unresolved it is the state before that write.
+State returns the records of the domain as the domain knows them committed, by key relative to the namespace, without the meta key. While a write is unresolved or in progress it is the state before that write. The map and its values belong to the caller.
 
 #### func (Domain) Status
 
@@ -167,7 +182,7 @@ State returns the records of the domain as the domain knows them committed, by k
 func (d *Domain) Status() DomainStatus
 ```
 
-Status returns the state of the domain.
+Status returns the state of the domain. It does not wait for a write in progress: it is the state before it.
 
 ### type DomainOptions
 
@@ -426,6 +441,9 @@ type Store interface {
 	// A committed Apply makes durable the whole state it was applied to,
 	// including every earlier batch Load could see at that moment (prefix
 	// durability).
+	//
+	// Apply borrows b for the call: it must not change b, its map or its
+	// value slices, nor keep them after it returns.
 	Apply(ctx context.Context, b Batch) error
 	// Close releases the store. Load and Apply after Close return
 	// ErrClosed.

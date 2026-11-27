@@ -3318,7 +3318,7 @@ type PubSubConfigurationUpdate struct {
 }
 ```
 
-PubSubConfigurationUpdate is the result of [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration): the output arguments of CloseAndUpdate (Part 14 §9.1.3.7.4).
+PubSubConfigurationUpdate is the result of [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration): the output arguments of CloseAndUpdate (Part 14 §9.1.3.7.6).
 
 #### func (PubSubConfigurationUpdate) Created
 
@@ -4324,7 +4324,7 @@ func (s *Server) PubSub() *pubsub.PubSub
 
 PubSub returns the PubSub runtime of the server, nil if the server was created without [WithPubSub](#func-withpubsub). Components added to it, before or after Start, appear in the information model.
 
-Calls on the runtime itself are outside the PubSub transaction of the server: a change made through them while a CloseAndUpdate (Part 14 §9.1.3.7.4) or [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration) runs can be lost to it, or put back by it. Code that changes the configuration while clients may update it makes the change through [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration). Reading the runtime needs no transaction.
+Calls on the runtime itself are outside the PubSub transaction of the server: a change made through them while a CloseAndUpdate (Part 14 §9.1.3.7.6) or [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration) runs can be lost to it, or put back by it. Code that changes the configuration while clients may update it makes the change through [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration). Reading the runtime needs no transaction.
 
 #### func (Server) PubSubComponentID
 
@@ -4550,7 +4550,7 @@ The opc.tcp endpoints come first, then the opc.wss and the opc.https ones.
 func (s *Server) UpdatePubSubConfiguration(ctx context.Context, cfg *ua.PubSubConfiguration2DataType, requireCompleteUpdate bool, refs []*ua.PubSubConfigurationRefDataType) (*PubSubConfigurationUpdate, ua.StatusCode)
 ```
 
-UpdatePubSubConfiguration applies cfg to the PubSub configuration of the server for the session of the Method call in ctx, as the CloseAndUpdate Method of PublishSubscribe.PubSubConfiguration (Part 14 §9.1.3.7.4) does with a file holding cfg: requireCompleteUpdate and refs have the meaning of its arguments of the same name.
+UpdatePubSubConfiguration applies cfg to the PubSub configuration of the server for the session of the Method call in ctx, as the CloseAndUpdate Method of PublishSubscribe.PubSubConfiguration (Part 14 §9.1.3.7.6) does with a file holding cfg: requireCompleteUpdate and refs have the meaning of its arguments of the same name.
 
 It returns Bad\_NotSupported when the server has no PubSub information model ([WithPubSub](#func-withpubsub)), Bad\_NothingToDo without refs, and Bad\_TypeMismatch without cfg.
 

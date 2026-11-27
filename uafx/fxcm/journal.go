@@ -508,10 +508,13 @@ func (x *run) sync(keys []string, recs touched, end bool) {
 	}
 	for _, k := range keys {
 		x.j.retained[k] = true
-		p.retain(x.r.id, k)
 	}
 	x.res.Failures = append(x.res.Failures, Failure{FxError: uafx.FxErrorRuntimeError, Status: StatusOf(err)})
 	x.mu.Unlock()
+	// After the run's mu: owedMu comes before it in the lock order.
+	for _, k := range keys {
+		p.retain(x.r.id, k)
+	}
 	for _, rec := range claimed {
 		rec.Class = Unresolved
 	}

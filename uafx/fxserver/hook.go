@@ -29,12 +29,21 @@ var _ server.PubSubConfigurationRestorer = (*persistence)(nil)
 // disabled record of a CloseConnections, or the rollback of what was not
 // committed (design §4.4). The same change made by another mechanism (a
 // PubSub Method, CloseAndUpdate) has no such intent and is refused.
-func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) error {
-	// A CloseAndUpdate that replaced components in place: the endpoints
-	// follow them before their records are read from the runtime (a
-	// refusal below puts the components back, and the endpoints follow
-	// that too: PubSubConfigurationRestored).
-	p.c.followMoves(ch.Moved)
+//
+// The endpoints follow the components a CloseAndUpdate replaced in place
+// (ch.Moved) only when the change stands: a refused change is reconciled
+// back to ch.Before, and PubSubConfigurationRestored then reports the
+// moves from the components of before to the restored ones, which the
+// endpoints must still reference. Following ch.Moved first would leave
+// them at the replacements the restore removes. The records are read from
+// the runtime by path, not through the endpoints, so the order does not
+// change what is written.
+func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) (err error) {
+	defer func() {
+		if err == nil {
+			p.c.followMoves(ch.Moved)
+		}
+	}()
 	added := addedComponents(ch.Before, ch.After)
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -76,8 +85,7 @@ func (p *persistence) PubSubConfigurationChanged(ch *server.PubSubChange) error 
 		// CloseConnections does after its intent, also while the store is
 		// fenced by that intent; design §4.4): the change stands and the
 		// store follows.
-		_, _ = p.d.Require(ctx, b)
-		p.c.log.Warn("uafx: the record of a changed PubSub component is owed; the store is fenced until it is written", "error", err)
+		p.requireLocked(ctx, b, "uafx: the record of a changed PubSub component is owed; the store is fenced until it is written", "error", err)
 		return nil
 	}
 }
@@ -123,7 +131,7 @@ type added struct {
 // addedComponents returns the components in after that are not in
 // before, and the WriterGroups and DataSetWriters whose WriterGroupId or
 // DataSetWriterId changed: a new id on an existing component is an
-// allocation too (a modify of Part 14 §9.1.3.7.4, or a replacement by
+// allocation too (an ElementModify of Part 14 §9.1.3.7.2 Table 239, or a replacement by
 // UpdatePubSubConfiguration).
 func addedComponents(before, after *ua.PubSubConfigurationDataType) []added {
 	have := map[string]added{}

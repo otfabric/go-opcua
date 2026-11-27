@@ -99,7 +99,7 @@ What v1.39.1 does with persistence today:
 | AP-10 | CloseConnections disables the CleanupTimeout processing | §6.2.5.2 ("shall"); §6.6.2 ("may") |
 | AP-11 | Table 12 has Bad_NotSupported for "The requested IsPersistent was not supported." | §6.2.4.2 Table 12 |
 | AP-12 | Stored ConfigurationData values are applied "after a power cycle" (SetStoredVariables, ClearStoredVariables, ListStoredVariables) | §6.4.6.2 to §6.4.6.5 |
-| AP-13 | What happens to the ConfigurationData of a closed Connection is vendor-specific | §6.2.5.2 |
+| AP-13 | What happens to the ConfigurationData of a closed Connection is vendor-specific; for an endpoint with IsPersistent set, EstablishConnections shall call SetStoredVariables for the Variables of its ConfigurationData that are not NonVolatile (not implemented: a known deviation, LIMITATIONS.md) | §6.2.5.2, §6.2.4.3.7 |
 | AP-14 | CreationTime and ModificationTime (DateTime, optional) in the Diagnostics of a ConnectionEndpoint; CUs "UAFX ConnectionEndpoint Diagnostics CreationTime" and "... ModificationTime" | §6.6.2 Table 73/74; OPC 10000-84 Table 6 |
 
 ### 2.2 The persisted check of SetCommunicationConfigurationCmd (§6.2.4.3.9.2)

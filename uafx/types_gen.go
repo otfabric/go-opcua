@@ -122,7 +122,7 @@ type CommunicationConfiguration interface {
 // PubSubCommunicationConfiguration is the
 // PubSubCommunicationConfigurationDataType of Part 81 §10.10.3: what
 // SetCommunicationConfigurationCmd applies, as the CloseAndUpdate Method of
-// Part 14 §9.1.3.7.4 does.
+// Part 14 §9.1.3.7.6 does.
 type PubSubCommunicationConfiguration struct {
 	PubSubConfiguration     *ua.PubSubConfiguration2DataType
 	RequireCompleteUpdate   bool

@@ -7,9 +7,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -147,7 +150,13 @@ func TestPersistentRestored(t *testing.T) {
 	opts := fxserver.ConnectionOptions{Store: store}
 	f := newFX(t, opts)
 	caps := f.child(t, f.id(ctlID), "ComponentCapabilities")
-	require.Equal(t, true, f.read(t, f.child(t, caps, "SupportsPersistence")))
+	sp := f.child(t, caps, "SupportsPersistence")
+	require.Equal(t, true, f.read(t, sp))
+	typ, err := f.c.Node(sp).ReferencedNodes(context.Background(), id.HasTypeDefinition, ua.BrowseDirectionForward, ua.NodeClassAll, false)
+	require.NoError(t, err)
+	require.Len(t, typ, 1)
+	require.Equal(t, ua.NewNumericNodeID(0, id.BaseDataVariableType).String(), typ[0].ID.String(),
+		"SupportsPersistence is a 0:BaseDataVariableType (Part 81 Table 26)")
 
 	ep := f.persistent(t, "P")
 	require.Equal(t, true, f.read(t, f.child(t, ep, "IsPersistent")))
@@ -290,7 +299,7 @@ func TestPersistentCommitFaults(t *testing.T) {
 		require.Empty(t, f.srv.PubSub().Configuration().Connections)
 		require.True(t, f.conns.Persistence().Store.Fenced)
 		// Fenced: refused before anything changes; reads go on.
-		require.Equal(t, ua.StatusBadResourceUnavailable, f.callStatus(t, f.persistentRequest("Q")))
+		require.Equal(t, ua.StatusBadInvalidState, f.callStatus(t, f.persistentRequest("Q")))
 		_, sc := f.reserve(t)
 		require.Equal(t, ua.StatusBadResourceUnavailable, sc, "no id is handed out while fenced")
 		store.FailLoadsWith(nil)
@@ -495,7 +504,7 @@ func TestQuarantine(t *testing.T) {
 		require.Error(t, f.conns.RetryRestore(ctx, q[0].ID))
 		require.Equal(t, 1, f.conns.Persistence().Quarantined)
 		if identity {
-			require.Equal(t, ua.StatusBadResourceUnavailable, f.callStatus(t, f.fullRequest("X")))
+			require.Equal(t, ua.StatusBadInvalidState, f.callStatus(t, f.fullRequest("X")))
 			_, sc := f.reserve(t)
 			require.Equal(t, ua.StatusBadResourceUnavailable, sc)
 		} else {
@@ -650,7 +659,7 @@ func TestPersistentUnknownKey(t *testing.T) {
 	require.Len(t, q, 1)
 	require.True(t, q[0].Fences)
 	require.NotNil(t, f.endpointNamed("P"), "the other records are restored")
-	require.Equal(t, ua.StatusBadResourceUnavailable, f.callStatus(t, f.fullRequest("X")))
+	require.Equal(t, ua.StatusBadInvalidState, f.callStatus(t, f.fullRequest("X")))
 	_, sc := f.reserve(t)
 	require.Equal(t, ua.StatusBadResourceUnavailable, sc)
 	require.NoError(t, f.conns.Discard(ctx, q[0].ID))
@@ -735,7 +744,7 @@ func TestQuarantineRecords(t *testing.T) {
 	q := f.conns.Quarantined()
 	require.Len(t, q, 3, "the component, the junk record and the endpoint that needs the component: %+v", q)
 	require.Nil(t, f.endpointNamed("P"))
-	require.Equal(t, ua.StatusBadResourceUnavailable, f.callStatus(t, f.fullRequest("X")))
+	require.Equal(t, ua.StatusBadInvalidState, f.callStatus(t, f.fullRequest("X")))
 	for _, x := range q {
 		require.NoError(t, f.conns.Discard(ctx, x.ID), x.Reason)
 	}
@@ -846,7 +855,7 @@ func TestQuarantineReservesComponents(t *testing.T) {
 			require.NoError(t, add(pubsub.UDPConnection("Free", f.udp, uint16(5))))
 
 			// A new id on an existing component is an allocation too: a
-			// modify (Part 14 §9.1.3.7.4) cannot take a reserved one.
+			// modify (ElementModify, Part 14 §9.1.3.7.2) cannot take a reserved one.
 			free := func(group, writer uint16) *ua.PubSubConfiguration2DataType {
 				return &ua.PubSubConfiguration2DataType{Connections: []*ua.PubSubConnectionDataType{
 					pubsub.AttachWriterGroups(pubsub.UDPConnection("Mod", f.udp, uint16(6)),
@@ -1318,4 +1327,427 @@ func TestNativeRemovalNotCommitted(t *testing.T) {
 	require.NoError(t, f.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.RemoveDataSetWriter(w) }))
 	exists, _ = f.writerState(t)
 	require.False(t, exists)
+}
+
+// TestRefusedModifyKeepsLinks: a change the PubSub configuration hook
+// refuses after a CloseAndUpdate replaced components in place is
+// reconciled back, and the persistent endpoint keeps valid References to
+// the restored components: its Status stays Operational and a removal
+// (CloseConnections Remove TRUE) removes what its call created. Each
+// refusal of the hook is tried: the record is not committed, NotPersisted
+// TRUE on a persisted component (Part 14 §6.2.2 Table 4), an id a
+// quarantined record reserves (design §4.7), and an EstablishConnections
+// whose update of the shared writer is refused.
+func TestRefusedModifyKeepsLinks(t *testing.T) {
+	t.Parallel()
+	notPersisted := []*ua.KeyValuePair{{Key: &ua.QualifiedName{Name: "NotPersisted"}, Value: ua.MustVariant(true)}}
+	modify := ua.PubSubConfigurationRefMaskElementModify
+	for _, tc := range []struct {
+		name   string
+		want   ua.StatusCode
+		refuse func(t *testing.T, f *fx, store *storetest.Faulty) ua.StatusCode
+		setup  func(t *testing.T, f *fx, mem *fxstore.MemoryStore, opts fxserver.ConnectionOptions) *fx
+	}{
+		{name: "not committed", want: ua.StatusBadResourceUnavailable, refuse: func(t *testing.T, f *fx, store *storetest.Faulty) ua.StatusCode {
+			store.FailApply(storetest.FailNotCommitted)
+			cfg := f.pubsubConfig(0)
+			cfg.Connections[0].WriterGroups[0].PublishingInterval = 30
+			return f.update(t, cfg, ref(modify|refWG, 0, 0, 0))
+		}},
+		{name: "NotPersisted", want: ua.StatusBadInvalidState, refuse: func(t *testing.T, f *fx, _ *storetest.Faulty) ua.StatusCode {
+			cfg := f.pubsubConfig(0)
+			cfg.Connections[0].WriterGroups[0].GroupProperties = notPersisted
+			return f.update(t, cfg, ref(modify|refWG, 0, 0, 0))
+		}},
+		{name: "quarantine reservation", want: ua.StatusBadResourceUnavailable,
+			setup: func(t *testing.T, f *fx, mem *fxstore.MemoryStore, opts fxserver.ConnectionOptions) *fx {
+				// A second record whose identities cannot be read: it
+				// may reserve any WriterGroupId.
+				f.stop(t)
+				ctx := context.Background()
+				st, err := mem.Load(ctx)
+				require.NoError(t, err)
+				for k, v := range st {
+					if strings.HasPrefix(k, "ac/ep/") {
+						v = append([]byte(nil), v...)
+						v[10] ^= 0xff
+						require.NoError(t, mem.Apply(ctx, fxstore.Batch{Puts: map[string][]byte{k + "X": v}}))
+						break
+					}
+				}
+				f = newFX(t, opts)
+				require.Len(t, f.conns.Quarantined(), 1)
+				return f
+			},
+			refuse: func(t *testing.T, f *fx, _ *storetest.Faulty) ua.StatusCode {
+				cfg := f.pubsubConfig(0)
+				cfg.Connections[0].WriterGroups[0].WriterGroupID = 0x7001
+				return f.update(t, cfg, ref(modify|refWG, 0, 0, 0))
+			}},
+		{name: "EstablishConnections on the shared writer", refuse: func(t *testing.T, f *fx, _ *storetest.Faulty) ua.StatusCode {
+			req := f.joinRequest(false, true)
+			cc := req.CommunicationConfigurations[0].PubSubConfiguration
+			cc.Connections[0].WriterGroups[0].DataSetWriters[0].DataSetWriterProperties = notPersisted
+			res := f.establish(t, req)
+			return res.Status
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			mem := &fxstore.MemoryStore{}
+			store := storetest.NewFaulty(mem)
+			opts := fxserver.ConnectionOptions{Store: store}
+			f := newFX(t, opts)
+			ep := f.persistent(t, "P")
+			if tc.setup != nil {
+				f = tc.setup(t, f, mem, opts)
+				ep = f.endpointNamed("P")
+				require.NotNil(t, ep)
+				f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
+			}
+			before := f.writerNode(t)
+			sc := tc.refuse(t, f, store)
+			require.NotEqual(t, ua.StatusOK, sc)
+			if tc.want != 0 {
+				require.Equal(t, tc.want, sc)
+			}
+			require.False(t, before.Equal(f.writerNode(t)), "the change ran and was reconciled back")
+			f.requireLinked(t, ep)
+			f.requireWriterRefs(t, ep)
+			f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
+			_, on := f.writerState(t)
+			require.True(t, on)
+
+			sc, res := f.close(t, true, ep)
+			require.Equal(t, ua.StatusOK, sc, "%v", res)
+			exists, _ := f.writerState(t)
+			require.False(t, exists, "Remove TRUE removes the writer the call created")
+			require.Empty(t, f.srv.PubSub().Configuration().Connections, "nothing the call created is left")
+		})
+	}
+}
+
+// TestClosedRefusesMethods: after Connections.Close, the Methods that
+// write the store are refused with Bad_InvalidState (Part 81 Table 9), and
+// RetryRestore and Discard fail: nothing writes the Store, which the
+// application may close once Close returns.
+func TestClosedRefusesMethods(t *testing.T) {
+	t.Parallel()
+	mem := &fxstore.MemoryStore{}
+	store := storetest.NewFaulty(mem)
+	f := newFX(t, fxserver.ConnectionOptions{Store: store})
+	ep := f.persistent(t, "P")
+	require.NoError(t, f.conns.Close())
+	applies := store.Applies()
+
+	require.Equal(t, ua.StatusBadInvalidState, f.callStatus(t, f.persistentRequest("Q")))
+	_, _, err := uafx.CloseConnections(context.Background(), f.c, f.id(ctlID), []*ua.NodeID{ep}, true)
+	require.ErrorIs(t, err, ua.StatusBadInvalidState)
+	require.ErrorIs(t, f.conns.Discard(context.Background(), "q/x"), fxserver.ErrQuarantine)
+	require.ErrorContains(t, f.conns.Discard(context.Background(), "q/x"), "closed")
+	require.ErrorContains(t, f.conns.RetryRestore(context.Background(), "q/x"), "closed")
+	require.Equal(t, applies, store.Applies(), "nothing is written after Close")
+	require.NotNil(t, f.srv.Node(ep), "the endpoint stays")
+	exists, _ := f.writerState(t)
+	require.True(t, exists)
+}
+
+// TestRestoreUndoneOnStartFailure: when EnableConnections fails after the
+// restore (SupportsPersistence cannot be set), what the restore brought
+// back is removed, not left without an owner, and the records stay for
+// the next start (design §4.1).
+func TestRestoreUndoneOnStartFailure(t *testing.T) {
+	t.Parallel()
+	for _, preconfigured := range []bool{false, true} {
+		t.Run(fmt.Sprintf("preconfigured=%v", preconfigured), func(t *testing.T) {
+			t.Parallel()
+			mem := &fxstore.MemoryStore{}
+			opts := fxserver.ConnectionOptions{Store: mem}
+			f := newFX(t, opts)
+			var ep *ua.NodeID
+			var origCleanup any
+			if preconfigured {
+				ep = f.id(presetID)
+				origCleanup = f.value(t, presetID+3)
+				r := f.persistentRequest("Preset")
+				p := r.ConnectionEndpointConfigurations[0].ConnectionEndpoint.Parameter
+				p.IsPreconfigured, p.Mode, p.OutputVariableIDs, p.CleanupTimeout = true, uafx.PubSubSubscriber, nil, -7
+				r.ConnectionEndpointConfigurations[0].CommunicationLinks.DataSetWriterRef = nil
+				r.CommunicationConfigurations[0].PubSubConfiguration.Connections[0].WriterGroups[0].DataSetWriters[0].Enabled = true
+				res := f.establish(t, r)
+				require.Equal(t, ua.StatusOK, res.Status, "%+v", res.ConnectionEndpointConfigurationResults[0])
+				require.NotEqual(t, origCleanup, f.value(t, presetID+3))
+				f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
+			} else {
+				ep = f.persistent(t, "P")
+			}
+			f.stop(t)
+
+			srv := newServer(t, server.WithPubSub(nil))
+			ns, idx, err := fxtest.PrepareConnections(srv)
+			require.NoError(t, err)
+			boom := errors.New("injected")
+			bad := fxserver.WithFailCapabilities(fxserver.ConnectionOptions{Store: mem, Logger: slog.New(slog.DiscardHandler)}, boom)
+			_, err = fxserver.EnableConnections(srv, ns, bad)
+			require.ErrorIs(t, err, boom)
+			require.Empty(t, srv.PubSub().Configuration().Connections, "the restored components are removed")
+			require.Empty(t, srv.PubSub().Configuration().PublishedDataSets)
+			if preconfigured {
+				v := func(n uint32) any { return srv.Node(ua.NewNumericNodeID(idx, n)).Value().Value.Value() }
+				require.NotNil(t, srv.Node(ep), "a preconfigured endpoint stays")
+				require.Equal(t, false, v(presetID+2), "IsPersistent is FALSE again")
+				require.Equal(t, origCleanup, v(presetID+3), "the CleanupTimeout of before is back")
+			} else {
+				require.Nil(t, srv.Node(ep), "the restored endpoint is removed")
+			}
+			require.NoError(t, srv.Close())
+
+			f = newFX(t, opts)
+			require.NotNil(t, f.srv.Node(ep), "the record stays: the next start restores it")
+			require.Len(t, f.conns.Persistence().Restored, 1)
+			if preconfigured {
+				// Its writer is not persisted (design §4.2): the restored
+				// subscriber has nothing to receive here.
+				require.Equal(t, true, f.value(t, presetID+2))
+				return
+			}
+			f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
+		})
+	}
+}
+
+// TestModificationTime: the ModificationTime of a ConnectionEndpoint
+// follows any modification of it (Part 81 Table 74): a disable, an
+// enable, the use of a preconfigured endpoint, persistent or not; for a
+// persistent endpoint only once its record is committed (a call whose
+// commit fails changes nothing).
+func TestModificationTime(t *testing.T) {
+	t.Parallel()
+	enableReq := func(f *fx, ep *ua.NodeID) *uafx.EstablishConnectionsRequest {
+		return &uafx.EstablishConnectionsRequest{CommandMask: uafx.EnableCommunicationCmd,
+			ConnectionEndpointConfigurations: []*uafx.ConnectionEndpointConfiguration{{FunctionalEntityNode: f.id(motionID),
+				ConnectionEndpoint: &uafx.ConnectionEndpointDefinition{Node: ep}}}}
+	}
+	modTime := func(t *testing.T, f *fx, ep *ua.NodeID) time.Time {
+		t.Helper()
+		m := fxserver.ModificationTime(f.conns, ep)
+		if n := f.child(t, f.child(t, ep, "Diagnostics"), "ModificationTime"); n != nil {
+			v, ok := f.read(t, n).(time.Time)
+			require.True(t, ok)
+			require.WithinDuration(t, m, v, time.Microsecond, "the Variable shows it")
+		}
+		return m
+	}
+	later := func(t *testing.T, f *fx, ep *ua.NodeID, than time.Time, msg string) time.Time {
+		t.Helper()
+		m := modTime(t, f, ep)
+		require.True(t, m.After(than), "%s: %v is not after %v", msg, m, than)
+		return m
+	}
+	for _, persistent := range []bool{false, true} {
+		t.Run(fmt.Sprintf("persistent=%v", persistent), func(t *testing.T) {
+			t.Parallel()
+			store := storetest.NewFaulty(&fxstore.MemoryStore{})
+			opts := fxserver.ConnectionOptions{}
+			req := func(f *fx) *uafx.EstablishConnectionsRequest { return f.fullRequest("E") }
+			if persistent {
+				opts.Store = store
+				req = func(f *fx) *uafx.EstablishConnectionsRequest { return f.persistentRequest("E") }
+			}
+			f := newFX(t, opts)
+			res := f.establish(t, req(f))
+			require.Equal(t, ua.StatusOK, res.Status)
+			ep := res.ConnectionEndpointConfigurationResults[0].ConnectionEndpointID
+			f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
+			m := modTime(t, f, ep)
+			created, _ := f.read(t, f.child(t, f.child(t, ep, "Diagnostics"), "CreationTime")).(time.Time)
+			require.WithinDuration(t, created, m, time.Microsecond, "creation is a modification")
+
+			sc, results := f.close(t, false, ep)
+			require.Equal(t, ua.StatusOK, sc, "%v", results)
+			m = later(t, f, ep, m, "disable")
+
+			if persistent {
+				store.FailApply(storetest.FailNotCommitted)
+				require.NotEqual(t, ua.StatusOK, f.establish(t, enableReq(f, ep)).Status)
+				require.Equal(t, m, modTime(t, f, ep), "a call whose commit failed modifies nothing")
+			}
+			require.Equal(t, ua.StatusOK, f.establish(t, enableReq(f, ep)).Status)
+			later(t, f, ep, m, "enable")
+		})
+		if !persistent {
+			t.Run("failed disable", func(t *testing.T) {
+				// A disable that fails changes nothing: the endpoint still
+				// demands its components, and its ModificationTime stays.
+				t.Parallel()
+				f := newFX(t, fxserver.ConnectionOptions{})
+				ep := f.operational(t, "E", -1)
+				m := modTime(t, f, ep)
+				boom := fmt.Errorf("injected: %w", ua.StatusBadResourceUnavailable)
+				fxserver.SetPubSubOps(f.conns, func(pubsub.ComponentID) error { return boom }, nil, nil)
+				sc, results := f.close(t, false, ep)
+				require.Equal(t, ua.StatusUncertain, sc, "%v", results)
+				require.Equal(t, m, modTime(t, f, ep), "a failed disable modifies nothing")
+			})
+		}
+		t.Run(fmt.Sprintf("preconfigured persistent=%v", persistent), func(t *testing.T) {
+			t.Parallel()
+			opts := fxserver.ConnectionOptions{}
+			if persistent {
+				opts.Store = &fxstore.MemoryStore{}
+			}
+			f := newFX(t, opts)
+			before := fxserver.ModificationTime(f.conns, f.id(presetID))
+			r := f.fullRequest("Preset")
+			p := r.ConnectionEndpointConfigurations[0].ConnectionEndpoint.Parameter
+			p.IsPreconfigured, p.Mode, p.OutputVariableIDs, p.IsPersistent = true, uafx.PubSubSubscriber, nil, persistent
+			r.ConnectionEndpointConfigurations[0].CommunicationLinks.DataSetWriterRef = nil
+			r.CommunicationConfigurations[0].PubSubConfiguration.Connections[0].WriterGroups[0].DataSetWriters[0].Enabled = true
+			res := f.establish(t, r)
+			require.Equal(t, ua.StatusOK, res.Status, "%+v", res.ConnectionEndpointConfigurationResults[0])
+			require.True(t, fxserver.ModificationTime(f.conns, f.id(presetID)).After(before), "the use of a preconfigured endpoint modifies it")
+		})
+	}
+}
+
+// TestCommitFailureResult: the failure of the commit point is reported in
+// the result of the command it stands for: an enable-only call on an
+// existing persistent endpoint has it in EnableCommunicationResult (Part 81
+// Table 17), not in ConnectionEndpointResult, which is for
+// CreateConnectionEndpointCmd (Table 12).
+func TestCommitFailureResult(t *testing.T) {
+	t.Parallel()
+	store := storetest.NewFaulty(&fxstore.MemoryStore{})
+	f := newFX(t, fxserver.ConnectionOptions{Store: store})
+	ep := f.persistent(t, "P")
+	sc, res := f.close(t, false, ep)
+	require.Equal(t, ua.StatusOK, sc, "%v", res)
+	store.FailApply(storetest.FailNotCommitted)
+	r := f.establish(t, &uafx.EstablishConnectionsRequest{CommandMask: uafx.EnableCommunicationCmd,
+		ConnectionEndpointConfigurations: []*uafx.ConnectionEndpointConfiguration{{FunctionalEntityNode: f.id(motionID),
+			ConnectionEndpoint: &uafx.ConnectionEndpointDefinition{Node: ep}}}})
+	require.Equal(t, ua.StatusUncertain, r.Status)
+	er := r.ConnectionEndpointConfigurationResults[0]
+	require.Equal(t, ua.StatusBadResourceUnavailable, er.EnableCommunicationResult)
+	require.Equal(t, ua.StatusOK, er.ConnectionEndpointResult)
+}
+
+// limitStore refuses for good, as a store over its Limits does
+// (fxstore.ErrLimit), every write of an endpoint record once refuse is
+// set.
+type limitStore struct {
+	fxstore.Store
+	refuse atomic.Bool
+}
+
+func (s *limitStore) Apply(ctx context.Context, b fxstore.Batch) error {
+	if s.refuse.Load() {
+		touches := slices.ContainsFunc(b.Deletes, func(k string) bool { return strings.HasPrefix(k, "ac/ep/") })
+		for k := range b.Puts {
+			touches = touches || strings.HasPrefix(k, "ac/ep/")
+		}
+		if touches {
+			return fxstore.AsNotCommitted(fmt.Errorf("%w: test", fxstore.ErrLimit))
+		}
+	}
+	return s.Store.Apply(ctx, b)
+}
+
+// errorLog keeps the messages logged at Error.
+type errorLog struct {
+	mu   sync.Mutex
+	msgs []string
+}
+
+func (l *errorLog) Enabled(_ context.Context, lv slog.Level) bool { return lv >= slog.LevelError }
+func (l *errorLog) Handle(_ context.Context, r slog.Record) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.msgs = append(l.msgs, r.Message)
+	return nil
+}
+func (l *errorLog) WithAttrs([]slog.Attr) slog.Handler { return l }
+func (l *errorLog) WithGroup(string) slog.Handler      { return l }
+func (l *errorLog) has(sub string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return slices.ContainsFunc(l.msgs, func(m string) bool { return strings.Contains(m, sub) })
+}
+
+// TestRequireRefusedForGood: a required write the store can never commit
+// (over its Limits) is not owed: the store is not fenced, the divergence
+// is logged at Error and counted in PersistenceStatus.Diverged, whether
+// Require refuses it at once or Settle drops it from the owed writes.
+func TestRequireRefusedForGood(t *testing.T) {
+	t.Parallel()
+	for _, fenced := range []bool{false, true} {
+		t.Run(fmt.Sprintf("fenced=%v", fenced), func(t *testing.T) {
+			t.Parallel()
+			faulty := storetest.NewFaulty(&fxstore.MemoryStore{})
+			store := &limitStore{Store: faulty}
+			log := &errorLog{}
+			f := newFX(t, fxserver.ConnectionOptions{Store: store, Logger: slog.New(log)})
+			ep := f.persistent(t, "P")
+			if fenced {
+				// The intent has an unknown outcome: the deletion of the
+				// record is owed, and only Settle finds it cannot commit.
+				faulty.FailApply(storetest.FailLost)
+			}
+			fxserver.SetCrashPoint(f.conns, func(p string) {
+				if p == "close.after-intent" {
+					store.refuse.Store(true)
+				}
+			})
+			sc, res := f.close(t, true, ep)
+			if fenced {
+				require.Equal(t, ua.StatusBadInternalError, res[0], "the outcome of the intent is unknown")
+			} else {
+				require.Equal(t, ua.StatusOK, sc, "%v", res)
+			}
+			require.Nil(t, f.srv.Node(ep), "the runtime removal stands")
+			require.Eventually(t, func() bool {
+				st := f.conns.Persistence()
+				return !st.Store.Fenced && st.Diverged == 1
+			}, 5*time.Second, 10*time.Millisecond, "%+v", f.conns.Persistence())
+			require.True(t, log.has("the store diverges from the runtime"))
+			// The store works for the other records.
+			store.refuse.Store(false)
+			f.persistent(t, "Q")
+		})
+	}
+}
+
+// TestModificationTimeUncommitted: a call rolled back after its commit
+// point (its EnableCommunicationCmd fails once the records committed)
+// puts the records back with their ModificationTime, and the endpoint's
+// ModificationTime goes back with them (Part 81 Table 74): Diagnostics
+// and the store agree, also after a restart.
+func TestModificationTimeUncommitted(t *testing.T) {
+	t.Parallel()
+	opts := fxserver.ConnectionOptions{Store: &fxstore.MemoryStore{}}
+	f := newFX(t, opts)
+	ep := f.persistent(t, "P")
+	sc, res := f.close(t, false, ep)
+	require.Equal(t, ua.StatusOK, sc, "%v", res)
+	// The reader goes: the enable fails after the commit point.
+	reader := f.lookup(t, pubsub.KindDataSetReader, subConn, rgName, readerName)
+	require.NoError(t, f.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error { return rt.RemoveDataSetReader(reader) }))
+	modNode := f.child(t, f.child(t, ep, "Diagnostics"), "ModificationTime")
+	before, ok := f.read(t, modNode).(time.Time)
+	require.True(t, ok)
+
+	r := f.establish(t, &uafx.EstablishConnectionsRequest{CommandMask: uafx.EnableCommunicationCmd,
+		ConnectionEndpointConfigurations: []*uafx.ConnectionEndpointConfiguration{{FunctionalEntityNode: f.id(motionID),
+			ConnectionEndpoint: &uafx.ConnectionEndpointDefinition{Node: ep}}}})
+	require.Equal(t, ua.StatusUncertain, r.Status)
+	require.Equal(t, ua.StatusBadInvalidState, r.ConnectionEndpointConfigurationResults[0].EnableCommunicationResult,
+		"the enable step failed, after the commit point")
+	now, _ := f.read(t, modNode).(time.Time)
+	require.True(t, before.Equal(now), "the ModificationTime is back: %v, was %v", now, before)
+	require.WithinDuration(t, before, fxserver.ModificationTime(f.conns, ep), time.Microsecond, "and the value the records are written with")
+
+	f = f.restart(t, opts)
+	require.NotNil(t, f.srv.Node(ep))
+	stored, _ := f.read(t, f.child(t, f.child(t, ep, "Diagnostics"), "ModificationTime")).(time.Time)
+	require.True(t, before.Equal(stored), "the store has the same ModificationTime: %v, was %v", stored, before)
 }

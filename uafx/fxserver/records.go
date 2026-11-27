@@ -4,6 +4,7 @@ package fxserver
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
@@ -472,9 +473,15 @@ func withNamespace(n *ua.NodeID, ns uint16) *ua.NodeID {
 	case ua.NodeIDTypeString:
 		return ua.NewStringNodeID(ns, n.StringID())
 	case ua.NodeIDTypeGUID:
+		// StringID is the canonical form of the Guid, which NewGUID parses.
 		return ua.NewGUIDNodeID(ns, n.StringID())
 	case ua.NodeIDTypeByteString:
-		return ua.NewByteStringNodeID(ns, []byte(n.StringID()))
+		// StringID is the base64 form of the ByteString, not its bytes.
+		b, err := base64.StdEncoding.DecodeString(n.StringID())
+		if err != nil {
+			return nil
+		}
+		return ua.NewByteStringNodeID(ns, b)
 	}
 	return nil
 }

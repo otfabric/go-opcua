@@ -8,9 +8,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"hash/crc32"
+	"maps"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"testing"
 )
 
@@ -195,17 +197,37 @@ func TestFileStoreCorrupt(t *testing.T) {
 	}
 }
 
+// FuzzDecodeState: the data file comes from the disk. The harness gives
+// every input a valid checksum, so that mutations reach the entries; it
+// does not for the inputs that start with 0xff, so that a bad checksum is
+// still exercised.
 func FuzzDecodeState(f *testing.F) {
 	f.Add(encodeState(map[string][]byte{"ac/meta": {1, 2}, "ac/ep/x": []byte("value")}))
 	f.Add(encodeState(map[string][]byte{}))
 	f.Add([]byte("FXST"))
+	badSum := append([]byte{0xff}, encodeState(map[string][]byte{"k": nil})...)
+	badSum[len(badSum)-1] ^= 1
+	f.Add(badSum)
+	unsorted := encodeState(map[string][]byte{"b": []byte("1"), "a": []byte("2")})
+	unsorted = append(unsorted[:headerLen], "\x01\x00\x00\x00b\x01\x00\x00\x001\x01\x00\x00\x00a\x01\x00\x00\x002\x00\x00\x00\x00"...)
+	f.Add(unsorted)
 	f.Fuzz(func(t *testing.T, data []byte) {
+		if len(data) > 0 && data[0] == 0xff {
+			data = data[1:]
+		} else if len(data) >= trailerLen {
+			body := data[:len(data)-trailerLen]
+			data = binary.LittleEndian.AppendUint32(slices.Clip(body), crc32.Checksum(body, castagnoli))
+		}
 		st, err := decodeState(data, Limits{MaxKeys: 64, MaxValue: 1 << 12, MaxTotal: 1 << 14})
 		if err != nil {
 			return
 		}
-		if !bytes.Equal(encodeState(st), data) {
-			t.Fatalf("decoded file does not encode back")
+		// The encoder sorts the keys; a decoded file in another order
+		// encodes back to the same entries.
+		enc := encodeState(st)
+		back, err := decodeState(enc, Limits{MaxKeys: 64, MaxValue: 1 << 12, MaxTotal: 1 << 14})
+		if err != nil || len(enc) != len(data) || !maps.EqualFunc(back, st, bytes.Equal) {
+			t.Fatalf("decoded file does not encode back: %v", err)
 		}
 	})
 }

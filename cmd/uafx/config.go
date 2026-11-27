@@ -52,7 +52,7 @@ Part 81 §10.41. It has no value 0.`},
 	"data:PubSubCommunicationConfigurationDataType": {Doc: `PubSubCommunicationConfiguration is the
 PubSubCommunicationConfigurationDataType of Part 81 §10.10.3: what
 SetCommunicationConfigurationCmd applies, as the CloseAndUpdate Method of
-Part 14 §9.1.3.7.4 does.`},
+Part 14 §9.1.3.7.6 does.`},
 	"data:PubSubCommunicationLinkConfigurationDataType": {Doc: `PubSubCommunicationLinkConfiguration is the
 PubSubCommunicationLinkConfigurationDataType of Part 81 §10.13.3: the
 DataSetReader and DataSetWriter of a ConnectionEndpoint, as references

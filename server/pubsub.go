@@ -35,7 +35,8 @@ type pubsubState struct {
 	// and then change it (CloseAndUpdate, UpdatePubSubConfiguration,
 	// Revert) with the PubSub Methods that change it and with
 	// ChangePubSubConfiguration, so that none of them is lost in between
-	// (Part 14 §9.1.3.7.4).
+	// (Part 14 §9.1.2: the mechanisms coordinate access to the
+	// configuration, delaying rather than failing parallel access).
 	txn sync.Mutex
 	// hook follows the changes made in txn (SetPubSubConfigurationHook).
 	hook atomic.Pointer[pubsubHookBox]
@@ -98,7 +99,7 @@ func WithPubSubAuthorizer(a PubSubAuthorizer) Option {
 //
 // Calls on the runtime itself are outside the PubSub transaction of the
 // server: a change made through them while a CloseAndUpdate (Part 14
-// §9.1.3.7.4) or [Server.UpdatePubSubConfiguration] runs can be lost to it,
+// §9.1.3.7.6) or [Server.UpdatePubSubConfiguration] runs can be lost to it,
 // or put back by it. Code that changes the configuration while clients may
 // update it makes the change through [Server.ChangePubSubConfiguration].
 // Reading the runtime needs no transaction.

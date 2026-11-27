@@ -64,6 +64,24 @@ func WithMaxControlled(o ConnectionOptions, n int) ConnectionOptions {
 	return o
 }
 
+// WithFailCapabilities makes the setting of SupportsPersistence in
+// EnableConnections fail with err.
+func WithFailCapabilities(o ConnectionOptions, err error) ConnectionOptions {
+	o.failCapabilities = err
+	return o
+}
+
+// ModificationTime returns the ModificationTime the connections keep for
+// the endpoint n (Part 81 Table 74), also of one without the Variable.
+func ModificationTime(c *Connections, n *ua.NodeID) time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e := c.endpoints[n.String()]; e != nil {
+		return e.modifiedAt
+	}
+	return time.Time{}
+}
+
 // SessionEnded tells the Guard of the Locks that the session s ended.
 func SessionEnded(c *Connections, s *server.Session) { lockGuard{c}.SessionEnded(s) }
 

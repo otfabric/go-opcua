@@ -98,6 +98,19 @@ behaviour you may notice, and the deviations of peers are in
   restart). A restored secured group gates its whole SecurityGroup until a
   key newer than the restart becomes current
   ([docs/uafx.md](docs/uafx.md#persistence)).
+- UAFX ConfigurationData of a persistent ConnectionEndpoint (OPC 10000-81
+  §6.2.4.3.7): SetConfigurationDataCmd writes the values, but
+  SetStoredVariables (§6.4.6.3), which the clause requires for an
+  endpoint with IsPersistent set, is not implemented, so the values are
+  not stored and a restart does not apply them again. The endpoint
+  itself is restored.
+- UAFX CloseConnections after `Connections.Close` returns the Method
+  status `Bad_InvalidState`; OPC 10000-81 Table 23 lists only Uncertain,
+  so this is a library interpretation using the general code of Part 4.
+- UAFX persistence: a required write the store refuses for good (over its
+  Limits) leaves the records of the AutomationComponent out of line with
+  the runtime (`PersistenceStatus.Diverged`) until a later write or a
+  restart replaces them; the store is not fenced.
 - ECC follows open62541, not Part 6 1.05.07, for curve25519 key material
   and ChannelThumbprint
   ([docs/interop-gaps.md](docs/interop-gaps.md)).

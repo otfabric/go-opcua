@@ -3,9 +3,14 @@
 package fxserver
 
 import (
+	"log/slog"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uafx/fxstore"
 )
 
 func safeFixture() *ua.PubSubConfigurationDataType {
@@ -92,5 +97,35 @@ func TestSafeDirection(t *testing.T) {
 	}
 	if !safeDirection(nil, &ua.PubSubConfigurationDataType{}) {
 		t.Error("nothing after nothing is not safe")
+	}
+}
+
+// TestCheckPersistedReadError: the persisted check of a persistent
+// endpoint, or of any endpoint with StrictNotPersisted, fails with
+// Bad_InvalidState when the configuration of the reader or writer, its
+// group or its connection cannot be read (Part 81 §6.2.4.3.9.2, Table
+// 16); without a check to run it passes.
+func TestCheckPersistedReadError(t *testing.T) {
+	t.Parallel()
+	srv, err := server.New(server.EndPoint("localhost", 0), server.InsecureNoSecurity(),
+		server.EnableAuthMode(ua.UserTokenTypeAnonymous), server.WithPubSub(nil))
+	require.NoError(t, err)
+	for _, tc := range []struct {
+		name       string
+		persistent bool
+		strict     bool
+		want       ua.StatusCode
+	}{
+		{"persistent", true, false, ua.StatusBadInvalidState},
+		{"strict", false, true, ua.StatusBadInvalidState},
+		{"no check", false, false, ua.StatusOK},
+	} {
+		c := &Connections{srv: srv, log: slog.New(slog.DiscardHandler),
+			opts: ConnectionOptions{Store: &fxstore.MemoryStore{}, StrictNotPersisted: tc.strict}}
+		x := &call{c: c}
+		e := &endpoint{persistent: tc.persistent}
+		for _, reader := range []bool{true, false} {
+			require.Equal(t, tc.want, x.checkPersisted(e, reader, 9001, 9002, 9003), "%s reader=%v", tc.name, reader)
+		}
 	}
 }

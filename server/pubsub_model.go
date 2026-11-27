@@ -778,8 +778,8 @@ func (m *pubsubModel) method(name string, f func(ctx context.Context, obj *ua.No
 
 // change wraps a configuration method that changes the configuration: as
 // method, and the call holds the PubSub transaction, so that it does not
-// fall between what a CloseAndUpdate reads and what it applies (Part 14
-// §9.1.3.7.4).
+// fall between what a CloseAndUpdate (Part 14 §9.1.3.7.6) reads and
+// what it applies (§9.1.2: the mechanisms coordinate access).
 func (m *pubsubModel) change(name string, f func(ctx context.Context, obj *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode)) MethodHandler {
 	return m.method(name, func(ctx context.Context, obj *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 		m.s.ps.txn.Lock()
