@@ -11,6 +11,7 @@ import (
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHistorian_UpdateDataSemantics(t *testing.T) {
@@ -135,7 +136,8 @@ func TestHistorian_DeleteRawModified(t *testing.T) {
 		t.Fatalf("unknown node: %v", st)
 	}
 
-	// Reverse range (start > end) still deletes the inclusive window.
+	// Reverse range (start > end): from startTime back to, not including,
+	// endTime, as a reverse read returns it.
 	res := h.DeleteRawModified(nodeID, false, base.Add(3*time.Second), base.Add(time.Second))
 	if res.StatusCode != ua.StatusOK {
 		t.Fatalf("delete range: %v", res.StatusCode)
@@ -145,9 +147,74 @@ func TestHistorian_DeleteRawModified(t *testing.T) {
 		t.Fatal(err)
 	}
 	hd := raw.HistoryData.Value.(*ua.HistoryData)
-	// Samples at t=0 and t=4 remain (deleted inclusive [1s, 3s]).
-	if len(hd.DataValues) != 2 {
-		t.Fatalf("remaining=%d, want 2", len(hd.DataValues))
+	// Samples at t=0, t=1 and t=4 remain (deleted (1s, 3s]).
+	if len(hd.DataValues) != 3 {
+		t.Fatalf("remaining=%d, want 3", len(hd.DataValues))
+	}
+}
+
+// TestHistorian_DeleteRawModifiedRange: the range of a raw delete (Part 11
+// §6.9.5.1) is that of a raw read: the end time is excluded, startTime =
+// endTime deletes the value at startTime, and a range without a sample is
+// Bad_NoData (§6.9.5.2). A delete removes exactly what a read of the same
+// range returns.
+func TestHistorian_DeleteRawModifiedRange(t *testing.T) {
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	at := func(i int) time.Time { return base.Add(time.Duration(i) * time.Second) }
+	nodeID := ua.NewStringNodeID(2, "Hist.DelRange")
+	fresh := func(t *testing.T) *Historian {
+		t.Helper()
+		h := NewHistorian()
+		h.EnableNode(nodeID, 100)
+		for i := 0; i < 5; i++ {
+			h.RecordValue(nodeID, &ua.DataValue{
+				EncodingMask: ua.DataValueValue | ua.DataValueSourceTimestamp,
+				Value:        ua.MustVariant(float64(i)), SourceTimestamp: at(i),
+			})
+		}
+		return h
+	}
+	values := func(t *testing.T, h *Historian, start, end time.Time) []float64 {
+		t.Helper()
+		raw, err := h.ReadRaw(nodeID, start, end, 0, false, nil)
+		require.NoError(t, err)
+		var out []float64
+		for _, dv := range raw.HistoryData.Value.(*ua.HistoryData).DataValues {
+			out = append(out, dv.Value.Value().(float64))
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		name       string
+		start, end time.Time
+		status     ua.StatusCode
+		left       []float64
+	}{
+		{"end excluded", at(1), at(3), ua.StatusOK, []float64{0, 3, 4}},
+		{"start equals end", at(2), at(2), ua.StatusOK, []float64{0, 1, 3, 4}},
+		{"start equals end without sample", at(2).Add(time.Millisecond), at(2).Add(time.Millisecond), ua.StatusBadNoData, []float64{0, 1, 2, 3, 4}},
+		{"reverse", at(3), at(1), ua.StatusOK, []float64{0, 1, 4}},
+		{"open start", time.Time{}, at(2), ua.StatusOK, []float64{2, 3, 4}},
+		{"open end", at(3), time.Time{}, ua.StatusOK, []float64{0, 1, 2}},
+		{"only the end time in range", at(4), at(4).Add(time.Hour), ua.StatusOK, []float64{0, 1, 2, 3}},
+		{"nothing in range", at(10), at(20), ua.StatusBadNoData, []float64{0, 1, 2, 3, 4}},
+		{"range ending at the first sample", at(-5), at(0), ua.StatusBadNoData, []float64{0, 1, 2, 3, 4}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			h := fresh(t)
+			if tc.status == ua.StatusOK && !tc.start.Equal(tc.end) {
+				// What a read of the range returns is what the delete removes.
+				read := values(t, h, tc.start, tc.end)
+				require.NotEmpty(t, read)
+				defer func() {
+					for _, v := range read {
+						require.NotContains(t, values(t, h, time.Time{}, time.Time{}), v)
+					}
+				}()
+			}
+			require.Equal(t, tc.status, h.DeleteRawModified(nodeID, false, tc.start, tc.end).StatusCode)
+			require.Equal(t, tc.left, values(t, h, time.Time{}, time.Time{}))
+		})
 	}
 }
 

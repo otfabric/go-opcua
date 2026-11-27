@@ -1447,6 +1447,8 @@ func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, 
 
 DeleteRawModified implements RawHistoryDeleter. Modified-only deletes are unsupported.
 
+The range is that of DeleteRawModifiedDetails (Part 11 §6.9.5.1): "values up to but not including the endTime are deleted", and with startTime = endTime "the value at the startTime is deleted". The end time is excluded as by a raw read (ReadRaw), so a delete removes the samples a read of the same range returns. Part 11 requires startTime \< endTime and both to be defined; the historian also takes the ranges ReadRaw takes: a zero time leaves the range open on its side, and startTime > endTime deletes from startTime back to, but not including, endTime. A range without a sample is Bad\_NoData (§6.9.5.2).
+
 #### func (Historian) EnableEvents
 
 ```go

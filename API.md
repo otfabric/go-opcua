@@ -2555,7 +2555,11 @@ opaque ByteStrings owned by the server (expire after 30s; max 100 active).
 
 Supported by default `*Historian`:
 - UpdateData Insert / Replace / Update semantics
-- DeleteRawModified with `isDeleteModified=false`; `true` → `BadHistoryOperationUnsupported`
+- DeleteRawModified with `isDeleteModified=false`; `true` → `BadHistoryOperationUnsupported`.
+  The end time is excluded, as by a raw read; startTime = endTime deletes the
+  value at startTime; a range without a sample is `BadNoData` (Part 11
+  §6.9.5). A zero time leaves the range open, and startTime > endTime deletes
+  from startTime back to, not including, endTime
 - DeleteAtTime
 - ReadAtTime (nearest previous)
 - ReadModified

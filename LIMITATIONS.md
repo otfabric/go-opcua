@@ -118,6 +118,4 @@ behaviour you may notice, and the deviations of peers are in
 - PubSub chunked NetworkMessages and UADP discovery use the layout of the OPC
   Foundation .NET stack 2.x where the specification is ambiguous; open62541
   1.5.10 sends and accepts neither.
-- Raw history deletes (DeleteRawModified) of the built-in historian remove the
-  sample at the end time, while a raw read excludes it.
 - PubSub over AMQP sends ExactlyOnce as AtLeastOnce.

@@ -113,7 +113,18 @@ func (h *Historian) UpdateData(nodeID *ua.NodeID, perform ua.PerformUpdateType, 
 	return &ua.HistoryUpdateResult{StatusCode: ua.StatusOK, OperationResults: ops}
 }
 
-// DeleteRawModified implements RawHistoryDeleter. Modified-only deletes are unsupported.
+// DeleteRawModified implements RawHistoryDeleter. Modified-only deletes are
+// unsupported.
+//
+// The range is that of DeleteRawModifiedDetails (Part 11 §6.9.5.1): "values
+// up to but not including the endTime are deleted", and with startTime =
+// endTime "the value at the startTime is deleted". The end time is
+// excluded as by a raw read (ReadRaw), so a delete removes the samples a
+// read of the same range returns. Part 11 requires startTime < endTime and
+// both to be defined; the historian also takes the ranges ReadRaw takes: a
+// zero time leaves the range open on its side, and startTime > endTime
+// deletes from startTime back to, but not including, endTime. A range
+// without a sample is Bad_NoData (§6.9.5.2).
 func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, startTime, endTime time.Time) *ua.HistoryUpdateResult {
 	if isDeleteModified {
 		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
@@ -126,31 +137,38 @@ func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, 
 		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadHistoryOperationUnsupported}
 	}
 
-	reverse := !startTime.IsZero() && !endTime.IsZero() && startTime.After(endTime)
-	lo, hi := startTime, endTime
-	if reverse {
-		lo, hi = endTime, startTime
-	}
-
 	kept := nh.samples[:0]
+	deleted := 0
 	for _, s := range nh.samples {
-		ts := s.SourceTimestamp
-		inRange := true
-		if !lo.IsZero() && ts.Before(lo) {
-			inRange = false
+		if inRawDeleteRange(startTime, endTime, s.SourceTimestamp) {
+			deleted++
+			continue
 		}
-		if !hi.IsZero() && !ts.Before(hi) && !ts.Equal(hi) {
-			// inclusive end
-			if ts.After(hi) {
-				inRange = false
-			}
-		}
-		if !inRange {
-			kept = append(kept, s)
-		}
+		kept = append(kept, s)
 	}
 	nh.samples = kept
+	if deleted == 0 {
+		return &ua.HistoryUpdateResult{StatusCode: ua.StatusBadNoData}
+	}
 	return &ua.HistoryUpdateResult{StatusCode: ua.StatusOK}
+}
+
+// inRawDeleteRange reports whether a sample at ts is in the range of a raw
+// delete from start to end (see DeleteRawModified).
+func inRawDeleteRange(start, end, ts time.Time) bool {
+	switch {
+	case !start.IsZero() && start.Equal(end):
+		return ts.Equal(start)
+	case !start.IsZero() && !end.IsZero() && start.After(end):
+		// From startTime back to endTime, as a reverse read.
+		return !ts.After(start) && ts.After(end)
+	case !start.IsZero() && ts.Before(start):
+		return false
+	case !end.IsZero() && !ts.Before(end):
+		return false
+	default:
+		return true
+	}
 }
 
 // DeleteAtTime implements AtTimeHistoryDeleter.
