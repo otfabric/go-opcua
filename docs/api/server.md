@@ -82,6 +82,12 @@ const DiagnosticsNamespaceURI = "urn:otfabric:go-opcua:diagnostics"
 DiagnosticsNamespaceURI is the namespace of the session diagnostics objects and of the SessionIds of the server. It is added to the namespace array when the first session is created, after the namespaces the application added before.
 
 ```go
+const IssuedTokenTypeJWT = "http://opcfoundation.org/UA/UserToken#JWT"
+```
+
+IssuedTokenTypeJWT is the IssuedTokenType of a UserTokenPolicy for JSON Web Tokens (Part 6 §6.5.2.2, Table 54).
+
+```go
 const PubSubNamespaceURI = "urn:otfabric:go-opcua:pubsub"
 ```
 
@@ -2924,6 +2930,16 @@ The registration runs in the background from [Server.Start](#func-server-start) 
 The SecureChannel to the discovery server is secured: the server picks the most secure endpoint the discovery server offers that one of its own certificates fits ([Certificate](#func-certificate) and [PrivateKey](#func-privatekey), or [ApplicationIdentity](#func-applicationidentity) for the ECC policies) and uses that certificate, whose application URI is the ServerUri it registers. See [RegisterSecurity](#func-registersecurity) and [RegisterInsecure](#func-registerinsecure).
 
 The option can be given several times to register with several discovery servers.
+
+#### func WithIssuedTokenPolicy
+
+```go
+func WithIssuedTokenPolicy(issuedTokenType, issuerEndpointURL string) Option
+```
+
+WithIssuedTokenPolicy sets what the IssuedToken UserTokenPolicy of every endpoint advertises (EnableAuthMode(ua.UserTokenTypeIssuedToken)): the IssuedTokenType, a URI naming the kind of token the server accepts (IssuedTokenTypeJWT, or a URI of the vendor of the Authorization Service), and the IssuerEndpointUrl, whose content depends on the Authorization Service and the token type: for a JWT the JSON object of Part 6 §6.5.2.2 (Part 4 §7.41). A client uses them to choose the Authorization Service it gets the token from.
+
+The validator of [WithIssuedTokenValidator](#func-withissuedtokenvalidator) decides which tokens are accepted; this option only announces them. Without it, or with empty strings, both fields are empty, as before v1.42.0.
 
 #### func WithIssuedTokenValidator
 

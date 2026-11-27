@@ -535,6 +535,19 @@ s, err := server.New(
 )
 ```
 
+### Issued Tokens
+
+The client presents a token from an Authorization Service (`opcua.AuthIssuedToken`); the server accepts it only through `server.WithIssuedTokenValidator`. The IssuedToken UserTokenPolicy tells clients which kind of token the server takes: its IssuedTokenType is a URI, `server.IssuedTokenTypeJWT` for JSON Web Tokens (Part 6 §6.5.2.2), and its IssuerEndpointUrl depends on the Authorization Service, for a JWT a JSON object with the fields of Part 6 §6.5.2.2 (Part 4 §7.41). Set both with `server.WithIssuedTokenPolicy`; without it both are empty.
+
+```go
+s, err := server.New(
+    server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
+    server.WithIssuedTokenValidator(checkJWT),
+    server.WithIssuedTokenPolicy(server.IssuedTokenTypeJWT, issuerJSON),
+    server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
+)
+```
+
 ---
 
 ## Common Security Configurations

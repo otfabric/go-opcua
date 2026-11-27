@@ -392,6 +392,30 @@ func WithIssuedTokenValidator(v IssuedTokenValidator) Option {
 	}
 }
 
+// IssuedTokenTypeJWT is the IssuedTokenType of a UserTokenPolicy for JSON
+// Web Tokens (Part 6 §6.5.2.2, Table 54).
+const IssuedTokenTypeJWT = "http://opcfoundation.org/UA/UserToken#JWT"
+
+// WithIssuedTokenPolicy sets what the IssuedToken UserTokenPolicy of every
+// endpoint advertises (EnableAuthMode(ua.UserTokenTypeIssuedToken)): the
+// IssuedTokenType, a URI naming the kind of token the server accepts
+// ([IssuedTokenTypeJWT], or a URI of the vendor of the Authorization
+// Service), and the IssuerEndpointUrl, whose content depends on the
+// Authorization Service and the token type: for a JWT the JSON object of
+// Part 6 §6.5.2.2 (Part 4 §7.41). A client uses them to choose the
+// Authorization Service it gets the token from.
+//
+// The validator of [WithIssuedTokenValidator] decides which tokens are
+// accepted; this option only announces them. Without it, or with empty
+// strings, both fields are empty, as before v1.42.0.
+func WithIssuedTokenPolicy(issuedTokenType, issuerEndpointURL string) Option {
+	return func(s *serverConfig) error {
+		s.issuedTokenType = issuedTokenType
+		s.issuerEndpointURL = issuerEndpointURL
+		return nil
+	}
+}
+
 // ClientCertificateValidator validates the application certificate presented
 // by a connecting client during OpenSecureChannel (and again at CreateSession
 // as defense-in-depth). The certificate is provided as DER-encoded bytes.

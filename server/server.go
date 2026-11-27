@@ -182,6 +182,8 @@ type serverConfig struct {
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
 	issuedTokenValidator       IssuedTokenValidator
+	issuedTokenType            string // WithIssuedTokenPolicy
+	issuerEndpointURL          string // WithIssuedTokenPolicy
 	clientCertificateValidator ClientCertificateValidator
 	allowUsernameOnNone        bool
 	eccSignLegacyKeyLength     bool
@@ -1063,9 +1065,13 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 		tok := &ua.UserTokenPolicy{
 			PolicyID:          policyID,
 			TokenType:         auth.tokenType,
-			IssuedTokenType:   "",
-			IssuerEndpointURL: "",
 			SecurityPolicyURI: tokenPolicyURI,
+		}
+		// IssuedTokenType "may only be specified if TokenType is
+		// ISSUEDTOKEN" (Part 4 §7.41); IssuerEndpointUrl belongs to it.
+		if auth.tokenType == ua.UserTokenTypeIssuedToken {
+			tok.IssuedTokenType = s.cfg.issuedTokenType
+			tok.IssuerEndpointURL = s.cfg.issuerEndpointURL
 		}
 
 		ep.UserIdentityTokens = append(ep.UserIdentityTokens, tok)
