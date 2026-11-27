@@ -574,6 +574,39 @@ func TestSecurity_IdentityReachesRoleMapper(t *testing.T) {
 	})
 }
 
+// TestSecurity_IssuedTokenPolicy: the IssuedToken UserTokenPolicy a client
+// discovers names the IssuedTokenType and IssuerEndpointUrl of
+// WithIssuedTokenPolicy (Part 4 §7.41), and the client signs in with an
+// issued token on it.
+func TestSecurity_IssuedTokenPolicy(t *testing.T) {
+	const issuer = `{"ua:resourceId":"urn:conformance:server"}`
+	_, url := newServer(t,
+		server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
+		server.WithIssuedTokenValidator(func(tok *ua.IssuedIdentityToken) error {
+			if bytes.Equal(tok.TokenData, []byte("header.payload.signature")) {
+				return nil
+			}
+			return ua.StatusBadIdentityTokenRejected
+		}),
+		server.WithIssuedTokenPolicy(server.IssuedTokenTypeJWT, issuer),
+		server.AllowUsernameOnNone(),
+	)
+	ep := endpointFor(t, url, ua.SecurityPolicyURINone, ua.MessageSecurityModeNone)
+	var issued []*ua.UserTokenPolicy
+	for _, p := range ep.UserIdentityTokens {
+		if p.TokenType == ua.UserTokenTypeIssuedToken {
+			issued = append(issued, p)
+		} else {
+			require.Empty(t, p.IssuedTokenType, "%v", p.TokenType)
+		}
+	}
+	require.Len(t, issued, 1)
+	require.Equal(t, "http://opcfoundation.org/UA/UserToken#JWT", issued[0].IssuedTokenType)
+	require.Equal(t, issuer, issued[0].IssuerEndpointURL)
+
+	newClient(t, url, opcua.SecurityFromEndpoint(ep, ua.UserTokenTypeIssuedToken), opcua.AuthIssuedToken([]byte("header.payload.signature")))
+}
+
 // TestSecurity_AccessRestrictions verifies the per-node AccessRestrictions
 // attribute is enforced against the security mode of the channel.
 func TestSecurity_AccessRestrictions(t *testing.T) {
