@@ -10,11 +10,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxcm"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
+	"github.com/otfabric/go-opcua/uafx/fxstore/storetest"
 )
 
 // The re-proof of the outcome of an interrupted call (design
@@ -141,9 +145,10 @@ func TestLostEnableE2E(t *testing.T) {
 func TestLostDisableE2E(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name string
-		sent bool
-	}{{"done", true}, {"not done", false}} {
+		name  string
+		sent  bool
+		mixed bool
+	}{{"done", true, false}, {"not done", false, false}, {"partly done", true, true}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
@@ -157,12 +162,38 @@ func TestLostDisableE2E(t *testing.T) {
 			st, _ := m.Status(k)
 			require.True(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
 			require.Positive(t, callsOfKind(t, mem, fxcm.CallClose))
+			// lost is the AC whose CloseConnections lost its response:
+			// the two are closed in parallel.
+			lost := a
+			for _, e := range st.Endpoints {
+				if e.Class == fxcm.Unresolved && e.ServerURI == b.uri {
+					lost = b
+				}
+			}
+			if tc.mixed {
+				// Its endpoint is bidirectional: its DataSetReader stays
+				// disabled, its DataSetWriter is enabled again. A disabled
+				// reader is no proof that the endpoint is.
+				enableWriter(t, lost)
+			}
 
 			require.NoError(t, m.Close())
 			m = newManager(t, opts)
 			before := n.Load()
 			res = process(t, m, uafx.ActionDisableConnections, k)
 			st, _ = m.Status(k)
+			if tc.mixed {
+				assert.Equal(t, fxcm.StateError, res.State)
+				var classes []fxcm.Ownership
+				for _, e := range st.Endpoints {
+					if e.ServerURI == lost.uri {
+						classes = append(classes, e.Class)
+					}
+				}
+				assert.Equal(t, []fxcm.Ownership{fxcm.Unresolved}, classes, "%+v", st.Endpoints)
+				assert.Positive(t, callsOfKind(t, mem, fxcm.CallClose), "the intent stays")
+				return
+			}
 			if tc.sent {
 				require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 				assert.False(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
@@ -251,6 +282,192 @@ func TestLostEstablishReproofE2E(t *testing.T) {
 				assert.Equal(t, 1, callsOfKind(t, mem, fxcm.CallEstablish), "the intent stays")
 			}
 			assert.Equal(t, []string{"ToA"}, b.endpoints(), "nothing closed")
+		})
+	}
+}
+
+// enableWriter enables the DataSetWriter W of a in its PubSub runtime, as
+// another mechanism may (OPC 10000-14 §9.1.2).
+func enableWriter(t *testing.T, a *ac) { setWriter(t, a, true) }
+
+// disableWriter disables it.
+func disableWriter(t *testing.T, a *ac) { setWriter(t, a, false) }
+
+func setWriter(t *testing.T, a *ac, on bool) {
+	t.Helper()
+	for _, c := range a.srv.PubSub().Components() {
+		if c.Kind == pubsub.KindDataSetWriter && c.Name == "W" {
+			if on {
+				require.NoError(t, a.srv.PubSub().Enable(c.ID))
+			} else {
+				require.NoError(t, a.srv.PubSub().Disable(c.ID))
+			}
+			n, ok := a.srv.PubSubNodeID(c.ID)
+			require.True(t, ok)
+			// The address space follows the runtime asynchronously: wait
+			// until a client reads the State the Manager will.
+			require.Eventually(t, func() bool {
+				st := childNamed(t, a, childNamed(t, a, n, "Status"), "State")
+				dv := a.srv.Node(st).Value()
+				v, ok := dv.Value.Value().(int32)
+				return ok && (ua.PubSubState(v) != ua.PubSubStateDisabled) == on
+			}, 10*time.Second, 10*time.Millisecond)
+			return
+		}
+	}
+	t.Fatal("no DataSetWriter W")
+}
+
+// childNamed returns the hierarchical child of n on a with the BrowseName
+// name.
+func childNamed(t *testing.T, a *ac, n *ua.NodeID, name string) *ua.NodeID {
+	t.Helper()
+	ns, err := a.srv.Namespace(int(n.Namespace()))
+	require.NoError(t, err)
+	res := ns.Browse(&ua.BrowseDescription{NodeID: n, BrowseDirection: ua.BrowseDirectionForward, ReferenceTypeID: ua.NewNumericNodeID(0, id.HierarchicalReferences), IncludeSubtypes: true, ResultMask: uint32(ua.BrowseResultMaskAll)})
+	for _, r := range res.References {
+		if r.BrowseName != nil && r.BrowseName.Name == name {
+			return r.NodeID.NodeID
+		}
+	}
+	t.Fatalf("%v has no %s", n, name)
+	return nil
+}
+
+// TestOutcomeCompletionLostE2E (decision C3-D13, design §6.3): a disable
+// (CloseConnections Remove FALSE) or an enable (EnableCommunicationCmd) is
+// answered, but the write that would complete its intents does not
+// commit. The records do not change, so they stay KnownOwned while the
+// intents stay in the store. The next run, live or after a restart,
+// decides each target by the postcondition of the call, not by the trusted
+// record: a then shows its DataSetWriter in the other state, so its
+// outcome is not proven, its intent stays, it is Unresolved, and nothing
+// is sent to it again.
+func TestOutcomeCompletionLostE2E(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		action uafx.FxProcess
+		match  func(*ua.CallMethodRequest) bool
+		kind   uint8
+		undo   func(*testing.T, *ac)
+	}{
+		{"disable", uafx.ActionDisableConnections, disables, fxcm.CallClose, enableWriter},
+		{"enable", uafx.ActionEnableConnections, enables, fxcm.CallEnable, disableWriter},
+	} {
+		for _, restart := range []bool{false, true} {
+			t.Run(tc.name+map[bool]string{false: " live", true: " restart"}[restart], func(t *testing.T) {
+				t.Parallel()
+				a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
+				mem, k, _ := establishedWith(t, a, b, fxcm.Options{}, false)
+				f := &failing{Store: mem}
+				d := newHookDialer()
+				var toA atomic.Int32
+				d.hook = func(addr fxcm.ServerAddress, req *ua.CallMethodRequest) (bool, error) {
+					if addr.Address == a.url && tc.match(req) {
+						toA.Add(1)
+					}
+					return true, nil
+				}
+				opts := fxcm.Options{Store: f, Dialer: d, Verify: fxcm.VerifyOptions{Manual: true}}
+				m := newManager(t, opts)
+				if tc.action == uafx.ActionEnableConnections {
+					res := process(t, m, uafx.ActionDisableConnections, k)
+					require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
+				}
+				// The completions of both ACs (a disable completes them in
+				// one write, an enable once per AC).
+				f.armN(storetest.FailNotCommitted, 2, deletesPrefix("call/"))
+				res := process(t, m, tc.action, k)
+				require.Equal(t, fxcm.StateError, res.State)
+				require.Positive(t, f.hit)
+				require.Equal(t, int32(1), toA.Load())
+				require.Positive(t, callsOfKind(t, mem, tc.kind), "the intents stay")
+				st, _ := m.Status(k)
+				for _, e := range st.Endpoints {
+					require.Equal(t, fxcm.KnownOwned, e.Class, "the record did not change: %+v", e)
+				}
+
+				tc.undo(t, a)
+				if restart {
+					require.NoError(t, m.Close())
+					m = newManager(t, opts)
+				}
+				res = process(t, m, tc.action, k)
+				assert.Equal(t, fxcm.StateError, res.State, "%+v", res)
+				assert.Equal(t, int32(1), toA.Load(), "nothing is sent to a again")
+				assert.Positive(t, callsOfKind(t, mem, tc.kind), "the intent of a stays")
+				st, _ = m.Status(k)
+				for _, e := range st.Endpoints {
+					if e.ServerURI == a.uri {
+						assert.Equal(t, fxcm.Unresolved, e.Class, "%+v", e)
+					}
+				}
+			})
+		}
+	}
+}
+
+// TestLostReleaseE2E (§6.2.5.2): the response of a CloseConnections with
+// Remove TRUE of a taken preconfigured endpoint is lost. Such an endpoint
+// is not deleted but released: after a restart its outcome is proven only
+// by the endpoint being released (RelatedEndpoint null, communication
+// disabled or none); one still related keeps its intent and stays
+// Unresolved, and the call is not sent again.
+func TestLostReleaseE2E(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		sent bool
+	}{{"done", true}, {"not done", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
+			mem := &fxstore.MemoryStore{}
+			d := newHookDialer()
+			var n atomic.Int32
+			d.hook = func(addr fxcm.ServerAddress, req *ua.CallMethodRequest) (bool, error) {
+				if addr.Address != b.url || len(req.InputArguments) != 2 {
+					return true, nil
+				}
+				if remove, _ := req.InputArguments[1].Value().(bool); !remove {
+					return true, nil
+				}
+				if n.Add(1) == 1 {
+					return tc.sent, ua.StatusBadCommunicationError
+				}
+				return true, nil
+			}
+			// The fixture's preconfigured endpoint has no CreationTime: a
+			// restarted Manager could not re-prove its record (§6.5), so
+			// the take and the lost release are of one Manager.
+			opts := fxcm.Options{Store: mem, Dialer: d, Verify: fxcm.VerifyOptions{Manual: true}}
+			m := newManager(t, opts)
+			cfg, err := m.Add(presetConf(t, a, b))
+			require.NoError(t, err)
+			k := cfg.Key()
+			res := process(t, m, uafx.ActionEstablishConnectionsEnabled, k)
+			require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
+			res = process(t, m, uafx.ActionRemoveConnections, k)
+			require.Equal(t, fxcm.StateError, res.State)
+			require.Equal(t, int32(1), n.Load())
+			require.Positive(t, callsOfKind(t, mem, fxcm.CallClose))
+
+			require.NoError(t, m.Close())
+			m = newManager(t, opts)
+			res = process(t, m, uafx.ActionRemoveConnections, k)
+			assert.Equal(t, int32(1), n.Load(), "not sent again")
+			assert.NotNil(t, b.srv.Node(b.id(fxtest.ConnPreset)), "a preconfigured endpoint stays")
+			st, _ := m.Status(k)
+			if tc.sent {
+				assert.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
+				assert.Zero(t, callsOfKind(t, mem, fxcm.CallClose))
+				assert.Empty(t, st.Endpoints)
+				return
+			}
+			assert.Equal(t, fxcm.StateError, res.State)
+			assert.Positive(t, callsOfKind(t, mem, fxcm.CallClose), "the intent stays")
+			assert.True(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
 		})
 	}
 }

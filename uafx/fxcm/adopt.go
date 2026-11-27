@@ -51,24 +51,9 @@ func (x *run) adoptable(ctx context.Context, a *acRun, ep *epRun, rec *record, o
 	}
 	x.s.mu.Lock()
 	ok := rec.Class == KnownOwned && rec.gen == x.gen && bytes.Equal(rec.fp, x.fp) && rec.NodeID.Equal(obs.NodeID)
-	created := rec.created
 	x.s.mu.Unlock()
 	if !ok {
 		return false
-	}
-	// The incarnation the record has (§6.5): an AutomationComponent that
-	// restarted without its endpoints may show another under the Name at
-	// the same NodeId, which only its CreationTime tells apart.
-	if !created.IsZero() {
-		cm, cmOK, now, err := endpointEvidence(ctx, a.t, obs.NodeID)
-		switch {
-		case err != nil:
-			x.m.log.Debug("fxcm: an endpoint was not adopted: its evidence was not read", "set", x.r.key.String(), "run", x.r.id, "endpoint", ep.e.conf.Name, "error", err)
-			return false
-		case !now.Equal(created), cmOK && cm != x.m.opts.ApplicationURI:
-			x.m.log.Debug("fxcm: an endpoint was not adopted: it is another incarnation", "set", x.r.key.String(), "run", x.r.id, "endpoint", ep.e.conf.Name)
-			return false
-		}
 	}
 	act, err := readActual(ctx, a.t, obs.NodeID)
 	if err != nil {

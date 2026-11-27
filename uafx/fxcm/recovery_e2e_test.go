@@ -380,6 +380,26 @@ func TestAdoptionE2E(t *testing.T) {
 			r, _ := referenced(t, b, ep, "DataSetReader")
 			setProperty(t, b, r, "MessageReceiveTimeout", 4321.0)
 		}},
+		{"reader group changed is not adopted", func(t *testing.T, b *ac, ep *ua.NodeID) {
+			r, _ := referenced(t, b, ep, "DataSetReader")
+			cid, ok := b.srv.PubSubComponentID(r)
+			require.True(t, ok)
+			info, err := b.srv.PubSub().Component(cid)
+			require.NoError(t, err)
+			g, ok := b.srv.PubSubNodeID(info.Parent)
+			require.True(t, ok)
+			setProperty(t, b, g, "MaxNetworkMessageSize", uint32(512))
+		}},
+		{"writer group message settings changed is not adopted", func(t *testing.T, b *ac, ep *ua.NodeID) {
+			w, _ := referenced(t, b, ep, "DataSetWriter")
+			cid, ok := b.srv.PubSubComponentID(w)
+			require.True(t, ok)
+			info, err := b.srv.PubSub().Component(cid)
+			require.NoError(t, err)
+			g, ok := b.srv.PubSubNodeID(info.Parent)
+			require.True(t, ok)
+			setProperty(t, b, childNamed(t, b, g, "MessageSettings"), "NetworkMessageContentMask", uint32(1))
+		}},
 		{"writer replaced is not adopted", func(t *testing.T, b *ac, ep *ua.NodeID) {
 			// Removed and added again with the same Name through the
 			// runtime: the endpoint's ToDataSetWriter names a writer that

@@ -48,7 +48,9 @@ behaviour you may notice, and the deviations of peers are in
   fenced as one only once a record or intent made over each shows the
   same ApplicationUri; adoption compares the PubSub properties of the
   endpoint's own reader, writer, groups and connections, not the rest of
-  the server's PubSub configuration
+  the server's PubSub configuration, and never adopts a configuration
+  with transport or broker settings, group or connection properties,
+  key services or a PublishingOffset, which it cannot compare
   ([docs/uafx.md](docs/uafx.md#persistence-of-the-connectionmanager)).
   Enable and Disable of a persisted
   component with the Methods of its Status Object are not persisted: after

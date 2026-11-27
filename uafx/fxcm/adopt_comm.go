@@ -55,18 +55,23 @@ type commActual struct {
 	// reader and rconn are those of the DataSetReader and its
 	// PubSubConnection; targets the TargetVariables of its
 	// SubscribedDataSet.
-	reader, rconn map[string]*ua.Variant
-	targets       []*ua.FieldTargetDataType
+	reader, rgroup, rconn map[string]*ua.Variant
+	targets               []*ua.FieldTargetDataType
 }
 
 // Properties read from each element (Part 14 §9.1.4 to §9.1.8).
 var (
-	connProps   = []string{"PublisherId", "TransportProfileUri", "Address/Url"}
-	groupProps  = []string{"WriterGroupId", "PublishingInterval", "KeepAliveTime", "Priority", "HeaderLayoutUri", "SecurityMode", "SecurityGroupId"}
+	connProps  = []string{"PublisherId", "TransportProfileUri", "Address/Url", "Address/NetworkInterface"}
+	groupProps = []string{
+		"WriterGroupId", "PublishingInterval", "KeepAliveTime", "Priority", "HeaderLayoutUri", "SecurityMode", "SecurityGroupId",
+		"MaxNetworkMessageSize", "MessageSettings/GroupVersion", "MessageSettings/DataSetOrdering",
+		"MessageSettings/NetworkMessageContentMask", "MessageSettings/SamplingOffset",
+	}
+	rgroupProps = []string{"SecurityMode", "SecurityGroupId", "MaxNetworkMessageSize"}
 	writerProps = []string{"DataSetWriterId", "DataSetFieldContentMask", "KeyFrameCount"}
 	readerProps = []string{
 		"PublisherId", "WriterGroupId", "DataSetWriterId", "DataSetFieldContentMask", "MessageReceiveTimeout",
-		"KeyFrameCount", "HeaderLayoutUri", "SecurityMode", "SecurityGroupId",
+		"KeyFrameCount", "HeaderLayoutUri", "SecurityMode", "SecurityGroupId", "DataSetMetaData",
 	}
 )
 
@@ -114,6 +119,9 @@ func readComm(ctx context.Context, t *target, act *actual) (*commActual, error) 
 		}
 		rg, err := parentOf(ctx, t, act.reader, id.HasDataSetReader)
 		if err != nil {
+			return nil, err
+		}
+		if c.rgroup, err = readProps(ctx, t, rg, rgroupProps); err != nil {
 			return nil, err
 		}
 		conn, err := parentOf(ctx, t, rg, id.HasReaderGroup)
@@ -252,6 +260,10 @@ func sameCommAt(cfg *ua.PubSubConfiguration2DataType, l *uafx.PubSubCommunicatio
 		if w == nil {
 			return false, "the configuration has no DataSetWriter for it"
 		}
+		if why := unprovableWriter(conn, g, w); why != "" {
+			return false, why
+		}
+		uadp := g.MessageSettings.Value.(*ua.UADPWriterGroupMessageDataType)
 		switch {
 		case w.DataSetWriterID != 0 && !sameU16(c.writer["DataSetWriterId"], w.DataSetWriterID):
 			return false, "its DataSetWriterId"
@@ -273,6 +285,16 @@ func sameCommAt(cfg *ua.PubSubConfiguration2DataType, l *uafx.PubSubCommunicatio
 			return false, "the SecurityMode of its WriterGroup"
 		case !sameStr(c.group["SecurityGroupId"], g.SecurityGroupID):
 			return false, "the SecurityGroupId of its WriterGroup"
+		case !sameU32(c.group["MaxNetworkMessageSize"], g.MaxNetworkMessageSize):
+			return false, "the MaxNetworkMessageSize of its WriterGroup"
+		case uadp.GroupVersion != 0 && !sameU32(c.group["MessageSettings/GroupVersion"], uadp.GroupVersion):
+			return false, "the GroupVersion of its WriterGroup"
+		case !sameI32(c.group["MessageSettings/DataSetOrdering"], int32(uadp.DataSetOrdering)):
+			return false, "the DataSetOrdering of its WriterGroup"
+		case !sameU32(c.group["MessageSettings/NetworkMessageContentMask"], uint32(uadp.NetworkMessageContentMask)):
+			return false, "the NetworkMessageContentMask of its WriterGroup"
+		case !sameF64(c.group["MessageSettings/SamplingOffset"], uadp.SamplingOffset):
+			return false, "the SamplingOffset of its WriterGroup"
 		case !isNullID(conn.PublisherID) && !sameVariant(c.wconn["PublisherId"], conn.PublisherID):
 			return false, "the PublisherId of its PubSubConnection"
 		case !sameConn(c.wconn, conn):
@@ -287,6 +309,10 @@ func sameCommAt(cfg *ua.PubSubConfiguration2DataType, l *uafx.PubSubCommunicatio
 			return false, "the configuration has no DataSetReader for it"
 		}
 		conn := cfg.Connections[l.DataSetReaderRef.ConnectionIndex]
+		rg := conn.ReaderGroups[l.DataSetReaderRef.GroupIndex]
+		if why := unprovableReader(conn, rg, r); why != "" {
+			return false, why
+		}
 		switch {
 		case !isNullID(r.PublisherID) && !sameVariant(c.reader["PublisherId"], r.PublisherID):
 			return false, "the PublisherId of its DataSetReader"
@@ -306,6 +332,14 @@ func sameCommAt(cfg *ua.PubSubConfiguration2DataType, l *uafx.PubSubCommunicatio
 			return false, "the SecurityMode of its DataSetReader"
 		case !sameStr(c.reader["SecurityGroupId"], r.SecurityGroupID):
 			return false, "the SecurityGroupId of its DataSetReader"
+		case !sameMetaData(c.reader["DataSetMetaData"], r.DataSetMetaData):
+			return false, "the DataSetMetaData of its DataSetReader"
+		case !sameI32(c.rgroup["SecurityMode"], int32(rg.SecurityMode)):
+			return false, "the SecurityMode of its ReaderGroup"
+		case !sameStr(c.rgroup["SecurityGroupId"], rg.SecurityGroupID):
+			return false, "the SecurityGroupId of its ReaderGroup"
+		case !sameU32(c.rgroup["MaxNetworkMessageSize"], rg.MaxNetworkMessageSize):
+			return false, "the MaxNetworkMessageSize of its ReaderGroup"
 		case !sameConn(c.rconn, conn):
 			return false, "the transport of the PubSubConnection of its DataSetReader"
 		case !sameTargets(r, c.targets):
@@ -380,13 +414,120 @@ func sameConn(have map[string]*ua.Variant, want *ua.PubSubConnectionDataType) bo
 	if want == nil {
 		return false
 	}
-	url := ""
+	url, iface := "", ""
 	if want.Address != nil {
 		if a, ok := want.Address.Value.(*ua.NetworkAddressURLDataType); ok {
-			url = a.URL
+			url, iface = a.URL, a.NetworkInterface
 		}
 	}
-	return sameStr(have["TransportProfileUri"], want.TransportProfileURI) && sameStr(have["Address/Url"], url)
+	return sameStr(have["TransportProfileUri"], want.TransportProfileURI) && sameStr(have["Address/Url"], url) &&
+		sameStr(have["Address/NetworkInterface"], iface)
+}
+
+// Settings adoption cannot prove equal (library interpretation of design
+// §6.6): the address space of Part 14 §9.1 shows them as Objects or
+// structures whose content is transport or encoding specific, or the AC
+// may not expose them. A configuration with one is never adopted: its
+// endpoints are closed and created again.
+
+// hasBody reports whether the extension object eo has a body.
+func hasBody(eo *ua.ExtensionObject) bool { return eo != nil && eo.Value != nil }
+
+// unprovableConn says what of conn adoption cannot compare, "" for none.
+func unprovableConn(conn *ua.PubSubConnectionDataType) string {
+	switch {
+	case len(conn.ConnectionProperties) > 0:
+		return "its PubSubConnection has ConnectionProperties"
+	case hasBody(conn.TransportSettings):
+		return "its PubSubConnection has TransportSettings"
+	case conn.Address == nil:
+		return "its PubSubConnection has no Address"
+	}
+	if _, ok := conn.Address.Value.(*ua.NetworkAddressURLDataType); !ok {
+		return "its PubSubConnection has an Address that is not a NetworkAddressUrl"
+	}
+	return ""
+}
+
+// unprovableWriter says what of the writer w, its group g and connection
+// conn adoption cannot compare, "" for none. The WriterGroup's
+// MessageSettings must be UADP (Part 14 §6.3.1.1), which it compares.
+func unprovableWriter(conn *ua.PubSubConnectionDataType, g *ua.WriterGroupDataType, w *ua.DataSetWriterDataType) string {
+	if why := unprovableConn(conn); why != "" {
+		return why
+	}
+	uadp, ok := g.MessageSettings.Value.(*ua.UADPWriterGroupMessageDataType)
+	switch {
+	case g.MessageSettings == nil || !ok || uadp == nil:
+		return "its WriterGroup has no UADP MessageSettings"
+	case len(uadp.PublishingOffset) > 0:
+		return "its WriterGroup has a PublishingOffset"
+	case hasBody(g.TransportSettings):
+		return "its WriterGroup has TransportSettings"
+	case len(g.GroupProperties) > 0, len(g.LocaleIDs) > 0, len(g.SecurityKeyServices) > 0:
+		return "its WriterGroup has GroupProperties, LocaleIds or SecurityKeyServices"
+	case hasBody(w.TransportSettings), hasBody(w.MessageSettings):
+		return "its DataSetWriter has TransportSettings or MessageSettings"
+	}
+	return ""
+}
+
+// unprovableReader says what of the reader r, its group rg and connection
+// conn adoption cannot compare, "" for none.
+func unprovableReader(conn *ua.PubSubConnectionDataType, rg *ua.ReaderGroupDataType, r *ua.DataSetReaderDataType) string {
+	if why := unprovableConn(conn); why != "" {
+		return why
+	}
+	switch {
+	case hasBody(rg.TransportSettings), hasBody(rg.MessageSettings):
+		return "its ReaderGroup has TransportSettings or MessageSettings"
+	case len(rg.GroupProperties) > 0, len(rg.SecurityKeyServices) > 0:
+		return "its ReaderGroup has GroupProperties or SecurityKeyServices"
+	case hasBody(r.TransportSettings), hasBody(r.MessageSettings):
+		return "its DataSetReader has TransportSettings or MessageSettings"
+	case len(r.SecurityKeyServices) > 0:
+		return "its DataSetReader has SecurityKeyServices"
+	}
+	return ""
+}
+
+// sameMetaData reports whether have, the DataSetMetaData of a reader, has
+// the fields of want (none for nil): by Name, BuiltInType, DataType and
+// ValueRank (Part 14 §6.2.3.2.2). Its ConfigurationVersion, which the AC
+// may set, is not compared.
+func sameMetaData(have *ua.Variant, want *ua.DataSetMetaDataType) bool {
+	var md *ua.DataSetMetaDataType
+	switch v := valueOf(have).(type) {
+	case *ua.DataSetMetaDataType:
+		md = v
+	case *ua.ExtensionObject:
+		if v != nil {
+			md, _ = v.Value.(*ua.DataSetMetaDataType)
+		}
+	}
+	var hf, wf []*ua.FieldMetaData
+	if md != nil {
+		hf = md.Fields
+	}
+	if want != nil {
+		wf = want.Fields
+	}
+	if len(hf) != len(wf) {
+		return false
+	}
+	for i, w := range wf {
+		h := hf[i]
+		if h == nil || w == nil {
+			if h != w {
+				return false
+			}
+			continue
+		}
+		if h.Name != w.Name || h.BuiltInType != w.BuiltInType || !h.DataType.Equal(w.DataType) || h.ValueRank != w.ValueRank {
+			return false
+		}
+	}
+	return true
 }
 
 // samePublished reports whether have is the PublishedData of the

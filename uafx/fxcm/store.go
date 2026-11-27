@@ -73,6 +73,9 @@ type persistence struct {
 	// part in or shares a server with (fencedOf).
 	fenced map[string][]OwedWork
 	active map[RunID]bool
+	// retained are the intents of active runs whose outcome is unknown
+	// (run.retain), by run: they fence like the intents of ended runs.
+	retained map[RunID]map[string]bool
 
 	settleMu sync.Mutex
 	settling bool
@@ -846,7 +849,22 @@ func (p *persistence) activate(id RunID, on bool) {
 		p.active[id] = true
 	} else {
 		delete(p.active, id)
+		delete(p.retained, id)
 	}
+}
+
+// retain notes that the intent k of the active run id has an unknown
+// outcome.
+func (p *persistence) retain(id RunID, k string) {
+	p.owedMu.Lock()
+	defer p.owedMu.Unlock()
+	if p.retained == nil {
+		p.retained = map[RunID]map[string]bool{}
+	}
+	if p.retained[id] == nil {
+		p.retained[id] = map[string]bool{}
+	}
+	p.retained[id][k] = true
 }
 
 // write is apply under p.mu.
@@ -1277,23 +1295,34 @@ func (p *persistence) unresolvedOn(key SetKey, run RunID) map[string]bool {
 	return out
 }
 
-// fenceAt refuses the intent c of a run of the set key while checkBlocked
-// does, or while another set has an intent of a run that is not active on
-// the server of c, by its address or by the ApplicationUri of its server
-// (two addresses of one server): the fence a run passed when it started is
-// checked again before each of its calls, so that work another set came to
-// owe meanwhile is not bypassed (design §6.3).
-func (p *persistence) fenceAt(key SetKey, c *callRecord) error {
-	if err := p.checkBlocked(key); err != nil {
-		return err
-	}
+// fenceIntents refuses the intent c of a run of the set key while another
+// set has an intent on the server of c, by its address or by the
+// ApplicationUri of its server (two addresses of one server), of a run
+// that is not active: the fence a run passed when it started is checked
+// again before each of its calls, so that work another set came to owe
+// meanwhile is not bypassed (design §6.3). The caller holds p.mu
+// (lockJournal), under which every intent is written, so that the check
+// and the write of the intent of c are one step and no other set writes an
+// intent in between. An intent of
+// another set's active run fences only when its outcome is unknown
+// (retained); one still in flight is serialized by the place locks.
+func (p *persistence) fenceIntents(key SetKey, c *callRecord) error {
 	p.owedMu.Lock()
 	active := maps.Clone(p.active)
+	retained := map[string]bool{}
+	for _, ks := range p.retained {
+		maps.Copy(retained, ks)
+	}
 	p.owedMu.Unlock()
-	l := decodeState(p.d.State())
-	for _, k := range sortedRecordKeys(l.calls) {
-		o := l.calls[k]
-		if keyString(SetKey{Folder: o.Folder, Name: o.SetName}) == keyString(key) || active[RunID(o.Run)] {
+	return fencedBy(key, c, decodeState(p.d.State()).calls, active, retained)
+}
+
+// fencedBy is fenceIntents over the intents calls of the store, the active
+// runs and the retained intents.
+func fencedBy(key SetKey, c *callRecord, calls map[string]*callRecord, active map[RunID]bool, retained map[string]bool) error {
+	for _, k := range sortedRecordKeys(calls) {
+		o := calls[k]
+		if keyString(SetKey{Folder: o.Folder, Name: o.SetName}) == keyString(key) || active[RunID(o.Run)] && !retained[k] {
 			continue
 		}
 		if o.Address == c.Address || o.Server.ApplicationURI != "" && o.Server.ApplicationURI == c.Server.ApplicationURI {

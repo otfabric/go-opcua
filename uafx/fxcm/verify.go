@@ -484,17 +484,22 @@ func (m *Manager) proveOutcome(ctx context.Context, t *target, r *record, n inte
 		pr.class, pr.why = Unresolved, "a CloseConnections of unknown outcome left it in place"
 		return pr
 	}
-	want := c.Kind == callEnable
-	on, known, err := commEnabled(ctx, t, pr.node)
+	want := commDisabled
+	if c.Kind == callEnable {
+		want = commEnabled
+	}
+	st, err := commStateOf(ctx, t, pr.node)
 	switch {
 	case err != nil:
 		return proof{class: Unverified, err: err}
-	case !known:
+	case st == want:
+	case st == commUnknown || st == commNone:
+		// No positive evidence: an unreadable State proves neither.
 		pr.class, pr.why = Unresolved, "its communication state cannot be read"
-	case on != want && want:
-		pr.class, pr.why = Unresolved, "an EnableCommunicationCmd of unknown outcome left its communication disabled"
-	case on != want:
-		pr.class, pr.why = Unresolved, "a CloseConnections of unknown outcome left its communication enabled"
+	case want == commEnabled:
+		pr.class, pr.why = Unresolved, "an EnableCommunicationCmd of unknown outcome left its communication "+st.String()
+	default:
+		pr.class, pr.why = Unresolved, "a CloseConnections of unknown outcome left its communication "+st.String()
 	}
 	return pr
 }
@@ -524,26 +529,81 @@ func proveReleased(ctx context.Context, t *target, r *record) proof {
 	if err != nil {
 		return proof{class: Unverified, err: err}
 	}
-	on, known, err := commEnabled(ctx, t, want)
+	st, err := commStateOf(ctx, t, want)
 	switch {
 	case err != nil:
 		return proof{class: Unverified, err: err}
 	case act.related != nil && !nullRelated(act.related):
 		return proof{class: Unresolved, node: want, why: "a CloseConnections of unknown outcome left the preconfigured endpoint related"}
-	case known && on:
-		return proof{class: Unresolved, node: want, why: "a CloseConnections of unknown outcome left the preconfigured endpoint enabled"}
+	case st == commUnknown:
+		return proof{class: Unresolved, node: want, why: "the communication state of the preconfigured endpoint cannot be read"}
+	case st != commDisabled && st != commNone:
+		return proof{class: Unresolved, node: want, why: "a CloseConnections of unknown outcome left the communication of the preconfigured endpoint " + st.String()}
 	}
 	return proof{drop: true, why: "the preconfigured endpoint is released"}
 }
 
-// commEnabled reports whether the DataSetReader and DataSetWriter of the
-// endpoint n of t are enabled: the State of their Status (Part 14 §9.1.10)
-// is not Disabled. known is false for an endpoint with neither, or one
-// whose State the server does not expose.
-func commEnabled(ctx context.Context, t *target, n *ua.NodeID) (on, known bool, err error) {
+// commState is what the State of the Status (Part 14 §9.1.10) of the
+// DataSetReader and DataSetWriter of an endpoint shows: each of them is
+// enabled when its State is not Disabled. Only commEnabled proves an
+// enablement and only commDisabled a disablement; the others prove
+// neither.
+type commState uint8
+
+const (
+	commUnknown  commState = iota // a State that cannot be read
+	commNone                      // neither a DataSetReader nor a DataSetWriter
+	commEnabled                   // every one enabled
+	commDisabled                  // every one disabled
+	commMixed                     // some enabled, some disabled
+)
+
+func (s commState) String() string {
+	switch s {
+	case commNone:
+		return "absent"
+	case commEnabled:
+		return "enabled"
+	case commDisabled:
+		return "disabled"
+	case commMixed:
+		return "partly enabled"
+	case commUnknown:
+	}
+	return "unknown"
+}
+
+// commOf is the commState of the States read: nil for one that could not
+// be read.
+func commOf(states []*ua.PubSubState) commState {
+	if len(states) == 0 {
+		return commNone
+	}
+	on, off := 0, 0
+	for _, st := range states {
+		switch {
+		case st == nil:
+			return commUnknown
+		case *st == ua.PubSubStateDisabled:
+			off++
+		default:
+			on++
+		}
+	}
+	switch {
+	case off == 0:
+		return commEnabled
+	case on == 0:
+		return commDisabled
+	}
+	return commMixed
+}
+
+// commStateOf reads the commState of the endpoint n of t.
+func commStateOf(ctx context.Context, t *target, n *ua.NodeID) (commState, error) {
 	act, err := readActual(ctx, t, n)
 	if err != nil {
-		return false, false, err
+		return commUnknown, err
 	}
 	read := &ua.ReadRequest{TimestampsToReturn: ua.TimestampsToReturnNeither}
 	for _, c := range []*ua.NodeID{act.reader, act.writer} {
@@ -552,43 +612,43 @@ func commEnabled(ctx context.Context, t *target, n *ua.NodeID) (on, known bool, 
 		}
 		props, err := t.children(ctx, c)
 		if err != nil {
-			return false, false, err
+			return commUnknown, err
 		}
 		st := child(props, 0, "Status")
 		if st == nil {
-			return false, false, nil
+			return commUnknown, nil
 		}
 		sprops, err := t.children(ctx, st)
 		if err != nil {
-			return false, false, err
+			return commUnknown, err
 		}
 		v := child(sprops, 0, "State")
 		if v == nil {
-			return false, false, nil
+			return commUnknown, nil
 		}
 		read.NodesToRead = append(read.NodesToRead, &ua.ReadValueID{NodeID: v, AttributeID: ua.AttributeIDValue})
 	}
 	if len(read.NodesToRead) == 0 {
-		return false, false, nil
+		return commNone, nil
 	}
 	res, err := t.sess.Read(ctx, read)
 	if err != nil {
-		return false, false, err
+		return commUnknown, err
 	}
 	if len(res.Results) != len(read.NodesToRead) {
-		return false, false, fmt.Errorf("fxcm: Read: %d results", len(res.Results))
+		return commUnknown, fmt.Errorf("fxcm: Read: %d results", len(res.Results))
 	}
-	on = true
-	for _, dv := range res.Results {
-		v, ok := dvValue(dv).(int32)
-		if dv == nil || bad(dv.Status) || !ok {
-			return false, false, nil
+	states := make([]*ua.PubSubState, len(res.Results))
+	for i, dv := range res.Results {
+		if dv == nil || bad(dv.Status) {
+			continue
 		}
-		if ua.PubSubState(v) == ua.PubSubStateDisabled {
-			on = false
+		if v, ok := dvValue(dv).(int32); ok {
+			st := ua.PubSubState(v)
+			states[i] = &st
 		}
 	}
-	return on, true, nil
+	return commOf(states), nil
 }
 
 // heldBy returns the place of an intent of intents that the record r
@@ -640,6 +700,10 @@ type work struct {
 	gen     uint64
 	recs    map[string]*record
 	intents map[string]*callRecord
+	// absent are the targets of close and enable intents (by intent key
+	// and index) that no record of the set holds and that the server
+	// shows no node at: nothing is left there for the call to change.
+	absent map[string]map[int]bool
 }
 
 // sameAddress reports whether the intent c was sent to addr.
@@ -679,7 +743,11 @@ func (m *Manager) collect(addr ServerAddress, owner *set) (ws []*work, busy bool
 			if r.addr != addr {
 				continue
 			}
-			if r.Class == Unverified || r.Class == Unresolved && heldBy(r, w.intents) != nil {
+			// A record an unended close or enablement targets is decided
+			// by the outcome of that call, whatever its class: a trusted
+			// owner proves nothing about the call (decision C3-D13).
+			in := heldBy(r, w.intents)
+			if r.Class == Unverified || in != nil && (r.Class == Unresolved || in.c.Kind != callEstablish) {
 				w.recs[rk] = r
 			}
 		}
@@ -744,6 +812,9 @@ func (m *Manager) verifyServer(ctx context.Context, addr ServerAddress, owner *s
 	}
 	var errs []error
 	for _, w := range ws {
+		if err := w.findAbsent(ctx, t); err != nil {
+			errs = append(errs, err)
+		}
 		var vs []verdict
 		for _, rk := range slices.Sorted(maps.Keys(w.recs)) {
 			r := w.recs[rk]
@@ -809,7 +880,8 @@ func (m *Manager) applyVerdicts(w *work, t *target, vs []verdict, owner *set) er
 	var cs []change
 	decided := map[*record]bool{}
 	for _, v := range vs {
-		if v.p.class == Unverified && !v.p.drop || s.records[v.rk] != v.rec || v.rec.Class != Unverified && (v.in == nil || v.rec.Class != Unresolved) {
+		outcome := v.in != nil && v.in.c.Kind != callEstablish
+		if v.p.class == Unverified && !v.p.drop || s.records[v.rk] != v.rec || v.rec.Class != Unverified && !outcome && (v.in == nil || v.rec.Class != Unresolved) {
 			continue
 		}
 		k := epKeyOf(s.cfg.key, v.rec)
@@ -841,7 +913,15 @@ func (m *Manager) applyVerdicts(w *work, t *target, vs []verdict, owner *set) er
 	}
 	var done []string
 	for _, k := range slices.Sorted(maps.Keys(w.intents)) {
-		if p.intentOpen(s, w.intents[k], undecided) {
+		c := w.intents[k]
+		if c.Kind != callEstablish {
+			// Complete only when every target has an outcome proven in
+			// this pass (or nothing left to change at it), never by the
+			// ownership of what is recorded there.
+			if !w.outcomesProven(k, c, vs, decided) {
+				continue
+			}
+		} else if p.intentOpen(s, c, undecided) {
 			continue
 		}
 		done = append(done, k)
@@ -870,6 +950,80 @@ func (m *Manager) applyVerdicts(w *work, t *target, vs []verdict, owner *set) er
 		events = append(events, Event{Kind: EventVerified, Set: s.cfg.key, Record: &rec, Closed: c.next == nil, Address: t.addr.Address})
 	}
 	return nil
+}
+
+// targetsOf returns the endpoints the close or enable intent c targets.
+func targetsOf(c *callRecord) []*qualifiedID {
+	if c.Kind == callEnable {
+		return c.Targets
+	}
+	return c.Nodes
+}
+
+// findAbsent fills w.absent: the targets of the close and enable intents
+// of w that no collected record holds, with no node at them on t (Browse
+// answers Bad_NodeIdUnknown). A read that fails proves nothing.
+func (w *work) findAbsent(ctx context.Context, t *target) error {
+	held := map[string]map[int]bool{}
+	for _, r := range w.recs {
+		if in := heldBy(r, w.intents); in != nil {
+			if held[in.key] == nil {
+				held[in.key] = map[int]bool{}
+			}
+			held[in.key][in.i] = true
+		}
+	}
+	var errs []error
+	for _, k := range slices.Sorted(maps.Keys(w.intents)) {
+		c := w.intents[k]
+		if c.Kind == callEstablish {
+			continue
+		}
+		for i, q := range targetsOf(c) {
+			if held[k][i] {
+				continue
+			}
+			n, err := current(q, t)
+			if err != nil || n == nil {
+				continue
+			}
+			if _, err := t.children(ctx, n); errors.Is(err, ua.StatusBadNodeIDUnknown) {
+				if w.absent == nil {
+					w.absent = map[string]map[int]bool{}
+				}
+				if w.absent[k] == nil {
+					w.absent[k] = map[int]bool{}
+				}
+				w.absent[k][i] = true
+			} else if err != nil {
+				errs = append(errs, err)
+			}
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// outcomesProven reports whether every target of the close or enable
+// intent c, of key k, has its outcome proven: a verdict of this pass on a
+// record at it that is decided (dropped, or proven other than Unresolved or
+// Unverified), or no node left at it (findAbsent).
+func (w *work) outcomesProven(k string, c *callRecord, vs []verdict, decided map[*record]bool) bool {
+	for i := range targetsOf(c) {
+		if w.absent[k][i] {
+			continue
+		}
+		ok := false
+		for _, v := range vs {
+			if v.in != nil && v.in.key == k && v.in.i == i && v.p.err == nil && decided[v.rec] {
+				ok = true
+				break
+			}
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // proven returns the record r as the verdict v decided it, on the server of

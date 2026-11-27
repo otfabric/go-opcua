@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/otfabric/go-opcua/ua"
 )
 
 // TestFencedOf: the narrowing of the fence (fencedOf, design §6.3, §6.4).
@@ -66,4 +68,39 @@ func TestFencedOfAliases(t *testing.T) {
 	one := keyString(SetKey{Name: "One"})
 	got := fencedOf(l, map[string][]OwedWork{one: {{Kind: OwedCall, Run: 1, Address: x}}}, nil)
 	assert.Equal(t, []string{keyString(SetKey{Name: "Two"})}, slices.Sorted(maps.Keys(got)))
+}
+
+// TestFencedBy: the check before an intent is written (fenceIntents). An
+// intent of another set on the same server fences once its run ended, and
+// while its run is active only when its outcome is unknown (retained); an
+// intent of the set itself, or on another server, does not.
+func TestFencedBy(t *testing.T) {
+	t.Parallel()
+	const x, y = "opc.tcp://x", "opc.tcp://y"
+	one := SetKey{Name: "One"}
+	c := &callRecord{Address: x, Server: serverEvidence{ApplicationURI: "urn:x"}}
+	calls := map[string]*callRecord{
+		"call/7/1": {Run: 7, SetName: "Two", Address: x},
+	}
+	for _, tc := range []struct {
+		name     string
+		calls    map[string]*callRecord
+		active   map[RunID]bool
+		retained map[string]bool
+		fenced   bool
+	}{
+		{"ended run", calls, nil, nil, true},
+		{"active run in flight", calls, map[RunID]bool{7: true}, nil, false},
+		{"active run, outcome unknown", calls, map[RunID]bool{7: true}, map[string]bool{"call/7/1": true}, true},
+		{"its own set", map[string]*callRecord{"call/7/1": {Run: 7, SetName: "One", Address: x}}, nil, nil, false},
+		{"another server", map[string]*callRecord{"call/7/1": {Run: 7, SetName: "Two", Address: y}}, nil, nil, false},
+		{"an alias of the server", map[string]*callRecord{"call/7/1": {Run: 7, SetName: "Two", Address: y, Server: serverEvidence{ApplicationURI: "urn:x"}}}, nil, nil, true},
+	} {
+		err := fencedBy(one, c, tc.calls, tc.active, tc.retained)
+		if tc.fenced {
+			assert.ErrorIs(t, err, ua.StatusBadInvalidState, tc.name)
+		} else {
+			assert.NoError(t, err, tc.name)
+		}
+	}
 }

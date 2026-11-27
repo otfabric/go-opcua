@@ -4,11 +4,13 @@ package fxcm_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/otfabric/go-opcua/server"
+	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxcm"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
@@ -137,5 +139,48 @@ func TestNamespaceReorderE2E(t *testing.T) {
 		if e.ServerURI == b.uri {
 			assert.True(t, e.NodeID.Equal(moved), "the record follows the NamespaceArray: %v", e.NodeID)
 		}
+	}
+}
+
+// TestReplacedIncarnationE2E (§6.5, §6.6.2 Table 74): an AutomationComponent
+// restarts and shows, under the Name and at the NodeId of an endpoint the
+// Manager recorded, with our ConnectionManagerApplicationUri, an endpoint
+// of another CreationTime: another incarnation. It is not adopted, and no
+// step closes it: neither the close-first of an establish, its rollback
+// (RollbackOnError TRUE) nor a remove. Its record is Unresolved.
+func TestReplacedIncarnationE2E(t *testing.T) {
+	t.Parallel()
+	for _, action := range []uafx.FxProcess{uafx.ActionEstablishConnectionsEnabled, uafx.ActionRemoveConnections} {
+		t.Run(action.String(), func(t *testing.T) {
+			t.Parallel()
+			storeB := &fxstore.MemoryStore{}
+			a := newAC(t, "a", fxserver.ConnectionOptions{Store: &fxstore.MemoryStore{}})
+			b := newAC(t, "b", fxserver.ConnectionOptions{Store: storeB})
+			m := newManager(t, fxcm.Options{Store: &fxstore.MemoryStore{}})
+			k := persistentSet(t, m, a, b)
+
+			b.stop()
+			b2 := buildAC(t, "b", fxserver.ConnectionOptions{Store: storeB}, "", b.port, nil)
+			ep := ownEndpoint(t, b2)
+			ct := childNamed(t, b2, childNamed(t, b2, ep, "Diagnostics"), "CreationTime")
+			other := time.Date(2001, 2, 3, 4, 5, 6, 0, time.UTC)
+			require.NoError(t, b2.srv.Node(ct).SetAttribute(ua.AttributeIDValue, &ua.DataValue{EncodingMask: ua.DataValueValue, Value: ua.MustVariant(other)}))
+
+			res := process(t, m, action, k)
+			assert.Equal(t, fxcm.StateError, res.State, "%+v", res)
+			assert.Empty(t, res.Adopted)
+			assert.True(t, ownEndpoint(t, b2).Equal(ep), "the other incarnation is in place")
+			assert.Equal(t, []string{"ToA"}, b2.endpoints(), "untouched")
+			assert.Equal(t, other, b2.srv.Node(ct).Value().Value.Value())
+			for _, c := range res.Closed {
+				assert.NotEqual(t, b.uri, c.ServerURI, "closed on b: %+v", c)
+			}
+			st, _ := m.Status(k)
+			for _, e := range st.Endpoints {
+				if e.ServerURI == b.uri {
+					assert.Equal(t, fxcm.Unresolved, e.Class, "%+v", e)
+				}
+			}
+		})
 	}
 }

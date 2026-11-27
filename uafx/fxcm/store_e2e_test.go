@@ -124,14 +124,17 @@ type failing struct {
 	when  func(b fxstore.Batch) bool
 	fault storetest.Fault
 	hit   int
+	times int // the batches when fails before it is disarmed; 0 is 1
 }
 
 func (f *failing) Apply(ctx context.Context, b fxstore.Batch) error {
 	f.mu.Lock()
 	hit := f.when != nil && f.when(b)
 	if hit {
-		f.when = nil
 		f.hit++
+		if f.hit >= max(f.times, 1) {
+			f.when = nil
+		}
 	}
 	fault := f.fault
 	f.mu.Unlock()
@@ -144,9 +147,14 @@ func (f *failing) Apply(ctx context.Context, b fxstore.Batch) error {
 }
 
 func (f *failing) arm(fault storetest.Fault, when func(b fxstore.Batch) bool) {
+	f.armN(fault, 1, when)
+}
+
+// armN fails the next n batches when matches.
+func (f *failing) armN(fault storetest.Fault, n int, when func(b fxstore.Batch) bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.fault, f.when = fault, when
+	f.fault, f.when, f.times, f.hit = fault, when, n, 0
 }
 
 func putsPrefix(prefix string) func(b fxstore.Batch) bool {

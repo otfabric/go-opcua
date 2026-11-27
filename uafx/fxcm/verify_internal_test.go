@@ -119,3 +119,31 @@ func TestVerifyOptionsDefaults(t *testing.T) {
 	assert.Positive(t, v.Parallelism)
 	assert.GreaterOrEqual(t, v.RetryMax, v.RetryInitial, "RetryMax is at least RetryInitial")
 }
+
+// TestCommOf: only every State enabled proves an enablement and only every
+// State Disabled a disablement (Part 14 §9.1.10); a mix or a State that
+// cannot be read proves neither.
+func TestCommOf(t *testing.T) {
+	t.Parallel()
+	st := func(s ua.PubSubState) *ua.PubSubState { return &s }
+	off, op, paused := st(ua.PubSubStateDisabled), st(ua.PubSubStateOperational), st(ua.PubSubStatePaused)
+	for _, tc := range []struct {
+		name   string
+		states []*ua.PubSubState
+		want   commState
+	}{
+		{"neither reader nor writer", nil, commNone},
+		{"both enabled", []*ua.PubSubState{op, op}, commEnabled},
+		{"paused is enabled", []*ua.PubSubState{paused}, commEnabled},
+		{"both disabled", []*ua.PubSubState{off, off}, commDisabled},
+		{"reader disabled, writer enabled", []*ua.PubSubState{off, op}, commMixed},
+		{"reader enabled, writer disabled", []*ua.PubSubState{op, off}, commMixed},
+		{"one unreadable, one disabled", []*ua.PubSubState{off, nil}, commUnknown},
+		{"one unreadable, one enabled", []*ua.PubSubState{nil, op}, commUnknown},
+	} {
+		assert.Equal(t, tc.want, commOf(tc.states), tc.name)
+	}
+	for s, want := range map[commState]string{commUnknown: "unknown", commNone: "absent", commEnabled: "enabled", commDisabled: "disabled", commMixed: "partly enabled"} {
+		assert.Equal(t, want, s.String())
+	}
+}

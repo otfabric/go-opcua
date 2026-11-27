@@ -27,6 +27,7 @@ func commFixture() (*ua.PubSubConfiguration2DataType, *uafx.PubSubCommunicationL
 	pub := ua.MustVariant(uint16(42))
 	r := pubsub.SetTargetVariables(pubsub.DataSetReader("R", pub, 5, 7, md), pubsub.Target(ua.NewNumericNodeID(1, 11)))
 	r.MessageReceiveTimeout = 50
+	wg.MaxNetworkMessageSize = 1400
 	wconn := pubsub.AttachWriterGroups(pubsub.UDPConnection("Pub", "opc.udp://127.0.0.1:4840", pub), wg)
 	rconn := pubsub.AttachReaderGroups(pubsub.UDPConnection("Sub", "opc.udp://127.0.0.1:4841", nil), pubsub.ReaderGroup("RG", r))
 	cfg := &ua.PubSubConfiguration2DataType{
@@ -40,9 +41,10 @@ func commFixture() (*ua.PubSubConfiguration2DataType, *uafx.PubSubCommunicationL
 	v := ua.MustVariant
 	conn := func(c *ua.PubSubConnectionDataType) map[string]*ua.Variant {
 		return map[string]*ua.Variant{
-			"PublisherId":         c.PublisherID,
-			"TransportProfileUri": v(c.TransportProfileURI),
-			"Address/Url":         v(c.Address.Value.(*ua.NetworkAddressURLDataType).URL),
+			"PublisherId":              c.PublisherID,
+			"TransportProfileUri":      v(c.TransportProfileURI),
+			"Address/Url":              v(c.Address.Value.(*ua.NetworkAddressURLDataType).URL),
+			"Address/NetworkInterface": v(""),
 		}
 	}
 	c := &commActual{
@@ -52,13 +54,18 @@ func commFixture() (*ua.PubSubConfiguration2DataType, *uafx.PubSubCommunicationL
 			"KeyFrameCount":           v(w.KeyFrameCount),
 		},
 		group: map[string]*ua.Variant{
-			"WriterGroupId":      v(wg.WriterGroupID),
-			"PublishingInterval": v(wg.PublishingInterval),
-			"KeepAliveTime":      v(wg.KeepAliveTime),
-			"Priority":           v(wg.Priority),
-			"HeaderLayoutUri":    v(wg.HeaderLayoutURI),
-			"SecurityMode":       v(int32(wg.SecurityMode)),
-			"SecurityGroupId":    v(wg.SecurityGroupID),
+			"WriterGroupId":                             v(wg.WriterGroupID),
+			"PublishingInterval":                        v(wg.PublishingInterval),
+			"KeepAliveTime":                             v(wg.KeepAliveTime),
+			"Priority":                                  v(wg.Priority),
+			"HeaderLayoutUri":                           v(wg.HeaderLayoutURI),
+			"SecurityMode":                              v(int32(wg.SecurityMode)),
+			"SecurityGroupId":                           v(wg.SecurityGroupID),
+			"MaxNetworkMessageSize":                     v(wg.MaxNetworkMessageSize),
+			"MessageSettings/GroupVersion":              v(uint32(77)),
+			"MessageSettings/DataSetOrdering":           v(int32(0)),
+			"MessageSettings/NetworkMessageContentMask": v(uint32(wg.MessageSettings.Value.(*ua.UADPWriterGroupMessageDataType).NetworkMessageContentMask)),
+			"MessageSettings/SamplingOffset":            v(float64(0)),
 		},
 		wconn:     conn(wconn),
 		published: pds.DataSetSource.Value.(*ua.PublishedDataItemsDataType).PublishedData,
@@ -72,6 +79,12 @@ func commFixture() (*ua.PubSubConfiguration2DataType, *uafx.PubSubCommunicationL
 			"HeaderLayoutUri":         v(r.HeaderLayoutURI),
 			"SecurityMode":            v(int32(r.SecurityMode)),
 			"SecurityGroupId":         v(r.SecurityGroupID),
+			"DataSetMetaData":         v(ua.NewExtensionObject(md)),
+		},
+		rgroup: map[string]*ua.Variant{
+			"SecurityMode":          v(int32(ua.MessageSecurityModeNone)),
+			"SecurityGroupId":       v(""),
+			"MaxNetworkMessageSize": v(uint32(0)),
 		},
 		rconn:   conn(rconn),
 		targets: r.SubscribedDataSet.Value.(*ua.TargetVariablesDataType).TargetVariables,
@@ -118,20 +131,92 @@ func TestSameComm(t *testing.T) {
 		{"reader", "SecurityMode", v(int32(3)), "the SecurityMode of its DataSetReader"},
 		{"reader", "SecurityGroupId", v("sg"), "the SecurityGroupId of its DataSetReader"},
 		{"rconn", "TransportProfileUri", v("urn:other"), "the transport of the PubSubConnection of its DataSetReader"},
+		{"rconn", "Address/NetworkInterface", v("eth1"), "the transport of the PubSubConnection of its DataSetReader"},
+		{"group", "MaxNetworkMessageSize", v(uint32(9)), "the MaxNetworkMessageSize of its WriterGroup"},
+		{"group", "MessageSettings/DataSetOrdering", v(int32(1)), "the DataSetOrdering of its WriterGroup"},
+		{"group", "MessageSettings/NetworkMessageContentMask", v(uint32(1)), "the NetworkMessageContentMask of its WriterGroup"},
+		{"group", "MessageSettings/SamplingOffset", v(float64(1)), "the SamplingOffset of its WriterGroup"},
+		{"reader", "DataSetMetaData", v(ua.NewExtensionObject(&ua.DataSetMetaDataType{})), "the DataSetMetaData of its DataSetReader"},
+		{"rgroup", "SecurityMode", v(int32(3)), "the SecurityMode of its ReaderGroup"},
+		{"rgroup", "SecurityGroupId", v("sg"), "the SecurityGroupId of its ReaderGroup"},
+		{"rgroup", "MaxNetworkMessageSize", v(uint32(9)), "the MaxNetworkMessageSize of its ReaderGroup"},
 	} {
 		cfg, l, c := commFixture()
-		m := map[string]map[string]*ua.Variant{"writer": c.writer, "group": c.group, "wconn": c.wconn, "reader": c.reader, "rconn": c.rconn}[tc.el]
+		m := map[string]map[string]*ua.Variant{"writer": c.writer, "group": c.group, "wconn": c.wconn, "reader": c.reader, "rgroup": c.rgroup, "rconn": c.rconn}[tc.el]
 		m[tc.prop] = tc.val
 		ok, why := sameCommAt(cfg, l, c)
 		assert.False(t, ok, "%s %s", tc.el, tc.prop)
 		assert.Equal(t, tc.want, why, "%s %s", tc.el, tc.prop)
 	}
 
+	t.Run("GroupVersion set by the configuration", func(t *testing.T) {
+		cfg, l, c := commFixture()
+		_, g, _ := writerAt(cfg, l.DataSetWriterRef)
+		g.MessageSettings.Value.(*ua.UADPWriterGroupMessageDataType).GroupVersion = 78
+		_, why := sameCommAt(cfg, l, c)
+		assert.Equal(t, "the GroupVersion of its WriterGroup", why)
+	})
+	t.Run("DataSetMetaData fields", func(t *testing.T) {
+		cfg, l, c := commFixture()
+		md := *readerAt(cfg, l.DataSetReaderRef).DataSetMetaData
+		f := *md.Fields[0]
+		f.BuiltInType++
+		md.Fields = []*ua.FieldMetaData{&f}
+		c.reader["DataSetMetaData"] = v(ua.NewExtensionObject(&md))
+		_, why := sameCommAt(cfg, l, c)
+		assert.Equal(t, "the DataSetMetaData of its DataSetReader", why)
+		md.Fields = []*ua.FieldMetaData{nil}
+		_, why = sameCommAt(cfg, l, c)
+		assert.Equal(t, "the DataSetMetaData of its DataSetReader", why, "nil field")
+		assert.True(t, sameMetaData(nil, nil), "neither has fields")
+	})
+	t.Run("settings adoption cannot compare", func(t *testing.T) {
+		eo := ua.NewExtensionObject(&ua.BrokerWriterGroupTransportDataType{QueueName: "q"})
+		kv := []*ua.KeyValuePair{{Key: &ua.QualifiedName{Name: "k"}, Value: v(int32(1))}}
+		for _, tc := range []struct {
+			name   string
+			change func(cfg *ua.PubSubConfiguration2DataType)
+			want   string
+		}{
+			{"connection properties", func(cfg *ua.PubSubConfiguration2DataType) { cfg.Connections[0].ConnectionProperties = kv }, "its PubSubConnection has ConnectionProperties"},
+			{"connection transport", func(cfg *ua.PubSubConfiguration2DataType) { cfg.Connections[1].TransportSettings = eo }, "its PubSubConnection has TransportSettings"},
+			{"no address", func(cfg *ua.PubSubConfiguration2DataType) { cfg.Connections[0].Address = nil }, "its PubSubConnection has no Address"},
+			{"another address", func(cfg *ua.PubSubConfiguration2DataType) {
+				cfg.Connections[0].Address = ua.NewExtensionObject(&ua.NetworkAddressDataType{})
+			}, "its PubSubConnection has an Address that is not a NetworkAddressUrl"},
+			{"JSON group", func(cfg *ua.PubSubConfiguration2DataType) {
+				cfg.Connections[0].WriterGroups[0].MessageSettings = ua.NewExtensionObject(&ua.JSONWriterGroupMessageDataType{})
+			}, "its WriterGroup has no UADP MessageSettings"},
+			{"publishing offset", func(cfg *ua.PubSubConfiguration2DataType) {
+				cfg.Connections[0].WriterGroups[0].MessageSettings.Value.(*ua.UADPWriterGroupMessageDataType).PublishingOffset = []float64{1}
+			}, "its WriterGroup has a PublishingOffset"},
+			{"group transport", func(cfg *ua.PubSubConfiguration2DataType) { cfg.Connections[0].WriterGroups[0].TransportSettings = eo }, "its WriterGroup has TransportSettings"},
+			{"group properties", func(cfg *ua.PubSubConfiguration2DataType) { cfg.Connections[0].WriterGroups[0].GroupProperties = kv }, "its WriterGroup has GroupProperties, LocaleIds or SecurityKeyServices"},
+			{"writer transport", func(cfg *ua.PubSubConfiguration2DataType) {
+				cfg.Connections[0].WriterGroups[0].DataSetWriters[0].TransportSettings = eo
+			}, "its DataSetWriter has TransportSettings or MessageSettings"},
+			{"reader group transport", func(cfg *ua.PubSubConfiguration2DataType) { cfg.Connections[1].ReaderGroups[0].MessageSettings = eo }, "its ReaderGroup has TransportSettings or MessageSettings"},
+			{"reader group properties", func(cfg *ua.PubSubConfiguration2DataType) { cfg.Connections[1].ReaderGroups[0].GroupProperties = kv }, "its ReaderGroup has GroupProperties or SecurityKeyServices"},
+			{"reader transport", func(cfg *ua.PubSubConfiguration2DataType) {
+				cfg.Connections[1].ReaderGroups[0].DataSetReaders[0].TransportSettings = eo
+			}, "its DataSetReader has TransportSettings or MessageSettings"},
+			{"reader key services", func(cfg *ua.PubSubConfiguration2DataType) {
+				cfg.Connections[1].ReaderGroups[0].DataSetReaders[0].SecurityKeyServices = []*ua.EndpointDescription{{}}
+			}, "its DataSetReader has SecurityKeyServices"},
+		} {
+			cfg, l, c := commFixture()
+			tc.change(cfg)
+			ok, why := sameCommAt(cfg, l, c)
+			assert.False(t, ok, tc.name)
+			assert.Equal(t, tc.want, why, tc.name)
+		}
+	})
 	t.Run("absent properties", func(t *testing.T) {
 		// An optional Property the AC does not have is no value: an
 		// empty string is not compared, anything else differs.
 		cfg, l, c := commFixture()
 		delete(c.group, "HeaderLayoutUri")
+		delete(c.rgroup, "SecurityGroupId")
 		delete(c.reader, "SecurityGroupId")
 		ok, why := sameCommAt(cfg, l, c)
 		assert.True(t, ok, why)

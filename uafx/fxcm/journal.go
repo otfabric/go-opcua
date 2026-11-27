@@ -210,9 +210,7 @@ func (x *run) intend(c *callRecord) (string, error) {
 	}
 	c.Run, c.Generation, c.Fingerprint = uint64(x.r.id), x.gen, x.fp
 	c.Folder, c.SetName = x.r.key.Folder, x.r.key.Name
-	if err := p.fenceAt(x.r.key, c); err != nil {
-		// Work another set came to owe on the server since the run
-		// started: nothing is sent (design §6.3).
+	if err := p.checkBlocked(x.r.key); err != nil {
 		return "", errNoIntent(err)
 	}
 	v, err := encodeRecord(c)
@@ -223,6 +221,12 @@ func (x *run) intend(c *callRecord) (string, error) {
 	k, err := func() (string, error) {
 		unlock := p.lockJournal(x.s)
 		defer unlock()
+		// Under the lock every intent is written with: work another set
+		// came to owe on the server since the run started, or a call of
+		// it whose outcome is unknown, and nothing is sent (design §6.3).
+		if err := p.fenceIntents(x.r.key, c); err != nil {
+			return "", errNoIntent(err)
+		}
 		x.mu.Lock()
 		x.j.n++
 		k := callStoreKey(x.r.id, x.j.n)
@@ -260,6 +264,9 @@ func (x *run) intend(c *callRecord) (string, error) {
 func (x *run) retain(k string) {
 	if k == "" {
 		return
+	}
+	if p := x.store(); p != nil {
+		p.retain(x.r.id, k)
 	}
 	x.mu.Lock()
 	defer x.mu.Unlock()
@@ -501,6 +508,7 @@ func (x *run) sync(keys []string, recs touched, end bool) {
 	}
 	for _, k := range keys {
 		x.j.retained[k] = true
+		p.retain(x.r.id, k)
 	}
 	x.res.Failures = append(x.res.Failures, Failure{FxError: uafx.FxErrorRuntimeError, Status: StatusOf(err)})
 	x.mu.Unlock()

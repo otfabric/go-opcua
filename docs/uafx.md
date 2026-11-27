@@ -1189,9 +1189,16 @@ following a settled store after the Manager lock is released, so it may
 call into the Manager.
 
 The fence is checked again before every state-changing call is
-journaled: an intent is not written, and its call not sent, while another
-set has unended work on its server (by Address, or by the ApplicationUri
-the intent records). Addresses are aliases of one server when records or
+journaled, under the lock every intent is written with, so that no other
+set writes an intent between the check and the write: an intent is not
+written, and its call not sent, while another set has unended work on its
+server (by Address, or by the ApplicationUri the intent records),
+including a call of a run still active whose outcome is unknown. Two
+FunctionalEntities of one AutomationComponent may share PubSub
+components: an ambiguous call fences the whole server, and the calls in
+flight of runs on other FunctionalEntities are serialized by the
+AutomationComponent, which changes its PubSub configuration one
+transaction at a time (library interpretation). Addresses are aliases of one server when records or
 intents made over them have the same ApplicationUri: an owed call on one
 fences the sets on every other. An alias that no record or intent of the
 store has made yet is not known as one (LIMITATIONS.md). The background
@@ -1290,14 +1297,21 @@ targets, their class before the call and, for a close, Remove. Its
 outcome is proven by the postcondition of that operation, never by the
 ownership of the endpoint: Remove TRUE by the endpoint being gone (a
 TakenPreconfigured endpoint by being released, its RelatedEndpoint null
-and its communication not enabled, §6.2.5.2); Remove FALSE by the
-DataSetReader or DataSetWriter of the endpoint being Disabled (OPC
-10000-14 §9.1.10, State 0); EnableCommunicationCmd by it not being
-Disabled. An endpoint whose postcondition does not hold, or cannot be
-read, is Unresolved, the intent stays, and nothing is sent again: neither
-the next run, a rollback nor a `Reconcile` resends the call (C3-D13);
-`Settle` is the administrative decision. A close or enable that failed or
-whose result was lost in the running Manager does the same.
+and its communication disabled or absent, §6.2.5.2); Remove FALSE by
+every DataSetReader and DataSetWriter of the endpoint being Disabled (OPC
+10000-14 §9.1.10, State 0); EnableCommunicationCmd by every one not being
+Disabled. Each needs positive evidence: a reader and a writer in
+different states, or a State that cannot be read, proves neither. An
+endpoint whose postcondition does not hold, or cannot be read, is
+Unresolved, the intent stays, and nothing is sent again: neither the next
+run, a rollback nor a `Reconcile` resends the call (C3-D13); `Settle` is
+the administrative decision. A close or enable that failed or whose
+result was lost in the running Manager does the same. Such an intent is
+complete only when every endpoint it targets has its outcome proven in
+one verification, whatever the class of the record there (a KnownOwned
+record proves nothing about the call, as after a completion that was not
+written), or when the server shows no node at a target no record holds
+(Browse answers `Bad_NodeIdUnknown`).
 
 **Adoption** (design §6.6, decision C3-D6). An establish run of a Manager
 with a Store keeps in place the endpoints its step 0 finds, instead of
@@ -1319,7 +1333,20 @@ TransportProfileUri, Address), the Variables of its PublishedDataSet, and
 of the DataSetReader (PublisherId, WriterGroupId, DataSetWriterId,
 DataSetFieldContentMask, MessageReceiveTimeout, KeyFrameCount,
 HeaderLayoutUri, SecurityMode, SecurityGroupId), the PubSubConnection of
-its ReaderGroup, and its TargetVariables. An id the Manager allocates is
+its ReaderGroup, and its TargetVariables. Also compared: the
+MaxNetworkMessageSize and the UADP MessageSettings (GroupVersion when the
+configuration sets it, DataSetOrdering, NetworkMessageContentMask,
+SamplingOffset) of the WriterGroup, the SecurityMode, SecurityGroupId and
+MaxNetworkMessageSize of the ReaderGroup, the fields of the reader's
+DataSetMetaData (Name, BuiltInType, DataType, ValueRank), and the
+NetworkInterface of each PubSubConnection. A configuration with a setting
+adoption cannot prove equal is never adopted, and its endpoints are
+closed and created again: TransportSettings or ConnectionProperties of a
+PubSubConnection, an Address that is not a NetworkAddressUrl, WriterGroup
+MessageSettings that are not UADP or have a PublishingOffset,
+TransportSettings, GroupProperties, LocaleIds or SecurityKeyServices of a
+group, and TransportSettings, MessageSettings or SecurityKeyServices of a
+reader or writer. An id the Manager allocates is
 compared with the one the AC has where the configuration leaves it to
 the AC, and a reader is adopted only with the ids of the writer it
 subscribes to as adopted. A writer or reader changed, or replaced, under
@@ -1339,11 +1366,27 @@ ActionEstablishConnections applies the enablement the configuration gives
 their DataSetWriter or DataSetReader. A crash before that call has sent
 nothing and owes nothing: the next establish adopts them again.
 
-**Sessions.** A run reads the NamespaceArray first on the session the
-pool holds for a server; when that session was dialed by an earlier run
-and the read fails (the server restarted while it was idle), the read is
-made once more on a new session before anything is sent. A call is never
-repeated (C3-D13).
+**Sessions.** A run, and each close and enable step, reads the
+NamespaceArray first on the session the pool holds for a server; when
+that session was dialed by an earlier run and the read fails (the server
+restarted while it was idle), the read is made once more on a new session
+before anything is sent. A call is never repeated (C3-D13).
+
+**Incarnation before every change** (§6.5, §6.6.2 Table 74). Before the
+close-first or the adoption of an establish, and before a
+CloseConnections or EnableCommunicationCmd of a recorded endpoint, the
+Manager reads the Diagnostics CreationTime and the
+ConnectionManagerApplicationUri of the endpoint at the record's NodeId.
+Another CreationTime, none, or another ConnectionManagerApplicationUri is
+another incarnation (an AutomationComponent that restarted and made a new
+endpoint under the same Name and NodeId): the record becomes Unresolved;
+evidence that cannot be read makes it Unverified. Either way the endpoint
+is not closed, adopted or enabled, by that step, a rollback
+(RollbackOnError TRUE) or a later run, until it is proven or settled, and
+its Connection fails with `Bad_InvalidState`. An endpoint that is gone is
+closed as before (nothing is changed there). Not being adoptable is not a
+reason to close: only a proven endpoint whose configuration differs is
+closed and created again.
 
 **NotPersisted** (design §6.7, decision C3-D2). Where the PubSub
 configuration of an endpoint does not state 0:NotPersisted (OPC 10000-14

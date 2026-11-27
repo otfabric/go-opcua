@@ -374,34 +374,43 @@ func (x *run) stop(ctx context.Context) {
 	}
 }
 
+// openTarget opens a target on the session the pool holds for addr and
+// reads its NamespaceArray. When that session was dialed by an earlier run
+// and the read fails, its server may have restarted while it was idle: the
+// read, before any call, is made once more on a new session (design §5.1;
+// a read changes nothing, Part 4 §5.11.2). A failure is a
+// TargetServerConnectionError, or the failure of the read.
+func (x *run) openTarget(ctx context.Context, addr ServerAddress) (*target, error) {
+	sess, reused, err := x.m.pool.reuse(ctx, addr)
+	if err != nil {
+		return nil, failure(uafx.FxErrorTargetServerConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err)
+	}
+	t := &target{addr: addr, sess: sess, cache: x.m.res.of(addr)}
+	err = t.open(ctx)
+	if err != nil && reused {
+		x.m.pool.drop(ctx, addr, sess)
+		if sess, err = x.m.pool.get(ctx, addr); err != nil {
+			return nil, failure(uafx.FxErrorTargetServerConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err)
+		}
+		t = &target{addr: addr, sess: sess, cache: x.m.res.of(addr)}
+		err = t.open(ctx)
+	}
+	if err != nil {
+		x.m.pool.drop(ctx, addr, sess)
+		return nil, err
+	}
+	return t, nil
+}
+
 // setup opens the session of a, resolves the AutomationComponent, its
 // Methods and capabilities, and the identifiers of its endpoints (step 1).
 func (x *run) setup(ctx context.Context, a *acRun) {
-	sess, reused, err := x.m.pool.reuse(ctx, a.addr)
+	t, err := x.openTarget(ctx, a.addr)
 	if err != nil {
-		x.failAC(a, failure(uafx.FxErrorTargetServerConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err))
-		return
-	}
-	a.t = &target{addr: a.addr, sess: sess, cache: x.m.res.of(a.addr)}
-	err = a.t.open(ctx)
-	if err != nil && reused {
-		// A session dialed by an earlier run may have gone with its
-		// server, which restarted while it was idle: the first read of
-		// this run, before any call, is made once more on a new session
-		// (design §5.1). A read changes nothing (Part 4 §5.11.2).
-		x.m.pool.drop(ctx, a.addr, sess)
-		if sess, err = x.m.pool.get(ctx, a.addr); err != nil {
-			x.failAC(a, failure(uafx.FxErrorTargetServerConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err))
-			return
-		}
-		a.t = &target{addr: a.addr, sess: sess, cache: x.m.res.of(a.addr)}
-		err = a.t.open(ctx)
-	}
-	if err != nil {
-		x.m.pool.drop(ctx, a.addr, sess)
 		x.failAC(a, err)
 		return
 	}
+	a.t = t
 	x.identify(ctx, a.t)
 	root, err := a.t.fxRoot()
 	if err != nil {
@@ -796,6 +805,16 @@ func (x *run) scan(ctx context.Context, a *acRun) {
 		}
 		class, verdict := Scan(recCopy, obs, x.m.opts.ApplicationURI, ep.e.conf.IsPreconfigured)
 		ep.obs = obs
+		if verdict == ScanCloseFirst && rec != nil {
+			// Ownership before adoption (§6.5): an endpoint that is not
+			// the incarnation its record was made with is neither adopted
+			// nor closed, by this step or a rollback.
+			if held, why := x.incarnation(ctx, a.t, rec); held != 0 {
+				x.hold(rec, k, a, held, why)
+				x.fail(ep, Failure{FxError: uafx.FxErrorCreateConnectionEndpointError, Status: ua.StatusBadInvalidState})
+				continue
+			}
+		}
 		switch verdict {
 		case ScanCloseFirst:
 			if class == KnownOwned && x.adoptable(ctx, a, ep, rec, obs) {
@@ -840,6 +859,57 @@ func (r *record) IsPreconfiguredClass() bool { return r.Class == TakenPreconfigu
 
 // remember records an endpoint of ep with class, as the run found or
 // made it.
+// incarnation re-proves, before a state-changing step, that the endpoint
+// of rec on t is the one rec was made with (§6.5, §6.6.2 Table 74): its
+// Diagnostics CreationTime is the recorded one and its
+// ConnectionManagerApplicationUri not another's. It returns 0 when it is,
+// or when the endpoint is gone (a close of it changes nothing); Unresolved
+// when it is another, Unverified when that cannot be read now. A record
+// without a CreationTime is not checked here: the scan and the re-proof
+// decide it by its ConnectionManagerApplicationUri.
+func (x *run) incarnation(ctx context.Context, t *target, rec *record) (Ownership, string) {
+	x.s.mu.Lock()
+	created, n := rec.created, rec.NodeID
+	x.s.mu.Unlock()
+	if created.IsZero() || n == nil || t == nil {
+		return 0, ""
+	}
+	cm, cmOK, now, err := endpointEvidence(ctx, t, n)
+	switch {
+	case errors.Is(err, ua.StatusBadNodeIDUnknown):
+		return 0, ""
+	case err != nil:
+		return Unverified, fmt.Sprintf("its evidence was not read: %v", err)
+	case now.IsZero():
+		return Unresolved, "it shows no CreationTime"
+	case !now.Equal(created):
+		return Unresolved, "it is another incarnation: its CreationTime is not the recorded one"
+	case cmOK && cm != x.m.opts.ApplicationURI:
+		return Unresolved, "its ConnectionManagerApplicationUri is another"
+	}
+	return 0, ""
+}
+
+// hold sets the record rec, of map key rk, to class (Unresolved or
+// Unverified) after incarnation, reports it and has the step of a write
+// it: it is never closed, adopted or changed until it is proven or
+// settled.
+func (x *run) hold(rec *record, rk string, a *acRun, class Ownership, why string) {
+	x.s.mu.Lock()
+	if x.s.records[rk] != rec {
+		x.s.mu.Unlock()
+		return
+	}
+	rec.Class, rec.ClosePending = class, false
+	cp := rec.EndpointRecord
+	x.s.mu.Unlock()
+	x.touchAC(a, rk, rec)
+	x.m.log.Warn("fxcm: an endpoint is not the one recorded: it is not touched", "set", x.r.key.String(), "run", x.r.id, "endpoint", cp.Name, "node", cp.NodeID, "class", class, "why", why)
+	x.mu.Lock()
+	x.res.Unresolved = append(x.res.Unresolved, cp)
+	x.mu.Unlock()
+}
+
 func (x *run) remember(a *acRun, ep *epRun, n *ua.NodeID, class Ownership) {
 	rec := &record{EndpointRecord: EndpointRecord{
 		Set: x.r.key, Endpoint: ep.ref(), ServerURI: a.addr.ServerURI, FunctionalEntity: ep.fe, Name: ep.e.conf.Name,
@@ -2349,6 +2419,9 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 	// intent stays, and they are Unresolved until the outcome is proven
 	// (decision C3-D13), so that no later step closes them again.
 	unknown := map[*record]bool{}
+	// held are the records incarnation did not prove: not sent, and held
+	// as Unresolved or Unverified instead of ClosePending.
+	held := map[*record]heldRecord{}
 	var intents []string
 	recsTouched := touched{}
 	var mu sync.Mutex
@@ -2368,7 +2441,7 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 				}
 				return
 			}
-			results, k, err := x.closeOn(ctx, g.addr, g.ac, g.recs, remove)
+			results, k, notSent, err := x.closeOn(ctx, g.addr, g.ac, g.recs, remove)
 			mu.Lock()
 			defer mu.Unlock()
 			if k != "" {
@@ -2376,6 +2449,11 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 			}
 			retained := x.retained(k)
 			for i, r := range g.recs {
+				if h, ok := notSent[i]; ok {
+					held[r] = h
+					errs[r] = failure(uafx.FxErrorCloseConnectionError, ua.StatusBadInvalidState, "%v is not the endpoint recorded: %s", r.NodeID, h.why)
+					continue
+				}
 				if retained && (err != nil || ambiguousStatus(results[i])) {
 					unknown[r] = true
 				}
@@ -2400,6 +2478,11 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 		k := recordKey(r.addr, r.FunctionalEntity, r.Name)
 		cur := x.s.records[k]
 		x.touch(recsTouched, k, r)
+		if h, ok := held[r]; ok {
+			x.s.mu.Unlock()
+			x.hold(r, k, nil, h.class, h.why)
+			continue
+		}
 		if errs[r] != nil {
 			if cur != nil {
 				cur.ClosePending = true
@@ -2425,29 +2508,56 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 	return errs
 }
 
-// closeOn calls CloseConnections on the AutomationComponent ac of addr.
-func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, recs []*record, remove bool) ([]ua.StatusCode, string, error) {
-	sess, err := x.m.pool.get(ctx, addr)
+// heldRecord is a record closeOn did not send: incarnation's verdict.
+type heldRecord struct {
+	class Ownership
+	why   string
+}
+
+// closeOn calls CloseConnections on the AutomationComponent ac of addr for
+// the records of recs whose endpoints are proven to be the ones recorded
+// (incarnation); the others are in held, by index, and not sent. The
+// results are by index of recs.
+func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, recs []*record, remove bool) ([]ua.StatusCode, string, map[int]heldRecord, error) {
+	t, err := x.openTarget(ctx, addr)
 	if err != nil {
-		return nil, "", failure(uafx.FxErrorCloseConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err)
-	}
-	t := &target{addr: addr, sess: sess, cache: x.m.res.of(addr)}
-	if err := t.open(ctx); err != nil {
-		x.m.pool.drop(ctx, addr, sess)
 		f := failureOf(err, uafx.FxErrorCloseConnectionError)
-		return nil, "", failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
+		return nil, "", nil, failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
 	}
 	x.identify(ctx, t)
+	var held map[int]heldRecord
+	var send []int
+	for i, r := range recs {
+		if class, why := x.incarnation(ctx, t, r); class != 0 {
+			if held == nil {
+				held = map[int]heldRecord{}
+			}
+			held[i] = heldRecord{class: class, why: why}
+			continue
+		}
+		send = append(send, i)
+	}
+	if len(send) == 0 {
+		return make([]ua.StatusCode, len(recs)), "", held, nil
+	}
+	results, k, err := x.closeSent(ctx, t, ac, recs, send, remove)
+	return results, k, held, err
+}
+
+// closeSent calls CloseConnections for the records send of recs; the
+// results are by index of recs.
+func (x *run) closeSent(ctx context.Context, t *target, ac *ua.NodeID, recs []*record, send []int, remove bool) ([]ua.StatusCode, string, error) {
+	addr, sess := t.addr, t.sess
 	_, closeM, _, err := methodsOf(ctx, t, ac)
 	if err != nil {
 		f := failureOf(err, uafx.FxErrorCloseConnectionError)
 		return nil, "", failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
 	}
-	nodes := make([]*ua.NodeID, len(recs))
-	prior := make([]Ownership, len(recs))
+	nodes := make([]*ua.NodeID, len(send))
+	prior := make([]Ownership, len(send))
 	x.s.mu.Lock()
-	for i, r := range recs {
-		nodes[i], prior[i] = r.NodeID, r.Class
+	for j, i := range send {
+		nodes[j], prior[j] = recs[i].NodeID, recs[i].Class
 	}
 	x.s.mu.Unlock()
 	// The intent first: without it nothing is sent (design §6.3).
@@ -2490,11 +2600,15 @@ func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, re
 	if len(out.OutputArguments) == 1 && out.OutputArguments[0] != nil {
 		results, _ = out.OutputArguments[0].Value().([]ua.StatusCode)
 	}
-	if len(results) != len(recs) {
-		return nil, k, failure(uafx.FxErrorCloseConnectionError, ua.StatusBadUnexpectedError, "CloseConnections: %d results for %d endpoints", len(results), len(recs))
+	if len(results) != len(send) {
+		return nil, k, failure(uafx.FxErrorCloseConnectionError, ua.StatusBadUnexpectedError, "CloseConnections: %d results for %d endpoints", len(results), len(send))
 	}
 	proven = !slices.ContainsFunc(results, ambiguousStatus)
-	return results, k, nil
+	byRec := make([]ua.StatusCode, len(recs))
+	for j, i := range send {
+		byRec[i] = results[j]
+	}
+	return byRec, k, nil
 }
 
 // closable returns the records of the set that may be closed and the
@@ -2700,23 +2814,38 @@ func (x *run) enableOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, r
 		failAll(failureOf(blockedFailure(uafx.FxErrorEnableCommunicationError, addr), uafx.FxErrorEnableCommunicationError))
 		return
 	}
-	sess, err := x.m.pool.get(ctx, addr)
+	t, err := x.openTarget(ctx, addr)
 	if err != nil {
 		failAll(failureOf(err, uafx.FxErrorTargetServerConnectionError))
 		return
 	}
-	a := &acRun{addr: addr, node: ac, t: &target{addr: addr, sess: sess, cache: x.m.res.of(addr)}}
-	if err := a.t.open(ctx); err != nil {
-		x.m.pool.drop(ctx, addr, sess)
-		failAll(failureOf(err, uafx.FxErrorTargetServerConnectionError))
-		return
-	}
+	a := &acRun{addr: addr, node: ac, t: t}
 	x.identify(ctx, a.t)
 	if err := x.methods(ctx, a); err != nil {
 		failAll(failureOf(err, uafx.FxErrorEnableCommunicationError))
 		return
 	}
 	defer x.syncStep(a)
+	// Only the endpoints proven to be the ones recorded are enabled
+	// (incarnation, §6.5); the others are held and not sent.
+	sent := recs[:0:0]
+	for _, r := range recs {
+		class, why := x.incarnation(ctx, a.t, r)
+		if class == 0 {
+			sent = append(sent, r)
+			continue
+		}
+		x.hold(r, recordKey(r.addr, r.FunctionalEntity, r.Name), a, class, why)
+		f := Failure{FxError: uafx.FxErrorEnableCommunicationError, Status: ua.StatusBadInvalidState}
+		if ep := x.epOf(r.Endpoint); ep != nil {
+			x.fail(ep, f)
+		} else {
+			x.extraFailure(f)
+		}
+	}
+	if recs = sent; len(recs) == 0 {
+		return
+	}
 	req := &uafx.EstablishConnectionsRequest{CommandMask: uafx.EnableCommunicationCmd}
 	for _, r := range recs {
 		req.ConnectionEndpointConfigurations = append(req.ConnectionEndpointConfigurations, &uafx.ConnectionEndpointConfiguration{
