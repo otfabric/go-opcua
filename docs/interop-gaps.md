@@ -7,10 +7,14 @@ peer entry comes from the interop suite ([INTEROP.md](../INTEROP.md)): the
 test that found it skips with the reason or pins the behaviour, and the
 ledger row says `unsupported` with the same reason.
 
-Versions: go-opcua v1.31.0 (checked 2026-11-12; the interop suite last passed
-on main on 2026-11-07, after v1.31.0); open62541 1.5.10, Eclipse Milo 1.1.8, async-opcua
-0.19.0, UA-.NETStandard 2.0.2, node-opcua 2.187.32 and opcua-asyncio
-(`asyncua`) 2.1.0, as packaged by opcua-interop v0.20.0.
+Versions: the entries were checked against go-opcua v1.31.0 (2026-11-12; the
+interop suite last passed on main on 2026-11-07, after v1.31.0) and open62541
+1.5.10, Eclipse Milo 1.1.8, async-opcua 0.19.0, UA-.NETStandard 2.0.2,
+node-opcua 2.187.32 and opcua-asyncio (`asyncua`) 2.1.0, as packaged by
+opcua-interop v0.20.0, and have not been checked again since, except: v1.42.0
+(checked 2026-11-27) removed the entries on triggering links, which a
+recreated subscription now gets back, and on raw history deletes, which now
+exclude the end time as a raw read does.
 
 ## What go-opcua does not implement
 
