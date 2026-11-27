@@ -1453,7 +1453,7 @@ func (h *Historian) DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, 
 
 DeleteRawModified implements RawHistoryDeleter. Modified-only deletes are unsupported.
 
-The range is that of DeleteRawModifiedDetails (Part 11 §6.9.5.1): "values up to but not including the endTime are deleted", and with startTime = endTime "the value at the startTime is deleted". The end time is excluded as by a raw read (ReadRaw), so a delete removes the samples a read of the same range returns. Part 11 requires startTime \< endTime and both to be defined; the historian also takes the ranges ReadRaw takes: a zero time leaves the range open on its side, and startTime > endTime deletes from startTime back to, but not including, endTime. A range without a sample is Bad\_NoData (§6.9.5.2).
+The range is that of DeleteRawModifiedDetails (Part 11 §6.9.5.1): "Both startTime and endTime shall be defined. The startTime shall be less than the endTime, and values up to but not including the endTime are deleted. It is permissible for startTime = endTime, in which case the value at the startTime is deleted." A range without a defined start or end time, or that ends before it starts, deletes nothing and is Bad\_HistoryOperationInvalid (see \[checkDeleteRawRange]). A range without a sample is Bad\_NoData (§6.9.5.2). The end time is excluded as by a raw read (ReadRaw), so a delete removes the samples a read of the same range returns.
 
 #### func (Historian) EnableEvents
 
@@ -3597,7 +3597,7 @@ type RawHistoryDeleter interface {
 }
 ```
 
-RawHistoryDeleter optionally supports DeleteRawModifiedDetails (raw deletes).
+RawHistoryDeleter optionally supports DeleteRawModifiedDetails (raw deletes). HistoryUpdate calls it only with a range Part 11 §6.9.5.1 allows, both times defined and startTime not after endTime; it answers any other range with Bad\_HistoryOperationInvalid without calling the deleter.
 
 ### type RefType
 

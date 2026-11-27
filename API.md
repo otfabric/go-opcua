@@ -2560,8 +2560,11 @@ Supported by default `*Historian`:
 - DeleteRawModified with `isDeleteModified=false`; `true` → `BadHistoryOperationUnsupported`.
   The end time is excluded, as by a raw read; startTime = endTime deletes the
   value at startTime; a range without a sample is `BadNoData` (Part 11
-  §6.9.5). A zero time leaves the range open, and startTime > endTime deletes
-  from startTime back to, not including, endTime
+  §6.9.5). A range without a start or end time (the zero `time.Time` or
+  1601-01-01, the null DateTime) or with startTime > endTime deletes nothing
+  and is `BadHistoryOperationInvalid`; HistoryUpdate refuses such a range the
+  same way before it reaches any `RawHistoryDeleter`, for modified deletes
+  too. Reads keep their open and reverse ranges
 - DeleteAtTime
 - ReadAtTime (nearest previous)
 - ReadModified

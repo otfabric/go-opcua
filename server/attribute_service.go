@@ -755,11 +755,17 @@ func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.S
 		if !ok {
 			return unsupported
 		}
+		if st := checkDeleteRawRange(v.StartTime, v.EndTime); st != ua.StatusOK {
+			return &ua.HistoryUpdateResult{StatusCode: st}
+		}
 		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
 	case ua.DeleteRawModifiedDetails:
 		deleter, ok := h.(RawHistoryDeleter)
 		if !ok {
 			return unsupported
+		}
+		if st := checkDeleteRawRange(v.StartTime, v.EndTime); st != ua.StatusOK {
+			return &ua.HistoryUpdateResult{StatusCode: st}
 		}
 		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
 	case *ua.DeleteAtTimeDetails:

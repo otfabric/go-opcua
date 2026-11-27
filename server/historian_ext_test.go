@@ -136,9 +136,7 @@ func TestHistorian_DeleteRawModified(t *testing.T) {
 		t.Fatalf("unknown node: %v", st)
 	}
 
-	// Reverse range (start > end): from startTime back to, not including,
-	// endTime, as a reverse read returns it.
-	res := h.DeleteRawModified(nodeID, false, base.Add(3*time.Second), base.Add(time.Second))
+	res := h.DeleteRawModified(nodeID, false, base.Add(time.Second), base.Add(3*time.Second))
 	if res.StatusCode != ua.StatusOK {
 		t.Fatalf("delete range: %v", res.StatusCode)
 	}
@@ -147,7 +145,7 @@ func TestHistorian_DeleteRawModified(t *testing.T) {
 		t.Fatal(err)
 	}
 	hd := raw.HistoryData.Value.(*ua.HistoryData)
-	// Samples at t=0, t=1 and t=4 remain (deleted (1s, 3s]).
+	// Samples at t=0, t=3 and t=4 remain (deleted [1s, 3s)).
 	if len(hd.DataValues) != 3 {
 		t.Fatalf("remaining=%d, want 3", len(hd.DataValues))
 	}
@@ -157,7 +155,10 @@ func TestHistorian_DeleteRawModified(t *testing.T) {
 // §6.9.5.1) is that of a raw read: the end time is excluded, startTime =
 // endTime deletes the value at startTime, and a range without a sample is
 // Bad_NoData (§6.9.5.2). A delete removes exactly what a read of the same
-// range returns.
+// range returns. "Both startTime and endTime shall be defined. The
+// startTime shall be less than the endTime": a range without one of them,
+// or reversed, is Bad_HistoryOperationInvalid and deletes nothing, for a
+// modified delete too.
 func TestHistorian_DeleteRawModifiedRange(t *testing.T) {
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	at := func(i int) time.Time { return base.Add(time.Duration(i) * time.Second) }
@@ -184,6 +185,8 @@ func TestHistorian_DeleteRawModifiedRange(t *testing.T) {
 		}
 		return out
 	}
+	all := []float64{0, 1, 2, 3, 4}
+	epoch := time.Date(1601, 1, 1, 0, 0, 0, 0, time.UTC) // the 0 of the binary encoding
 	for _, tc := range []struct {
 		name       string
 		start, end time.Time
@@ -193,9 +196,12 @@ func TestHistorian_DeleteRawModifiedRange(t *testing.T) {
 		{"end excluded", at(1), at(3), ua.StatusOK, []float64{0, 3, 4}},
 		{"start equals end", at(2), at(2), ua.StatusOK, []float64{0, 1, 3, 4}},
 		{"start equals end without sample", at(2).Add(time.Millisecond), at(2).Add(time.Millisecond), ua.StatusBadNoData, []float64{0, 1, 2, 3, 4}},
-		{"reverse", at(3), at(1), ua.StatusOK, []float64{0, 1, 4}},
-		{"open start", time.Time{}, at(2), ua.StatusOK, []float64{2, 3, 4}},
-		{"open end", at(3), time.Time{}, ua.StatusOK, []float64{0, 1, 2}},
+		{"reverse", at(3), at(1), ua.StatusBadHistoryOperationInvalid, all},
+		{"no start time", time.Time{}, at(2), ua.StatusBadHistoryOperationInvalid, all},
+		{"no end time", at(3), time.Time{}, ua.StatusBadHistoryOperationInvalid, all},
+		{"neither time", time.Time{}, time.Time{}, ua.StatusBadHistoryOperationInvalid, all},
+		{"start time at the epoch", epoch, at(2), ua.StatusBadHistoryOperationInvalid, all},
+		{"end time before the epoch", at(0), epoch.Add(-time.Hour), ua.StatusBadHistoryOperationInvalid, all},
 		{"only the end time in range", at(4), at(4).Add(time.Hour), ua.StatusOK, []float64{0, 1, 2, 3}},
 		{"nothing in range", at(10), at(20), ua.StatusBadNoData, []float64{0, 1, 2, 3, 4}},
 		{"range ending at the first sample", at(-5), at(0), ua.StatusBadNoData, []float64{0, 1, 2, 3, 4}},
@@ -214,6 +220,10 @@ func TestHistorian_DeleteRawModifiedRange(t *testing.T) {
 			}
 			require.Equal(t, tc.status, h.DeleteRawModified(nodeID, false, tc.start, tc.end).StatusCode)
 			require.Equal(t, tc.left, values(t, h, time.Time{}, time.Time{}))
+			if tc.status == ua.StatusBadHistoryOperationInvalid {
+				// A modified delete checks the range first as well.
+				require.Equal(t, tc.status, h.DeleteRawModified(nodeID, true, tc.start, tc.end).StatusCode)
+			}
 		})
 	}
 }
