@@ -838,12 +838,23 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 		}, nil
 	}
 
-	// A linked item must be one of the same subscription (Part 4 §5.12.5.2:
-	// Bad_MonitoredItemIdInvalid otherwise). Additions are processed before
-	// removals, so a link named in both lists is gone afterwards.
+	// A linked item must be one of the same subscription (Part 4 §5.13.5.2:
+	// Bad_MonitoredItemIdInvalid otherwise). "The list of linksToRemove is
+	// processed before the linksToAdd" (§5.13.5.2, Table 72), so a link
+	// named in both lists exists afterwards. Each list of results has "the
+	// size and order" of its own list in the request.
 	linked := func(id uint32) bool {
 		it, exists := s.Items[id]
 		return exists && it.Sub == triggerItem.Sub
+	}
+	removeResults := make([]ua.StatusCode, len(req.LinksToRemove))
+	for i, linkID := range req.LinksToRemove {
+		if _, ok := triggerItem.triggers[linkID]; !ok || !linked(linkID) {
+			removeResults[i] = ua.StatusBadMonitoredItemIDInvalid
+			continue
+		}
+		delete(triggerItem.triggers, linkID)
+		removeResults[i] = ua.StatusOK
 	}
 	addResults := make([]ua.StatusCode, len(req.LinksToAdd))
 	for i, linkID := range req.LinksToAdd {
@@ -856,15 +867,6 @@ func (s *MonitoredItemService) SetTriggering(ctx context.Context, sc *uasc.Secur
 		}
 		triggerItem.triggers[linkID] = struct{}{}
 		addResults[i] = ua.StatusOK
-	}
-	removeResults := make([]ua.StatusCode, len(req.LinksToRemove))
-	for i, linkID := range req.LinksToRemove {
-		if _, ok := triggerItem.triggers[linkID]; !ok || !linked(linkID) {
-			removeResults[i] = ua.StatusBadMonitoredItemIDInvalid
-			continue
-		}
-		delete(triggerItem.triggers, linkID)
-		removeResults[i] = ua.StatusOK
 	}
 	// A triggered item that already holds samples is reported with the next
 	// notification of its trigger: wake Publish if the trigger has one queued.
