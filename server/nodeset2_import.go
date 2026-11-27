@@ -27,8 +27,15 @@ import (
 // to those of the server: a NodeSet can be imported into a server whose
 // namespace table differs from the document's. A document whose indexes
 // already are those of the server, or that has no NamespaceUris, is
-// imported as it is. A BrowseName without a prefix is a name in the
-// namespace of its node, whether or not the document is rewritten.
+// imported as it is.
+//
+// A BrowseName without a namespace prefix is a name in the OPC UA
+// namespace, 0, whatever the namespace of its node: "The form without a
+// prefix ... shall only be used for QualifiedNames in the OPC UA
+// Namespace" (Part 6 §5.1.12). A companion model writes InputArguments,
+// for one, for the 0:InputArguments Property of its Methods. A prefix that
+// names no namespace of the document (or, for a document without
+// NamespaceUris, of the server) fails the import.
 //
 // This is the primary public API for loading custom NodeSet data. Users
 // do not need to import the schema package directly.
@@ -47,7 +54,7 @@ func (s *Server) ImportNodeSetXML(data []byte) error {
 	if identity {
 		return s.importNodeSet(&nodes)
 	}
-	out, err := nodeset.RemapWith(data, s.namespaceIndex, nodeset.Options{KeepUnprefixedBrowseNames: true})
+	out, err := nodeset.Remap(data, s.namespaceIndex)
 	if err != nil {
 		return fmt.Errorf("server: map the namespaces of the NodeSet: %w", err)
 	}
@@ -119,17 +126,19 @@ func isForward(ref *schema.Reference) bool {
 	return ref.IsForwardAttr == nil || *ref.IsForwardAttr
 }
 
-// importBrowseName converts the BrowseName attribute of a NodeSet2 node into a
-// QualifiedName. The attribute has the form "Name" or "<nsIndex>:Name"; the
-// numeric prefix is the namespace index and not part of the name. Without a
-// prefix the name belongs to the namespace of the node.
-func importBrowseName(nid *ua.NodeID, attr string) *ua.QualifiedName {
-	if i := strings.IndexByte(attr, ':'); i > 0 {
-		if ns, err := strconv.ParseUint(attr[:i], 10, 16); err == nil {
-			return &ua.QualifiedName{NamespaceIndex: uint16(ns), Name: attr[i+1:]}
-		}
+// importBrowseName converts the BrowseName attribute of the NodeSet2 node
+// nid into a QualifiedName: "<NamespaceIndex>:<Name>", or "<Name>" for a
+// name in namespace 0 (Part 6 §5.1.12, [nodeset.ParseQualifiedName]). The
+// namespace must exist on the server.
+func (s *Server) importBrowseName(nid *ua.NodeID, attr string) (*ua.QualifiedName, error) {
+	ns, name, err := nodeset.ParseQualifiedName(attr)
+	if err != nil {
+		return nil, fmt.Errorf("nodeset import: node %s: %w", nid, err)
 	}
-	return &ua.QualifiedName{NamespaceIndex: nid.Namespace(), Name: attr}
+	if int(ns) >= len(s.Namespaces()) {
+		return nil, fmt.Errorf("nodeset import: node %s: BrowseName %q: the server has no namespace %d", nid, attr, ns)
+	}
+	return &ua.QualifiedName{NamespaceIndex: ns, Name: name}, nil
 }
 
 // importRef adds a reference a nodeset declares on node: node -typ-> target
@@ -197,7 +206,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(rt.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, rt.BrowseNameAttr))
+		bn, err := s.importBrowseName(nid, rt.BrowseNameAttr)
+		if err != nil {
+			return err
+		}
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(bn)
 		attrs[ua.AttributeIDIsAbstract] = DataValueFromValue(rt.IsAbstractAttr)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(rt.UserWriteMaskAttr)
 		attrs[ua.AttributeIDSymmetric] = DataValueFromValue(rt.SymmetricAttr)
@@ -237,7 +250,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(dt.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, dt.BrowseNameAttr))
+		bn, err := s.importBrowseName(nid, dt.BrowseNameAttr)
+		if err != nil {
+			return err
+		}
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(bn)
 		attrs[ua.AttributeIDIsAbstract] = DataValueFromValue(dt.IsAbstractAttr)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(dt.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(dt.WriteMaskAttr)
@@ -272,7 +289,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
+		bn, err := s.importBrowseName(nid, ot.BrowseNameAttr)
+		if err != nil {
+			return err
+		}
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(bn)
 		attrs[ua.AttributeIDIsAbstract] = DataValueFromValue(ot.IsAbstractAttr)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
@@ -306,7 +327,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
+		bn, err := s.importBrowseName(nid, ot.BrowseNameAttr)
+		if err != nil {
+			return err
+		}
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(bn)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {
@@ -340,7 +365,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
+		bn, err := s.importBrowseName(nid, ot.BrowseNameAttr)
+		if err != nil {
+			return err
+		}
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(bn)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {
@@ -374,7 +403,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
+		bn, err := s.importBrowseName(nid, ot.BrowseNameAttr)
+		if err != nil {
+			return err
+		}
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(bn)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {
@@ -410,7 +443,11 @@ func (s *Server) nodesImportNodeSet(nodes *schema.UANodeSet) error {
 		}
 		var attrs Attributes = make(map[ua.AttributeID]*ua.DataValue)
 		attrs[ua.AttributeIDAccessRestrictions] = DataValueFromValue(ot.AccessRestrictionsAttr)
-		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(importBrowseName(nid, ot.BrowseNameAttr))
+		bn, err := s.importBrowseName(nid, ot.BrowseNameAttr)
+		if err != nil {
+			return err
+		}
+		attrs[ua.AttributeIDBrowseName] = DataValueFromValue(bn)
 		attrs[ua.AttributeIDUserWriteMask] = DataValueFromValue(ot.UserWriteMaskAttr)
 		attrs[ua.AttributeIDWriteMask] = DataValueFromValue(ot.WriteMaskAttr)
 		if len(ot.DisplayName) > 0 {

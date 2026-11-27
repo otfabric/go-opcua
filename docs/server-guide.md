@@ -692,8 +692,12 @@ The importer handles:
   values are rewritten to those of the server, so a model can be imported
   into a server whose namespace table differs from the document's. A
   document whose indexes already are those of the server, or that has no
-  `NamespaceUris`, is imported as it is; a BrowseName without a prefix is a
-  name in the namespace of its node either way
+  `NamespaceUris`, is imported as it is. A BrowseName without a prefix is a
+  name in namespace 0 whatever the namespace of its node ("The form without
+  a prefix ... shall only be used for QualifiedNames in the OPC UA
+  Namespace", Part 6 §5.1.12): the `InputArguments` of a companion Method
+  is `0:InputArguments`. A prefix that names no namespace of the document
+  fails the import
 - All node types (Objects, Variables, Methods, DataTypes, ObjectTypes, VariableTypes, ReferenceTypes)
 - Reference relationships
 - Node attributes (BrowseName, DisplayName, Description, etc.)

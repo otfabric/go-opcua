@@ -67,8 +67,8 @@ func TestImportNodeSetXML_RemapsNamespaces(t *testing.T) {
 	require.NotNil(t, srv.Node(tank))
 	require.Nil(t, other.Node(ua.NewNumericNodeID(1, 7000)), "nothing lands in the namespace with the document's index")
 	require.Equal(t, &ua.QualifiedName{NamespaceIndex: 2, Name: "Tank"}, srv.Node(tank).BrowseName())
-	require.Equal(t, &ua.QualifiedName{NamespaceIndex: 2, Name: "Valve"}, srv.Node(valve).BrowseName(),
-		"a BrowseName without a prefix stays in the namespace of its node")
+	require.Equal(t, &ua.QualifiedName{NamespaceIndex: 0, Name: "Valve"}, srv.Node(valve).BrowseName(),
+		"a BrowseName without a prefix is in namespace 0 (Part 6 §5.1.12)")
 	require.True(t, hasRef(srv.Node(tank), valve, id.HasComponent, true))
 
 	// The same document again reuses the namespace.
@@ -103,7 +103,7 @@ func TestImportNodeSetXML_MatchingNamespaces(t *testing.T) {
 	require.Equal(t, []string{"http://opcfoundation.org/UA/", "urn:test:a", "urn:test:new"}, namespaceNames(srv))
 	require.NotNil(t, srv.Node(ua.NewNumericNodeID(1, 7000)))
 	require.NotNil(t, srv.Node(ua.NewNumericNodeID(2, 7001)))
-	require.Equal(t, &ua.QualifiedName{NamespaceIndex: 1, Name: "Valve"}, srv.Node(ua.NewNumericNodeID(1, 7002)).BrowseName())
+	require.Equal(t, &ua.QualifiedName{NamespaceIndex: 0, Name: "Valve"}, srv.Node(ua.NewNumericNodeID(1, 7002)).BrowseName())
 
 	// A document without NamespaceUris names the server's indexes.
 	require.NoError(t, srv.ImportNodeSetXML([]byte(`<UANodeSet xmlns="http://opcfoundation.org/UA/2011/03/UANodeSet.xsd">

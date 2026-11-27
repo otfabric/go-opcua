@@ -195,25 +195,12 @@ func URIs(src []byte) ([]string, error) {
 // RolePermissionType; nothing else in an ExtensionObject Body);
 // the prefix of BrowseName attributes and of the Name of a DataType
 // Definition; and the NamespaceIndex of a QualifiedName value. A
-// BrowseName without a prefix is a name in namespace 0 (Part 6 §F.3) and
-// gets the prefix "0:", so that it is not read as a name in the namespace
-// of its node. Everything else, Extensions included, is copied as it is.
-// An index outside the namespace table of the document is an error.
+// BrowseName without a prefix is a name in the OPC UA namespace, "The form
+// without a prefix ... shall only be used for QualifiedNames in the OPC UA
+// Namespace" (Part 6 §5.1.12), and gets the prefix "0:", which says the
+// same. Everything else, Extensions included, is copied as it is. An index
+// outside the namespace table of the document is an error.
 func Remap(src []byte, resolve Resolver) ([]byte, error) {
-	return RemapWith(src, resolve, Options{})
-}
-
-// Options change what [RemapWith] rewrites.
-type Options struct {
-	// KeepUnprefixedBrowseNames leaves a BrowseName without a namespace
-	// prefix as it is instead of giving it the prefix "0:", for an
-	// importer that reads such a name as a name in the namespace of its
-	// node.
-	KeepUnprefixedBrowseNames bool
-}
-
-// RemapWith is [Remap] with the options opts.
-func RemapWith(src []byte, resolve Resolver, opts Options) ([]byte, error) {
 	uris, err := URIs(src)
 	if err != nil {
 		return nil, err
@@ -273,7 +260,7 @@ func RemapWith(src []byte, resolve Resolver, opts Options) ([]byte, error) {
 				}
 				return nil
 			}
-			out = append(out, remapTag(t.raw, tok.Name.Local, opts, mapIndex, mapNodeID)...)
+			out = append(out, remapTag(t.raw, tok.Name.Local, mapIndex, mapNodeID)...)
 		case xml.CharData:
 			if len(stack) == 0 {
 				out = append(out, t.raw...)
@@ -306,7 +293,7 @@ func RemapWith(src []byte, resolve Resolver, opts Options) ([]byte, error) {
 }
 
 // remapTag rewrites the attributes of the start tag raw of the element el.
-func remapTag(raw []byte, el string, opts Options, mapIndex, mapNodeID func([]byte) []byte) []byte {
+func remapTag(raw []byte, el string, mapIndex, mapNodeID func([]byte) []byte) []byte {
 	return replaceAttrs(raw, func(m, space, rawName, eq, value []byte) []byte {
 		name := local(rawName)
 		q, v := value[:1], value[1:len(value)-1]
@@ -317,8 +304,6 @@ func remapTag(raw []byte, el string, opts Options, mapIndex, mapNodeID func([]by
 			switch idx, n, ok := qualifiedPrefix(v); {
 			case ok:
 				v = concat(mapIndex(idx), []byte(":"), v[n:])
-			case opts.KeepUnprefixedBrowseNames:
-				return m
 			default:
 				v = concat([]byte("0:"), v)
 			}

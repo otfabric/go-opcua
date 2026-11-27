@@ -4306,7 +4306,9 @@ func (s *Server) ImportNodeSetXML(data []byte) error
 
 ImportNodeSetXML parses OPC UA NodeSet2 XML data and imports the nodes, references, and namespaces into the server's address space.
 
-The NamespaceIndexes of the NodeIds, ExpandedNodeIds and QualifiedNames of a NodeSet identify an element of its NamespaceUris, "The first index is always 1 (0 is always the OPC UA namespace)" (Part 6 §F.2). Each URI of the document gets the index the server has for it, or a new namespace on the server when it has none, and the document's indexes are rewritten to those of the server: a NodeSet can be imported into a server whose namespace table differs from the document's. A document whose indexes already are those of the server, or that has no NamespaceUris, is imported as it is. A BrowseName without a prefix is a name in the namespace of its node, whether or not the document is rewritten.
+The NamespaceIndexes of the NodeIds, ExpandedNodeIds and QualifiedNames of a NodeSet identify an element of its NamespaceUris, "The first index is always 1 (0 is always the OPC UA namespace)" (Part 6 §F.2). Each URI of the document gets the index the server has for it, or a new namespace on the server when it has none, and the document's indexes are rewritten to those of the server: a NodeSet can be imported into a server whose namespace table differs from the document's. A document whose indexes already are those of the server, or that has no NamespaceUris, is imported as it is.
+
+A BrowseName without a namespace prefix is a name in the OPC UA namespace, 0, whatever the namespace of its node: "The form without a prefix ... shall only be used for QualifiedNames in the OPC UA Namespace" (Part 6 §5.1.12). A companion model writes InputArguments, for one, for the 0:InputArguments Property of its Methods. A prefix that names no namespace of the document (or, for a document without NamespaceUris, of the server) fails the import.
 
 This is the primary public API for loading custom NodeSet data. Users do not need to import the schema package directly.
 
