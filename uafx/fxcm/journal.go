@@ -210,6 +210,11 @@ func (x *run) intend(c *callRecord) (string, error) {
 	}
 	c.Run, c.Generation, c.Fingerprint = uint64(x.r.id), x.gen, x.fp
 	c.Folder, c.SetName = x.r.key.Folder, x.r.key.Name
+	if err := p.fenceAt(x.r.key, c); err != nil {
+		// Work another set came to owe on the server since the run
+		// started: nothing is sent (design §6.3).
+		return "", errNoIntent(err)
+	}
 	v, err := encodeRecord(c)
 	if err != nil {
 		return "", errNoIntent(err)
@@ -264,6 +269,17 @@ func (x *run) retain(k string) {
 	x.j.retained[k] = true
 }
 
+// retained reports whether the intent k stays in the store: the outcome
+// of its call is unknown.
+func (x *run) retained(k string) bool {
+	if k == "" {
+		return false
+	}
+	x.mu.Lock()
+	defer x.mu.Unlock()
+	return x.j.retained[k]
+}
+
 // crashPoint runs the crash hook of the tests.
 func (x *run) crashPoint(name string) {
 	if x.m != nil {
@@ -282,21 +298,40 @@ func fingerprint(v any) []byte {
 	return sum[:]
 }
 
-// establishIntent is the intent of an EstablishConnections of req on a.
+// establishIntent is the intent of an EstablishConnections of req on a:
+// an enablement of existing endpoints (EnableCommunicationCmd alone,
+// addressed by NodeId) records them as its Targets with the classes of
+// their records; any other establish records its Names with the evidence
+// of their absence and the parameters it sends (design §6.3).
 func (x *run) establishIntent(a *acRun, req *uafx.EstablishConnectionsRequest, args []*ua.Variant) *callRecord {
 	nsa := a.t.nsa
-	c := &callRecord{Kind: callEstablish, ACNode: qualify(a.node, nsa), Namespaces: nsa, Server: a.t.evidenceNow()}
+	c := &callRecord{Kind: callEstablish, ACNode: qualify(a.node, nsa), Namespaces: nsa, Server: a.t.evidenceNow(), Command: uint32(req.CommandMask)}
 	c.Address, c.SecurityMode, c.SecurityPolicyURI, c.ServerURIConf = a.addr.Address, uint32(a.addr.SecurityMode), a.addr.SecurityPolicyURI, a.addr.ServerURI
 	if b, err := ua.Encode(args); err == nil {
 		c.Request = b
 	}
+	if req.CommandMask == uafx.EnableCommunicationCmd {
+		c.Kind = callEnable
+		for _, cec := range req.ConnectionEndpointConfigurations {
+			var n *ua.NodeID
+			if cec.ConnectionEndpoint != nil {
+				n = cec.ConnectionEndpoint.Node
+			}
+			c.Targets = append(c.Targets, qualify(n, nsa))
+			c.FunctionalEntities = append(c.FunctionalEntities, qualify(cec.FunctionalEntityNode, nsa))
+			c.Prior = append(c.Prior, int64(x.priorClass(a.addr, n)))
+		}
+		return c
+	}
 	for _, cec := range req.ConnectionEndpointConfigurations {
 		name := ""
 		var pre *ua.NodeID
+		var sent storedParam
 		absent := false
 		if d := cec.ConnectionEndpoint; d != nil {
 			if d.Parameter != nil {
 				name = d.Parameter.Name
+				sent = paramOf(d.Parameter, nsa)
 			}
 			pre = d.Node
 		}
@@ -310,19 +345,34 @@ func (x *run) establishIntent(a *acRun, req *uafx.EstablishConnectionsRequest, a
 		c.EndpointFingerprints = append(c.EndpointFingerprints, fingerprint(cec))
 		c.AbsentBefore = append(c.AbsentBefore, absent)
 		c.Preconfigured = append(c.Preconfigured, qualify(pre, nsa))
+		c.Params = append(c.Params, sent)
 	}
 	return c
 }
 
+// priorClass returns the class of the record of the set at the NodeId n
+// on addr, Unresolved for none.
+func (x *run) priorClass(addr ServerAddress, n *ua.NodeID) Ownership {
+	x.s.mu.Lock()
+	defer x.s.mu.Unlock()
+	for _, r := range x.s.records {
+		if r.addr == addr && n != nil && r.NodeID.Equal(n) {
+			return r.Class
+		}
+	}
+	return Unresolved
+}
+
 // closeIntent is the intent of a CloseConnections of nodes on ac of the
-// server t.
-func closeIntent(t *target, ac *ua.NodeID, nodes []*ua.NodeID, remove bool) *callRecord {
+// server t, with prior, the classes of their records.
+func closeIntent(t *target, ac *ua.NodeID, nodes []*ua.NodeID, prior []Ownership, remove bool) *callRecord {
 	c := &callRecord{
 		Kind: callClose, ACNode: qualify(ac, t.nsa), Namespaces: t.nsa, Remove: remove, Server: t.evidenceNow(),
 		Address: t.addr.Address, SecurityMode: uint32(t.addr.SecurityMode), SecurityPolicyURI: t.addr.SecurityPolicyURI, ServerURIConf: t.addr.ServerURI,
 	}
-	for _, n := range nodes {
+	for i, n := range nodes {
 		c.Nodes = append(c.Nodes, qualify(n, t.nsa))
+		c.Prior = append(c.Prior, int64(prior[i]))
 	}
 	return c
 }

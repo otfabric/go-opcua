@@ -46,6 +46,13 @@ type (
 // owed.
 const PhaseRollbackRequired = phaseRollbackRequired
 
+// The kinds of an intent.
+const (
+	CallEstablish = callEstablish
+	CallClose     = callClose
+	CallEnable    = callEnable
+)
+
 // IdentityReported is the source of an identity the server reported.
 const IdentityReported = identityReported
 

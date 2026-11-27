@@ -243,10 +243,17 @@ func newPool(d Dialer) *pool {
 // get returns the session of addr, dialing it when there is none. Callers
 // that ask while a dial is in progress wait for it.
 func (p *pool) get(ctx context.Context, addr ServerAddress) (Session, error) {
+	s, _, err := p.reuse(ctx, addr)
+	return s, err
+}
+
+// reuse is get, and reports whether the session was dialed before this
+// call: such a session may have gone with its server while it was idle.
+func (p *pool) reuse(ctx context.Context, addr ServerAddress) (Session, bool, error) {
 	p.mu.Lock()
 	if p.closed {
 		p.mu.Unlock()
-		return nil, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
+		return nil, false, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
 	}
 	e := p.sessions[addr]
 	if e == nil {
@@ -265,17 +272,17 @@ func (p *pool) get(ctx context.Context, addr ServerAddress) (Session, error) {
 		p.mu.Unlock()
 		if closed && e.err == nil {
 			_ = e.s.Close(context.WithoutCancel(ctx))
-			return nil, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
+			return nil, false, managerError(ua.StatusBadShutdown, "the ConnectionManager is closed")
 		}
-		return e.s, e.err
+		return e.s, false, e.err
 	}
 	p.mu.Unlock()
 	select {
 	case <-e.ready:
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, false, ctx.Err()
 	}
-	return e.s, e.err
+	return e.s, true, e.err
 }
 
 // drop closes s and forgets it, if it is still the session of addr.

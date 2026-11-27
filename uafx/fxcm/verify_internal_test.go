@@ -34,6 +34,11 @@ func TestSameServer(t *testing.T) {
 		{"authenticated, reported", auth, rep, false, true},
 		{"authenticated, another certificate", auth, serverEvidence{ApplicationURI: "urn:a", Source: identityAuthenticated, Thumbprint: []byte{2}}, false, false},
 		{"authenticated, authenticated", auth, auth, true, false},
+		// A record made over a secured channel without authenticated
+		// evidence is never re-proved by a reported ApplicationUri, nor
+		// by a channel authenticated now (§6.5).
+		{"secured, reported", serverEvidence{ApplicationURI: "urn:a", Source: identityReported, Secured: true}, rep, false, false},
+		{"secured, reported, authenticated now", serverEvidence{ApplicationURI: "urn:a", Source: identityReported, Secured: true}, auth, false, false},
 	} {
 		ok, retry, why := sameServer(tc.rec, tc.cur)
 		assert.Equal(t, tc.ok, ok, tc.name)

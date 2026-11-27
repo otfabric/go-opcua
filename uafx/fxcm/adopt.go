@@ -51,9 +51,24 @@ func (x *run) adoptable(ctx context.Context, a *acRun, ep *epRun, rec *record, o
 	}
 	x.s.mu.Lock()
 	ok := rec.Class == KnownOwned && rec.gen == x.gen && bytes.Equal(rec.fp, x.fp) && rec.NodeID.Equal(obs.NodeID)
+	created := rec.created
 	x.s.mu.Unlock()
 	if !ok {
 		return false
+	}
+	// The incarnation the record has (§6.5): an AutomationComponent that
+	// restarted without its endpoints may show another under the Name at
+	// the same NodeId, which only its CreationTime tells apart.
+	if !created.IsZero() {
+		cm, cmOK, now, err := endpointEvidence(ctx, a.t, obs.NodeID)
+		switch {
+		case err != nil:
+			x.m.log.Debug("fxcm: an endpoint was not adopted: its evidence was not read", "set", x.r.key.String(), "run", x.r.id, "endpoint", ep.e.conf.Name, "error", err)
+			return false
+		case !now.Equal(created), cmOK && cm != x.m.opts.ApplicationURI:
+			x.m.log.Debug("fxcm: an endpoint was not adopted: it is another incarnation", "set", x.r.key.String(), "run", x.r.id, "endpoint", ep.e.conf.Name)
+			return false
+		}
 	}
 	act, err := readActual(ctx, a.t, obs.NodeID)
 	if err != nil {
@@ -68,6 +83,29 @@ func (x *run) adoptable(ctx context.Context, a *acRun, ep *epRun, rec *record, o
 		why = "its DataSetReader or DataSetWriter is not the configured one"
 	case !sameNodes(act.controls, ep.controls):
 		why = "it does not control the configured ControlGroups"
+	}
+	if why == "" && a.adoptCfg == nil {
+		// The configuration of the set on this server: its NodeIds
+		// mapped as the run would send them (prepareComm).
+		cm, err := x.prepareComm(ctx, a)
+		if err != nil {
+			x.m.log.Debug("fxcm: an endpoint was not adopted: its configuration does not map to the server", "set", x.r.key.String(), "run", x.r.id, "endpoint", ep.e.conf.Name, "error", err)
+			return false
+		}
+		if cm != nil {
+			a.adoptCfg = cm.cfg
+		}
+	}
+	if why == "" {
+		c, err := readComm(ctx, a.t, act)
+		if err != nil {
+			x.m.log.Debug("fxcm: an endpoint was not adopted: its communication configuration was not read", "set", x.r.key.String(), "run", x.r.id, "endpoint", ep.e.conf.Name, "error", err)
+			return false
+		}
+		if ok, what := sameComm(a.adoptCfg, ep, c); !ok {
+			why = what + " is not the configured one"
+		}
+		ep.comm = c
 	}
 	if why != "" {
 		x.m.log.Debug("fxcm: an endpoint was not adopted", "set", x.r.key.String(), "run", x.r.id, "endpoint", ep.e.conf.Name, "why", why)
@@ -156,13 +194,17 @@ func (x *run) adopt(ctx context.Context) bool {
 	if len(adopted) == 0 {
 		return false
 	}
+	// The identifiers allocated across the flows (adopt_comm.go): a
+	// subscriber that fails them is not adoptable, so neither is the run;
+	// it is closed first like the other adoptable ones.
+	rejected := x.adoptFlows()
 	if x.anyFailed() {
 		for _, ep := range adopted {
 			ep.adopt = nil
 		}
 		return false
 	}
-	if len(rest) == 0 {
+	if len(rest) == 0 && !rejected {
 		x.keepInPlace(ctx, adopted)
 		return true
 	}

@@ -573,6 +573,29 @@ func fencedOf(l *loaded, owed map[string][]OwedWork, unverified map[string]bool)
 	for _, r := range l.calls {
 		serve(SetKey{Folder: r.Folder, Name: r.SetName}, r.Address)
 	}
+	// The addresses of one server, by the ApplicationUri its records and
+	// intents were made with: a domain takes them all (two discovery URLs
+	// of one AutomationComponent are one server).
+	uris := map[string][]string{}
+	for _, r := range l.eps {
+		if u := r.Server.ApplicationURI; u != "" && !slices.Contains(uris[u], r.Address) {
+			uris[u] = append(uris[u], r.Address)
+		}
+	}
+	for _, r := range l.calls {
+		if u := r.Server.ApplicationURI; u != "" && !slices.Contains(uris[u], r.Address) {
+			uris[u] = append(uris[u], r.Address)
+		}
+	}
+	alias := func(domain map[string]bool) {
+		for _, as := range uris {
+			if slices.ContainsFunc(as, func(a string) bool { return domain[a] }) {
+				for _, a := range as {
+					domain[a] = true
+				}
+			}
+		}
+	}
 	fenced := map[string][]OwedWork{}
 	for _, oks := range sortedRecordKeys(owed) {
 		for _, w := range owed[oks] {
@@ -591,6 +614,7 @@ func fencedOf(l *loaded, owed map[string][]OwedWork, unverified map[string]bool)
 					}
 				}
 			}
+			alias(domain)
 			cands := map[string]bool{}
 			for ks := range servers {
 				cands[ks] = true
@@ -1236,6 +1260,44 @@ func (p *persistence) checkConfig(key SetKey) error {
 	for _, w := range p.owed[ks] {
 		if w.Kind == OwedSetChange {
 			return managerError(ua.StatusBadInvalidState, "the set %s owes the %v of run %d, which a Reconcile completes", key, w.Kind, w.Run)
+		}
+	}
+	return nil
+}
+
+// unresolvedOn returns the server addresses on which an intent of the set
+// key of a run other than run is in the store: its outcome is not proven.
+func (p *persistence) unresolvedOn(key SetKey, run RunID) map[string]bool {
+	out := map[string]bool{}
+	for _, c := range decodeState(p.d.State()).calls {
+		if keyString(SetKey{Folder: c.Folder, Name: c.SetName}) == keyString(key) && RunID(c.Run) != run {
+			out[c.Address] = true
+		}
+	}
+	return out
+}
+
+// fenceAt refuses the intent c of a run of the set key while checkBlocked
+// does, or while another set has an intent of a run that is not active on
+// the server of c, by its address or by the ApplicationUri of its server
+// (two addresses of one server): the fence a run passed when it started is
+// checked again before each of its calls, so that work another set came to
+// owe meanwhile is not bypassed (design §6.3).
+func (p *persistence) fenceAt(key SetKey, c *callRecord) error {
+	if err := p.checkBlocked(key); err != nil {
+		return err
+	}
+	p.owedMu.Lock()
+	active := maps.Clone(p.active)
+	p.owedMu.Unlock()
+	l := decodeState(p.d.State())
+	for _, k := range sortedRecordKeys(l.calls) {
+		o := l.calls[k]
+		if keyString(SetKey{Folder: o.Folder, Name: o.SetName}) == keyString(key) || active[RunID(o.Run)] {
+			continue
+		}
+		if o.Address == c.Address || o.Server.ApplicationURI != "" && o.Server.ApplicationURI == c.Server.ApplicationURI {
+			return managerError(ua.StatusBadInvalidState, "the set %s owes a call of unknown outcome on the server of %s (run %d)", SetKey{Folder: o.Folder, Name: o.SetName}, c.Address, o.Run)
 		}
 	}
 	return nil

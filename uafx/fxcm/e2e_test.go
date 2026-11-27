@@ -47,6 +47,10 @@ type ac struct {
 	test  uint16
 	uri   string
 	url   string
+	port  int
+	// stop closes the AutomationComponent and its server before the end
+	// of the test (a restart); the Cleanup calls it too.
+	stop func()
 }
 
 func (a *ac) id(n uint32) *ua.NodeID { return ua.NewNumericNodeID(a.test, n) }
@@ -78,15 +82,25 @@ func newAC(t *testing.T, name string, opts fxserver.ConnectionOptions) *ac {
 // srvOpts are added to the options of the server.
 func newACWith(t *testing.T, name string, opts fxserver.ConnectionOptions, extra string, srvOpts ...server.Option) *ac {
 	t.Helper()
+	return buildAC(t, name, opts, extra, 0, nil, srvOpts...)
+}
+
+// buildAC is newACWith on port (0 for any), with pre run on the server
+// before the fixture adds its namespaces.
+func buildAC(t *testing.T, name string, opts fxserver.ConnectionOptions, extra string, port int, pre func(*server.Server), srvOpts ...server.Option) *ac {
+	t.Helper()
 	uri := "urn:go-opcua:fxcm:" + name
 	srv, err := server.New(append([]server.Option{
-		server.EndPoint("localhost", 0),
+		server.EndPoint("localhost", port),
 		server.InsecureNoSecurity(),
 		server.EnableAuthMode(ua.UserTokenTypeAnonymous),
 		server.ApplicationURI(uri),
 		server.WithPubSub(nil),
 	}, srvOpts...)...)
 	require.NoError(t, err)
+	if pre != nil {
+		pre(srv)
+	}
 	ns, test, err := fxtest.PrepareConnections(srv)
 	require.NoError(t, err)
 	if extra != "" {
@@ -99,11 +113,15 @@ func newACWith(t *testing.T, name string, opts fxserver.ConnectionOptions, extra
 	conns, err := fxserver.EnableConnections(srv, ns, opts)
 	require.NoError(t, err)
 	require.NoError(t, srv.Start(context.Background()))
-	t.Cleanup(func() {
-		_ = conns.Close()
-		_ = srv.Close()
-	})
-	return &ac{srv: srv, conns: conns, ns: ns, test: test, uri: uri, url: fmt.Sprintf("opc.tcp://localhost:%d", srv.Port())}
+	var once sync.Once
+	stop := func() {
+		once.Do(func() {
+			_ = conns.Close()
+			_ = srv.Close()
+		})
+	}
+	t.Cleanup(stop)
+	return &ac{srv: srv, conns: conns, ns: ns, test: test, uri: uri, url: fmt.Sprintf("opc.tcp://localhost:%d", srv.Port()), port: srv.Port(), stop: stop}
 }
 
 // The namespace indexes of the Namespaces of the ServerAddresses of e2eConf.

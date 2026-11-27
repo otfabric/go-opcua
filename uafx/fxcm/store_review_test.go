@@ -506,13 +506,35 @@ func TestStoreRollbackObligationE2E(t *testing.T) {
 		st, _ := m.Status(cfg.Key())
 		assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedRollback), "%+v", st.Recovery.Owed)
 
-		// Still failing, the owed rollback fails the next run and stays
-		// owed; once the close succeeds, a Process completes it.
+		// The close of the rollback has an unknown outcome (decision
+		// C3-D13): its endpoints are Unresolved and its intent stays, so
+		// that no run sends it again, even once the AC would answer. The
+		// re-proof finds them in place: the postcondition of Remove TRUE
+		// does not hold.
+		closeOK.Store(true)
+		var closes atomic.Int32
+		d.hook = func(_ fxcm.ServerAddress, req *ua.CallMethodRequest) (bool, error) {
+			if len(req.InputArguments) == 2 {
+				closes.Add(1)
+			}
+			return true, nil
+		}
 		res = process(t, m, uafx.ActionRemoveConnections, cfg.Key())
 		require.Equal(t, fxcm.StateError, res.State)
+		assert.Zero(t, closes.Load(), "an ambiguous close is never sent again")
+		assert.NotEmpty(t, stored[fxcm.StoredCall](t, mem, "call/"))
 		st, _ = m.Status(cfg.Key())
 		assert.True(t, owesKind(st.Recovery.Owed, fxcm.OwedRollback), "%+v", st.Recovery.Owed)
-		closeOK.Store(true)
+		require.True(t, hasClass(st, fxcm.Unresolved), "%+v", st.Endpoints)
+		assert.NotEmpty(t, append(a.endpoints(), b.endpoints()...))
+
+		// Settle, the administrative decision, makes them KnownOwned and
+		// completes the intent: the next Process does the owed rollback.
+		for _, e := range st.Endpoints {
+			if e.Class == fxcm.Unresolved {
+				require.NoError(t, m.Settle(cfg.Key(), e.Endpoint, fxcm.SettleOwned))
+			}
+		}
 		res = process(t, m, uafx.ActionRemoveConnections, cfg.Key())
 		require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 		assert.Empty(t, a.endpoints())
@@ -745,9 +767,10 @@ func TestStoreAmbiguousE2E(t *testing.T) {
 			res := process(t, m, uafx.ActionEstablishConnectionsEnabled, k)
 			st, _ = m.Status(k)
 			if isClose {
-				// The endpoints of the close are KnownOwned, its close
-				// pending: the intent is complete, and the endpoints are
-				// closed and created again or kept, as step 0 finds them.
+				// The AC did close them: the re-proof finds them
+				// verifiably absent, the postcondition of Remove TRUE
+				// (decision C3-D13), so the intent is complete and the
+				// run creates them again.
 				assert.Empty(t, stored[fxcm.StoredCall](t, mem, "call/"))
 				assert.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
 				assert.Len(t, a.endpoints(), 1)

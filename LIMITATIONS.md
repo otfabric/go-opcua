@@ -42,7 +42,13 @@ behaviour you may notice, and the deviations of peers are in
   Process or Reconcile (an owed set change by Reconcile only, nothing
   resent) and keeps proven endpoints of an unchanged configuration in
   place; an endpoint whose record was lost is Unresolved, never adopted,
-  and adoption is all or nothing for a run
+  and adoption is all or nothing for a run. A close or enable whose
+  outcome cannot be proven by its postcondition stays Unresolved until
+  `Settle`, and is never resent. Two ServerAddresses of one server are
+  fenced as one only once a record or intent made over each shows the
+  same ApplicationUri; adoption compares the PubSub properties of the
+  endpoint's own reader, writer, groups and connections, not the rest of
+  the server's PubSub configuration
   ([docs/uafx.md](docs/uafx.md#persistence-of-the-connectionmanager)).
   Enable and Disable of a persisted
   component with the Methods of its Status Object are not persisted: after

@@ -248,11 +248,16 @@ func sameDuration(a, b float64) bool {
 // authenticated. Evidence is compared like for like: a reported identity is
 // never taken for an authenticated one. retry is set when the session
 // cannot show the evidence the record has (no authenticated channel now):
-// the record stays Unverified.
+// the record stays Unverified. A record made over a secured channel without
+// authenticated evidence is never re-proved by the ApplicationUri the
+// server reports (design §6.5: the thumbprint when the record was made
+// over a secured channel): the evidence it lacks cannot be read back.
 func sameServer(rec, cur serverEvidence) (ok, retry bool, why string) {
 	switch {
 	case rec.Source == identityUnavailable || rec.ApplicationURI == "":
 		return false, false, "the record has no identity of its server"
+	case rec.Secured && rec.Source != identityAuthenticated:
+		return false, false, "the record was made over a secured channel without an authenticated identity"
 	case cur.ApplicationURI == "":
 		return false, true, "the session shows no identity of its server"
 	case cur.ApplicationURI != rec.ApplicationURI:
@@ -320,6 +325,10 @@ func (m *Manager) proveRecord(ctx context.Context, t *target, rec *record) proof
 	if err != nil {
 		return proof{class: Unverified, err: err}
 	}
+	if pr.cmOK && pr.cm != m.opts.ApplicationURI {
+		// The later read contradicts ours: it wins over the browse (§6.5).
+		return proof{drop: true, why: "its ConnectionManagerApplicationUri is another"}
+	}
 	act, err := readActual(ctx, t, obs.NodeID)
 	if err != nil {
 		return proof{class: Unverified, err: err}
@@ -368,6 +377,15 @@ type intentName struct {
 func (m *Manager) proveIntentName(ctx context.Context, t *target, cfg *Config, gen uint64, n intentName) proof {
 	c := n.c
 	name := c.Names[n.i]
+	// The server the call was sent to, by the evidence of the intent: a
+	// server replaced at the address proves nothing about the call (§6.5).
+	ok, retry, why := sameServer(c.Server, t.evidenceNow())
+	switch {
+	case retry:
+		return proof{class: Unverified, err: errors.New(why)}
+	case !ok:
+		return proof{class: Unresolved, why: why}
+	}
 	fe, err := current(c.FunctionalEntities[n.i], t)
 	if err != nil {
 		return proof{class: Unverified, err: err}
@@ -409,26 +427,196 @@ func (m *Manager) proveIntentName(ctx context.Context, t *target, cfg *Config, g
 		return proof{class: Unresolved, why: "more than one endpoint of its Name"}
 	}
 	pr := proof{class: class, node: found[0].NodeID, param: act.param, read: true}
-	if class == Unresolved {
+	switch {
+	case class == Unresolved:
 		pr.why = "the lost response is not proven"
+	case pre != nil && !found[0].NodeID.Equal(pre):
+		// The call took the preconfigured endpoint pre: another one with
+		// the Name is not its outcome.
+		pr.class, pr.why = Unresolved, "not the preconfigured endpoint the call took"
+	case n.i < len(c.Params) && c.Params[n.i].Set && !sameParam(act.param, c.Params[n.i]):
+		// What the call sent is the intended configuration (§6.5).
+		pr.class, pr.why = Unresolved, "its configuration is not the one the call sent"
 	}
 	if pr.cm, pr.cmOK, pr.created, err = endpointEvidence(ctx, t, found[0].NodeID); err != nil {
 		return proof{class: Unverified, err: err}
 	}
+	if pr.cmOK && pr.cm != m.opts.ApplicationURI && pr.class != Unresolved {
+		pr.class, pr.why = Unresolved, "its ConnectionManagerApplicationUri is another"
+	}
 	return pr
 }
 
-// heldBy returns the Name of an establish intent of intents that the record
-// r holds (by its server, FunctionalEntity and Name), nil for none.
+// proveOutcome decides the record r, an endpoint the unended close or
+// enablement n addressed, by the postcondition of that call (decision
+// C3-D13): ownership is re-proved from the class the record had before the
+// call (proveRecord, §6.5), on the server the intent names; then a
+// CloseConnections with Remove TRUE (§6.2.5.2) is done only when the
+// endpoint is verifiably absent, one with Remove FALSE only when its
+// DataSetReader and DataSetWriter are disabled, an EnableCommunicationCmd
+// (§6.2.4.3.10.2) only when they are not (their Status State, Part 14
+// §9.1.10). An endpoint in place whose postcondition does not hold keeps
+// the intent and stays Unresolved: nothing sends the call again; Settle
+// decides it.
+func (m *Manager) proveOutcome(ctx context.Context, t *target, r *record, n intentName) proof {
+	c := n.c
+	ok, retry, why := sameServer(c.Server, t.evidenceNow())
+	switch {
+	case retry:
+		return proof{class: Unverified, err: errors.New(why)}
+	case !ok:
+		return proof{class: Unresolved, why: why}
+	case n.i >= len(c.Prior) || !Ownership(c.Prior[n.i]).MayClose():
+		return proof{class: Unresolved, why: "the intent shows no ownership of the endpoint before the call"}
+	}
+	if c.Kind == callClose && c.Remove && Ownership(c.Prior[n.i]) == TakenPreconfigured {
+		return proveReleased(ctx, t, r)
+	}
+	cp := *r
+	cp.stored = Ownership(c.Prior[n.i])
+	pr := m.proveRecord(ctx, t, &cp)
+	if pr.err != nil || pr.drop || pr.class == Unresolved {
+		// Unverified, verifiably absent (a removal done, nothing left to
+		// disable or enable), or not proven.
+		return pr
+	}
+	if c.Kind == callClose && c.Remove {
+		pr.class, pr.why = Unresolved, "a CloseConnections of unknown outcome left it in place"
+		return pr
+	}
+	want := c.Kind == callEnable
+	on, known, err := commEnabled(ctx, t, pr.node)
+	switch {
+	case err != nil:
+		return proof{class: Unverified, err: err}
+	case !known:
+		pr.class, pr.why = Unresolved, "its communication state cannot be read"
+	case on != want && want:
+		pr.class, pr.why = Unresolved, "an EnableCommunicationCmd of unknown outcome left its communication disabled"
+	case on != want:
+		pr.class, pr.why = Unresolved, "a CloseConnections of unknown outcome left its communication enabled"
+	}
+	return pr
+}
+
+// proveReleased decides the record r of a preconfigured endpoint that an
+// unended CloseConnections with Remove TRUE addressed: such an endpoint is
+// not deleted (§6.2.5.2), it is released: its RelatedEndpoint goes and its
+// communication is disabled. Released, or absent, the record goes;
+// otherwise it stays Unresolved.
+func proveReleased(ctx context.Context, t *target, r *record) proof {
+	fe, err := current(qualify(r.FunctionalEntity, r.nsa), t)
+	if err != nil {
+		return proof{class: Unverified, err: err}
+	}
+	want, err := current(qualify(r.NodeID, r.nsa), t)
+	if err != nil {
+		return proof{class: Unverified, err: err}
+	}
+	found, err := observeName(ctx, t, fe, r.Name, nil)
+	if err != nil {
+		return proof{class: Unverified, err: err}
+	}
+	if !slices.ContainsFunc(found, func(o Observed) bool { return o.NodeID.Equal(want) }) {
+		return proof{drop: true, why: "no endpoint of its Name at its NodeId"}
+	}
+	act, err := readActual(ctx, t, want)
+	if err != nil {
+		return proof{class: Unverified, err: err}
+	}
+	on, known, err := commEnabled(ctx, t, want)
+	switch {
+	case err != nil:
+		return proof{class: Unverified, err: err}
+	case act.related != nil && !nullRelated(act.related):
+		return proof{class: Unresolved, node: want, why: "a CloseConnections of unknown outcome left the preconfigured endpoint related"}
+	case known && on:
+		return proof{class: Unresolved, node: want, why: "a CloseConnections of unknown outcome left the preconfigured endpoint enabled"}
+	}
+	return proof{drop: true, why: "the preconfigured endpoint is released"}
+}
+
+// commEnabled reports whether the DataSetReader and DataSetWriter of the
+// endpoint n of t are enabled: the State of their Status (Part 14 §9.1.10)
+// is not Disabled. known is false for an endpoint with neither, or one
+// whose State the server does not expose.
+func commEnabled(ctx context.Context, t *target, n *ua.NodeID) (on, known bool, err error) {
+	act, err := readActual(ctx, t, n)
+	if err != nil {
+		return false, false, err
+	}
+	read := &ua.ReadRequest{TimestampsToReturn: ua.TimestampsToReturnNeither}
+	for _, c := range []*ua.NodeID{act.reader, act.writer} {
+		if c == nil {
+			continue
+		}
+		props, err := t.children(ctx, c)
+		if err != nil {
+			return false, false, err
+		}
+		st := child(props, 0, "Status")
+		if st == nil {
+			return false, false, nil
+		}
+		sprops, err := t.children(ctx, st)
+		if err != nil {
+			return false, false, err
+		}
+		v := child(sprops, 0, "State")
+		if v == nil {
+			return false, false, nil
+		}
+		read.NodesToRead = append(read.NodesToRead, &ua.ReadValueID{NodeID: v, AttributeID: ua.AttributeIDValue})
+	}
+	if len(read.NodesToRead) == 0 {
+		return false, false, nil
+	}
+	res, err := t.sess.Read(ctx, read)
+	if err != nil {
+		return false, false, err
+	}
+	if len(res.Results) != len(read.NodesToRead) {
+		return false, false, fmt.Errorf("fxcm: Read: %d results", len(res.Results))
+	}
+	on = true
+	for _, dv := range res.Results {
+		v, ok := dvValue(dv).(int32)
+		if dv == nil || bad(dv.Status) || !ok {
+			return false, false, nil
+		}
+		if ua.PubSubState(v) == ua.PubSubStateDisabled {
+			on = false
+		}
+	}
+	return on, true, nil
+}
+
+// heldBy returns the place of an intent of intents that the record r
+// holds, nil for none: a Name of an establish (by its server,
+// FunctionalEntity and Name), an endpoint of a close or an enablement (by
+// its server and NodeId).
 func heldBy(r *record, intents map[string]*callRecord) *intentName {
 	for _, k := range slices.Sorted(maps.Keys(intents)) {
 		c := intents[k]
-		if c.Kind != callEstablish || !c.sameAddress(r.addr) {
+		if !c.sameAddress(r.addr) {
 			continue
 		}
-		for i, name := range c.Names {
-			if r.Name == name && qualify(r.FunctionalEntity, r.nsa).String() == c.FunctionalEntities[i].String() {
-				return &intentName{key: k, c: c, i: i}
+		switch c.Kind {
+		case callEstablish:
+			for i, name := range c.Names {
+				if r.Name == name && qualify(r.FunctionalEntity, r.nsa).String() == c.FunctionalEntities[i].String() {
+					return &intentName{key: k, c: c, i: i}
+				}
+			}
+		case callClose, callEnable:
+			nodes := c.Nodes
+			if c.Kind == callEnable {
+				nodes = c.Targets
+			}
+			for i, q := range nodes {
+				if r.NodeID != nil && qualify(r.NodeID, r.nsa).String() == q.String() {
+					return &intentName{key: k, c: c, i: i}
+				}
 			}
 		}
 	}
@@ -531,6 +719,29 @@ func (m *Manager) verifyServer(ctx context.Context, addr ServerAddress, owner *s
 		return busy, err
 	}
 	t.identify(ctx)
+	// The places the work proves, locked as an establish locks them
+	// (scan to its end): no run changes the endpoints under them between
+	// the evidence and its verdict.
+	var places []string
+	for _, w := range ws {
+		for _, r := range w.recs {
+			if fe, err := current(qualify(r.FunctionalEntity, r.nsa), t); err == nil && fe != nil {
+				places = append(places, addr.Address+"\x00"+fe.String())
+			}
+		}
+		for _, c := range w.intents {
+			for _, q := range c.FunctionalEntities {
+				if fe, err := current(q, t); err == nil && fe != nil {
+					places = append(places, addr.Address+"\x00"+fe.String())
+				}
+			}
+		}
+	}
+	release, err := m.places.lock(ctx, places)
+	defer release()
+	if err != nil {
+		return busy, err
+	}
 	var errs []error
 	for _, w := range ws {
 		var vs []verdict
@@ -539,6 +750,11 @@ func (m *Manager) verifyServer(ctx context.Context, addr ServerAddress, owner *s
 			v := verdict{rk: rk, rec: r}
 			in := heldBy(r, w.intents)
 			switch {
+			case in != nil && in.c.Kind != callEstablish:
+				// An endpoint of an unended close or enablement: the
+				// postcondition of the call decides it.
+				v.in = in
+				v.p = m.proveOutcome(ctx, t, r, *in)
 			case in != nil && (r.Class == Unresolved || r.stored == Unresolved):
 				// A Name of an unended establish: the intent decides it.
 				v.in = in
@@ -673,17 +889,24 @@ func (r *record) proven(v verdict, t *target, cfg *Config) *record {
 		cp.NodeID, _ = current(qualify(r.NodeID, r.nsa), t)
 	}
 	cp.nsa = t.nsa
+	est := v.in != nil && v.in.c.Kind == callEstablish
 	if v.p.read {
 		cp.cmURI, cp.cmObserved, cp.created = v.p.cm, v.p.cmOK, v.p.created
-		if v.in != nil || !cp.param.Set {
+		if est || !cp.param.Set {
 			// A Name the intent decided: the parameter is the one found.
 			// A stored parameter is URI-qualified: it needs no mapping.
 			cp.param = v.p.param
 		}
 	}
-	if v.in != nil {
+	if v.in != nil && v.in.c.Kind == callClose && cp.Class != Unresolved {
+		// A disablement proven done: no close is pending.
+		cp.ClosePending = false
+	}
+	if est {
 		c := v.in.c
-		cp.server = t.evidenceNow()
+		// The identity the call was made with, which the proof compared:
+		// never rebaselined on what the session shows now.
+		cp.server = c.Server
 		cp.epfp = c.EndpointFingerprints[v.in.i]
 		if cfg.version != 0 && r.gen == c.Generation {
 			cp.Version = cfg.version
@@ -708,8 +931,12 @@ func (p *persistence) intentOpen(s *set, c *callRecord, undecided func(*record) 
 					return true
 				}
 			}
-		case callClose:
-			for _, q := range c.Nodes {
+		case callClose, callEnable:
+			nodes := c.Nodes
+			if c.Kind == callEnable {
+				nodes = c.Targets
+			}
+			for _, q := range nodes {
 				if r.NodeID != nil && qualify(r.NodeID, r.nsa).String() == q.String() {
 					return true
 				}

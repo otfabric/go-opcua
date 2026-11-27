@@ -16,6 +16,7 @@ import (
 	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil/fxtest"
+	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx"
 	"github.com/otfabric/go-opcua/uafx/fxcm"
@@ -33,10 +34,18 @@ import (
 // endpoints on a and b. The Manager that wrote it is closed.
 func established(t *testing.T, a, b *ac, opts fxcm.Options) (*fxstore.MemoryStore, fxcm.SetKey, []*ua.NodeID) {
 	t.Helper()
+	return establishedWith(t, a, b, opts, true)
+}
+
+// establishedWith is established with the RollbackOnError of the set.
+func establishedWith(t *testing.T, a, b *ac, opts fxcm.Options, rollback bool) (*fxstore.MemoryStore, fxcm.SetKey, []*ua.NodeID) {
+	t.Helper()
 	mem := &fxstore.MemoryStore{}
 	opts.Store = mem
 	m := newManager(t, opts)
-	cfg, err := m.Add(e2eConf(t, "Recover", a, b))
+	conf := e2eConf(t, "Recover", a, b)
+	conf.RollbackOnError = rollback
+	cfg, err := m.Add(conf)
 	require.NoError(t, err)
 	res := process(t, m, uafx.ActionEstablishConnectionsEnabled, cfg.Key())
 	require.Equal(t, fxcm.StateReady, res.State, "%+v", res.Failures)
@@ -344,6 +353,69 @@ func TestAdoptionE2E(t *testing.T) {
 			}
 		}
 	})
+	// The communication of an endpoint changed by another PubSub
+	// configuration mechanism (Part 14 §9.1.2, PS-2) under the same Names:
+	// ownership, parameter and links prove nothing about what it
+	// publishes or subscribes to, so it is not adopted (C3-D6); the run
+	// closes both endpoints and creates them again (C2).
+	for _, tc := range []struct {
+		name   string
+		change func(t *testing.T, b *ac, ep *ua.NodeID)
+	}{
+		{"writer changed is not adopted", func(t *testing.T, b *ac, ep *ua.NodeID) {
+			w, _ := referenced(t, b, ep, "DataSetWriter")
+			setProperty(t, b, w, "KeyFrameCount", uint32(99))
+		}},
+		{"writer group changed is not adopted", func(t *testing.T, b *ac, ep *ua.NodeID) {
+			w, _ := referenced(t, b, ep, "DataSetWriter")
+			cid, ok := b.srv.PubSubComponentID(w)
+			require.True(t, ok)
+			info, err := b.srv.PubSub().Component(cid)
+			require.NoError(t, err)
+			g, ok := b.srv.PubSubNodeID(info.Parent)
+			require.True(t, ok)
+			setProperty(t, b, g, "PublishingInterval", 1234.0)
+		}},
+		{"reader changed is not adopted", func(t *testing.T, b *ac, ep *ua.NodeID) {
+			r, _ := referenced(t, b, ep, "DataSetReader")
+			setProperty(t, b, r, "MessageReceiveTimeout", 4321.0)
+		}},
+		{"writer replaced is not adopted", func(t *testing.T, b *ac, ep *ua.NodeID) {
+			// Removed and added again with the same Name through the
+			// runtime: the endpoint's ToDataSetWriter names a writer that
+			// is gone.
+			w, _ := referenced(t, b, ep, "DataSetWriter")
+			cid, ok := b.srv.PubSubComponentID(w)
+			require.True(t, ok)
+			info, err := b.srv.PubSub().Component(cid)
+			require.NoError(t, err)
+			require.NoError(t, b.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+				cfg, err := rt.DataSetWriterConfig(cid)
+				if err != nil {
+					return err
+				}
+				if err := rt.RemoveDataSetWriter(cid); err != nil {
+					return err
+				}
+				_, err = rt.AddDataSetWriter(info.Parent, cfg)
+				return err
+			}))
+			_, ok = b.srv.PubSub().Lookup(pubsub.KindDataSetWriter, info.Parent, info.Name)
+			require.True(t, ok, "a writer of the Name is there")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})
+			mem, k, nodes := established(t, a, b, fxcm.Options{})
+			tc.change(t, b, ownEndpoint(t, b))
+			m := newManager(t, fxcm.Options{Store: mem, Verify: fxcm.VerifyOptions{Manual: true}})
+			res := process(t, m, uafx.ActionEstablishConnectionsEnabled, k)
+			assert.Empty(t, res.Adopted, "%+v", res)
+			assert.Len(t, res.Closed, 2)
+			assert.NotEqual(t, nodeSet(nodes), nodeSet(endpointsOf(a, b)), "closed, not kept")
+		})
+	}
 	t.Run("mixed falls back", func(t *testing.T) {
 		t.Parallel()
 		a, b := newAC(t, "a", fxserver.ConnectionOptions{}), newAC(t, "b", fxserver.ConnectionOptions{})

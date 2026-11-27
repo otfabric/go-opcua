@@ -37,6 +37,9 @@ type run struct {
 
 	acs []*acRun
 	eps []*epRun
+	// blocked are the server addresses on which an intent of the set is
+	// unresolved (recover): no call of the run is sent there.
+	blocked map[string]bool
 
 	mu      sync.Mutex
 	stopped bool
@@ -64,6 +67,10 @@ type acRun struct {
 	comm       *commModel
 	// defaultPublisherID is the DefaultPublisherId of the reservation.
 	defaultPublisherID *ua.Variant
+	// adoptCfg is the PubSub configuration of the set mapped to the
+	// server, for the adoption of its endpoints (adopt_comm.go); set by
+	// the scan of a.
+	adoptCfg *ua.PubSubConfiguration2DataType
 	// values are the ConfigurationValues the calls returned (§6.16.3).
 	values []*ua.PubSubConfigurationValueDataType
 	// configured is set when the configure step of the AC returned, so
@@ -114,8 +121,10 @@ type epRun struct {
 	// sent is the SHA-256 of the ConnectionEndpointConfiguration the run
 	// sent for the endpoint (design §6.1), with a Store.
 	sent []byte
-	// adopt is the record of the endpoint step 0 found adoptable (adopt.go).
+	// adopt is the record of the endpoint step 0 found adoptable (adopt.go),
+	// comm its communication configuration as read (adopt_comm.go).
 	adopt *record
+	comm  *commActual
 }
 
 func (ep *epRun) ref() EndpointRef { return EndpointRef{ep.e.conn.name, ep.e.number} }
@@ -203,18 +212,26 @@ func (m *Manager) execute(ctx context.Context, s *set, r *Run, prev State) *RunR
 		x.extraFailure(failureOf(err, uafx.FxErrorRuntimeError))
 		return x.finish()
 	}
-	// The owed work of the set first (recover.go).
-	x.recover(ctx)
-	switch r.action {
-	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled, uafx.ActionEstablishConnections:
+	// The owed work of the set first (recover.go): unless it is done, the
+	// action does not run.
+	ok := x.recover(ctx)
+	switch {
+	case !ok:
+	case r.action == uafx.ActionEstablishConnectionsEnabled, r.action == uafx.ActionEstablishConnectionsDisabled, r.action == uafx.ActionEstablishConnections:
+		if x.failBlocked() {
+			// Its Connections on a blocked server fail, which stops the
+			// run before any call (EC-10), with the rollback of C2.
+			x.stop(ctx)
+			break
+		}
 		x.establishRun(ctx)
-	case uafx.ActionRemoveConnections, ActionRemoveSet:
+	case r.action == uafx.ActionRemoveConnections, r.action == ActionRemoveSet:
 		x.closeRun(ctx, true)
-	case uafx.ActionDisableConnections:
+	case r.action == uafx.ActionDisableConnections:
 		x.closeRun(ctx, false)
-	case uafx.ActionEnableConnections:
+	case r.action == uafx.ActionEnableConnections:
 		x.enableRun(ctx)
-	case ActionReconcile:
+	case r.action == ActionReconcile:
 		x.reconcileRun(ctx, prev)
 		x.completeSetChange()
 	}
@@ -360,13 +377,27 @@ func (x *run) stop(ctx context.Context) {
 // setup opens the session of a, resolves the AutomationComponent, its
 // Methods and capabilities, and the identifiers of its endpoints (step 1).
 func (x *run) setup(ctx context.Context, a *acRun) {
-	sess, err := x.m.pool.get(ctx, a.addr)
+	sess, reused, err := x.m.pool.reuse(ctx, a.addr)
 	if err != nil {
 		x.failAC(a, failure(uafx.FxErrorTargetServerConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err))
 		return
 	}
 	a.t = &target{addr: a.addr, sess: sess, cache: x.m.res.of(a.addr)}
-	if err := a.t.open(ctx); err != nil {
+	err = a.t.open(ctx)
+	if err != nil && reused {
+		// A session dialed by an earlier run may have gone with its
+		// server, which restarted while it was idle: the first read of
+		// this run, before any call, is made once more on a new session
+		// (design §5.1). A read changes nothing (Part 4 §5.11.2).
+		x.m.pool.drop(ctx, a.addr, sess)
+		if sess, err = x.m.pool.get(ctx, a.addr); err != nil {
+			x.failAC(a, failure(uafx.FxErrorTargetServerConnectionError, failureOf(err, uafx.FxErrorTargetServerConnectionError).Status, "%v", err))
+			return
+		}
+		a.t = &target{addr: a.addr, sess: sess, cache: x.m.res.of(a.addr)}
+		err = a.t.open(ctx)
+	}
+	if err != nil {
 		x.m.pool.drop(ctx, a.addr, sess)
 		x.failAC(a, err)
 		return
@@ -2314,6 +2345,10 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 	}
 	errs := map[*record]error{}
 	closedGone := map[*record]bool{}
+	// unknown are the records whose close has an unknown outcome: their
+	// intent stays, and they are Unresolved until the outcome is proven
+	// (decision C3-D13), so that no later step closes them again.
+	unknown := map[*record]bool{}
 	var intents []string
 	recsTouched := touched{}
 	var mu sync.Mutex
@@ -2325,13 +2360,25 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 			defer wg.Done()
 			sem <- struct{}{}
 			defer func() { <-sem }()
+			if x.blocked[g.addr.Address] {
+				mu.Lock()
+				defer mu.Unlock()
+				for _, r := range g.recs {
+					errs[r] = blockedFailure(uafx.FxErrorCloseConnectionError, g.addr)
+				}
+				return
+			}
 			results, k, err := x.closeOn(ctx, g.addr, g.ac, g.recs, remove)
 			mu.Lock()
 			defer mu.Unlock()
 			if k != "" {
 				intents = append(intents, k)
 			}
+			retained := x.retained(k)
 			for i, r := range g.recs {
+				if retained && (err != nil || ambiguousStatus(results[i])) {
+					unknown[r] = true
+				}
 				e := err
 				// Bad_NodeIdUnknown: the endpoint does not exist (Table 24),
 				// as after a close whose response was lost or a cleanup:
@@ -2356,6 +2403,9 @@ func (x *run) closeRecords(ctx context.Context, recs []*record, remove bool) map
 		if errs[r] != nil {
 			if cur != nil {
 				cur.ClosePending = true
+				if unknown[r] && cur == r {
+					cur.Class = Unresolved
+				}
 			}
 		} else if (remove || closedGone[r]) && cur == r {
 			delete(x.s.records, k)
@@ -2394,11 +2444,14 @@ func (x *run) closeOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, re
 		return nil, "", failure(uafx.FxErrorCloseConnectionError, f.Status, "%v", err)
 	}
 	nodes := make([]*ua.NodeID, len(recs))
+	prior := make([]Ownership, len(recs))
+	x.s.mu.Lock()
 	for i, r := range recs {
-		nodes[i] = r.NodeID
+		nodes[i], prior[i] = r.NodeID, r.Class
 	}
+	x.s.mu.Unlock()
 	// The intent first: without it nothing is sent (design §6.3).
-	k, err := x.intend(closeIntent(t, ac, nodes, remove))
+	k, err := x.intend(closeIntent(t, ac, nodes, prior, remove))
 	if err != nil {
 		return nil, "", err
 	}
@@ -2643,6 +2696,10 @@ func (x *run) enableOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, r
 			}
 		}
 	}
+	if x.blocked[addr.Address] {
+		failAll(failureOf(blockedFailure(uafx.FxErrorEnableCommunicationError, addr), uafx.FxErrorEnableCommunicationError))
+		return
+	}
 	sess, err := x.m.pool.get(ctx, addr)
 	if err != nil {
 		failAll(failureOf(err, uafx.FxErrorTargetServerConnectionError))
@@ -2675,8 +2732,23 @@ func (x *run) enableOn(ctx context.Context, addr ServerAddress, ac *ua.NodeID, r
 	}
 	switch {
 	case unknown:
-		// Decision C3-D13: the intent stays, the outcome is not proven.
+		// Decision C3-D13: the intent stays, the outcome is not proven;
+		// with a Store the records are Unresolved until the re-proof of
+		// the outcome (proveOutcome) or Settle decides them, so that no
+		// later step enables them again or builds on them.
 		x.retain(a.lastIntent)
+		if a.lastIntent != "" {
+			x.s.mu.Lock()
+			for _, r := range recs {
+				if cur := x.s.records[recordKey(r.addr, r.FunctionalEntity, r.Name)]; cur == r {
+					r.Class = Unresolved
+				}
+			}
+			x.s.mu.Unlock()
+			for _, r := range recs {
+				x.touchAC(a, recordKey(r.addr, r.FunctionalEntity, r.Name), r)
+			}
+		}
 		f := failureOf(err, uafx.FxErrorEnableCommunicationError)
 		if !errors.Is(err, errAmbiguous) && f.Status != ua.StatusBadTimeout {
 			f.Status = ua.StatusBadCommunicationError

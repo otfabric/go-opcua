@@ -39,13 +39,16 @@ type hookDialer struct {
 	// answer, when it returns a result, answers a Call with it without
 	// sending it: a definite refusal by the server.
 	answer func(addr fxcm.ServerAddress, req *ua.CallMethodRequest) *ua.CallMethodResult
-	// identity, when set, lets the sessions show the identity of their
-	// server (fxcm.IdentifiedSession), as the sessions of ClientDialer do.
+	// identity lets the sessions show the identity of their server
+	// (fxcm.IdentifiedSession), as the sessions of ClientDialer do: set by
+	// newHookDialer, cleared by a test of a session without it. ident,
+	// when set, changes what they show: another server at the address.
 	identity bool
+	ident    func(fxcm.ServerIdentity) fxcm.ServerIdentity
 }
 
 func newHookDialer() *hookDialer {
-	return &hookDialer{ClientDialer: fxcm.ClientDialer{Options: []opcua.Option{opcua.ApplicationURI(cmURI), opcua.AutoReconnect(false), opcua.InsecureNoSecurity()}}}
+	return &hookDialer{ClientDialer: fxcm.ClientDialer{Options: []opcua.Option{opcua.ApplicationURI(cmURI), opcua.AutoReconnect(false), opcua.InsecureNoSecurity()}}, identity: true}
 }
 
 func (d *hookDialer) Dial(ctx context.Context, addr fxcm.ServerAddress) (fxcm.Session, error) {
@@ -80,7 +83,13 @@ type identifiedHookSession struct {
 	id fxcm.IdentifiedSession
 }
 
-func (s *identifiedHookSession) ServerIdentity() fxcm.ServerIdentity { return s.id.ServerIdentity() }
+func (s *identifiedHookSession) ServerIdentity() fxcm.ServerIdentity {
+	id := s.id.ServerIdentity()
+	if s.d.ident != nil {
+		return s.d.ident(id)
+	}
+	return id
+}
 
 type hookSession struct {
 	fxcm.Session

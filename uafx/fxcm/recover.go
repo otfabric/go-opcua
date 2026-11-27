@@ -30,29 +30,64 @@ func (p *persistence) owedOfSet(key SetKey) []OwedWork {
 	return slices.Clone(p.owed[keyString(key)])
 }
 
-// recover is the first step of a run with a Store.
-func (x *run) recover(ctx context.Context) {
+// recover is the first step of a run with a Store. It reports whether the
+// action of the run may proceed: not when the owed rollback did not finish
+// or the end of the owed work was not written (the obligations stay, and
+// the run ends in Error). The servers on which an intent of the set is
+// still unresolved after the verification are blocked for the run
+// (x.blocked): no call of the run reaches them, the owed rollback's
+// included, until the outcome is proven or Settle decides it.
+func (x *run) recover(ctx context.Context) bool {
 	p := x.store()
 	if p == nil {
-		return
+		return true
 	}
 	x.verifyRun(ctx)
+	x.blocked = p.unresolvedOn(x.r.key, x.r.id)
 	owed := p.owedOfSet(x.r.key)
+	ok := true
 	if slices.ContainsFunc(owed, func(w OwedWork) bool { return w.Kind == OwedRollback }) {
-		x.owedRollback(ctx, owed)
+		ok = x.owedRollback(ctx, owed)
 	}
-	x.endOwedRuns(owed)
+	if !x.endOwedRuns(owed) {
+		ok = false
+	}
+	if !ok {
+		x.m.log.Warn("fxcm: the owed work of the set was not done; the action of the run does not run", "set", x.r.key.String(), "run", x.r.id)
+		x.extraFailure(Failure{FxError: uafx.FxErrorRuntimeError, Status: ua.StatusBadInvalidState})
+	}
+	return ok
+}
+
+// failBlocked fails the endpoints of the run on a blocked server (recover)
+// and reports whether there was one.
+func (x *run) failBlocked() bool {
+	any := false
+	for _, ep := range x.eps {
+		if x.blocked[x.cfg.serverAddress(ep.e.ac.server).Address] {
+			x.fail(ep, Failure{FxError: uafx.FxErrorRuntimeError, Status: ua.StatusBadInvalidState})
+			any = true
+		}
+	}
+	return any
+}
+
+// blockedFailure is the failure of a call the run does not send to a
+// blocked server.
+func blockedFailure(fx uafx.FxError, addr ServerAddress) error {
+	return failure(fx, ua.StatusBadInvalidState, "a call of the set on %s has an unknown outcome: nothing is sent there until it is proven or settled", addr.Address)
 }
 
 // owedRollback is the rollback the runs of owed owe (§6.7.3.2, CR-4): every
 // closable endpoint of the set is closed with Remove TRUE, as the rollback
 // of C2 closes them. It is done before the action of the run; a close that
-// fails fails the run, and the rollback stays owed.
-func (x *run) owedRollback(ctx context.Context, owed []OwedWork) {
+// fails fails the run, and the rollback stays owed. It reports whether
+// every close succeeded.
+func (x *run) owedRollback(ctx context.Context, owed []OwedWork) bool {
 	x.crashPoint("recover.rollback")
 	recs, _ := x.closable()
 	if len(recs) == 0 {
-		return
+		return true
 	}
 	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), x.m.opts.RollbackTimeout)
 	defer cancel()
@@ -67,13 +102,15 @@ func (x *run) owedRollback(ctx context.Context, owed []OwedWork) {
 		}
 	}
 	x.m.log.Info("fxcm: the owed rollback closed the endpoints of the set", "set", x.r.key.String(), "run", x.r.id, "closed", len(recs)-len(errs), "failed", len(errs))
+	return len(errs) == 0
 }
 
 // endOwedRuns deletes the run records of owed whose work is done: none of
 // their intents is left, and for a rollback no record of the set may still
 // be closed or decided (KnownOwned, TakenPreconfigured, Unverified,
-// Unresolved of that run). A set change is completeSetChange's.
-func (x *run) endOwedRuns(owed []OwedWork) {
+// Unresolved of that run). A set change is completeSetChange's. It reports
+// false when the write of the end failed.
+func (x *run) endOwedRuns(owed []OwedWork) bool {
 	p := x.store()
 	var ends []RunID
 	for _, w := range owed {
@@ -86,7 +123,7 @@ func (x *run) endOwedRuns(owed []OwedWork) {
 		}
 	}
 	if len(ends) == 0 {
-		return
+		return true
 	}
 	unlock := p.lockJournal(x.s)
 	defer unlock()
@@ -105,13 +142,15 @@ func (x *run) endOwedRuns(owed []OwedWork) {
 		b.Deletes = append(b.Deletes, runStoreKey(id), txStoreKey(id))
 	}
 	if len(b.Deletes) == 0 {
-		return
+		return true
 	}
 	if o, err := p.apply(b, 0); o != fxstore.Committed {
 		err = storeError(o, err)
 		x.m.log.Warn("fxcm: the end of the owed work was not written to the store; it stays owed", "set", x.r.key.String(), "run", x.r.id, "error", err)
 		x.extraFailure(failureOf(err, uafx.FxErrorRuntimeError))
+		return false
 	}
+	return true
 }
 
 // hasIntents reports whether the state st holds an intent of the run id.

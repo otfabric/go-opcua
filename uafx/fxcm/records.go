@@ -59,6 +59,9 @@ const (
 const (
 	callEstablish uint8 = 1
 	callClose     uint8 = 2
+	// callEnable is an EstablishConnections with EnableCommunicationCmd
+	// alone (§6.2.4.3.10.2) on existing endpoints, addressed by NodeId.
+	callEnable uint8 = 3
 )
 
 // qualifiedID is a remote NodeId with the URI of its namespace instead of
@@ -303,6 +306,18 @@ type callRecord struct {
 	// Nodes and Remove of a close.
 	Nodes  []*qualifiedID
 	Remove bool
+	// Command is the CommandMask of an establish or enablement. Params
+	// are, per Name of an establish, the ConnectionEndpointParameter it
+	// sent (URI-qualified), unset for an endpoint configuration without
+	// one: the configuration the re-proof of its outcome compares.
+	Command uint32
+	Params  []storedParam
+	// Targets are the existing endpoints an enablement addresses, one per
+	// endpoint configuration. Prior is, per Target of an enablement or per
+	// Node of a close, the class of its record before the call: the
+	// ownership the re-proof of the outcome starts from (design §6.3).
+	Targets []*qualifiedID
+	Prior   []int64
 
 	// Generation and Fingerprint are the set configuration of the run.
 	Generation  uint64
@@ -671,7 +686,8 @@ func (r *callRecord) check(k string, c countersRecord) error {
 	switch r.Kind {
 	case callEstablish:
 		n := len(r.Names)
-		if len(r.FunctionalEntities) != n || len(r.AbsentBefore) != n || len(r.Preconfigured) != n || len(r.EndpointFingerprints) != n || len(r.Nodes) != 0 {
+		if len(r.FunctionalEntities) != n || len(r.AbsentBefore) != n || len(r.Preconfigured) != n || len(r.EndpointFingerprints) != n || len(r.Nodes) != 0 ||
+			len(r.Params) != 0 && len(r.Params) != n || len(r.Targets) != 0 || len(r.Prior) != 0 {
 			return errSemantic("an establish intent with %d Names and %d FunctionalEntities", n, len(r.FunctionalEntities))
 		}
 		for i := range n {
@@ -683,11 +699,23 @@ func (r *callRecord) check(k string, c countersRecord) error {
 			}
 		}
 	case callClose:
-		if len(r.Nodes) == 0 || len(r.Names) != 0 {
+		if len(r.Nodes) == 0 || len(r.Names) != 0 || len(r.Targets) != 0 || len(r.Prior) != 0 && len(r.Prior) != len(r.Nodes) {
 			return errSemantic("a close intent with %d nodes", len(r.Nodes))
 		}
 		for _, q := range r.Nodes {
 			if _, err := unqualify(q, r.Namespaces); err != nil {
+				return err
+			}
+		}
+	case callEnable:
+		if len(r.Targets) == 0 || len(r.Names) != 0 || len(r.Nodes) != 0 || len(r.Prior) != len(r.Targets) || len(r.FunctionalEntities) != len(r.Targets) {
+			return errSemantic("an enablement intent with %d targets", len(r.Targets))
+		}
+		for i, q := range r.Targets {
+			if _, err := unqualify(q, r.Namespaces); err != nil {
+				return err
+			}
+			if _, err := unqualify(r.FunctionalEntities[i], r.Namespaces); err != nil {
 				return err
 			}
 		}

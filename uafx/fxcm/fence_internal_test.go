@@ -51,3 +51,19 @@ func TestFencedOf(t *testing.T) {
 		assert.Equal(t, want, got, tc.name)
 	}
 }
+
+// TestFencedOfAliases: two addresses of one server, by the ApplicationUri
+// its records were made with, are one domain: an owed call on one fences
+// the sets on the other.
+func TestFencedOfAliases(t *testing.T) {
+	t.Parallel()
+	const x, x2, y = "opc.tcp://x", "opc.tcp://x-alias", "opc.tcp://y"
+	l := &loaded{eps: map[string]*epStored{
+		"e1": {SetName: "One", Address: x, Server: serverEvidence{ApplicationURI: "urn:x", Source: identityReported}},
+		"e2": {SetName: "Two", Address: x2, Server: serverEvidence{ApplicationURI: "urn:x", Source: identityReported}},
+		"e3": {SetName: "Three", Address: y, Server: serverEvidence{ApplicationURI: "urn:y", Source: identityReported}},
+	}}
+	one := keyString(SetKey{Name: "One"})
+	got := fencedOf(l, map[string][]OwedWork{one: {{Kind: OwedCall, Run: 1, Address: x}}}, nil)
+	assert.Equal(t, []string{keyString(SetKey{Name: "Two"})}, slices.Sorted(maps.Keys(got)))
+}
