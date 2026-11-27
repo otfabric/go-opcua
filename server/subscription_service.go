@@ -483,11 +483,7 @@ func (s *SubscriptionService) releasePublishRequests(sess *session, status ua.St
 	for {
 		select {
 		case pr := <-sess.PublishRequests:
-			h := faultHeader(status)
-			if pr.Req != nil && pr.Req.RequestHeader != nil {
-				h.RequestHandle = pr.Req.RequestHeader.RequestHandle
-			}
-			_ = s.srv.sendPublishResponse(pr.replyChannel(nil), pr.ID, &ua.ServiceFault{ResponseHeader: h})
+			s.srv.faultPublishRequest(pr, nil, status)
 		default:
 			return
 		}

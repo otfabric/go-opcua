@@ -10,10 +10,12 @@ Correctness fixes of phase 0 of docs/roadmap.md, each against the clause of the 
 ### Fixed
 
 - server: the UserRolePermissions Attribute lists the RolePermissions of the roles granted to the session that reads it, with Read and with a monitored item (Part 3 §5.2.10: "the Permissions that apply to a Node for all Roles granted to current Session"). Before, it returned every entry of RolePermissions. A request without a session, or a session that the `RoleMapper` gave no role, has the Anonymous role, as for the `RBACAccessController`.
+- server: Cancel answers each Publish request it cancels with a ServiceFault `Bad_RequestCancelledByClient` (Part 4 §5.7.5: "Successfully cancelled service requests shall respond with Bad_RequestCancelledByClient") and still returns their number in cancelCount. Before, the cancelled requests were dropped without a response and the client waited for its request timeout. The Publish requests with another handle stay queued in their order; one that no longer fits because a new Publish request took its place is answered with `Bad_TooManyPublishRequests`, as the oldest request of a full queue is (Part 4 §5.14.5.1), instead of being dropped silently.
 
 ### Tests
 
 - `TestRead_UserRolePermissions`, `TestForSessionRoles_Edges` and `TestReadSample_UserRolePermissions` (`server`): sessions with one, two, an unlisted and no role, a node without RolePermissions, malformed entries and a monitored item.
+- `TestCancel_AnswersCancelledPublishRequest` (`server`, over the wire): the client's cancelled Publish returns `Bad_RequestCancelledByClient` and Cancel returns cancelCount 1. `TestCancel_KeepsOtherPublishRequests` and `TestRequeuePublishRequests_FullQueue`: several requests with the handle, the order of the others, a request without a header, Cancel without a session and a queue that is full when the requests are put back.
 
 ---
 ## v1.41.0
