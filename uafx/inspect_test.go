@@ -82,6 +82,12 @@ func TestInspect(t *testing.T) {
 	assert.Equal(t, uafx.ConnectionEndpointOperational, *ep.Status)
 	assert.True(t, ep.IsPersistent)
 	assert.Equal(t, 1500*time.Millisecond, ep.CleanupTimeout)
+	require.NotNil(t, ep.CleanupTimeoutMs)
+	assert.Equal(t, 1500.0, *ep.CleanupTimeoutMs)
+	assert.True(t, ep.CreationTime.IsZero(), "the fixture endpoint has no Diagnostics")
+	require.NotNil(t, ac.Capabilities, "the fixture has an empty ComponentCapabilities")
+	assert.Equal(t, uafx.ComponentCapabilities{}, *ac.Capabilities)
+	assert.False(t, ac.Capabilities.Persistence())
 	assert.Equal(t, "urn:example:cm", ep.ConnectionManagerApplicationURI)
 
 	require.Len(t, r.ConnectionManagers, 1)
@@ -107,5 +113,7 @@ func TestInspect(t *testing.T) {
 		"Controller/FunctionalEntities/Motion/ConnectionEndpoints/Bare: ConnectionEndpoint has no mandatory RelatedEndpoint (Part 81 §6.6.2)",
 		"Controller/FunctionalEntities/Motion/ConnectionEndpoints/Bare: ConnectionEndpoint has no mandatory Status (Part 81 §6.6.2)",
 		"Controller/FunctionalEntities/Motion/ConnectionEndpoints/Bare: PubSubConnectionEndpoint has no mandatory Mode (Part 81 §6.6.3)",
+		"Controller/FunctionalEntities/Motion/ConnectionEndpoints/ToLine: persistent ConnectionEndpoint has CleanupTimeout 1500 ms; it shall be negative (Part 81 §6.6.2)",
+		"Controller/FunctionalEntities/Motion/ConnectionEndpoints/ToLine: ConnectionEndpoint has IsPersistent TRUE, but its AutomationComponent does not announce SupportsPersistence TRUE (Part 81 §6.2.6)",
 	}, findings)
 }

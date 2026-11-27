@@ -42,6 +42,7 @@ func TestRun(t *testing.T) {
 		"functional entity Motion",
 		"functional entity Axis",
 		"endpoint ToLine:",
+		"supports persistence: false",
 		"ConnectionManager",
 	} {
 		if !strings.Contains(text.String(), want) {

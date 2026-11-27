@@ -4,11 +4,15 @@ package uafx_test
 
 import (
 	"context"
+	"math"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/otfabric/go-opcua"
 	"github.com/otfabric/go-opcua/di/diid"
 	"github.com/otfabric/go-opcua/internal/testutil"
 	"github.com/otfabric/go-opcua/server"
@@ -183,4 +187,132 @@ func TestInspectClosedClient(t *testing.T) {
 	require.NoError(t, c.Close(context.Background()))
 	_, err := uafx.Inspect(context.Background(), c, uafx.Limits{})
 	require.ErrorIs(t, err, uafx.ErrInspect)
+}
+
+// capsServer returns a server with the fixture whose Controller has the
+// ComponentCapabilities members of Part 81 §6.2.6 Table 26 and whose
+// persistent endpoint ToLine has the CleanupTimeout cleanup.
+func capsServer(t *testing.T, cleanup float64, supportsPersistence bool) *uafx.Report {
+	t.Helper()
+	r, err := uafx.Inspect(context.Background(), capsClient(t, cleanup, supportsPersistence), uafx.Limits{})
+	require.NoError(t, err)
+	return r
+}
+
+// The CreationTime and ModificationTime capsClient gives ToLine.
+var (
+	toLineCreated  = time.Date(2026, 11, 20, 8, 0, 0, 0, time.UTC)
+	toLineModified = time.Date(2026, 11, 27, 9, 30, 0, 0, time.UTC)
+)
+
+// capsClient is capsServer with a client of the server, whose endpoint
+// ToLine has Diagnostics (Part 81 §6.6.2 Table 74).
+func capsClient(t *testing.T, cleanup float64, supportsPersistence bool) *opcua.Client {
+	t.Helper()
+	srv := NewTestServer(t)
+	ns, err := fxserver.AddModel(srv)
+	require.NoError(t, err)
+	require.NoError(t, fxserver.ImportNodeSet(srv, ReadFixture(t)))
+	test := NSIndex(t, srv, TestNS)
+	space, err := srv.Namespace(int(test))
+	require.NoError(t, err)
+	caps := srv.Node(ua.NewNumericNodeID(test, 1003))
+	require.NotNil(t, caps)
+	for i, m := range []struct {
+		name  string
+		value any
+	}{
+		{"SupportsPersistence", supportsPersistence},
+		{"MaxConnections", uint32(8)},
+		{"MaxConnectionsPerCall", uint32(2)},
+		{"MaxFunctionalEntities", uint32(4)},
+		{"MinConnections", uint32(1)},
+		{"CommandBundleRequired", true},
+	} {
+		v := server.NewVariableNode(ua.NewNumericNodeID(test, uint32(90000+i)), m.name, m.value)
+		require.NoError(t, v.SetAttribute(ua.AttributeIDBrowseName, server.DataValueFromValue(&ua.QualifiedName{NamespaceIndex: ns.AC, Name: m.name})))
+		space.AddNode(v)
+		caps.AddRef(v, server.RefTypeIDHasComponent, true)
+	}
+	SetValue(t, srv, ua.NewNumericNodeID(test, 1303), cleanup)
+	// The Diagnostics has the BrowseName of DI, its members those of AC.
+	ep := srv.Node(ua.NewNumericNodeID(test, 1300))
+	require.NotNil(t, ep)
+	diag := server.NewFolderNode(ua.NewNumericNodeID(test, 90100), "Diagnostics")
+	require.NoError(t, diag.SetAttribute(ua.AttributeIDBrowseName, server.DataValueFromValue(&ua.QualifiedName{NamespaceIndex: ns.DI, Name: "Diagnostics"})))
+	space.AddNode(diag)
+	ep.AddRef(diag, server.RefTypeIDHasComponent, true)
+	for i, m := range []struct {
+		name  string
+		value time.Time
+	}{{"CreationTime", toLineCreated}, {"ModificationTime", toLineModified}} {
+		v := server.NewVariableNode(ua.NewNumericNodeID(test, uint32(90101+i)), m.name, m.value)
+		require.NoError(t, v.SetAttribute(ua.AttributeIDBrowseName, server.DataValueFromValue(&ua.QualifiedName{NamespaceIndex: ns.AC, Name: m.name})))
+		space.AddNode(v)
+		diag.AddRef(v, server.RefTypeIDHasComponent, true)
+	}
+	return StartTestServer(t, srv)
+}
+
+// persistenceFindings are the Findings of r about persistence.
+func persistenceFindings(r *uafx.Report) []string {
+	var out []string
+	for _, f := range r.Findings {
+		if f.Clause == "6.2.6" || strings.HasPrefix(f.Text, "persistent ConnectionEndpoint") {
+			out = append(out, f.String())
+		}
+	}
+	return out
+}
+
+// TestInspectCapabilities: the ComponentCapabilities members are reported
+// (Part 81 §6.2.6 Table 26); a persistent endpoint whose CleanupTimeout is
+// not negative is a finding (§6.6.2), NaN and 0 included, and one on a
+// component without SupportsPersistence TRUE is a finding (§6.2.6).
+func TestInspectCapabilities(t *testing.T) {
+	r := capsServer(t, -1, true)
+	var ac *uafx.AutomationComponent
+	for i := range r.AutomationComponents {
+		if r.AutomationComponents[i].BrowseName.Name == "Controller" {
+			ac = &r.AutomationComponents[i]
+		}
+	}
+	require.NotNil(t, ac)
+	require.NotNil(t, ac.Capabilities)
+	u := func(v uint32) *uint32 { return &v }
+	b := func(v bool) *bool { return &v }
+	assert.Equal(t, uafx.ComponentCapabilities{
+		SupportsPersistence: b(true), MaxConnections: u(8), MaxConnectionsPerCall: u(2),
+		MaxFunctionalEntities: u(4), MinConnections: u(1), CommandBundleRequired: b(true),
+	}, *ac.Capabilities)
+	assert.True(t, ac.Capabilities.Persistence())
+	assert.Empty(t, persistenceFindings(r))
+	ep := ac.FunctionalEntities[0].ConnectionEndpoints
+	for _, e := range ep {
+		if e.BrowseName.Name == "ToLine" {
+			require.NotNil(t, e.CleanupTimeoutMs)
+			assert.Equal(t, -1.0, *e.CleanupTimeoutMs)
+			assert.Zero(t, e.CleanupTimeout)
+			assert.True(t, toLineCreated.Equal(e.CreationTime), "%v", e.CreationTime)
+			assert.True(t, toLineModified.Equal(e.ModificationTime), "%v", e.ModificationTime)
+		}
+	}
+
+	const path = "Controller/FunctionalEntities/Motion/ConnectionEndpoints/ToLine: "
+	for _, c := range []struct {
+		cleanup float64
+		text    string
+	}{
+		{0, "0 ms"},
+		{math.NaN(), "NaN ms"},
+	} {
+		assert.Equal(t, []string{
+			path + "persistent ConnectionEndpoint has CleanupTimeout " + c.text + "; it shall be negative (Part 81 §6.6.2)",
+		}, persistenceFindings(capsServer(t, c.cleanup, true)))
+	}
+	assert.Equal(t, []string{
+		path + "ConnectionEndpoint has IsPersistent TRUE, but its AutomationComponent does not announce SupportsPersistence TRUE (Part 81 §6.2.6)",
+	}, persistenceFindings(capsServer(t, -1, false)))
+	var nilCaps *uafx.ComponentCapabilities
+	assert.False(t, nilCaps.Persistence())
 }

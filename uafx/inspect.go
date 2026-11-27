@@ -134,6 +134,30 @@ type AutomationComponent struct {
 	FunctionalEntities []FunctionalEntity
 	// Descriptors are the AcDescriptors (Part 81 §6.2.3) of the component.
 	Descriptors []Node
+	// Capabilities are the ComponentCapabilities of the component (Part
+	// 81 §6.2.6 Table 26), nil when it has none.
+	Capabilities *ComponentCapabilities
+}
+
+// ComponentCapabilities are the members of the ComponentCapabilities of an
+// AutomationComponent (Part 81 §6.2.6 Table 26). Every member is optional:
+// a nil field is one the component does not have or that cannot be read.
+type ComponentCapabilities struct {
+	// SupportsPersistence TRUE means the component supports persistent
+	// ConnectionEndpoints (IsPersistent, §5.5.5); absent or FALSE means it
+	// does not.
+	SupportsPersistence   *bool
+	MaxConnections        *uint32
+	MaxConnectionsPerCall *uint32
+	MaxFunctionalEntities *uint32
+	MinConnections        *uint32
+	CommandBundleRequired *bool
+}
+
+// Persistence reports whether the capabilities announce SupportsPersistence
+// TRUE.
+func (c *ComponentCapabilities) Persistence() bool {
+	return c != nil && c.SupportsPersistence != nil && *c.SupportsPersistence
 }
 
 // Asset is an instance of FxAssetType (Part 81 §6.3.2) or of a subtype,
@@ -176,9 +200,21 @@ type FunctionalEntity struct {
 type ConnectionEndpoint struct {
 	Node
 	// Status is nil when it cannot be read.
-	Status         *ConnectionEndpointStatus
-	IsPersistent   bool
+	Status       *ConnectionEndpointStatus
+	IsPersistent bool
+	// CleanupTimeout is the CleanupTimeout of the endpoint, 0 when it is
+	// negative (never cleaned up) or cannot be read; CleanupTimeoutMs has
+	// the value itself.
 	CleanupTimeout time.Duration
+	// CleanupTimeoutMs is the CleanupTimeout as the server holds it, a
+	// Duration in milliseconds (Part 3 §8.13), nil when it cannot be read.
+	// A negative value means the endpoint is never cleaned up, which a
+	// persistent endpoint requires (Part 81 §6.6.2).
+	CleanupTimeoutMs *float64
+	// CreationTime and ModificationTime are those of the Diagnostics of the
+	// endpoint (Part 81 §6.6.2 Table 74), zero when it has none.
+	CreationTime     time.Time
+	ModificationTime time.Time
 	// ConnectionManagerApplicationURI is the ApplicationUri of the
 	// ConnectionManager that established the endpoint, when known.
 	ConnectionManagerApplicationURI string
@@ -531,7 +567,57 @@ func (in *inspector) readAC(ctx context.Context, ac Node) (AutomationComponent, 
 		}
 		out.Descriptors = descs
 	}
+	if ref := byName.get(in.ns.ac, "ComponentCapabilities"); ref != nil && ref.NodeClass == ua.NodeClassObject {
+		caps, err := in.readCapabilitiesOf(ctx, ref.NodeID.NodeID)
+		if err != nil {
+			return out, err
+		}
+		out.Capabilities = caps
+		in.checkPersistence(out)
+	}
 	return out, nil
+}
+
+// readCapabilitiesOf reads the members of the ComponentCapabilities n of
+// an AutomationComponent (Part 81 §6.2.6 Table 26).
+func (in *inspector) readCapabilitiesOf(ctx context.Context, n *ua.NodeID) (*ComponentCapabilities, error) {
+	vals, err := in.readChildren(ctx, n, in.ns.ac, "SupportsPersistence", "MaxConnections",
+		"MaxConnectionsPerCall", "MaxFunctionalEntities", "MinConnections", "CommandBundleRequired")
+	if err != nil {
+		return nil, err
+	}
+	return &ComponentCapabilities{
+		SupportsPersistence:   valPtr[bool](vals["SupportsPersistence"]),
+		MaxConnections:        valPtr[uint32](vals["MaxConnections"]),
+		MaxConnectionsPerCall: valPtr[uint32](vals["MaxConnectionsPerCall"]),
+		MaxFunctionalEntities: valPtr[uint32](vals["MaxFunctionalEntities"]),
+		MinConnections:        valPtr[uint32](vals["MinConnections"]),
+		CommandBundleRequired: valPtr[bool](vals["CommandBundleRequired"]),
+	}, nil
+}
+
+// checkPersistence adds a Finding for each persistent ConnectionEndpoint
+// of ac when ac does not announce SupportsPersistence TRUE: absent or
+// FALSE means the component does not support persistent endpoints (Part
+// 81 §6.2.6 Table 26).
+func (in *inspector) checkPersistence(ac AutomationComponent) {
+	if ac.Capabilities.Persistence() {
+		return
+	}
+	var walk func(path string, fes []FunctionalEntity)
+	walk = func(path string, fes []FunctionalEntity) {
+		for _, fe := range fes {
+			p := path + "/" + fe.BrowseName.Name
+			for _, ep := range fe.ConnectionEndpoints {
+				if ep.IsPersistent {
+					in.find(ep.NodeID, p+"/ConnectionEndpoints/"+ep.BrowseName.Name, "6.2.6",
+						"ConnectionEndpoint has IsPersistent TRUE, but its AutomationComponent does not announce SupportsPersistence TRUE")
+				}
+			}
+			walk(p, fe.SubFunctionalEntities)
+		}
+	}
+	walk(ac.BrowseName.Name+"/FunctionalEntities", ac.FunctionalEntities)
 }
 
 func (in *inspector) readAsset(ctx context.Context, a Node) (Asset, error) {
@@ -673,8 +759,24 @@ func (in *inspector) readEndpoint(ctx context.Context, n Node, path string) (Con
 	out.IsPersistent, _ = val(vals["IsPersistent"]).(bool)
 	if ms, ok := val(vals["CleanupTimeout"]).(float64); ok {
 		out.CleanupTimeout = durationOf(ms)
+		out.CleanupTimeoutMs = &ms
+		// "For a persistent ConnectionEndpoint, the CleanupTimeout shall be
+		// set to a negative number" (Part 81 §6.6.2).
+		if out.IsPersistent && !(ms < 0) {
+			in.find(n.NodeID, path, "6.6.2", "persistent ConnectionEndpoint has CleanupTimeout %v ms; it shall be negative", ms)
+		}
 	}
 	out.ConnectionManagerApplicationURI = text(vals["ConnectionManagerApplicationUri"])
+	// The Diagnostics of the endpoint has the BrowseName of DI, its
+	// members those of the AC namespace (Part 81 §6.6.2 Table 74).
+	if ref := byName.get(in.ns.di, "Diagnostics"); in.ns.di != 0 && ref != nil && ref.NodeClass == ua.NodeClassObject {
+		d, err := in.readChildren(ctx, ref.NodeID.NodeID, in.ns.ac, "CreationTime", "ModificationTime")
+		if err != nil {
+			return out, err
+		}
+		out.CreationTime, _ = val(d["CreationTime"]).(time.Time)
+		out.ModificationTime, _ = val(d["ModificationTime"]).(time.Time)
+	}
 	return out, nil
 }
 
@@ -1069,6 +1171,16 @@ func val(v *ua.Variant) any {
 		return nil
 	}
 	return v.Value()
+}
+
+// valPtr returns a pointer to the value of v when it is a T, nil
+// otherwise.
+func valPtr[T any](v *ua.Variant) *T {
+	x, ok := val(v).(T)
+	if !ok {
+		return nil
+	}
+	return &x
 }
 
 // durationOf converts a Duration in milliseconds (Part 3 §8.13) to a

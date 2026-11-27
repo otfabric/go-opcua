@@ -102,6 +102,7 @@ func print(w io.Writer, r *uafx.Report) error {
 		if h := ac.AggregatedHealth; h != nil {
 			p.printf("  health: device %v, operational %v\n", h.AggregatedDeviceHealth, h.AggregatedOperationalHealth)
 		}
+		p.printf("  supports persistence: %v\n", ac.Capabilities.Persistence())
 		for _, a := range ac.Assets {
 			p.printf("  asset %s: %s %s, serial %s, hardware %s, software %s\n",
 				a.BrowseName.Name, a.Manufacturer, a.Model, a.SerialNumber, a.HardwareRevision, a.SoftwareRevision)
@@ -146,8 +147,19 @@ func printEntity(p *printer, fe uafx.FunctionalEntity, indent string) {
 		if ep.Status != nil {
 			status = ep.Status.String()
 		}
-		p.printf("%s  endpoint %s: %s, persistent %v, cleanup timeout %v\n",
-			indent, ep.BrowseName.Name, status, ep.IsPersistent, ep.CleanupTimeout)
+		cleanup := "unknown"
+		switch ms := ep.CleanupTimeoutMs; {
+		case ms != nil && *ms < 0:
+			cleanup = "never"
+		case ms != nil:
+			cleanup = ep.CleanupTimeout.String()
+		}
+		p.printf("%s  endpoint %s: %s, persistent %v, cleanup timeout %s",
+			indent, ep.BrowseName.Name, status, ep.IsPersistent, cleanup)
+		if !ep.CreationTime.IsZero() {
+			p.printf(", created %s, modified %s", ep.CreationTime.UTC().Format(time.RFC3339), ep.ModificationTime.UTC().Format(time.RFC3339))
+		}
+		p.printf("\n")
 	}
 	for _, sub := range fe.SubFunctionalEntities {
 		printEntity(p, sub, indent+"  ")
