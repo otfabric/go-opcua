@@ -116,17 +116,3 @@ func TestCancel_KeepsOtherPublishRequests(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, uint32(0), resp.(*ua.CancelResponse).CancelCount)
 }
-
-// TestRequeuePublishRequests_FullQueue: a request that finds the queue full
-// when Cancel puts it back is answered, not lost: the queue keeps the ones
-// that fit.
-func TestRequeuePublishRequests_FullQueue(t *testing.T) {
-	srv := newTestServer()
-	sess := &session{PublishRequests: make(chan PubReq, 1)}
-	srv.requeuePublishRequests(sess, []PubReq{
-		{Req: &ua.PublishRequest{RequestHeader: &ua.RequestHeader{RequestHandle: 1}}, ID: 1},
-		{Req: &ua.PublishRequest{RequestHeader: &ua.RequestHeader{RequestHandle: 2}}, ID: 2},
-	}, nil)
-	require.Len(t, sess.PublishRequests, 1)
-	require.Equal(t, uint32(1), (<-sess.PublishRequests).ID)
-}

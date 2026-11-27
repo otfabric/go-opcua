@@ -589,7 +589,7 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 // that were cancelled (Part 4 §5.7.5). The server handles every request but
 // Publish before it reads the next one, so the outstanding requests are the
 // Publish requests queued on the session. Each one that is cancelled is
-// answered with a ServiceFault; the others stay queued.
+// answered with a ServiceFault; the others stay queued, in their order.
 func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
@@ -609,24 +609,52 @@ func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r u
 	}, nil
 }
 
+// queuePublishRequest queues the Publish request pr on sess. When the queue
+// is full its oldest request is answered with Bad_TooManyPublishRequests
+// and pr is queued: "When a Server receives a new Publish request that
+// exceeds its limit it shall de-queue the oldest Publish request and return
+// a response with the result set to Bad_TooManyPublishRequests" (Part 4
+// §5.14.5.1). A request is answered by whoever takes it from the queue, so
+// none is answered twice.
+func (s *Server) queuePublishRequest(sess *session, pr PubReq) {
+	var evicted []PubReq
+	sess.publishMu.Lock()
+	for queued := false; !queued; {
+		select {
+		case sess.PublishRequests <- pr:
+			queued = true
+		default:
+			// Full. A subscription may take a request meanwhile, then
+			// there is nothing to de-queue and the next round queues pr.
+			select {
+			case old := <-sess.PublishRequests:
+				evicted = append(evicted, old)
+			default:
+			}
+		}
+	}
+	sess.publishMu.Unlock()
+	for _, old := range evicted {
+		s.cfg.logger.Warn("too many publish requests: answering the oldest with Bad_TooManyPublishRequests")
+		s.faultPublishRequest(old, pr.Channel, ua.StatusBadTooManyPublishRequests)
+	}
+}
+
 // cancelPublishRequests answers the Publish requests queued on sess whose
 // RequestHandle is handle with Bad_RequestCancelledByClient and returns how
-// many there were. The other requests are queued again. A Publish request
-// that arrives meanwhile can take the place of one of them; that one, older
-// than the request that took its place, is then answered rather than lost:
-// with a full queue the Server "shall de-queue the oldest Publish request
-// and return a response with the result set to Bad_TooManyPublishRequests"
-// (Part 4 §5.14.5.1). fallback is the channel of a request that does not
-// name its own.
+// many there were. The other requests are queued again, in their order: no
+// Publish request is queued while the queue is taken apart (publishMu), and
+// the subscriptions only take requests from it, so they fit again.
+// fallback is the channel of a request that does not name its own.
 func (s *Server) cancelPublishRequests(sess *session, handle uint32, fallback *uasc.SecureChannel) uint32 {
-	var cancelled uint32
+	var cancelled []PubReq
+	sess.publishMu.Lock()
 	var remaining []PubReq
 	for drained := false; !drained; {
 		select {
 		case pr := <-sess.PublishRequests:
 			if pr.Req != nil && pr.Req.RequestHeader != nil && pr.Req.RequestHeader.RequestHandle == handle {
-				cancelled++
-				s.faultPublishRequest(pr, fallback, ua.StatusBadRequestCancelledByClient)
+				cancelled = append(cancelled, pr)
 			} else {
 				remaining = append(remaining, pr)
 			}
@@ -634,28 +662,23 @@ func (s *Server) cancelPublishRequests(sess *session, handle uint32, fallback *u
 			drained = true
 		}
 	}
-	s.requeuePublishRequests(sess, remaining, fallback)
-	return cancelled
-}
-
-// requeuePublishRequests queues the Publish requests prs on sess again, in
-// their order. One that finds the queue full is answered with
-// Bad_TooManyPublishRequests (see cancelPublishRequests).
-func (s *Server) requeuePublishRequests(sess *session, prs []PubReq, fallback *uasc.SecureChannel) {
-	for _, pr := range prs {
-		select {
-		case sess.PublishRequests <- pr:
-		default:
-			s.cfg.logger.Warn("publish request queue filled during Cancel; answering with Bad_TooManyPublishRequests")
-			s.faultPublishRequest(pr, fallback, ua.StatusBadTooManyPublishRequests)
-		}
+	for _, pr := range remaining {
+		sess.PublishRequests <- pr // there is room: see above
 	}
+	sess.publishMu.Unlock()
+	for _, pr := range cancelled {
+		s.faultPublishRequest(pr, fallback, ua.StatusBadRequestCancelledByClient)
+	}
+	return uint32(len(cancelled))
 }
 
 // faultPublishRequest answers the queued Publish request pr with a
 // ServiceFault of the given status. fallback is the channel used when pr
 // does not name its own.
 func (s *Server) faultPublishRequest(pr PubReq, fallback *uasc.SecureChannel, status ua.StatusCode) {
+	if s.publishFaulted != nil {
+		s.publishFaulted(pr, status)
+	}
 	h := faultHeader(status)
 	if pr.Req != nil && pr.Req.RequestHeader != nil {
 		h.RequestHandle = pr.Req.RequestHeader.RequestHandle

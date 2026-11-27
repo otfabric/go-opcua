@@ -3971,6 +3971,9 @@ SecurityGroupNodeID returns the NodeId of the node of a SecurityGroup.
 ```go
 type Server struct {
 
+	// publishFaulted, when set, is told about every queued Publish request
+	// the server answers with a ServiceFault (tests).
+
 	// nsView is the namespaces for readers that do not take mu (Node):
 	// AddNamespace publishes a new slice, it never changes one in place.
 
@@ -4821,7 +4824,7 @@ func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r u
 
 Cancel implements the OPC UA Cancel service. [https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5](https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5)
 
-"All outstanding requests with the matching requestHandle shall be cancelled", and "Successfully cancelled service requests shall respond with Bad\_RequestCancelledByClient"; cancelCount is the number of requests that were cancelled (Part 4 §5.7.5). The server handles every request but Publish before it reads the next one, so the outstanding requests are the Publish requests queued on the session. Each one that is cancelled is answered with a ServiceFault; the others stay queued.
+"All outstanding requests with the matching requestHandle shall be cancelled", and "Successfully cancelled service requests shall respond with Bad\_RequestCancelledByClient"; cancelCount is the number of requests that were cancelled (Part 4 §5.7.5). The server handles every request but Publish before it reads the next one, so the outstanding requests are the Publish requests queued on the session. Each one that is cancelled is answered with a ServiceFault; the others stay queued, in their order.
 
 #### func (SessionService) CloseSession
 

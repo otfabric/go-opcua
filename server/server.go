@@ -60,6 +60,10 @@ type Server struct {
 
 	cfg *serverConfig
 
+	// publishFaulted, when set, is told about every queued Publish request
+	// the server answers with a ServiceFault (tests).
+	publishFaulted func(pr PubReq, status ua.StatusCode)
+
 	mu         sync.Mutex
 	status     *ua.ServerStatusDataType
 	endpoints  []*ua.EndpointDescription
@@ -432,6 +436,7 @@ func New(opts ...Option) (*Server, error) {
 	s.diag.bind()
 	s.sb.idNamespace = s.diag.sessionNamespace
 	s.sb.removed = s.sessionRemoved
+	s.sb.publishQueue = publishQueueSize(cfg.subscriptionsPerSessionLimit())
 
 	return s, nil
 }

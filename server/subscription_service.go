@@ -363,14 +363,7 @@ func (s *SubscriptionService) Publish(ctx context.Context, sc *uasc.SecureChanne
 		return nil, ua.StatusBadNoSubscription
 	}
 
-	select {
-	case session.PublishRequests <- PubReq{Req: req, ID: reqID, Channel: sc}:
-	default:
-		// The per-session queue is full. Tell the client instead of silently
-		// dropping the request, which it would only notice as a timeout.
-		s.srv.cfg.logger.Warn("too many publish requests")
-		return nil, ua.StatusBadTooManyPublishRequests
-	}
+	s.srv.queuePublishRequest(session, PubReq{Req: req, ID: reqID, Channel: sc})
 
 	// per opcua spec, we don't respond now.  When data is available on the subscription,
 	// the Subscription will respond in the background.
@@ -445,10 +438,7 @@ func (s *Subscription) sendStatusChange(sess *session, ch *uasc.SecureChannel) {
 	change, ok := sess.takeStatusChange()
 	if !ok {
 		// A Publish request of its own took the notification meanwhile.
-		select {
-		case sess.PublishRequests <- pubreq:
-		default:
-		}
+		s.srv.srv.queuePublishRequest(sess, pubreq)
 		return
 	}
 	resp := statusChangeResponse(pubreq.Req, change, s.srv.ackPublishAcknowledgements(sess, pubreq.Req.SubscriptionAcknowledgements))
