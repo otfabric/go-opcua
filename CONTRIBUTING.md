@@ -67,7 +67,9 @@ Generators under `cmd/`:
 | `cmd/service` | `schema/Opc.Ua.Types.bsd` | `ua/enums_gen.go`, `ua/extobjs_gen.go`, `ua/service_gen.go`, `ua/register_extobjs_gen.go` |
 
 All generators use the shared naming formatter at `internal/goname` for
-idiomatic Go identifier normalization.
+idiomatic Go identifier normalization. A generator that reads a NodeSet2
+document (`cmd/uafx`) reads it with `internal/nodeset.Parse`, the reader of
+`server.ImportNodeSetXML` too, and declares no XML types of its own.
 
 ## Submitting changes
 
