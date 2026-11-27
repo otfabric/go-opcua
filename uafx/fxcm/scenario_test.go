@@ -39,6 +39,9 @@ type hookDialer struct {
 	// answer, when it returns a result, answers a Call with it without
 	// sending it: a definite refusal by the server.
 	answer func(addr fxcm.ServerAddress, req *ua.CallMethodRequest) *ua.CallMethodResult
+	// identity, when set, lets the sessions show the identity of their
+	// server (fxcm.IdentifiedSession), as the sessions of ClientDialer do.
+	identity bool
 }
 
 func newHookDialer() *hookDialer {
@@ -63,8 +66,21 @@ func (d *hookDialer) Dial(ctx context.Context, addr fxcm.ServerAddress) (fxcm.Se
 	if err != nil {
 		return nil, err
 	}
-	return &hookSession{Session: s, d: d, addr: addr}, nil
+	hs := &hookSession{Session: s, d: d, addr: addr}
+	if is, ok := s.(fxcm.IdentifiedSession); ok && d.identity {
+		return &identifiedHookSession{hookSession: hs, id: is}, nil
+	}
+	return hs, nil
 }
+
+// identifiedHookSession is a hookSession that shows the identity of its
+// server.
+type identifiedHookSession struct {
+	*hookSession
+	id fxcm.IdentifiedSession
+}
+
+func (s *identifiedHookSession) ServerIdentity() fxcm.ServerIdentity { return s.id.ServerIdentity() }
 
 type hookSession struct {
 	fxcm.Session

@@ -77,6 +77,17 @@ type persistence struct {
 	settleMu sync.Mutex
 	settling bool
 
+	// verifyMu guards the background verification (verify.go): verifying
+	// while it runs, verifyAgain when records became Unverified meanwhile.
+	verifyMu    sync.Mutex
+	verifying   bool
+	verifyAgain bool
+	// unverified are the server Addresses on which a record is Unverified
+	// (noteVerified clears them), verifyErr the error of the last attempt
+	// on a server that failed. Under owedMu.
+	unverified map[string]bool
+	verifyErr  map[string]string
+
 	// stale are the records of runs that never called (phase planned),
 	// which the start deletes.
 	stale []string
@@ -95,9 +106,10 @@ const (
 )
 
 // OwedWork is work the journal of a Manager shows, which it exposes and
-// does not execute (design §6.3): the next Process or Reconcile of the set
-// does it (stage C3.3). In this version it is kept in the store, reported,
-// and it fences the operations that could bypass it.
+// does not execute by itself (design §6.3): the first step of the next
+// Process or Reconcile of the set does it (recover), and a Reconcile
+// completes an owed set change. Until then it is reported and fences the
+// operations that could bypass it.
 type OwedWork struct {
 	// Kind says what is owed.
 	Kind OwedKind
@@ -169,15 +181,21 @@ type Recovery struct {
 	// establish intent without an endpoint record holds its Names with
 	// one (NodeID nil).
 	Unverified []EndpointRecord
-	// Owed is the work the journal shows. While it is owed, the set is
-	// not established, enabled, replaced or removed (Bad_InvalidState).
+	// Owed is the work the journal shows. The first step of the next
+	// Process or Reconcile of the set does it (a set change: a Reconcile
+	// only); until then the set is not replaced, removed or updated
+	// (Bad_InvalidState).
 	Owed []OwedWork
 	// Fenced is the work other sets owe that this set takes part in (an
-	// operation of their set change) or shares a server with. While it
-	// is owed, the remote operations of the set and its CommitEdit are
-	// refused (Bad_InvalidState): whether they are independent of it is
-	// what recovery proves (stage C3.3; library interpretation).
+	// operation of their set change), or that holds a server of this set
+	// whose independence is not proven yet (fencedOf). While it is owed,
+	// the remote operations of the set and its CommitEdit are refused
+	// (Bad_InvalidState; library interpretation).
 	Fenced []OwedWork
+	// Unreachable are the servers (by Address) of Unverified records whose
+	// last verification attempt failed, with its error; they are tried
+	// again with a bounded backoff (VerifyOptions).
+	Unreachable map[string]string
 	// Blocked, when not empty, is why the remote operations of the set
 	// are refused: a record of it in the store is not valid.
 	Blocked string
@@ -232,6 +250,7 @@ func openPersistence(m *Manager, opts Options) (*persistence, error) {
 	p := &persistence{
 		m: m, timeout: opts.StoreTimeout, failed: map[string]error{}, owed: map[string][]OwedWork{},
 		orphans: map[string]string{}, active: map[RunID]bool{}, blockedSets: map[string]string{},
+		unverified: map[string]bool{}, verifyErr: map[string]string{},
 	}
 	if p.timeout <= 0 {
 		p.timeout = defaultStoreTimeout
@@ -482,7 +501,13 @@ func (p *persistence) load(st map[string][]byte) {
 		runs = max(runs, r.Run)
 	}
 	m.runs.Store(runs)
-	p.owed, p.orphans, p.fenced = owedOf(l, p.active)
+	for _, r := range l.eps {
+		p.unverified[r.Address] = true
+	}
+	for _, r := range l.calls {
+		p.unverified[r.Address] = true
+	}
+	p.owed, p.orphans, p.fenced = owedOf(l, p.active, p.unverified)
 	for ks, s := range m.sets {
 		attachIntents(s, l, p.active)
 		if len(p.owed[ks]) > 0 || p.blockedSets[ks] != "" {
@@ -495,25 +520,32 @@ func (p *persistence) load(st map[string][]byte) {
 // obligations of no set l has (an Add of a set change, a run whose set
 // record is gone) and, by set, the work of other sets that fences it
 // (fencedOf). The runs in active are running: what they owe is theirs.
-func owedOf(l *loaded, active map[RunID]bool) (owed map[string][]OwedWork, orphans map[string]string, fenced map[string][]OwedWork) {
+func owedOf(l *loaded, active map[RunID]bool, unverified map[string]bool) (owed map[string][]OwedWork, orphans map[string]string, fenced map[string][]OwedWork) {
 	owed, orphans = journalOwed(l, active)
-	return owed, orphans, fencedOf(l, owed)
+	return owed, orphans, fencedOf(l, owed, unverified)
 }
 
 // fencedOf returns, by set key, the work other sets owe that the set may
 // depend on, conservatively (library interpretation of design §6.3):
 //   - the set takes part in an owed set change (an operation of its
-//     Replace, Remove or complete Update), or
+//     Replace, Remove or complete Update), until the change is made; or
 //   - the set has a server (by its ServerAddress Address, or the server of
 //     one of its endpoint records or call intents) in the domain of the
-//     owed work: the servers of the set that owes it, of the sets of its
-//     set change, and the server of an owed call.
+//     owed work: the server of an owed call, whose outcome is unknown
+//     until its intent is resolved; and, for other owed work, the servers
+//     of the set that owes it and of the sets of its set change on which
+//     a record is not verified yet (unverified, design §6.4).
 //
-// Whether such a set is independent of the obligation (other
-// AutomationComponents, other PubSub components) is what recovery proves
-// (stage C3.3); until then its remote operations and configuration changes
-// are refused like those of the set that owes it.
-func fencedOf(l *loaded, owed map[string][]OwedWork) map[string][]OwedWork {
+// The proof of independence (stage C3.3): once every record of a server
+// is decided by the re-proof of §6.5 (KnownOwned, TakenPreconfigured or
+// Unresolved, the last never closed) and no call on it has an unknown
+// outcome, a run of another set on that server closes only the endpoints
+// of its own records and creates only under Names its scan proves free;
+// the owed work of the first set, done by its own runs, touches only the
+// endpoints of its own records. Until then the remote operations and
+// configuration changes of a fenced set are refused like those of the set
+// that owes the work.
+func fencedOf(l *loaded, owed map[string][]OwedWork, unverified map[string]bool) map[string][]OwedWork {
 	servers := map[string]map[string]bool{}
 	serve := func(k SetKey, addr string) {
 		ks := keyString(k)
@@ -549,12 +581,14 @@ func fencedOf(l *loaded, owed map[string][]OwedWork) map[string][]OwedWork {
 				parts[keyString(c.Set)] = true
 			}
 			domain := map[string]bool{}
-			if w.Address != "" {
+			if w.Kind == OwedCall && w.Address != "" {
 				domain[w.Address] = true
 			}
 			for ks := range parts {
 				for a := range servers[ks] {
-					domain[a] = true
+					if unverified[a] {
+						domain[a] = true
+					}
 				}
 			}
 			cands := map[string]bool{}
@@ -692,7 +726,7 @@ func (r *epStored) record() *record {
 		ServerURI: r.Server.ApplicationURI, FunctionalEntity: fe, Name: r.Name, NodeID: n,
 		Class: Unverified, Run: RunID(r.Run), Version: r.Version, ClosePending: r.ClosePending,
 	}, addr: addr, acNode: ac, nsa: r.Namespaces, gen: r.Generation, fp: r.Fingerprint, stored: Ownership(r.Class),
-		server: r.Server, created: r.CreationTime, cmURI: r.CMApplicationURI, cmObserved: r.CMObserved, epfp: r.EndpointFingerprint}
+		server: r.Server, created: r.CreationTime, cmURI: r.CMApplicationURI, cmObserved: r.CMObserved, epfp: r.EndpointFingerprint, param: r.Param}
 	if rec.ServerURI == "" {
 		rec.ServerURI = r.ServerURIConf
 	}
@@ -712,7 +746,7 @@ func storedOf(rec *record) *epStored {
 		ACNode: qualify(rec.acNode, rec.nsa), FunctionalEntity: qualify(rec.FunctionalEntity, rec.nsa), Name: rec.Name, NodeID: qualify(rec.NodeID, rec.nsa),
 		CreationTime: rec.created, CMApplicationURI: rec.cmURI, CMObserved: rec.cmObserved,
 		Class: int64(class), Run: uint64(rec.Run), Version: rec.Version, ClosePending: rec.ClosePending,
-		Generation: rec.gen, Fingerprint: rec.fp, EndpointFingerprint: rec.epfp,
+		Generation: rec.gen, Fingerprint: rec.fp, EndpointFingerprint: rec.epfp, Param: rec.param,
 	}
 }
 
@@ -775,7 +809,7 @@ func (p *persistence) apply(b fxstore.Batch, gen uint64) (fxstore.Outcome, error
 func (p *persistence) refreshOwed() {
 	l := decodeState(p.d.State())
 	p.owedMu.Lock()
-	p.owed, p.orphans, p.fenced = owedOf(l, p.active)
+	p.owed, p.orphans, p.fenced = owedOf(l, p.active, p.unverified)
 	p.owedMu.Unlock()
 }
 
@@ -888,6 +922,7 @@ func (p *persistence) follow() bool {
 	m := p.m
 	p.owedMu.Lock()
 	active := maps.Clone(p.active)
+	unverified := maps.Clone(p.unverified)
 	p.owedMu.Unlock()
 	var events []Event
 	defer func() {
@@ -977,10 +1012,17 @@ func (p *persistence) follow() bool {
 		s.mu.Lock()
 		if s.records[rk] == nil {
 			s.records[rk] = rec
+			// Unverified again: so is its server (design §6.4).
+			unverified[rec.addr.Address] = true
 		}
 		s.mu.Unlock()
 	}
-	owed, orphans, fenced := owedOf(l, active)
+	for _, c := range l.calls {
+		if !active[RunID(c.Run)] {
+			unverified[c.Address] = true
+		}
+	}
+	owed, orphans, fenced := owedOf(l, active, unverified)
 	for ks, s := range m.sets {
 		s.mu.Lock()
 		attachIntents(s, l, active)
@@ -990,7 +1032,7 @@ func (p *persistence) follow() bool {
 		s.mu.Unlock()
 	}
 	p.owedMu.Lock()
-	p.owed, p.orphans, p.fenced = owed, orphans, fenced
+	p.owed, p.orphans, p.fenced, p.unverified = owed, orphans, fenced, unverified
 	p.owedMu.Unlock()
 	return true
 }
@@ -1076,6 +1118,14 @@ func (p *persistence) recovery(s *set) Recovery {
 	p.owedMu.Lock()
 	r.Owed = slices.Clone(p.owed[ks])
 	r.Fenced = slices.Clone(p.fenced[ks])
+	for _, rec := range s.records {
+		if why := p.verifyErr[rec.addr.Address]; rec.Class == Unverified && why != "" {
+			if r.Unreachable == nil {
+				r.Unreachable = map[string]string{}
+			}
+			r.Unreachable[rec.addr.Address] = why
+		}
+	}
 	p.owedMu.Unlock()
 	r.Done = r.Pending == 0 && len(r.Owed) == 0 && len(r.Fenced) == 0 && r.Blocked == ""
 	return r
@@ -1107,20 +1157,35 @@ func (p *persistence) checkKey(key SetKey) error {
 	return nil
 }
 
-// checkRemote refuses an operation on the set key that acts on its
-// endpoints (a run of any action, a Replace, a Remove, an Update, a
-// Settle) while a record that is not valid could be of it, or while it
-// owes work (design §6.3). Closes are refused too: whether a close
-// conflicts with the obligation (the evidence of an unproven call, a
-// component it shares, a pending set change) is what recovery proves
-// (stage C3.3), so C3.2 refuses it.
+// checkRemote refuses an operation on the set key that changes its set or
+// acts on its endpoints outside a run (a Replace, a Remove, an Update) while
+// a record that is not valid could be of it, while it owes work, or while
+// it takes part in, or shares a server with, work another set owes
+// (fencedOf): the owed work is done by a Process or Reconcile of the set
+// first (design §6.3), whose run starts with it (checkRun).
 func (p *persistence) checkRemote(key SetKey) error {
+	if err := p.checkBlocked(key); err != nil {
+		return err
+	}
+	ks := keyString(key)
+	p.owedMu.Lock()
+	owed := slices.Clone(p.owed[ks])
+	p.owedMu.Unlock()
+	if len(owed) > 0 {
+		return managerError(ua.StatusBadInvalidState, "the set %s owes %v of run %d: a Process or Reconcile of the set does it first", key, owed[0].Kind, owed[0].Run)
+	}
+	return nil
+}
+
+// checkBlocked refuses an operation on the endpoints of the set key while
+// a record that is not valid could be of it, or while it takes part in, or
+// shares a server with, work another set owes (fencedOf).
+func (p *persistence) checkBlocked(key SetKey) error {
 	ks := keyString(key)
 	p.mu.Lock()
 	all, blocked := p.blockedAll, p.blockedSets[ks]
 	p.mu.Unlock()
 	p.owedMu.Lock()
-	owed := slices.Clone(p.owed[ks])
 	fenced := slices.Clone(p.fenced[ks])
 	p.owedMu.Unlock()
 	switch {
@@ -1128,10 +1193,31 @@ func (p *persistence) checkRemote(key SetKey) error {
 		return managerError(ua.StatusBadInvalidState, "the store holds a record that is not valid: %s", all)
 	case blocked != "":
 		return managerError(ua.StatusBadInvalidState, "the store holds a record of the set %s that is not valid: %s", key, blocked)
-	case len(owed) > 0:
-		return managerError(ua.StatusBadInvalidState, "the set %s owes %v of run %d (recovery, stage C3.3)", key, owed[0].Kind, owed[0].Run)
 	case len(fenced) > 0:
-		return managerError(ua.StatusBadInvalidState, "the set %s takes part in, or shares a server with, %v owed by run %d (recovery, stage C3.3)", key, fenced[0].Kind, fenced[0].Run)
+		return managerError(ua.StatusBadInvalidState, "the set %s takes part in, or shares a server with, %v owed by run %d", key, fenced[0].Kind, fenced[0].Run)
+	}
+	return nil
+}
+
+// checkRun refuses a run of action on the set key while checkBlocked
+// does, and a run other than a Reconcile while the set owes a set change:
+// that change replaces or removes the set, which only a Reconcile completes
+// (library interpretation of design §6.3). The other owed work (a call
+// whose outcome is unknown, a rollback, a reconcile) is done by the first
+// step of the run (recover).
+func (p *persistence) checkRun(key SetKey, action uafx.FxProcess) error {
+	if err := p.checkBlocked(key); err != nil {
+		return err
+	}
+	if action == ActionReconcile {
+		return nil
+	}
+	p.owedMu.Lock()
+	defer p.owedMu.Unlock()
+	for _, w := range p.owed[keyString(key)] {
+		if w.Kind == OwedSetChange {
+			return managerError(ua.StatusBadInvalidState, "the set %s owes the %v of run %d, which a Reconcile completes", key, w.Kind, w.Run)
+		}
 	}
 	return nil
 }
@@ -1145,11 +1231,11 @@ func (p *persistence) checkConfig(key SetKey) error {
 	p.owedMu.Lock()
 	defer p.owedMu.Unlock()
 	if f := p.fenced[ks]; len(f) > 0 {
-		return managerError(ua.StatusBadInvalidState, "the set %s takes part in, or shares a server with, %v owed by run %d (recovery, stage C3.3)", key, f[0].Kind, f[0].Run)
+		return managerError(ua.StatusBadInvalidState, "the set %s takes part in, or shares a server with, %v owed by run %d", key, f[0].Kind, f[0].Run)
 	}
 	for _, w := range p.owed[ks] {
 		if w.Kind == OwedSetChange {
-			return managerError(ua.StatusBadInvalidState, "the set %s owes %v of run %d (recovery, stage C3.3)", key, w.Kind, w.Run)
+			return managerError(ua.StatusBadInvalidState, "the set %s owes the %v of run %d, which a Reconcile completes", key, w.Kind, w.Run)
 		}
 	}
 	return nil
@@ -1241,11 +1327,26 @@ func (p *persistence) switchSets(cs []setChange, runs []RunID) ([]uint64, [][]by
 	return gens, fps, nil
 }
 
-// settleRecord writes the verdict of Settle on the record rec of the set s.
-// The caller holds s.mu.
+// settleRecord writes the verdict of Settle on the record rec of the set s,
+// with the completion of the intents of runs that are not active whose
+// places the verdict decides the last (design §6.3). The caller holds s.mu.
 func (p *persistence) settleRecord(s *set, rec *record, v Verdict) error {
 	var b fxstore.Batch
 	k := epKeyOf(s.cfg.key, rec)
+	l := decodeState(p.d.State())
+	p.owedMu.Lock()
+	active := maps.Clone(p.active)
+	p.owedMu.Unlock()
+	undecided := func(r *record) bool { return r != rec && (r.Class == Unverified || r.Class == Unresolved) }
+	for _, ck := range sortedRecordKeys(l.calls) {
+		c := l.calls[ck]
+		if keyString(SetKey{Folder: c.Folder, Name: c.SetName}) != keyString(s.cfg.key) || active[RunID(c.Run)] || !c.sameAddress(rec.addr) {
+			continue
+		}
+		if !p.intentOpen(s, c, undecided) {
+			b.Deletes = append(b.Deletes, ck)
+		}
+	}
 	if v == SettleOwned {
 		cp := *rec
 		cp.Class = KnownOwned
@@ -1254,8 +1355,8 @@ func (p *persistence) settleRecord(s *set, rec *record, v Verdict) error {
 			return storeError(fxstore.NotCommitted, err)
 		}
 		b.Puts = map[string][]byte{k: val}
-	} else {
-		b.Deletes = []string{k}
+	} else if _, ok := p.d.State()[k]; ok {
+		b.Deletes = append(b.Deletes, k)
 	}
 	if o, err := p.write(b, 0); o != fxstore.Committed {
 		return storeError(o, err)

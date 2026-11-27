@@ -209,6 +209,27 @@ type epStored struct {
 	Generation          uint64
 	Fingerprint         []byte
 	EndpointFingerprint []byte
+	// Param is the ConnectionEndpointParameter the endpoint was
+	// established or taken with, or the one its re-proof read (design
+	// §6.5: the configuration check after a restart).
+	Param storedParam
+}
+
+// storedParam is the part of a PubSubConnectionEndpointParameter
+// (§10.37) an AutomationComponent exposes as Variables of the endpoint
+// (§6.6.2 Table 73, §6.6.3): Mode, InputVariables, OutputVariables,
+// IsPersistent, CleanupTimeout and RelatedEndpoint. NodeIds are
+// URI-qualified with the Namespaces of the record. Set is false for a
+// record without one.
+type storedParam struct {
+	Set            bool
+	Mode           int32
+	Inputs         []*qualifiedID
+	Outputs        []*qualifiedID
+	IsPersistent   bool
+	CleanupTimeout float64
+	// Related is the RelatedEndpoint encoded (ua.Encode), empty for none.
+	Related []byte
 }
 
 // runRecord is the journal of a run (§6.3).
@@ -474,7 +495,70 @@ func (r *epStored) check(k string, c countersRecord) error {
 			return err
 		}
 	}
+	if err := r.Param.check(r.Namespaces); err != nil {
+		return err
+	}
 	return r.Server.check()
+}
+
+// check checks the parameter p of a record with the NamespaceArray nsa.
+func (p *storedParam) check(nsa []string) error {
+	if !p.Set {
+		if p.Mode != 0 || len(p.Inputs)+len(p.Outputs)+len(p.Related) != 0 || p.IsPersistent || p.CleanupTimeout != 0 {
+			return errSemantic("a parameter that is not set")
+		}
+		return nil
+	}
+	if math.IsNaN(p.CleanupTimeout) {
+		return errSemantic("a CleanupTimeout NaN")
+	}
+	for _, q := range append(slices.Clone(p.Inputs), p.Outputs...) {
+		if q == nil {
+			return errSemantic("a null Variable of the parameter")
+		}
+		if _, err := unqualify(q, nsa); err != nil {
+			return err
+		}
+	}
+	if len(p.Related) > 0 {
+		if _, err := p.related(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// related returns the RelatedEndpoint of p, nil for none.
+func (p *storedParam) related() (*uafx.RelatedEndpoint, error) {
+	if len(p.Related) == 0 {
+		return nil, nil
+	}
+	r := &uafx.RelatedEndpoint{}
+	if err := decodeExact(p.Related, r); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// paramOf returns the stored form of the parameter p, whose NodeIds are of
+// a server with the NamespaceArray nsa; the zero storedParam for nil.
+func paramOf(p *uafx.PubSubConnectionEndpointParameter, nsa []string) storedParam {
+	if p == nil {
+		return storedParam{}
+	}
+	sp := storedParam{Set: true, Mode: int32(p.Mode), IsPersistent: p.IsPersistent, CleanupTimeout: p.CleanupTimeout}
+	for _, n := range p.InputVariableIDs {
+		sp.Inputs = append(sp.Inputs, qualify(n, nsa))
+	}
+	for _, n := range p.OutputVariableIDs {
+		sp.Outputs = append(sp.Outputs, qualify(n, nsa))
+	}
+	if p.RelatedEndpoint != nil {
+		if b, err := ua.Encode(p.RelatedEndpoint); err == nil {
+			sp.Related = b
+		}
+	}
+	return sp
 }
 
 // validAction reports whether a is the Action of a run.

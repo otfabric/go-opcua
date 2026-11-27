@@ -71,6 +71,11 @@ type RunResult struct {
 	// close of the rollback succeeded.
 	RolledBack       bool
 	RollbackComplete bool
+	// Adopted are the endpoints an establish run kept in place: proven
+	// its own, of the configuration it processed and as configured
+	// (design docs/design/uafx-persistent-connections.md §6.6), with a
+	// Store.
+	Adopted []EndpointRecord
 }
 
 // EventKind is the kind of an Event.
@@ -111,6 +116,12 @@ const (
 	// EventEditEnded: the edit of a set ended without a commit
 	// (DiscardUpdates, or its Lock went, §6.7.4).
 	EventEditEnded
+	// EventVerified: the verification of the records a Manager with a
+	// Store loaded (design §6.4) decided Record (its new Class; Closed
+	// when the record was dropped: its endpoint is absent or Foreign,
+	// nothing was closed), or an attempt on the server at Address failed
+	// (Err; Record nil).
+	EventVerified
 )
 
 // Event is what an Observer receives.

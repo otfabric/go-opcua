@@ -114,6 +114,8 @@ type epRun struct {
 	// sent is the SHA-256 of the ConnectionEndpointConfiguration the run
 	// sent for the endpoint (design §6.1), with a Store.
 	sent []byte
+	// adopt is the record of the endpoint step 0 found adoptable (adopt.go).
+	adopt *record
 }
 
 func (ep *epRun) ref() EndpointRef { return EndpointRef{ep.e.conn.name, ep.e.number} }
@@ -201,6 +203,8 @@ func (m *Manager) execute(ctx context.Context, s *set, r *Run, prev State) *RunR
 		x.extraFailure(failureOf(err, uafx.FxErrorRuntimeError))
 		return x.finish()
 	}
+	// The owed work of the set first (recover.go).
+	x.recover(ctx)
 	switch r.action {
 	case uafx.ActionEstablishConnectionsEnabled, uafx.ActionEstablishConnectionsDisabled, uafx.ActionEstablishConnections:
 		x.establishRun(ctx)
@@ -212,6 +216,15 @@ func (m *Manager) execute(ctx context.Context, s *set, r *Run, prev State) *RunR
 		x.enableRun(ctx)
 	case ActionReconcile:
 		x.reconcileRun(ctx, prev)
+		x.completeSetChange()
+	}
+	if p := x.store(); p != nil {
+		if owed := p.owedOfSet(x.r.key); len(owed) > 0 {
+			// The run leaves owed work: the set stays in Error, as it
+			// starts after a restart (design §6.4).
+			x.m.log.Warn("fxcm: the set still owes work", "set", x.r.key.String(), "run", x.r.id, "kind", owed[0].Kind.String(), "of", owed[0].Run)
+			x.extraFailure(Failure{FxError: uafx.FxErrorRuntimeError, Status: ua.StatusBadInvalidState})
+		}
 	}
 	return x.finish()
 }
@@ -295,7 +308,17 @@ func (x *run) establishRun(ctx context.Context) {
 		x.stop(ctx)
 		return
 	}
-	for _, f := range []func(context.Context, *acRun){x.scan, x.prepare, x.reserve} {
+	if x.step(ctx, x.live(), x.scan) {
+		return
+	}
+	if x.adopt(ctx) {
+		return
+	}
+	if x.anyFailed() {
+		x.stop(ctx)
+		return
+	}
+	for _, f := range []func(context.Context, *acRun){x.prepare, x.reserve} {
 		if x.step(ctx, x.live(), f) {
 			return
 		}
@@ -716,10 +739,12 @@ func (x *run) scan(ctx context.Context, a *acRun) {
 			recCopy = &c
 		}
 		x.s.mu.Unlock()
-		if recCopy != nil && recCopy.Class == Unverified {
-			// A record loaded at the start and not verified since holds
-			// the Name: the Connection fails, the record stays as it is
-			// (design §6.4: never closed, adopted or changed).
+		if recCopy != nil && (recCopy.Class == Unverified || recCopy.Class == Unresolved && x.heldName(a.addr, recCopy.Name)) {
+			// A record loaded at the start and not verified since, or
+			// the Name of a call whose outcome is unknown, holds the
+			// Name: the Connection fails, the record stays as it is
+			// (design §6.3, §6.4: never closed, adopted, changed or
+			// forgotten, and absence proves nothing).
 			x.mu.Lock()
 			x.res.Unresolved = append(x.res.Unresolved, *recCopy)
 			x.mu.Unlock()
@@ -742,6 +767,11 @@ func (x *run) scan(ctx context.Context, a *acRun) {
 		ep.obs = obs
 		switch verdict {
 		case ScanCloseFirst:
+			if class == KnownOwned && x.adoptable(ctx, a, ep, rec, obs) {
+				// Kept in place if every endpoint of the run is (adopt).
+				ep.adopt = rec
+				continue
+			}
 			closeFirst = append(closeFirst, rec)
 			closeEps = append(closeEps, ep)
 		case ScanBlocked:
@@ -767,6 +797,12 @@ func (x *run) scan(ctx context.Context, a *acRun) {
 	}
 }
 
+// heldName reports whether an owed intent of the set holds name on addr.
+func (x *run) heldName(addr ServerAddress, name string) bool {
+	p := x.store()
+	return p != nil && p.heldName(x.r.key, addr, name)
+}
+
 // IsPreconfiguredClass reports whether the record is of an endpoint the
 // AC keeps after a close.
 func (r *record) IsPreconfiguredClass() bool { return r.Class == TakenPreconfigured }
@@ -780,6 +816,9 @@ func (x *run) remember(a *acRun, ep *epRun, n *ua.NodeID, class Ownership) {
 	}, addr: a.addr, acNode: a.node, gen: x.gen, fp: x.fp, epfp: ep.sent}
 	if a.t != nil {
 		rec.nsa, rec.server = a.t.nsa, a.t.evidenceNow()
+		if n != nil {
+			rec.param = paramOf(ep.param, a.t.nsa)
+		}
 	}
 	if ep.obs != nil && n != nil && ep.obs.NodeID.Equal(n) && ep.obs.CMApplicationURI != nil {
 		rec.cmURI, rec.cmObserved = *ep.obs.CMApplicationURI, true
