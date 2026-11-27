@@ -49,16 +49,6 @@ func discoverEnumTypes(dir, pattern string) ([]string, error) {
 	return types, nil
 }
 
-// cleanFiles removes the listed files. Ignores files that don't exist.
-func cleanFiles(files []string) error {
-	for _, f := range files {
-		if err := os.Remove(f); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("clean %s: %w", f, err)
-		}
-	}
-	return nil
-}
-
 // stringerIndex is the range check stringer writes for a run of
 // consecutive values starting at k:
 //
