@@ -11,12 +11,24 @@ import (
 	"sync"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/nodeset"
 	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
 )
 
 // ImportNodeSetXML parses OPC UA NodeSet2 XML data and imports the nodes,
 // references, and namespaces into the server's address space.
+//
+// The NamespaceIndexes of the NodeIds, ExpandedNodeIds and QualifiedNames
+// of a NodeSet identify an element of its NamespaceUris, "The first index
+// is always 1 (0 is always the OPC UA namespace)" (Part 6 §F.2). Each URI
+// of the document gets the index the server has for it, or a new namespace
+// on the server when it has none, and the document's indexes are rewritten
+// to those of the server: a NodeSet can be imported into a server whose
+// namespace table differs from the document's. A document whose indexes
+// already are those of the server, or that has no NamespaceUris, is
+// imported as it is. A BrowseName without a prefix is a name in the
+// namespace of its node, whether or not the document is rewritten.
 //
 // This is the primary public API for loading custom NodeSet data. Users
 // do not need to import the schema package directly.
@@ -25,7 +37,82 @@ func (s *Server) ImportNodeSetXML(data []byte) error {
 	if err := xml.Unmarshal(data, &nodes); err != nil {
 		return fmt.Errorf("server: unmarshal NodeSet XML: %w", err)
 	}
-	return s.importNodeSet(&nodes)
+	if nodes.NamespaceUris == nil || len(nodes.NamespaceUris.URI) == 0 {
+		return s.importNodeSet(&nodes)
+	}
+	identity, err := s.planNamespaces(nodes.NamespaceUris.URI)
+	if err != nil {
+		return err
+	}
+	if identity {
+		return s.importNodeSet(&nodes)
+	}
+	out, err := nodeset.RemapWith(data, s.namespaceIndex, nodeset.Options{KeepUnprefixedBrowseNames: true})
+	if err != nil {
+		return fmt.Errorf("server: map the namespaces of the NodeSet: %w", err)
+	}
+	var remapped schema.UANodeSet
+	if err := xml.Unmarshal(out, &remapped); err != nil {
+		return fmt.Errorf("server: unmarshal NodeSet XML: %w", err)
+	}
+	return s.importNodeSet(&remapped)
+}
+
+// namespaceLookup returns the index of the first namespace of the server
+// named uri.
+func (s *Server) namespaceLookup(uri string) (uint16, bool) {
+	for i, ns := range s.Namespaces() {
+		if ns.Name() == uri {
+			return uint16(i), true // a server has at most maxNamespaces
+		}
+	}
+	return 0, false
+}
+
+// namespaceIndex returns the index of the namespace uri on the server,
+// adding a NodeNameSpace for it when the server has none.
+func (s *Server) namespaceIndex(uri string) (uint16, error) {
+	if idx, ok := s.namespaceLookup(uri); ok {
+		return idx, nil
+	}
+	ns := NewNodeNameSpace(s, uri)
+	if idx, ok := s.namespaceLookup(uri); ok && idx == ns.ID() {
+		return idx, nil
+	}
+	return 0, fmt.Errorf("the server has no namespace index left for %q", uri)
+}
+
+// planNamespaces works out the server index of each namespace of the
+// NamespaceUris uris of a document, without adding any: the index the
+// server has for the URI, or the index a new namespace would get. It
+// reports whether every URI keeps its index in the document (the k-th URI,
+// index k, has index k on the server), and refuses a document whose new
+// namespaces would not fit a UInt16 index (Part 3 §8.2.2) before any is
+// added.
+func (s *Server) planNamespaces(uris []string) (identity bool, err error) {
+	have := len(s.Namespaces())
+	next := have // the index of the next new namespace
+	planned := map[string]int{}
+	identity = true
+	for k, uri := range uris {
+		idx, ok := planned[uri]
+		if !ok {
+			if i, found := s.namespaceLookup(uri); found {
+				idx = int(i)
+			} else {
+				idx = next
+				next++
+			}
+			planned[uri] = idx
+		}
+		if idx != k+1 {
+			identity = false
+		}
+	}
+	if next > maxNamespaces {
+		return false, fmt.Errorf("nodeset import: %d namespaces do not fit the %d namespace indexes (%d in use)", next-have, maxNamespaces, have)
+	}
+	return identity, nil
 }
 
 // isForward returns the value of the IsForward attribute, defaulting to true
@@ -82,13 +169,13 @@ func (s *Server) namespacesImportNodeSet(nodes *schema.UANodeSet) error {
 	if nodes.NamespaceUris == nil {
 		return nil
 	}
-	// Every URI becomes a new namespace; refuse the file before adding any
-	// if their indexes would not fit a UInt16 (Part 3 §8.2.2).
-	if have, add := len(s.Namespaces()), len(nodes.NamespaceUris.URI); have+add > maxNamespaces {
-		return fmt.Errorf("nodeset import: %d namespaces do not fit the %d namespace indexes (%d in use)", add, maxNamespaces, have)
-	}
-	for i := range nodes.NamespaceUris.URI {
-		_ = NewNodeNameSpace(s, nodes.NamespaceUris.URI[i])
+	// A URI the server has keeps its namespace; the others become new
+	// namespaces. ImportNodeSetXML has checked that they fit
+	// (planNamespaces).
+	for _, uri := range nodes.NamespaceUris.URI {
+		if _, ok := s.namespaceLookup(uri); !ok {
+			_ = NewNodeNameSpace(s, uri)
+		}
 	}
 	return nil
 }

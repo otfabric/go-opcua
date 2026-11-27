@@ -71,6 +71,18 @@ func TestRemap(t *testing.T) {
 	assert.Contains(t, s, "nsu=urn:x and terms like columns=4;")
 }
 
+// TestRemapKeepUnprefixedBrowseNames: with the option a BrowseName without
+// a prefix is left as it is; the others are rewritten as by Remap.
+func TestRemapKeepUnprefixedBrowseNames(t *testing.T) {
+	out, err := RemapWith([]byte(doc), table(map[string]uint16{"urn:a": 7, "urn:b": 3}), Options{KeepUnprefixedBrowseNames: true})
+	require.NoError(t, err)
+	s := string(out)
+	assert.Contains(t, s, `NodeId="ns=7;i=2" BrowseName="InputArguments"`)
+	assert.Contains(t, s, `BrowseName="3DVector"`)
+	assert.Contains(t, s, `NodeId="ns=7;i=1" BrowseName="7:Obj"`)
+	assert.Contains(t, s, `BrowseName="3:DT"><Definition Name="3:DT">`)
+}
+
 func TestRemapErrors(t *testing.T) {
 	_, err := Remap([]byte(doc), table(map[string]uint16{"urn:a": 7}))
 	assert.ErrorContains(t, err, `namespace "urn:b"`)

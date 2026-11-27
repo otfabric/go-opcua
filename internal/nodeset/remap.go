@@ -200,6 +200,20 @@ func URIs(src []byte) ([]string, error) {
 // of its node. Everything else, Extensions included, is copied as it is.
 // An index outside the namespace table of the document is an error.
 func Remap(src []byte, resolve Resolver) ([]byte, error) {
+	return RemapWith(src, resolve, Options{})
+}
+
+// Options change what [RemapWith] rewrites.
+type Options struct {
+	// KeepUnprefixedBrowseNames leaves a BrowseName without a namespace
+	// prefix as it is instead of giving it the prefix "0:", for an
+	// importer that reads such a name as a name in the namespace of its
+	// node.
+	KeepUnprefixedBrowseNames bool
+}
+
+// RemapWith is [Remap] with the options opts.
+func RemapWith(src []byte, resolve Resolver, opts Options) ([]byte, error) {
 	uris, err := URIs(src)
 	if err != nil {
 		return nil, err
@@ -259,7 +273,7 @@ func Remap(src []byte, resolve Resolver) ([]byte, error) {
 				}
 				return nil
 			}
-			out = append(out, remapTag(t.raw, tok.Name.Local, mapIndex, mapNodeID)...)
+			out = append(out, remapTag(t.raw, tok.Name.Local, opts, mapIndex, mapNodeID)...)
 		case xml.CharData:
 			if len(stack) == 0 {
 				out = append(out, t.raw...)
@@ -292,7 +306,7 @@ func Remap(src []byte, resolve Resolver) ([]byte, error) {
 }
 
 // remapTag rewrites the attributes of the start tag raw of the element el.
-func remapTag(raw []byte, el string, mapIndex, mapNodeID func([]byte) []byte) []byte {
+func remapTag(raw []byte, el string, opts Options, mapIndex, mapNodeID func([]byte) []byte) []byte {
 	return replaceAttrs(raw, func(m, space, rawName, eq, value []byte) []byte {
 		name := local(rawName)
 		q, v := value[:1], value[1:len(value)-1]
@@ -300,9 +314,12 @@ func remapTag(raw []byte, el string, mapIndex, mapNodeID func([]byte) []byte) []
 		case nodeIDAttrs[name]:
 			v = mapNodeID(v)
 		case name == "BrowseName":
-			if idx, n, ok := qualifiedPrefix(v); ok {
+			switch idx, n, ok := qualifiedPrefix(v); {
+			case ok:
 				v = concat(mapIndex(idx), []byte(":"), v[n:])
-			} else {
+			case opts.KeepUnprefixedBrowseNames:
+				return m
+			default:
 				v = concat([]byte("0:"), v)
 			}
 		case name == "Name" && el == "Definition":

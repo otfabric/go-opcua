@@ -1738,6 +1738,8 @@ func (s *Server) ImportNodeSetXML(data []byte) error
 
 Parses OPC UA NodeSet2 XML data and imports nodes, references, and namespaces
 into the server's address space. Use this to load custom information models.
+The namespace indexes of the document are mapped to those of the server by
+the URIs of its `NamespaceUris` (Part 6 §F.2); a URI the server has is reused.
 For `UAVariable` elements the `<Value>` (the OPC UA XML DataEncoding, decoded
 with `ua.DecodeXML`), `DataType`, `ValueRank`, `ArrayDimensions`,
 `AccessLevel` and `UserAccessLevel` are applied; see the
