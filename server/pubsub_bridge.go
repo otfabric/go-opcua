@@ -39,7 +39,7 @@ type PubSubIDReservation struct {
 
 // PubSubConfigurationUpdate is the result of
 // [Server.UpdatePubSubConfiguration]: the output arguments of
-// CloseAndUpdate (Part 14 §9.1.3.7.4).
+// CloseAndUpdate (Part 14 §9.1.3.7.6).
 type PubSubConfigurationUpdate struct {
 	ChangesApplied       bool
 	ReferenceResults     []ua.StatusCode
@@ -407,7 +407,7 @@ func (s *Server) ReservePubSubIDs(ctx context.Context, writerGroups, dataSetWrit
 
 // UpdatePubSubConfiguration applies cfg to the PubSub configuration of the
 // server for the session of the Method call in ctx, as the CloseAndUpdate
-// Method of PublishSubscribe.PubSubConfiguration (Part 14 §9.1.3.7.4) does
+// Method of PublishSubscribe.PubSubConfiguration (Part 14 §9.1.3.7.6) does
 // with a file holding cfg: requireCompleteUpdate and refs have the meaning
 // of its arguments of the same name.
 //

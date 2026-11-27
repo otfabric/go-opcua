@@ -76,10 +76,14 @@ jobs:
   # runner the durable ConnectionManager tests of uafx/fxcm starved
   # uafx/fxserver past its 5 minutes and the 1 s session timeout test of
   # server (#55). The coverage run of coverage-merged does the same.
+  # The race run's package timeout is 10 minutes: before v1.40.0 uafx/fxcm
+  # took 238 s and uafx/fxserver 186 s of the 5 minutes on a 2-CPU runner
+  # (#56), and 369 s and 414 s with GOMAXPROCS=2 locally. The tests' own
+  # deadlines are unchanged; the job timeout covers three such packages.
   server:
     name: ${{ matrix.race && 'Race' || 'Test' }} server (Go ${{ matrix.go-version }})
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     strategy:
       fail-fast: false
       matrix:
@@ -103,7 +107,7 @@ jobs:
         run: go test -count=1 -timeout=120s ./server ./uafx/fxcm ./uafx/fxserver
       - name: Race test
         if: ${{ matrix.race }}
-        run: go test -count=1 -p 1 -timeout=5m -race ./server ./uafx/fxcm ./uafx/fxserver
+        run: go test -count=1 -p 1 -timeout=10m -race ./server ./uafx/fxcm ./uafx/fxserver
 
   # The shared coverage job no longer runs the tests of the server and
   # uafx/fxcm packages, so this job runs them with the same -coverpkg, merges the profile into the
@@ -113,7 +117,7 @@ jobs:
   coverage-merged:
     needs: ci
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -127,11 +131,11 @@ jobs:
         env:
           # Must match coverpkg of the ci job.
           COVERPKG: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
-        # 5m like the race run of the server job: with -covermode=atomic and
+        # 10m like the race run of the server job: with -covermode=atomic and
         # this -coverpkg, uafx/fxcm alone took 120.3 s on a 2-CPU runner
         # after C3.3 (74 s on 10 cores); its tests' own deadlines are
         # unchanged.
-        run: go test -count=1 -p 1 -timeout=5m -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=server.out ./server ./uafx/fxcm ./uafx/fxserver
+        run: go test -count=1 -p 1 -timeout=10m -covermode=atomic -coverpkg="$COVERPKG" -coverprofile=server.out ./server ./uafx/fxcm ./uafx/fxserver
       - name: Download the shared coverage profile
         uses: actions/download-artifact@v7
         with:

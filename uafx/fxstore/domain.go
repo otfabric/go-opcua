@@ -12,8 +12,10 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -27,6 +29,11 @@ var ErrForeignOwner = errors.New("fxstore: the store belongs to another owner")
 
 // ErrSchema reports a store written by a newer version of the library.
 var ErrSchema = errors.New("fxstore: unsupported schema")
+
+// ErrInvalidKey reports a batch of Domain.Apply or Domain.Require with an
+// empty key or the reserved key "meta". From Apply and Require it wraps
+// ErrNotCommitted.
+var ErrInvalidKey = errors.New("fxstore: invalid key")
 
 // DomainOptions configure OpenDomain.
 type DomainOptions struct {
@@ -60,8 +67,11 @@ type DomainOptions struct {
 // ambiguous confirmations never lose the identity or the evidence of the
 // original batch.
 //
-// A Domain is safe for concurrent use; its writes are serialized. It starts
-// no goroutines: the caller runs Settle, typically with a backoff.
+// A Domain is safe for concurrent use; its writes are serialized. State,
+// Status and Schema do not wait for a write in progress: they return what
+// the domain knew before it (design §3.5: read-only access stays
+// available). It starts no goroutines: the caller runs Settle, typically
+// with a backoff.
 type Domain struct {
 	s   Store
 	o   DomainOptions
@@ -73,7 +83,20 @@ type Domain struct {
 	rev        uint64
 	id         batchID
 	unresolved *unresolved
-	required   []Batch // relative keys
+	required   []Batch // relative keys, owned by the domain
+
+	// snap is what State, Status and Schema read, published under mu
+	// whenever a write, a settlement or the fence changes it.
+	snap atomic.Pointer[snapshot]
+}
+
+// snapshot is the published view of a Domain. Its state map is the
+// committed state map of the domain, which is never changed in place.
+type snapshot struct {
+	state      map[string][]byte
+	schema     uint16
+	status     DomainStatus
+	unresolved UnresolvedWrite
 }
 
 type batchID [16]byte
@@ -181,26 +204,33 @@ func OpenDomain(ctx context.Context, s Store, o DomainOptions) (*Domain, error) 
 		return nil, fmt.Errorf("%w: records without a meta key", ErrCorrupt)
 	}
 	d.state = state
+	d.publishLocked()
 	return d, nil
+}
+
+// publishLocked publishes the current state and status for State, Status
+// and Schema.
+func (d *Domain) publishLocked() {
+	sn := &snapshot{state: d.state, schema: d.schema,
+		status: DomainStatus{Revision: d.rev, Fenced: d.fencedLocked(), Required: len(d.required)}}
+	if u := d.unresolved; u != nil {
+		sn.unresolved = UnresolvedWrite{Batch: u.id.String(), Revision: u.rev, Since: u.since, Attempts: u.attempts,
+			Confirmations: len(u.confirms), Err: u.lastErr}
+		sn.status.Unresolved = &sn.unresolved
+	}
+	d.snap.Store(sn)
 }
 
 func (d *Domain) metaKey() string { return d.pfx + "meta" }
 
 // Schema returns the schema of the loaded records (0 for an empty store).
-func (d *Domain) Schema() uint16 {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.schema
-}
+func (d *Domain) Schema() uint16 { return d.snap.Load().schema }
 
 // State returns the records of the domain as the domain knows them
 // committed, by key relative to the namespace, without the meta key. While
-// a write is unresolved it is the state before that write.
-func (d *Domain) State() map[string][]byte {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	return d.relative(d.state)
-}
+// a write is unresolved or in progress it is the state before that write.
+// The map and its values belong to the caller.
+func (d *Domain) State() map[string][]byte { return d.relative(d.snap.Load().state) }
 
 func (d *Domain) relative(state map[string][]byte) map[string][]byte {
 	out := make(map[string][]byte, len(state))
@@ -214,10 +244,13 @@ func (d *Domain) relative(state map[string][]byte) map[string][]byte {
 
 // Apply writes b, its keys relative to the namespace, with the next
 // revision. It returns the outcome and, unless committed, an error: a
-// fenced domain is NotCommitted with ErrFenced.
+// fenced domain is NotCommitted with ErrFenced, an empty or "meta" key
+// NotCommitted with ErrInvalidKey, a state over the Limits NotCommitted
+// with ErrLimit. Apply does not keep b.
 func (d *Domain) Apply(ctx context.Context, b Batch) (Outcome, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	defer d.publishLocked()
 	if d.fencedLocked() {
 		return NotCommitted, ErrFenced
 	}
@@ -227,19 +260,70 @@ func (d *Domain) Apply(ctx context.Context, b Batch) (Outcome, error) {
 // Require writes b like Apply and, unless the write commits, owes it: the
 // domain stays fenced until Settle has written it. It is for the writes
 // that make the store follow a change the runtime made already (a
-// removal), which must not be lost.
+// removal), which must not be lost. While the domain is fenced b is owed
+// without being written: NotCommitted with ErrFenced.
+//
+// A write that can never commit is not owed and does not fence the
+// domain: a batch with an empty or "meta" key (ErrInvalidKey) or one that
+// takes the state over the Limits of the domain or of the store
+// (ErrLimit). Require returns NotCommitted with that error; the store does
+// not follow the change.
+//
+// Require copies b: the caller may reuse it.
 func (d *Domain) Require(ctx context.Context, b Batch) (Outcome, error) {
+	b = cloneBatch(b)
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	defer d.publishLocked()
 	if d.fencedLocked() {
+		if err := d.validateOwedLocked(b); err != nil {
+			return NotCommitted, err
+		}
 		d.required = append(d.required, b)
 		return NotCommitted, ErrFenced
 	}
 	o, err := d.applyLocked(ctx, b, &b)
-	if o == NotCommitted {
+	if o == NotCommitted && !permanent(err) {
 		d.required = append(d.required, b)
 	}
 	return o, err
+}
+
+// permanent reports an error of applyLocked that a retry of the same batch
+// cannot cure: the domain never owes such a write.
+func permanent(err error) bool { return errors.Is(err, ErrInvalidKey) || errors.Is(err, ErrLimit) }
+
+// validateOwedLocked checks b, to be owed by a fenced domain, as its
+// eventual write will: its keys, and the Limits of the domain on the
+// committed state with the owed writes and b applied. The outcome of an
+// unresolved write is not known yet, so Settle checks again.
+func (d *Domain) validateOwedLocked(b Batch) error {
+	next := d.state
+	for _, r := range append(d.required[:len(d.required):len(d.required)], b) {
+		full, err := d.full(r)
+		if err != nil {
+			return err
+		}
+		next = applyBatch(next, full)
+	}
+	m := meta{schema: d.o.Schema, owner: d.o.Owner}
+	next[d.metaKey()] = m.encode()
+	if err := d.o.Limits.check(next); err != nil {
+		return AsNotCommitted(err)
+	}
+	return nil
+}
+
+// cloneBatch returns a deep copy of b.
+func cloneBatch(b Batch) Batch {
+	out := Batch{Deletes: slices.Clone(b.Deletes)}
+	if b.Puts != nil {
+		out.Puts = make(map[string][]byte, len(b.Puts))
+		for k, v := range b.Puts {
+			out.Puts[k] = bytes.Clone(v)
+		}
+	}
+	return out
 }
 
 func (d *Domain) fencedLocked() bool { return d.unresolved != nil || len(d.required) > 0 }
@@ -279,13 +363,13 @@ func (d *Domain) full(b Batch) (Batch, error) {
 	out := Batch{Puts: make(map[string][]byte, len(b.Puts)+1)}
 	for k, v := range b.Puts {
 		if k == "" || k == "meta" {
-			return Batch{}, AsNotCommitted(fmt.Errorf("fxstore: invalid key %q", k))
+			return Batch{}, AsNotCommitted(fmt.Errorf("%w %q", ErrInvalidKey, k))
 		}
 		out.Puts[d.pfx+k] = v
 	}
 	for _, k := range b.Deletes {
 		if k == "" || k == "meta" {
-			return Batch{}, AsNotCommitted(fmt.Errorf("fxstore: invalid key %q", k))
+			return Batch{}, AsNotCommitted(fmt.Errorf("%w %q", ErrInvalidKey, k))
 		}
 		if _, put := b.Puts[k]; !put {
 			out.Deletes = append(out.Deletes, d.pfx+k)
@@ -298,9 +382,15 @@ func (d *Domain) full(b Batch) (Batch, error) {
 // required ones. It returns true when the domain is no longer fenced, and
 // the error of the step that kept it fenced. It writes nothing when the
 // domain is not fenced.
+//
+// A required write that can never commit (ErrInvalidKey, ErrLimit: the
+// unresolved write it followed may have grown the state) is dropped, not
+// retried: that Settle returns false with its error, and the next one goes
+// on with the remaining writes.
 func (d *Domain) Settle(ctx context.Context) (bool, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	defer d.publishLocked()
 	if u := d.unresolved; u != nil {
 		u.attempts++
 		if err := d.confirmLocked(ctx, u); err != nil {
@@ -318,6 +408,10 @@ func (d *Domain) Settle(ctx context.Context) (bool, error) {
 			d.required = d.required[1:]
 			return false, err
 		default:
+			if permanent(err) {
+				d.required = d.required[1:]
+				return false, fmt.Errorf("fxstore: settle: a required write can never be written and is dropped: %w", err)
+			}
 			return false, err
 		}
 	}
@@ -439,14 +533,14 @@ type UnresolvedWrite struct {
 	Err error
 }
 
-// Status returns the state of the domain.
+// Status returns the state of the domain. It does not wait for a write in
+// progress: it is the state before it.
 func (d *Domain) Status() DomainStatus {
-	d.mu.Lock()
-	defer d.mu.Unlock()
-	st := DomainStatus{Revision: d.rev, Fenced: d.fencedLocked(), Required: len(d.required)}
-	if u := d.unresolved; u != nil {
-		st.Unresolved = &UnresolvedWrite{Batch: u.id.String(), Revision: u.rev, Since: u.since, Attempts: u.attempts,
-			Confirmations: len(u.confirms), Err: u.lastErr}
+	sn := d.snap.Load()
+	st := sn.status
+	if st.Unresolved != nil {
+		u := sn.unresolved
+		st.Unresolved = &u
 	}
 	return st
 }

@@ -3,6 +3,8 @@
 package fxserver_test
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -13,11 +15,12 @@ import (
 	"github.com/otfabric/go-opcua/uafx/fxacid"
 	"github.com/otfabric/go-opcua/uafx/fxserver"
 	"github.com/otfabric/go-opcua/uafx/fxstore"
+	"github.com/otfabric/go-opcua/uafx/fxstore/storetest"
 )
 
 // joinRequest is a second EstablishConnections call that creates Pub2, a
 // Publisher on the existing DataSetWriter of Pub: a reference to an
-// existing element needs an operation (Part 14 §9.1.3.7.4), so it sends
+// existing element needs an operation (Part 14 §9.1.3.7.6), so it sends
 // an ElementModify of the writer, which the runtime applies by replacing
 // it (the writer of pubsubConfig is disabled: it differs from the running
 // one). With enable, it enables Pub2.
@@ -193,5 +196,44 @@ func TestSharedNotAdoptedByName(t *testing.T) {
 	refs := f.targets(t, ep, fxacid.ToDataSetWriter)
 	for _, n := range refs {
 		require.False(t, n.Equal(now), "the endpoint does not take over a new writer of the same Name")
+	}
+}
+
+// TestSharedReenableAfterCommit: the replaced writer an earlier endpoint
+// demands is enabled again only after the commit point of the call that
+// replaced it (design §4.3: nothing is sent with the configuration of the
+// call before its records are committed); when the commit fails, it never
+// runs under the new configuration, and the rollback leaves the first
+// endpoint with its writer.
+func TestSharedReenableAfterCommit(t *testing.T) {
+	t.Parallel()
+	for _, enable := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enable=%v", enable), func(t *testing.T) {
+			t.Parallel()
+			store := storetest.NewFaulty(&fxstore.MemoryStore{})
+			f := newFX(t, fxserver.ConnectionOptions{Store: store})
+			ep := f.persistent(t, "Pub")
+			var mu sync.Mutex
+			var probed, onAtCommit bool
+			store.OnApply = func(fxstore.Batch) {
+				mu.Lock()
+				defer mu.Unlock()
+				if !probed {
+					probed = true
+					_, onAtCommit = f.writerState(t)
+				}
+			}
+			store.FailApply(storetest.FailNotCommitted)
+			res := f.establish(t, f.joinRequest(true, enable))
+			require.NotEqual(t, ua.StatusOK, res.Status)
+			mu.Lock()
+			require.True(t, probed, "the call reached its commit point")
+			require.False(t, onAtCommit, "the replaced writer is not enabled before the commit point")
+			mu.Unlock()
+			f.requireWriterRefs(t, ep)
+			_, on := f.writerState(t)
+			require.True(t, on, "the rollback gives Pub its writer back")
+			f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
+		})
 	}
 }

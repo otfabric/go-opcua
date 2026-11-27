@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"time"
 
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/server"
@@ -42,6 +43,15 @@ func (c *Connections) closeCall(ctx context.Context, ac *automationComponent, ar
 	}
 	c.call.Lock()
 	defer c.call.Unlock()
+	if c.closed.Load() {
+		// Connections.Close ran: nothing is closed. Table 23 of Part 81
+		// lists Uncertain only, for errors of single Connections; this
+		// is no such error, and Bad_InvalidState is the general code of
+		// an operation that cannot run in the current state (Part 4
+		// §7.38, Table 182): a library interpretation, as for
+		// EstablishConnections (Table 9).
+		return nil, ua.StatusBadInvalidState
+	}
 	scope := map[string]bool{}
 	for _, fe := range c.functionalEntities(ac) {
 		scope[fe.String()] = true
@@ -85,7 +95,17 @@ func (c *Connections) closeOne(ctx context.Context, n *ua.NodeID, remove bool, s
 		if persistent && c.pers != nil {
 			return c.closePersistent(e, remove)
 		}
-		return c.closeEndpoint(e, remove)
+		c.mu.Lock()
+		demanded := e.demand
+		c.mu.Unlock()
+		sc := c.closeEndpoint(e, remove)
+		if demanded && !remove && sc == ua.StatusOK {
+			// Disabled: a modification (Part 81 Table 74); the
+			// persistent ones get it with their records
+			// (disablePersistent).
+			c.touch(e, time.Now())
+		}
+		return sc
 	case e != nil || c.isA(n, fxacid.ConnectionEndpointType):
 		// A ConnectionEndpoint of another AutomationComponent.
 		return ua.StatusBadNodeIDUnknown
@@ -299,7 +319,8 @@ func (c *Connections) prune(e *endpoint) ua.StatusCode {
 		c.mu.Unlock()
 		// What is in use and what goes is decided and done in one PubSub
 		// transaction: a component another client adds meanwhile is
-		// neither removed with it nor lost (Part 14 §9.1.3.7.4).
+		// neither removed with it nor lost (Part 14 §9.1.2: the mechanisms
+		// coordinate access to the configuration).
 		// The provenance of what goes (c.created) changes only once the
 		// transaction succeeded: a hook that refuses it puts the
 		// components back, created by the endpoints as before.

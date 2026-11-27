@@ -1101,20 +1101,38 @@ func (p *persistence) intentOpen(s *set, c *callRecord, undecided func(*record) 
 }
 
 // unverifiedAddrs returns the servers with Unverified records, or unended
-// intents of runs that are not active, of the sets of m.
-func (m *Manager) unverifiedAddrs() []ServerAddress {
+// intents of runs that are not active, of the sets of m. A server that has
+// only intents and is in proved (its last attempt verified everything
+// collect returned, and nothing became Unverified since) is left out: the
+// intents it still has are not decided by another attempt (they wait for
+// their server or for the Process of their set), and verifying it again
+// would only repeat the same browse.
+func (m *Manager) unverifiedAddrs(proved map[ServerAddress]bool) []ServerAddress {
 	m.mu.Lock()
 	sets := slices.Collect(maps.Values(m.sets))
 	m.mu.Unlock()
 	seen := map[ServerAddress]bool{}
+	of := map[string]bool{}
 	for _, s := range sets {
 		s.mu.Lock()
+		of[keyString(s.cfg.key)] = true
 		for _, r := range s.records {
 			if r.Class == Unverified {
 				seen[r.addr] = true
 			}
 		}
 		s.mu.Unlock()
+	}
+	if p := m.p; p != nil {
+		p.owedMu.Lock()
+		active := maps.Clone(p.active)
+		p.owedMu.Unlock()
+		for _, c := range decodeState(p.d.State()).calls {
+			a := ServerAddress{Address: c.Address, SecurityMode: ua.MessageSecurityMode(c.SecurityMode), SecurityPolicyURI: c.SecurityPolicyURI, ServerURI: c.ServerURIConf}
+			if of[keyString(SetKey{Folder: c.Folder, Name: c.SetName})] && !active[RunID(c.Run)] && !seen[a] && !proved[a] {
+				seen[a] = true
+			}
+		}
 	}
 	out := slices.Collect(maps.Keys(seen))
 	slices.SortFunc(out, func(a, b ServerAddress) int {
@@ -1171,11 +1189,21 @@ func (m *Manager) verifyLoop() {
 	o := m.opts.Verify
 	next := map[ServerAddress]time.Time{}
 	wait := map[ServerAddress]time.Duration{}
+	// proved are the servers whose last attempt left nothing to do but
+	// intents it could not decide (unverifiedAddrs); a new request
+	// (startVerify while this loop runs) tries them again.
+	proved := map[ServerAddress]bool{}
 	for {
-		addrs := m.unverifiedAddrs()
 		p.verifyMu.Lock()
 		again := p.verifyAgain
 		p.verifyAgain = false
+		p.verifyMu.Unlock()
+		if again {
+			clear(proved)
+		}
+		addrs := m.unverifiedAddrs(proved)
+		p.verifyMu.Lock()
+		again = again || p.verifyAgain
 		if len(addrs) == 0 && !again {
 			p.verifying = false
 			p.verifyMu.Unlock()
@@ -1203,11 +1231,14 @@ func (m *Manager) verifyLoop() {
 				}
 				defer func() { <-sem }()
 				ctx, cancel := context.WithTimeout(m.ctx, o.Timeout)
-				_, err := m.verifyServer(ctx, a, nil)
+				busy, err := m.verifyServer(ctx, a, nil)
 				cancel()
 				mu.Lock()
 				defer mu.Unlock()
 				p.noteAttempt(a, err)
+				if err == nil && !busy {
+					proved[a] = true
+				}
 				if err == nil {
 					// Done, unless a run held a set (it verifies that set
 					// itself) or a record changed meanwhile: then the
@@ -1235,7 +1266,7 @@ func (m *Manager) verifyLoop() {
 			return
 		}
 		earliest := time.Duration(0)
-		for _, a := range m.unverifiedAddrs() {
+		for _, a := range m.unverifiedAddrs(proved) {
 			d := time.Until(next[a])
 			if earliest == 0 || d < earliest {
 				earliest = d

@@ -351,10 +351,15 @@ func (b *Buffer) WriteStruct(w interface{}) {
 func (b *Buffer) WriteTime(v time.Time) {
 	d := make([]byte, 8)
 	if !v.IsZero() {
-		// encode time in "100 nanosecond intervals since January 1, 1601"
-		// Dates before 1601 cannot be represented and encode as the
-		// null DateTime; UnixNano would overflow outside of 1678..2262.
-		if secs := v.Unix() + 11644473600; secs >= 0 && secs < math.MaxInt64/10_000_000 {
+		// encode time in "100 nanosecond intervals since January 1, 1601".
+		// Part 6 §5.2.2.5: a value at or before 1601-01-01 encodes as 0 (the
+		// null DateTime), one at or after 9999-12-31 23:59:59 UTC as
+		// MaxInt64, which ReadTime decodes as the latest time it can
+		// represent. UnixNano would overflow outside of 1678..2262.
+		switch secs := v.Unix() + 11644473600; {
+		case !v.Before(dateTimeLimit):
+			binary.LittleEndian.PutUint64(d, math.MaxInt64)
+		case secs > 0 || (secs == 0 && v.Nanosecond() >= 100):
 			ts := uint64(secs)*10_000_000 + uint64(v.Nanosecond()/100)
 			binary.LittleEndian.PutUint64(d, ts)
 		}

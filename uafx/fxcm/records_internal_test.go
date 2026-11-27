@@ -5,7 +5,9 @@ package fxcm
 import (
 	"encoding/binary"
 	"hash/crc32"
+	"maps"
 	"math"
+	"strings"
 	"testing"
 	"time"
 
@@ -64,10 +66,39 @@ func newLike(v any) any {
 	panic("unknown record")
 }
 
+// frame is part as a record of the store: the format, the length, part and
+// its checksum, so that a fuzzed part reaches the decoder.
+func frame(part []byte) []byte {
+	val := make([]byte, 0, 9+len(part))
+	val = append(val, recordFormat)
+	val = binary.LittleEndian.AppendUint32(val, uint32(len(part)))
+	val = append(val, part...)
+	return binary.LittleEndian.AppendUint32(val, crc32.Checksum(part, crcTable))
+}
+
+// keyOf is the store key a record r would have, for its semantic check.
+func keyOf(r any) string {
+	switch r := r.(type) {
+	case *setRecord:
+		return setStoreKey(SetKey{Folder: r.Folder, Name: r.Name})
+	case *epStored:
+		addr := ServerAddress{Address: r.Address, SecurityMode: ua.MessageSecurityMode(r.SecurityMode), SecurityPolicyURI: r.SecurityPolicyURI, ServerURI: r.ServerURIConf}
+		return epStoreKey(SetKey{Folder: r.Folder, Name: r.SetName}, addr, r.FunctionalEntity, r.Name)
+	case *runRecord:
+		return runStoreKey(RunID(r.Run))
+	case *txRecord:
+		return txStoreKey(RunID(r.Run))
+	case *callRecord:
+		return callStoreKey(RunID(r.Run), 1)
+	}
+	return "counters"
+}
+
 // FuzzDecodeRecord: a record from the store, which a restarted Manager
-// reads, never panics the decoder, and one that decodes encodes back to a
-// record that decodes to the same value. The checksum is fixed up so that
-// the input reaches the decoder.
+// reads, never panics the decoder or its semantic check (check, against
+// its own key and the highest counters), and one that decodes encodes back
+// to a record that decodes to the same value. The checksum is fixed up so
+// that the input reaches the decoder.
 func FuzzDecodeRecord(f *testing.F) {
 	conf, _, err := encodeConf(named("s"))
 	require.NoError(f, err)
@@ -89,11 +120,7 @@ func FuzzDecodeRecord(f *testing.F) {
 		if uint64(len(part)) > math.MaxUint32 {
 			return
 		}
-		val := make([]byte, 0, 9+len(part))
-		val = append(val, recordFormat)
-		val = binary.LittleEndian.AppendUint32(val, uint32(len(part)))
-		val = append(val, part...)
-		val = binary.LittleEndian.AppendUint32(val, crc32.Checksum(part, crcTable))
+		val := frame(part)
 		for _, v := range []func() any{
 			func() any { return new(countersRecord) }, func() any { return new(setRecord) }, func() any { return new(epStored) },
 			func() any { return new(runRecord) }, func() any { return new(callRecord) }, func() any { return new(txRecord) },
@@ -106,8 +133,14 @@ func FuzzDecodeRecord(f *testing.F) {
 			require.NoError(t, err)
 			back := v()
 			require.NoError(t, decodeRecord(again, back))
+			require.Equal(t, out, back)
 			if s, ok := out.(*setRecord); ok {
 				_, _ = decodeConf(s.Conf)
+			}
+			if c, ok := out.(interface {
+				check(k string, c countersRecord) error
+			}); ok {
+				_ = c.check(keyOf(out), countersRecord{Generation: math.MaxUint64, RunID: math.MaxUint64})
 			}
 		}
 	})
@@ -127,4 +160,58 @@ func TestRecordsErrors(t *testing.T) {
 	for k, want := range map[OwedKind]string{OwedReconcile: "Reconcile", OwedRollback: "Rollback", OwedSetChange: "SetChange", OwedCall: "Call", 9: "OwedKind(9)"} {
 		require.Equal(t, want, k.String())
 	}
+}
+
+// FuzzLoadState: a store whose records a restarted Manager loads
+// (decodeState, design §3.2) never panics it, whatever one record of a
+// valid journal is replaced with; every record is either decoded or
+// failed, never both or neither.
+func FuzzLoadState(f *testing.F) {
+	base := map[string][]byte{}
+	for k, v := range semanticState(f) {
+		b, err := encodeRecord(v)
+		require.NoError(f, err)
+		base[k] = b
+	}
+	keys := sortedKeys(base)
+	for i, k := range keys {
+		b, err := ua.Encode(semanticState(f)[k])
+		require.NoError(f, err)
+		f.Add(uint8(i), b, false)
+	}
+	f.Add(uint8(0), []byte{1, 2, 3}, true)
+	f.Fuzz(func(t *testing.T, at uint8, part []byte, rekey bool) {
+		if uint64(len(part)) > math.MaxUint32 {
+			return
+		}
+		st := maps.Clone(base)
+		k := keys[int(at)%len(keys)]
+		val := frame(part)
+		if rekey {
+			// The record under the key it names, so that its check
+			// against its key passes and the others are reached.
+			for _, v := range []any{new(setRecord), new(epStored), new(runRecord), new(txRecord), new(callRecord)} {
+				if decodeRecord(val, v) == nil && strings.HasPrefix(keyOf(v), strings.SplitN(k, "/", 2)[0]+"/") {
+					delete(st, k)
+					k = keyOf(v)
+					break
+				}
+			}
+		}
+		st[k] = val
+		l := decodeState(st)
+		for key := range st {
+			_, failed := l.failed[key]
+			n := 0
+			for _, has := range []bool{l.sets[key] != nil, l.eps[key] != nil, l.runs[key] != nil, l.txs[key] != nil, l.calls[key] != nil, key == "counters"} {
+				if has {
+					n++
+				}
+			}
+			if key == "counters" {
+				continue
+			}
+			require.True(t, failed != (n == 1), "%s: failed %v, decoded %d", key, failed, n)
+		}
+	})
 }

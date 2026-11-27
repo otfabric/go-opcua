@@ -83,8 +83,19 @@ type ConnectionOptions struct {
 	// be opened, has another owner or a newer format fails
 	// EnableConnections. nil: IsPersistent TRUE fails with
 	// Bad_NotSupported.
+	//
+	// The application owns the Store: it opens it, and it closes it after
+	// Connections.Close returns, which is when nothing writes it any more.
 	Store fxstore.Store
-	// StoreTimeout bounds each store operation; 0 is 10 s.
+	// StoreTimeout bounds each store operation; 0 is 10 s. The store
+	// calls run with a context of their own, bounded by StoreTimeout, not
+	// with the context of the Method call that causes them (a record must
+	// not be cut off half-way by a client that goes away). They run in the
+	// PubSub configuration transaction of the server or under the lock of
+	// the connection Methods: a slow store holds up every change of the
+	// PubSub configuration (CloseAndUpdate, the PubSub Methods,
+	// ChangePubSubConfiguration) and the connection Methods for up to
+	// StoreTimeout each.
 	StoreTimeout time.Duration
 	// StrictNotPersisted enforces the persisted check of
 	// SetCommunicationConfigurationCmd for non-persistent endpoints (Part 81
@@ -98,6 +109,9 @@ type ConnectionOptions struct {
 	StrictNotPersisted bool
 	// maxControlled replaces maxControlled in tests; 0 is maxControlled.
 	maxControlled int
+	// failCapabilities, set by tests, makes setSupportsPersistence fail
+	// with it.
+	failCapabilities error
 	// Logger logs what the connections do; nil is slog.Default().
 	Logger *slog.Logger
 }
@@ -128,6 +142,9 @@ type Connections struct {
 	// call serializes EstablishConnections and CloseConnections, which Part
 	// 81 makes atomic (§6.2.4.3.9.1, §6.2.4.3.10.1, §6.2.5.2).
 	call sync.Mutex
+	// closed: Close ran; the Methods that write the store are refused.
+	// Set with call held.
+	closed atomic.Bool
 
 	mu        sync.Mutex
 	acs       []*automationComponent
@@ -262,6 +279,9 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 		// other configuration mechanisms (design §4.1, §4.5).
 		c.restoreAll()
 		if err := c.setSupportsPersistence(); err != nil {
+			// Nothing owns what the restore brought back: it goes, the
+			// records stay for the next start.
+			c.undoRestoreAll()
 			return nil, fmt.Errorf("%w: SupportsPersistence: %w", ErrConnections, err)
 		}
 		srv.SetPubSubConfigurationHook(c.pers)
@@ -323,10 +343,23 @@ func (c *Connections) ensureArgumentsIn(m, decl *ua.NodeID) error {
 // fxRootID is FxRoot (Part 81 §12.2) in the Data namespace.
 const fxRootID = 71
 
-// Close stops the Status updates. The Methods stay registered.
+// Close stops the Status updates, the CleanupTimeout of the endpoints and
+// the settling of the store, and removes the PubSub configuration hook.
+// The Methods stay registered, but once Close returns EstablishConnections
+// and CloseConnections fail with Bad_InvalidState (Part 81 Table 9: the
+// AutomationComponent cannot process them in its current state), and
+// RetryRestore and Discard return an error: nothing writes the Store
+// afterwards. A call that runs when Close starts finishes first. The
+// application owns the Store and closes it after Close returns.
 func (c *Connections) Close() error {
 	c.once.Do(func() {
 		close(c.stop)
+		<-c.done
+		// After the calls that run: the monitor is gone, so taking call
+		// cannot wait on it.
+		c.call.Lock()
+		c.closed.Store(true)
+		c.call.Unlock()
 		if c.pers != nil {
 			c.srv.SetPubSubConfigurationHook(nil)
 		}

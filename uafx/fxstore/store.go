@@ -46,6 +46,9 @@ type Store interface {
 	// A committed Apply makes durable the whole state it was applied to,
 	// including every earlier batch Load could see at that moment (prefix
 	// durability).
+	//
+	// Apply borrows b for the call: it must not change b, its map or its
+	// value slices, nor keep them after it returns.
 	Apply(ctx context.Context, b Batch) error
 	// Close releases the store. Load and Apply after Close return
 	// ErrClosed.

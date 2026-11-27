@@ -287,6 +287,10 @@ func TestCrash(t *testing.T) {
 	}
 }
 
+// cmCrashDone starts the line a child of TestCrash prints when its action
+// ended without reaching its crash point.
+const cmCrashDone = "FXCMDONE"
+
 func runCMCrashChild(t *testing.T, name, dir, point string) {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCrashChild$", "-test.count=1", "-test.timeout=2m")
@@ -306,6 +310,10 @@ func runCMCrashChild(t *testing.T, name, dir, point string) {
 		lines = append(lines, line)
 		if line == "FXCMCRASH "+point {
 			reached = true
+			break
+		}
+		if strings.HasPrefix(line, cmCrashDone) {
+			// The child missed its point: fail now, not at the timer.
 			break
 		}
 	}
@@ -367,6 +375,6 @@ func TestCrashChild(t *testing.T) {
 		select {} // until the parent kills the process
 	})
 	sc.act(t, f)
-	fmt.Println("FXCMDONE: the crash point was not reached")
+	fmt.Println(cmCrashDone + ": the crash point was not reached")
 	select {}
 }

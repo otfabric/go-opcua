@@ -6,7 +6,8 @@ How to run each tier. How to work with the suites: [CONTRIBUTING.md](CONTRIBUTIN
 
 | Tier | Command | Prerequisites | In CI |
 |---|---|---|---|
-| Unit, API | `make test` | none | yes, Go 1.26 and 1.27, with `-race` |
+| Unit, API | `make test` | none | yes, Go 1.26 and 1.27, with `-race`; `server`, `uafx/fxcm` and `uafx/fxserver` in the `server` job |
+| Crash | the `TestCrash` tests of `uafx/fxserver` and `uafx/fxcm`, part of `make test`: a subprocess on a FileStore killed at each failure window, then restarted | none | yes |
 | End-to-end | `make e2e` (alias of `make selfintegration`): Go client against the in-process Go server | none | no |
 | Integration | `make integration`: Go client against the FreeOpcUa Python server | Python 3.11 or later, `make install-py-opcua` | no |
 | Conformance | `./conformance/...`, part of `make coverage` | none | yes |
@@ -31,7 +32,7 @@ The interop images and PKI variables are listed in [INTEROP.md](INTEROP.md#envir
 
 ## Coverage
 
-Two gates. `make coverage` measures `COVER_PKGS`, conformance tests included, and fails below 90; `.github/workflows/ci.yml` requires 94 with the same `coverpkg`. `make coverage-pkg-check` requires `COVER_PKG_MIN` (90) per library package, generated code excluded. `cmd/`, `examples/`, `tests/`, `interop/`, `chaos/` and `conformance/` are test or tool code and are not library packages.
+Two gates. `make coverage` measures `COVER_PKGS`, conformance tests included, and fails below 90; the `coverage-merged` job of `.github/workflows/ci.yml` requires `COVERAGE_MIN` (94, `make coverage-merged-check`) on the merged profile of the shared jobs and the `server` job, with the same `coverpkg`. `make coverage-pkg-check` requires `COVER_PKG_MIN` (90) per library package, generated code excluded. `cmd/`, `examples/`, `tests/`, `interop/`, `chaos/` and `conformance/` are test or tool code and are not library packages.
 
 ## Fuzz regressions
 

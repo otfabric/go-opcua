@@ -76,6 +76,10 @@ type endpoint struct {
 	// when the endpoint has no Diagnostics.
 	createdAt, modifiedAt time.Time
 	modNode               *ua.NodeID
+	// unpreset, set when a restore made the preconfigured endpoint
+	// persistent, puts back the CleanupTimeout it had before; guarded by
+	// the mu of the connections.
+	unpreset func()
 }
 
 // Status returns the Status of e.

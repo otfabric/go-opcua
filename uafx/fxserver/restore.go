@@ -386,7 +386,12 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 				c.write(c.childID(e.id, "IsPersistent"), false)
 				c.mu.Lock()
 				e.persistent, e.key = false, ""
+				unpreset := e.unpreset
+				e.unpreset = nil
 				c.mu.Unlock()
+				if unpreset != nil {
+					unpreset()
+				}
 				c.setLinkLocked(e, true, nil, false)
 				c.setLinkLocked(e, false, nil, false)
 			} else {
@@ -503,8 +508,20 @@ func (c *Connections) restoreOne(r *epRecord, comps map[string]*compRecord) (e *
 	if b.Preconfigured {
 		c.mu.Lock()
 		e = c.endpoints[r.id.Endpoint.String()]
+		oldDuration := e.cleanup
 		c.mu.Unlock()
+		cleanupID := c.childID(e.id, "CleanupTimeout")
+		oldCleanup := c.value(cleanupID)
+		pe := e
 		c.setPreconfigured(e, param)
+		c.mu.Lock()
+		e.unpreset = func() {
+			c.write(cleanupID, oldCleanup)
+			c.mu.Lock()
+			pe.cleanup = oldDuration
+			c.mu.Unlock()
+		}
+		c.mu.Unlock()
 	} else {
 		ids := slices.Clone(r.id.Nodes)
 		alloc := func() *ua.NodeID {
@@ -703,6 +720,7 @@ func (c *Connections) Quarantined() []QuarantinedEndpoint {
 // RetryRestore restores the quarantined record id again: when it is
 // restored, its record goes back where the persistent endpoints are, in
 // one committed Apply; else it stays quarantined with the new reason.
+// After Close it returns an error.
 func (c *Connections) RetryRestore(ctx context.Context, id string) error {
 	p := c.pers
 	if p == nil {
@@ -710,6 +728,9 @@ func (c *Connections) RetryRestore(ctx context.Context, id string) error {
 	}
 	c.call.Lock()
 	defer c.call.Unlock()
+	if c.closed.Load() {
+		return fmt.Errorf("%w: the connections are closed", ErrQuarantine)
+	}
 	p.mu.Lock()
 	// Namespaces may have been added since: component records that did
 	// not map then may now.
@@ -771,7 +792,7 @@ func (c *Connections) RetryRestore(ctx context.Context, id string) error {
 			// The record goes back to quarantine once the outcome is
 			// known; until then the store is fenced.
 			rctx, cancel := context.WithTimeout(context.Background(), p.timeout)
-			_, _ = p.d.Require(rctx, p.undo(b))
+			p.requireLocked(rctx, p.undo(b), "uafx: RetryRestore: the outcome of the restored record is unknown; the store is fenced until it is settled", "record", id)
 			cancel()
 		}
 		return fmt.Errorf("%w: the restored record was not committed: %w", ErrQuarantine, err)
@@ -782,22 +803,58 @@ func (c *Connections) RetryRestore(ctx context.Context, id string) error {
 	return nil
 }
 
-// undoRestore removes the endpoint e that RetryRestore restored: as a
-// CloseConnections with Remove does, without the store.
+// undoRestore removes the endpoint e that a restore restored: as a
+// CloseConnections with Remove does, without the store. A preconfigured
+// endpoint stays, as it was before the restore: IsPersistent FALSE, no
+// record key, its CleanupTimeout of before (as the undo of restoreOne).
 func (c *Connections) undoRestore(e *endpoint) {
 	c.mu.Lock()
-	e.persistent = false
+	e.persistent, e.key = false, ""
+	created := e.created
+	unpreset := e.unpreset
+	e.unpreset = nil
 	c.mu.Unlock()
 	_ = c.closeEndpoint(e, true)
+	if !created {
+		c.write(c.childID(e.id, "IsPersistent"), false)
+		if unpreset != nil {
+			unpreset()
+		}
+	}
+}
+
+// undoRestoreAll removes the endpoints restoreAll restored, without the
+// store, when EnableConnections fails after it: their records stay, and
+// the next start restores them.
+func (c *Connections) undoRestoreAll() {
+	p := c.pers
+	p.mu.Lock()
+	restored := p.restored
+	p.restored = nil
+	p.mu.Unlock()
+	for _, n := range restored {
+		c.mu.Lock()
+		e := c.endpoints[n.String()]
+		c.mu.Unlock()
+		if e != nil {
+			c.undoRestore(e)
+		}
+	}
 }
 
 // Discard deletes the quarantined record id and releases what it reserves,
 // in one committed Apply. It removes nothing at runtime: a quarantined
-// record restored nothing (design §4.7).
+// record restored nothing (design §4.7). After Close it returns an error.
 func (c *Connections) Discard(ctx context.Context, id string) error {
 	p := c.pers
 	if p == nil {
 		return fmt.Errorf("%w: no store", ErrQuarantine)
+	}
+	// call orders Discard with Close: nothing writes the store after it.
+	c.call.Lock()
+	defer c.call.Unlock()
+	if c.closed.Load() {
+		return fmt.Errorf("%w: the connections are closed", ErrQuarantine)
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -876,10 +933,14 @@ func (p *persistence) reserved(n *ua.NodeID, fe *ua.NodeID, name string) bool {
 // ComponentCapabilities of each AutomationComponent (Part 81 §6.2.6 Table
 // 26), adding the Variable when the instance has none.
 func (c *Connections) setSupportsPersistence() error {
+	if err := c.opts.failCapabilities; err != nil {
+		return err
+	}
 	for _, ac := range c.acs {
 		caps := c.childID(ac.id, "ComponentCapabilities")
 		if caps == nil {
-			// Mandatory in the AutomationComponentType (Part 81 §6.2.1); an
+			// Mandatory in the AutomationComponentType (Part 81 §6.2.2
+			// Table 4); an
 			// instance without it gets one.
 			ns, err := c.srv.Namespace(int(ac.id.Namespace()))
 			if err != nil {
@@ -916,8 +977,10 @@ func (c *Connections) setSupportsPersistence() error {
 		}
 		ns.AddNode(v)
 		c.node(caps).AddReference(v, ua.NewNumericNodeID(c.ns.AC, fxacid.HasCapability), true)
-		if pt := c.node(ua.NewNumericNodeID(0, id.PropertyType)); pt != nil {
-			v.AddReference(pt, ua.NewNumericNodeID(0, id.HasTypeDefinition), true)
+		// A HasCapability Variable of TypeDefinition 0:BaseDataVariableType
+		// (Part 81 §6.2.6 Table 26), not a Property.
+		if bt := c.node(ua.NewNumericNodeID(0, id.BaseDataVariableType)); bt != nil {
+			v.AddReference(bt, ua.NewNumericNodeID(0, id.HasTypeDefinition), true)
 		}
 	}
 	return nil

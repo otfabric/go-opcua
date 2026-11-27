@@ -225,7 +225,7 @@ EstablishConnections runs the commands of its CommandMask in the order of
 | EstablishControlCmd | See [ControlGroups](#controlgroups) |
 | SetConfigurationDataCmd | Writes the ConfigurationData Variables with the rights of the caller (`server.WriteValue`) |
 | ReassignControlCmd | See [ControlGroups](#controlgroups) |
-| SetCommunicationConfigurationCmd | Applies the PubSub configuration as CloseAndUpdate does (Part 14 §9.1.3.7.4) and links each endpoint to its DataSetReader and DataSetWriter, after checking that they exist and that their DataSets carry the Variables of the endpoint |
+| SetCommunicationConfigurationCmd | Applies the PubSub configuration as CloseAndUpdate does (Part 14 §9.1.3.7.6) and links each endpoint to its DataSetReader and DataSetWriter, after checking that they exist and that their DataSets carry the Variables of the endpoint |
 | EnableCommunicationCmd | Enables the DataSetReaders and DataSetWriters of the endpoints and their groups and connections |
 
 The PubSub commands and the writes run with the session of the caller, as
@@ -498,7 +498,12 @@ endpoint, its control and the PubSub components it references in one
 atomic Apply, before EnableCommunicationCmd enables anything: the commit
 point. When the store says the write did not commit, the call rolls back
 (Table 21) and the first persistent endpoint gets `Bad_ResourceUnavailable`,
-the others `Bad_NothingToDo`; when the outcome is unknown it rolls back and
+the others `Bad_NothingToDo`, in the result of the command the commit point
+stands for (ConnectionEndpointResult with CreateConnectionEndpointCmd, else
+EnableCommunicationResult with EnableCommunicationCmd, else
+CommunicationLinksResult for a SetCommunicationConfigurationCmd with links,
+else ConnectionEndpointResult; the `Bad_InvalidState` of a RemovePending
+endpoint follows the same rule); when the outcome is unknown it rolls back and
 gets `Bad_InternalError`, and the store is fenced until a later write
 settles what is there (library interpretation, C3-D13). A failure after the
 commit is undone with a durable removal. The persisted check of
@@ -542,7 +547,7 @@ writer an EstablishConnections call created is stored as created
 shares, and every endpoint restored with it owns it, so a hand-over needs
 no record of its own and survives a restart. An endpoint a later call
 links to an existing reader or writer shares it: the reference needs an
-ElementModify (Part 14 §9.1.3.7.4), which the runtime applies by
+ElementModify (Part 14 §9.1.3.7.2 Table 239), which the runtime applies by
 replacing the component (and what is below a modified group or
 connection) under the same Name. The server reports those replacements
 (`PubSubConfigurationUpdate.Moved`, computed in the transaction of the
@@ -582,8 +587,9 @@ whose identity still reads reserves its Name in its FunctionalEntity
 (`Bad_BrowseNameDuplicated`), its NodeIds and its WriterGroupIds and
 DataSetWriterIds (ReserveIds and CloseAndUpdate do not hand them out, on
 the whole server). A record whose identity does not read fences
-EstablishConnections of its AC and the PubSub id allocation of the server
-(`Bad_ResourceUnavailable`), and a key that is none of the records fences
+EstablishConnections of its AC (the Method status `Bad_InvalidState`,
+Table 9; also while a write of the store is unresolved) and the PubSub id
+allocation of the server (`Bad_ResourceUnavailable`), and a key that is none of the records fences
 all ACs, until it is discarded.
 
 **Other configuration mechanisms** (design §4.5, PS-2). CloseAndUpdate,
@@ -602,7 +608,7 @@ and the record is owed, as for a close (library interpretation). The same
 change by another mechanism has no durable intent and is refused like any
 other. While the store is fenced, new components and ReserveIds
 are refused, and so is a new WriterGroupId or DataSetWriterId on an
-existing component (a modify, Part 14 §9.1.3.7.4) that a quarantined
+existing component (a modify, Part 14 §9.1.3.7.2 Table 239) that a quarantined
 record reserves. When a hook refuses a change, the server reconciles the
 runtime back to the configuration before it by name: what the change
 removed or changed comes back under a new ComponentID and node, and the
@@ -651,13 +657,28 @@ which is not kept: the gate is not protection against an arbitrary SKS
 rollback ([Limits](#limits)).
 
 **Durability.** `Connections.Persistence` reports the store state, the
-restored endpoints and the quarantine. `FileStore` reports
+restored endpoints and the quarantine, and in `Diverged` the required
+writes the store refused for good (`fxstore.ErrLimit`): their records do
+not follow the runtime until a later write or a restart replaces them.
+The application owns the Store and closes it after `Connections.Close`
+returns. Store calls use their own context bounded by `StoreTimeout`, not
+the Method's; a slow store holds up PubSub configuration changes and the
+connection Methods for up to `StoreTimeout` each. After `Close` the
+Methods stay registered, but EstablishConnections and CloseConnections are
+`Bad_InvalidState` and `RetryRestore` and `Discard` fail: nothing writes
+the store, and a PubSub change made after Close is not recorded. `FileStore` reports
 `DurabilityPowerLoss` on Unix systems (where the file system honours
 fsync), and `DurabilityProcessCrash` on Windows, where a directory cannot be
 fsynced, so a committed write survives a crash of the process but a power
 loss only as far as the file system's metadata journal goes. A write with
 an unknown outcome keeps the evidence of at most 64 confirmations with an
 unknown outcome; past that the store stays fenced until it is opened again.
+A write that is owed (`Domain.Require`) is only one that may still commit:
+a batch with an invalid key (`fxstore.ErrInvalidKey`) or over the Limits
+(`fxstore.ErrLimit`) is returned to the caller and does not fence the
+store; one found not to fit only when Settle writes it is dropped and
+reported by that Settle. `Domain.State` and `Status` never wait for a store
+call in progress: they return the state before it.
 Network file
 systems and file systems that ignore fsync or advisory locks are not
 supported; platforms without flock cannot open a FileStore. `MemoryStore` survives no restart.
@@ -1045,7 +1066,16 @@ the store committed (`StoreStatus().Reconciling` until then; memory
 follows once no set is being processed, replaced or removed and no Add
 holds the key of a stored set). A write that landed is then the
 Manager's state, one that did not is not, and the generations it would
-have used are never handed out again. A commit that definitely did not
+have used are never handed out again. Memory then follows the committed
+state: an endpoint record whose stored value differs is the stored one,
+Unverified, a record the store does not have is dropped unless an
+unended intent holds it, and the verification starts at once (§6.4). The
+application owns the Store and closes it after `Manager.Close` returns.
+Each store operation has its own context bounded by `StoreTimeout`;
+journal writes are not cancelled by Close, only a settle attempt is,
+which leaves the store fenced until the next `New`. Writes are
+serialised, so a slow store holds other operations for up to
+`StoreTimeout` each. A commit that definitely did not
 commit leaves the edit open. One whose outcome is unknown keeps the edit
 and what it committed: until the Manager has followed the store, a
 CommitUpdates or DiscardUpdates of it is `Bad_InvalidState`; when the
@@ -1646,7 +1676,7 @@ go run ./examples/uafx/cm -port 4856
 | Multicast (four servers): AC1 publishes to a UDP multicast group, AC2 and AC3 subscribe, one DataSetWriter serves both, Remove removes all three sides (`TestConnectionManagerMulticast`). It needs an interface that carries multicast (`GO_OPCUA_MULTICAST_IFACE`, else the first that works) and skips without one; `GO_OPCUA_MULTICAST_REQUIRE=1`, set in the CI `server` job, makes that a failure. Run on macOS on en0 and lo0 | `uafx/fxcm` |
 | Persistence: an endpoint restored at its NodeIds with its CreationTime, control and communication after a restart; disable and remove durable; C3-D4 and the persisted check (PC-1, PC-2 with StrictNotPersisted); every store outcome at the commit point and at close (not committed, unknown, fenced, settled); the hook (changes, refusals, NotPersisted, removed components, held ids); quarantine of a corrupt body, a corrupt identity, a conflict (RetryRestore) and an unknown key, and Discard; the gate of a secured group with a static key and after a rotation; a start on a foreign or failing store | `uafx/fxserver` |
 | Crash: the server killed as a subprocess at seven points of establish, close and disable, then restarted on the same FileStore: the endpoint is restored as committed and no durable disable or removal is undone (`TestCrash`) | `uafx/fxserver` |
-| The store contract (`storetest.Run`) on MemoryStore and FileStore, the Domain (fence, Require, Settle, batch identity of a confirming Apply) and the fault injector | `uafx/fxstore` |
+| The store contract (`storetest.Run`) on MemoryStore and FileStore, the Domain (fence, Require, Settle, batch identity of a confirming Apply) and the fault injector; fuzz: the state file (`FuzzDecodeState`) and the domain metadata (`FuzzDecodeMeta`) | `uafx/fxstore` |
 | The key gate: rotation, wraparound, an SKS that reissues ids or material, static and unavailable sources, a new KeySource | `pubsub` |
 | Fuzz: a hostile server (`FuzzInspectHostileServer`), the UAFX structures (`FuzzDecodeStructures`, and every generated structure with `FuzzDecodeStructure`), the arguments of EstablishConnections (`FuzzDecodeEstablishConnections`), the namespace mapping of NodeSet documents (`FuzzRemap`, and `FuzzScanners` against the regular expressions its scanners replace), the records of persistent endpoints and components (`FuzzDecodeEndpoint`, `FuzzDecodeComponent`) | `uafx`, `internal/nodeset`, `uafx/fxserver` |
 | End to end: every RSA and ECC security policy in both secure modes, anonymous and username identity, multi-chunk responses, concurrent clients, OperationLimits of one node | [`conformance/uafx`](../conformance/uafx) |
@@ -1666,8 +1696,10 @@ The test address space is `internal/testutil/fxtest`.
   server does not have). An item in two lists of one ControlGroup is not
   refused. No AutomationComponent log.
 - Persistence ([Persistence](#persistence)) keeps the endpoints, their
-  control and their PubSub components, not ConfigurationData (AP-13) and
-  not the Methods of §6.4.6 (VariableStorage). The PubSub configuration
+  control and their PubSub components, not ConfigurationData and not the
+  Methods of §6.4.6 (VariableStorage): §6.2.4.3.7 requires
+  SetStoredVariables for the ConfigurationData of a persistent endpoint,
+  a known deviation (LIMITATIONS.md). The PubSub configuration
   of the server is not persisted as a whole (Part 14 §9.1.2 is not met):
   only the components persistent endpoints reference. StrictNotPersisted
   is off by default, so a non-persistent endpoint whose reader or writer

@@ -5,10 +5,12 @@ package fxserver
 import (
 	"bytes"
 	"context"
+	"errors"
 	"math"
 	"reflect"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/pubsub"
@@ -50,14 +52,23 @@ func (c *Connections) establish(ctx context.Context, ac *automationComponent, ar
 	}
 	c.call.Lock()
 	defer c.call.Unlock()
+	if c.closed.Load() {
+		// Connections.Close ran: the AutomationComponent cannot process
+		// the call in its current state (Part 81 Table 9).
+		return nil, ua.StatusBadInvalidState
+	}
 	if p := c.pers; p != nil {
 		// While a write of the store is unresolved, or a record whose
 		// identities cannot be read is quarantined, nothing is
 		// established: a new Name, NodeId or PubSub id could collide
 		// (design §3.5, §4.7). Definitely not done (C3-D13).
+		// Bad_InvalidState: the AutomationComponent cannot process the
+		// call in its current state (Part 81 Table 9, which allows no
+		// other Bad code for this). The log names the reason and the
+		// quarantined record.
 		if why := p.establishFence(ac); why != "" {
 			c.log.Warn("uafx: EstablishConnections refused", "ac", ac.id, "reason", why)
-			return nil, ua.StatusBadResourceUnavailable
+			return nil, ua.StatusBadInvalidState
 		}
 	}
 	x := newCall(ctx, c, ac, req)
@@ -141,7 +152,13 @@ type call struct {
 	linkUndo []func() // SetCommunicationConfigurationCmd
 	// moved are the components the update of the call replaced in place
 	// (PubSubConfigurationUpdate.Moved), which the endpoints followed.
-	moved      []server.PubSubComponentMove
+	moved     []server.PubSubComponentMove
+	reenabled bool // reenableMoved ran
+	// modified are the existing endpoints the call changed (their
+	// parameters, links or enablement): they get a new ModificationTime
+	// once the call succeeds (Part 81 Table 74), the persistent ones with
+	// their committed records (persist).
+	modified   []*endpoint
 	enabled    []pubsub.ComponentID // EnableCommunicationCmd
 	cleanupsOn []*endpoint
 	demandsOn  []*endpoint     // EnableCommunicationCmd made them demand
@@ -151,6 +168,10 @@ type call struct {
 	// what it committed when the call is rolled back after it.
 	persisted  bool
 	compensate *fxstore.Batch
+	// untouch are the ModificationTimes of the endpoints before the
+	// commit point touched them: uncommit puts them back with the
+	// records.
+	untouch map[*endpoint]time.Time
 }
 
 // element is one ConnectionEndpointConfiguration of the call.
@@ -243,8 +264,11 @@ func (x *call) run() ua.StatusCode {
 	for _, cmd := range x.req.CommandMask.Order() {
 		// The commit point: everything is staged, nothing enabled yet
 		// (design §4.3).
-		if cmd == uafx.EnableCommunicationCmd && !x.persist() {
-			return abort()
+		if cmd == uafx.EnableCommunicationCmd {
+			if !x.persist() {
+				return abort()
+			}
+			x.reenableMoved()
 		}
 		if !steps[cmd]() {
 			return abort()
@@ -253,6 +277,8 @@ func (x *call) run() ua.StatusCode {
 	if !x.persist() {
 		return abort()
 	}
+	x.reenableMoved()
+	x.touchModified()
 	return ua.StatusOK
 }
 
@@ -821,6 +847,7 @@ func (x *call) usePreconfigured(el *element, p *uafx.PubSubConnectionEndpointPar
 	cleanupID, persistID := c.childID(n, "CleanupTimeout"), c.childID(n, "IsPersistent")
 	oldCleanup, oldPersist, oldDuration := c.value(cleanupID), c.value(persistID), e.cleanup
 	c.setPreconfigured(e, p)
+	x.modify(e)
 	x.restore = append(x.restore, func() {
 		c.write(relID, old)
 		c.write(cleanupID, oldCleanup)
@@ -1193,6 +1220,7 @@ func (x *call) communicate() bool {
 		if sc != ua.StatusOK {
 			return false
 		}
+		x.modify(el.ep)
 	}
 	return true
 }
@@ -1353,33 +1381,52 @@ func (x *call) link(el *element, cc *uafx.PubSubCommunicationConfiguration, l *u
 // non-persistent endpoint's has NotPersisted TRUE (PC-2, of the reader or
 // writer only: §4.9 of the design). Otherwise Bad_InvalidState (PC-3).
 func (x *call) checkPersisted(e *endpoint, reader bool, cid, gid, conn pubsub.ComponentID) ua.StatusCode {
+	strict := x.c.opts.StrictNotPersisted && x.c.opts.Store != nil
+	if !e.persistent && !strict {
+		return ua.StatusOK
+	}
 	rt := x.c.srv.PubSub()
 	var own []*ua.KeyValuePair
 	var parents [][]*ua.KeyValuePair
+	// A configuration that cannot be read cannot be shown to be
+	// persisted (or not): the check fails with the code of Table 16 for
+	// it (Bad_InvalidState) rather than passing unchecked.
+	var errs []error
 	if reader {
-		if r, err := rt.DataSetReaderConfig(cid); err == nil {
+		r, err := rt.DataSetReaderConfig(cid)
+		if err == nil {
 			own = r.DataSetReaderProperties
 		}
-		if g, err := rt.ReaderGroupConfig(gid); err == nil {
+		g, gerr := rt.ReaderGroupConfig(gid)
+		if gerr == nil {
 			parents = append(parents, g.GroupProperties)
 		}
+		errs = append(errs, err, gerr)
 	} else {
-		if w, err := rt.DataSetWriterConfig(cid); err == nil {
+		w, err := rt.DataSetWriterConfig(cid)
+		if err == nil {
 			own = w.DataSetWriterProperties
 		}
-		if g, err := rt.WriterGroupConfig(gid); err == nil {
+		g, gerr := rt.WriterGroupConfig(gid)
+		if gerr == nil {
 			parents = append(parents, g.GroupProperties)
 		}
+		errs = append(errs, err, gerr)
 	}
-	if cc, err := rt.ConnectionConfig(conn); err == nil {
+	cc, err := rt.ConnectionConfig(conn)
+	if err == nil {
 		parents = append(parents, cc.ConnectionProperties)
+	}
+	if err := errors.Join(append(errs, err)...); err != nil {
+		x.c.log.Warn("uafx: EstablishConnections: the persisted check cannot read the configuration", "endpoint", e.id, "error", err)
+		return ua.StatusBadInvalidState
 	}
 	switch {
 	case e.persistent:
 		if notPersisted(own) || slices.ContainsFunc(parents, notPersisted) {
 			return ua.StatusBadInvalidState
 		}
-	case x.c.opts.StrictNotPersisted && x.c.opts.Store != nil:
+	case strict:
 		if !notPersisted(own) {
 			return ua.StatusBadInvalidState
 		}
@@ -1605,11 +1652,15 @@ func (x *call) enableOne(rt *pubsub.PubSub, e *endpoint) ua.StatusCode {
 		e.cleanupOff = false
 		x.cleanupsOn = append(x.cleanupsOn, e)
 	}
+	changed := !e.demand
 	if !e.demand {
 		e.demand = true
 		x.demandsOn = append(x.demandsOn, e)
 	}
 	x.c.mu.Unlock()
+	if changed {
+		x.modify(e)
+	}
 	return ua.StatusOK
 }
 
@@ -1699,23 +1750,59 @@ func variants(vs []*ua.Variant) []*ua.Variant {
 // followUpdate makes the endpoints follow the components the update of
 // the call replaced in place (an ElementModify of a component other
 // endpoints share, or of its group or connection): their References, the
-// provenance and what they have left to prune move to the new components,
-// and a DataSetReader or DataSetWriter an endpoint demands is enabled
-// again, with the groups and connection above it, since its enablement
-// follows the endpoints (design §4.4; library interpretation: the
-// configuration a call sends does not end another endpoint's demand). The
-// moves are by ComponentID, computed by the server in the transaction of
-// the update, so a component another mechanism added under the same name
-// is never taken for the replaced one.
+// provenance and what they have left to prune move to the new components.
+// The moves are by ComponentID, computed by the server in the transaction
+// of the update, so a component another mechanism added under the same
+// name is never taken for the replaced one. What an endpoint demands is
+// enabled again at the commit point (reenableMoved).
 func (x *call) followUpdate(moved []server.PubSubComponentMove) {
 	if len(moved) == 0 {
 		return
 	}
 	x.moved = moved
+	x.c.followMoves(moved)
+}
+
+// modify records that the call changed the endpoint e. An endpoint the
+// call created has its ModificationTime from its creation.
+func (x *call) modify(e *endpoint) {
+	if e == nil || slices.Contains(x.created, e) || slices.Contains(x.modified, e) {
+		return
+	}
+	x.modified = append(x.modified, e)
+}
+
+// touchModified sets the ModificationTime of the non-persistent endpoints
+// the call changed (Part 81 Table 74: "any modification of this
+// ConnectionEndpoint"); persist touches the persistent ones when their
+// records commit.
+func (x *call) touchModified() {
+	now := time.Now()
+	for _, e := range x.modified {
+		x.c.mu.Lock()
+		persistent := e.persistent && x.c.pers != nil
+		x.c.mu.Unlock()
+		if !persistent {
+			x.c.touch(e, now)
+		}
+	}
+}
+
+// reenableMoved enables again a DataSetReader or DataSetWriter the update
+// of the call replaced and an endpoint demands, with the groups and
+// connection above it, since its enablement follows the endpoints (design
+// §4.4; library interpretation: the configuration a call sends does not
+// end another endpoint's demand). It runs after the commit point of the
+// call (persist), never before: no message is sent with the configuration
+// of the call before its records are committed (design §4.3). Once.
+func (x *call) reenableMoved() {
+	if x.reenabled {
+		return
+	}
+	x.reenabled = true
 	c := x.c
-	c.followMoves(moved)
 	rt := c.srv.PubSub()
-	for _, m := range moved {
+	for _, m := range x.moved {
 		if m.ToNode == nil || !c.demanded(m.ToNode) {
 			continue
 		}
