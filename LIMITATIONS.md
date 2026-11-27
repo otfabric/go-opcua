@@ -65,8 +65,11 @@ behaviour you may notice, and the deviations of peers are in
   directory fsync), and does not support network file systems. The other
   Methods of Part 81 are not implemented, and Parts 82 to 84 are not implemented. None of the pinned references of opcua-interop
   implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
-- Time-scheduled Ethernet (TSN), AMQP over WebSockets, and PubSub Actions bound
-  to server Methods (go-opcua runs Go handlers).
+- Time-scheduled Ethernet (TSN) and AMQP over WebSockets.
+- The PubSub configuration of a server (`server.WithPubSub`, the configuration
+  Methods and the PubSubConfiguration file) lives in memory: it is not
+  persisted across a restart (Part 14 §9.1.2), outside the components UAFX
+  persists.
 - Triggering links are not restored when the client re-creates a subscription
   after a reconnect.
 - mDNS has no probing or conflict resolution.
