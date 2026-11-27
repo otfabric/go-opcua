@@ -19,6 +19,7 @@ The code generators read only pinned inputs: every file `schema/update-schema.sh
 - `make gen` first runs `schemamanifest verify`: the SHA-256 and Models of every input must match the manifest, and every RequiredModel must be satisfied by a vendored model with the same ModelUri, by the ModelVersion and PublicationDate comparison of OPC 10000-6 §F.2, Table F.1 (UAFX requires UA 1.05.06, DI requires UA 1.05.04 and GDS UA 1.05.07 of 2026-05-01; the vendored UA is 1.05.07 of 2026-07-30).
 - `make check-gen` also fails on a new untracked generated file (`*_gen.go`, `*_gen_test.go`, `interop/COVERAGE.md`, `interop/GAPS.md`), not only on a changed one.
 - The weekly `schema-check.yml` workflow compares the head of `latest` with the pinned inputs and reports the commits, the inputs whose content changed and the Version, ModelVersion, PublicationDate and RequiredModels of each changed model.
+- `internal/nodeset.Parse` is the one NodeSet2 reader: of `server.ImportNodeSetXML`, of the namespace 0 the server builds itself and of the `cmd/uafx` generator. It reads every attribute of each node class with the defaults of UANodeSet.xsd, references, role permissions, DataType definitions and values (OPC 10000-6 Annex F), and has the queries the generators need (Related, Children, ModellingRule, TypeDefinition, SuperType, MethodArguments). It replaces `internal/schema/uaNodeSet.go`, xgen output edited by hand, and the XML types of `cmd/uafx`. The imported address space of namespace 0 and of the GDS, DI and UAFX models is unchanged (`TestImportedAddressSpaceGolden`, recorded with the old reader); the generated UAFX code is unchanged.
 
 ### Removed
 
@@ -57,6 +58,7 @@ The code generators read only pinned inputs: every file `schema/update-schema.sh
 - `TestSetTriggering_RemoveBeforeAdd` (`server`): removing and adding the same link, removing a missing link and adding it, replacing one link or one of two, adding only, removing only, and the order of the results (fails without the fix). `TestSetTriggering_RemoveAndAddKeepsLink` (over the wire): the item to report is reported with its triggering item after such a request.
 - `TestWithIssuedTokenPolicy` (`server`): the configured IssuedTokenType and IssuerEndpointUrl on every IssuedToken policy and on no other, and empty fields by default.
 - `TestVendoredInputs`, `TestCompareModels`, `TestRequiredModels`, `TestUpdateAndVerify`, `TestUpdateFails`, `TestDiff` (`internal/cmd/schemamanifest`). `TestGeneratedFileList` (`internal/cmd/gen`) checks the list of generated files against the `*_gen.go` and `*_gen_test.go` files of the module.
+- `TestImportedAddressSpaceGolden` (`server`): per namespace the number of nodes and references and a SHA-256 over every node of namespace 0 and of the GDS, DI and UAFX models. The tests of `internal/nodeset` walk the vendored NodeSets and fail on an attribute or element the reader drops; `FuzzParse` covers Parse and its queries.
 
 ---
 ## v1.41.0

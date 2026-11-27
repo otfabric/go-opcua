@@ -37,7 +37,11 @@ rule 3).
 
 Done in v1.42.0 (PR #61): all seven items. The IssuedTokenType is set with
 `server.WithIssuedTokenPolicy` and stays empty without it; the clauses are
-cited in RELEASE.md.
+cited in RELEASE.md. The review of the fixes added four more, also in
+v1.42.0: a BrowseName without a prefix is in namespace 0 (Part 6 §5.1.12),
+a raw delete without a valid range is refused (Part 11 §6.9.5.1), a full
+Publish queue answers its oldest request (Part 4 §5.14.5.1), and
+SetTriggering removes links before it adds them (Part 4 §5.13.5.2).
 
 ## Phase 1: generation foundation
 
@@ -48,6 +52,13 @@ cited in RELEASE.md.
 | One NodeSet model reader shared by the generators and the runtime import | three readers: `cmd/uafx/model.go`, `internal/schema/uaNodeSet.go` (xgen output edited by hand, never regenerated), `internal/nodeset/remap.go` |
 | `make check-gen` also fails on new untracked generated files | it runs `git diff --quiet` |
 | Use or drop `schema/Opc.Ua.PredefinedNodes.xml` and `schema/UANodeSet.xsd` | no consumer; the XSD is not downloaded either |
+
+Done in v1.42.0 (PR #61, with the work of #60 and #62): all five items. The
+inputs are pinned in `schema/manifest.json` and checked by `make gen`; both
+unused files are dropped; `internal/nodeset.Parse` is the one reader of
+`cmd/uafx` and `server.ImportNodeSetXML`, and
+`TestImportedAddressSpaceGolden` holds the imported address space identical
+to that of the old reader.
 
 ## Phase 2: generated Method contracts
 
