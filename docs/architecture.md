@@ -74,8 +74,8 @@ Packages are tiered by intended audience and stability commitment:
 | `internal/goname/` | Shared identifier normalization for code generators |
 | `internal/websocket/` | RFC 6455 framing, messages and handshake of the `opc.wss` transport |
 | `internal/mqtt/`, `internal/amqp/`, `internal/mdns/` | MQTT 3.1.1 / 5.0 and AMQP 1.0 clients of the PubSub transports; the mDNS responder of multicast discovery |
-| `internal/cmd/gen/` | Go-based code generation driver |
 | `internal/cmd/schemamanifest/` | Pins, downloads and verifies the schema inputs (`schema/manifest.json`) |
+| `internal/cmd/gen/` | Go-based code generation driver |
 | `internal/nodeset/` | Maps the namespace indexes of a NodeSet2 document to those of a server |
 
 ---
