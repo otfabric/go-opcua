@@ -1,0 +1,234 @@
+{
+  "repository": "OPCFoundation/UA-Nodeset",
+  "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+  "commitDate": "2026-11-18T08:20:55Z",
+  "inputs": [
+    {
+      "path": "schema/NodeIds.csv",
+      "upstream": "Schema/NodeIds.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "beb46640d1ba5281eee470282fd31bff8f654f20a465948f0d237ecab6880a92"
+    },
+    {
+      "path": "schema/StatusCode.csv",
+      "upstream": "Schema/StatusCode.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "69912ec2b15955d9264ea5bc5c511c90c524ec59c7fe55d70e952d35777503cc"
+    },
+    {
+      "path": "schema/AttributeIds.csv",
+      "upstream": "Schema/AttributeIds.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "ef4ba0535924298c1ce9a6916c41d207ff38326812ab0795e5ad749132af155e"
+    },
+    {
+      "path": "schema/ServerCapabilities.csv",
+      "upstream": "Schema/ServerCapabilities.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "59acd9fd4fbe2e7c3455f0ad045d5126a6242193356cd760256c717297b49969"
+    },
+    {
+      "path": "schema/Opc.Ua.NodeIds.permissions.csv",
+      "upstream": "Schema/Opc.Ua.NodeIds.permissions.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "6f4c7811c46d474741eb4f238badc19413f283a48b7f6db3b64bd7af2f201d9d"
+    },
+    {
+      "path": "schema/Opc.Ua.Types.bsd",
+      "upstream": "Schema/Opc.Ua.Types.bsd",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "a75e05f4c3865e32c8414fe08b3078bae6718e090fbc2134d44170335d1537f1"
+    },
+    {
+      "path": "internal/schema/Opc.Ua.NodeSet2.xml",
+      "upstream": "Schema/Opc.Ua.NodeSet2.xml",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "d29ad5eb20884935a6b7ef8f9b70a6ad72417411a3fd3e4e704dac5762d394c8",
+      "models": [
+        {
+          "modelUri": "http://opcfoundation.org/UA/",
+          "version": "1.05.07",
+          "modelVersion": "1.5.7",
+          "publicationDate": "2026-07-30T00:00:00Z"
+        }
+      ]
+    },
+    {
+      "path": "schema/Opc.Ua.Gds.NodeIds.csv",
+      "upstream": "GDS/Opc.Ua.Gds.NodeIds.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "1a2b20f38a38206a11477868cf3c2c551500107a3473a36b9a9e5f60a2ed5192"
+    },
+    {
+      "path": "internal/schema/Opc.Ua.Gds.NodeSet2.xml",
+      "upstream": "GDS/Opc.Ua.Gds.NodeSet2.xml",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "1c807b5a689cc51b0575fe16f0eb1efc45233598be3e0e49ee4b7113026abc88",
+      "models": [
+        {
+          "modelUri": "http://opcfoundation.org/UA/GDS/",
+          "version": "1.05.07",
+          "modelVersion": "1.5.7",
+          "publicationDate": "2026-05-01T00:00:00Z",
+          "requiredModels": [
+            {
+              "modelUri": "http://opcfoundation.org/UA/",
+              "version": "1.05.07",
+              "modelVersion": "1.5.7",
+              "publicationDate": "2026-05-01T00:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "schema/Opc.Ua.Di.NodeIds.csv",
+      "upstream": "DI/Opc.Ua.Di.NodeIds.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "de1b204f0124e8f88b20a15bf3b4557877a942e6f750e1e5201a6bc455411e72"
+    },
+    {
+      "path": "uafx/internal/model/Opc.Ua.Di.NodeSet2.xml",
+      "upstream": "DI/Opc.Ua.Di.NodeSet2.xml",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "40a02d98a8b2a014ec9f961625a422df3566d4dd783151ec6ae55b47296199de",
+      "models": [
+        {
+          "modelUri": "http://opcfoundation.org/UA/DI/",
+          "version": "1.05.0",
+          "modelVersion": "1.5.0",
+          "publicationDate": "2025-11-15T00:00:00Z",
+          "requiredModels": [
+            {
+              "modelUri": "http://opcfoundation.org/UA/",
+              "version": "1.05.04",
+              "modelVersion": "1.5.4",
+              "publicationDate": "2025-01-08T00:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "schema/opc.ua.fx.data.nodeset2.csv",
+      "upstream": "UAFX/opc.ua.fx.data.nodeset2.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "5480396e37fb63bc60ba6ee182f5b3292260aa1234b28349f30d951719d6c0ba"
+    },
+    {
+      "path": "uafx/internal/model/opc.ua.fx.data.nodeset2.xml",
+      "upstream": "UAFX/opc.ua.fx.data.nodeset2.xml",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "80ffa5eae396fb2ed6ea7fc8647013dc6bdfbd939b12249a3b711542e4881339",
+      "models": [
+        {
+          "modelUri": "http://opcfoundation.org/UA/FX/Data/",
+          "version": "1.00.04",
+          "publicationDate": "2026-07-22T18:52:04Z",
+          "requiredModels": [
+            {
+              "modelUri": "http://opcfoundation.org/UA/",
+              "version": "1.05.06",
+              "modelVersion": "1.5.6",
+              "publicationDate": "2025-11-08T00:00:00Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "schema/opc.ua.fx.data.nodeset2.bsd",
+      "upstream": "UAFX/opc.ua.fx.data.nodeset2.bsd",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "e4563c562194092ef7f63708831309736e11ebedd76c56a459fe40d5349dafb2"
+    },
+    {
+      "path": "schema/opc.ua.fx.ac.nodeset2.csv",
+      "upstream": "UAFX/opc.ua.fx.ac.nodeset2.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "61e3f2c5440e16cdeaa5694e19e16be433217f6fdf849f0a2b7ecd0531691240"
+    },
+    {
+      "path": "uafx/internal/model/opc.ua.fx.ac.nodeset2.xml",
+      "upstream": "UAFX/opc.ua.fx.ac.nodeset2.xml",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "35586e374eea321291aee9e46731d3ca547cc5a73626f99260d20254da60b941",
+      "models": [
+        {
+          "modelUri": "http://opcfoundation.org/UA/FX/AC/",
+          "version": "1.00.04",
+          "publicationDate": "2026-07-22T18:52:23Z",
+          "requiredModels": [
+            {
+              "modelUri": "http://opcfoundation.org/UA/",
+              "version": "1.05.06",
+              "modelVersion": "1.5.6",
+              "publicationDate": "2025-11-08T00:00:00Z"
+            },
+            {
+              "modelUri": "http://opcfoundation.org/UA/DI/",
+              "version": "1.05.0",
+              "modelVersion": "1.5.0",
+              "publicationDate": "2025-11-15T00:00:00Z"
+            },
+            {
+              "modelUri": "http://opcfoundation.org/UA/FX/Data/",
+              "version": "1.00.04",
+              "publicationDate": "2026-07-22T18:52:04Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "schema/opc.ua.fx.ac.nodeset2.bsd",
+      "upstream": "UAFX/opc.ua.fx.ac.nodeset2.bsd",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "bf5f4adb1cc6321b9c8ce4afb8cea5a9ee70fe3488d24d84e7f4bf00d7650db4"
+    },
+    {
+      "path": "schema/opc.ua.fx.cm.nodeset2.csv",
+      "upstream": "UAFX/opc.ua.fx.cm.nodeset2.csv",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "f1ce6fe0c6157f828843f435c2e80e1d3f83a16dda4d86a14fced67c6d784984"
+    },
+    {
+      "path": "uafx/internal/model/opc.ua.fx.cm.nodeset2.xml",
+      "upstream": "UAFX/opc.ua.fx.cm.nodeset2.xml",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "6abfb436bfc07051d7c972dc36a4d8744a760cd1b94a72d37d621a4c272f7929",
+      "models": [
+        {
+          "modelUri": "http://opcfoundation.org/UA/FX/CM/",
+          "version": "1.00.04",
+          "publicationDate": "2026-07-22T18:52:36Z",
+          "requiredModels": [
+            {
+              "modelUri": "http://opcfoundation.org/UA/",
+              "version": "1.05.06",
+              "modelVersion": "1.5.6",
+              "publicationDate": "2025-11-08T00:00:00Z"
+            },
+            {
+              "modelUri": "http://opcfoundation.org/UA/DI/",
+              "version": "1.05.0",
+              "modelVersion": "1.5.0",
+              "publicationDate": "2025-11-15T00:00:00Z"
+            },
+            {
+              "modelUri": "http://opcfoundation.org/UA/FX/Data/",
+              "version": "1.00.04",
+              "publicationDate": "2026-07-22T18:52:04Z"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "path": "schema/opc.ua.fx.cm.nodeset2.bsd",
+      "upstream": "UAFX/opc.ua.fx.cm.nodeset2.bsd",
+      "commit": "ed0b821f6a6f1f0c440c442ed95a9146ae8b7f8d",
+      "sha256": "04f78bb06021de37665151395adff471bd0774f845d47fea521d56c5a2983de6"
+    }
+  ]
+}

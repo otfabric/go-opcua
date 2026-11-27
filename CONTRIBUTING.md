@@ -48,8 +48,8 @@ make gen          # or: go generate ./...
 ```
 
 The driver:
-- cleans an explicit list of generated files (no shell globs)
-- runs each generator under `cmd/` in order
+- checks the vendored inputs against `schema/manifest.json` (`internal/cmd/schemamanifest verify`), so code is only generated from the pinned upstream files
+- runs each generator under `cmd/` in order, overwriting its output in place (stringer type-checks `./ua` and the root package, so the generated files are not deleted first)
 - discovers enum types in `ua/enums*.go` via Go's parser and runs `stringer`
 - uses `go tool stringer` (version pinned in `go.mod` via the `tool` directive)
 - rewrites the range check of each generated `String` method to compare the value as a `uint64` before it becomes an index, so a value of an unsigned type gives `Type(n)` where `int` has 32 bits too; `TestGeneratedStringersAreBounded` fails when a generated file misses it
@@ -68,6 +68,37 @@ Generators under `cmd/`:
 
 All generators use the shared naming formatter at `internal/goname` for
 idiomatic Go identifier normalization.
+
+Every generated file is named `*_gen.go` or `*_gen_test.go` and is listed
+in `generatedFiles` of the driver (`TestGeneratedFileList` checks both).
+`make check-gen` regenerates and fails on a changed file and on a new
+untracked generated file.
+
+### Schema inputs
+
+The inputs come from the OPC Foundation
+[UA-Nodeset](https://github.com/OPCFoundation/UA-Nodeset) repository, all
+at one commit recorded in `schema/manifest.json`: per input the upstream
+path, the commit, the SHA-256 and, for a NodeSet, its Models (ModelUri,
+Version, ModelVersion, PublicationDate) with their RequiredModels. The list
+of inputs is in `internal/cmd/schemamanifest/manifest.go`.
+
+```sh
+./schema/update-schema.sh          # the pinned commit again: no diff
+./schema/update-schema.sh latest   # move the pin to a branch, tag or commit
+make gen
+```
+
+`schemamanifest verify` (run by `make gen` and by
+`TestVendoredInputs`) checks the SHA-256 and Models of every input and that
+every RequiredModel is satisfied by a vendored model with the same
+ModelUri: the same or a later ModelVersion, an equal ModelVersion decided
+by the PublicationDate, the PublicationDate when neither has a
+ModelVersion (OPC 10000-6 §F.2, Table F.1; Version is not compared, it is
+"not intended for programmatic comparisons"). The weekly
+`schema-check.yml` workflow downloads the head of `latest` and opens an
+issue that lists the inputs whose content changed and the version,
+publication date and RequiredModels of each model that changed.
 
 ## Submitting changes
 

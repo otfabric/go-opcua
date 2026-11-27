@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"go/parser"
 	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -46,35 +48,61 @@ func TestDiscoverEnumTypes_NoMatch(t *testing.T) {
 	}
 }
 
-func TestCleanFiles(t *testing.T) {
-	dir := t.TempDir()
-	f := filepath.Join(dir, "test_gen.go")
-	if err := os.WriteFile(f, []byte("test"), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	// Clean should remove existing file
-	if err := cleanFiles([]string{f}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(f); !os.IsNotExist(err) {
-		t.Error("file should have been removed")
-	}
-
-	// Clean should tolerate already-missing files
-	if err := cleanFiles([]string{f}); err != nil {
-		t.Error("clean should not error on missing files")
-	}
-}
-
+// TestGeneratedFileList: generatedFiles names exactly the *_gen.go and
+// *_gen_test.go files of the module, once each, and every one of them has
+// the header of a generated file, so the file names `make check-gen`
+// looks for are those of the generated files.
 func TestGeneratedFileList(t *testing.T) {
-	// Verify no duplicates in generatedFiles
-	seen := map[string]bool{}
+	const root = "../../.."
+	want := map[string]bool{}
 	for _, f := range generatedFiles {
-		if seen[f] {
+		if want[f] {
 			t.Errorf("duplicate in generatedFiles: %s", f)
 		}
-		seen[f] = true
+		want[f] = true
+	}
+	generated := regexp.MustCompile(`(?m)^// Code generated .* DO NOT EDIT\.$`)
+	got := map[string]bool{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if path != root && (strings.HasPrefix(d.Name(), ".") || d.Name() == "testdata") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(path, "_gen.go") && !strings.HasSuffix(path, "_gen_test.go") {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(rel)
+		got[rel] = true
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !generated.Match(data) {
+			t.Errorf("%s has no \"Code generated ... DO NOT EDIT.\" line", rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for f := range got {
+		if !want[f] {
+			t.Errorf("%s is not in generatedFiles", f)
+		}
+	}
+	for f := range want {
+		if !got[f] {
+			t.Errorf("%s of generatedFiles does not exist", f)
+		}
 	}
 }
 

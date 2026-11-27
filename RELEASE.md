@@ -5,11 +5,25 @@
 **Date:** 2026-11-27
 **Previous release:** v1.41.0
 
-Correctness fixes of phase 0 of docs/roadmap.md, each against the clause of the specification it follows.
+Correctness fixes of phase 0 of docs/roadmap.md, each against the clause of the specification it follows, and phase 1: pinned code generator inputs and one NodeSet2 reader.
+
+The code generators read only pinned inputs: every file `schema/update-schema.sh` downloads comes from one commit of the OPC Foundation UA-Nodeset repository (`ed0b821f6a6f`, the head of `latest` on 2026-11-18; every vendored file is byte-identical to it), recorded with its SHA-256 and, for a NodeSet, its Models and RequiredModels in `schema/manifest.json`. The pinning changes no vendored input and no generated file. The module is about 7 MB smaller.
 
 ### Added
 
 - server: `WithIssuedTokenPolicy(issuedTokenType, issuerEndpointURL)` sets the IssuedTokenType and IssuerEndpointUrl the IssuedToken UserTokenPolicy of every endpoint advertises (Part 4 §7.41: the IssuedTokenType is a URI, "This field may only be specified if TokenType is ISSUEDTOKEN"), and `IssuedTokenTypeJWT` is the URI of a JSON Web Token, `http://opcfoundation.org/UA/UserToken#JWT` (Part 6 §6.5.2.2, Table 54).
+
+### Changed
+
+- `schema/update-schema.sh [REF]` downloads every input at REF (a commit, branch or tag; default: the pinned commit, which must give no diff) through `internal/cmd/schemamanifest update` and rewrites `schema/manifest.json`; nothing is written unless every download succeeds.
+- `make gen` first runs `schemamanifest verify`: the SHA-256 and Models of every input must match the manifest, and every RequiredModel must be satisfied by a vendored model with the same ModelUri, by the ModelVersion and PublicationDate comparison of OPC 10000-6 §F.2, Table F.1 (UAFX requires UA 1.05.06, DI requires UA 1.05.04 and GDS UA 1.05.07 of 2026-05-01; the vendored UA is 1.05.07 of 2026-07-30).
+- `make check-gen` also fails on a new untracked generated file (`*_gen.go`, `*_gen_test.go`, `interop/COVERAGE.md`, `interop/GAPS.md`), not only on a changed one.
+- The weekly `schema-check.yml` workflow compares the head of `latest` with the pinned inputs and reports the commits, the inputs whose content changed and the Version, ModelVersion, PublicationDate and RequiredModels of each changed model.
+
+### Removed
+
+- `schema/Opc.Ua.PredefinedNodes.xml` (7 MB, the .NET stack's form of the namespace 0 model): nothing in the module read it.
+- `schema/UANodeSet.xsd`: nothing read it, it was not downloaded and it was an older revision (1.05.02) than upstream's (1.05.04). Go has no XML Schema validator; the NodeSets are checked by the manifest instead.
 
 ### Fixed
 
@@ -42,6 +56,7 @@ Correctness fixes of phase 0 of docs/roadmap.md, each against the clause of the 
 - `TestHistorian_DeleteRawModifiedRange` (`server`): end time excluded, startTime = endTime with and without a sample, reverse and open ranges, a range ending at the first sample and an empty range, each checked against what ReadRaw returns for the range. `TestHistory_Delete` (`conformance/history`) checks the same over the wire; its expectations followed the closed range and are now those of Part 11. Reversed, open and missing ranges are `Bad_HistoryOperationInvalid` and delete nothing, in `TestHistorian_DeleteRawModifiedRange`, `TestHistory_Delete/RawRangeInvalid` (with a valid operation in the same request), `TestHistoryUpdate_DeleteRawModifiedRangeChecked` (a custom backend that is not called) and `TestCheckDeleteRawRange` (the null DateTime of each encoding).
 - `TestSetTriggering_RemoveBeforeAdd` (`server`): removing and adding the same link, removing a missing link and adding it, replacing one link or one of two, adding only, removing only, and the order of the results (fails without the fix). `TestSetTriggering_RemoveAndAddKeepsLink` (over the wire): the item to report is reported with its triggering item after such a request.
 - `TestWithIssuedTokenPolicy` (`server`): the configured IssuedTokenType and IssuerEndpointUrl on every IssuedToken policy and on no other, and empty fields by default.
+- `TestVendoredInputs`, `TestCompareModels`, `TestRequiredModels`, `TestUpdateAndVerify`, `TestUpdateFails`, `TestDiff` (`internal/cmd/schemamanifest`). `TestGeneratedFileList` (`internal/cmd/gen`) checks the list of generated files against the `*_gen.go` and `*_gen_test.go` files of the module.
 
 ---
 ## v1.41.0

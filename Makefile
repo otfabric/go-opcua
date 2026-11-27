@@ -147,11 +147,21 @@ coverage-ledger: ## Validate and regenerate interop/COVERAGE.md from coverage.js
 	@go run ./internal/cmd/render-interop-coverage
 	@go test -count=1 ./interop -run TestCoverageManifestValid
 
-check-gen: gen ## Verify generated files are up to date
+# The generated files are named *_gen.go or *_gen_test.go (the gen driver's
+# TestGeneratedFileList checks it); the interop ledger renders the other two.
+GENERATED_PATHS := '*_gen.go' '*_gen_test.go' interop/COVERAGE.md interop/GAPS.md
+
+check-gen: gen ## Verify generated files are up to date (changed, or new and untracked)
 	@echo "Checking for generation drift"
 	@if ! git diff --quiet; then \
 		echo "ERROR: Generated files are out of date. Run 'make gen' and commit."; \
 		git diff --stat; \
+		exit 1; \
+	fi
+	@untracked=$$(git status --porcelain --untracked-files=all -- $(GENERATED_PATHS)); \
+	if [ -n "$$untracked" ]; then \
+		echo "ERROR: make gen wrote files that are not committed: commit them."; \
+		echo "$$untracked"; \
 		exit 1; \
 	fi
 

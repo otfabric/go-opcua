@@ -1,10 +1,13 @@
 name: Upstream schema check
 run-name: "Upstream schema check (${{ github.event_name }}) by @${{ github.actor }}"
 
-# Downloads the OPC Foundation schema files with schema/update-schema.sh and
-# compares them with the copies vendored in this repository. When upstream has
-# moved, it opens (or refreshes) a tracking issue; nothing is committed.
-# The update itself stays manual: ./schema/update-schema.sh && make gen.
+# Downloads the OPC Foundation schema files at the head of the upstream
+# `latest` branch with schema/update-schema.sh and compares them with the
+# copies pinned in schema/manifest.json: the commit, the inputs whose content
+# changed, and the Version, ModelVersion, PublicationDate and RequiredModels
+# of each NodeSet. When upstream has moved, it opens (or refreshes) a tracking
+# issue; nothing is committed. The update itself stays manual:
+# ./schema/update-schema.sh latest && make gen.
 on:
   schedule:
     - cron: "0 6 * * 1"
@@ -30,40 +33,65 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download upstream schema
-        run: ./schema/update-schema.sh
+      - uses: actions/setup-go@v7
+        with:
+          go-version: '1.26'
 
-      - name: Compare with vendored copies
+      - name: Download upstream schema
+        id: update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # The default shell stops at the first failure (bash -e).
+          set +e -uo pipefail
+          cp schema/manifest.json "$RUNNER_TEMP/manifest.pinned.json"
+          # update fails after writing the files when a RequiredModel is no
+          # longer satisfied; that is reported, not a failure of this job.
+          ./schema/update-schema.sh latest 2>&1 | tee "$RUNNER_TEMP/update.log"
+          echo "status=${PIPESTATUS[0]}" >> "$GITHUB_OUTPUT"
+
+      - name: Compare with the pinned inputs
         id: diff
+        env:
+          UPDATE_STATUS: ${{ steps.update.outputs.status }}
         run: |
           set -euo pipefail
 
-          # Record intent-to-add so files that are new upstream show up too.
-          git add --intent-to-add schema internal/schema uafx/internal/model
-
-          changed=$(git diff --name-only -- schema internal/schema uafx/internal/model)
-          if [ -z "${changed}" ]; then
+          # The branch moves with every companion specification; only the
+          # content of the inputs counts.
+          inputs='[.inputs[] | [.path, .sha256]]'
+          if [ "$(jq -c "${inputs}" schema/manifest.json)" = "$(jq -c "${inputs}" "$RUNNER_TEMP/manifest.pinned.json")" ]; then
+            if [ "${UPDATE_STATUS}" != "0" ]; then
+              echo "The download failed before a manifest was written." | tee -a "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "Vendored schema matches upstream." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "The pinned inputs match upstream $(jq -r .commit schema/manifest.json)." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          # Identifies this exact upstream content, so the same change is
-          # reported once even if the tracking issue is closed unresolved.
-          fingerprint=$(git diff -- schema internal/schema uafx/internal/model | sha256sum | cut -c1-16)
+          # Identifies this exact upstream content (the SHA-256 of every
+          # input), so the same change is reported once even if the tracking
+          # issue is closed unresolved.
+          fingerprint=$(jq -r '.inputs[] | .path + " " + .sha256' schema/manifest.json | sha256sum | cut -c1-16)
 
           {
-            echo "| File | Lines added | Lines removed |"
-            echo "|---|---:|---:|"
-            git diff --numstat -- schema internal/schema uafx/internal/model \
-              | awk -F'\t' '{ printf "| `%s` | %s | %s |\n", $3, $1, $2 }'
+            go run ./internal/cmd/schemamanifest diff "$RUNNER_TEMP/manifest.pinned.json" schema/manifest.json
+            if [ "${UPDATE_STATUS}" != "0" ]; then
+              echo
+              echo "**The upstream models do not satisfy each other's RequiredModels** (OPC 10000-6 §F.2):"
+              echo
+              echo '```'
+              grep -i -A20 'schemamanifest:' "$RUNNER_TEMP/update.log" || tail -20 "$RUNNER_TEMP/update.log"
+              echo '```'
+            fi
           } > "$RUNNER_TEMP/schema-table.md"
 
           echo "changed=true" >> "$GITHUB_OUTPUT"
           echo "fingerprint=${fingerprint}" >> "$GITHUB_OUTPUT"
 
           {
-            echo "## Upstream schema differs from the vendored copy"
+            echo "## Upstream schema differs from the pinned inputs"
             echo
             cat "$RUNNER_TEMP/schema-table.md"
           } >> "$GITHUB_STEP_SUMMARY"
@@ -79,30 +107,21 @@ jobs:
 
           marker="<!-- schema-fingerprint:${FINGERPRINT} -->"
 
-          # Latest upstream commit touching the schema directory (best effort).
-          upstream=$(gh api "repos/${UPSTREAM_REPO}/commits?path=Schema&per_page=1" \
-            --jq '.[0] | "[`\(.sha[0:12])`](\(.html_url)) — \(.commit.committer.date[0:10]) — \(.commit.message | split("\n")[0])"' \
-            2>/dev/null || true)
-
           {
             echo "${marker}"
-            echo "The OPC Foundation schema files in [${UPSTREAM_REPO}](https://github.com/${UPSTREAM_REPO}) no longer match the copies vendored in this repository."
+            echo "The OPC Foundation schema files at the head of the \`latest\` branch of [${UPSTREAM_REPO}](https://github.com/${UPSTREAM_REPO}) no longer match the inputs pinned in \`schema/manifest.json\`."
             echo
-            if [ -n "${upstream}" ]; then
-              echo "Latest upstream schema commit: ${upstream}"
-              echo
-            fi
             cat "$RUNNER_TEMP/schema-table.md"
             echo
             echo "### Update manually"
             echo
             echo '```sh'
-            echo "./schema/update-schema.sh"
+            echo "./schema/update-schema.sh latest"
             echo "make gen"
             echo "make test"
             echo '```'
             echo
-            echo "Review the generated diff (new NodeIds, StatusCodes, types and default permissions) before committing."
+            echo "Review the generated diff (new NodeIds, StatusCodes, types and default permissions) and the new pin in \`schema/manifest.json\` before committing."
             echo
             echo "Detected by [this workflow run](${RUN_URL}). Closing this issue without updating silences it until upstream changes again."
           } > "$RUNNER_TEMP/issue-body.md"

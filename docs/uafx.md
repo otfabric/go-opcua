@@ -32,8 +32,11 @@ None of the profiles of Part 84 is claimed. What is missing is listed under [Lim
 The NodeSets are those the OPC Foundation publishes in the
 [UA-Nodeset](https://github.com/OPCFoundation/UA-Nodeset) repository
 (folders `UAFX` and `DI`, MIT license), embedded in `uafx/internal/model`.
-`schema/update-schema.sh` downloads them, `make gen` generates the NodeId
-packages and the DataTypes.
+`schema/update-schema.sh` downloads them at the UA-Nodeset commit pinned in
+`schema/manifest.json`, `make gen` generates the NodeId packages and the
+DataTypes. The manifest check verifies that the RequiredModels of the UAFX
+NodeSets (UA 1.05.06, DI 1.05.0, FX Data 1.00.04) are satisfied by the
+vendored models (UA 1.05.07, DI 1.05.0, FX Data 1.00.04; OPC 10000-6 §F.2).
 
 ## Inspecting a server
 
