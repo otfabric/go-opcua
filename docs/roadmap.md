@@ -35,6 +35,10 @@ Small fixes that customers run into today.
 The clause of each fix is read in the specification before the PR (AGENTS.md
 rule 3).
 
+Done in v1.42.0 (PR #61): all seven items. The IssuedTokenType is set with
+`server.WithIssuedTokenPolicy` and stays empty without it; the clauses are
+cited in RELEASE.md.
+
 ## Phase 1: generation foundation
 
 | Item | Today |
