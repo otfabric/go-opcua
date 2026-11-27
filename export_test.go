@@ -17,11 +17,19 @@ func (c *Client) TestingRecreateSubscription(ctx context.Context, id uint32) err
 	return err
 }
 
+// TestingRecreateDelete is recreateDelete, under the client's subMux as
+// recreateSubscription calls it.
 func (s *Subscription) TestingRecreateDelete(ctx context.Context) error {
+	s.c.subMux.Lock()
+	defer s.c.subMux.Unlock()
 	return s.recreateDelete(ctx)
 }
 
+// TestingRecreateCreate is recreateCreate, under the client's subMux as
+// recreateSubscription calls it.
 func (s *Subscription) TestingRecreateCreate(ctx context.Context) error {
+	s.c.subMux.Lock()
+	defer s.c.subMux.Unlock()
 	return s.recreateCreate(ctx)
 }
 
@@ -79,6 +87,8 @@ func (s *Subscription) TestingSetItemServerID(id, serverID uint32) {
 
 // TestingRestoreTriggering is restoreTriggering.
 func (s *Subscription) TestingRestoreTriggering(ctx context.Context) error {
+	s.c.subMux.Lock()
+	defer s.c.subMux.Unlock()
 	return s.restoreTriggering(ctx)
 }
 
