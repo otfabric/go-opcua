@@ -89,6 +89,17 @@ func TestInspectPaged(t *testing.T) {
 // for a call whose failure it tolerates, a report; it never panics.
 func TestInspectFaults(t *testing.T) {
 	_, c, _ := FXTestServer(t, false)
+	inspectFaults(t, c)
+}
+
+// TestInspectFaultsCapabilities: the faults of TestInspectFaults with the
+// ComponentCapabilities members and an endpoint with Diagnostics.
+func TestInspectFaultsCapabilities(t *testing.T) {
+	inspectFaults(t, capsClient(t, -1, true))
+}
+
+func inspectFaults(t *testing.T, c uafx.InspectClient) {
+	t.Helper()
 	ctx := context.Background()
 	count := &faulty{InspectClient: c, fail: -1}
 	_, err := uafx.InspectWith(ctx, count, uafx.Limits{}, 2)

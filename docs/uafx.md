@@ -66,10 +66,19 @@ for _, f := range r.Findings {
 | The server capability identifiers (FXAC, FXCM) | ServerConfiguration/ServerCapabilities |
 | FxRoot | Part 81 §12.2 |
 | AutomationComponents organized by FxRoot, of AutomationComponentType or a subtype: ConformanceName, AggregatedHealth, Descriptors | §6.2.2 |
+| Their ComponentCapabilities: SupportsPersistence, MaxConnections, MaxConnectionsPerCall, MaxFunctionalEntities, MinConnections, CommandBundleRequired (`Capabilities`, a nil field for a member the component does not have) | §6.2.6 Table 26 |
 | Their Assets (FxAssetType): the nameplate (Manufacturer, Model, SerialNumber, revisions, ...) | §6.3.2 |
 | Their FunctionalEntities and SubFunctionalEntities: author, version, OperationalHealth | §6.4.2 |
-| The ConnectionEndpoints of the FunctionalEntities: Status, IsPersistent, CleanupTimeout | §6.6.2, §6.6.3 |
+| The ConnectionEndpoints of the FunctionalEntities: Status, IsPersistent, CleanupTimeout (`CleanupTimeoutMs` as the server holds it, negative for an endpoint that is never cleaned up; `CleanupTimeout` is 0 then), the CreationTime and ModificationTime of their Diagnostics | §6.6.2 Table 73, Table 74, §6.6.3 |
 | The ConnectionManager organized by FxRoot and its ConnectionConfigurationSets | §6.7.2, §12.3 |
+
+Two persistence findings: a persistent endpoint whose CleanupTimeout is
+not negative, NaN included ("For a persistent ConnectionEndpoint, the
+CleanupTimeout shall be set to a negative number", §6.6.2), and a
+persistent endpoint on an AutomationComponent that does not announce
+SupportsPersistence TRUE, which absent or FALSE denies (§6.2.6 Table 26).
+A go-opcua AutomationComponent with a store announces it (see
+[Persistence](#persistence)) and has neither.
 
 A type is recognised by the HasSubtype chain of the server, so vendor
 subtypes count; a supertype the server cannot tell ends the inspection

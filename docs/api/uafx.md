@@ -136,10 +136,39 @@ type AutomationComponent struct {
 	FunctionalEntities []FunctionalEntity
 	// Descriptors are the AcDescriptors (Part 81 §6.2.3) of the component.
 	Descriptors []Node
+	// Capabilities are the ComponentCapabilities of the component (Part
+	// 81 §6.2.6 Table 26), nil when it has none.
+	Capabilities *ComponentCapabilities
 }
 ```
 
 AutomationComponent is an instance of AutomationComponentType (Part 81 §6.2.2) or of a subtype.
+
+### type ComponentCapabilities
+
+```go
+type ComponentCapabilities struct {
+	// SupportsPersistence TRUE means the component supports persistent
+	// ConnectionEndpoints (IsPersistent, §5.5.5); absent or FALSE means it
+	// does not.
+	SupportsPersistence   *bool
+	MaxConnections        *uint32
+	MaxConnectionsPerCall *uint32
+	MaxFunctionalEntities *uint32
+	MinConnections        *uint32
+	CommandBundleRequired *bool
+}
+```
+
+ComponentCapabilities are the members of the ComponentCapabilities of an AutomationComponent (Part 81 §6.2.6 Table 26). Every member is optional: a nil field is one the component does not have or that cannot be read.
+
+#### func (ComponentCapabilities) Persistence
+
+```go
+func (c *ComponentCapabilities) Persistence() bool
+```
+
+Persistence reports whether the capabilities announce SupportsPersistence TRUE.
 
 ### type ConnectionEndpoint
 
@@ -147,9 +176,21 @@ AutomationComponent is an instance of AutomationComponentType (Part 81 §6.2.2) 
 type ConnectionEndpoint struct {
 	Node
 	// Status is nil when it cannot be read.
-	Status         *ConnectionEndpointStatus
-	IsPersistent   bool
+	Status       *ConnectionEndpointStatus
+	IsPersistent bool
+	// CleanupTimeout is the CleanupTimeout of the endpoint, 0 when it is
+	// negative (never cleaned up) or cannot be read; CleanupTimeoutMs has
+	// the value itself.
 	CleanupTimeout time.Duration
+	// CleanupTimeoutMs is the CleanupTimeout as the server holds it, a
+	// Duration in milliseconds (Part 3 §8.13), nil when it cannot be read.
+	// A negative value means the endpoint is never cleaned up, which a
+	// persistent endpoint requires (Part 81 §6.6.2).
+	CleanupTimeoutMs *float64
+	// CreationTime and ModificationTime are those of the Diagnostics of the
+	// endpoint (Part 81 §6.6.2 Table 74), zero when it has none.
+	CreationTime     time.Time
+	ModificationTime time.Time
 	// ConnectionManagerApplicationURI is the ApplicationUri of the
 	// ConnectionManager that established the endpoint, when known.
 	ConnectionManagerApplicationURI string

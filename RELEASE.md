@@ -1,5 +1,29 @@
 # go-opcua Releases
 
+## v1.41.0
+
+**Date:** unreleased
+**Previous release:** v1.40.0
+
+`uafx.Inspect` reports the persistence of an AutomationComponent and its ConnectionEndpoints (OPC 10000-81 §6.2.6, §6.6.2), so that a client can see what v1.40.0 servers announce: SupportsPersistence and the other ComponentCapabilities, the CleanupTimeout of an endpoint as the server holds it, and the CreationTime and ModificationTime of its Diagnostics, which a restored endpoint keeps across a restart. None of the pinned references of opcua-interop implements UAFX, so this is tested against go-opcua only. Two new findings can appear in a Report; see Behaviour changes.
+
+### Added
+
+- `uafx.AutomationComponent.Capabilities` (`*uafx.ComponentCapabilities`): SupportsPersistence, MaxConnections, MaxConnectionsPerCall, MaxFunctionalEntities, MinConnections and CommandBundleRequired of the ComponentCapabilities (Part 81 §6.2.6 Table 26), each nil when the component does not have the member or it cannot be read; nil when the component has no ComponentCapabilities. `ComponentCapabilities.Persistence` reports SupportsPersistence TRUE.
+- `uafx.ConnectionEndpoint.CleanupTimeoutMs`: the CleanupTimeout as the server holds it, in milliseconds, nil when it cannot be read. `CleanupTimeout` stays 0 for a negative value, which means the endpoint is never cleaned up and which a persistent endpoint requires (§6.6.2), so the two could not be told apart before.
+- `uafx.ConnectionEndpoint.CreationTime` and `ModificationTime`, from the Diagnostics of the endpoint (§6.6.2 Table 74), zero when it has none.
+- The example `uafx/inspect` prints whether each AutomationComponent supports persistence, "never" for a negative CleanupTimeout and the CreationTime and ModificationTime of an endpoint.
+
+### Behaviour changes
+
+- `Inspect` adds a Finding (clause 6.6.2) for a persistent ConnectionEndpoint whose CleanupTimeout is not negative, 0 and NaN included ("For a persistent ConnectionEndpoint, the CleanupTimeout shall be set to a negative number"), and a Finding (clause 6.2.6) for a persistent ConnectionEndpoint on an AutomationComponent that does not announce SupportsPersistence TRUE (Table 26: absent or FALSE means it does not support persistent endpoints). A server that shows such endpoints now has these Findings; a go-opcua AutomationComponent has neither.
+- `Inspect` reads the ComponentCapabilities of each AutomationComponent and the Diagnostics of each ConnectionEndpoint: one Browse and one Read more for each, within the existing Limits.
+
+### Tests
+
+- `TestInspectCapabilities` (`uafx`): every ComponentCapabilities member, a negative CleanupTimeout with the Diagnostics times, the findings for a CleanupTimeout of 0 and NaN and for SupportsPersistence FALSE. `TestInspectFaultsCapabilities` fails each call of such an inspection in turn. `TestInspectPersistence` (`uafx/fxserver`): a go-opcua AutomationComponent with a store announces SupportsPersistence TRUE, its persistent endpoint a negative CleanupTimeout and its Diagnostics, with the same CreationTime after a restart and no persistence finding; without a store SupportsPersistence is absent.
+
+---
 ## v1.40.0
 
 **Date:** 2026-11-27
