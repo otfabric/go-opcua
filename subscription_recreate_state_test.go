@@ -4,12 +4,16 @@ package opcua_test
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/otfabric/go-opcua"
+	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/internal/testutil"
+	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uasc"
 	"github.com/stretchr/testify/require"
 )
 
@@ -157,6 +161,113 @@ func TestRestoreTriggering_ServerRefuses(t *testing.T) {
 	err = sub.TestingRestoreTriggering(ctx)
 	require.ErrorIs(t, err, ua.StatusBadMonitoredItemIDInvalid)
 	require.NotContains(t, err.Error(), "item to report")
+}
+
+// Unmonitor drops the links of the items it deletes: "When a MonitoredItem
+// is deleted, its triggered item links are also deleted" (Part 4
+// §5.13.6.1), and so is a link to a deleted item to report (§5.13.1.6), so
+// a recreation does not send them.
+func TestUnmonitor_DropsTriggeringLinks(t *testing.T) {
+	t.Parallel()
+	srv, url := testutil.NewTestServer(t)
+	ns := testutil.AddTestNodes(t, srv)
+	c := testutil.NewTestClient(t, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, make(chan *opcua.PublishNotificationData, 64))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	var reqs []*ua.MonitoredItemCreateRequest
+	for i, name := range []string{"IntVar", "FloatVar", "StringVar", "IntVar"} {
+		reqs = append(reqs, opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewStringNodeID(ns.ID(), name), ua.AttributeIDValue, uint32(i+1)))
+	}
+	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth, reqs...)
+	require.NoError(t, err)
+	var ids []uint32
+	for _, r := range res.Results {
+		require.Equal(t, ua.StatusOK, r.StatusCode)
+		ids = append(ids, r.MonitoredItemID)
+	}
+	a, b, d, e := ids[0], ids[1], ids[2], ids[3]
+	for _, l := range []struct {
+		trigger uint32
+		reports []uint32
+	}{{a, []uint32{b, d}}, {e, []uint32{d}}} {
+		_, err := sub.SetTriggering(ctx, l.trigger, l.reports, nil)
+		require.NoError(t, err)
+	}
+	require.Equal(t, map[uint32][]uint32{a: {b, d}, e: {d}}, sub.TestingTriggers())
+
+	// An item to report: the links to it go, and a triggering item left
+	// without links is forgotten.
+	_, err = sub.Unmonitor(ctx, d)
+	require.NoError(t, err)
+	require.Equal(t, map[uint32][]uint32{a: {b}}, sub.TestingTriggers())
+
+	// A triggering item: its links go with it.
+	_, err = sub.Unmonitor(ctx, a)
+	require.NoError(t, err)
+	require.Empty(t, sub.TestingTriggers())
+}
+
+// restoreTriggering reports a link the response of the server has no
+// result for as not created (Bad_UnknownResponse): the addResults have
+// "the size and order" of linksToAdd (Part 4 §5.13.5.2).
+func TestRestoreTriggering_MissingResult(t *testing.T) {
+	t.Parallel()
+	var calls atomic.Int32
+	_, url := newScriptedServer(t, map[uint16]server.Handler{
+		id.SetTriggeringRequestEncodingDefaultBinary: func(_ context.Context, _ *uasc.SecureChannel, r ua.Request, _ uint32) (ua.Response, error) {
+			req := r.(*ua.SetTriggeringRequest)
+			res := &ua.SetTriggeringResponse{ResponseHeader: &ua.ResponseHeader{RequestHandle: req.RequestHeader.RequestHandle, ServiceResult: ua.StatusOK}}
+			if calls.Add(1) == 1 {
+				res.AddResults = make([]ua.StatusCode, len(req.LinksToAdd)) // all Good
+			}
+			return res, nil
+		},
+	})
+	c := connectCovClient(t, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, make(chan *opcua.PublishNotificationData, 64))
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	res, err := sub.Monitor(ctx, ua.TimestampsToReturnBoth,
+		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime), ua.AttributeIDValue, 1),
+		opcua.NewMonitoredItemCreateRequestWithDefaults(ua.NewNumericNodeID(0, id.ServerServerStatusState), ua.AttributeIDValue, 2))
+	require.NoError(t, err)
+	trigID, reportID := res.Results[0].MonitoredItemID, res.Results[1].MonitoredItemID
+	_, err = sub.SetTriggering(ctx, trigID, []uint32{reportID}, nil)
+	require.NoError(t, err)
+
+	err = sub.TestingRestoreTriggering(ctx)
+	require.ErrorIs(t, err, ua.StatusBadUnknownResponse)
+	require.Contains(t, err.Error(), "item to report")
+}
+
+// A SetPublishingMode the server refuses for the subscription changes
+// nothing the recreation uses.
+func TestSetPublishingMode_RefusedKeepsMode(t *testing.T) {
+	t.Parallel()
+	srv, url := testutil.NewTestServer(t)
+	testutil.AddTestNodes(t, srv)
+	c := testutil.NewTestClient(t, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	sub, err := c.Subscribe(ctx, &opcua.SubscriptionParameters{Interval: 50 * time.Millisecond}, make(chan *opcua.PublishNotificationData, 64))
+	require.NoError(t, err)
+	require.NoError(t, sub.TestingRecreateDelete(ctx)) // the server no longer has it
+	res, err := sub.SetPublishingMode(ctx, false)
+	require.NoError(t, err)
+	require.Equal(t, []ua.StatusCode{ua.StatusBadSubscriptionIDInvalid}, res.Results)
+	require.NoError(t, sub.TestingRecreateCreate(ctx))
+	t.Cleanup(func() { _ = sub.Cancel(context.Background()) })
+	st, err := sub.Stats(ctx)
+	require.NoError(t, err)
+	require.True(t, st.PublishingEnabled, "the refused request did not disable publishing")
 }
 
 // A SetTriggering request that removes and adds the same link keeps it:

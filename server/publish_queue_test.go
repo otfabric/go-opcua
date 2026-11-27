@@ -287,3 +287,19 @@ func TestPublish_FullQueueAnswersOldest(t *testing.T) {
 	default:
 	}
 }
+
+// TestSendStatusChange_PutsRequestBack: a subscription that took a Publish
+// request for a StatusChangeNotification another request has sent
+// meanwhile queues the request again instead of dropping it.
+func TestSendStatusChange_PutsRequestBack(t *testing.T) {
+	srv := newTestServer()
+	faults := recordFaults(srv)
+	sub := NewSubscription()
+	sub.srv = srv.SubscriptionService
+	sess := &session{PublishRequests: make(chan PubReq, 2)}
+	srv.queuePublishRequest(sess, testPubReq(1))
+
+	sub.sendStatusChange(sess, nil)
+	require.Equal(t, []uint32{1}, queuedIDs(sess))
+	require.Empty(t, faults.faulted())
+}

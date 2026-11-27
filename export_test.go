@@ -4,6 +4,7 @@ package opcua
 
 import (
 	"context"
+	"slices"
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -79,4 +80,19 @@ func (s *Subscription) TestingSetItemServerID(id, serverID uint32) {
 // TestingRestoreTriggering is restoreTriggering.
 func (s *Subscription) TestingRestoreTriggering(ctx context.Context) error {
 	return s.restoreTriggering(ctx)
+}
+
+// TestingTriggers returns the triggering links the subscription records:
+// triggering item -> items to report, by the ids the caller knows them by.
+func (s *Subscription) TestingTriggers() map[uint32][]uint32 {
+	s.itemsMu.Lock()
+	defer s.itemsMu.Unlock()
+	out := map[uint32][]uint32{}
+	for trigger, links := range s.triggers {
+		for id := range links {
+			out[trigger] = append(out[trigger], id)
+		}
+		slices.Sort(out[trigger])
+	}
+	return out
 }
