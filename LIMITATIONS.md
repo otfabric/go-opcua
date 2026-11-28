@@ -162,6 +162,22 @@ behaviour you may notice, and the deviations of peers are in
 - The Methods of the Server Object (GetMonitoredItems, ResendData,
   SetSubscriptionDurable, RequestServerStateChange) are tested against
   go-opcua only.
+- Profiles of OPC 10000-7: the server claims none. Its default
+  ServerProfileArray is the list of Profiles whose mandatory ConformanceUnits
+  are all evidenced in [docs/profiles.md](docs/profiles.md), and neither
+  target is: the Micro Embedded Device 2025 Server Profile lacks AccessLevelEx
+  (Atomicity, Full Array Only), MaxMonitoredItemsQueueSize, MaxArrayLength,
+  MaxStringLength, MaxByteStringLength, ServerArray, ServiceLevel and
+  RedundancySupport values, the ProfileUris filter of GetEndpoints, Sessions
+  served in parallel (one dispatcher serves every session), the RequestHandle
+  of a ServiceFault on an error path, a default ApplicationInstanceCertificate
+  and documented capacities and time synchronization; the Standard UA Client
+  2025 Profile lacks more than one outstanding Publish request, Republish on a
+  sequence gap in a live session, the OperationLimits honoured, re-discovery,
+  obsolete security policies behind administrative intervention and
+  documented capacities and time synchronization. The ServerCapabilities
+  ConformanceUnits Property (Optional) is not served. The Part 14 PubSub
+  Profiles are not in the inventory yet.
 
 ## Verification
 

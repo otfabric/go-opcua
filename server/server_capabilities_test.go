@@ -52,6 +52,22 @@ func TestServerCapabilitiesOptions(t *testing.T) {
 	require.Equal(t, []string{"en"}, capabilityOf(t, none, id.ServerServerCapabilitiesLocaleIDArray), "no LocaleIds is the default")
 }
 
+// TestServerProfilesDefault: without WithServerProfiles the
+// ServerProfileArray is the list the inventory evidences
+// (server_profiles_gen.go, docs/profiles.md), never Null; WithServerProfiles
+// with no URIs replaces it with the empty array.
+func TestServerProfilesDefault(t *testing.T) {
+	require.NotNil(t, evidencedServerProfiles)
+	srv, err := New()
+	require.NoError(t, err)
+	require.Equal(t, evidencedServerProfiles, capabilityOf(t, srv, id.ServerServerCapabilitiesServerProfileArray))
+
+	cfg := &serverConfig{}
+	require.NoError(t, WithServerProfiles()(cfg))
+	require.NotNil(t, cfg.serverProfiles, "no URIs is a list, not the default")
+	require.Equal(t, []string{}, cfg.serverProfileArray())
+}
+
 // TestBindServerCapabilitiesWithoutNode: a server without one of the
 // Properties binds the others.
 func TestBindServerCapabilitiesWithoutNode(t *testing.T) {

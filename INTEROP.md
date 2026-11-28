@@ -631,6 +631,8 @@ The directional compatibility ledger is the source of truth:
 - [`interop/COVERAGE.md`](interop/COVERAGE.md) — generated matrix (`go generate ./interop`)
 - [`interop/GAPS.md`](interop/GAPS.md) — generated unverified summary (`go run ./internal/cmd/render-interop-coverage -summary -write-gaps=interop/GAPS.md`)
 
+The Profile inventory ([docs/profiles.md](docs/profiles.md), `internal/profiles/inventory.json`) cites verified rows of `coverage.json` as evidence of ConformanceUnits; `go test ./internal/profiles` fails when a cited row is no longer verified.
+
 Go↔Go companions never earn a verified checkmark. A row may move to `verified` only after a named peer test runs against the pinned peer environment **without skip** and asserts that exact capability.
 
 Every `unverified` row must carry a controlled `reason`:

@@ -117,7 +117,7 @@ namespace.
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | done in v1.43.0, with auditing on (`server.WithChangeAuditing(false)` turns them off); no ledger row |
 | History annotations (UpdateStructureData) | done in v1.43.0: UpdateStructureDataDetails, ReadAnnotationDataDetails, the Annotations Property (`EnableAnnotations`), `AnnotationHistoryProvider`, client helpers; no ledger row |
 | Client session keepalive while idle | done in v1.43.0 |
-| ServerProfileArray | done in v1.43.0: every Mandatory ServerCapabilities Property has a value (Part 5 §6.3.2); ServerProfileArray from `WithServerProfiles`, empty by default, until phase 5 computes it |
+| ServerProfileArray | done in v1.43.0: every Mandatory ServerCapabilities Property has a value (Part 5 §6.3.2); ServerProfileArray from `WithServerProfiles`, else the Profiles phase 5 evidences, none yet |
 
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
 Enumeration and OptionSet DataType of namespace 0 and of the imported models,
@@ -174,6 +174,31 @@ A profile, conformance unit and test inventory, from which the server
 computes ServerProfileArray. First targets: Micro Embedded Device 2025 Server
 and Standard UA Client 2025, then the Part 14 UDP UADP Periodic Fixed
 publisher and subscriber.
+
+Progress (v1.43.0): the inventory exists for the two first targets
+([profiles.md](profiles.md)). `internal/profiles` reads the Profiles from a
+pinned export of the Released UACore 1.05 profile group of the OPC
+Foundation profile database, expands each target through the Profiles it
+includes and maps every ConformanceUnit, mandatory or optional, to tests and
+verified rows of `interop/coverage.json`, as evidenced, partial or missing;
+`make gen` renders the report and the default ServerProfileArray, and
+`go test ./internal/profiles` fails on a test that no longer exists or a
+ConformanceUnit without an entry. Micro Embedded Device 2025 Server: 16 of
+30 mandatory ConformanceUnits evidenced, 10 partial, 4 missing. Standard UA
+Client 2025: 33 of 48 evidenced, 12 partial, 3 missing. Neither is claimed,
+so the computed ServerProfileArray is empty; the gaps are listed in the
+report and in LIMITATIONS.md.
+
+Next slices: close the mandatory gaps of the server Profile (AccessLevelEx,
+the missing ServerCapabilities and Server Object values, GetEndpoints
+ProfileUris, the RequestHandle of every ServiceFault, sessions served in
+parallel, the capacity and time synchronization documentation, a default
+certificate) and of the client Profile; make a claim depend on the
+configuration of the server (a Profile is claimed only for the endpoints,
+security and limits it is configured with), and only then serve the
+ConformanceUnits Property; ledger rows against independent peers for the
+units tested Go to Go only; the Part 14 UDP UADP Periodic Fixed publisher
+and subscriber Profiles.
 
 ## Phase 6: UAFX Part 84
 

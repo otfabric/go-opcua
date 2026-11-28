@@ -33,8 +33,9 @@ The monitored item, continuation point and event queue limits are listed in
 
 Every Mandatory Property of the ServerCapabilities (OPC 10000-5 §6.3.2) has a
 value. `WithServerProfiles(uris...)` sets the ServerProfileArray, the URIs of
-the OPC 10000-7 Profiles the server supports in its configuration; the library
-does not determine its Profiles, so without the option the array is empty.
+the OPC 10000-7 Profiles the server supports in its configuration. Without the
+option the array holds the Profiles whose mandatory ConformanceUnits the
+inventory in [profiles.md](profiles.md) evidences; none is yet, so it is empty.
 `WithLocaleIDs(locales...)` sets the LocaleIdArray, `["en"]` by default, the
 locale of the texts the server writes. MinSupportedSampleRate is 0 (a sampling
 interval of 0 is exception-based sampling), MaxHistoryContinuationPoints is 0

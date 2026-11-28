@@ -17,7 +17,9 @@
 // in place rather than deleted first. The NodeId packages (cmd/id) are
 // generated before cmd/uafx, whose output refers to their names, and
 // cmd/methods (the Method contracts of package uamethod) reads the NodeSet
-// the manifest pins.
+// the manifest pins. internal/cmd/profiles, last, writes docs/profiles.md
+// and the default ServerProfileArray from the Profile inventory of
+// internal/profiles, and fails when a test the inventory names is gone.
 //
 // Invoke via: go generate ./...  (from module root)
 // Or directly: go run ./internal/cmd/gen
@@ -60,6 +62,7 @@ var generatedFiles = []string{
 	"id/id_Variable_gen.go",
 	"id/id_names_gen.go",
 	"server/default_permissions_gen.go",
+	"server/server_profiles_gen.go",
 	"ua/enums_attribute_id_gen.go",
 	"ua/enums_gen.go",
 	"ua/enums_strings_gen.go",
@@ -114,6 +117,7 @@ var generators = [][]string{
 	{"go", "run", "./cmd/capability"},
 	{"go", "run", "./cmd/permissions"},
 	{"go", "run", "./cmd/service"},
+	{"go", "run", "./internal/cmd/profiles"},
 }
 
 func main() {

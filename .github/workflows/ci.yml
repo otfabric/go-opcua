@@ -37,7 +37,7 @@ jobs:
       test-exclude-regex: "(/example(s)?($|/)|/chaos($|/)|/server$|/uafx/fxcm$|/uafx/fxserver$)"
       # Match Makefile COVER_PKGS so Codecov uses the same merged metric as
       # `make coverage` (conformance hits count toward core packages).
-      coverpkg: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/server/aggregate,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
+      coverpkg: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/server/aggregate,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/internal/profiles
     secrets: inherit
 
   # The chaos-monkey and parallelism suites (chaos/..., see chaos/doc.go)
@@ -166,7 +166,7 @@ jobs:
       - name: Server, uafx/fxcm and uafx/fxserver tests with coverage
         env:
           # Must match coverpkg of the ci job.
-          COVERPKG: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/server/aggregate,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns
+          COVERPKG: github.com/otfabric/go-opcua,github.com/otfabric/go-opcua/ua,github.com/otfabric/go-opcua/uacp,github.com/otfabric/go-opcua/uasc,github.com/otfabric/go-opcua/uapolicy,github.com/otfabric/go-opcua/server,github.com/otfabric/go-opcua/server/aggregate,github.com/otfabric/go-opcua/monitor,github.com/otfabric/go-opcua/errors,github.com/otfabric/go-opcua/id,github.com/otfabric/go-opcua/internal/stats,github.com/otfabric/go-opcua/internal/mdns,github.com/otfabric/go-opcua/internal/profiles
         # 10m like the race run of the server job: with -covermode=atomic and
         # this -coverpkg, uafx/fxcm alone took 120.3 s on a 2-CPU runner
         # after C3.3 (74 s on 10 cores); its tests' own deadlines are

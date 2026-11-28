@@ -4049,7 +4049,7 @@ WithServerDiagnostics sets whether the server collects diagnostics from the star
 func WithServerProfiles(uris ...string) Option
 ```
 
-WithServerProfiles sets the ServerProfileArray of the ServerCapabilities (OPC 10000-5 §6.3.2): the URIs of the Profiles of OPC 10000-7 the server supports, "limited to the Profiles the Server supports in its current configuration". The library does not determine its Profiles: without the option, or with no URIs, the array is empty.
+WithServerProfiles sets the ServerProfileArray of the ServerCapabilities (OPC 10000-5 §6.3.2): the URIs of the Profiles of OPC 10000-7 the server supports, "limited to the Profiles the Server supports in its current configuration". Without the option the array holds the Profiles the library evidences: those whose mandatory ConformanceUnits all have tests in the inventory of docs/profiles.md. No Profile is evidenced yet, so the default array is empty. The option replaces that list; with no URIs the array is empty.
 
 #### func WithServerStateChange
 
