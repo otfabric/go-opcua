@@ -1146,7 +1146,7 @@ Requests the server cannot honour are rejected per item:
 |---------|------------|
 | Deadband on a variable that is not a Number | `BadFilterNotAllowed` |
 | Any filter on an attribute other than Value, or an `EventFilter` on Value | `BadFilterNotAllowed` |
-| Percent deadband on a node without an `EURange` property; `AggregateFilter` | `BadMonitoredItemFilterUnsupported` |
+| Percent deadband on a node without an `EURange` property | `BadMonitoredItemFilterUnsupported` |
 | Negative deadband, percent above 100 | `BadDeadbandFilterInvalid` |
 | Unknown trigger or deadband type, or something that is not a monitoring filter | `BadMonitoredItemFilterInvalid` |
 | Malformed `IndexRange` | `BadIndexRangeInvalid` |
@@ -1190,6 +1190,42 @@ application reports a change, it does not poll.
   holds the latest value of each interval. One timer serves all items; there is
   no goroutine per monitored item.
 - Event items are not sampled; their revised interval is `0`.
+
+**AggregateFilter.** A monitored item on the Value of a Variable with an
+`AggregateFilter` (Part 4 §7.22.4) reports one processed value per interval of
+any Aggregate of `aggregate.Functions()`, all listed in the AggregateFunctions
+folder of the ServerCapabilities (Part 5 §6.3.2). The item keeps its samples, the
+values a plain item would report under the same sampling interval, as raw values.
+It calculates the intervals that have completed each time the publishing timer of
+the subscription expires: "The MonitoredItem only reports values for intervals
+that have completed when the publish timer expires". The calculation is that of a
+HistoryRead over the same raw values (Part 13 §4.3.2). An interval that holds the
+latest value is Partial. An interval after it is "After End of Data": Bad_NoData
+for the Aggregates over raw values, extrapolated and Uncertain for Interpolative,
+TimeAverage and Total. The SourceTimestamp is that of the Aggregate, and the
+ServerTimestamp is the end of the interval.
+
+| Parameter | Revision |
+|-----------|----------|
+| processingInterval | `0`, negative or not a number: the publishing interval of the subscription (Part 13 §5.4.3.1: "revised to a suitable non-zero value"). Then at least 100 ms and twice the revised sampling interval (Part 4 Table 147), at most one day |
+| startTime | The first boundary startTime + n × processingInterval at or after the creation of the item; the server reads no history for a monitored item. A future startTime is kept; without one the intervals start at the creation |
+| aggregateConfiguration | Overrides the configuration of the Variable, which is that of the history provider (`AggregateConfigProvider`, Part 13 §4.3.1) or `aggregate.DefaultConfig()` |
+
+The `AggregateFilterResult` returns the three revised values. The initial value
+of the item is its first raw value, not a notification. In Disabled mode the
+item keeps no raw values; when it is enabled again, the intervals restart at the
+next boundary. An item keeps at most 65536 raw values between two calculations.
+
+| Request | StatusCode |
+|---------|------------|
+| An attribute other than Value | `BadFilterNotAllowed` |
+| An Aggregate of no `aggregate.Functions()`, AnnotationCount among them | `BadAggregateNotSupported` |
+| An aggregateConfiguration that is not valid (Part 13 §4.2.1.2) | `BadMonitoredItemFilterInvalid` |
+| TimestampsToReturn Server or Neither (Part 13 §5.4.3.1; Both is accepted) | `BadTimestampsToReturnInvalid` |
+
+`ModifyMonitoredItems` validates a new AggregateFilter the same way. The raw values
+carry over to the intervals of the new filter. An item that changes to or from a
+DataChangeFilter starts from its current value.
 
 **IndexRange.** A monitored item with an `IndexRange` (for example `"2:4"` or
 `"1,0:1"` for a matrix) reports only that part of the array, and a change
