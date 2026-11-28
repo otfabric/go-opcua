@@ -299,6 +299,20 @@ func (f *FileObject) OpenCount() int {
 	return f.open
 }
 
+// openForWriting reports whether a valid handle of the file was opened for
+// writing.
+func (f *FileObject) openForWriting() bool {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.pruneLocked()
+	for _, x := range f.handles {
+		if x.mode&fileModeWrite != 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // CloseAll closes every handle, as the end of their sessions does.
 func (f *FileObject) CloseAll() {
 	f.mu.Lock()

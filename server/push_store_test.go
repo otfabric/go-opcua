@@ -170,7 +170,7 @@ func TestPushBatchStoreFailure(t *testing.T) {
 	// Nothing is left to apply.
 	st.setFail(nil)
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc)
 	require.Empty(t, st.stored())
 
 	// ApplyImmediately: the change that cannot be stored is not made.
