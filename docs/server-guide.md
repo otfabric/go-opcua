@@ -304,6 +304,7 @@ This creates a server with:
 | `WithAuditing(enabled)`, `WithAlarmClock(clock)` | Audit events of the condition methods and of the GDS; the clock of the alarm timers ([Alarms and Conditions](#alarms-and-conditions)) |
 | `WithPushManagement(pm)` | ServerConfiguration push model ([Certificate Management](#certificate-management-push-model)) |
 | `WithPubSub(cfg, opts...)` | PubSub runtime with the PublishSubscribe information model ([PubSub](pubsub.md)) |
+| `WithPubSubStore(st)` | Persist the PubSub configuration ([PubSub configuration persistence](#pubsub-configuration-persistence)) |
 
 The full list is in [API.md](../API.md#server-configuration-options).
 
@@ -1574,6 +1575,40 @@ unchanged otherwise; the EstimatedReturnTime Property, null when the requested
 state is RUNNING_0; in SHUTDOWN_4 the SecondsTillShutdown of the ServerStatus,
 which counts down, and its ShutdownReason. `Start` sets RUNNING_0 and `Close`
 SHUTDOWN_4 as before.
+
+---
+
+## PubSub configuration persistence
+
+"The latest configuration shall be persisted by the OPC UA Server and shall
+be available after a restart of the OPC UA Server" (OPC 10000-14 §9.1.2).
+`server.WithPubSubStore` does that for the PubSub runtime of `WithPubSub`;
+`server/pubsubstore` is the store, on `uafx/fxstore`:
+
+```go
+st, err := pubsubstore.OpenDir(ctx, "/var/lib/myserver/pubsub", pubsubstore.Options{Owner: appURI})
+if err != nil { /* the directory, its lock, or records that do not decode */ }
+defer st.Close() // after srv.Close
+srv, err := server.New(
+    server.WithPubSub(initial), // the configuration of an empty store
+    server.WithPubSubStore(st),
+    // ...
+)
+```
+
+| | Behaviour |
+|---|---|
+| Restore | Once, in the PubSub transaction, before the first change, `BuildPubSubModel` or `Start`: the stored configuration replaces that of `WithPubSub`, which only an empty store keeps. A store that does not load, a configuration that is not valid, or a NodeId in a namespace the server does not have (`pubsubstore.ErrNamespace`; the namespace indexes are mapped by URI) fail them all until the restore succeeds; nothing runs on a partial configuration |
+| What is written | Each change, in the transaction, after the `PubSubConfigurationHook` accepted it: the configuration Methods (§9.1.3, Enable and Disable of PublishSubscribe and of each component included), CloseAndUpdate of the PubSubConfiguration file (§9.1.3.7.6), `UpdatePubSubConfiguration` and `Revert`, `ChangePubSubConfiguration` and `ChangePubSubConfigurationThen`. One `fxstore.Domain.Apply` of the records that change, the PublishSubscribe Enabled and one record per PublishedDataSet and PubSubConnection with its groups, writers and readers |
+| A write that fails | The runtime goes back to the configuration before the change and the change fails with `Bad_InternalError` (none of the result codes of §9.1.3 is for a store failure); a hook sees the undo as a Revert. A write with an unknown outcome fences the store: `Store.Settle`, or the next change, finds what landed and writes the configuration the server has back, so a restart never brings a change the server did not apply |
+| Not written | A component with 0:NotPersisted TRUE (§6.2.2 Table 4: the Boolean in namespace 0 in its ConnectionProperties, GroupProperties, DataSetWriterProperties or DataSetReaderProperties), with what is below it, and a DataSetWriter of a PublishedDataSet that is not written. A configuration that is not valid without them (an Action WriterGroup with a PublishingInterval of 0 whose writers are all NotPersisted) is refused with `Bad_ConfigurationError` |
+| Owned elsewhere | The components a `server.PubSubComponentOwner` keeps (`Server.SetPubSubComponentOwner`). `uafx/fxserver.EnableConnections` registers the `Connections`: the components EstablishConnections creates are theirs (restored from `ConnectionOptions.Store` with a persistent ConnectionEndpoint, gone with a non-persistent one) ([uafx.md](uafx.md#persistence)) |
+| Changes on the runtime | `Server.PubSub()` changes outside the transaction; the next change in it writes them, or `Server.PersistPubSubConfiguration` |
+| Security | Secured WriterGroups, ReaderGroups and DataSetReaders of a restored configuration gate their SecurityGroup until a key newer than the restart is current ([security.md](security.md#pubsub-configuration-store)) |
+
+`pubsubstore.Open` takes any `fxstore.Store` (a database, an encrypting
+wrapper); its namespace `pubsub` must be the only one in it. `Store.Status`
+reports the revision and whether the store is fenced.
 
 ---
 

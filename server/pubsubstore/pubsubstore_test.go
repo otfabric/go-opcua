@@ -113,7 +113,7 @@ func TestRoundTrip(t *testing.T) {
 
 	s, err = OpenDir(ctx, dir, Options{Owner: owner})
 	require.NoError(t, err)
-	defer s.Close()
+	defer func() { _ = s.Close() }()
 	requireSame(t, cfg, load(t, s))
 
 	// A removal deletes the record; nothing but the root remains for an

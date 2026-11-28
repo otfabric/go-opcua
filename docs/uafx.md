@@ -697,6 +697,41 @@ supported; platforms without flock cannot open a FileStore. `MemoryStore` surviv
 An application can supply its own `Store`; `storetest.Run` checks it
 against the contract.
 
+#### The PubSub configuration store of the server
+
+`server.WithPubSubStore` persists the PubSub configuration of the server
+(Part 14 §9.1.2, [server-guide.md](server-guide.md#pubsub-configuration-persistence)).
+Each component has one store that restores it:
+
+- EnableConnections registers the `Connections` as the
+  `server.PubSubComponentOwner` of the server, with a `Store` or without.
+  The components an EstablishConnections call created
+  (SetCommunicationConfigurationCmd), and below them the readers and
+  writers its endpoints own, are theirs: the server's store leaves them out.
+  With a persistent endpoint the component records restore them (above);
+  with a non-persistent one they are gone after a restart, as the endpoint
+  is (Part 81 §5.5.5).
+- The components an endpoint references but did not create, preconfigured
+  or added by another mechanism, are the server's. Its store restores them
+  first: EnableConnections runs the restore of the server
+  (`Server.PersistPubSubConfiguration`) before it adopts endpoints or
+  restores its own records, and fails with `ErrConnections` when that
+  restore fails. A persistent endpoint then adopts them as it adopts any
+  component that is there (design §5).
+- What a call adds that no endpoint uses (a PubSubConnection of the
+  CommunicationConfiguration that no endpoint references) is handed to the
+  server's store when the call ends (`Server.PersistPubSubConfiguration`
+  after each EstablishConnections and CloseConnections; a failure is logged
+  and the next change writes it).
+- A store write that fails fails the change of the call that needs it, as
+  any change of the server's configuration (`Bad_InternalError`); what a
+  call adds is not written to the server's store while the call runs.
+
+Not persisted by either store: a component another mechanism adds below a
+component a call created (a DataSetWriter added with AddDataSetWriter to a
+WriterGroup of an endpoint, for example) is gone after a restart, also
+when the component above it is restored.
+
 ### Calling the Methods
 
 ```go
@@ -1720,9 +1755,12 @@ The test address space is `internal/testutil/fxtest`.
   control and their PubSub components, not ConfigurationData and not the
   Methods of §6.4.6 (VariableStorage): §6.2.4.3.7 requires
   SetStoredVariables for the ConfigurationData of a persistent endpoint,
-  a known deviation (LIMITATIONS.md). The PubSub configuration
-  of the server is not persisted as a whole (Part 14 §9.1.2 is not met):
-  only the components persistent endpoints reference. StrictNotPersisted
+  a known deviation (LIMITATIONS.md). Without `server.WithPubSubStore`
+  the PubSub configuration of the server is not persisted as a whole
+  (Part 14 §9.1.2 is not met): only the components persistent endpoints
+  reference. With it, a component another mechanism adds below a component
+  an EstablishConnections call created is not persisted by either store
+  ([The PubSub configuration store of the server](#the-pubsub-configuration-store-of-the-server)). StrictNotPersisted
   is off by default, so a non-persistent endpoint whose reader or writer
   lacks 0:NotPersisted TRUE is accepted, against PC-2 (§6.2.4.3.9.2;
   Part 14 §6.2.2 makes such a component persisted). 0:NotPersisted on

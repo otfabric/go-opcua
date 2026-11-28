@@ -230,6 +230,22 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	c.ops = pubsubOps{disable: rt.Disable, removeReader: rt.RemoveDataSetReader, removeWriter: rt.RemoveDataSetWriter,
 		removeGroup: rt.RemoveGroup, removeConnection: rt.RemoveConnection, removePDS: rt.RemovePublishedDataSet}
 	c.created = map[pubsub.ComponentID]bool{}
+	// The PubSub configuration store of the server leaves the components
+	// the calls create to the connections (owner.go), with a Store or
+	// without: before the restore, which adds them again.
+	srv.SetPubSubComponentOwner(c)
+	enabled := false
+	defer func() {
+		if !enabled {
+			srv.SetPubSubComponentOwner(nil)
+		}
+	}()
+	// The PubSub configuration store of the server restores first: the
+	// endpoints adopt, and restore onto, what it holds. Nothing without
+	// one.
+	if err := srv.PersistPubSubConfiguration(context.Background()); err != nil {
+		return nil, fmt.Errorf("%w: the PubSub configuration store of the server: %w", ErrConnections, err)
+	}
 	if opts.Store != nil {
 		// Before any node is created: the records reserve their NodeIds.
 		if err := c.openPersistence(); err != nil {
@@ -288,6 +304,7 @@ func EnableConnections(srv *server.Server, ns Namespaces, opts ConnectionOptions
 	}
 	c.refreshAll()
 	go c.monitor()
+	enabled = true
 	return c, nil
 }
 

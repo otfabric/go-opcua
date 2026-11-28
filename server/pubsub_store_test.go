@@ -798,3 +798,16 @@ func TestPubSubStoreConcurrent(t *testing.T) {
 	got := p.rt.Configuration()
 	require.True(t, bytes.Equal(encodedConfig(t, want), encodedConfig(t, got)))
 }
+
+// TestPubSubHookRefusesRootDisable: a Disable of PublishSubscribe the
+// PubSubConfigurationHook refuses is undone, without a store too.
+func TestPubSubHookRefusesRootDisable(t *testing.T) {
+	t.Parallel()
+	srv, url := testutil.NewTestServer(t, server.WithPubSub(nil))
+	h := &recordingHook{}
+	srv.SetPubSubConfigurationHook(h)
+	h.set(ua.StatusBadInvalidState, false)
+	r := remote.New(testutil.NewTestClient(t, url))
+	require.ErrorIs(t, r.Disable(context.Background(), nid(id.PublishSubscribe)), ua.StatusBadInvalidState)
+	require.True(t, srv.PubSub().Configuration().Enabled)
+}
