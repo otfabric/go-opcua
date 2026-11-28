@@ -300,6 +300,7 @@ func TestSKS_AddRemoveSecurityGroup(t *testing.T) {
 		{"lifetime", []any{"sg3", 0.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"negative lifetime", []any{"sg3", -1.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		{"name", []any{"", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
+		// A wrong type is refused by the Call service (Part 4 §5.12.2.2).
 		{"types", []any{"sg3", "1000", pubsubsec.PolicyURIAes128CTR, uint32(0), uint32(0)}, ua.StatusBadInvalidArgument},
 		// MaxPastKeyCount + MaxFutureKeyCount is at most 65534.
 		{"future keys", []any{"sg3", 1000.0, pubsubsec.PolicyURIAes128CTR, uint32(65535), uint32(0)}, ua.StatusBadInvalidArgument},

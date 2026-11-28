@@ -301,7 +301,7 @@ func declaredInputArguments(srv *Server, methodID *ua.NodeID) []*ua.Argument {
 // the built-in type it derives from; BaseDataType and the abstract types
 // below it accept any value.
 func variantMatchesArgument(srv *Server, v *ua.Variant, arg *ua.Argument) bool {
-	if v == nil || arg == nil || arg.DataType == nil {
+	if arg == nil || arg.DataType == nil {
 		return true
 	}
 	// Built-in DataType NodeIDs in ns=0 use the TypeID numeric identifier.
@@ -311,6 +311,14 @@ func variantMatchesArgument(srv *Server, v *ua.Variant, arg *ua.Argument) bool {
 	want, ok := builtinTypeOf(srv, arg.DataType)
 	if !ok {
 		return true
+	}
+	if v == nil || v.Type() == ua.TypeIDNull {
+		// An empty Variant is a null value, which applications "shall not"
+		// tell from the null of a DataType (OPC 10000-6 §5.1.9): it is a
+		// value of an array, whose default is null and the same as empty
+		// (§5.1.2, §5.1.11), and of a nullable built-in type (Table 1), and
+		// the Method takes it; for the others it is the wrong type.
+		return arg.ValueRank != -1 || nullableBuiltin(want)
 	}
 	if v.Type() != want {
 		return false
@@ -326,14 +334,39 @@ func variantMatchesArgument(srv *Server, v *ua.Variant, arg *ua.Argument) bool {
 	}
 }
 
+// nullableBuiltin reports whether a built-in type has a null value: the
+// Nullable column of OPC 10000-6 §5.1.2 Table 1 is No for Boolean, the
+// integer and floating-point types and StatusCode only.
+func nullableBuiltin(t ua.TypeID) bool {
+	switch t {
+	case ua.TypeIDBoolean, ua.TypeIDSByte, ua.TypeIDByte, ua.TypeIDInt16, ua.TypeIDUint16,
+		ua.TypeIDInt32, ua.TypeIDUint32, ua.TypeIDInt64, ua.TypeIDUint64,
+		ua.TypeIDFloat, ua.TypeIDDouble, ua.TypeIDStatusCode:
+		return false
+	case ua.TypeIDNull, ua.TypeIDString, ua.TypeIDDateTime, ua.TypeIDGUID, ua.TypeIDByteString,
+		ua.TypeIDXMLElement, ua.TypeIDNodeID, ua.TypeIDExpandedNodeID, ua.TypeIDQualifiedName,
+		ua.TypeIDLocalizedText, ua.TypeIDExtensionObject, ua.TypeIDDataValue, ua.TypeIDVariant,
+		ua.TypeIDDiagnosticInfo:
+		return true
+	}
+	return true
+}
+
 // builtinTypeOf returns the built-in type a namespace 0 DataType is encoded
 // as: the type itself or the built-in type it is a subtype of. It returns
 // false for BaseDataType, for the abstract types below it that are not
 // subtypes of a built-in type (Number, Integer, Enumeration) and for
 // unknown types. The standard type tree does not change, so the results
-// are cached.
+// are cached. Two Byte and Four Byte are DataEncodings of a NUMERIC
+// NodeId (OPC 10000-6 §5.2.2.9, Tables 17, 19 and 20), the ones a NodeSet
+// or a decoder gives the DataTypes of namespace 0, and are the same type.
 func builtinTypeOf(srv *Server, dt *ua.NodeID) (ua.TypeID, bool) {
-	if dt == nil || dt.Namespace() != 0 || dt.Type() != ua.NodeIDTypeNumeric {
+	if dt == nil || dt.Namespace() != 0 {
+		return 0, false
+	}
+	switch dt.Type() {
+	case ua.NodeIDTypeTwoByte, ua.NodeIDTypeFourByte, ua.NodeIDTypeNumeric:
+	default:
 		return 0, false
 	}
 	n := dt.IntID()
