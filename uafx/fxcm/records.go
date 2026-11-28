@@ -29,11 +29,13 @@ import (
 //	tx/<run>        the set change a Replace, Remove or complete Update
 //	                in run <run> makes after its closes (§6.2)
 //	call/<run>/<n>  the intent of an EstablishConnections or CloseConnections
+//	sks/<group>     a SecurityGroup the Manager added to an SKS (sks.go)
 //
 // <set> and <endpoint> are hex SHA-256 prefixes of the SetKey and of the
 // place of the endpoint (server, FunctionalEntity by namespace URI, Name),
 // so that a key never depends on a namespace index; <run> is the RunID in
-// hex. Remote NodeIds are stored URI-qualified (qualifiedID; §6.1: "Remote
+// hex; <group> a hex SHA-256 prefix of the Address and ServerUri of the
+// SKS and the SecurityGroupId. Remote NodeIds are stored URI-qualified (qualifiedID; §6.1: "Remote
 // NodeIds are stored URI-qualified"), with the NamespaceArray of their
 // server, which the encoded arguments of an intent need.
 
@@ -233,6 +235,16 @@ type storedParam struct {
 	CleanupTimeout float64
 	// Related is the RelatedEndpoint encoded (ua.Encode), empty for none.
 	Related []byte
+}
+
+// sksRecord is a SecurityGroup the Manager added to an SKS (§6.7.3.2),
+// which it removes when no set lists it any more (§6.7.3.3). Added to
+// schema 1: a store without such records is read as before.
+type sksRecord struct {
+	Address           string
+	SecurityPolicyURI string
+	ServerURI         string
+	SecurityGroupID   string
 }
 
 // runRecord is the journal of a run (§6.3).
@@ -482,6 +494,22 @@ func orNil(n *ua.NodeID) *ua.NodeID {
 // errSemantic reports a record that decodes but is not valid.
 func errSemantic(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", errRecord, fmt.Sprintf(format, args...))
+}
+
+// check checks the SecurityGroup record r of key k.
+func (r *sksRecord) check(k string, _ countersRecord) error {
+	switch {
+	case r.SecurityGroupID == "":
+		return errSemantic("a SecurityGroup record without a SecurityGroupId")
+	case sksKey(r.Address, r.ServerURI, r.SecurityGroupID) != k:
+		return errSemantic("the key is not of the SecurityGroup %q", r.SecurityGroupID)
+	}
+	return nil
+}
+
+// group is the SecurityGroupRecord of r.
+func (r *sksRecord) group() SecurityGroupRecord {
+	return SecurityGroupRecord{Address: r.Address, SecurityPolicyURI: r.SecurityPolicyURI, ServerURI: r.ServerURI, SecurityGroupID: r.SecurityGroupID}
 }
 
 // check checks the set record r of key k against the counters c.

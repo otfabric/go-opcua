@@ -17,6 +17,7 @@ import (
 	"github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/server"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 	"github.com/stretchr/testify/require"
 )
 
@@ -303,6 +304,16 @@ func TestParseResult(t *testing.T) {
 	require.ErrorIs(t, err, ErrBadResponse)
 	_, err = parseResult([]*ua.Variant{v("u"), v(uint32(1)), v([][]byte{}), v(1.0), v(1.0)})
 	require.ErrorIs(t, err, ErrBadResponse)
+	// The outputs of the declaration (Part 14 §8.3.2), no more: the
+	// *uamethod.ArgumentError is wrapped.
+	_, err = parseResult([]*ua.Variant{v("u"), v(uint32(1)), v([][]byte{{1}}), v(1.0), v(1.0), v(1.0)})
+	require.ErrorIs(t, err, ErrBadResponse)
+	require.ErrorIs(t, err, ua.StatusBadTooManyArguments)
+	var ae *uamethod.ArgumentError
+	require.ErrorAs(t, err, &ae)
+	require.True(t, ae.Output)
+	_, err = parseResult([]*ua.Variant{v("u"), v(uint32(1)), v([]byte{1}), v(1.0), v(1.0)})
+	require.ErrorIs(t, err, ua.StatusBadTypeMismatch, "a ByteString where an array of them is declared")
 	r, err := parseResult([]*ua.Variant{v("u"), v(uint32(1)), v([][]byte{{1}}), v(math.NaN()), v(1e300)})
 	require.NoError(t, err)
 	require.Zero(t, r.TimeToNextKey)

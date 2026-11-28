@@ -1177,7 +1177,9 @@ result, err := c.Call(ctx, req)
 ### Typed calls
 
 Package `uamethod` has generated contracts of Methods of namespace 0
-(FileType, FileDirectoryType, RoleSetType and RoleType): typed inputs and outputs and a
+(FileType, FileDirectoryType, RoleSetType, RoleType, ServerType,
+TrustListType, PubSubConfigurationType and PubSubKeyServiceType; the `gds`,
+`pubsub/remote` and `pubsub/sks` clients use them): typed inputs and outputs and a
 call function that checks the outputs against the declaration. A nil
 method NodeId calls the declaration of the type, which a server maps to
 the Method of the Object (Part 4 §5.12.2.2 in 1.05.06):

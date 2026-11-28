@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 	"github.com/otfabric/go-opcua/uapolicy"
 )
 
@@ -87,11 +88,11 @@ func (m *pushManager) fileOpen(ctx context.Context, _ *MethodCaller, g *certGrou
 // fileOpenWithMasks is OpenWithMasks (Part 12 §7.8.2.2): reads only the
 // lists of the masks.
 func (m *pushManager) fileOpenWithMasks(ctx context.Context, _ *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	masks, ok := argValue[uint32](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeOpenWithMasksInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	b, sc := m.readContent(g, ua.TrustListMasks(masks))
+	b, sc := m.readContent(g, ua.TrustListMasks(in.Masks))
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -101,7 +102,8 @@ func (m *pushManager) fileOpenWithMasks(ctx context.Context, _ *MethodCaller, g 
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{ua.MustVariant(h)}, ua.StatusOK
+	out := uamethod.TrustListTypeOpenWithMasksOutput{FileHandle: h}
+	return out.Pack(), ua.StatusOK
 }
 
 // fileMethod returns a Method of FileType of the TrustList of a group.
@@ -115,15 +117,15 @@ func (m *pushManager) fileMethod(name string) func(context.Context, *MethodCalle
 // opened for writing and replaces the lists the written TrustListDataType
 // specifies. The output tells whether ApplyChanges is required.
 func (m *pushManager) fileCloseAndUpdate(ctx context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	h, ok := argValue[uint32](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeCloseAndUpdateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// The handle is closed whatever the outcome: the client cannot fix
 	// what it wrote.
-	b, sc := g.file.CloseAndTake(ctx, h, nil)
+	b, sc := g.file.CloseAndTake(ctx, in.FileHandle, nil)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
@@ -139,7 +141,8 @@ func (m *pushManager) fileCloseAndUpdate(ctx context.Context, c *MethodCaller, g
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{ua.MustVariant(required)}, ua.StatusOK
+	out := uamethod.TrustListTypeCloseAndUpdateOutput{ApplyChangesRequired: required}
+	return out.Pack(), ua.StatusOK
 }
 
 // openLocked reports whether the trust list has open handles, during which
@@ -151,11 +154,11 @@ func (m *pushManager) openLocked(g *certGroup) bool {
 // addCertificate is AddCertificate (Part 12 §7.8.2.4): adds one certificate
 // to the trusted or to the issuer certificates.
 func (m *pushManager) addCertificate(ctx context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	der, ok1 := argValue[[]byte](args, 0)
-	trusted, ok2 := argValue[bool](args, 1)
-	if !ok1 || !ok2 {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeAddCertificateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
+	der, trusted := in.Certificate, in.IsTrustedCertificate
 	cert, err := uapolicy.ParseCertificate(der)
 	if err != nil || !bytes.Equal(cert.Raw, der) {
 		return nil, ua.StatusBadCertificateInvalid
@@ -185,11 +188,11 @@ func (m *pushManager) addCertificate(ctx context.Context, c *MethodCaller, g *ce
 // certificate with the thumbprint (hexadecimal SHA-1) from the trusted or
 // the issuer certificates, with the CRLs it issued.
 func (m *pushManager) removeCertificate(ctx context.Context, c *MethodCaller, g *certGroup, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	thumb, ok1 := argValue[string](args, 0)
-	trusted, ok2 := argValue[bool](args, 1)
-	if !ok1 || !ok2 {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.TrustListTypeRemoveCertificateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
+	thumb, trusted := in.Thumbprint, in.IsTrustedCertificate
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.openLocked(g) {

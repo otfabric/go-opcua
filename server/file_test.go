@@ -604,7 +604,7 @@ func TestFileMethodHandlers(t *testing.T) {
 			args[i] = "x"
 		}
 		_, sc = call(name, args...)
-		require.Equal(t, ua.StatusBadTypeMismatch, sc, name)
+		require.Equal(t, ua.StatusBadInvalidArgument, sc, name)
 		_, sc = call(name, append(args, "x")...)
 		require.Equal(t, ua.StatusBadTooManyArguments, sc, name)
 	}
@@ -710,12 +710,23 @@ func TestConfigFileInternals(t *testing.T) {
 	f := s.ps.model.file
 	require.NotNil(t, f)
 	ctx, _ := fileSession(s)
+	// The arguments of the declaration (Part 4 §5.12.2.4): too few, then
+	// a handle that is no UInt32.
 	_, sc := f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant("h")})
-	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	require.Equal(t, ua.StatusBadArgumentsMissing, sc)
+	_, sc = f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant("h"), ua.MustVariant(false), ua.MustVariant([]*ua.ExtensionObject{})})
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
 	h, sc := f.file.Open(ctx, fileModeWrite|fileModeEraseExisting)
 	require.Equal(t, ua.StatusOK, sc)
 	_, sc = f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant(h), ua.MustVariant("x"), ua.MustVariant("y")})
+	require.Equal(t, ua.StatusBadInvalidArgument, sc)
+	// A null element of ConfigurationReferences is no
+	// PubSubConfigurationRefDataType.
+	_, sc = f.closeAndUpdate(ctx, nil, []*ua.Variant{ua.MustVariant(h), ua.MustVariant(false), ua.MustVariant([]*ua.ExtensionObject{ua.NewExtensionObject(nil)})})
 	require.Equal(t, ua.StatusBadTypeMismatch, sc)
+	// The second argument of ReserveIds is missing.
+	_, sc = f.reserveIDs(ctx, nil, []*ua.Variant{ua.MustVariant("profile")})
+	require.Equal(t, ua.StatusBadArgumentsMissing, sc)
 	require.Equal(t, 1, f.file.OpenCount(), "the handle stays open")
 
 	f.mu.Lock()

@@ -10,7 +10,7 @@ Package uamethod holds the contracts of Methods of the OPC UA namespace 0 (OPC 1
 
 For each Method there is a [Method](#type-method) value with the NodeIds of the Method declaration and of its ObjectType and the declared arguments, an Input and an Output structure with Pack (to the \[]\*ua.Variant of a CallMethodRequest or CallMethodResult) and Unpack (from it, with the checks of the Call service: the number of arguments, their built-in type and their ValueRank), and a Call function that calls the Method with a client.
 
-The Methods of FileType and FileDirectoryType (OPC 10000-20 §4.2, §4.3) are the first: the server package serves files with them (server.FileObject) and package filetransfer is the client.
+The Methods of FileType and FileDirectoryType (OPC 10000-20 §4.2, §4.3) are the first: the server package serves files with them (server.FileObject) and package filetransfer is the client. The TrustListType (OPC 10000-12 §7.8.2), PubSubConfigurationType and PubSubKeyServiceType (OPC 10000-14 §9.1.3.7, §8.3) Methods of the server and of packages gds, pubsub/remote and pubsub/sks use them too.
 
 ## Functions
 
@@ -20,7 +20,7 @@ The Methods of FileType and FileDirectoryType (OPC 10000-20 §4.2, §4.3) are th
 func StatusOf(err error) ua.StatusCode
 ```
 
-StatusOf returns the status an error of Unpack stands for, so a Method handler can return it: the Status of an \*ArgumentError, else Bad\_InvalidArgument. It returns StatusOK for nil.
+StatusOf returns the operation level status an error of Unpack stands for, so a Method handler can return it (OPC 10000-4 §5.12.2.2 and Table 61): Bad\_ArgumentsMissing or Bad\_TooManyArguments for the number of input arguments, Bad\_InvalidArgument for an input argument that "broke a constraint (e.g. wrong data type ...)", whose own Bad\_TypeMismatch (Table 62) is the Status of the \*ArgumentError; the Status of an \*ArgumentError of an output argument; Bad\_InvalidArgument for any other error. It returns StatusOK for nil.
 
 ## Types
 

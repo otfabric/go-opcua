@@ -52,7 +52,10 @@ func (f *fx) persistent(t *testing.T, name string) *ua.NodeID {
 
 func (f *fx) waitStatus(t *testing.T, ep *ua.NodeID, want uafx.ConnectionEndpointStatus) {
 	t.Helper()
-	require.Eventually(t, func() bool { st, ok := f.conns.Status(ep); return ok && st == want }, 5*time.Second, 5*time.Millisecond,
+	// 20 s: a restored endpoint becomes Operational when the data of the
+	// first publishing intervals arrived, which a loaded runner (the crash
+	// tests start child processes) can delay beyond a few seconds.
+	require.Eventually(t, func() bool { st, ok := f.conns.Status(ep); return ok && st == want }, 20*time.Second, 5*time.Millisecond,
 		"the Status of %v does not become %v", ep, want)
 }
 
@@ -599,7 +602,13 @@ func TestPersistentSecuredGate(t *testing.T) {
 		require.NoError(t, err)
 		return k
 	}
-	ring := security.NewKeyRing("sg", policy)
+	// The key rotation runs on a clock of the test: the gate opens only
+	// for a key it saw coming before it became current, and a rotation on
+	// the wall clock could happen before any call of the group looked at
+	// the future keys on a slow runner.
+	var clock atomic.Int64
+	clock.Store(time.Now().UnixNano())
+	ring := security.NewKeyRing("sg", policy, security.WithClock(func() time.Time { return time.Unix(0, clock.Load()) }))
 	require.NoError(t, ring.SetKeys(policy.URI(), 1, [][]byte{newKey()}, 0, 0))
 	withRing := func(srv *server.Server) (fxserver.Namespaces, uint16, error) {
 		srv.PubSub().SetKeySource("sg", ring)
@@ -635,8 +644,12 @@ func TestPersistentSecuredGate(t *testing.T) {
 	_, open = f.srv.PubSub().SecurityGroupGate("sg")
 	require.False(t, open, "a static key never opens the gate")
 
-	// The SKS rotates: the key current at once is not fresh, the next one is.
+	// The SKS rotates: the key current at once is not fresh, the next one
+	// is, once the gate saw it as a future key and then current.
 	require.NoError(t, ring.SetKeys(policy.URI(), 2, [][]byte{newKey(), newKey()}, 100*time.Millisecond, time.Hour))
+	_, open = f.srv.PubSub().SecurityGroupGate("sg")
+	require.False(t, open, "the key current at once was in no future list")
+	clock.Add(int64(150 * time.Millisecond))
 	f.waitStatus(t, ep, uafx.ConnectionEndpointOperational)
 	_, open = f.srv.PubSub().SecurityGroupGate("sg")
 	require.True(t, open)

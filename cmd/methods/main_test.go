@@ -67,26 +67,27 @@ func TestGenerated(t *testing.T) {
 	}
 }
 
-// TestNextFamilies: the ObjectTypes the roadmap names next resolve with the
-// DataTypes of namespace 0 the generator knows, structures included.
+// TestNextFamilies: the ObjectTypes the roadmap names next do not resolve
+// with the generator as it is. The Methods of the GDS DirectoryType have
+// arguments of DataTypes outside namespace 0 (ApplicationRecordDataType of
+// the GDS NodeSet); those of CertificateDirectoryType have arguments of
+// subtypes of built-in types (UtcTime) that the GDS NodeSet alone does not
+// resolve. When one resolves, add it to families.
 func TestNextFamilies(t *testing.T) {
-	f := family{
-		NodeSet: ns0NodeSet,
-		Package: "uamethod",
-		Out:     "unused",
-		Types:   []string{"TrustListType", "PubSubConfigurationType", "PubSubKeyServiceType"},
-	}
-	types, err := resolve(ns0Set(t), f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	src, err := emit(f, types)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{"TrustListTypeOpenWithMasks", "PubSubConfigurationTypeCloseAndUpdate", "PubSubKeyServiceTypeGetSecurityKeys"} {
-		if !strings.Contains(string(src), "var "+want+" = ") {
-			t.Errorf("no contract %s", want)
+	chdirRoot(t)
+	for typ, want := range map[string]string{
+		"DirectoryType":            "is not of namespace 0",
+		"CertificateDirectoryType": "DataType i=294 is not supported",
+	} {
+		_, err := load(family{
+			NodeSet:   "internal/schema/Opc.Ua.Gds.NodeSet2.xml",
+			Namespace: "http://opcfoundation.org/UA/GDS/",
+			Package:   "gdsmethod",
+			Out:       "unused",
+			Types:     []string{typ},
+		})
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%s: %v, want %q (when it resolves, add it to families)", typ, err, want)
 		}
 	}
 }
@@ -112,8 +113,9 @@ func TestLoadErrors(t *testing.T) {
 
 func TestClause(t *testing.T) {
 	for doc, want := range map[string]string{
-		"https://reference.opcfoundation.org/v105/Core/docs/Part20/4.2.2":  "OPC 10000-20 §4.2.2",
-		"https://reference.opcfoundation.org/v105/Core/docs/Part20/4.2.2/": "OPC 10000-20 §4.2.2",
+		"https://reference.opcfoundation.org/v105/Core/docs/Part20/4.2.2":          "OPC 10000-20 §4.2.2",
+		"https://reference.opcfoundation.org/v105/Core/docs/Part20/4.2.2/":         "OPC 10000-20 §4.2.2",
+		"https://reference.opcfoundation.org/v105/Core/docs/Part12/7.8.2/#7.8.2.3": "OPC 10000-12 §7.8.2.3",
 		"":                          "",
 		"https://example.com/other": "",
 	} {

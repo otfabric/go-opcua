@@ -308,7 +308,7 @@ func (x *run) establishRun(ctx context.Context) {
 		return
 	}
 	x.checkNames()
-	if x.anyFailed() {
+	if x.anyFailed() || !x.configureSKS(ctx) {
 		x.stop(ctx)
 		return
 	}
@@ -2717,8 +2717,12 @@ func (x *run) rollback(ctx context.Context) {
 // not stop the others (EC-15). An Unresolved endpoint is not closed; in a
 // remove run its Connection fails with CloseConnectionError and
 // Bad_InvalidState, so that the set is not removed while it may have
-// Connections (design §5.4).
+// Connections (design §5.4). A remove run that removed them all removes
+// the SecurityGroups of the set from its SKS (§6.7.3.3, removeSKS).
 func (x *run) closeRun(ctx context.Context, remove bool) {
+	if remove {
+		defer x.removeSKSAfter(ctx)
+	}
 	recs, unresolved := x.closable()
 	for _, r := range unresolved {
 		x.mu.Lock()
@@ -2745,6 +2749,18 @@ func (x *run) closeRun(ctx context.Context, remove bool) {
 		case err != nil:
 			x.extraFailure(failureOf(err, uafx.FxErrorCloseConnectionError))
 		}
+	}
+}
+
+// removeSKSAfter runs removeSKS after a remove run without failures: every
+// endpoint of the set is removed, and so is its SKS configuration
+// (§6.7.3.3).
+func (x *run) removeSKSAfter(ctx context.Context) {
+	x.mu.Lock()
+	failed := len(x.res.Failures) > 0
+	x.mu.Unlock()
+	if !failed && !x.anyFailed() {
+		x.removeSKS(ctx)
 	}
 }
 

@@ -92,16 +92,22 @@ call function. The pilot is done: `server.FileObject` (`AddFile`,
 `ServeFile`, `NewFile`, `AddFileDirectory`) and package `filetransfer` are
 built on the FileType and FileDirectoryType contracts, and the four FileType
 implementations and the `gds` and `pubsub/remote` clients of their files use
-them. Not generated yet: the events a Method generates, mandatory children
-and state machine transitions. The next families, TrustListType
-(OpenWithMasks, CloseAndUpdate, AddCertificate, RemoveCertificate),
-PubSubConfigurationType (ReserveIds, CloseAndUpdate) and
-PubSubKeyServiceType (GetSecurityKeys, GetSecurityGroup), resolve with the
-generator as it is (`TestNextFamilies`): adding them to the config and
-moving their handlers and clients is the work. The GDS DirectoryType and
-CertificateDirectoryType need DataTypes outside namespace 0
-(ApplicationRecordDataType of the GDS NodeSet) and a contracts package per
-namespace.
+them. The second families are done too: TrustListType (OpenWithMasks,
+CloseAndUpdate, AddCertificate, RemoveCertificate) for `ServeTrustList`,
+push certificate management and the `gds` client;
+PubSubConfigurationType (ReserveIds, CloseAndUpdate) for the
+PubSubConfiguration file and `pubsub/remote`; PubSubKeyServiceType
+(GetSecurityKeys, GetSecurityGroup) for the SKS and `pubsub/sks`. The
+RoleSet, Role and ServerType Methods are generated as well. What remains:
+the GDS DirectoryType and CertificateDirectoryType, whose arguments are
+DataTypes outside namespace 0 (ApplicationRecordDataType of the GDS
+NodeSet) or subtypes of built-in types the GDS NodeSet alone does not
+resolve (`TestNextFamilies`), need the generator to read a NodeSet with
+the one of namespace 0 and a contracts package per namespace; the
+Methods of ServerConfigurationType, SecurityGroupFolderType and
+PubSubKeyPushTargetType, still written by hand, and those of alarms and
+UAFX; and the events a Method generates, mandatory children and state
+machine transitions, which are not generated.
 
 ## Phase 3: core symmetry
 
@@ -117,7 +123,7 @@ namespace.
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | done in v1.43.0, with auditing on (`server.WithChangeAuditing(false)` turns them off); no ledger row |
 | History annotations (UpdateStructureData) | done in v1.43.0: UpdateStructureDataDetails, ReadAnnotationDataDetails, the Annotations Property (`EnableAnnotations`), `AnnotationHistoryProvider`, client helpers; no ledger row |
 | Client session keepalive while idle | done in v1.43.0 |
-| ServerProfileArray | done in v1.43.0: every Mandatory ServerCapabilities Property has a value (Part 5 §6.3.2); ServerProfileArray from `WithServerProfiles`, empty by default, until phase 5 computes it |
+| ServerProfileArray | done in v1.43.0: every Mandatory ServerCapabilities Property has a value (Part 5 §6.3.2); ServerProfileArray from `WithServerProfiles`, else the Profiles phase 5 evidences, none yet |
 
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
 Enumeration and OptionSet DataType of namespace 0 and of the imported models,
@@ -186,12 +192,46 @@ computes ServerProfileArray. First targets: Micro Embedded Device 2025 Server
 and Standard UA Client 2025, then the Part 14 UDP UADP Periodic Fixed
 publisher and subscriber.
 
+Progress (v1.43.0): the inventory exists for the two first targets
+([profiles.md](profiles.md)). `internal/profiles` reads the Profiles from a
+pinned export of the Released UACore 1.05 profile group of the OPC
+Foundation profile database, expands each target through the Profiles it
+includes and maps every ConformanceUnit, mandatory or optional, to tests and
+verified rows of `interop/coverage.json`, as evidenced, partial or missing;
+`make gen` renders the report and the default ServerProfileArray, and
+`go test ./internal/profiles` fails on a test that no longer exists or a
+ConformanceUnit without an entry. Micro Embedded Device 2025 Server: 16 of
+30 mandatory ConformanceUnits evidenced, 10 partial, 4 missing. Standard UA
+Client 2025: 33 of 48 evidenced, 12 partial, 3 missing. Neither is claimed,
+so the computed ServerProfileArray is empty; the gaps are listed in the
+report and in LIMITATIONS.md.
+
+Next slices: close the mandatory gaps of the server Profile (AccessLevelEx,
+the missing ServerCapabilities and Server Object values, GetEndpoints
+ProfileUris, the RequestHandle of every ServiceFault, sessions served in
+parallel, the capacity and time synchronization documentation, a default
+certificate) and of the client Profile; make a claim depend on the
+configuration of the server (a Profile is claimed only for the endpoints,
+security and limits it is configured with), and only then serve the
+ConformanceUnits Property; ledger rows against independent peers for the
+units tested Go to Go only; the Part 14 UDP UADP Periodic Fixed publisher
+and subscriber Profiles.
+
 ## Phase 6: UAFX Part 84
 
 On the persistence of phase 4: SecurityKeyServer of the ConnectionManager
 wired to `pubsub/sks`, ConnectionManager and AutomationComponent logs,
 publisher QoS, ConfigurationData and VariableStorage persisted. See the
 limits in [uafx.md](uafx.md#limits).
+
+Progress (v1.43.0): the SecurityKeyServer of the ConnectionManager is wired
+to `pubsub/sks` with the pull model (Part 81 §6.7.3.2, §6.7.3.3, E.5):
+`fxcm.Options.SecurityKeyServer` (`RemoteSKS`, `LocalSKS`) adds and removes
+the SecurityGroups of a set, kept as `sks/` records of the Store, and names
+the SKS in the SecurityKeyServices; `fxserver.ConnectionOptions.SecurityKeys`
+(`sks.Puller`, `sks.EndpointDialer`) pulls the keys on the
+AutomationComponents. Not done: the push model and PubSubKeyPushTargets;
+no ledger row (no peer of opcua-interop implements UAFX). Next: the logs.
 
 ## Later, on demand
 

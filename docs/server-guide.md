@@ -33,8 +33,9 @@ The monitored item, continuation point and event queue limits are listed in
 
 Every Mandatory Property of the ServerCapabilities (OPC 10000-5 §6.3.2) has a
 value. `WithServerProfiles(uris...)` sets the ServerProfileArray, the URIs of
-the OPC 10000-7 Profiles the server supports in its configuration; the library
-does not determine its Profiles, so without the option the array is empty.
+the OPC 10000-7 Profiles the server supports in its configuration. Without the
+option the array holds the Profiles whose mandatory ConformanceUnits the
+inventory in [profiles.md](profiles.md) evidences; none is yet, so it is empty.
 `WithLocaleIDs(locales...)` sets the LocaleIdArray, `["en"]` by default, the
 locale of the texts the server writes. MinSupportedSampleRate is 0 (a sampling
 interval of 0 is exception-based sampling), MaxHistoryContinuationPoints is 0
@@ -686,7 +687,7 @@ handler := func(ctx context.Context, objectID, methodID *ua.NodeID, args []*ua.V
         return nil, ua.StatusBadArgumentsMissing
     }
     if t := args[0].Type(); t != ua.TypeIDFloat && t != ua.TypeIDDouble {
-        return nil, ua.StatusBadTypeMismatch
+        return nil, ua.StatusBadInvalidArgument // a wrong data type (Part 4 §5.12.2.2)
     }
     factor := args[0].Float()
     result := factor * 2.0
@@ -705,10 +706,18 @@ Give the method node its signature with `SetMethodArguments`: it adds the
 InputArguments and OutputArguments Properties of Part 3 §5.7 (PropertyType,
 DataType Argument, ValueRank 1, referenced with HasProperty) to the node's
 namespace, so clients can read them (`Client.MethodArguments`) and the
-server checks the input arguments of a call against them
-(`Bad_ArgumentsMissing`, `Bad_TooManyArguments`, `Bad_TypeMismatch`).
-A nil list leaves that Property out; calling it again replaces the
-arguments.
+server checks the input arguments of a call against them before the
+handler runs. The result follows OPC 10000-4 §5.12.2.2 and Tables 61 and
+62: too few or too many arguments are `Bad_ArgumentsMissing` and
+`Bad_TooManyArguments`; an argument of the wrong type makes the result
+`Bad_InvalidArgument`, with one inputArgumentResult per input argument,
+`Bad_TypeMismatch` for each wrong one. The inputArgumentResults are empty
+in every other result ("This list is empty unless the operation level
+result is Bad_InvalidArgument"), and the output arguments of a handler
+are dropped when its status is Bad ("The list shall be empty if the
+statusCode Severity is Bad"): a handler that has outputs to return with
+an error returns a status of Severity Uncertain. A nil list leaves that
+Property out; calling it again replaces the arguments.
 
 ```go
 method := server.NewFolderNode(methodID, "Double")
@@ -735,15 +744,18 @@ of arguments, their built-in type and ValueRank) and returns an
 func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
     var in uamethod.FileTypeReadInput
     if err := in.Unpack(args); err != nil {
-        return nil, uamethod.StatusOf(err) // Bad_ArgumentsMissing, Bad_TooManyArguments, Bad_TypeMismatch
+        return nil, uamethod.StatusOf(err) // Bad_ArgumentsMissing, Bad_TooManyArguments, Bad_InvalidArgument
     }
     return (&uamethod.FileTypeReadOutput{Data: data(in.FileHandle, in.Length)}).Pack(), ua.StatusOK
 }
 ```
 
-The contracts are those of FileType and FileDirectoryType, and of
-RoleSetType and RoleType (OPC 10000-18); the families are chosen in
-`cmd/methods/config.go`.
+The contracts are those of FileType and FileDirectoryType, of
+RoleSetType and RoleType (OPC 10000-18), of ServerType (OPC 10000-5 §9),
+of TrustListType (OPC 10000-12 §7.8.2), and of PubSubConfigurationType
+and PubSubKeyServiceType (OPC 10000-14 §9.1.3.7, §8.3); the families are
+chosen in `cmd/methods/config.go`. The TrustList, PubSubConfiguration and
+SKS Methods of the server use them.
 
 ---
 

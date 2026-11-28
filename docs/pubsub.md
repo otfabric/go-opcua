@@ -480,6 +480,7 @@ of that SecurityGroup from a `security.KeySource`:
 | `security.NewKeyRing(id, policy)` + `SetKeys` | static keys, or keys pushed with SetSecurityKeys |
 | `security.KeyService.KeySource(id)` | the SKS runs in the same process |
 | `sks.NewKeySource(ctx, sks.Config{...})` | pull keys from a remote SKS and refresh them before they rotate |
+| `sks.NewPuller(rt, sks.PullerOptions{...})` | pull the keys of every secured group whose SecurityKeyServices name an SKS |
 
 Pass it with `pubsub.WithKeySource(id, ks)` or `pubsub.WithKeySourceLookup`.
 A secured writer group sends nothing until it has keys; a reader requires at
@@ -522,6 +523,24 @@ a quarter of the number space or more away from the last one: a sequence does
 not produce that under one token (a copy of an earlier message is older), so
 its MessageNonces are not numbered as Table 156 says (random, for instance).
 
+`sks.Puller` reads the configuration of a runtime (at once, then every
+`Interval`): for every SecurityGroupId of a WriterGroup, ReaderGroup or
+DataSetReader with Sign or SignAndEncrypt whose SecurityKeyServices name an
+SKS with ApplicationType SERVER (the pull model, Part 14 §6.2.5.4 Table 40;
+a DataSetReader without them takes those of its group), and whose keys the
+runtime has from no other source, it starts a `KeySource` on the first SKS
+that answers and sets it with `SetKeySource`. A first fetch that fails on
+every SKS is tried again with backoff (`MinRetry` to `MaxRetry` of its `Source`);
+until then the group has no keys (§5.4.5.3: PreOperational). When the
+configuration no longer has the SecurityGroupId, the Puller removes and
+closes its KeySource; `Close` removes them all. `sks.EndpointDialer` is its
+usual `Dial`: GetEndpoints on the DiscoveryUrls of the element (its
+EndpointUrl without them), the SignAndEncrypt endpoint of its
+SecurityPolicyUri (`opcua.SelectEndpoint`), its ApplicationUri checked
+against the endpoint's (`Bad_ServerUriInvalid`); an element that is not a
+pull SKS is `sks.ErrEndpoint`. `fxserver.ConnectionOptions.SecurityKeys`
+starts one for an AutomationComponent (docs/uafx.md).
+
 A go-opcua server becomes a Security Key Service with
 `srv.EnableSecurityKeyService(ks)` (GetSecurityKeys, Add/Remove/GetSecurityGroup;
 keys are only handed out over SignAndEncrypt channels and, by default, not to
@@ -529,6 +548,14 @@ anonymous users) and accepts pushed keys with `srv.EnableSecurityKeyPush`.
 The past, current and future keys of a SecurityGroup fit the Keys array of
 one GetSecurityKeys result (65535): `AddSecurityGroup` refuses a
 `MaxPastKeyCount` + `MaxFutureKeyCount` above 65534 with `Bad_InvalidArgument`.
+An `AddSecurityGroup` of a SecurityGroup the SKS has with the same
+parameters (SecurityPolicyUri, KeyLifetime, MaxFutureKeyCount,
+MaxPastKeyCount, folder) returns its SecurityGroupId and NodeId with
+`Good_DataIgnored`; with other parameters it is `Bad_NodeIdExists` (Part 14
+§8.5.2). Deviations: `GetSecurityGroup` of an unknown SecurityGroupId is
+`Bad_NotFound` (§8.3.3 says `Bad_NoMatch`), and `AddSecurityGroup` refuses
+a KeyLifetime of 0 and an empty SecurityPolicyUri instead of taking the
+defaults of the SKS (§8.5.2).
 
 ## Chunked NetworkMessages
 

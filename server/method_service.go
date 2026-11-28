@@ -116,15 +116,17 @@ func (s *MethodService) callMethod(ctx context.Context, m *ua.CallMethodRequest)
 	}
 
 	outputs, status := h(ctx, m.ObjectID, m.MethodID, m.InputArguments)
-
-	inputResults := make([]ua.StatusCode, len(m.InputArguments))
-	for j := range inputResults {
-		inputResults[j] = ua.StatusOK
+	// "The list shall be empty if the statusCode Severity is Bad" (OPC
+	// 10000-4 §5.12.2.2, outputArguments). The inputArgumentResults stay
+	// empty: the handler names no argument, and the list "is empty unless
+	// the operation level result is Bad_InvalidArgument" and then "has the
+	// same length as the inputArguments list" when populated.
+	if isBad(status) {
+		outputs = nil
 	}
-
 	return &ua.CallMethodResult{
 		StatusCode:                   status,
-		InputArgumentResults:         inputResults,
+		InputArgumentResults:         []ua.StatusCode{},
 		InputArgumentDiagnosticInfos: []*ua.DiagnosticInfo{},
 		OutputArguments:              outputs,
 	}
@@ -202,39 +204,28 @@ func hasComponent(n *Node, target *ua.NodeID) bool {
 // against the method node's InputArguments property. Returns nil when
 // validation passes (or when no InputArguments property is declared and
 // zero arguments were supplied).
+//
+// The results follow OPC 10000-4 §5.12.2.2 and §5.12.2.4: too few or too
+// many arguments are Bad_ArgumentsMissing and Bad_TooManyArguments (Table
+// 61) with no inputArgumentResults, which are "empty unless the operation
+// level result is Bad_InvalidArgument"; an argument of the wrong type makes
+// the result Bad_InvalidArgument ("if at least one input argument broke a
+// constraint (e.g. wrong data type ...)"), with one inputArgumentResult per
+// input argument, Bad_TypeMismatch (Table 62) for each wrong one.
 func validateMethodInputs(srv *Server, methodID *ua.NodeID, inputs []*ua.Variant) *ua.CallMethodResult {
 	expected := declaredInputArguments(srv, methodID)
 	// No InputArguments property: treat as zero-argument method.
 	if expected == nil {
 		if len(inputs) > 0 {
-			return &ua.CallMethodResult{
-				StatusCode:           ua.StatusBadTooManyArguments,
-				InputArgumentResults: allStatusOK(len(inputs)),
-			}
+			return &ua.CallMethodResult{StatusCode: ua.StatusBadTooManyArguments}
 		}
 		return nil
 	}
-
 	if len(inputs) < len(expected) {
-		results := make([]ua.StatusCode, len(expected))
-		for i := range results {
-			if i < len(inputs) {
-				results[i] = ua.StatusOK
-			} else {
-				results[i] = ua.StatusBadArgumentsMissing
-			}
-		}
-		return &ua.CallMethodResult{
-			StatusCode:           ua.StatusBadArgumentsMissing,
-			InputArgumentResults: results,
-		}
+		return &ua.CallMethodResult{StatusCode: ua.StatusBadArgumentsMissing}
 	}
-
 	if len(inputs) > len(expected) {
-		return &ua.CallMethodResult{
-			StatusCode:           ua.StatusBadTooManyArguments,
-			InputArgumentResults: allStatusOK(len(inputs)),
-		}
+		return &ua.CallMethodResult{StatusCode: ua.StatusBadTooManyArguments}
 	}
 
 	results := make([]ua.StatusCode, len(inputs))
@@ -249,19 +240,11 @@ func validateMethodInputs(srv *Server, methodID *ua.NodeID, inputs []*ua.Variant
 	}
 	if mismatch {
 		return &ua.CallMethodResult{
-			StatusCode:           ua.StatusBadTypeMismatch,
+			StatusCode:           ua.StatusBadInvalidArgument,
 			InputArgumentResults: results,
 		}
 	}
 	return nil
-}
-
-func allStatusOK(n int) []ua.StatusCode {
-	out := make([]ua.StatusCode, n)
-	for i := range out {
-		out[i] = ua.StatusOK
-	}
-	return out
 }
 
 // declaredInputArguments reads the InputArguments property of a method node.

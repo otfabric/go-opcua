@@ -440,7 +440,8 @@ func TestMethod_ArgumentValidationAndDispatch(t *testing.T) {
 			return nil, ua.StatusOK
 		})
 
-		// Fail() always reports an application error along with an output.
+		// Fail() reports an application error and an output, which the server
+		// drops because the status is Bad (Part 4 §5.12.2.2).
 		fail = newMethod("Fail").ID()
 		srv.RegisterMethod(f.MethodObject, fail, func(_ context.Context, obj, meth *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
 			record(obj, meth, args)
@@ -458,7 +459,9 @@ func TestMethod_ArgumentValidationAndDispatch(t *testing.T) {
 		res, err := c.CallMethod(ctx, f.MethodObject, join, "-", int32(2), []string{"a", "b", "c"})
 		require.NoError(t, err)
 		require.Equal(t, ua.StatusOK, res.StatusCode)
-		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusOK, ua.StatusOK}, res.InputArgumentResults)
+		// "This list is empty unless the operation level result is
+		// Bad_InvalidArgument" (Part 4 §5.12.2.2, inputArgumentResults).
+		require.Empty(t, res.InputArgumentResults)
 		require.Len(t, res.OutputArguments, 2)
 		require.Equal(t, "a-b-ca-b-c", res.OutputArguments[0].Value())
 		require.Equal(t, int32(3), res.OutputArguments[1].Value())
@@ -498,25 +501,31 @@ func TestMethod_ArgumentValidationAndDispatch(t *testing.T) {
 			status  ua.StatusCode
 			results []ua.StatusCode
 		}{
-			{"MissingAll", nil, ua.StatusBadArgumentsMissing,
-				[]ua.StatusCode{ua.StatusBadArgumentsMissing, ua.StatusBadArgumentsMissing, ua.StatusBadArgumentsMissing}},
-			{"MissingLast", []any{"-", int32(1)}, ua.StatusBadArgumentsMissing,
-				[]ua.StatusCode{ua.StatusOK, ua.StatusOK, ua.StatusBadArgumentsMissing}},
-			{"TooMany", []any{"-", int32(1), []string{"a"}, true}, ua.StatusBadTooManyArguments,
-				[]ua.StatusCode{ua.StatusOK, ua.StatusOK, ua.StatusOK, ua.StatusOK}},
-			{"WrongScalarType", []any{"-", int64(1), []string{"a"}}, ua.StatusBadTypeMismatch,
+			// Part 4 §5.12.2.2 and Tables 61/62: the number of arguments is
+			// Bad_ArgumentsMissing or Bad_TooManyArguments with no
+			// inputArgumentResults; a wrong type is Bad_InvalidArgument with
+			// one result per input argument, Bad_TypeMismatch for each
+			// wrong one.
+			{"MissingAll", nil, ua.StatusBadArgumentsMissing, nil},
+			{"MissingLast", []any{"-", int32(1)}, ua.StatusBadArgumentsMissing, nil},
+			{"TooMany", []any{"-", int32(1), []string{"a"}, true}, ua.StatusBadTooManyArguments, nil},
+			{"WrongScalarType", []any{"-", int64(1), []string{"a"}}, ua.StatusBadInvalidArgument,
 				[]ua.StatusCode{ua.StatusOK, ua.StatusBadTypeMismatch, ua.StatusOK}},
-			{"ScalarWhereArrayExpected", []any{"-", int32(1), "a"}, ua.StatusBadTypeMismatch,
+			{"ScalarWhereArrayExpected", []any{"-", int32(1), "a"}, ua.StatusBadInvalidArgument,
 				[]ua.StatusCode{ua.StatusOK, ua.StatusOK, ua.StatusBadTypeMismatch}},
-			{"ArrayWhereScalarExpected", []any{[]string{"-"}, int32(1), []string{"a"}}, ua.StatusBadTypeMismatch,
+			{"ArrayWhereScalarExpected", []any{[]string{"-"}, int32(1), []string{"a"}}, ua.StatusBadInvalidArgument,
 				[]ua.StatusCode{ua.StatusBadTypeMismatch, ua.StatusOK, ua.StatusOK}},
-			{"SeveralWrong", []any{int32(0), "x", []string{"a"}}, ua.StatusBadTypeMismatch,
+			{"SeveralWrong", []any{int32(0), "x", []string{"a"}}, ua.StatusBadInvalidArgument,
 				[]ua.StatusCode{ua.StatusBadTypeMismatch, ua.StatusBadTypeMismatch, ua.StatusOK}},
 		} {
 			res, err := c.CallMethod(ctx, f.MethodObject, join, tc.args...)
 			require.NoError(t, err, tc.name)
 			require.Equal(t, tc.status, res.StatusCode, tc.name)
-			require.Equal(t, tc.results, res.InputArgumentResults, tc.name)
+			if tc.results == nil {
+				require.Empty(t, res.InputArgumentResults, tc.name)
+			} else {
+				require.Equal(t, tc.results, res.InputArgumentResults, tc.name)
+			}
 			require.Empty(t, res.OutputArguments, tc.name)
 		}
 		require.Len(t, recorded(), before, "the handler must not run for invalid arguments")
@@ -533,12 +542,14 @@ func TestMethod_ArgumentValidationAndDispatch(t *testing.T) {
 		require.Equal(t, ua.StatusBadTooManyArguments, res.StatusCode)
 	})
 
-	t.Run("HandlerStatusAndOutputsAreReturned", func(t *testing.T) {
+	t.Run("HandlerStatusIsReturnedWithoutOutputs", func(t *testing.T) {
+		// The outputArguments "shall be empty if the statusCode Severity is
+		// Bad" (Part 4 §5.12.2.2): the handler's output is dropped.
 		res, err := c.CallMethod(ctx, f.MethodObject, fail)
 		require.NoError(t, err)
 		require.Equal(t, ua.StatusBadInvalidState, res.StatusCode)
-		require.Len(t, res.OutputArguments, 1)
-		require.Equal(t, "diagnostic detail", res.OutputArguments[0].Value())
+		require.Empty(t, res.OutputArguments)
+		require.Empty(t, res.InputArgumentResults)
 	})
 
 	t.Run("WrongObjectForMethod", func(t *testing.T) {
@@ -563,7 +574,7 @@ func TestMethod_ArgumentValidationAndDispatch(t *testing.T) {
 		require.Equal(t, ua.StatusBadMethodInvalid, resp.Results[1].StatusCode)
 		require.Equal(t, ua.StatusOK, resp.Results[2].StatusCode)
 		require.Equal(t, ua.StatusBadNodeIDUnknown, resp.Results[3].StatusCode)
-		require.Equal(t, ua.StatusBadTypeMismatch, resp.Results[4].StatusCode)
+		require.Equal(t, ua.StatusBadInvalidArgument, resp.Results[4].StatusCode)
 		require.Len(t, recorded(), before+1, "only Ping reached a recording handler")
 	})
 }

@@ -34,8 +34,11 @@ behaviour you may notice, and the deviations of peers are in
   `fxserver.EnableConnectionManager`) keeps its sets and the records of its
   endpoints in memory, and with a Store also durably; it has no ConnectionManagerLog, lists no
   GlobalDiscoveryServers, reflects no Qos or ReceiveQos of an edited flow
-  onto the PubSub configuration; it configures no SecurityKeyServer,
-  asks no GDS, resolves no AliasNames, generates no PubSub configuration
+  onto the PubSub configuration; it configures the SecurityKeyServer of a
+  set with the pull model only (no PubSubKeyPushTargets, no RolePermissions,
+  GroupProperties or SecurityGroupFolder of a SecurityGroup), does not keep
+  secured endpoints in place after its restart (they are closed and
+  established again), asks no GDS, resolves no AliasNames, generates no PubSub configuration
   from the flows, and cannot adapt subscribers to the PublisherId of a
   matched PubSubConnection on AutomationComponents with
   CommandBundleRequired that subscribe to each other in a cycle (the
@@ -193,6 +196,22 @@ behaviour you may notice, and the deviations of peers are in
 - The Methods of the Server Object (GetMonitoredItems, ResendData,
   SetSubscriptionDurable, RequestServerStateChange) are tested against
   go-opcua only.
+- Profiles of OPC 10000-7: the server claims none. Its default
+  ServerProfileArray is the list of Profiles whose mandatory ConformanceUnits
+  are all evidenced in [docs/profiles.md](docs/profiles.md), and neither
+  target is: the Micro Embedded Device 2025 Server Profile lacks AccessLevelEx
+  (Atomicity, Full Array Only), MaxMonitoredItemsQueueSize, MaxArrayLength,
+  MaxStringLength, MaxByteStringLength, ServerArray, ServiceLevel and
+  RedundancySupport values, the ProfileUris filter of GetEndpoints, Sessions
+  served in parallel (one dispatcher serves every session), the RequestHandle
+  of a ServiceFault on an error path, a default ApplicationInstanceCertificate
+  and documented capacities and time synchronization; the Standard UA Client
+  2025 Profile lacks more than one outstanding Publish request, Republish on a
+  sequence gap in a live session, the OperationLimits honoured, re-discovery,
+  obsolete security policies behind administrative intervention and
+  documented capacities and time synchronization. The ServerCapabilities
+  ConformanceUnits Property (Optional) is not served. The Part 14 PubSub
+  Profiles are not in the inventory yet.
 
 ## Verification
 

@@ -5,6 +5,7 @@ package server
 import (
 	"context"
 	"hash/fnv"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/pubsub"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 const (
@@ -237,19 +239,20 @@ func allocID(used map[uint16]bool) (uint16, bool) {
 }
 
 func (f *configFile) reserveIDs(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	if _, ok := argValue[string](args, 0); !ok {
-		return nil, ua.StatusBadTypeMismatch
+	var in uamethod.PubSubConfigurationTypeReserveIDsInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	ng, ok1 := argValue[uint16](args, 1)
-	nw, ok2 := argValue[uint16](args, 2)
-	if !ok1 || !ok2 {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	r, sc := f.reserve(ctx, ng, nw)
+	r, sc := f.reserve(ctx, in.NumReqWriterGroupIDs, in.NumReqDataSetWriterIDs)
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	return []*ua.Variant{r.DefaultPublisherID, ua.MustVariant(r.WriterGroupIDs), ua.MustVariant(r.DataSetWriterIDs)}, ua.StatusOK
+	out := uamethod.PubSubConfigurationTypeReserveIDsOutput{
+		DefaultPublisherID: r.DefaultPublisherID,
+		WriterGroupIDs:     r.WriterGroupIDs,
+		DataSetWriterIDs:   r.DataSetWriterIDs,
+	}
+	return out.Pack(), ua.StatusOK
 }
 
 // reserve reserves ng WriterGroupIds and nw DataSetWriterIds for the
@@ -325,24 +328,19 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 	f.m.s.ps.txn.Lock()
 	defer f.m.s.ps.txn.Unlock()
 
-	h, ok := argValue[uint32](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	var (
-		file    *ua.PubSubConfiguration2DataType
-		require bool
-		refs    []*ua.PubSubConfigurationRefDataType
-	)
 	// The handle stays open when the arguments or what was written are
 	// refused: the client may close it, or write again.
-	_, sc := f.file.CloseAndTake(ctx, h, func(b []byte) ua.StatusCode {
-		var ok, ok2 bool
-		require, ok = argValue[bool](args, 1)
-		refs, ok2 = argStructs[ua.PubSubConfigurationRefDataType](args, 2)
-		if !ok || !ok2 {
-			return ua.StatusBadTypeMismatch
-		}
+	var in uamethod.PubSubConfigurationTypeCloseAndUpdateInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
+	}
+	require, refs := in.RequireCompleteUpdate, in.ConfigurationReferences
+	// A null element is no PubSubConfigurationRefDataType.
+	if slices.Contains(refs, nil) {
+		return nil, ua.StatusBadTypeMismatch
+	}
+	var file *ua.PubSubConfiguration2DataType
+	_, sc := f.file.CloseAndTake(ctx, in.FileHandle, func(b []byte) ua.StatusCode {
 		var sc ua.StatusCode
 		if file, sc = decodeConfigFile(b); sc != ua.StatusOK {
 			return sc
@@ -359,14 +357,18 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 	if sc != ua.StatusOK {
 		return nil, sc
 	}
-	values := make([]*ua.ExtensionObject, len(u.ConfigurationValues))
-	for i, v := range u.ConfigurationValues {
-		values[i] = ua.NewExtensionObject(v)
+	out := uamethod.PubSubConfigurationTypeCloseAndUpdateOutput{
+		ChangesApplied:       u.ChangesApplied,
+		ReferencesResults:    u.ReferenceResults,
+		ConfigurationObjects: u.ConfigurationObjects,
 	}
-	if !u.ChangesApplied {
-		values = nil
+	if u.ChangesApplied {
+		out.ConfigurationValues = u.ConfigurationValues
+		if out.ConfigurationValues == nil {
+			out.ConfigurationValues = []*ua.PubSubConfigurationValueDataType{}
+		}
 	}
-	return []*ua.Variant{ua.MustVariant(u.ChangesApplied), ua.MustVariant(u.ReferenceResults), ua.MustVariant(values), ua.MustVariant(u.ConfigurationObjects)}, ua.StatusOK
+	return out.Pack(), ua.StatusOK
 }
 
 // applyLocked applies file as CloseAndUpdate does (Part 14 §9.1.3.7.6).

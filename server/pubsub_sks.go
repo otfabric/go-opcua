@@ -7,6 +7,7 @@ import (
 	"errors"
 	"math"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -15,6 +16,7 @@ import (
 	pubsubsec "github.com/otfabric/go-opcua/pubsub/security"
 	"github.com/otfabric/go-opcua/server/attrs"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // DefaultSKSNamespaceURI is the namespace the nodes of SecurityGroups are
@@ -279,29 +281,29 @@ func (h *SecurityKeyService) getSecurityKeys(ctx context.Context, _, _ *ua.NodeI
 	if st := requireEncryption(c); st != ua.StatusOK {
 		return nil, st
 	}
-	if st := checkArgs(args, ua.TypeIDString, ua.TypeIDUint32, ua.TypeIDUint32); st != ua.StatusOK {
-		return nil, st
+	var in uamethod.PubSubKeyServiceTypeGetSecurityKeysInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	gid, _ := args[0].Value().(string)
-	start, _ := args[1].Value().(uint32)
-	count, _ := args[2].Value().(uint32)
+	gid := in.SecurityGroupID
 	if _, ok := h.ks.SecurityGroup(gid); !ok {
 		return nil, ua.StatusBadNotFound
 	}
 	if err := h.ks.Authorize(ctx, c, pubsubsec.OpGetSecurityKeys, gid); err != nil {
 		return nil, pubsubsec.StatusCode(err)
 	}
-	r, err := h.ks.GetSecurityKeys(gid, start, count)
+	r, err := h.ks.GetSecurityKeys(gid, in.StartingTokenID, in.RequestedKeyCount)
 	if err != nil {
 		return nil, pubsubsec.StatusCode(err)
 	}
-	return []*ua.Variant{
-		ua.MustVariant(r.SecurityPolicyURI),
-		ua.MustVariant(r.FirstTokenID),
-		ua.MustVariant(r.Keys),
-		ua.MustVariant(durationMS(r.TimeToNextKey)),
-		ua.MustVariant(durationMS(r.KeyLifetime)),
-	}, ua.StatusOK
+	out := uamethod.PubSubKeyServiceTypeGetSecurityKeysOutput{
+		SecurityPolicyURI: r.SecurityPolicyURI,
+		FirstTokenID:      r.FirstTokenID,
+		Keys:              r.Keys,
+		TimeToNextKey:     durationMS(r.TimeToNextKey),
+		KeyLifetime:       durationMS(r.KeyLifetime),
+	}
+	return out.Pack(), ua.StatusOK
 }
 
 func (h *SecurityKeyService) getSecurityGroup(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
@@ -309,10 +311,11 @@ func (h *SecurityKeyService) getSecurityGroup(ctx context.Context, _, _ *ua.Node
 	if st := requireEncryption(c); st != ua.StatusOK {
 		return nil, st
 	}
-	if st := checkArgs(args, ua.TypeIDString); st != ua.StatusOK {
-		return nil, st
+	var in uamethod.PubSubKeyServiceTypeGetSecurityGroupInput
+	if err := in.Unpack(args); err != nil {
+		return nil, uamethod.StatusOf(err)
 	}
-	gid, _ := args[0].Value().(string)
+	gid := in.SecurityGroupID
 	nid, ok := h.SecurityGroupNodeID(gid)
 	if !ok {
 		return nil, ua.StatusBadNotFound
@@ -320,7 +323,8 @@ func (h *SecurityKeyService) getSecurityGroup(ctx context.Context, _, _ *ua.Node
 	if err := h.ks.Authorize(ctx, c, pubsubsec.OpGetSecurityGroup, gid); err != nil {
 		return nil, pubsubsec.StatusCode(err)
 	}
-	return []*ua.Variant{ua.MustVariant(nid)}, ua.StatusOK
+	out := uamethod.PubSubKeyServiceTypeGetSecurityGroupOutput{SecurityGroupNodeID: nid}
+	return out.Pack(), ua.StatusOK
 }
 
 func (h *SecurityKeyService) addSecurityGroup(ctx context.Context, folder *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
@@ -347,22 +351,38 @@ func (h *SecurityKeyService) addSecurityGroup(ctx context.Context, folder *ua.No
 	if !ok {
 		return nil, ua.StatusBadInvalidArgument
 	}
-	err := h.ks.AddSecurityGroup(pubsubsec.SecurityGroupConfig{
+	cfg := pubsubsec.SecurityGroupConfig{
 		SecurityGroupID:     name,
 		SecurityPolicyURI:   uri,
 		KeyLifetime:         d,
 		MaxFutureKeyCount:   maxFuture,
 		MaxPastKeyCount:     maxPast,
 		SecurityGroupFolder: path,
-	})
-	if err != nil {
-		return nil, pubsubsec.StatusCode(err)
+	}
+	status := ua.StatusOK
+	if err := h.ks.AddSecurityGroup(cfg); err != nil {
+		st := pubsubsec.StatusCode(err)
+		have, ok := h.ks.SecurityGroup(name)
+		if st != ua.StatusBadNodeIDExists || !ok || !sameSecurityGroup(have, cfg) {
+			return nil, st
+		}
+		// Part 14 §8.5.2: a SecurityGroup with these parameters exists;
+		// it is returned without adding a new one.
+		status = ua.StatusGoodDataIgnored
 	}
 	nid, ok := h.SecurityGroupNodeID(name)
 	if !ok { // removed concurrently, or the server was detached
 		return nil, ua.StatusBadInternalError
 	}
-	return []*ua.Variant{ua.MustVariant(name), ua.MustVariant(nid)}, ua.StatusOK
+	return []*ua.Variant{ua.MustVariant(name), ua.MustVariant(nid)}, status
+}
+
+// sameSecurityGroup reports whether a and b have the parameters of
+// AddSecurityGroup (Part 14 §8.5.2) and the same SecurityGroupFolder.
+func sameSecurityGroup(a, b pubsubsec.SecurityGroupConfig) bool {
+	return a.SecurityPolicyURI == b.SecurityPolicyURI && a.KeyLifetime == b.KeyLifetime &&
+		a.MaxFutureKeyCount == b.MaxFutureKeyCount && a.MaxPastKeyCount == b.MaxPastKeyCount &&
+		slices.Equal(a.SecurityGroupFolder, b.SecurityGroupFolder)
 }
 
 func (h *SecurityKeyService) removeSecurityGroup(ctx context.Context, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {

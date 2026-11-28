@@ -99,13 +99,34 @@ func TestSessionKeepAliveOnlyWhenIdle(t *testing.T) {
 	c := connectCovClient(t, ks.url, opcua.SessionKeepAlive(time.Second))
 	ctx := context.Background()
 
-	// Busy for two and a half intervals, a request every 20 ms.
-	before := ks.reads.Load()
-	for end := time.Now().Add(2500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
-		_, err := c.ReadValue(ctx, ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime))
-		require.NoError(t, err)
+	// Busy for two and a half intervals, a request every 20 ms. A stalled
+	// runner can leave the client idle for an interval between two
+	// requests, and then a keep-alive is right: such a round proves
+	// nothing and is run again.
+	busy := func() (keepAlives int32, maxGap time.Duration) {
+		before := ks.reads.Load()
+		last := time.Now()
+		for end := last.Add(2500 * time.Millisecond); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+			start := time.Now()
+			maxGap = max(maxGap, start.Sub(last))
+			_, err := c.ReadValue(ctx, ua.NewNumericNodeID(0, id.ServerServerStatusCurrentTime))
+			require.NoError(t, err)
+			last = time.Now()
+		}
+		return ks.reads.Load() - before, maxGap
 	}
-	require.Equal(t, before, ks.reads.Load(), "a client in use sends no keep-alive")
+	proved := false
+	for range 5 {
+		n, gap := busy()
+		if gap >= 500*time.Millisecond {
+			t.Logf("the client was idle for %v between two requests; again", gap)
+			continue
+		}
+		require.Zero(t, n, "a client in use sends no keep-alive")
+		proved = true
+		break
+	}
+	require.True(t, proved, "no round without a stall of half an interval")
 
 	// Idle: one keep-alive per interval.
 	ks.waitKeepAlives(t, 2)

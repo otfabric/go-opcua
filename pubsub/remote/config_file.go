@@ -77,15 +77,20 @@ type ReservedIDs struct {
 // (Part 14 §9.1.3.7.5) and returns the default PublisherId of the server for
 // a transport profile.
 func (r *Client) ReserveIDs(ctx context.Context, transportProfileURI string, writerGroups, dataSetWriters uint16) (*ReservedIDs, error) {
-	out, err := r.fileCall(ctx, "ReserveIds", id.PublishSubscribePubSubConfigurationReserveIDs, 3,
-		ua.MustVariant(transportProfileURI), ua.MustVariant(writerGroups), ua.MustVariant(dataSetWriters))
+	in := uamethod.PubSubConfigurationTypeReserveIDsInput{
+		TransportProfileURI:    transportProfileURI,
+		NumReqWriterGroupIDs:   writerGroups,
+		NumReqDataSetWriterIDs: dataSetWriters,
+	}
+	out, err := r.fileCall(ctx, "ReserveIds", id.PublishSubscribePubSubConfigurationReserveIDs, 0, in.Pack()...)
 	if err != nil {
 		return nil, err
 	}
-	res := &ReservedIDs{DefaultPublisherID: out[0]}
-	res.WriterGroupIDs, _ = out[1].Value().([]uint16)
-	res.DataSetWriterIDs, _ = out[2].Value().([]uint16)
-	return res, nil
+	var o uamethod.PubSubConfigurationTypeReserveIDsOutput
+	if err := o.Unpack(out); err != nil {
+		return nil, fmt.Errorf("remote: %w", err)
+	}
+	return &ReservedIDs{DefaultPublisherID: o.DefaultPublisherID, WriterGroupIDs: o.WriterGroupIDs, DataSetWriterIDs: o.DataSetWriterIDs}, nil
 }
 
 // UpdateResult is the result of UpdateConfiguration.
@@ -122,8 +127,13 @@ func (r *Client) UpdateConfiguration(ctx context.Context, cfg *ua.PubSubConfigur
 	if err := f.Write(ctx, b); err != nil {
 		return nil, errors.Join(err, f.Close(ctx))
 	}
-	out, err := r.fileCall(ctx, "CloseAndUpdate", id.PublishSubscribePubSubConfigurationCloseAndUpdate, 3,
-		ua.MustVariant(f.Handle()), ua.MustVariant(requireComplete), structsArg(refs))
+	in := uamethod.PubSubConfigurationTypeCloseAndUpdateInput{
+		FileHandle:            f.Handle(),
+		RequireCompleteUpdate: requireComplete,
+		// No references are an empty array, not the null array.
+		ConfigurationReferences: append([]*ua.PubSubConfigurationRefDataType{}, refs...),
+	}
+	out, err := r.fileCall(ctx, "CloseAndUpdate", id.PublishSubscribePubSubConfigurationCloseAndUpdate, 3, in.Pack()...)
 	if err != nil {
 		var e *Error
 		if errors.As(err, &e) && e.Status != ua.StatusBadInvalidArgument {
@@ -132,18 +142,19 @@ func (r *Client) UpdateConfiguration(ctx context.Context, cfg *ua.PubSubConfigur
 		}
 		return nil, err
 	}
-	res := &UpdateResult{}
-	res.ChangesApplied, _ = out[0].Value().(bool)
-	res.Results, _ = out[1].Value().([]ua.StatusCode)
-	if eos, ok := out[2].Value().([]*ua.ExtensionObject); ok {
-		for _, eo := range eos {
-			if v, ok := eo.Value.(*ua.PubSubConfigurationValueDataType); ok {
-				res.Values = append(res.Values, v)
-			}
-		}
+	if len(out) == 3 {
+		// A server may leave out ConfigurationObjects, the last output.
+		out = append(out, ua.MustVariant([]*ua.NodeID(nil)))
 	}
-	if len(out) > 3 {
-		res.Objects, _ = out[3].Value().([]*ua.NodeID)
+	var o uamethod.PubSubConfigurationTypeCloseAndUpdateOutput
+	if err := o.Unpack(out); err != nil {
+		return nil, fmt.Errorf("remote: %w", err)
+	}
+	res := &UpdateResult{ChangesApplied: o.ChangesApplied, Results: o.ReferencesResults, Objects: o.ConfigurationObjects}
+	for _, v := range o.ConfigurationValues {
+		if v != nil {
+			res.Values = append(res.Values, v)
+		}
 	}
 	return res, nil
 }

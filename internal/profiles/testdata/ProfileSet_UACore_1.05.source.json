@@ -1,0 +1,10 @@
+{
+  "file": "ProfileSet_UACore_1.05.xml",
+  "url": "https://profiles.opcfoundation.org/api/profilegroup/export/xml/171?rs=3",
+  "page": "https://profiles.opcfoundation.org/",
+  "profileGroup": "UACore 1.05",
+  "releaseStatus": "Released",
+  "retrieved": "2026-11-28",
+  "servedAs": "ProfileSet_UACore_1.05_2026-11-28.xml",
+  "sha256": "6457fc7c4303ee0de64c7d2db3e75a212145aa132a2c268f1fb6054b6448e0a1"
+}
