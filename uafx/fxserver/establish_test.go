@@ -662,8 +662,14 @@ func TestConnectionHealth(t *testing.T) {
 	require.Eventually(t, func() bool { return opHealth()&0xffff == 1 }, 5*time.Second, 5*time.Millisecond, "Preset is still Initial")
 
 	setValue(t, f.srv, f.id(motionOH), uint32(0x20000|1))
-	f.conns.RefreshHealth()
-	assert.Equal(t, uint32(0x20000|1), aggregated())
+	// The AggregatedOperationalHealth ORs that of every FunctionalEntity:
+	// the endpoints of H go Initial, PreOperational, Operational while
+	// their data starts to flow, so the CommHealth bits of their
+	// FunctionalEntity clear only once they are Operational.
+	require.Eventually(t, func() bool {
+		f.conns.RefreshHealth()
+		return aggregated() == 0x20000|1
+	}, 5*time.Second, 5*time.Millisecond, "the vendor bits of Motion and the Initial Preset only")
 }
 
 // TestEstablishVerify: VerifyAssetCmd and VerifyFunctionalEntityCmd
