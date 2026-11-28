@@ -40,6 +40,11 @@ type pubsubState struct {
 	txn sync.Mutex
 	// hook follows the changes made in txn (SetPubSubConfigurationHook).
 	hook atomic.Pointer[pubsubHookBox]
+	// owner keeps components out of the store (SetPubSubComponentOwner).
+	owner atomic.Pointer[pubsubOwnerBox]
+	// restored: the configuration of WithPubSubStore was restored; under
+	// txn.
+	restored bool
 
 	evMu   sync.Mutex
 	evSubs map[*pubsubEventSub]struct{}
@@ -139,6 +144,9 @@ func (s *Server) startPubSub(ctx context.Context) error {
 	rt := s.PubSub()
 	if rt == nil {
 		return fmt.Errorf("server: pubsub: %w", s.ps.err)
+	}
+	if err := s.restorePubSub(); err != nil {
+		return err
 	}
 	if err := s.buildPubSubModel(); err != nil {
 		return err

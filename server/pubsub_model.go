@@ -99,10 +99,15 @@ func (s *Server) unregisterMethod(objectID, methodID *ua.NodeID) {
 // An application that needs those NodeIds before Start (a companion
 // specification that restores References to components, as the persistent
 // ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the
-// model again. It needs a server with a PubSub runtime (WithPubSub).
+// model again. It needs a server with a PubSub runtime (WithPubSub). With
+// [WithPubSubStore] it restores the stored configuration first, and fails
+// when that fails.
 func (s *Server) BuildPubSubModel() error {
 	if s.PubSub() == nil {
 		return fmt.Errorf("server: pubsub: no runtime: %w", s.ps.err)
+	}
+	if err := s.restorePubSub(); err != nil {
+		return err
 	}
 	return s.buildPubSubModel()
 }
@@ -785,7 +790,7 @@ func (m *pubsubModel) change(name string, f func(ctx context.Context, obj *ua.No
 		m.s.ps.txn.Lock()
 		defer m.s.ps.txn.Unlock()
 		h := m.s.pubsubHook()
-		if h == nil {
+		if h == nil && m.s.cfg.pubsubStore == nil {
 			return f(ctx, obj, args)
 		}
 		before, ids := m.rt.Configuration(), m.s.restorerSnapshot(h)
