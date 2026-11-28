@@ -10,9 +10,13 @@ behaviour you may notice, and the deviations of peers are in
 - The OpenAPI mapping of the UA JSON services. UA JSON over HTTPS and
   WebSockets (`https-uajson`, `wss-uajson`) and the binary `opc.https` and
   `opc.wss` transports are implemented.
-- A file-based certificate store for the push model: `server.CertificateStore`
-  has no implementation in the library, so without one, pushed trust lists,
-  certificates and keys live in memory only.
+- Push certificate management keeps its changes in memory unless
+  `PushManagement.Store` is set; `server/pushstore` stores them in a local
+  directory (no network file systems) with the private keys unencrypted, as
+  0600 files. It does not keep the pending transaction, the rejected list or
+  the key a CreateSigningRequest generated: after a restart UpdateCertificate
+  with the certificate of such a request fails (`Bad_SecurityChecksFailed`)
+  unless it brings its key.
 - Dynamic decoding of custom structures (`opcua.DynamicTypeDecoding`) reads
   the DataTypeDefinition Attribute only: a server that describes its types
   with a DataTypeDictionary (OPC 10000-5 Annex D, the 1.03 mechanism) and not
@@ -72,13 +76,39 @@ behaviour you may notice, and the deviations of peers are in
   implements UAFX, so it is tested against go-opcua only (see [docs/uafx.md](docs/uafx.md#limits)).
 - Time-scheduled Ethernet (TSN) and AMQP over WebSockets.
 - The PubSub configuration of a server (`server.WithPubSub`, the configuration
-  Methods and the PubSubConfiguration file) lives in memory: it is not
-  persisted across a restart (Part 14 §9.1.2), outside the components UAFX
-  persists.
+  Methods and the PubSubConfiguration file) lives in memory unless
+  `server.WithPubSubStore` persists it (Part 14 §9.1.2, `server/pubsubstore`,
+  v1.43.0). The store keeps the configuration of PublishSubscribe, its
+  PublishedDataSets and PubSubConnections with their groups, writers and
+  readers; not the SecurityGroups, their keys and the PubSubKeyPushTargets
+  (§8), and not the ID reservations of ReserveIds, which end with their
+  session (§9.1.3.7.5). A change made on the runtime directly
+  (`Server.PubSub()`) is written with the next change made through the
+  server, or by `Server.PersistPubSubConfiguration`. A component another
+  mechanism adds below a component a UAFX EstablishConnections call created
+  is persisted by neither store (docs/uafx.md). A restored secured group
+  gates its SecurityGroup until a newer key is current, so a SecurityGroup
+  with static keys stays closed after a restart. With `ua.StatusBadInternalError`
+  for a store that does not write, the Methods of §9.1.3 answer with a code
+  their tables do not list (none of them covers a store failure): a library
+  interpretation.
 - mDNS has no probing or conflict resolution.
-- Part 13 Aggregates: the AnnotationCount Aggregate is not implemented (the
-  server keeps no Annotations, Part 11 §5.1.2). The AggregateFilter of a
-  monitored item (Part 4 §7.22.4) reads no history. A startTime in the past
+- History Annotations (Part 11 §5.1.2): the SourceTimestamp identifies an
+  Annotation, so a node has at most one per time (§6.9.3 leaves the choice to
+  the server). The Annotations Property has a null value; deleting the node or
+  the Property does not delete the Annotations of the provider. An empty
+  userName is the user of the session, not left empty.
+- Change audit events (Part 4 §6.5.7, §6.5.8; Part 11 §5.8): the OldValues
+  of an event update or delete are null (the provider keeps no event before
+  an update) and a modified raw delete has none. The OldValues of a data
+  update are read from the provider before the update, outside the update:
+  a concurrent writer can change them in between. An event insert names the
+  EventIds of the inserted events in the Message. A Write or HistoryUpdate
+  the service refuses as a whole reports one event, with the Server object as
+  SourceNode.
+- Part 13 Aggregates: the AggregateFilter of a monitored item (Part 4
+  §7.22.4) reads no history, and refuses AnnotationCount, which "applies to
+  Historical Aggregates only" (Part 13 Table 5). A startTime in the past
   is revised to the first boundary after the creation of the item. The
   server does not wait for late samples before it calculates an interval
   (Part 13 §4.3.2 allows that). An item keeps at most 65536 raw values
@@ -115,6 +145,37 @@ behaviour you may notice, and the deviations of peers are in
   AccessRestrictions Attribute of a node without its own does not answer
   with the defaults of its namespace, which are read from the
   NamespaceMetadata Object.
+- Managed RoleSet (`server.WithRoleManagement`, OPC 10000-18): the
+  configuration of the roles lives in memory unless `server.WithRoleSetStore`
+  persists it (`server/rolestore`, v1.43.0). The store keeps the roles
+  AddRole added and the Identities, Applications, ApplicationsExclude,
+  Endpoints and EndpointsExclude of every role that can change; not the
+  RolePermissions of the nodes and the DefaultRolePermissions of the
+  namespaces, which are the application's (a RolePermission the application
+  gives a role that RemoveRole removed comes back with the next start). The
+  restore runs at Start, or at the first change through `Server.RoleSet()`
+  before it; MaxRoles and MaxEntries do not limit the roles it restores. The
+  first AddRole adds the namespace `server.RolesNamespaceURI` also when its
+  write fails. An AddRole whose NodeId a restored role has already (the
+  namespace index in the identifier may have moved) gets a suffix `#2`, `#3`.
+  With `ua.StatusBadInternalError` for a store that does not write, the
+  Methods of §4.2.2 to §4.4.10 and the Write of ApplicationsExclude and
+  EndpointsExclude answer with a code their tables do not list (none of them
+  covers a store failure): a library interpretation. The roles of namespace 0
+  cannot be removed; Anonymous, AuthenticatedUser and TrustedApplication
+  cannot be changed. Browse and Read of the role Properties are limited to
+  administrators only by the `RBACAccessController` (or an own
+  `AccessController`), through the RolePermissions of the nodes, not by the
+  RoleSet itself (§4.4.1). CustomConfiguration is always FALSE: no vendor-specific
+  mapping. The RoleMapper is not called again when a role changes: an active
+  session keeps the RoleMapper roles of its last ActivateSession. Thumbprint
+  rules use SHA-1 (Part 6 §3.1.1, the hash where no SecurityPolicy
+  applies). Role and GroupId rules need JWT issued tokens and read the
+  `roles`, `groups` and `iss` claims only. A session whose endpointUrl
+  names no configured Endpoint gets no role that has Endpoints. The added
+  role nodes have no NodeVersion, so AddRole and RemoveRole report no
+  GeneralModelChangeEvent (Part 3 §9.32.2). RoleSet and `rolemgmt` are tested against go-opcua only: no peer of the
+  pinned opcua-interop release manages roles.
 - Durable subscriptions (`server`, SetSubscriptionDurable, OPC 10000-5 §9.3):
   the subscription, its MonitoredItems and their queues live in memory. They
   outlive the session for the revised lifetime and another session takes
@@ -127,7 +188,8 @@ behaviour you may notice, and the deviations of peers are in
   ServerStatus only: the application's `server.ServerStateChangeFunc` decides
   whether to accept a change, and stops or restarts the server itself;
   without one every request is Bad_InvalidState. Administrative rights are
-  the ConfigureAdmin and SecurityAdmin roles of the RoleMapper.
+  the ConfigureAdmin and SecurityAdmin roles of the session (from the
+  RoleMapper and, with `server.WithRoleManagement`, the RoleSet).
 - The Methods of the Server Object (GetMonitoredItems, ResendData,
   SetSubscriptionDurable, RequestServerStateChange) are tested against
   go-opcua only.

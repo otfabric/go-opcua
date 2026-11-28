@@ -111,7 +111,7 @@ func (u *PubSubConfigurationUpdate) RevertMoves() ([]PubSubComponentMove, error)
 		return nil, fmt.Errorf("server: revert the PubSub configuration: %w", err)
 	}
 	moved := movesBetween(ids, f.m.s.componentsByPath(), nil)
-	if h != nil {
+	if h != nil || f.m.s.cfg.pubsubStore != nil {
 		if err := f.m.s.pubsubChanged(h, &PubSubChange{Context: context.Background(), Before: u.after, Revert: true, ids: f.m.s.restorerOnly(h, ids)}); err != nil {
 			return nil, fmt.Errorf("server: revert the PubSub configuration: %w", err)
 		}
@@ -159,8 +159,11 @@ func (s *Server) ChangePubSubConfigurationThen(fn func(rt *pubsub.PubSub) error,
 
 // changeLocked is ChangePubSubConfiguration in the PubSub transaction.
 func (s *Server) changeLocked(rt *pubsub.PubSub, fn func(rt *pubsub.PubSub) error) error {
+	if err := s.restorePubSubLocked(); err != nil {
+		return err
+	}
 	h := s.pubsubHook()
-	if h == nil {
+	if h == nil && s.cfg.pubsubStore == nil {
 		return fn(rt)
 	}
 	before, ids := rt.Configuration(), s.restorerSnapshot(h)
@@ -346,18 +349,22 @@ func (s *Server) pubsubHook() PubSubConfigurationHook {
 	return nil
 }
 
-// pubsubChanged runs the hook h after the change ch, whose After it sets,
-// in the PubSub transaction; when it fails, the runtime goes back to
-// ch.Before. Nothing changed: no call.
+// pubsubChanged runs the hook h, when not nil, and then the store of
+// WithPubSubStore after the change ch, whose After it sets, in the PubSub
+// transaction; when either fails, the runtime goes back to ch.Before.
+// Nothing changed: no call.
 func (s *Server) pubsubChanged(h PubSubConfigurationHook, ch *PubSubChange) error {
 	rt := s.PubSub()
 	ch.After = rt.Configuration()
 	if reflect.DeepEqual(ch.Before, ch.After) {
 		return nil
 	}
+	if h == nil {
+		return s.storeChangeLocked(nil, ch)
+	}
 	err := h.PubSubConfigurationChanged(ch)
 	if err == nil {
-		return nil
+		return s.storeChangeLocked(h, ch)
 	}
 	if rerr := reconcilePubSub(rt, ch.Before); rerr != nil {
 		s.cfg.logger.Error("pubsub: restoring the configuration a hook refused failed", "error", rerr)
@@ -370,6 +377,39 @@ func (s *Server) pubsubChanged(h PubSubConfigurationHook, ch *PubSubChange) erro
 	var sc ua.StatusCode
 	if !errors.As(err, &sc) {
 		err = fmt.Errorf("%w: %w", ua.StatusBadInternalError, err)
+	}
+	return err
+}
+
+// storeChangeLocked writes the change ch, which the hook h (nil: none)
+// accepted, to the store of WithPubSubStore. When the write fails the
+// runtime goes back to ch.Before and h sees that as a change of its own: a
+// Revert from ch.After, with the components the undo brought back under a
+// new ComponentID in Moved, so that it follows the runtime, as it does
+// for PubSubConfigurationUpdate.Revert. The error carries the StatusCode
+// of the change (storePubSubLocked).
+func (s *Server) storeChangeLocked(h PubSubConfigurationHook, ch *PubSubChange) error {
+	if s.cfg.pubsubStore == nil {
+		return nil
+	}
+	err := s.storePubSubLocked(ch)
+	if err == nil {
+		return nil
+	}
+	rt := s.PubSub()
+	var ids map[string]componentAt
+	if h != nil {
+		ids = s.componentsByPath()
+	}
+	if rerr := reconcileTo(rt, ch.Before); rerr != nil {
+		s.cfg.logger.Error("pubsub: restoring the configuration the store refused failed", "error", rerr)
+	}
+	if h != nil {
+		undo := &PubSubChange{Context: ch.Context, Before: ch.After, After: rt.Configuration(), Revert: true,
+			Moved: movesBetween(ids, s.componentsByPath(), nil)}
+		if herr := h.PubSubConfigurationChanged(undo); herr != nil {
+			s.cfg.logger.Error("pubsub: the hook refused the undo of a change the store refused", "error", herr)
+		}
 	}
 	return err
 }

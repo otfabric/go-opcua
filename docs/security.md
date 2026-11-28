@@ -439,10 +439,38 @@ GetRejectedList.
 - **Limits.** CloseAndUpdate checks every certificate and CRL, accepts only
   CRLs signed by a CA of the lists, at most 1024 entries and
   `MaxTrustListSize` bytes.
-- **Persistence** is the application's (`PushManagement.Store`): the server
-  writes no files, so keys pushed with UpdateCertificate stay in memory unless
-  a store saves them (a `CertificateGroupStore` also gets the HTTPS and
-  UserToken groups).
+- **Persistence** is opt in (`PushManagement.Store`): without a store the
+  server writes no files, and keys pushed with UpdateCertificate stay in
+  memory. `pushstore.OpenDir` (package `server/pushstore`) keeps the trust
+  lists, certificates and keys of every group in a directory of its own and
+  `server.New` restores them:
+  - **Atomic.** Each ApplyChanges and ResetToServerDefaults is one write
+    (`CertificateBatchStore`); an ApplyChanges whose write fails is
+    `Bad_InternalError`, applies nothing and discards its transaction ("If
+    any errors are found then all changes are discarded", Part 12 §7.10.2).
+    A write with an unknown outcome (a failed rename or directory fsync)
+    fences the store until `Settle`, which the next write runs first: it
+    writes the state before the failed write back if that write landed, so
+    a restart never brings back changes the server did not apply, nor a part
+    of one. A crash before `Settle` restarts with the state before or after
+    the write, never a mix.
+  - **Files.** The directory is created 0700 and its files (a lock file and
+    one data file, `state`, with a CRC-32C) 0600; a directory the group or
+    others may write is refused. One process owns it (an exclusive lock).
+  - **Keys** are stored as unencrypted PKCS #8 DER (`uapolicy.MarshalPrivateKey`:
+    RSA, ECDSA on the NIST and Brainpool curves, Ed25519, Ed448), protected
+    by the file permissions. For encryption at rest, wrap the `fxstore.Store`
+    passed to `pushstore.Open`. A key that cannot be exported (a hardware
+    module) cannot be stored: ApplyChanges fails with it.
+  - **Fail closed.** A data file that does not decode, a stored trust list or
+    certificate that is not valid, a key that does not match its certificate,
+    or a store of another owner (its ApplicationUri) fails `server.New`: the
+    server does not start with a trust list other than the one it was given.
+    ResetToServerDefaults empties the store.
+  - The interfaces of earlier versions (`CertificateStore`,
+    `CertificateGroupStore`, `CertificateDeleteStore`) still work; they get
+    one call per trust list and certificate, so a failure part-way leaves the
+    earlier ones stored.
 - **Three groups, three trust lists.** The DefaultApplicationGroup trust list
   validates client application certificates, the DefaultUserTokenGroup one
   X.509 user identity tokens (before a `WithX509UserValidator` is asked), and
@@ -459,6 +487,34 @@ GetRejectedList.
 - **Alarms.** `PushManagement.Alarms` raises CertificateExpired before a group
   certificate expires and TrustListOutOfDate when a trust list has not been
   updated for `TrustListUpdateFrequency`.
+
+### PubSub configuration store
+
+`server.WithPubSubStore` with `server/pubsubstore` writes the PubSub
+configuration of the server to disk (Part 14 §9.1.2):
+
+- **Secrets.** The records hold the configuration as the runtime has it,
+  ConnectionProperties, GroupProperties, DataSetWriterProperties and
+  DataSetReaderProperties included: the broker password of an MQTT or AMQP
+  connection, which the address space shows as null, is in them in clear
+  (Part 14 §6.2.2: properties "may contain information that should not be
+  visible outside the configuration tools"). SecurityGroups, their keys and
+  the PubSubKeyPushTargets are not in the records.
+- **Files.** `pubsubstore.OpenDir` creates its directory 0700 and its files
+  0600 (`fxstore.FileStore`), refuses a directory the group or others may
+  write, and holds an exclusive lock on it. For encryption at rest, pass
+  `pubsubstore.Open` an `fxstore.Store` that encrypts.
+- **Restarts.** A restored WriterGroup, ReaderGroup or DataSetReader with a
+  SecurityMode above None gates its SecurityGroup
+  (`pubsub.PubSub.GateSecurityGroup`): it neither secures nor accepts
+  messages until a key newer than the restart is current (Part 14 §7.2.3,
+  §7.2.4.4.3), so that a key in use before the restart is not used again.
+  A SecurityGroup whose key never changes (static keys of the application)
+  therefore stays closed after a restore: it needs a key source that
+  rotates, such as an SKS.
+- **Integrity.** A record that does not decode, a configuration that is not
+  valid, or a store of another `Owner` fails `Open`; the server does not start
+  on a configuration it cannot restore completely.
 
 ---
 
@@ -708,11 +764,61 @@ s, err := server.New(
 )
 ```
 
-`server.Session` is the session of the request, nil without one: `ID()`, `Identity()` (the user identity token as the client sent it), `Roles()` (from the `RoleMapper`) and `ClientCertificate()`. It does not expose the AuthenticationToken or the nonces.
+`server.Session` is the session of the request, nil without one: `ID()`, `Identity()` (the user identity token as the client sent it), `Roles()` (from the `RoleMapper` and, with `WithRoleManagement`, the managed RoleSet) and `ClientCertificate()`. It does not expose the AuthenticationToken or the nonces.
 
 The `DefaultAccessController` allows all operations. Override it to enforce your security model.
 
 Reading the UserRolePermissions Attribute of a node (with Read or a monitored item) returns the entries of its RolePermissions for the roles of the session only (Part 3 §5.2.10); a request without a session, or a session the `RoleMapper` gave no role, has the Anonymous role, as for the `RBACAccessController`. RolePermissions lists every role.
+
+### Managed roles (OPC 10000-18)
+
+`server.WithRoleManagement` lets a security administrator configure the
+roles at run time with the RoleSet and Role Methods of OPC 10000-18
+(AddRole, RemoveRole, AddIdentity, RemoveIdentity, AddApplication,
+RemoveApplication, AddEndpoint, RemoveEndpoint) and the Writes of
+ApplicationsExclude and EndpointsExclude. What it means for security:
+
+- Every change needs a SignAndEncrypt channel and the SecurityAdmin role,
+  or what `RoleManagement.Authorizer` allows; seed the first administrator
+  with `Server.RoleSet().AddIdentity` (or the `RoleMapper`), as the
+  RoleSet starts without one.
+- A session gets the roles of the `RoleMapper` plus the roles whose rules
+  it complies with (§4.4.1); a change applies to the active sessions at
+  once. The defaults of §4.3 apply: every session has the Anonymous role,
+  an authenticated one AuthenticatedUser too, and a session on a signed
+  channel with a Client Certificate the server validated has
+  TrustedApplication. Grant permissions to Anonymous with that in mind.
+- An Anonymous rule cannot be given to SecurityAdmin, ConfigureAdmin or
+  SecurityKeyServerAdmin (`Bad_RequestNotAllowed`, §4.4.1).
+- "The Properties and Methods of the RoleType ... shall only be
+  browseable, readable, writeable and callable by authorized
+  administrators through an encrypted channel" (§4.4.1). The Methods and
+  the Writes check it themselves. Browse and Read of the Properties follow
+  the RolePermissions (SecurityAdmin) and AccessRestrictions (signed and
+  encrypted) of the NodeSet: use the `RBACAccessController`, or an
+  `AccessController` of your own that keeps the Properties from other
+  users; the `DefaultAccessController` lets every session on an encrypted
+  channel read them.
+- Application rules and Applications use the ApplicationUri of the Client
+  Certificate, and only of one the server validated
+  (`WithClientCertificateTrustList`, `WithClientCertificateValidator` or
+  push management) on a signed channel: without a validator the server
+  accepts any certificate, so none counts as trusted.
+- Role and GroupId rules read the `roles` and `groups` claims of a JWT
+  (Part 6 §6.5.2.3) the `IssuedTokenValidator` accepted; they are refused
+  unless the server's issued token policy is `IssuedTokenTypeJWT`.
+- RemoveRole deletes the role's RolePermissions everywhere (§4.2.3).
+- The configuration is kept in memory only, unless `WithRoleSetStore`
+  persists it. `rolestore.OpenDir` writes the rules that grant every role,
+  SecurityAdmin included, to its directory: whoever can write that
+  directory can grant themselves any role on the next start. The directory
+  is created 0700 and its files 0600 (`fxstore.FileStore`), a directory the
+  group or others may write is refused, and the directory is locked
+  exclusively. For integrity or encryption at rest, pass `rolestore.Open`
+  an `fxstore.Store` that provides it. A store that does not decode, of
+  another `Owner`, or with a role the server would refuse fails `Start`:
+  the server does not start with a RoleSet it cannot restore completely. A
+  change whose write fails is not made.
 
 ### Writable Attributes
 
@@ -1020,7 +1126,7 @@ Size the limits to the clients you expect: an engineering tool and a few HMIs ne
 | `WithMaxBrowseContinuationPoints(n)` | 10 per session | Browse: `Bad_NoContinuationPoints` for the node |
 | `WithMaxQueryContinuationPoints(n)` | 5 per session | QueryFirst: `Bad_NoContinuationPoints` |
 
-The values in force are published in ServerCapabilities (`OperationLimits`, `MaxMonitoredItems`, `MaxMonitoredItemsPerSubscription`, `MaxBrowseContinuationPoints`, `MaxQueryContinuationPoints`).
+The values in force are published in ServerCapabilities (`OperationLimits`, `MaxMonitoredItems`, `MaxMonitoredItemsPerSubscription`, `MaxBrowseContinuationPoints`, `MaxQueryContinuationPoints`, the last two as UInt16 up to 65535).
 
 - Browse and Query continuation points belong to the session that created them: another session gets `Bad_ContinuationPointInvalid`. They are released when the session is closed or times out, and an unused one expires after 10 minutes.
 - The event queue of an event monitored item holds its revised QueueSize (default 1000 for QueueSize 0, at most 10000). On overflow an `EventQueueOverflowEventType` event marks the loss (Part 4 §5.12.1.5): with DiscardOldest the oldest event is dropped and the overflow event heads the queue, otherwise the new event is dropped.
@@ -1053,7 +1159,7 @@ The Query service set is off by default (`Bad_ServiceUnsupported`): a QueryFirst
 - [ ] Set a WriteMask only on the attributes clients must change
 - [ ] Size `WithMaxSessions`, `WithMaxSubscriptions` and `WithMaxSubscriptionsPerSession` to the clients you expect
 - [ ] Keep `WithOperationLimits` and the monitored item limits as small as the clients allow; enable `WithQuery` only where clients need it
-- [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with a `CertificateStore` if they must survive a restart
+- [ ] With `WithPushManagement`, grant SecurityAdmin to authenticated users only and persist changes with `pushstore.OpenDir` (or another `CertificateStore`) if they must survive a restart; keep its directory on local storage, owned by the server's user
 - [ ] On a Local Discovery Server, keep secured registration (no `LDSAllowInsecureRegistration`) and configure `WithClientCertificateTrustList`
 - [ ] Enable `WithMulticastDiscovery` only on interfaces where the server should be discoverable, and never trust a discovered URL without validating the server certificate
 - [ ] Monitor certificate expiration dates

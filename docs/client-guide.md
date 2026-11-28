@@ -11,12 +11,13 @@
 | **Discovery** | `GetEndpoints`, `FindServers`, `FindServersWithFilter`, `FindServersOnNetwork`, `FindServersOnNetworkWithFilter`, `RegisterServer`, `RegisterServer2`, `DiscoverServers` | Fully implemented |
 | **Session** | Automatic via `Connect` / `Close` | Fully implemented |
 | **Attribute** | `Read`, `ReadValue`, `Write`, `WriteValue` | Fully implemented (`IndexRange`, `TimestampsToReturn`) |
-| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryReadEvent`, `HistoryReleaseContinuationPoints`, `HistoryUpdateData`, `HistoryUpdateEvents`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents` | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed and events + update/delete) |
+| **Attribute (History)** | `HistoryReadRawModified`, `HistoryReadProcessed`, `HistoryReadAtTime`, `HistoryReadEvent`, `HistoryReleaseContinuationPoints`, `HistoryUpdateData`, `HistoryUpdateEvents`, `HistoryDeleteRawModified`, `HistoryDeleteAtTime`, `HistoryDeleteEvents`; Annotations: `HistoryReadAnnotations`, `HistoryUpdateStructureData`, `ReadAnnotations`, `UpdateAnnotations` | Fully implemented (server-dependent; go-opcua default `*Historian` covers raw/modified/at-time/processed and events + update/delete) |
 | **Browse** | `Browse`, `BrowseNext` | Fully implemented (`ResultMask`, continuation release) |
 | **View** | `RegisterNodes`, `UnregisterNodes` | Fully implemented |
 | **Node Management** | `AddNodes`, `DeleteNodes`, `AddReferences`, `DeleteReferences` | Fully implemented |
 | **Method** | `Call`, `CallMethod`; typed contracts of package `uamethod` | Fully implemented |
 | **Files** (Part 20, over Method + Call) | package `filetransfer`: FileType (`Open`, `Read`, `Write`, `Position`, `SetPosition`, `Close`, `ReadAll`, `WriteAll`, `Info`, `io.Reader` / `io.Writer`) and FileDirectoryType (`Entries`, `CreateDirectory`, `CreateFile`, `Delete`, `MoveOrCopy`) | Implemented; see [Files](#files-part-20) |
+| **Role management** (Part 18, over Method + Call, Read, Write) | package `rolemgmt`: RoleSet (`Roles`, `AddRole`, `RemoveRole`) and roles (`Config`, `AddIdentity`, `RemoveIdentity`, `AddApplication`, `RemoveApplication`, `AddEndpoint`, `RemoveEndpoint`, `SetApplicationsExclude`, `SetEndpointsExclude`) | Implemented; see [Role management](#role-management-opc-10000-18) |
 | **Subscription** | `Subscribe`, `SubscriptionBuilder`, `SetPublishingMode`, `Republish`, `TransferSubscriptions` | Fully implemented; reconnect recovery via `WithSubscriptionRecoveryHandler` |
 | **Monitored Items** | `Monitor`, `ModifyMonitoredItems`, `Unmonitor`, `SetMonitoringMode`, `SetTriggering` | Fully implemented (exact queues / Overflow on go-opcua servers) |
 | **Query** | `QueryFirst`, `QueryNext` | Fully implemented (server-dependent) |
@@ -1176,7 +1177,7 @@ result, err := c.Call(ctx, req)
 ### Typed calls
 
 Package `uamethod` has generated contracts of Methods of namespace 0
-(FileType and FileDirectoryType today): typed inputs and outputs and a
+(FileType, FileDirectoryType, RoleSetType and RoleType): typed inputs and outputs and a
 call function that checks the outputs against the declaration. A nil
 method NodeId calls the declaration of the type, which a server maps to
 the Method of the Object (Part 4 §5.12.2.2 in 1.05.06):
@@ -1220,6 +1221,33 @@ obj, file, err := d.Directory(logs).CreateFile(ctx, "today", true) // opened wit
 newID, err := d.MoveOrCopy(ctx, obj.NodeID(), logs, true, "copy") // copy into logs
 err = d.Delete(ctx, logs)
 ```
+
+## Role management (OPC 10000-18)
+
+Package `rolemgmt` configures the roles of a server through its RoleSet
+Object (OPC 10000-18 §4.3): AddRole and RemoveRole (§4.2.2, §4.2.3), the
+Properties of a role (§4.4.1) and its Methods AddIdentity, RemoveIdentity,
+AddApplication, RemoveApplication, AddEndpoint and RemoveEndpoint (§4.4.5
+to §4.4.10). The server requires a SignAndEncrypt channel and a user with
+administrator rights such as the SecurityAdmin role.
+
+```go
+rs := rolemgmt.New(c) // Server.ServerCapabilities.RoleSet
+roles, err := rs.Roles(ctx)                  // the role Objects, with their BrowseNames
+role, err := rs.AddRole(ctx, "Maintainer", "") // "": the namespace the server chooses
+err = role.AddIdentity(ctx, &ua.IdentityMappingRuleType{
+    CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "bob"})
+err = role.AddApplication(ctx, "urn:example:hmi")
+err = role.SetApplicationsExclude(ctx, false)  // Applications become an include list
+cfg, err := role.Config(ctx)                    // Identities, Applications, Endpoints, ...
+err = rs.RemoveRole(ctx, role.NodeID)
+
+observer := rs.Role(ua.RoleObserver.NodeID())   // a well-known role
+```
+
+A Bad result is an `*uamethod.CallError` (`errors.Is(err,
+ua.StatusBadUserAccessDenied)` holds); a refused Read or Write of a
+Property wraps its StatusCode.
 
 ---
 
@@ -1435,6 +1463,28 @@ st, err := c.HistoryReleaseContinuationPoints(ctx, d, &ua.HistoryReadValueID{Nod
 // st[0]: Good, or Bad_ContinuationPointInvalid for a point already used, released or of another session
 ```
 
+Annotations (Part 11 §6.6.6) of a node with the Annotations Property (§5.1.2) are
+written with `UpdateAnnotations` (UpdateStructureDataDetails, §6.9.3) and read with
+`ReadAnnotations` (ReadAnnotationDataDetails, §6.5.6); `HistoryUpdateStructureData`
+and `HistoryReadAnnotations` take the full details. The time of a
+`HistoryAnnotation` is the SourceTimestamp the server identifies it by:
+
+```go
+ops, err := c.UpdateAnnotations(ctx, nodeID, ua.PerformUpdateTypeInsert, opcua.HistoryAnnotation{
+    Time:       sampleTime,
+    Annotation: &ua.Annotation{Message: "sensor recalibrated", UserName: "olivia", AnnotationTime: time.Now()},
+})
+// ops[0]: Good_EntryInserted, or Bad_EntryExists for a time with one
+notes, err := c.ReadAnnotations(ctx, nodeID, sampleTime, otherTime)
+// one per time in order; notes[1].Status Bad_NoData and a nil Annotation for a time without one
+_, err = c.UpdateAnnotations(ctx, nodeID, ua.PerformUpdateTypeRemove, opcua.HistoryAnnotation{Time: sampleTime})
+```
+
+A Bad status of the node, such as `Bad_HistoryOperationUnsupported` for a node without
+Annotations, is the error. A raw read (`HistoryReadRawModified`) of the Annotations
+Property returns the Annotations of a range; the processed Aggregate AnnotationCount
+counts them per interval.
+
 Peer-proven history is raw HistoryRead (`history.read.raw`) in both directions with all six
 peers, and its continuation points (`history.read.continuation`) in both directions with all
 of them but the asyncua server, which returns none (see [INTEROP.md](../INTEROP.md)).
@@ -1544,7 +1594,7 @@ accepts (UA-.NETStandard compares the case).
 
 Peers differ in details: open62541 1.5.10 serves the methods to any session on a
 SignAndEncrypt channel and answers ApplyChanges without a pending change with
-`Bad_NothingToDo` (as node-opcua), and the endpoints of UA-.NETStandard and
+`Bad_NothingToDo` (as node-opcua and, since v1.43.0, go-opcua, Part 12 §7.10.9), and the endpoints of UA-.NETStandard and
 node-opcua carry the issuer chain after the certificate. Of the Part 12 1.05
 additions, UA-.NETStandard serves GetCertificates, the TransactionDiagnostics,
 the HTTPS and UserToken trust lists, PFX keys and the alarms, and refuses

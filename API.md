@@ -87,8 +87,10 @@ Complete reference for all public types, functions, and interfaces in `github.co
   - [SessionObserver](#sessionobserver)
   - [Push certificate management (server)](#push-certificate-management-server)
   - [Files (server)](#files-server)
+  - [Role management (server)](#role-management-server)
 - [Package `uamethod`](#package-uamethod)
 - [Package `filetransfer`](#package-filetransfer)
+- [Package `rolemgmt`](#package-rolemgmt)
 - [Package `pubsub`](#package-pubsub)
   - [Runtime](#runtime)
   - [Sub-packages](#sub-packages)
@@ -299,6 +301,14 @@ func (c *Client) ReadHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, e
 func (c *Client) ReadEventHistory(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, filter *ua.EventFilter, maxEvents uint32) ([]*ua.HistoryEventFieldList, error)
 func (c *Client) ReadEventHistoryAll(ctx context.Context, nodeID *ua.NodeID, start, end time.Time, filter *ua.EventFilter, pageSize uint32) iter.Seq2[*ua.HistoryEventFieldList, error]
 func (c *Client) HistoryReleaseContinuationPoints(ctx context.Context, details any, nodes ...*ua.HistoryReadValueID) ([]ua.StatusCode, error)
+func (c *Client) HistoryReadAnnotations(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAnnotationDataDetails) (*ua.HistoryReadResponse, error)
+func (c *Client) ReadAnnotations(ctx context.Context, nodeID *ua.NodeID, reqTimes ...time.Time) ([]HistoryAnnotation, error)
+
+type HistoryAnnotation struct {
+    Time       time.Time      // the SourceTimestamp that identifies the Annotation
+    Annotation *ua.Annotation // nil when the node has none at Time
+    Status     ua.StatusCode  // of the read: Bad_NoData for a time without one
+}
 ```
 
 `ReadHistoryAll` returns a Go 1.23 iterator that pages through all historical
@@ -324,6 +334,11 @@ HistoryReadDetails the points came from (`*ua.ReadRawModifiedDetails`,
 `Bad_ContinuationPointInvalid` for a point that is unknown, already used or
 released, or of another session.
 
+`ReadAnnotations` reads the Annotations (Part 11 §6.6.6) of a node with the
+Annotations Property, or of the Property (§5.1.2), at `reqTimes` with
+ReadAnnotationDataDetails (§6.5.6): one per time, in order, following
+continuation points. A Bad status of the node is the error.
+
 #### History update
 
 ```go
@@ -332,10 +347,15 @@ func (c *Client) HistoryUpdateEvents(ctx context.Context, details ...*ua.UpdateE
 func (c *Client) HistoryDeleteRawModified(ctx context.Context, details ...*ua.DeleteRawModifiedDetails) (*ua.HistoryUpdateResponse, error)
 func (c *Client) HistoryDeleteAtTime(ctx context.Context, details ...*ua.DeleteAtTimeDetails) (*ua.HistoryUpdateResponse, error)
 func (c *Client) HistoryDeleteEvents(ctx context.Context, details ...*ua.DeleteEventDetails) (*ua.HistoryUpdateResponse, error)
+func (c *Client) HistoryUpdateStructureData(ctx context.Context, details ...*ua.UpdateStructureDataDetails) (*ua.HistoryUpdateResponse, error)
+func (c *Client) UpdateAnnotations(ctx context.Context, nodeID *ua.NodeID, perform ua.PerformUpdateType, annotations ...HistoryAnnotation) ([]ua.StatusCode, error)
 ```
 
 Each method wraps the typed details into `ExtensionObject` entries for the
-underlying `HistoryUpdateRequest`.
+underlying `HistoryUpdateRequest`. `UpdateAnnotations` sends one
+UpdateStructureDataDetails (Part 11 §6.9.3) with an Annotation per
+`HistoryAnnotation` at its `Time` (a Remove needs only the Time) and returns
+the OperationResults; a Bad status of the node is the error.
 
 #### Method calls
 
@@ -1893,6 +1913,7 @@ server publishes it with `SetServerState`. Without one every request is
 | `WithServerStateChange(f ServerStateChangeFunc)` | The application's handler of RequestServerStateChange (OPC 10000-5 §9.4); without one every request is `Bad_InvalidState` |
 | `WithServerDiagnostics(enabled bool)` | Collect server diagnostics (`Server.ServerDiagnostics`, default true); see the [server guide](docs/server-guide.md#server-diagnostics) |
 | `WithRoleMapper(rm RoleMapper)` | Maps a session's identity token to its role NodeIDs (`RoleMapper func(token ua.IdentityToken) []*ua.NodeID`); used by the default access controller |
+| `WithRoleManagement(cfg RoleManagement)` | Serve the RoleSet of OPC 10000-18 (AddRole, RemoveRole and the Role Methods) and grant the sessions the roles whose rules they comply with, in addition to those of the RoleMapper; see [Role management (server)](#role-management-server). Without it the roles come from the RoleMapper alone, as in v1.42 and earlier |
 | `ApplicationURI(uri string)` | ApplicationUri of the server; only needed without a certificate (`Certificate` sets it from the URI SAN) |
 | `WithReverseConnect(clientURL string, opts ...ReverseConnectOption)` | Open reverse connections to the client listening at `clientURL`; see [Reverse connect (server)](#reverse-connect-server) |
 | `WebSocketEndPoint(host string, port int)` | Add an `opc.wss://host:port` endpoint (Part 6 §7.5, wss-uasc-uabinary); the server listens on the first one, port 0 picks a free port |
@@ -2161,7 +2182,7 @@ the nonces.
 ```go
 func (s *Session) ID() *ua.NodeID                 // SessionId
 func (s *Session) Identity() ua.IdentityToken     // as the client sent it, without a password; nil before ActivateSession
-func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper; a copy
+func (s *Session) Roles() []*ua.NodeID            // from the RoleMapper and the managed RoleSet; a copy
 func (s *Session) ClientCertificate() []byte      // of CreateSession; a copy; nil with SecurityPolicy None
 ```
 
@@ -2427,8 +2448,13 @@ func (g *AlarmGroup) SetSuppressing(on bool) error // suppression groups
 func (g *AlarmGroup) Evaluate() error              // from the DigitalVariables
 
 // Audit events (AuditConditionEventType and subtypes; the SecureChannel and
-// Session service sets; certificate errors); off by default
+// Session service sets; certificate errors; Write, HistoryUpdate and
+// NodeManagement); off by default
 func WithAuditing(enabled bool) Option
+// the audit events of Write, HistoryUpdate and NodeManagement with auditing
+// on (Part 4 §6.5.7, §6.5.8; Part 11 §5.8); default true, false is the
+// behaviour before v1.43.0
+func WithChangeAuditing(enabled bool) Option
 func (s *Server) SetAuditing(enabled bool)
 func (s *Server) Auditing() bool
 // an audit event of the application (Part 5 §6.4.3), to the sessions an
@@ -2720,8 +2746,8 @@ Supported by default `*Historian`:
 - DeleteAtTime
 - ReadAtTime (nearest previous)
 - ReadModified
-- ReadProcessed: every standard Aggregate of Part 13 §5.4.3 but
-  AnnotationCount, calculated by `server/aggregate` with the configuration of
+- ReadProcessed: every standard Aggregate of Part 13 §5.4.3, AnnotationCount
+  of the Annotations of the node too, calculated by `server/aggregate` with the configuration of
   `SetAggregateConfig` (default `aggregate.DefaultConfig()`), overridden by
   the aggregateConfiguration of the request
 
@@ -2822,8 +2848,42 @@ func (h *Historian) DeleteEvents(notifier *ua.NodeID, eventIDs [][]byte) *ua.His
 - Audit events in the history go to the sessions an `EventAccessController`
   allows.
 - The HistoryServerCapabilities (`AccessHistoryEventsCapability`,
-  `Insert/Replace/Update/DeleteEventCapability`, and the data capabilities)
-  report what the provider of `SetHistorian` implements.
+  `Insert/Replace/Update/DeleteEventCapability`, `InsertAnnotationCapability`
+  and the data capabilities) report what the provider of `SetHistorian`
+  implements.
+
+Annotations (Part 11 §5.1.2, §6.5.6, §6.9.3):
+
+```go
+// the Annotations Property on a Variable or Object: DataType Annotation,
+// ValueRank -2, CurrentRead | HistoryRead | HistoryWrite, a null value
+func (s *Server) EnableAnnotations(nodeID *ua.NodeID) error
+
+type AnnotationHistoryProvider interface {
+    UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+    ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+    ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+}
+
+// *Historian implements it for the nodes it keeps history of:
+func (h *Historian) UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+func (h *Historian) ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+func (h *Historian) ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+```
+
+- HistoryUpdate UpdateStructureDataDetails and HistoryRead
+  ReadAnnotationDataDetails on the node or its Property; ReadRawModifiedDetails
+  on the Property reads the Annotations of a range (IsReadModified is
+  `Bad_HistoryOperationUnsupported`). A node without the Property is
+  `Bad_HistoryOperationUnsupported`.
+- The SourceTimestamp identifies an Annotation: Insert `Good_EntryInserted` /
+  `Bad_EntryExists`, Replace `Good_EntryReplaced` / `Bad_NoEntryExists`, Update
+  either, Remove `Good` / `Bad_NoEntryExists`. A value that is no Annotation is
+  `Bad_TypeMismatch`; an empty annotationTime is the time of the update, an
+  empty userName the user of the session.
+- ReadAnnotations returns one DataValue per reqTime, `Bad_NoData` for a time
+  without one. The raw values at a time with an Annotation carry the ExtraData
+  bit (Part 4 §7.38.1). The processed Aggregate AnnotationCount counts them.
 
 Peer HistoryRead raw interoperability: all four directions verified
 (`history.read.raw`) since opcua-interop v0.6.0; continuation points verified
@@ -2866,9 +2926,13 @@ func Supported(aggregateType *ua.NodeID) bool
 func Functions() []*ua.NodeID
 func Name(aggregateType *ua.NodeID) string
 func Description(aggregateType *ua.NodeID) string
+func HistoricalOnly(aggregateType *ua.NodeID) bool // AnnotationCount (Part 13 Table 5)
+
+func (r Request) CalculateWithAnnotations(raw, annotations []*ua.DataValue) ([]*ua.DataValue, ua.StatusCode)
+func (r Request) CalculateIntervalsWithAnnotations(raw, annotations []*ua.DataValue, first, last int) ([]*ua.DataValue, ua.StatusCode)
 ```
 
-The 36 standard Aggregates of Part 13 §5.4.3 but AnnotationCount, with the
+The 37 standard Aggregates of Part 13 §5.4.3, with the
 intervals of §5.4.2.2 (Table 49), Interpolated and Simple Bounding Values
 (§3.1.8, §3.1.9), the PercentValues and PercentTime StatusCode calculation
 (§5.4.3.2) and the Aggregate bits of Part 4 §7.38.1 (`ua.StatusCodeHistorianBits` and the constants it masks,
@@ -2877,7 +2941,11 @@ with `ua.StatusCodeInfoTypeDataValue`). `Check` returns
 Start = End, a negative ProcessingInterval, more than `MaxIntervals`
 intervals) or `Bad_AggregateInvalidInputs` (a Config that is not `Valid`).
 Arrays are `Bad_NotSupported` for the Aggregates that calculate with numbers
-(Part 11 §6.5.4.2). Evidence: every example of Annex A
+(Part 11 §6.5.4.2). AnnotationCount (§5.4.3.20) counts the annotations
+`CalculateWithAnnotations` takes, by their SourceTimestamp, per interval;
+without them it counts none. `HistoricalOnly` reports the Aggregates that
+"apply to Historical Aggregates only" (Table 5), which the AggregateFilter
+refuses. Evidence: every example of Annex A
 (`server/aggregate/testdata/AggregateExamples.csv`), with the rows where the
 package follows a clause instead listed in `deviations_test.go`.
 
@@ -2955,7 +3023,7 @@ type PushManagement struct {
     MaxRejectedCertificates  int                   // 0: 64
     ApplyImmediately         bool                  // no transactions: changes apply when their method returns
     Authorizer               PushAuthorizer        // nil: SecurityAdmin role (always SignAndEncrypt)
-    Store                    CertificateStore      // nil: nothing is persisted; a CertificateGroupStore gets every group
+    Store                    CertificateStore      // nil: nothing is persisted; pushstore.OpenDir: a directory, one write per ApplyChanges
     PFXPassword              func(ctx context.Context, certificateGroup, certificateType *ua.NodeID) (string, error)
     TrustListUpdateFrequency time.Duration         // UpdateFrequency; drives TrustListOutOfDate
     Alarms                   *CertificateAlarms    // CertificateExpired and TrustListOutOfDate alarms
@@ -2993,6 +3061,32 @@ type CertificateDeleteStore interface {
     CertificateStore
     DeleteGroupCertificate(ctx context.Context, certificateGroup, certificateType *ua.NodeID) error // DeleteCertificate, ResetToServerDefaults
 }
+type CertificateBatchStore interface { // used instead of the methods above
+    CertificateStore
+    StoreChanges(ctx context.Context, c CertificateChanges) error // one ApplyChanges or ResetToServerDefaults, all or nothing
+}
+type CertificateLoadStore interface { // restored by New on top of the configuration
+    CertificateStore
+    LoadCertificates(ctx context.Context) (CertificateChanges, error)
+}
+type CertificateChanges struct {
+    Reset        bool // ResetToServerDefaults: the store may forget what it holds
+    TrustLists   []CertificateGroupTrustList
+    Certificates []CertificateGroupChange
+}
+type CertificateGroupTrustList struct {
+    Group          string // BrowseName: "DefaultApplicationGroup", "DefaultHttpsGroup", "DefaultUserTokenGroup" or a CertificateGroup.Name
+    TrustList      *ua.TrustListDataType
+    LastUpdateTime time.Time
+}
+type CertificateGroupChange struct {
+    Group           string
+    CertificateType *ua.NodeID
+    Certificate     []byte // nil: deleted
+    Issuers         [][]byte
+    PrivateKey      crypto.Signer
+}
+func (c CertificateGroupChange) Deleted() bool
 func WithPushManagement(pm PushManagement) Option
 func (s *Server) TrustList() *ua.TrustListDataType    // the trust list in effect (nil without push management)
 func (s *Server) GroupTrustList(certificateGroup *ua.NodeID) *ua.TrustListDataType
@@ -3001,6 +3095,28 @@ func (s *Server) RejectedCertificates() [][]byte      // the most recently rejec
 func (s *Server) CertificateGroupID(name string) *ua.NodeID
 func (s *Server) GroupCertificate(certificateGroup, certificateType *ua.NodeID) ([]byte, [][]byte, crypto.Signer)
 func (s *Server) VerifyGroupCertificate(certificateGroup *ua.NodeID, chain []byte) error // against the group's trust list
+```
+
+Package `server/pushstore` is a `PushManagement.Store` on `uafx/fxstore`
+(one Domain, namespace `push`):
+
+```go
+type Options struct {
+    Owner  string         // ApplicationUri: a store of another owner is refused
+    Limits fxstore.Limits // zero: the defaults (4 MiB per record)
+}
+func OpenDir(ctx context.Context, dir string, o Options) (*Store, error) // an fxstore.FileStore in dir (0700, files 0600)
+func Open(ctx context.Context, s fxstore.Store, o Options) (*Store, error)
+func (s *Store) StoreChanges(ctx context.Context, c server.CertificateChanges) error // one atomic write
+func (s *Store) LoadCertificates(ctx context.Context) (server.CertificateChanges, error)
+func (s *Store) Settle(ctx context.Context) (bool, error) // after an unknown outcome; writes the state before it back
+func (s *Store) Status() fxstore.DomainStatus
+func (s *Store) Close() error
+// and the methods of CertificateStore, CertificateGroupStore and CertificateDeleteStore
+func GroupName(n *ua.NodeID) (string, error)
+const Namespace = "push"; const Schema = 1
+const DefaultApplicationGroup, DefaultHTTPSGroup, DefaultUserTokenGroup = "DefaultApplicationGroup", "DefaultHttpsGroup", "DefaultUserTokenGroup"
+var ErrClosed error
 ```
 
 See [docs/server-guide.md](docs/server-guide.md#certificate-management-push-model).
@@ -3082,13 +3198,59 @@ func (d *FileDirectory) Lookup(path string) (*ua.NodeID, *FileObject, bool)
 
 See [docs/server-guide.md](docs/server-guide.md#files-part-20).
 
+### Role management (server)
+
+The managed RoleSet of OPC 10000-18 (§4.2 to §4.5). The methods of
+`RoleSet` return the StatusCode the Method would as error; they need no
+session.
+
+```go
+const RolesNamespaceURI = "urn:otfabric:go-opcua:roles" // the namespace of the roles AddRole adds
+const DefaultMaxRoles = 64                             // RoleManagement.MaxRoles of zero
+const DefaultMaxRoleEntries = 256                      // RoleManagement.MaxEntries of zero
+type RoleManagement struct {
+    MaxRoles   int // roles AddRole may add; past it Bad_NotSupported
+    MaxEntries int // Identities, Applications and Endpoints, each, of a role; past it Bad_ResourceUnavailable
+    Authorizer func(ctx context.Context, caller *MethodCaller, method string) ua.StatusCode // nil: the SecurityAdmin role
+}
+func WithRoleManagement(cfg RoleManagement) Option
+func (s *Server) RoleSet() *RoleSet // nil without WithRoleManagement
+type Role struct {
+    NodeID              *ua.NodeID
+    BrowseName          *ua.QualifiedName
+    Identities          []*ua.IdentityMappingRuleType
+    Applications        []string
+    ApplicationsExclude bool
+    Endpoints           []*ua.EndpointType
+    EndpointsExclude    bool
+    Fixed               bool // Anonymous, AuthenticatedUser, TrustedApplication (§4.3)
+    Removable           bool // added by AddRole
+}
+func (rs *RoleSet) Roles() []Role
+func (rs *RoleSet) Role(id *ua.NodeID) (Role, bool)
+func (rs *RoleSet) AddRole(name, namespaceURI string) (*ua.NodeID, error) // §4.2.2
+func (rs *RoleSet) RemoveRole(role *ua.NodeID) error                       // §4.2.3
+func (rs *RoleSet) AddIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error    // §4.4.5
+func (rs *RoleSet) RemoveIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error // §4.4.6
+func (rs *RoleSet) AddApplication(role *ua.NodeID, applicationURI string) error            // §4.4.7
+func (rs *RoleSet) RemoveApplication(role *ua.NodeID, applicationURI string) error         // §4.4.8
+func (rs *RoleSet) AddEndpoint(role *ua.NodeID, ep *ua.EndpointType) error                 // §4.4.9
+func (rs *RoleSet) RemoveEndpoint(role *ua.NodeID, ep *ua.EndpointType) error              // §4.4.10
+func (rs *RoleSet) SetApplicationsExclude(role *ua.NodeID, exclude bool) error
+func (rs *RoleSet) SetEndpointsExclude(role *ua.NodeID, exclude bool) error
+```
+
+See [docs/server-guide.md](docs/server-guide.md#role-management-roleset-opc-10000-18).
+
 ---
 
 ## Package `uamethod`
 
 The contracts of Methods of namespace 0, generated by `cmd/methods` from the
 InputArguments and OutputArguments of the NodeSet: FileType and
-FileDirectoryType (OPC 10000-20 §4.2, §4.3).
+FileDirectoryType (OPC 10000-20 §4.2, §4.3), RoleSetType and RoleType
+(OPC 10000-18 §4.2, §4.4; a structure argument such as the Rule of
+AddIdentity is its Go type, `*ua.IdentityMappingRuleType`).
 
 ```go
 type Method struct {
@@ -3150,6 +3312,45 @@ func (d *Directory) MoveOrCopy(ctx context.Context, obj, target *ua.NodeID, crea
 ```
 
 See [docs/client-guide.md](docs/client-guide.md#files-part-20).
+
+---
+
+## Package `rolemgmt`
+
+The client of the RoleSet and the roles of OPC 10000-18 (§4.2 to §4.4).
+
+```go
+func New(c *opcua.Client) *RoleSet                     // Server.ServerCapabilities.RoleSet
+func NewRoleSet(c *opcua.Client, obj *ua.NodeID) *RoleSet
+func (s *RoleSet) NodeID() *ua.NodeID
+func (s *RoleSet) Roles(ctx context.Context) ([]*Role, error) // components of RoleType
+func (s *RoleSet) Role(nodeID *ua.NodeID) *Role
+func (s *RoleSet) AddRole(ctx context.Context, name, namespaceURI string) (*Role, error)
+func (s *RoleSet) RemoveRole(ctx context.Context, role *ua.NodeID) error
+type Role struct {
+    NodeID     *ua.NodeID
+    BrowseName *ua.QualifiedName // set by Roles
+}
+type Config struct {
+    Identities          []*ua.IdentityMappingRuleType
+    Applications        []string
+    ApplicationsExclude bool
+    Endpoints           []*ua.EndpointType
+    EndpointsExclude    bool
+    CustomConfiguration bool
+}
+func (r *Role) Config(ctx context.Context) (*Config, error)
+func (r *Role) AddIdentity(ctx context.Context, rule *ua.IdentityMappingRuleType) error
+func (r *Role) RemoveIdentity(ctx context.Context, rule *ua.IdentityMappingRuleType) error
+func (r *Role) AddApplication(ctx context.Context, applicationURI string) error
+func (r *Role) RemoveApplication(ctx context.Context, applicationURI string) error
+func (r *Role) AddEndpoint(ctx context.Context, ep *ua.EndpointType) error
+func (r *Role) RemoveEndpoint(ctx context.Context, ep *ua.EndpointType) error
+func (r *Role) SetApplicationsExclude(ctx context.Context, exclude bool) error // Write
+func (r *Role) SetEndpointsExclude(ctx context.Context, exclude bool) error    // Write
+```
+
+See [docs/client-guide.md](docs/client-guide.md#role-management-opc-10000-18).
 
 ---
 

@@ -341,7 +341,7 @@ func TestTransactionOfOneSession(t *testing.T) {
 
 	require.NoError(t, a.AddCertificate(ctx, p.StrangerCert, true))
 	require.ErrorIs(t, b.AddCertificate(ctx, p.CACert, true), ua.StatusBadTransactionPending)
-	require.ErrorIs(t, b.ApplyChanges(ctx), ua.StatusBadTransactionPending)
+	require.ErrorIs(t, b.ApplyChanges(ctx), ua.StatusBadSessionIDInvalid, "the session is not valid for the active transaction (Part 12 §7.10.9)")
 	require.NoError(t, a.CancelChanges(ctx))
 	require.Equal(t, [][]byte{p.ClientCert}, srv.TrustList().TrustedCertificates)
 

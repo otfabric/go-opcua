@@ -177,7 +177,7 @@ func TestPushAuthorize(t *testing.T) {
 	}})
 	user2, _ := pushCallerCtx(s2, ua.MessageSecurityModeSignAndEncrypt)
 	_, sc = pushCall(t, s2, user2, scObj, mApply)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc, "authorized; no transaction to apply")
 	_, sc = pushCall(t, s2, user2, scObj, mRejected)
 	require.Equal(t, ua.StatusBadUserAccessDenied, sc)
 	require.Equal(t, []string{"ApplyChanges", "GetRejectedList"}, seen)
@@ -329,9 +329,9 @@ func TestPushCloseAndUpdate(t *testing.T) {
 	require.Equal(t, [][]byte{p.CACert}, tl.IssuerCertificates) // deduplicated
 	// Nothing pending.
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mCancel)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc)
 }
 
 func TestPushAddRemove(t *testing.T) {
@@ -409,7 +409,7 @@ func TestPushTransactions(t *testing.T) {
 	_, sc = tlCall(t, s, b, mAdd, p.CACert, true)
 	require.Equal(t, ua.StatusBadTransactionPending, sc)
 	_, sc = pushCall(t, s, b, scObj, mCancel)
-	require.Equal(t, ua.StatusBadTransactionPending, sc)
+	require.Equal(t, ua.StatusBadSessionIDInvalid, sc, "the session is not valid for the active transaction (Part 12 §7.10.11)")
 	// The session sees its own pending trust list.
 	_, sc = tlCall(t, s, a, mAdd, p.CACert, false)
 	require.Equal(t, ua.StatusOK, sc)
@@ -418,7 +418,7 @@ func TestPushTransactions(t *testing.T) {
 	// The transaction of a closed session is dropped.
 	require.NoError(t, s.sb.Close(sessA.AuthTokenID))
 	_, sc = pushCall(t, s, b, scObj, mApply)
-	require.Equal(t, ua.StatusOK, sc)
+	require.Equal(t, ua.StatusBadNothingToDo, sc, "the closed session's transaction is gone")
 	require.Equal(t, [][]byte{p.ClientCert}, s.TrustList().TrustedCertificates)
 	require.Empty(t, s.TrustList().IssuerCertificates)
 }
@@ -463,16 +463,22 @@ func TestPushStore(t *testing.T) {
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusBadInternalError, sc)
 	require.Equal(t, [][]byte{p.ClientCert}, s.TrustList().TrustedCertificates)
+	// The failed ApplyChanges discarded the transaction (Part 12 §7.10.2):
+	// the change is made again.
+	require.Nil(t, s.push.tx)
 
 	st.mu.Lock()
 	st.fail = nil
 	st.mu.Unlock()
+	_, sc = tlCall(t, s, ctx, mAdd, p.StrangerCert, true)
+	require.Equal(t, ua.StatusOK, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusOK, sc)
 	require.Len(t, st.tls, 1)
 	require.Equal(t, [][]byte{p.ClientCert, p.StrangerCert}, st.tls[0].TrustedCertificates)
 
-	// A certificate that fails to be stored stays pending.
+	// A certificate that fails to be stored is discarded with its
+	// transaction; it is applied when it is updated again.
 	cert := reissue(t, p.ServerCert, p.ServerKey, time.Now().Add(-time.Hour), time.Now().Add(time.Hour))
 	_, sc = pushCall(t, s, ctx, scObj, mUpdate, defaultGroup, rsaType, cert, [][]byte{}, "", []byte{})
 	require.Equal(t, ua.StatusOK, sc)
@@ -481,14 +487,18 @@ func TestPushStore(t *testing.T) {
 	st.mu.Unlock()
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusBadInternalError, sc)
+	c, _ := s.cfg.primaryIdentity()
+	require.Equal(t, p.ServerCert, c)
 	st.mu.Lock()
 	st.fail = nil
 	st.mu.Unlock()
+	_, sc = pushCall(t, s, ctx, scObj, mUpdate, defaultGroup, rsaType, cert, [][]byte{}, "", []byte{})
+	require.Equal(t, ua.StatusOK, sc)
 	_, sc = pushCall(t, s, ctx, scObj, mApply)
 	require.Equal(t, ua.StatusOK, sc)
 	require.Equal(t, [][]byte{cert}, st.certs)
 	require.True(t, st.types[0].Equal(rsaType))
-	c, _ := s.cfg.primaryIdentity()
+	c, _ = s.cfg.primaryIdentity()
 	require.Equal(t, cert, c)
 }
 

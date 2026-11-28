@@ -155,6 +155,9 @@ type Server struct {
 	// push is the push certificate management (push.go), nil without
 	// WithPushManagement.
 	push *pushManager
+	// roleSet is the managed RoleSet (roleset.go), nil without
+	// WithRoleManagement.
+	roleSet *RoleSet
 }
 
 type serverConfig struct {
@@ -195,6 +198,8 @@ type serverConfig struct {
 	accessController           AccessController
 	nodeManagement             bool // EnableNodeManagement
 	roleMapper                 RoleMapper
+	roleMgmt                   *RoleManagement // WithRoleManagement
+	roleSetStore               RoleSetStore    // WithRoleSetStore
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
 	issuedTokenValidator       IssuedTokenValidator
@@ -249,12 +254,17 @@ type serverConfig struct {
 	pubsub *pubsubConfig
 	// pubsubAuth authorises the PubSub configuration methods.
 	pubsubAuth PubSubAuthorizer
+	// pubsubStore persists the PubSub configuration (WithPubSubStore).
+	pubsubStore PubSubConfigurationStore
 
 	// diagnosticsOff starts the server with EnabledFlag false
 	// (WithServerDiagnostics).
 	diagnosticsOff bool
 	// auditing turns the audit events on (WithAuditing).
 	auditing bool
+	// changeAuditOff: WithChangeAuditing(false), no audit events of Write,
+	// HistoryUpdate and the NodeManagement services.
+	changeAuditOff bool
 	// alarmClock is the clock of the alarm timers (WithAlarmClock).
 	alarmClock Clock
 	// push is the configuration of WithPushManagement (nil: none).
@@ -265,6 +275,10 @@ type serverConfig struct {
 	// stateChange carries out RequestServerStateChange
 	// (WithServerStateChange); nil refuses it.
 	stateChange ServerStateChangeFunc
+	// serverProfiles is the ServerProfileArray (WithServerProfiles).
+	serverProfiles []string
+	// localeIDs is the LocaleIdArray (WithLocaleIDs); empty: ["en"].
+	localeIDs []string
 }
 
 var capabilities = ServerCapabilities{
@@ -336,6 +350,12 @@ func New(opts ...Option) (*Server, error) {
 	if cfg.accessController == nil {
 		cfg.accessController = DefaultAccessController{}
 	}
+	if cfg.pubsubStore != nil && cfg.pubsub == nil {
+		return nil, stderrors.New("server: WithPubSubStore needs WithPubSub")
+	}
+	if cfg.roleSetStore != nil && cfg.roleMgmt == nil {
+		return nil, stderrors.New("server: WithRoleSetStore needs WithRoleManagement")
+	}
 	var push *pushManager
 	if cfg.push != nil {
 		if cfg.clientCertificateValidator != nil {
@@ -395,6 +415,9 @@ func New(opts ...Option) (*Server, error) {
 	if push != nil {
 		push.s = s
 		push.initFiles()
+		if err := push.restore(context.Background()); err != nil {
+			return nil, err
+		}
 		s.push = push
 	}
 
@@ -449,6 +472,7 @@ func New(opts ...Option) (*Server, error) {
 	if err := s.buildPushModel(); err != nil {
 		return nil, err
 	}
+	s.bindRoleSet()
 	s.bindAuditing()
 	s.bindHistoryCapabilities()
 	s.bindAggregateFunctions()
@@ -456,6 +480,7 @@ func New(opts ...Option) (*Server, error) {
 	s.bindMonitoredItemCapabilities()
 	s.bindContinuationPointCapabilities()
 	s.bindEstimatedReturnTime()
+	s.bindServerCapabilities()
 
 	s.diag = newServerDiagnostics(s, !cfg.diagnosticsOff)
 	s.diag.bind()
@@ -714,6 +739,11 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	if err := s.checkRegistrations(); err != nil {
 		return err
+	}
+	if rs := s.roleSet; rs != nil {
+		if err := rs.restore(); err != nil {
+			return err
+		}
 	}
 
 	// An ECC endpoint without an ECC certificate cannot work, and unlike an

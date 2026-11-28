@@ -771,6 +771,14 @@ HistoryDeleteRawModified deletes raw or modified historical data within a time r
 
 Part 4, Section 5.10.5 / Part 11, Section 6.8.5.
 
+#### func (Client) HistoryReadAnnotations
+
+```go
+func (c *Client) HistoryReadAnnotations(ctx context.Context, nodes []*ua.HistoryReadValueID, details *ua.ReadAnnotationDataDetails) (*ua.HistoryReadResponse, error)
+```
+
+HistoryReadAnnotations sends a HistoryRead with ReadAnnotationDataDetails (Part 11 §6.5.6): the Annotations of nodes at the reqTimes of details, one DataValue per time, in the order of the times. The nodes are those with an Annotations Property, or the Property (Part 11 §5.1.2).
+
 #### func (Client) HistoryReadAtTime
 
 ```go
@@ -826,6 +834,14 @@ func (c *Client) HistoryUpdateEvents(ctx context.Context, details ...*ua.UpdateE
 HistoryUpdateEvents updates historical events for one or more nodes.
 
 Part 4, Section 5.10.5 / Part 11, Section 6.8.4.
+
+#### func (Client) HistoryUpdateStructureData
+
+```go
+func (c *Client) HistoryUpdateStructureData(ctx context.Context, details ...*ua.UpdateStructureDataDetails) (*ua.HistoryUpdateResponse, error)
+```
+
+HistoryUpdateStructureData sends a HistoryUpdate with UpdateStructureDataDetails (Part 11 §6.9.3): it inserts, replaces, updates or removes structured history, such as the Annotations of a node.
 
 #### func (Client) LoadDataTypes
 
@@ -1000,6 +1016,14 @@ func (c *Client) ReadAlarmMetrics(ctx context.Context, metricsID *ua.NodeID) (*A
 ```
 
 ReadAlarmMetrics reads the components of an AlarmMetricsType object. A component the object does not have (or that cannot be read) keeps its zero value; the error reports the first service failure.
+
+#### func (Client) ReadAnnotations
+
+```go
+func (c *Client) ReadAnnotations(ctx context.Context, nodeID *ua.NodeID, reqTimes ...time.Time) ([]HistoryAnnotation, error)
+```
+
+ReadAnnotations reads the Annotations of nodeID at reqTimes (Part 11 §6.5.6), one HistoryAnnotation per time in the order of reqTimes. nodeID is a node with an Annotations Property, or the Property (Part 11 §5.1.2). ReadAnnotations follows continuation points. A Bad status of the node, such as Bad\_HistoryOperationUnsupported for a node without Annotations, is returned as the error (a [ua.StatusCode](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusCode)).
 
 #### func (Client) ReadEventHistory
 
@@ -1458,6 +1482,14 @@ func (c *Client) Unsuppress2(ctx context.Context, conditionID *ua.NodeID, commen
 
 Unsuppress2 is Unsuppress with a Comment.
 
+#### func (Client) UpdateAnnotations
+
+```go
+func (c *Client) UpdateAnnotations(ctx context.Context, nodeID *ua.NodeID, perform ua.PerformUpdateType, annotations ...HistoryAnnotation) ([]ua.StatusCode, error)
+```
+
+UpdateAnnotations inserts, replaces, updates or removes Annotations of nodeID with UpdateStructureDataDetails (Part 11 §6.9.3), one per annotation, at its Time. A Remove needs only the Time; the other operations need the Annotation. The result holds the OperationResults, such as Good\_EntryInserted, Good\_EntryReplaced, Bad\_EntryExists or Bad\_NoEntryExists, for each annotation in order. A Bad status of the node is returned as the error (a [ua.StatusCode](https://pkg.go.dev/github.com/otfabric/go-opcua/ua#StatusCode)).
+
 #### func (Client) UpdateNamespaces
 
 ```go
@@ -1734,6 +1766,18 @@ type ExponentialBackoffConfig struct {
 ```
 
 ExponentialBackoffConfig provides full control over exponential back-off retry behaviour.
+
+### type HistoryAnnotation
+
+```go
+type HistoryAnnotation struct {
+	Time       time.Time
+	Annotation *ua.Annotation
+	Status     ua.StatusCode
+}
+```
+
+HistoryAnnotation is an Annotation (Part 11 §6.6.6) of the history of a node at Time, the SourceTimestamp of its DataValue. Status is the status a read returned for the time: Bad\_NoData, with a nil Annotation, when the node has none at Time.
 
 ### type InvalidResponseTypeError
 

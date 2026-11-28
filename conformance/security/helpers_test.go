@@ -16,6 +16,7 @@ var (
 	eventually         = conformkit.Eventually
 	parallel           = conformkit.Parallel
 	newServer          = conformkit.NewServer
+	newServerPrepared  = conformkit.NewServerPrepared
 	setupWith          = conformkit.SetupWith
 	newClient          = conformkit.NewClient
 	dialClient         = conformkit.DialClient

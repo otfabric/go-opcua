@@ -84,7 +84,7 @@ func TestGDSPush_DeleteCertificate(t *testing.T) {
 	require.Equal(t, ua.StatusBadInvalidState, d.Result)
 	require.Len(t, d.Errors, 1)
 	require.True(t, d.Errors[0].TargetID.Equal(gds.DefaultApplicationGroup))
-	require.NoError(t, g.CancelChanges(ctx))
+	require.ErrorIs(t, g.CancelChanges(ctx), ua.StatusBadNothingToDo, "the failed ApplyChanges ended the transaction")
 	require.Equal(t, p.serverCert, endpointFor(t, url, ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt).ServerCertificate)
 }
 

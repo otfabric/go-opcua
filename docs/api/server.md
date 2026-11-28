@@ -36,6 +36,20 @@ const (
 
 ```go
 const (
+	// DefaultMaxRoles is the number of roles AddRole may add when
+	// RoleManagement.MaxRoles is zero.
+	DefaultMaxRoles = 64
+	// DefaultMaxRoleEntries is the number of Identities, Applications and
+	// Endpoints, each, of a role when RoleManagement.MaxEntries is zero.
+	DefaultMaxRoleEntries = 256
+	// maxRoleText is the longest RoleName, criteria, ApplicationUri and
+	// EndpointUrl taken, in bytes.
+
+)
+```
+
+```go
+const (
 	RejectedOpenSecureChannel = "OpenSecureChannel"
 	RejectedCreateSession     = "CreateSession"
 	RejectedActivateSession   = "ActivateSession"
@@ -98,6 +112,12 @@ const PubSubNamespaceURI = "urn:otfabric:go-opcua:pubsub"
 ```
 
 PubSubNamespaceURI is the namespace of the nodes of the PubSub components (connections, groups, writers, readers, published data sets).
+
+```go
+const RolesNamespaceURI = "urn:otfabric:go-opcua:roles"
+```
+
+RolesNamespaceURI is the namespace of the role Objects that AddRole adds. The server adds it to the NamespaceArray at the first AddRole of a role outside namespace 0.
 
 ## Variables
 
@@ -407,6 +427,40 @@ type AlarmMetricsValues struct {
 
 AlarmMetricsValues are the values of an AlarmMetrics object.
 
+### type AnnotationHistoryProvider
+
+```go
+type AnnotationHistoryProvider interface {
+	// UpdateAnnotations serves HistoryUpdate UpdateStructureDataDetails
+	// (Part 11 §6.9.3) with one OperationResult per value: Insert is
+	// Bad_EntryExists when the Annotation exists, Replace and Remove
+	// Bad_NoEntryExists when it does not, Update replaces or inserts
+	// (Good_EntryReplaced, Good_EntryInserted), and a time the history
+	// cannot store is Bad_OutOfRange. The server has checked perform and
+	// each value: every value has a SourceTimestamp, and an Annotation but
+	// for Remove.
+	UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+
+	// ReadAnnotations serves HistoryRead ReadAnnotationDataDetails (Part 11
+	// §6.5.6): a HistoryData with the Annotation at each of reqTimes, in
+	// their order, and a DataValue with a Bad StatusCode (Bad_NoData) for a
+	// time without one.
+	ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+
+	// ReadRawAnnotations serves HistoryRead ReadRawModifiedDetails of the
+	// Annotations Property (Part 11 §5.1.2): the Annotations from startTime
+	// to endTime as [HistoryProvider.ReadRaw] reads values, at most
+	// numValues of them (0: no limit) with a continuation point when more
+	// match. The server also reads them for the AnnotationCount Aggregate
+	// (Part 13 §5.4.3.20) of a provider that is no ProcessedHistoryReader.
+	ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+}
+```
+
+AnnotationHistoryProvider optionally keeps the Annotations of HistoricalDataNodes (Part 11 §5.1.2; the Annotation DataType, §6.6.6). The server calls it with the NodeId of the node that has the Annotations Property ([Server.EnableAnnotations](#func-server-enableannotations)), also when the client names the Property. An Annotation is a DataValue whose Value is a \*ua.Annotation in an ExtensionObject and whose SourceTimestamp is the time of the value it annotates; the provider decides what makes an Annotation unique (§6.9.3.2), the default [\*Historian](#type-historian) the timestamp.
+
+The server answers ReadRawModifiedDetails with IsReadModified on the Annotations Property with Bad\_HistoryOperationUnsupported. The provider's continuation points are released through [HistoryProvider.ReleaseContinuation](#func-historyprovider-releasecontinuation).
+
 ### type AtTimeHistoryDeleter
 
 ```go
@@ -590,6 +644,42 @@ CertificateAlarms configures the alarms of the certificate groups (Part 12 §7.8
 
 The alarms are Alarms & Conditions conditions (Server.AddCondition) with the source node of their certificate group, in the namespace CertificateAlarmsNamespaceURI. They report their events to the group and the Server object.
 
+### type CertificateBatchStore
+
+```go
+type CertificateBatchStore interface {
+	CertificateStore
+	// StoreChanges persists c, all or nothing. It returns nil when c is
+	// durable. On an error the server does not apply c: ApplyChanges
+	// fails with Bad_InternalError and its transaction is discarded (Part
+	// 12 §7.10.2). After an error the store must hold the state it held
+	// before, or refuse later writes until it does, so that a restarted
+	// server never starts with changes it did not apply.
+	StoreChanges(ctx context.Context, c CertificateChanges) error
+}
+```
+
+CertificateBatchStore is a CertificateStore that persists all the changes of one ApplyChanges, or of one ResetToServerDefaults, in one atomic write. The server calls StoreChanges instead of the other methods of the store and of CertificateGroupStore and CertificateDeleteStore. Package server/pushstore implements it on a directory.
+
+### type CertificateChanges
+
+```go
+type CertificateChanges struct {
+	// Reset marks the changes of ResetToServerDefaults (Part 12 §7.10.13):
+	// they are the trust lists and certificates of the configuration of
+	// the server. A store may then forget what it holds instead of storing
+	// them, so that a restarted server starts with its configuration again.
+	Reset bool
+	// TrustLists are the trust lists that change, at most one per group.
+	TrustLists []CertificateGroupTrustList
+	// Certificates are the certificates that change, at most one per group
+	// and certificate type.
+	Certificates []CertificateGroupChange
+}
+```
+
+CertificateChanges are the trust lists and certificates of certificate groups that one ApplyChanges or ResetToServerDefaults applies, or that a CertificateLoadStore restores.
+
 ### type CertificateDeleteStore
 
 ```go
@@ -633,6 +723,36 @@ type CertificateGroup struct {
 
 CertificateGroup is a certificate group of the application (see PushManagement.CertificateGroups).
 
+### type CertificateGroupChange
+
+```go
+type CertificateGroupChange struct {
+	// Group is the BrowseName of the certificate group, as in
+	// CertificateGroupTrustList.
+	Group string
+	// CertificateType is the type of the certificate (Part 12 §7.8.4), a
+	// numeric NodeId of namespace 0.
+	CertificateType *ua.NodeID
+	// Certificate is the DER encoded certificate; nil deletes the
+	// certificate of the type (DeleteCertificate).
+	Certificate []byte
+	// Issuers are the DER encoded certificates of its issuer chain.
+	Issuers [][]byte
+	// PrivateKey is the key of the certificate.
+	PrivateKey crypto.Signer
+}
+```
+
+CertificateGroupChange is a certificate of a certificate group that is added, replaced or deleted.
+
+#### func (CertificateGroupChange) Deleted
+
+```go
+func (c CertificateGroupChange) Deleted() bool
+```
+
+Deleted reports whether the change deletes the certificate.
+
 ### type CertificateGroupStore
 
 ```go
@@ -648,6 +768,37 @@ type CertificateGroupStore interface {
 
 CertificateGroupStore is a CertificateStore that persists the trust lists and certificates of every certificate group. The server calls these methods instead of those of CertificateStore.
 
+### type CertificateGroupTrustList
+
+```go
+type CertificateGroupTrustList struct {
+	// Group is the BrowseName of the certificate group:
+	// "DefaultApplicationGroup", "DefaultHttpsGroup",
+	// "DefaultUserTokenGroup" or the Name of a CertificateGroup of
+	// PushManagement.CertificateGroups. Unlike its NodeId it does not
+	// depend on the namespace table.
+	Group string
+	// TrustList is the whole trust list (SpecifiedLists is All).
+	TrustList *ua.TrustListDataType
+	// LastUpdateTime is when it took effect, its LastUpdateTime (Part 12
+	// §7.8.2.1). On a restore the zero time keeps the start of the server.
+	LastUpdateTime time.Time
+}
+```
+
+CertificateGroupTrustList is the trust list of a certificate group.
+
+### type CertificateLoadStore
+
+```go
+type CertificateLoadStore interface {
+	CertificateStore
+	LoadCertificates(ctx context.Context) (CertificateChanges, error)
+}
+```
+
+CertificateLoadStore is a CertificateStore that restores what it persisted. New calls LoadCertificates once and applies what it returns on top of the configuration: the trust lists replace those of PushManagement, the certificates those of the options of the server (or are added), and a deleted certificate is removed. What the server was configured with stays the target of ResetToServerDefaults. An error of LoadCertificates, or a trust list or certificate that is not valid, fails New: a server does not start with a trust list other than the one it was told to have.
+
 ### type CertificateStore
 
 ```go
@@ -661,7 +812,9 @@ type CertificateStore interface {
 }
 ```
 
-CertificateStore persists the changes push certificate management makes, so that a restarted server can be configured with them. ApplyChanges calls it before the changes take effect; an error fails ApplyChanges with Bad\_InternalError and keeps the changes pending.
+CertificateStore persists the changes push certificate management makes, so that a restarted server can be configured with them. ApplyChanges calls it before the changes take effect; an error fails ApplyChanges with Bad\_InternalError and discards its transaction, as any error ApplyChanges finds does ("If any errors are found then all changes are discarded", Part 12 §7.10.2), and nothing is applied.
+
+The methods of CertificateStore, CertificateGroupStore and CertificateDeleteStore store one trust list or certificate per call: an error part-way leaves the earlier ones stored. A store that implements CertificateBatchStore receives all the changes in one call instead, and a CertificateLoadStore is restored by New. Package server/pushstore implements all of them on a directory.
 
 ### type ClientCertificateValidator
 
@@ -1776,6 +1929,10 @@ type Historian struct {
 	// aggConfig is the Aggregate configuration of nodes
 	// (SetAggregateConfig), keyed by NodeID.String().
 
+	// annotations holds the Annotations of the enabled nodes (Part 11
+	// §5.1.2), keyed by NodeID.String(), in the order of their
+	// SourceTimestamp; created by the first insert.
+
 }
 ```
 
@@ -1865,6 +2022,14 @@ func (h *Historian) IsEnabled(nodeID *ua.NodeID) bool
 
 IsEnabled reports whether the given node is enabled for history.
 
+#### func (Historian) ReadAnnotations
+
+```go
+func (h *Historian) ReadAnnotations(nodeID *ua.NodeID, reqTimes []time.Time) (*ua.HistoryReadResult, error)
+```
+
+ReadAnnotations implements [AnnotationHistoryProvider](#type-annotationhistoryprovider): the Annotation at each time, Bad\_NoData for a time without one. A node that is not enabled is Bad\_HistoryOperationUnsupported.
+
 #### func (Historian) ReadAtTime
 
 ```go
@@ -1897,7 +2062,7 @@ ReadModified implements ModifiedHistoryReader.
 func (h *Historian) ReadProcessed(nodeID *ua.NodeID, startTime, endTime time.Time, processingInterval float64, aggregateType *ua.NodeID, aggregateConfiguration *ua.AggregateConfiguration) (*ua.HistoryReadResult, error)
 ```
 
-ReadProcessed implements ProcessedHistoryReader: it calculates every Aggregate of [aggregate.Functions](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Functions) over the samples of nodeID (Part 11 §6.5.4, Part 13 §5.4), with the configuration of [Historian.AggregateConfig](#func-historian-aggregateconfig) overridden by aggregateConfiguration. A node without history is Bad\_HistoryOperationUnsupported; the other results are those of [aggregate.Request.Check](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Check) and [aggregate.Request.Calculate](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Calculate).
+ReadProcessed implements ProcessedHistoryReader: it calculates every Aggregate of [aggregate.Functions](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Functions) over the samples of nodeID (Part 11 §6.5.4, Part 13 §5.4), AnnotationCount over its Annotations, with the configuration of [Historian.AggregateConfig](#func-historian-aggregateconfig) overridden by aggregateConfiguration. A node without history is Bad\_HistoryOperationUnsupported; the other results are those of [aggregate.Request.Check](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Check) and [aggregate.Request.Calculate](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#Request.Calculate).
 
 #### func (Historian) ReadRaw
 
@@ -1906,6 +2071,16 @@ func (h *Historian) ReadRaw(nodeID *ua.NodeID, startTime, endTime time.Time, num
 ```
 
 ReadRaw implements ReadRawModifiedDetails for a single node. It returns the matching DataValues and a continuation point if results are truncated.
+
+A sample with an Annotation at its SourceTimestamp has the Extra Data bit (Part 4 §7.38.1, Table 177): Part 11 §5.1.2 has a client find the times of the Annotations of a node in the values of a raw read of the node that carry the ExtraData flag.
+
+#### func (Historian) ReadRawAnnotations
+
+```go
+func (h *Historian) ReadRawAnnotations(nodeID *ua.NodeID, startTime, endTime time.Time, numValues uint32, continuationPoint []byte) (*ua.HistoryReadResult, error)
+```
+
+ReadRawAnnotations implements [AnnotationHistoryProvider](#type-annotationhistoryprovider): the Annotations of nodeID from startTime to endTime as [Historian.ReadRaw](#func-historian-readraw) reads samples, with its continuation points.
 
 #### func (Historian) RecordEvent
 
@@ -1938,6 +2113,21 @@ func (h *Historian) SetAggregateConfig(nodeID *ua.NodeID, cfg aggregate.Config)
 ```
 
 SetAggregateConfig sets the configuration the Aggregates of nodeID are calculated with: its AggregateConfiguration (Part 13 §4.2.1.2) and its Stepped Property (Part 11 §5.2.2). Without it a node uses [aggregate.DefaultConfig](https://pkg.go.dev/github.com/otfabric/go-opcua/server/aggregate#DefaultConfig).
+
+#### func (Historian) UpdateAnnotations
+
+```go
+func (h *Historian) UpdateAnnotations(nodeID *ua.NodeID, perform ua.PerformUpdateType, values []*ua.DataValue) *ua.HistoryUpdateResult
+```
+
+UpdateAnnotations implements [AnnotationHistoryProvider](#type-annotationhistoryprovider): the Historian keeps the Annotations of the nodes of its EnableNode, as many as their samples, one per SourceTimestamp (Part 11 §6.9.3.2). Per value (OperationResults, Part 11 §6.9.3.3 to §6.9.3.6):
+
+  - Insert: Bad\_EntryExists when an Annotation has the timestamp; else insert, Good\_EntryInserted
+  - Replace: Bad\_NoEntryExists when none has it; else replace, Good\_EntryReplaced
+  - Update: replace (Good\_EntryReplaced) or insert (Good\_EntryInserted)
+  - Remove: Bad\_NoEntryExists when none has it; else remove, Good
+
+A full history drops its oldest Annotation for a new one; an Annotation older than all of a full history cannot be stored, Bad\_OutOfRange. A value without a SourceTimestamp, or without an Annotation but for Remove, is Bad\_InvalidArgument. A node that is not enabled is Bad\_HistoryOperationUnsupported; a PerformUpdateType that is none of the four is Bad\_InvalidArgument.
 
 #### func (Historian) UpdateData
 
@@ -3619,6 +3809,14 @@ func WithAuditing(enabled bool) Option
 
 WithAuditing turns the audit events on or off (default off).
 
+#### func WithChangeAuditing
+
+```go
+func WithChangeAuditing(enabled bool) Option
+```
+
+WithChangeAuditing sets whether a server with auditing on ([WithAuditing](#func-withauditing)) reports the audit events of Write, HistoryUpdate, AddNodes, DeleteNodes, AddReferences and DeleteReferences (Part 4 §6.5.7, §6.5.8). It is on by default; WithChangeAuditing(false) restores the behaviour of v1.42, which reported the audit events of the SecureChannel, Session and Method services only. A server without auditing reports none either way.
+
 #### func WithClientCertificateTrustList
 
 ```go
@@ -3694,6 +3892,14 @@ A registration is removed when the server unregisters (IsOnline false), when its
 Registration changes what clients are told about the network, so by default it is only accepted on a SecureChannel with message security (Sign or SignAndEncrypt), from an application whose certificate carries the registered ServerUri. Which certificates may open such a channel is decided by [WithClientCertificateTrustList](#func-withclientcertificatetrustlist). See [LDSAllowInsecureRegistration](#func-ldsallowinsecureregistration) and [LDSSkipServerURICheck](#func-ldsskipserveruricheck) for the lab settings.
 
 Combine it with [WithMulticastDiscovery](#func-withmulticastdiscovery) for the multicast extension (LDS-ME): registered servers are then announced with mDNS.
+
+#### func WithLocaleIDs
+
+```go
+func WithLocaleIDs(locales ...string) Option
+```
+
+WithLocaleIDs sets the LocaleIdArray of the ServerCapabilities (OPC 10000-5 §6.3.2), the LocaleIds "that are known to be supported by the Server", for an application that serves texts in more locales. Without the option, or with no LocaleIds, the array is \["en"], the locale of the texts the server writes.
 
 #### func WithMaxBrowseContinuationPoints
 
@@ -3874,6 +4080,20 @@ WithPubSubAuthorizer restricts the PubSub configuration methods. Without it ever
 
 Whatever the authorizer, a session that configures a reader must be allowed to write its TargetVariables (CheckWrite and AccessLevel for the Value, CheckWrite and WriteMask for other Attributes), and one that adds published variables must be allowed to read them (CheckRead): Bad\_UserAccessDenied, Bad\_NotWritable otherwise. The runtime writes a target Attribute other than the Value only where its WriteMask allows it.
 
+#### func WithPubSubStore
+
+```go
+func WithPubSubStore(st PubSubConfigurationStore) Option
+```
+
+WithPubSubStore persists the PubSub configuration of [WithPubSub](#func-withpubsub) in st (OPC 10000-14 §9.1.2). Once st holds a configuration it is the configuration of the server: the server restores it before it builds the PubSub information model ([Server.BuildPubSubModel](#func-server-buildpubsubmodel) or Start, or the first [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration) before them), in place of the configuration given to WithPubSub, which is the configuration of an empty store only. A store that cannot be loaded, or a configuration that is not valid, fails the restore: BuildPubSubModel and Start return the error and the server does not start (fail closed). Register the namespaces the configuration uses before.
+
+Every change of the configuration made in the PubSub transaction is written in one call of st before the Method or function that made it returns; a write that fails undoes the change and fails it with Bad\_InternalError. A change made on the runtime directly ([Server.PubSub](#func-server-pubsub)) is outside the transaction: it is written with the next change made in it, or by [Server.PersistPubSubConfiguration](#func-server-persistpubsubconfiguration).
+
+A restored WriterGroup, ReaderGroup or DataSetReader with a SecurityMode above None gates its SecurityGroup in the runtime ([pubsub.PubSub.GateSecurityGroup](https://pkg.go.dev/github.com/otfabric/go-opcua/pubsub#PubSub.GateSecurityGroup)): it neither secures nor accepts messages under a key that may have been in use before the restart (Part 14 §7.2.3, §7.2.4.4.3).
+
+It needs WithPubSub.
+
 #### func WithPushManagement
 
 ```go
@@ -3912,6 +4132,14 @@ func WithReverseConnect(clientURL string, opts ...ReverseConnectOption) Option
 
 WithReverseConnect makes the server open reverse connections to the client listening at clientURL ("opc.tcp://host:port") once it is started. See [Server.AddReverseConnect](#func-server-addreverseconnect) for the details; the handles of the targets configured this way are available from [Server.ReverseConnects](#func-server-reverseconnects).
 
+#### func WithRoleManagement
+
+```go
+func WithRoleManagement(cfg RoleManagement) Option
+```
+
+WithRoleManagement serves the RoleSet of OPC 10000-18 and grants the sessions the roles whose rules they comply with, in addition to the roles of the RoleMapper (see [RoleSet](#type-roleset)). Without it the roles come from the RoleMapper alone and the RoleSet Methods are not served, as in v1.42 and earlier.
+
 #### func WithRoleMapper
 
 ```go
@@ -3920,6 +4148,18 @@ func WithRoleMapper(rm RoleMapper) Option
 
 WithRoleMapper configures a custom role mapper for session identity → role resolution.
 
+#### func WithRoleSetStore
+
+```go
+func WithRoleSetStore(st RoleSetStore) Option
+```
+
+WithRoleSetStore persists the managed RoleSet of [WithRoleManagement](#func-withrolemanagement) in st. Once st holds roles they are the configuration of the RoleSet: the server restores them once, at Start before it accepts a connection, or at the first change made through [Server.RoleSet](#func-server-roleset) before Start, whichever comes first; the changes an application makes at each start are made on the restored roles. A store that cannot be loaded, or roles that are not valid, fail the restore: Start returns the error and the server does not start (fail closed). Register the namespaces the BrowseNames of the added roles use before Start.
+
+Every change of the RoleSet is written in one call of st after it succeeded in memory and before the Method, Write or function that made it returns; a write that fails leaves the RoleSet as it was and fails the change with Bad\_InternalError (a library interpretation: OPC 10000-18 gives no result code for it).
+
+It needs WithRoleManagement.
+
 #### func WithServerDiagnostics
 
 ```go
@@ -3927,6 +4167,14 @@ func WithServerDiagnostics(enabled bool) Option
 ```
 
 WithServerDiagnostics sets whether the server collects diagnostics from the start: the initial value of Server.ServerDiagnostics.EnabledFlag (Part 5 §6.3.3). The default is true. A client with the SecurityAdmin or ConfigureAdmin role can change it at runtime by writing EnabledFlag.
+
+#### func WithServerProfiles
+
+```go
+func WithServerProfiles(uris ...string) Option
+```
+
+WithServerProfiles sets the ServerProfileArray of the ServerCapabilities (OPC 10000-5 §6.3.2): the URIs of the Profiles of OPC 10000-7 the server supports, "limited to the Profiles the Server supports in its current configuration". The library does not determine its Profiles: without the option, or with no URIs, the array is empty.
 
 #### func WithServerStateChange
 
@@ -4046,6 +4294,21 @@ type PubSubComponentMove struct {
 
 PubSubComponentMove is a component a refused change brought back under a new ComponentID and node: the same kind and path of names (its PubSubConnection, group and own Name; a PublishedDataSet's Name).
 
+### type PubSubComponentOwner
+
+```go
+type PubSubComponentOwner interface {
+	// OwnsPubSubComponent reports whether the owner keeps the component of
+	// kind at path: the names from its PubSubConnection down (a
+	// PublishedDataSet: its Name), in the configuration ch.After. It is
+	// called in the PubSub transaction, after the PubSubConfigurationHook
+	// accepted ch; it must not change the configuration.
+	OwnsPubSubComponent(ch *PubSubChange, kind pubsub.ComponentKind, path []string) bool
+}
+```
+
+PubSubComponentOwner is a part of the application that persists some PubSub components itself, or keeps them in memory on purpose: the [PubSubConfigurationStore](#type-pubsubconfigurationstore) of the server leaves them out, with what is below them. The persistent ConnectionEndpoints of OPC UA FX (package uafx/fxserver) own the components their EstablishConnections calls created, so that each component has one store that restores it.
+
 ### type PubSubConfigurationHook
 
 ```go
@@ -4078,6 +4341,34 @@ type PubSubConfigurationRestorer interface {
 ```
 
 PubSubConfigurationRestorer is a [PubSubConfigurationHook](#type-pubsubconfigurationhook) that follows the components a refused change brings back. The runtime is reconciled back to the configuration before the change by name, so a component the change removed or changed comes back under a new ComponentID and node: PubSubConfigurationRestored is called with those moves, in the PubSub transaction, after the runtime was reconciled back and before anything else changes the configuration. It must not change the configuration.
+
+### type PubSubConfigurationStore
+
+```go
+type PubSubConfigurationStore interface {
+	// LoadPubSubConfiguration returns the stored configuration with its
+	// NodeIds in the namespaces of namespaces, the NamespaceArray of the
+	// server, or nil when the store holds no configuration. An error, a
+	// NodeId in a namespace the server does not have included, fails the
+	// restore: the server does not start with a configuration other than
+	// the latest one.
+	LoadPubSubConfiguration(ctx context.Context, namespaces []string) (*ua.PubSubConfigurationDataType, error)
+	// StorePubSubConfiguration makes cfg, whose NodeIds are in the
+	// namespaces of namespaces, the stored configuration, all or nothing.
+	// It returns nil when cfg is durable. On an error the server does not
+	// apply the change: it undoes it and fails it with
+	// Bad_InternalError. After an error the store must hold the
+	// configuration it held before, or refuse later writes until it does,
+	// so that a restarted server never starts with a change it did not
+	// apply. cfg leaves out the components with 0:NotPersisted TRUE and
+	// those a [PubSubComponentOwner] keeps; the store does not keep it.
+	StorePubSubConfiguration(ctx context.Context, cfg *ua.PubSubConfigurationDataType, namespaces []string) error
+}
+```
+
+PubSubConfigurationStore persists the PubSub configuration of a server: "The latest configuration shall be persisted by the OPC UA Server and shall be available after a restart of the OPC UA Server. PubSub components are not persisted, if the component has the optional NotPersisted property set with a value of true" (OPC 10000-14 §9.1.2). Package server/pubsubstore implements it on a directory.
+
+The server calls StorePubSubConfiguration in the PubSub transaction after each change, whatever makes it (the Methods of Part 14 §9.1.3, CloseAndUpdate, [Server.UpdatePubSubConfiguration](#func-server-updatepubsubconfiguration), [PubSubConfigurationUpdate.Revert](#func-pubsubconfigurationupdate-revert), [Server.ChangePubSubConfiguration](#func-server-changepubsubconfiguration) and [Server.PersistPubSubConfiguration](#func-server-persistpubsubconfiguration)), and LoadPubSubConfiguration once, before the PubSub information model is built ([WithPubSubStore](#func-withpubsubstore)).
 
 ### type PubSubConfigurationUpdate
 
@@ -4191,10 +4482,14 @@ type PushManagement struct {
 	Authorizer PushAuthorizer
 
 	// Store, if set, persists what ApplyChanges and ResetToServerDefaults
-	// apply. The server does not write files on its own. A Store that also
-	// implements CertificateGroupStore persists the changes of every
-	// certificate group; otherwise only those of the
-	// DefaultApplicationGroup are persisted.
+	// apply. The server does not write files on its own: pushstore.OpenDir
+	// (package server/pushstore) is a Store on a directory that writes
+	// each ApplyChanges atomically and restores it at the next start. A
+	// Store that implements CertificateBatchStore persists every change of
+	// an ApplyChanges in one write; one that implements
+	// CertificateGroupStore persists the changes of every certificate
+	// group; otherwise only those of the DefaultApplicationGroup are
+	// persisted. A CertificateLoadStore is loaded by New.
 	Store CertificateStore
 
 	// PFXPassword returns the password of a PKCS #12 (PFX) private key that
@@ -4651,6 +4946,57 @@ func (s ReverseConnectState) String() string
 
 String returns the name of the state.
 
+### type Role
+
+```go
+type Role struct {
+	// NodeID is the NodeId of the role Object, BrowseName its BrowseName.
+	NodeID     *ua.NodeID
+	BrowseName *ua.QualifiedName
+	// Identities are the rules that map a UserIdentityToken to the role.
+	Identities []*ua.IdentityMappingRuleType
+	// Applications are ApplicationUris; ApplicationsExclude makes them an
+	// exclude list.
+	Applications        []string
+	ApplicationsExclude bool
+	// Endpoints are Endpoints; EndpointsExclude makes them an exclude list.
+	Endpoints        []*ua.EndpointType
+	EndpointsExclude bool
+	// Fixed reports a role whose configuration cannot be changed
+	// (Anonymous, AuthenticatedUser and TrustedApplication, §4.3).
+	Fixed bool
+	// Removable reports a role RemoveRole may remove: one AddRole added.
+	Removable bool
+}
+```
+
+Role is the configuration of a role of the RoleSet (OPC 10000-18 §4.4.1).
+
+### type RoleManagement
+
+```go
+type RoleManagement struct {
+	// MaxRoles is the most roles AddRole adds besides those of namespace 0;
+	// past it AddRole returns Bad_NotSupported, "the Server does not allow
+	// more Roles to be added" (OPC 10000-18 §4.2.2). Zero is
+	// DefaultMaxRoles.
+	MaxRoles int
+	// MaxEntries is the most Identities, Applications and Endpoints, each,
+	// of one role; past it the Add Methods return Bad_ResourceUnavailable.
+	// Zero is DefaultMaxRoleEntries.
+	MaxEntries int
+	// Authorizer, when set, decides who may change the roles in place of
+	// the SecurityAdmin role (OPC 10000-18 §4.2.2: "user credentials with
+	// administrator rights like SecurityAdmin Role"). It gets the caller
+	// and the BrowseName of the Method, or "ApplicationsExclude" or
+	// "EndpointsExclude" for a Write of those Properties, and returns
+	// StatusOK to allow it. The encrypted channel is checked before it.
+	Authorizer func(ctx context.Context, caller *MethodCaller, method string) ua.StatusCode
+}
+```
+
+RoleManagement configures the managed RoleSet ([WithRoleManagement](#func-withrolemanagement)).
+
 ### type RoleMapper
 
 ```go
@@ -4658,6 +5004,146 @@ type RoleMapper func(token ua.IdentityToken) []*ua.NodeID
 ```
 
 RoleMapper resolves the set of well-known role NodeIDs for a given identity token. Implementations should return the appropriate roles based on the token type and credentials (e.g. AnonymousIdentityToken → \[Anonymous], UserNameIdentityToken → \[AuthenticatedUser, ...]).
+
+### type RoleSet
+
+```go
+type RoleSet struct {
+
+	// opMu serializes the changes, which add and delete nodes; mu guards
+	// roles, which the Properties read. opMu is taken before mu, and
+	// before the rolesMu of a session no lock of the RoleSet is held.
+
+	// ns is the namespace of the roles AddRole adds, nil before the first.
+
+	// restored: the roles of WithRoleSetStore were restored; under opMu.
+
+}
+```
+
+RoleSet is the managed RoleSet of a server ([WithRoleManagement](#func-withrolemanagement)): the application's access to the configuration the RoleSet Methods change. Its methods return a ua.StatusCode as error, the result the Method would have: Bad\_NodeIdUnknown for a role that does not exist, Bad\_InvalidArgument, Bad\_AlreadyExists, Bad\_NotFound, Bad\_RequestNotAllowed, Bad\_NotSupported or Bad\_ResourceUnavailable. They need no session and no SecurityAdmin role: the application is the server.
+
+#### func (RoleSet) AddApplication
+
+```go
+func (rs *RoleSet) AddApplication(role *ua.NodeID, applicationURI string) error
+```
+
+AddApplication adds the ApplicationUri to the Applications of the role (OPC 10000-18 §4.4.7).
+
+#### func (RoleSet) AddEndpoint
+
+```go
+func (rs *RoleSet) AddEndpoint(role *ua.NodeID, ep *ua.EndpointType) error
+```
+
+AddEndpoint adds the Endpoint to the Endpoints of the role (OPC 10000-18 §4.4.9).
+
+#### func (RoleSet) AddIdentity
+
+```go
+func (rs *RoleSet) AddIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error
+```
+
+AddIdentity adds the identity mapping rule to the role (OPC 10000-18 §4.4.5).
+
+#### func (RoleSet) AddRole
+
+```go
+func (rs *RoleSet) AddRole(name, namespaceURI string) (*ua.NodeID, error)
+```
+
+AddRole adds the role name, qualified by namespaceURI, to the RoleSet and returns the NodeId of its Object (OPC 10000-18 §4.2.2). An empty namespaceURI is RolesNamespaceURI.
+
+#### func (RoleSet) RemoveApplication
+
+```go
+func (rs *RoleSet) RemoveApplication(role *ua.NodeID, applicationURI string) error
+```
+
+RemoveApplication removes the ApplicationUri from the Applications of the role (OPC 10000-18 §4.4.8).
+
+#### func (RoleSet) RemoveEndpoint
+
+```go
+func (rs *RoleSet) RemoveEndpoint(role *ua.NodeID, ep *ua.EndpointType) error
+```
+
+RemoveEndpoint removes the Endpoint from the Endpoints of the role (OPC 10000-18 §4.4.10).
+
+#### func (RoleSet) RemoveIdentity
+
+```go
+func (rs *RoleSet) RemoveIdentity(role *ua.NodeID, rule *ua.IdentityMappingRuleType) error
+```
+
+RemoveIdentity removes the identity mapping rule from the role (OPC 10000-18 §4.4.6).
+
+#### func (RoleSet) RemoveRole
+
+```go
+func (rs *RoleSet) RemoveRole(role *ua.NodeID) error
+```
+
+RemoveRole removes the role from the RoleSet (OPC 10000-18 §4.2.3) with its nodes and its RolePermissions.
+
+#### func (RoleSet) Role
+
+```go
+func (rs *RoleSet) Role(id *ua.NodeID) (Role, bool)
+```
+
+Role returns the role with the NodeId id; false if there is none.
+
+#### func (RoleSet) Roles
+
+```go
+func (rs *RoleSet) Roles() []Role
+```
+
+Roles returns the roles of the RoleSet, in the order of the RoleSet.
+
+#### func (RoleSet) SetApplicationsExclude
+
+```go
+func (rs *RoleSet) SetApplicationsExclude(role *ua.NodeID, exclude bool) error
+```
+
+SetApplicationsExclude sets ApplicationsExclude of the role: whether the Applications are an exclude list (OPC 10000-18 §4.4.1).
+
+#### func (RoleSet) SetEndpointsExclude
+
+```go
+func (rs *RoleSet) SetEndpointsExclude(role *ua.NodeID, exclude bool) error
+```
+
+SetEndpointsExclude sets EndpointsExclude of the role: whether the Endpoints are an exclude list (OPC 10000-18 §4.4.1).
+
+### type RoleSetStore
+
+```go
+type RoleSetStore interface {
+	// LoadRoleSet returns the stored roles with their NodeIds and
+	// BrowseNames in the namespaces of namespaces, the NamespaceArray of the
+	// server, or nil when the store holds no roles. An error, a namespace
+	// the server does not have included, fails the restore: the server does
+	// not start with a RoleSet other than the latest one.
+	LoadRoleSet(ctx context.Context, namespaces []string) ([]Role, error)
+	// StoreRoleSet makes roles, whose NodeIds and BrowseNames are in the
+	// namespaces of namespaces, the stored roles, all or nothing, in their
+	// order. It returns nil when roles are durable. On an error the server
+	// does not apply the change and fails it with Bad_InternalError. After
+	// an error the store must hold the roles it held before, or refuse later
+	// writes until it does, so that a restarted server never starts with a
+	// change it did not apply. roles are those of the RoleSet that are not
+	// Fixed; the store does not keep them.
+	StoreRoleSet(ctx context.Context, roles []Role, namespaces []string) error
+}
+```
+
+RoleSetStore persists the managed RoleSet of a server ([WithRoleManagement](#func-withrolemanagement), OPC 10000-18): the roles AddRole added (§4.2.2) and the Identities, Applications, ApplicationsExclude, Endpoints and EndpointsExclude of every role whose configuration can change (§4.4.1), the well-known roles of namespace 0 included. Package server/rolestore implements it on a directory.
+
+The server calls StoreRoleSet after each change that succeeded, whatever makes it (the Methods of §4.2.2, §4.2.3 and §4.4.5 to §4.4.10, a Write of ApplicationsExclude or EndpointsExclude, or the [RoleSet](#type-roleset) methods), and LoadRoleSet once, before the first session can be activated ([WithRoleSetStore](#func-withrolesetstore)).
 
 ### type SKSOption
 
@@ -4800,6 +5286,9 @@ type Server struct {
 	// push is the push certificate management (push.go), nil without
 	// WithPushManagement.
 
+	// roleSet is the managed RoleSet (roleset.go), nil without
+	// WithRoleManagement.
+
 }
 ```
 
@@ -4933,7 +5422,7 @@ Auditing reports whether the server reports audit events.
 func (s *Server) BuildPubSubModel() error
 ```
 
-BuildPubSubModel publishes the PubSub runtime in the address space now, as Start does: the PublishSubscribe Object, its Methods and the Objects of the components, which then have their NodeIds ([Server.PubSubNodeID](#func-server-pubsubnodeid)). An application that needs those NodeIds before Start (a companion specification that restores References to components, as the persistent ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the model again. It needs a server with a PubSub runtime (WithPubSub).
+BuildPubSubModel publishes the PubSub runtime in the address space now, as Start does: the PublishSubscribe Object, its Methods and the Objects of the components, which then have their NodeIds ([Server.PubSubNodeID](#func-server-pubsubnodeid)). An application that needs those NodeIds before Start (a companion specification that restores References to components, as the persistent ConnectionEndpoints of OPC UA FX do) calls it; Start does not build the model again. It needs a server with a PubSub runtime (WithPubSub). With [WithPubSubStore](#func-withpubsubstore) it restores the stored configuration first, and fails when that fails.
 
 #### func (Server) CertificateGroupID
 
@@ -5014,6 +5503,16 @@ func (s *Server) EmitEvent(nodeID *ua.NodeID, fields *ua.EventFieldList) error
 ```
 
 EmitEvent sends an event notification to all monitored items watching the given node. The fields should contain the event fields matching the select clauses requested by clients.
+
+#### func (Server) EnableAnnotations
+
+```go
+func (s *Server) EnableAnnotations(nodeID *ua.NodeID) error
+```
+
+EnableAnnotations gives the Variable or Object nodeID the Annotations Property (Part 11 §5.1.2): "Any HistoricalDataNode that supports changing, deleting, or adding Annotations shall have the Annotations Property". The Property has the DataType Annotation and the HistoryRead and HistoryWrite bits; its history is the Annotations of the node, kept by the [AnnotationHistoryProvider](#type-annotationhistoryprovider) of the server (the default [\*Historian](#type-historian) keeps them for the nodes of its EnableNode). A node that has the Property already is left as it is.
+
+The errors are Bad\_NodeIdInvalid for a nil nodeID, Bad\_NodeIdUnknown for a node the address space does not hold and Bad\_NodeClassInvalid for a node other than a Variable or Object, or a Property: "Since Properties cannot have Properties, the Annotations Property can only exist on DataVariables or Objects" (§5.1.2).
 
 #### func (Server) EnableEventHistory
 
@@ -5146,6 +5645,14 @@ NewFile returns a FileObject of the server that is not in the address space: see
 func (s *Server) Node(nid *ua.NodeID) *Node
 ```
 
+#### func (Server) PersistPubSubConfiguration
+
+```go
+func (s *Server) PersistPubSubConfiguration(ctx context.Context) error
+```
+
+PersistPubSubConfiguration writes the PubSub configuration of the runtime to the store of [WithPubSubStore](#func-withpubsubstore) now, in the PubSub transaction: for changes made on the runtime directly ([Server.PubSub](#func-server-pubsub)), and for components a [PubSubComponentOwner](#type-pubsubcomponentowner) no longer keeps. It restores the store first when that has not happened yet. It does nothing without a store, and returns ua.StatusBadNotSupported without PubSub. An error changes nothing in the runtime: the store follows it with the next write.
+
 #### func (Server) Port
 
 ```go
@@ -5274,6 +5781,14 @@ func (s *Server) ReverseConnects() []*ReverseConnect
 
 ReverseConnects returns the reverse connect targets of the server, in the order they were added.
 
+#### func (Server) RoleSet
+
+```go
+func (s *Server) RoleSet() *RoleSet
+```
+
+RoleSet returns the managed RoleSet, nil without [WithRoleManagement](#func-withrolemanagement).
+
 #### func (Server) ServeFile
 
 ```go
@@ -5347,6 +5862,14 @@ func (s *Server) SetNamespaceDefaults(namespaceURI string, d NamespaceDefaults) 
 ```
 
 SetNamespaceDefaults sets the default permissions of the namespace with the URI namespaceURI: the DefaultRolePermissions, DefaultUserRolePermissions and DefaultAccessRestrictions Properties of its NamespaceMetadata Object, which apply to the nodes of the namespace that have no RolePermissions or AccessRestrictions of their own (Part 3 §4.9.3, §5.2.9, §5.2.11). The RolePermissions take effect under the [RBACAccessController](#type-rbacaccesscontroller); the AccessRestrictions under every AccessController. A zero NamespaceDefaults removes the defaults. It replaces the defaults of an imported NodeSet Model. It returns an error when the server has no such namespace.
+
+#### func (Server) SetPubSubComponentOwner
+
+```go
+func (s *Server) SetPubSubComponentOwner(o PubSubComponentOwner)
+```
+
+SetPubSubComponentOwner sets the owner of components the store of [WithPubSubStore](#func-withpubsubstore) leaves out; nil removes it. One owner at a time: a second call replaces the first.
 
 #### func (Server) SetPubSubConfigurationHook
 

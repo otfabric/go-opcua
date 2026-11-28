@@ -76,6 +76,19 @@ func count(iv *interval) *ua.DataValue {
 	return result(iv.ts, ua.MustVariant(n), iv.valueStatus(iv.in())|ua.StatusCodeHistorianCalculated)
 }
 
+// annotationCount is the AnnotationCount Aggregate (Part 13 §5.4.3.20,
+// Table 68): the number of Annotations in the interval, an Int32, Good,
+// Calculated, with the timestamp of the start of the interval (StartTime)
+// and the Partial bit only when the interval is not a complete interval; it
+// uses no bounds. The start and the end of data are those of the raw
+// values of the Variable, as for every Aggregate: an interval before or
+// after them is Bad_NoData (calculate). The Annex A examples of
+// AnnotationCount are checked in TestAnnexExamples.
+func annotationCount(iv *interval) *ua.DataValue {
+	n := int32(iv.s.annotationsIn(iv.lo, iv.hi, iv.reverse))
+	return result(iv.ts, ua.MustVariant(n), ua.StatusOK|ua.StatusCodeHistorianCalculated)
+}
+
 // deviation returns the standard deviation or the variance of the Good raw
 // values, of a sample (n - 1) or of the population (n) (Part 13 §5.4.3.37
 // to §5.4.3.40, Tables 85 to 88): "For every interval where n = 1, a value

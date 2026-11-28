@@ -167,11 +167,32 @@ func (r Request) Calculate(raw []*ua.DataValue) ([]*ua.DataValue, ua.StatusCode)
 // CalculateIntervals is [Request.Calculate] for the intervals first to
 // last-1 only.
 func (r Request) CalculateIntervals(raw []*ua.DataValue, first, last int) ([]*ua.DataValue, ua.StatusCode) {
+	return r.CalculateIntervalsWithAnnotations(raw, nil, first, last)
+}
+
+// CalculateWithAnnotations is [Request.Calculate] with the Annotations of
+// the Variable (Part 11 §5.1.2), which the AnnotationCount Aggregate counts
+// (Part 13 §5.4.3.20): the DataValues of its Annotation history, each with
+// the SourceTimestamp of the value it annotates, any order. An entry with a
+// Bad StatusCode is no Annotation. The other Aggregates ignore annotations,
+// and [Request.Calculate] is CalculateWithAnnotations without any: its
+// AnnotationCount is 0 in every interval with data.
+func (r Request) CalculateWithAnnotations(raw, annotations []*ua.DataValue) ([]*ua.DataValue, ua.StatusCode) {
+	if st := r.Check(); st != ua.StatusOK {
+		return nil, st
+	}
+	return r.CalculateIntervalsWithAnnotations(raw, annotations, 0, r.count())
+}
+
+// CalculateIntervalsWithAnnotations is [Request.CalculateWithAnnotations]
+// for the intervals first to last-1 only.
+func (r Request) CalculateIntervalsWithAnnotations(raw, annotations []*ua.DataValue, first, last int) ([]*ua.DataValue, ua.StatusCode) {
 	if st := r.Check(); st != ua.StatusOK {
 		return nil, st
 	}
 	f := lookup(r.Aggregate)
 	s := newSeries(raw, r.Config)
+	s.annotations = annotationTimes(annotations)
 	if f.numeric {
 		// "Not all Aggregates can be applied to arrays ... Any Aggregate
 		// that can not be applied to an array, shall report Bad_NotSupported
@@ -343,8 +364,9 @@ type function struct {
 	calc func(*interval) *ua.DataValue
 	// partial: the Aggregate sets the Partial bit (Partial "Set Sometimes"
 	// in its table); extrapolates: it returns a value after the end of data;
-	// numeric: it cannot be applied to arrays.
-	partial, extrapolates, numeric bool
+	// numeric: it cannot be applied to arrays; historical: it applies to
+	// historical Aggregates only (Part 13 §4.2.2.2, Table 5).
+	partial, extrapolates, numeric, historical bool
 }
 
 var functions []*function
@@ -368,6 +390,7 @@ func init() {
 		{id: id.AggregateFunctionMaximumActualTime2, name: "MaximumActualTime2", calc: minMax2(true, true), partial: true, numeric: true},
 		{id: id.AggregateFunctionRange2, name: "Range2", calc: range2, partial: true, numeric: true},
 		{id: id.AggregateFunctionCount, name: "Count", calc: count, partial: true},
+		{id: id.AggregateFunctionAnnotationCount, name: "AnnotationCount", calc: annotationCount, partial: true, historical: true},
 		{id: id.AggregateFunctionDurationInStateZero, name: "DurationInStateZero", calc: durationInState(false), partial: true, numeric: true},
 		{id: id.AggregateFunctionDurationInStateNonZero, name: "DurationInStateNonZero", calc: durationInState(true), partial: true, numeric: true},
 		{id: id.AggregateFunctionNumberOfTransitions, name: "NumberOfTransitions", calc: transitions, partial: true, numeric: true},
@@ -407,15 +430,24 @@ func lookup(n *ua.NodeID) *function {
 func Supported(aggregateType *ua.NodeID) bool { return lookup(aggregateType) != nil }
 
 // Functions returns the NodeIds of the AggregateFunction Objects (Part 13
-// §4.2.2) the package calculates, in the order of Part 13 §5.4.3. It holds
-// every standard Aggregate but AnnotationCount (§5.4.3.20), which counts
-// the Annotations of Part 11 §5.1.2 rather than values.
+// §4.2.2) the package calculates, in the order of Part 13 §5.4.3: every
+// standard Aggregate.
 func Functions() []*ua.NodeID {
 	out := make([]*ua.NodeID, len(functions))
 	for i, f := range functions {
 		out[i] = ua.NewNumericNodeID(0, f.id)
 	}
 	return out
+}
+
+// HistoricalOnly reports whether a supported Aggregate applies to
+// historical Aggregates only: AnnotationCount, "Retrieve the number of
+// Annotations in the interval (applies to Historical Aggregates only)"
+// (Part 13 §4.2.2.2, Table 5). An AggregateFilter of a MonitoredItem (Part
+// 4 §7.22.4) cannot use it.
+func HistoricalOnly(aggregateType *ua.NodeID) bool {
+	f := lookup(aggregateType)
+	return f != nil && f.historical
 }
 
 // Name returns the BrowseName of a supported AggregateFunction Object
@@ -468,6 +500,7 @@ var descriptions = map[string]string{
 	"VarianceSample":              "Retrieve the variance for the interval as calculated by the StandardDeviationSample.",
 	"StandardDeviationPopulation": "Retrieve the standard deviation for the interval for a complete population (n) which includes Simple Bounding Values.",
 	"VariancePopulation":          "Retrieve the variance for the interval as calculated by the StandardDeviationPopulation which includes Simple Bounding Values.",
+	"AnnotationCount":             "Retrieve the number of Annotations in the interval (applies to Historical Aggregates only).",
 }
 
 // Description returns the Description of a supported AggregateFunction

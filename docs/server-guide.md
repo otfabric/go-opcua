@@ -31,6 +31,17 @@ field is no limit) and fails a larger request with `BadTooManyOperations`.
 The monitored item, continuation point and event queue limits are listed in
 [security.md](security.md#per-call-and-per-session-resource-limits).
 
+Every Mandatory Property of the ServerCapabilities (OPC 10000-5 §6.3.2) has a
+value. `WithServerProfiles(uris...)` sets the ServerProfileArray, the URIs of
+the OPC 10000-7 Profiles the server supports in its configuration; the library
+does not determine its Profiles, so without the option the array is empty.
+`WithLocaleIDs(locales...)` sets the LocaleIdArray, `["en"]` by default, the
+locale of the texts the server writes. MinSupportedSampleRate is 0 (a sampling
+interval of 0 is exception-based sampling), MaxHistoryContinuationPoints is 0
+(the server refuses no HistoryRead for a count of continuation points; a
+`HistoryProvider` may release those it cannot keep, OPC 10000-4 §7.9), and
+SoftwareCertificates is empty. The continuation point limits are UInt16.
+
 Unsupported services return consistent OPC UA status codes. Any request type
 not registered with the server returns `StatusBadServiceUnsupported`.
 
@@ -185,6 +196,45 @@ Channels of opc.https and opcua+uajson are not opened or closed and have no
 SecureChannelId. OpenSecureChannel requests the server cannot decrypt or
 verify are not reported.
 
+### Change audit events
+
+With auditing on the server also reports the audit events of the services
+that change the address space or the history, for successful and failed
+calls (Part 4 §6.5.7, §6.5.8; Part 11 §5.8):
+
+| Event type | SourceName | SourceNode | Per |
+|------------|------------|------------|-----|
+| AuditWriteUpdateEventType | `Attribute/Write` | the node written | WriteValue |
+| AuditHistoryValueUpdateEventType | `Attribute/HistoryUpdate` | the node | UpdateDataDetails |
+| AuditHistoryAnnotationUpdateEventType | `Attribute/HistoryUpdate` | the node | UpdateStructureDataDetails |
+| AuditHistoryEventUpdateEventType | `Attribute/HistoryUpdate` | the notifier | UpdateEventDetails |
+| AuditHistoryRawModifyDeleteEventType | `Attribute/HistoryUpdate` | the node | DeleteRawModifiedDetails |
+| AuditHistoryAtTimeDeleteEventType | `Attribute/HistoryUpdate` | the node | DeleteAtTimeDetails |
+| AuditHistoryEventDeleteEventType | `Attribute/HistoryUpdate` | the notifier | DeleteEventDetails |
+| AuditAddNodesEventType, AuditDeleteNodesEventType, AuditAddReferencesEventType, AuditDeleteReferencesEventType | `NodeManagement/AddNodes` … | the Server object | call |
+
+Each carries the fields of AuditEventType (ActionTimeStamp, Status: false when
+the operation failed, ServerId, ClientAuditEntryId, ClientUserId) and its own
+(Part 5 §6.4.19 to §6.4.26):
+
+- Write: AttributeId, IndexRange, OldValue (the value before the write, limited
+  to the IndexRange; null for a node that is not there or not readable) and
+  NewValue.
+- HistoryUpdate: ParameterDataTypeId (the DataType of the details), UpdatedNode,
+  PerformInsertReplace, NewValues and OldValues: the values the provider held
+  before a Replace, Update or delete, read with its `ReadRaw`. A modified
+  delete has no OldValues; event updates and deletes have null OldValues (the
+  provider keeps no event before an update). An event insert lists the
+  EventIds of the inserted events in its Message (Part 11 §5.8.1).
+- NodeManagement: NodesToAdd, NodesToDelete, ReferencesToAdd or
+  ReferencesToDelete, the whole parameter of the call; Status is false when
+  any item failed and the Message names the first failure.
+
+A request the service refuses as a whole (a ServiceFault) reports one event of
+its type with Status false and the Server object as SourceNode.
+`server.WithChangeAuditing(false)` turns these events off while the security
+audit events stay on, the behaviour before v1.43.0.
+
 ---
 
 ## Minimal Server
@@ -254,6 +304,7 @@ This creates a server with:
 | `WithAuditing(enabled)`, `WithAlarmClock(clock)` | Audit events of the condition methods and of the GDS; the clock of the alarm timers ([Alarms and Conditions](#alarms-and-conditions)) |
 | `WithPushManagement(pm)` | ServerConfiguration push model ([Certificate Management](#certificate-management-push-model)) |
 | `WithPubSub(cfg, opts...)` | PubSub runtime with the PublishSubscribe information model ([PubSub](pubsub.md)) |
+| `WithPubSubStore(st)` | Persist the PubSub configuration ([PubSub configuration persistence](#pubsub-configuration-persistence)) |
 
 The full list is in [API.md](../API.md#server-configuration-options).
 
@@ -690,8 +741,9 @@ func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Varia
 }
 ```
 
-The contracts are those of FileType and FileDirectoryType today; the
-families are chosen in `cmd/methods/config.go`.
+The contracts are those of FileType and FileDirectoryType, and of
+RoleSetType and RoleType (OPC 10000-18); the families are chosen in
+`cmd/methods/config.go`.
 
 ---
 
@@ -1175,7 +1227,7 @@ below), plus UpdateData and raw/at-time deletes. Continuations are session-bound
 ### Processed reads (Part 13 Aggregates)
 
 HistoryRead `ReadProcessedDetails` (Part 11 §6.5.4) returns one value per interval
-of every standard Aggregate of Part 13 §5.4.3 but AnnotationCount, calculated by
+of every standard Aggregate of Part 13 §5.4.3, calculated by
 the `server/aggregate` package: the intervals of Table 49 (reverse reads, a
 ProcessingInterval of 0 for one interval), Interpolated and Simple Bounding
 Values, the PercentValues and PercentTime StatusCode calculation and the
@@ -1222,6 +1274,53 @@ The last raw value read is taken as the end of the history: an interval after it
 "After End of Data". Where the examples of Annex A conflict with a clause the
 package follows the clause; LIMITATIONS.md lists those cases.
 
+AnnotationCount (Part 13 §5.4.3.20) counts the Annotations of each interval: an
+Int32 with the Calculated bit and the interval's StartTime, Partial for an
+incomplete interval (Part 13 §5.3.3.2), `Bad_NoData` before and after the data,
+which the raw values give. The server reads the Annotations from an
+`AnnotationHistoryProvider`; `aggregate.Request.CalculateWithAnnotations` takes
+their times. Part 13 Table 5 says it "applies to Historical Aggregates only": the
+AggregateFilter of a monitored item refuses it (`aggregate.HistoricalOnly`).
+
+### Annotations
+
+An Annotation (Part 11 §6.6.6: message, userName, annotationTime) is a note on
+the history of a Variable or Object at a time. `EnableAnnotations` adds the
+Annotations Property (Part 11 §5.1.2: DataType Annotation, ValueRank -2,
+AccessLevel CurrentRead, HistoryRead and HistoryWrite, a null value) to the node:
+
+```go
+h := server.NewHistorian()
+h.EnableNode(nodeID, 0) // the Annotations live with the history of the node
+s.SetHistorian(h)
+if err := s.EnableAnnotations(nodeID); err != nil { // Bad_NodeClassInvalid for a Property
+    log.Fatal(err)
+}
+```
+
+- HistoryUpdate `UpdateStructureDataDetails` (Part 11 §6.9.3) on the node or on its
+  Property inserts (`Good_EntryInserted`, `Bad_EntryExists`), replaces
+  (`Good_EntryReplaced`, `Bad_NoEntryExists`), updates (either Good) or removes
+  (`Good`, `Bad_NoEntryExists`) Annotations. The SourceTimestamp of each DataValue
+  identifies the Annotation; a value that is no Annotation is
+  `Bad_TypeMismatch`, one without a SourceTimestamp `Bad_InvalidArgument`. An
+  empty annotationTime is set to the time of the update, an empty userName to the
+  user of the session (empty for an anonymous session).
+- HistoryRead `ReadAnnotationDataDetails` (Part 11 §6.5.6) returns one DataValue
+  per reqTime in the order of the request, `Bad_NoData` for a time without one.
+  `ReadRawModifiedDetails` on the Property returns the Annotations of the range in
+  time order, with continuation points; IsReadModified is
+  `Bad_HistoryOperationUnsupported`.
+- The raw values at a time with an Annotation carry the ExtraData bit (Part 4
+  §7.38.1).
+- A node without the Property is `Bad_HistoryOperationUnsupported`; the HistoryWrite
+  and HistoryRead bits and the RBAC permissions of the node apply to the Property
+  too. The Historian keeps the Annotations of a node until `EnableNode` starts a
+  new history; when its history is full an Annotation older than its oldest value
+  is `Bad_OutOfRange`.
+- Your own store implements `AnnotationHistoryProvider`, which also gives the
+  InsertAnnotationCapability of the HistoryServerCapabilities.
+
 ### Historical events
 
 A notifier (an Object or View whose EventNotifier has the HistoryRead bit) is a
@@ -1265,7 +1364,8 @@ _ = s.EmitBaseEvent(pumpID, &server.BaseEvent{ /* ... */ })
   `EventHistoryUpdater` / `EventHistoryDeleter`) on the value given to `SetHistorian`.
 - The HistoryServerCapabilities report what the provider implements.
 - ReadEventDetails2 with ReadModified and ReadEventDetailsSorted answer
-  `Bad_HistoryOperationUnsupported`; no audit events are reported for history updates.
+  `Bad_HistoryOperationUnsupported`; history updates are audited ([change audit
+  events](#change-audit-events)).
 
 ### Monitored-item queues and modes
 
@@ -1370,7 +1470,7 @@ next boundary. An item keeps at most 65536 raw values between two calculations.
 | Request | StatusCode |
 |---------|------------|
 | An attribute other than Value | `BadFilterNotAllowed` |
-| An Aggregate of no `aggregate.Functions()`, AnnotationCount among them | `BadAggregateNotSupported` |
+| An Aggregate of no `aggregate.Functions()`, or AnnotationCount (historical only, Part 13 Table 5) | `BadAggregateNotSupported` |
 | An aggregateConfiguration that is not valid (Part 13 §4.2.1.2) | `BadMonitoredItemFilterInvalid` |
 | TimestampsToReturn Server or Neither (Part 13 §5.4.3.1; Both is accepted) | `BadTimestampsToReturnInvalid` |
 
@@ -1475,6 +1575,40 @@ unchanged otherwise; the EstimatedReturnTime Property, null when the requested
 state is RUNNING_0; in SHUTDOWN_4 the SecondsTillShutdown of the ServerStatus,
 which counts down, and its ShutdownReason. `Start` sets RUNNING_0 and `Close`
 SHUTDOWN_4 as before.
+
+---
+
+## PubSub configuration persistence
+
+"The latest configuration shall be persisted by the OPC UA Server and shall
+be available after a restart of the OPC UA Server" (OPC 10000-14 §9.1.2).
+`server.WithPubSubStore` does that for the PubSub runtime of `WithPubSub`;
+`server/pubsubstore` is the store, on `uafx/fxstore`:
+
+```go
+st, err := pubsubstore.OpenDir(ctx, "/var/lib/myserver/pubsub", pubsubstore.Options{Owner: appURI})
+if err != nil { /* the directory, its lock, or records that do not decode */ }
+defer st.Close() // after srv.Close
+srv, err := server.New(
+    server.WithPubSub(initial), // the configuration of an empty store
+    server.WithPubSubStore(st),
+    // ...
+)
+```
+
+| | Behaviour |
+|---|---|
+| Restore | Once, in the PubSub transaction, before the first change, `BuildPubSubModel` or `Start`: the stored configuration replaces that of `WithPubSub`, which only an empty store keeps. A store that does not load, a configuration that is not valid, or a NodeId in a namespace the server does not have (`pubsubstore.ErrNamespace`; the namespace indexes are mapped by URI) fail them all until the restore succeeds; nothing runs on a partial configuration |
+| What is written | Each change, in the transaction, after the `PubSubConfigurationHook` accepted it: the configuration Methods (§9.1.3, Enable and Disable of PublishSubscribe and of each component included), CloseAndUpdate of the PubSubConfiguration file (§9.1.3.7.6), `UpdatePubSubConfiguration` and `Revert`, `ChangePubSubConfiguration` and `ChangePubSubConfigurationThen`. One `fxstore.Domain.Apply` of the records that change, the PublishSubscribe Enabled and one record per PublishedDataSet and PubSubConnection with its groups, writers and readers |
+| A write that fails | The runtime goes back to the configuration before the change and the change fails with `Bad_InternalError` (none of the result codes of §9.1.3 is for a store failure); a hook sees the undo as a Revert. A write with an unknown outcome fences the store: `Store.Settle`, or the next change, finds what landed and writes the configuration the server has back, so a restart never brings a change the server did not apply |
+| Not written | A component with 0:NotPersisted TRUE (§6.2.2 Table 4: the Boolean in namespace 0 in its ConnectionProperties, GroupProperties, DataSetWriterProperties or DataSetReaderProperties), with what is below it, and a DataSetWriter of a PublishedDataSet that is not written. A configuration that is not valid without them (an Action WriterGroup with a PublishingInterval of 0 whose writers are all NotPersisted) is refused with `Bad_ConfigurationError` |
+| Owned elsewhere | The components a `server.PubSubComponentOwner` keeps (`Server.SetPubSubComponentOwner`). `uafx/fxserver.EnableConnections` registers the `Connections`: the components EstablishConnections creates are theirs (restored from `ConnectionOptions.Store` with a persistent ConnectionEndpoint, gone with a non-persistent one) ([uafx.md](uafx.md#persistence)) |
+| Changes on the runtime | `Server.PubSub()` changes outside the transaction; the next change in it writes them, or `Server.PersistPubSubConfiguration` |
+| Security | Secured WriterGroups, ReaderGroups and DataSetReaders of a restored configuration gate their SecurityGroup until a key newer than the restart is current ([security.md](security.md#pubsub-configuration-store)) |
+
+`pubsubstore.Open` takes any `fxstore.Store` (a database, an encrypting
+wrapper); its namespace `pubsub` must be the only one in it. `Store.Status`
+reports the revision and whether the store is fenced.
 
 ---
 
@@ -1646,23 +1780,59 @@ srv, _ := server.New(
 |-----------|--------|
 | Validation | New channels and sessions validate the client application certificate against the trust list (Part 4 §6.1.3): a chain to a trusted certificate, issuer certificates as intermediates, CRLs of the CAs (`Bad_CertificateRevoked`, `Bad_CertificateIssuerRevoked`). It replaces `WithClientCertificateTrustList` (`New` refuses both) |
 | Trust list input | CloseAndUpdate decodes the TrustListDataType exactly; every certificate and CRL must parse, a CRL must be signed by a CA of the lists; at most 1024 entries and `MaxTrustListSize` bytes (default 1 MiB; `Bad_EncodingLimitsExceeded` beyond) |
-| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending`. The end of the session cancels its transaction at once and discards the pending changes (§7.10.2, §7.10.9), with the handles of its TrustList files and what they hold without CloseAndUpdate. `ApplyImmediately` applies every change when its method returns |
+| Transactions | AddCertificate, RemoveCertificate, CloseAndUpdate and UpdateCertificate collect their changes in a transaction of the calling session (Part 12 §7.10.2); they take effect at ApplyChanges, CancelChanges drops them, another session gets `Bad_TransactionPending` for a change and `Bad_SessionIdInvalid` for ApplyChanges and CancelChanges (§7.10.9, §7.10.11). Without an active transaction ApplyChanges and CancelChanges are `Bad_NothingToDo`, and ApplyChanges is `Bad_InvalidState` while a TrustList is open for writing: nothing is applied, and it can be called again once the TrustList is closed (§7.10.9). The end of the session cancels its transaction at once and discards the pending changes (§7.10.2, §7.10.9), with the handles of its TrustList files and what they hold without CloseAndUpdate. An ApplyChanges that fails (a certificate to delete that is in use, a `Store` that cannot write) applies nothing and discards the transaction: "If any errors are found then all changes are discarded" (§7.10.2). `ApplyImmediately` applies every change when its method returns |
 | UpdateCertificate | Replaces the certificate of its group and type: an application instance certificate (RSA, ECDSA on NIST and Brainpool curves, Ed25519, Ed448) or the HTTPS certificate of the DefaultHttpsGroup. The key is the one of the last CreateSigningRequest or CreateSelfSignedCertificate, the current key, or a `PEM` or `PFX` (PKCS #12, password from `PFXPassword`; a wrong one is `Bad_SecurityChecksFailed`) private key. The certificate must carry the server's ApplicationUri and be issued by one of the issuer certificates when they are given |
 | After ApplyChanges | New channels and the endpoints use the new certificate, new TLS handshakes the new HTTPS certificate; channels and connections already open keep theirs and keep working |
 | CreateSigningRequest | PKCS #10 for the current key or, with `regeneratePrivateKey`, a new key of the certificate type: RSA (2048, 3072 or 4096 bits), ECDSA P-256 / P-384, brainpoolP256r1 / brainpoolP384r1, Ed25519 or Ed448 (nonce of at least 32 bytes) |
 | CreateSelfSignedCertificate | A new key and a self-signed certificate for a group and type (subject, DNS names and IP addresses default to those of the current certificate, 365 days by default, the ApplicationUri as SAN); it takes effect at ApplyChanges |
-| DeleteCertificate | Removes the certificate of a group and type at ApplyChanges (Part 12 1.05 §7.10); `Bad_InvalidState` if there is none, counting the transaction. ApplyChanges refuses (`Bad_InvalidState`, in the TransactionDiagnostics) to delete the certificate the endpoints advertise, or the HTTPS certificate while there are opc.https / opc.wss endpoints. A deleted type stays in CertificateTypes: CreateSigningRequest with a new key, UpdateCertificate or CreateSelfSignedCertificate fill it again, also in the same transaction. A `CertificateDeleteStore` persists deletions |
+| DeleteCertificate | Removes the certificate of a group and type at ApplyChanges (Part 12 1.05 §7.10); `Bad_InvalidState` if there is none, counting the transaction. ApplyChanges refuses (`Bad_InvalidState`, in the TransactionDiagnostics, and discards the transaction) to delete the certificate the endpoints advertise, or the HTTPS certificate while there are opc.https / opc.wss endpoints. A deleted type stays in CertificateTypes: CreateSigningRequest with a new key, UpdateCertificate or CreateSelfSignedCertificate fill it again, also in the same transaction. A `CertificateDeleteStore` persists deletions |
 | GetCertificates | The certificate types and certificates of a group |
-| ResetToServerDefaults | Back to the trust lists, certificates and keys the server started with (stored through `Store`), the groups of the application included; certificates the server did not start with are deleted. `Bad_TransactionPending` while another session has a transaction |
+| ResetToServerDefaults | Back to the trust lists, certificates and keys the server was configured with (stored through `Store`; `pushstore` empties itself), the groups of the application included; certificates the configuration does not have are deleted. `Bad_TransactionPending` while another session has a transaction; `Bad_InternalError`, with nothing changed, when the `Store` cannot write |
 | Group trust lists | The DefaultUserTokenGroup trust list validates X.509 user tokens before a `WithX509UserValidator` is asked; the DefaultHttpsGroup trust list validates TLS client certificates when `HTTPSClientCertificates` is `HTTPSClientCertificatesVerifyIfGiven` or `HTTPSClientCertificatesRequire` |
 | Alarms | `Alarms: &server.CertificateAlarms{ExpirationLimit, CheckInterval}` adds CertificateExpired (active from `ExpirationLimit`, default 14 days, before the group certificate expires; severity 900 once expired) and TrustListOutOfDate (active when a trust list was not updated for `TrustListUpdateFrequency`) conditions in the namespace `server.CertificateAlarmsNamespaceURI`, evaluated every `CheckInterval` (default 1 minute) and on every change |
 | GetRejectedList | The most recent `MaxRejectedCertificates` (default 64) client certificates validation rejected |
 | Access | SignAndEncrypt only (`Bad_SecurityModeInsufficient`), and the SecurityAdmin role (`Bad_UserAccessDenied`), unless `Authorizer` decides otherwise |
-| Persistence | None by default: the server writes no files. A `CertificateStore` gets the trust list and the new certificate with its issuers and key at ApplyChanges, before they take effect; an error fails ApplyChanges with `Bad_InternalError` and keeps the change pending |
+| Persistence | None by default: the server writes no files. `pushstore.OpenDir` keeps every group in a directory, one atomic write per ApplyChanges, restored by `New` (see below). A `CertificateStore` gets the changes at ApplyChanges, before they take effect; an error fails ApplyChanges with `Bad_InternalError`, applies nothing and discards the transaction |
 
 `Server.TrustList()`, `Server.GroupTrustList(group)`,
 `Server.HTTPSCertificate()` and `Server.RejectedCertificates()` return the
 trust lists in effect, the HTTPS certificate and the rejected certificates.
+
+### Persisting push certificate management
+
+Package `server/pushstore` is a `PushManagement.Store` on a directory: the
+trust lists of every group (with their LastUpdateTime), the certificates with
+their issuers and private keys, and the deleted certificates. Open it before
+`New`, which restores what it holds on top of the configuration, and close it
+after the server:
+
+```go
+st, err := pushstore.OpenDir(ctx, "/var/lib/myserver/push", pushstore.Options{
+    Owner: "urn:example:myserver", // the ApplicationUri: another owner's store is refused
+})
+if err != nil {
+    return err
+}
+defer st.Close()
+
+srv, err := server.New(
+    server.Certificate(certDER), server.PrivateKey(key), // the defaults
+    server.WithPushManagement(server.PushManagement{
+        TrustList: &ua.TrustListDataType{TrustedCertificates: [][]byte{caDER}},
+        Store:     st,
+    }),
+)
+```
+
+| Behaviour | Detail |
+|-----------|--------|
+| One write per ApplyChanges | `StoreChanges` (`server.CertificateBatchStore`) gets every trust list and certificate of the transaction and writes them in one `fxstore.Domain.Apply`; ResetToServerDefaults is one write that deletes every record, so the next start has the configuration |
+| Restore | `New` calls `LoadCertificates` (`server.CertificateLoadStore`): a stored trust list replaces that of `PushManagement`, a stored certificate the configured one of its type (or is added), a deleted one is removed. The configuration stays what ResetToServerDefaults returns to. A record of a group or type the server no longer has is ignored with a warning; one that is not valid fails `New` |
+| Failed write | ApplyChanges is `Bad_InternalError`, nothing is applied, the transaction is discarded (Part 12 §7.10.2) and every trust list and group of it has an error in the TransactionDiagnostics |
+| Unknown outcome | A failed rename or directory fsync leaves the write's outcome unknown: the store is fenced (`Status().Fenced`) and refuses writes until `Settle`, which the next write runs first. If the write landed, `Settle` writes the state before it back. An application may also call `Settle` with a backoff |
+| Directory | Created 0700, the lock file and the data file 0600; group- or world-writable directories are refused; one process at a time (`fxstore.ErrLocked`). Local file systems only (`fxstore.FileStore`) |
+| Keys | Unencrypted PKCS #8 DER; see [security.md](security.md#push-certificate-management). `pushstore.Open` takes any `fxstore.Store`, for a backend of the application (an encrypting wrapper, a database) |
+| Limits | `Options.Limits` (`fxstore.Limits`): a record (a trust list) of at most 4 MiB by default |
 
 ### Certificate groups of the application
 
@@ -1703,7 +1873,8 @@ The groups are String NodeIds (`CertificateGroups.<Name>` and
 `server.CertificateAlarmsNamespaceURI`; `gds.Client.CertificateGroups` finds
 them. The server itself does not use them. A `CertificateStore` gets their
 changes through `StoreGroupTrustList` and `StoreGroupCertificate` (a
-`CertificateGroupStore`).
+`CertificateGroupStore`), or by their name in `StoreChanges` (a
+`CertificateBatchStore`, such as `pushstore`).
 
 A Global Discovery Server (the pull model) is the subject of the next section.
 
@@ -1873,6 +2044,92 @@ defaults of their namespace. Reading the RolePermissions,
 UserRolePermissions or AccessRestrictions Attribute of a node without its
 own answers as before; the defaults are read from the NamespaceMetadata
 Object.
+
+### Role management (RoleSet, OPC 10000-18)
+
+By default the roles of a session come from the `RoleMapper`
+(`WithRoleMapper`, `DefaultRoleMapper` without one). `WithRoleManagement`
+adds the managed RoleSet of OPC 10000-18: the server keeps the
+configuration of its roles in memory (and, with `WithRoleSetStore`, in a
+store: see below) and serves it through the RoleSet
+Object (`Server.ServerCapabilities.RoleSet`, §4.3), whose roles a
+certificate or user manager changes over the wire with the RoleSet and
+Role Methods, and the application with `Server.RoleSet()`:
+
+```go
+srv, _ := server.New(
+    server.ApplicationIdentity(cert, key),
+    server.EnableSecurity(ua.SecurityPolicyURIBasic256Sha256, ua.MessageSecurityModeSignAndEncrypt),
+    server.EnableAuthMode(ua.UserTokenTypeUserName),
+    server.WithUsernameValidator(checkPassword),
+    server.WithClientCertificateTrustList(clientCA), // Applications need trusted certificates
+    server.WithAccessController(server.NewRBACAccessController(nil)),
+    server.WithRoleManagement(server.RoleManagement{}),
+)
+// The first administrator: the RoleSet Methods need SecurityAdmin.
+err := srv.RoleSet().AddIdentity(ua.RoleSecurityAdmin.NodeID(),
+    &ua.IdentityMappingRuleType{CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "secadmin"})
+maintainer, err := srv.RoleSet().AddRole("Maintainer", "") // in server.RolesNamespaceURI
+```
+
+| Topic | Behaviour |
+|-------|-----------|
+| Roles | The 12 well-known roles of the NodeSet (Anonymous, AuthenticatedUser, Observer, Operator, Engineer, Supervisor, ConfigureAdmin, SecurityAdmin, SecurityKeyServerAdmin, TrustedApplication and the SKS roles), and up to `MaxRoles` (default 64) added by AddRole (§4.2.2) as Objects of RoleType below the RoleSet, with the String NodeId `<namespace index of the BrowseName>:<RoleName>` in the namespace `server.RolesNamespaceURI` (added at the first AddRole). An empty NamespaceUri qualifies the BrowseName with that namespace, any other must be in the NamespaceArray (`Bad_InvalidArgument`); a well-known name with the OPC UA namespace URI is `Bad_AlreadyExists` |
+| Defaults | §4.3: Anonymous has the rules Anonymous and AuthenticatedUser, AuthenticatedUser the rule AuthenticatedUser, TrustedApplication the rule TrustedApplication; these three cannot be changed (`Bad_RequestNotAllowed`; their NodeSet Objects have no Methods). The other roles start without Identities, and with ApplicationsExclude and EndpointsExclude TRUE |
+| Methods | AddRole, RemoveRole (§4.2.3); AddIdentity, RemoveIdentity, AddApplication, RemoveApplication, AddEndpoint, RemoveEndpoint (§4.4.5 to §4.4.10), with their results: `Bad_InvalidArgument`, `Bad_AlreadyExists`, `Bad_NotFound`, `Bad_NodeIdUnknown`, `Bad_RequestNotAllowed`, `Bad_NotSupported` (no more roles), `Bad_ResourceUnavailable` (more than `MaxEntries`, default 256, Identities, Applications or Endpoints of a role) |
+| Properties | Identities, Applications, ApplicationsExclude, Endpoints, EndpointsExclude and CustomConfiguration (FALSE) show the configuration (§4.4.1) and report a data change when it changes; ApplicationsExclude and EndpointsExclude are written with the Write service |
+| Access | A SignAndEncrypt channel (`Bad_SecurityModeInsufficient`) and the SecurityAdmin role (`Bad_UserAccessDenied`), or what `RoleManagement.Authorizer` allows, for the Methods and the Writes. The RolePermissions of the NodeSet limit the Properties to SecurityAdmin under the `RBACAccessController`; an added role takes those of Observer |
+| Granting | At ActivateSession a session gets the roles of the `RoleMapper`, then every role whose Identities match its identity token and whose Applications and Endpoints allow its Client Certificate and Endpoint (§4.4.1), each role once. A change of a role is applied at once to the active sessions (§4.4.1); the `RoleMapper` is not called again for them |
+| Identity rules | UserName (the user name), Thumbprint (SHA-1 of the user certificate, upper-case hex), X509Subject (the subject or the issuer name of the user certificate, `CN="..."/O="..."` in the order of §4.4.3 Table 10), Application (the ApplicationUri of a trusted Client Certificate), Anonymous, AuthenticatedUser, TrustedApplication, Role and GroupId (the `roles` and `groups` claims of a JWT, prefixed with `iss/`, with `WithIssuedTokenPolicy(server.IssuedTokenTypeJWT, …)` only, `Bad_NotSupported` without). A rule of another form is `Bad_InvalidArgument`; an Anonymous rule for SecurityAdmin, ConfigureAdmin or SecurityKeyServerAdmin is `Bad_RequestNotAllowed` |
+| Applications and Endpoints | An include list grants the role only to those, an exclude list to all others; a role with Applications needs a signed channel and a Client Certificate the server validated (a trust list, a validator or push management). An Endpoint matches the endpointUrl of CreateSession and the SecurityPolicy and SecurityMode of the channel; fields left at their default are ignored (§4.4.2) |
+| RemoveRole | Removes the role's nodes, its RolePermissions on every node and in the DefaultRolePermissions of every namespace (§4.2.3), and the role from the sessions. Roles of namespace 0 are not removable (`Bad_RequestNotAllowed`) |
+| Audit | With auditing on, a change by a Role Method reports a RoleMappingRuleChangedAuditEventType event (§4.5); AddRole, RemoveRole and refused calls an AuditUpdateMethodEventType event |
+| Persistence | None by default: the configuration starts from the defaults with each `New` and is lost when the process ends. `WithRoleSetStore` with `rolestore.OpenDir` keeps it in a directory, one atomic write per change, restored at `Start` (see below) |
+
+Without `WithRoleManagement` the roles come from the `RoleMapper` alone,
+the RoleSet Methods are not served (`Bad_MethodInvalid`) and the
+Properties have the values of the NodeSet, as in v1.42 and earlier.
+
+#### Persisting the RoleSet
+
+Package `server/rolestore` is a `server.RoleSetStore` on a directory: the
+roles AddRole added and the Identities, Applications, ApplicationsExclude,
+Endpoints and EndpointsExclude of every role that can change, the
+well-known roles included. Open it before `New` and close it after the
+server:
+
+```go
+st, err := rolestore.OpenDir(ctx, "/var/lib/myserver/roles", rolestore.Options{
+    Owner: "urn:example:myserver", // the ApplicationUri: another owner's store is refused
+})
+if err != nil {
+    return err
+}
+defer st.Close()
+
+srv, err := server.New(
+    // ... as above
+    server.WithRoleManagement(server.RoleManagement{}),
+    server.WithRoleSetStore(st),
+)
+// Register the namespaces the BrowseNames of added roles use before Start.
+// The first administrator: Bad_AlreadyExists once the store has it.
+err = srv.RoleSet().AddIdentity(ua.RoleSecurityAdmin.NodeID(),
+    &ua.IdentityMappingRuleType{CriteriaType: ua.IdentityCriteriaTypeUserName, Criteria: "secadmin"})
+if err != nil && !errors.Is(err, ua.StatusBadAlreadyExists) {
+    return err
+}
+```
+
+| Behaviour | Detail |
+|-----------|--------|
+| One write per change | Every AddRole, RemoveRole, Role Method, Write of ApplicationsExclude or EndpointsExclude and `RoleSet` method that succeeds writes the roles that are not Fixed in one `StoreRoleSet`, one `fxstore.Domain.Apply` of the records that change, before it returns; the active sessions get their roles again after it |
+| Restore | Once, at `Start` before the server listens, or at the first change through `Server.RoleSet()` before it: the stored configuration replaces that of the roles it names, and the added roles come back with their nodes, Methods and NodeIds ("A Server shall persist the identifierType and identifier NodeId elements of a Node as well as the Namespace Uri", OPC 10000-3 §5.2.2), their namespaces mapped by URI. Changes an application makes at each start are made on the restored roles (an AddRole or AddIdentity of something restored is `Bad_AlreadyExists`) |
+| Fail closed | A store that cannot be loaded, a namespace the server does not have (`rolestore.ErrNamespace`), a role that is not one of the RoleSet or is Fixed, or a rule the Methods would refuse fails `Start` and every change until the restore succeeds |
+| Failed write | The change is not made (the RoleSet stays as it was) and fails with `Bad_InternalError`, the error of the store in the chain; OPC 10000-18 lists no result code for it |
+| Unknown outcome | The store is fenced (`Status().Fenced`) and refuses writes until `Settle`, which the next write runs first; if the write landed, `Settle` writes the roles before it back |
+| Not stored | The RolePermissions of the nodes and the DefaultRolePermissions of the namespaces: they are the application's, set at each start with the NodeIds of the restored roles |
+| Directory | Created 0700, the lock file and the data file 0600; group- or world-writable directories are refused; one process at a time (`fxstore.ErrLocked`). `rolestore.Open` takes any `fxstore.Store` |
 
 ---
 

@@ -276,13 +276,15 @@ func TestAnnexExamples(t *testing.T) {
 	for _, tb := range af.tables {
 		f := functionByName(tb.aggregate)
 		if f == nil {
-			if tb.aggregate != "AnnotationCount" {
-				t.Errorf("annex: no Aggregate %s", tb.aggregate)
-			}
+			t.Errorf("annex: no Aggregate %s", tb.aggregate)
 			continue
 		}
 		req := Request{Aggregate: ua.NewNumericNodeID(0, f.id), Start: start, End: end, ProcessingInterval: tb.pi, Config: tb.cfg}
-		got, st := req.Calculate(af.raw[tb.historian])
+		var annotations []*ua.DataValue
+		if tb.aggregate == "AnnotationCount" {
+			annotations = annexAnnotations(af.raw[tb.historian])
+		}
+		got, st := req.CalculateWithAnnotations(af.raw[tb.historian], annotations)
 		if st != ua.StatusOK {
 			t.Errorf("%s/%s: %v", tb.aggregate, tb.historian, st)
 			continue
@@ -313,6 +315,31 @@ func TestAnnexExamples(t *testing.T) {
 		}
 	}
 	t.Logf("annex: %d rows of %d tables, %d by a clause rather than the file", rows, len(af.tables), deviated)
+}
+
+// annexAnnotations returns the Annotations the AnnotationCount tables of
+// the file count. The file gives no Annotation data of its own: the
+// "ANNOTATION:" notes of Historian1 (two at 12:00:40, one at 12:00:50 and
+// one at 12:01:10) do not give its counts, and the counts of every data set
+// are those of one Annotation at each raw value, the first entry ("First
+// archive entry, Point created", Bad_NoData, which marks the start of the
+// history and is not data) excepted, whatever the StatusCode of the value.
+// The test supplies these, and so checks the intervals, the Partial bit and
+// the start and end of data of AnnotationCount (Part 13 §5.4.3.20, Table
+// 68) against the file.
+func annexAnnotations(raw []*ua.DataValue) []*ua.DataValue {
+	var out []*ua.DataValue
+	for i, dv := range raw {
+		if i == 0 && dv.Status == ua.StatusBadNoData {
+			continue
+		}
+		out = append(out, &ua.DataValue{
+			EncodingMask:    ua.DataValueValue | ua.DataValueSourceTimestamp,
+			Value:           ua.MustVariant(ua.NewExtensionObject(&ua.Annotation{Message: "annex"})),
+			SourceTimestamp: dv.SourceTimestamp,
+		})
+	}
+	return out
 }
 
 func functionByName(name string) *function {
