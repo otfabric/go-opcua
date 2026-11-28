@@ -4,8 +4,11 @@ package opcua
 
 import (
 	"context"
+	stderrors "errors"
 	"fmt"
 	"io"
+	"maps"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -56,6 +59,18 @@ type Subscription struct {
 	// recreated after a reconnect while other goroutines use it. Code in
 	// this package reads it through id().
 	idMu sync.RWMutex
+
+	// publishingDisabled is the publishing mode SetPublishingMode last set
+	// on the server: a recreated subscription is created with it (Part 4
+	// §5.14.2.2, publishingEnabled). Guarded by paramsMu.
+	publishingDisabled bool
+
+	// triggers holds the triggering links SetTriggering created on the
+	// server, by the ids the caller knows the items by: triggering item ->
+	// items to report. A recreation gives the items new server ids and the
+	// new subscription has no links, so they are created again (Part 4
+	// §5.13.5). Guarded by itemsMu.
+	triggers map[uint32]map[uint32]struct{}
 
 	// needsRecreate is set when recreating the subscription after a
 	// reconnect failed. The next recovery then recreates it instead of
@@ -383,10 +398,20 @@ func (s *Subscription) Unmonitor(ctx context.Context, monitoredItemIDs ...uint32
 		return nil, err
 	}
 
-	// remove monitored items
+	// remove monitored items, and their triggering links: "When a
+	// MonitoredItem is deleted, its triggered item links are also deleted"
+	// (Part 4 §5.13.6.1), and so is the link to a deleted item to report
+	// (§5.13.1.6).
 	s.itemsMu.Lock()
 	for _, id := range monitoredItemIDs {
 		delete(s.items, id)
+		delete(s.triggers, id)
+		for trigger, links := range s.triggers {
+			delete(links, id)
+			if len(links) == 0 {
+				delete(s.triggers, trigger)
+			}
+		}
 	}
 	s.itemsMu.Unlock()
 
@@ -527,7 +552,52 @@ func (s *Subscription) SetTriggering(ctx context.Context, triggeringItemID uint3
 		LinksToRemove:    s.serverItemIDs(remove),
 	}
 
-	return send[ua.SetTriggeringResponse](ctx, s.c, req)
+	res, err := send[ua.SetTriggeringResponse](ctx, s.c, req)
+	if err != nil {
+		return nil, err
+	}
+	s.rememberTriggering(triggeringItemID, add, remove, res)
+	return res, nil
+}
+
+// rememberTriggering records the links a SetTriggering response confirms,
+// so that a recreation of the subscription creates them again. "The list of
+// linksToRemove is processed before the linksToAdd" (Part 4 §5.13.5.2). A
+// link to remove is forgotten when the server removed it or reports
+// Bad_MonitoredItemIdInvalid, the result for a link that does not exist; a
+// link to add is remembered when the server created it.
+func (s *Subscription) rememberTriggering(trigger uint32, add, remove []uint32, res *ua.SetTriggeringResponse) {
+	s.itemsMu.Lock()
+	defer s.itemsMu.Unlock()
+	if _, ok := s.items[trigger]; !ok {
+		return
+	}
+	links := s.triggers[trigger]
+	for i, id := range remove {
+		if i < len(res.RemoveResults) && (res.RemoveResults[i] == ua.StatusOK || res.RemoveResults[i] == ua.StatusBadMonitoredItemIDInvalid) {
+			delete(links, id)
+		}
+	}
+	for i, id := range add {
+		if i >= len(res.AddResults) || res.AddResults[i] != ua.StatusOK {
+			continue
+		}
+		if _, ok := s.items[id]; !ok {
+			continue
+		}
+		if links == nil {
+			links = make(map[uint32]struct{})
+		}
+		links[id] = struct{}{}
+	}
+	if len(links) == 0 {
+		delete(s.triggers, trigger)
+		return
+	}
+	if s.triggers == nil {
+		s.triggers = make(map[uint32]map[uint32]struct{})
+	}
+	s.triggers[trigger] = links
 }
 
 // SetPublishingMode enables or disables publishing of notification messages for this subscription.
@@ -541,7 +611,22 @@ func (s *Subscription) SetPublishingMode(ctx context.Context, publishingEnabled 
 		SubscriptionIDs:   []uint32{s.id()},
 	}
 
-	return send[ua.SetPublishingModeResponse](ctx, s.c, req)
+	res, err := send[ua.SetPublishingModeResponse](ctx, s.c, req)
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Results) > 0 && res.Results[0] == ua.StatusOK {
+		s.setPublishingEnabled(publishingEnabled)
+	}
+	return res, nil
+}
+
+// setPublishingEnabled records the publishing mode the server confirmed for
+// the subscription; a recreation creates the subscription with it.
+func (s *Subscription) setPublishingEnabled(enabled bool) {
+	s.paramsMu.Lock()
+	s.publishingDisabled = !enabled
+	s.paramsMu.Unlock()
 }
 
 func (s *Subscription) publishTimeout() time.Duration {
@@ -646,13 +731,16 @@ func (s *Subscription) recreateDelete(ctx context.Context) error { //nolint:unpa
 func (s *Subscription) recreateCreate(ctx context.Context) error {
 	s.paramsMu.Lock()
 	params := s.params
+	publishingEnabled := !s.publishingDisabled
 	s.paramsMu.Unlock()
 
+	// The subscription comes back in the publishing mode the caller left
+	// it in (SetPublishingMode), not enabled.
 	req := &ua.CreateSubscriptionRequest{
 		RequestedPublishingInterval: float64(params.Interval / time.Millisecond),
 		RequestedLifetimeCount:      params.LifetimeCount,
 		RequestedMaxKeepAliveCount:  params.MaxKeepAliveCount,
-		PublishingEnabled:           true,
+		PublishingEnabled:           publishingEnabled,
 		MaxNotificationsPerPublish:  params.MaxNotificationsPerPublish,
 		Priority:                    params.Priority,
 	}
@@ -753,4 +841,65 @@ func (s *Subscription) recreateCreate(ctx context.Context) error {
 
 	restored = true
 	return nil
+}
+
+// restoreTriggering creates the triggering links of the subscription again
+// after recreateCreate gave its monitored items new server ids: the new
+// subscription on the server has none (Part 4 §5.13.5). It sends one
+// SetTriggering request per triggering item, with the items' current server
+// ids. The links stay recorded whether or not the server accepts them, so a
+// later recreation tries again. It returns the links the server did not
+// create, nil when all were.
+func (s *Subscription) restoreTriggering(ctx context.Context) error {
+	type link struct {
+		trigger, triggerServer uint32
+		reports, servers       []uint32
+	}
+	var todo []link
+	s.itemsMu.Lock()
+	for _, trigger := range slices.Sorted(maps.Keys(s.triggers)) {
+		item, ok := s.items[trigger]
+		if !ok {
+			continue
+		}
+		l := link{trigger: trigger, triggerServer: item.serverID}
+		for _, id := range slices.Sorted(maps.Keys(s.triggers[trigger])) {
+			if report, ok := s.items[id]; ok {
+				l.reports = append(l.reports, id)
+				l.servers = append(l.servers, report.serverID)
+			}
+		}
+		if len(l.reports) > 0 {
+			todo = append(todo, l)
+		}
+	}
+	s.itemsMu.Unlock()
+
+	var errs []error
+	for _, l := range todo {
+		res, err := send[ua.SetTriggeringResponse](ctx, s.c, &ua.SetTriggeringRequest{
+			SubscriptionID:   s.id(),
+			TriggeringItemID: l.triggerServer,
+			LinksToAdd:       l.servers,
+		})
+		if err != nil {
+			errs = append(errs, fmt.Errorf("triggering item %d: %w", l.trigger, err))
+			continue
+		}
+		for i, id := range l.reports {
+			st := ua.StatusBadUnknownResponse
+			if i < len(res.AddResults) {
+				st = res.AddResults[i]
+			}
+			if st != ua.StatusOK {
+				errs = append(errs, fmt.Errorf("triggering item %d, item to report %d: %w", l.trigger, id, st))
+			}
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	err := stderrors.Join(errs...)
+	s.c.cfg.logger.Warn("recreated subscription is missing triggering links", "sub_id", s.id(), "error", err)
+	return err
 }

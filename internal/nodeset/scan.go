@@ -2,7 +2,11 @@
 
 package nodeset
 
-import "bytes"
+import (
+	"bytes"
+	"fmt"
+	"strconv"
+)
 
 // The scanners here match what Remap rewrites. They used to be regular
 // expressions, which the race detector made the most expensive part of an
@@ -99,6 +103,26 @@ func replaceAttrs(raw []byte, f func(m, space, name, eq, value []byte) []byte) [
 		return raw
 	}
 	return append(out, raw[last:]...)
+}
+
+// ParseQualifiedName reads the string form of a QualifiedName of a NodeSet,
+// a BrowseName for one: "<NamespaceIndex>:<Name>" or "<Name>" (Part 6
+// §5.1.12, Table 7). "The form without a prefix ... shall only be used for
+// QualifiedNames in the OPC UA Namespace": a name without a prefix is in
+// namespace 0, whatever the namespace of its node. A prefix is a sequence
+// of digits and a colon; the name of a QualifiedName in the OPC UA
+// namespace that starts with one is written with the prefix "0:". A prefix
+// that is not a UInt16 is an error.
+func ParseQualifiedName(s string) (ns uint16, name string, err error) {
+	idx, n, ok := qualifiedPrefix([]byte(s))
+	if !ok {
+		return 0, s, nil
+	}
+	v, err := strconv.ParseUint(string(idx), 10, 16)
+	if err != nil {
+		return 0, "", fmt.Errorf("nodeset: QualifiedName %q: namespace index %s is not a UInt16", s, idx)
+	}
+	return uint16(v), s[n:], nil
 }
 
 // qualifiedPrefix returns the namespace index of the QualifiedName v

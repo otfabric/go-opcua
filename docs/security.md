@@ -535,6 +535,19 @@ s, err := server.New(
 )
 ```
 
+### Issued Tokens
+
+The client presents a token from an Authorization Service (`opcua.AuthIssuedToken`); the server accepts it only through `server.WithIssuedTokenValidator`. The IssuedToken UserTokenPolicy tells clients which kind of token the server takes: its IssuedTokenType is a URI, `server.IssuedTokenTypeJWT` for JSON Web Tokens (Part 6 §6.5.2.2), and its IssuerEndpointUrl depends on the Authorization Service, for a JWT a JSON object with the fields of Part 6 §6.5.2.2 (Part 4 §7.41). Set both with `server.WithIssuedTokenPolicy`; without it both are empty.
+
+```go
+s, err := server.New(
+    server.EnableAuthMode(ua.UserTokenTypeIssuedToken),
+    server.WithIssuedTokenValidator(checkJWT),
+    server.WithIssuedTokenPolicy(server.IssuedTokenTypeJWT, issuerJSON),
+    server.EnableSecurity("Basic256Sha256", ua.MessageSecurityModeSignAndEncrypt),
+)
+```
+
 ---
 
 ## Common Security Configurations
@@ -698,6 +711,8 @@ s, err := server.New(
 `server.Session` is the session of the request, nil without one: `ID()`, `Identity()` (the user identity token as the client sent it), `Roles()` (from the `RoleMapper`) and `ClientCertificate()`. It does not expose the AuthenticationToken or the nonces.
 
 The `DefaultAccessController` allows all operations. Override it to enforce your security model.
+
+Reading the UserRolePermissions Attribute of a node (with Read or a monitored item) returns the entries of its RolePermissions for the roles of the session only (Part 3 §5.2.10); a request without a session, or a session the `RoleMapper` gave no role, has the Anonymous role, as for the `RBACAccessController`. RolePermissions lists every role.
 
 ### Writable Attributes
 

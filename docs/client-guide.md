@@ -1105,7 +1105,10 @@ c, _ := opcua.NewClient("opc.tcp://server:4840",
 | `Reconnecting` | Recovery in progress |
 
 With `AutoReconnect(true)` (default), reconnect runs Transfer → Republish → Recreate
-per subscription. Observe outcomes with `WithSubscriptionRecoveryHandler`:
+per subscription. A recreated subscription keeps the publishing mode last set
+with `SetPublishingMode` and the triggering links of `SetTriggering`; links the
+server refuses make the outcome `SubscriptionRecoveryPartial`. Observe outcomes
+with `WithSubscriptionRecoveryHandler`:
 
 ```go
 opcua.WithSubscriptionRecoveryHandler(func(ev opcua.SubscriptionRecoveryEvent) {

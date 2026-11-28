@@ -3,7 +3,6 @@
 package uafx
 
 import (
-	"encoding/xml"
 	"math"
 	"slices"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/otfabric/go-opcua/di/diid"
 	"github.com/otfabric/go-opcua/internal/nodeset"
-	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uafx/fxacid"
 	"github.com/otfabric/go-opcua/uafx/fxcmid"
@@ -43,46 +41,35 @@ func mandatoryOf(t *testing.T, doc []byte, typeID uint32) []string {
 // ModellingRules.
 func membersOf(t *testing.T, doc []byte, typeID uint32) ([]string, map[string]string) {
 	t.Helper()
-	var ns schema.UANodeSet
-	require.NoError(t, xml.Unmarshal(doc, &ns))
+	ns, err := nodeset.Parse(doc)
+	require.NoError(t, err)
 	type member struct {
 		browseName string
-		refs       []*schema.Reference
+		refs       []nodeset.Reference
 	}
 	nodes := map[string]member{}
-	add := func(id, bn string, refs *schema.ListOfReferences) {
-		if refs != nil {
-			nodes[id] = member{bn, refs.Reference}
+	for _, n := range ns.Nodes {
+		isMember := n.Class == nodeset.Object || n.Class == nodeset.Variable || n.Class == nodeset.Method || n.Class == nodeset.ObjectType
+		if isMember && len(n.References) > 0 {
+			nodes[n.NodeID] = member{n.BrowseName, n.References}
 		}
-	}
-	for _, n := range ns.UAObject {
-		add(n.NodeIDAttr, n.BrowseNameAttr, n.References)
-	}
-	for _, n := range ns.UAVariable {
-		add(n.NodeIDAttr, n.BrowseNameAttr, n.References)
-	}
-	for _, n := range ns.UAMethod {
-		add(n.NodeIDAttr, n.BrowseNameAttr, n.References)
-	}
-	for _, n := range ns.UAObjectType {
-		add(n.NodeIDAttr, n.BrowseNameAttr, n.References)
 	}
 	typ, ok := nodes["ns=1;i="+strconv.FormatUint(uint64(typeID), 10)]
 	require.True(t, ok, "type %d", typeID)
 	var out []string
 	rules := map[string]string{}
 	for _, r := range typ.refs {
-		if r.IsForwardAttr != nil && !*r.IsForwardAttr {
+		if !r.IsForward {
 			continue
 		}
-		m, ok := nodes[r.Value]
+		m, ok := nodes[r.Target]
 		if !ok {
 			continue
 		}
 		out = append(out, m.browseName)
 		for _, mr := range m.refs {
-			if mr.ReferenceTypeAttr == "HasModellingRule" {
-				rules[m.browseName] = mr.Value
+			if mr.Type == "HasModellingRule" {
+				rules[m.browseName] = mr.Target
 			}
 		}
 	}

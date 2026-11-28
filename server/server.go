@@ -8,7 +8,6 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/tls"
-	"encoding/xml"
 	stderrors "errors"
 	"fmt"
 	"log/slog"
@@ -22,6 +21,7 @@ import (
 	"time"
 
 	"github.com/otfabric/go-opcua/id"
+	"github.com/otfabric/go-opcua/internal/nodeset"
 	"github.com/otfabric/go-opcua/internal/schema"
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uacp"
@@ -33,13 +33,13 @@ const defaultListenAddr = "opc.tcp://localhost:0"
 
 var (
 	builtinNodeSetOnce sync.Once
-	builtinNodeSet     schema.UANodeSet
+	builtinNodeSet     *nodeset.Set
 	// builtinNodeSetValues holds the decoded <Value> of the variables of
 	// the built-in node set (nil if it cannot be decoded). It is written
 	// once, under builtinNodeSetOnce. The Variants are prototypes: they
 	// tell which values decode and are never handed to a server, see
 	// importVariableValue.
-	builtinNodeSetValues map[*schema.Value]*ua.Variant
+	builtinNodeSetValues map[*nodeset.Value]*ua.Variant
 	builtinNodeSetErr    error
 )
 
@@ -59,6 +59,10 @@ type Server struct {
 	url string
 
 	cfg *serverConfig
+
+	// publishFaulted, when set, is told about every queued Publish request
+	// the server answers with a ServiceFault (tests).
+	publishFaulted func(pr PubReq, status ua.StatusCode)
 
 	mu         sync.Mutex
 	status     *ua.ServerStatusDataType
@@ -182,6 +186,8 @@ type serverConfig struct {
 	usernameValidator          UsernameValidator
 	x509UserValidator          X509UserValidator
 	issuedTokenValidator       IssuedTokenValidator
+	issuedTokenType            string // WithIssuedTokenPolicy
+	issuerEndpointURL          string // WithIssuedTokenPolicy
 	clientCertificateValidator ClientCertificateValidator
 	allowUsernameOnNone        bool
 	eccSignLegacyKeyLength     bool
@@ -373,13 +379,16 @@ func New(opts ...Option) (*Server, error) {
 	}
 
 	builtinNodeSetOnce.Do(func() {
-		builtinNodeSetErr = xml.Unmarshal(schema.OpcUaNodeSet2, &builtinNodeSet)
+		builtinNodeSet, builtinNodeSetErr = nodeset.Parse(schema.OpcUaNodeSet2)
+		if builtinNodeSetErr != nil {
+			return
+		}
 		// The values of the standard node set are decoded once, to know
 		// which of them a server can serve. A server does not get these
 		// Variants themselves: importVariableValue gives every node a
 		// copy of its own.
-		builtinNodeSetValues = make(map[*schema.Value]*ua.Variant)
-		for _, v := range builtinNodeSet.UAVariable {
+		builtinNodeSetValues = make(map[*nodeset.Value]*ua.Variant)
+		for _, v := range builtinNodeSet.OfClass(nodeset.Variable) {
 			if v.Value != nil {
 				builtinNodeSetValues[v.Value] = decodeNodeSetValue(v.Value)
 			}
@@ -405,7 +414,7 @@ func New(opts ...Option) (*Server, error) {
 	if rbac, ok := cfg.accessController.(*RBACAccessController); ok && rbac != nil && rbac.srv == nil {
 		rbac.srv = s
 	}
-	if err := s.importNodeSet(&builtinNodeSet); err != nil {
+	if err := s.importNodeSet(builtinNodeSet); err != nil {
 		return nil, fmt.Errorf("server: import built-in node set: %w", err)
 	}
 
@@ -430,6 +439,7 @@ func New(opts ...Option) (*Server, error) {
 	s.diag.bind()
 	s.sb.idNamespace = s.diag.sessionNamespace
 	s.sb.removed = s.sessionRemoved
+	s.sb.publishQueue = publishQueueSize(cfg.subscriptionsPerSessionLimit())
 
 	return s, nil
 }
@@ -1063,9 +1073,13 @@ func (s *Server) endpointDescription(url, profile string, sec security) *ua.Endp
 		tok := &ua.UserTokenPolicy{
 			PolicyID:          policyID,
 			TokenType:         auth.tokenType,
-			IssuedTokenType:   "",
-			IssuerEndpointURL: "",
 			SecurityPolicyURI: tokenPolicyURI,
+		}
+		// IssuedTokenType "may only be specified if TokenType is
+		// ISSUEDTOKEN" (Part 4 §7.41); IssuerEndpointUrl belongs to it.
+		if auth.tokenType == ua.UserTokenTypeIssuedToken {
+			tok.IssuedTokenType = s.cfg.issuedTokenType
+			tok.IssuerEndpointURL = s.cfg.issuerEndpointURL
 		}
 
 		ep.UserIdentityTokens = append(ep.UserIdentityTokens, tok)

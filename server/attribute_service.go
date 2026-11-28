@@ -78,6 +78,9 @@ func (s *AttributeService) Read(ctx context.Context, sc *uasc.SecureChannel, r u
 		}
 
 		dv := ns.Attribute(n.NodeID, n.AttributeID)
+		if n.AttributeID == ua.AttributeIDUserRolePermissions {
+			dv = forSessionRoles(dv, sess)
+		}
 
 		if n.IndexRange != "" {
 			if n.AttributeID != ua.AttributeIDValue || dv == nil || dv.Status != ua.StatusOK || dv.Value == nil {
@@ -752,11 +755,17 @@ func (s *AttributeService) dispatchHistoryUpdate(ctx context.Context, sc *uasc.S
 		if !ok {
 			return unsupported
 		}
+		if st := checkDeleteRawRange(v.StartTime, v.EndTime); st != ua.StatusOK {
+			return &ua.HistoryUpdateResult{StatusCode: st}
+		}
 		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
 	case ua.DeleteRawModifiedDetails:
 		deleter, ok := h.(RawHistoryDeleter)
 		if !ok {
 			return unsupported
+		}
+		if st := checkDeleteRawRange(v.StartTime, v.EndTime); st != ua.StatusOK {
+			return &ua.HistoryUpdateResult{StatusCode: st}
 		}
 		return deleter.DeleteRawModified(v.NodeID, v.IsDeleteModified, v.StartTime, v.EndTime)
 	case *ua.DeleteAtTimeDetails:

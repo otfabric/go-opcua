@@ -61,7 +61,7 @@ func TestRepublishSubscription_UnknownID(t *testing.T) {
 func TestRecreateSubscription_UnknownID(t *testing.T) {
 	t.Parallel()
 	c := newNotifyTestClient(t)
-	err := c.recreateSubscription(context.Background(), 404)
+	_, err := c.recreateSubscription(context.Background(), 404)
 	require.ErrorIs(t, err, ua.StatusBadSubscriptionIDInvalid)
 }
 

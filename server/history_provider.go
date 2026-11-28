@@ -21,6 +21,9 @@ type HistoryDataUpdater interface {
 }
 
 // RawHistoryDeleter optionally supports DeleteRawModifiedDetails (raw deletes).
+// HistoryUpdate calls it only with a range Part 11 §6.9.5.1 allows, both
+// times defined and startTime not after endTime; it answers any other
+// range with Bad_HistoryOperationInvalid without calling the deleter.
 type RawHistoryDeleter interface {
 	DeleteRawModified(nodeID *ua.NodeID, isDeleteModified bool, startTime, endTime time.Time) *ua.HistoryUpdateResult
 }

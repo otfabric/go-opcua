@@ -536,33 +536,58 @@ func TestHistory_Delete(t *testing.T) {
 		require.Equal(t, []float64{0, 1, 2, 4, 5, 6, 7, 9}, current())
 	})
 
-	t.Run("RawRangeInclusiveWindow", func(t *testing.T) {
-		// The built-in historian deletes the inclusive window [start, end]
-		// (see server.Historian.DeleteRawModified).
+	t.Run("RawRangeEndExcluded", func(t *testing.T) {
+		// "values up to but not including the endTime are deleted"
+		// (Part 11 §6.9.5.1), as a raw read excludes it.
 		resp, err := c.HistoryDeleteRawModified(ctx, &ua.DeleteRawModifiedDetails{
 			NodeID: f.HistoryVar, StartTime: histAt(4), EndTime: histAt(6),
+		})
+		require.NoError(t, err)
+		require.Equal(t, ua.StatusOK, resp.Results[0].StatusCode)
+		require.Equal(t, []float64{0, 1, 2, 6, 7, 9}, current())
+	})
+
+	t.Run("RawRangeStartEqualsEnd", func(t *testing.T) {
+		// "It is permissible for startTime = endTime, in which case the
+		// value at the startTime is deleted" (§6.9.5.1).
+		resp, err := c.HistoryDeleteRawModified(ctx, &ua.DeleteRawModifiedDetails{
+			NodeID: f.HistoryVar, StartTime: histAt(6), EndTime: histAt(6),
 		})
 		require.NoError(t, err)
 		require.Equal(t, ua.StatusOK, resp.Results[0].StatusCode)
 		require.Equal(t, []float64{0, 1, 2, 7, 9}, current())
 	})
 
-	t.Run("RawRangeReversedBounds", func(t *testing.T) {
-		resp, err := c.HistoryDeleteRawModified(ctx, &ua.DeleteRawModifiedDetails{
-			NodeID: f.HistoryVar, StartTime: histAt(2), EndTime: histAt(1),
-		})
+	t.Run("RawRangeInvalid", func(t *testing.T) {
+		// "Both startTime and endTime shall be defined. The startTime shall
+		// be less than the endTime" (§6.9.5.1): a reversed range, or one
+		// without a start or end time, deletes nothing; the operations of
+		// the same request with a valid range are carried out.
+		resp, err := c.HistoryDeleteRawModified(ctx,
+			&ua.DeleteRawModifiedDetails{NodeID: f.HistoryVar, StartTime: histAt(2), EndTime: histAt(0)},
+			&ua.DeleteRawModifiedDetails{NodeID: f.HistoryVar, EndTime: histAt(100)},
+			&ua.DeleteRawModifiedDetails{NodeID: f.HistoryVar, StartTime: histAt(-100)},
+			&ua.DeleteRawModifiedDetails{NodeID: f.HistoryVar, IsDeleteModified: true, StartTime: histAt(2), EndTime: histAt(0)},
+			&ua.DeleteRawModifiedDetails{NodeID: f.HistoryVar, StartTime: histAt(1), EndTime: histAt(2)},
+		)
 		require.NoError(t, err)
-		require.Equal(t, ua.StatusOK, resp.Results[0].StatusCode)
-		require.Equal(t, []float64{0, 7, 9}, current())
+		require.Len(t, resp.Results, 5)
+		for i := range 4 {
+			require.Equal(t, ua.StatusBadHistoryOperationInvalid, resp.Results[i].StatusCode, "detail %d", i)
+		}
+		require.Equal(t, ua.StatusOK, resp.Results[4].StatusCode)
+		require.Equal(t, []float64{0, 2, 7, 9}, current())
 	})
 
 	t.Run("RawRangeMatchingNothing", func(t *testing.T) {
+		// "If no data is found in the time range ... the StatusCode for
+		// that item is Bad_NoData" (§6.9.5.2).
 		resp, err := c.HistoryDeleteRawModified(ctx, &ua.DeleteRawModifiedDetails{
 			NodeID: f.HistoryVar, StartTime: histAt(50), EndTime: histAt(60),
 		})
 		require.NoError(t, err)
-		require.Equal(t, ua.StatusOK, resp.Results[0].StatusCode)
-		require.Equal(t, []float64{0, 7, 9}, current())
+		require.Equal(t, ua.StatusBadNoData, resp.Results[0].StatusCode)
+		require.Equal(t, []float64{0, 2, 7, 9}, current())
 	})
 
 	t.Run("DeleteModifiedUnsupported", func(t *testing.T) {
@@ -571,7 +596,7 @@ func TestHistory_Delete(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Equal(t, ua.StatusBadHistoryOperationUnsupported, resp.Results[0].StatusCode)
-		require.Equal(t, []float64{0, 7, 9}, current(), "nothing may be deleted")
+		require.Equal(t, []float64{0, 2, 7, 9}, current(), "nothing may be deleted")
 	})
 
 	t.Run("NodeWithoutHistory", func(t *testing.T) {

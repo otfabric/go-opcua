@@ -672,7 +672,10 @@ recovery that attempts, per subscription:
 
 1. **TransferSubscriptions** onto the new session
 2. **Republish** of available sequence numbers
-3. **Recreate** the subscription if transfer fails
+3. **Recreate** the subscription if transfer fails, with its parameters, the
+   publishing mode last set with `SetPublishingMode`, its monitored items (in
+   their monitoring mode) and the triggering links of `SetTriggering`, which
+   are created again with the new server ids of the items
 
 Applications observe the result via `WithSubscriptionRecoveryHandler`:
 
@@ -709,7 +712,7 @@ type SubscriptionRecoveryEvent struct {
 | `SubscriptionRecoveryTransferred` | Transfer succeeded; nothing needed to republish |
 | `SubscriptionRecoveryRepublished` | Transfer succeeded and buffered notifications were republished |
 | `SubscriptionRecoveryRecreated` | Transfer failed; a new subscription was created |
-| `SubscriptionRecoveryPartial` | Some sequence numbers republished; a gap remains |
+| `SubscriptionRecoveryPartial` | Some sequence numbers republished; a gap remains. Or: a new subscription was created, but the server did not create all of its triggering links again (`Detail` names them; they are tried again with the next recreation) |
 | `SubscriptionRecoveryUnrecoverableGap` | Expected next sequence is absent from the server retransmission buffer; notifications are permanently lost |
 
 Manual `Client.Republish` / `Client.TransferSubscriptions` do not emit these events.
@@ -1735,6 +1738,9 @@ func (s *Server) ImportNodeSetXML(data []byte) error
 
 Parses OPC UA NodeSet2 XML data and imports nodes, references, and namespaces
 into the server's address space. Use this to load custom information models.
+The namespace indexes of the document are mapped to those of the server by
+the URIs of its `NamespaceUris` (Part 6 §F.2); a URI the server has is reused.
+A BrowseName without a prefix is a name in namespace 0 (Part 6 §5.1.12).
 For `UAVariable` elements the `<Value>` (the OPC UA XML DataEncoding, decoded
 with `ua.DecodeXML`), `DataType`, `ValueRank`, `ArrayDimensions`,
 `AccessLevel` and `UserAccessLevel` are applied; see the
@@ -1775,6 +1781,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `AllowUsernameOnNone()` | Advertise `UserName` token on unencrypted (`None/None`) endpoints — for test deployments only; X.509 token policies there name a real security policy |
 | `WithUsernameValidator(v UsernameValidator)` | Callback `func(username, password string) error` called during `ActivateSession` for `UserNameIdentityToken`; without one, username tokens are rejected with `BadUserAccessDenied` |
 | `WithX509UserValidator(v X509UserValidator)` | Callback `func(certDER []byte) error` called during `ActivateSession` for `X509IdentityToken`; must also call `EnableAuthMode(ua.UserTokenTypeCertificate)`; without one, X.509 user tokens are rejected |
+| `WithIssuedTokenPolicy(issuedTokenType, issuerEndpointURL string)` | IssuedTokenType (a URI such as `IssuedTokenTypeJWT`, Part 6 §6.5.2.2) and IssuerEndpointUrl advertised by the IssuedToken UserTokenPolicy (Part 4 §7.41); empty by default |
 | `WithIssuedTokenValidator(v IssuedTokenValidator)` | Callback `func(tok *ua.IssuedIdentityToken) error` called during `ActivateSession` for `IssuedIdentityToken` (token data decrypted where the policy encrypts it); must also call `EnableAuthMode(ua.UserTokenTypeIssuedToken)`; without one, issued tokens are rejected with `BadIdentityTokenRejected` |
 | `WithClientCertificateTrustList(caCertDER ...[]byte)` | Verify the client application certificate (DER) at `OpenSecureChannel` (and again at `CreateSession`) against the provided CA pool; rejects untrusted certs with `BadCertificateUntrusted` |
 | `WithClientCertificateValidator(v ClientCertificateValidator)` | The application's own validator of client application certificates, called at the same points (a trust list it changes while the server runs, a rejected list for an administrator); replaces the one of `WithClientCertificateTrustList`, refused with `WithPushManagement` |
@@ -1787,7 +1794,7 @@ func (s *Server) SetServerDiagnosticsEnabled(on bool) // true resets the counter
 | `WithMaxPendingResponses(n int)` | Stop reading a client's requests while `n` of its responses are unwritten (default 256; waiting Publish requests do not count) |
 | `WithMaxSessions(n int)` | Most sessions the server keeps, activated or not (default 100); CreateSession beyond it fails with `BadTooManySessions`; published as ServerCapabilities `MaxSessions` |
 | `WithMaxSubscriptions(n int)` | Most subscriptions over all sessions (default 1024); CreateSubscription beyond it fails with `BadTooManySubscriptions`; published as `MaxSubscriptions` |
-| `WithMaxSubscriptionsPerSession(n int)` | Most subscriptions one session owns (default 64); CreateSubscription and TransferSubscriptions beyond it give `BadTooManySubscriptions`; published as `MaxSubscriptionsPerSession` |
+| `WithMaxSubscriptionsPerSession(n int)` | Most subscriptions one session owns (default 64); CreateSubscription and TransferSubscriptions beyond it give `BadTooManySubscriptions`; published as `MaxSubscriptionsPerSession`. A session queues max(100, n+1) Publish requests, more than it can have subscriptions (Part 4 §5.14.5.1); a new one beyond that answers the oldest with `BadTooManyPublishRequests` |
 | `WithOperationLimits(l OperationalLimits)` | Per-call OperationLimits (default 32 each, a zero field is no limit); a request with more operations fails with `BadTooManyOperations`; published as ServerCapabilities `OperationLimits` |
 | `WithMaxMonitoredItems(n int)` | Most monitored items over all subscriptions (default 100000); CreateMonitoredItems gives `BadTooManyMonitoredItems` for the items beyond it; published as `MaxMonitoredItems` |
 | `WithMaxMonitoredItemsPerSubscription(n int)` | Most monitored items of one subscription (default 10000); `BadTooManyMonitoredItems` beyond it; published as `MaxMonitoredItemsPerSubscription` |
@@ -2550,7 +2557,14 @@ opaque ByteStrings owned by the server (expire after 30s; max 100 active).
 
 Supported by default `*Historian`:
 - UpdateData Insert / Replace / Update semantics
-- DeleteRawModified with `isDeleteModified=false`; `true` → `BadHistoryOperationUnsupported`
+- DeleteRawModified with `isDeleteModified=false`; `true` → `BadHistoryOperationUnsupported`.
+  The end time is excluded, as by a raw read; startTime = endTime deletes the
+  value at startTime; a range without a sample is `BadNoData` (Part 11
+  §6.9.5). A range without a start or end time (the zero `time.Time` or
+  1601-01-01, the null DateTime) or with startTime > endTime deletes nothing
+  and is `BadHistoryOperationInvalid`; HistoryUpdate refuses such a range the
+  same way before it reaches any `RawHistoryDeleter`, for modified deletes
+  too. Reads keep their open and reverse ranges
 - DeleteAtTime
 - ReadAtTime (nearest previous)
 - ReadModified

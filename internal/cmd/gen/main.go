@@ -4,14 +4,18 @@
 //
 // It replaces the former generate.sh with a deterministic, tested Go
 // program that:
+//   - checks the vendored inputs against schema/manifest.json
+//     (internal/cmd/schemamanifest verify), so code is only generated from
+//     the pinned upstream files
 //   - runs each generator in order (overwriting output files in place)
 //   - discovers enum types and runs stringer via go tool
 //   - does not install tools or run go mod tidy
 //
-// Generated files are NOT cleaned before regeneration because the
-// generators import the ua package which depends on its own generated
-// files. Deleting them first creates a circular dependency that breaks
-// compilation on cold caches (e.g. CI).
+// The generators import none of the generated packages, but stringer, run
+// last, type-checks ./ua and the root package, so their generated files
+// must compile together when it runs; the files are therefore overwritten
+// in place rather than deleted first. The NodeId packages (cmd/id) are
+// generated before cmd/uafx, whose output refers to their names.
 //
 // Invoke via: go generate ./...  (from module root)
 // Or directly: go run ./internal/cmd/gen
@@ -25,8 +29,10 @@ import (
 	"strings"
 )
 
-// generatedFiles is the explicit list of all generated output files,
-// relative to the module root. This replaces wildcard shell globs.
+// generatedFiles is the list of the files the generators and stringer
+// write, relative to the module root. Every one is named *_gen.go or
+// *_gen_test.go, which `make check-gen` relies on to find new untracked
+// output; TestGeneratedFileList checks the list against the module.
 var generatedFiles = []string{
 	"connstate_strings_gen.go",
 	"di/diid/id_DataType_gen.go",
@@ -90,6 +96,7 @@ var generatedFiles = []string{
 
 // generators lists the generators to run, in dependency order.
 var generators = [][]string{
+	{"go", "run", "./internal/cmd/schemamanifest", "verify"},
 	{"go", "run", "./cmd/id"},
 	{"go", "run", "./cmd/id", "-in", "schema/Opc.Ua.Gds.NodeIds.csv", "-out", "gds/gdsid/id_*_gen.go", "-pkg", "gdsid"},
 	{"go", "run", "./cmd/id", "-in", "schema/Opc.Ua.Di.NodeIds.csv", "-out", "di/diid/id_*_gen.go", "-pkg", "diid"},

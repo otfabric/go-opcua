@@ -4,6 +4,7 @@ package opcua
 
 import (
 	"context"
+	"slices"
 
 	"github.com/otfabric/go-opcua/ua"
 	"github.com/otfabric/go-opcua/uasc"
@@ -12,14 +13,23 @@ import (
 // Testing helpers exported only to external tests (package opcua_test).
 
 func (c *Client) TestingRecreateSubscription(ctx context.Context, id uint32) error {
-	return c.recreateSubscription(ctx, id)
+	_, err := c.recreateSubscription(ctx, id)
+	return err
 }
 
+// TestingRecreateDelete is recreateDelete, under the client's subMux as
+// recreateSubscription calls it.
 func (s *Subscription) TestingRecreateDelete(ctx context.Context) error {
+	s.c.subMux.Lock()
+	defer s.c.subMux.Unlock()
 	return s.recreateDelete(ctx)
 }
 
+// TestingRecreateCreate is recreateCreate, under the client's subMux as
+// recreateSubscription calls it.
 func (s *Subscription) TestingRecreateCreate(ctx context.Context) error {
+	s.c.subMux.Lock()
+	defer s.c.subMux.Unlock()
 	return s.recreateCreate(ctx)
 }
 
@@ -65,4 +75,34 @@ func (c *Client) TestingSubscriptionGeneration() uint64 {
 // TestingMarkSubscriptionsBrokenSince is markSubscriptionsBrokenSince.
 func (c *Client) TestingMarkSubscriptionsBrokenSince(gen uint64) int {
 	return c.markSubscriptionsBrokenSince(gen)
+}
+
+// TestingSetItemServerID makes the monitored item the caller knows by id
+// known to the server by serverID, as a recreation does.
+func (s *Subscription) TestingSetItemServerID(id, serverID uint32) {
+	s.itemsMu.Lock()
+	defer s.itemsMu.Unlock()
+	s.items[id].serverID = serverID
+}
+
+// TestingRestoreTriggering is restoreTriggering.
+func (s *Subscription) TestingRestoreTriggering(ctx context.Context) error {
+	s.c.subMux.Lock()
+	defer s.c.subMux.Unlock()
+	return s.restoreTriggering(ctx)
+}
+
+// TestingTriggers returns the triggering links the subscription records:
+// triggering item -> items to report, by the ids the caller knows them by.
+func (s *Subscription) TestingTriggers() map[uint32][]uint32 {
+	s.itemsMu.Lock()
+	defer s.itemsMu.Unlock()
+	out := map[uint32][]uint32{}
+	for trigger, links := range s.triggers {
+		for id := range links {
+			out[trigger] = append(out[trigger], id)
+		}
+		slices.Sort(out[trigger])
+	}
+	return out
 }

@@ -355,7 +355,10 @@ func TestMonitoredItem_DeleteAndTriggeringStatuses(t *testing.T) {
 			LinksToRemove:    []uint32{a, a + 1000},
 		})
 		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadMonitoredItemIDInvalid, ua.StatusOK}, res.AddResults)
-		require.Equal(t, []ua.StatusCode{ua.StatusOK, ua.StatusBadMonitoredItemIDInvalid}, res.RemoveResults)
+		// "The list of linksToRemove is processed before the linksToAdd"
+		// (Part 4 §5.13.5.2): the link to a does not exist yet when it is
+		// removed, and exists afterwards.
+		require.Equal(t, []ua.StatusCode{ua.StatusBadMonitoredItemIDInvalid, ua.StatusBadMonitoredItemIDInvalid}, res.RemoveResults)
 
 		_, err := sendRaw[ua.SetTriggeringResponse](t, c, &ua.SetTriggeringRequest{
 			SubscriptionID: sub.id, TriggeringItemID: trig + 1000, LinksToAdd: []uint32{a},

@@ -581,7 +581,15 @@ func (s *SessionService) CloseSession(ctx context.Context, sc *uasc.SecureChanne
 }
 
 // Cancel implements the OPC UA Cancel service.
-// https://reference.opcfoundation.org/Core/Part4/v105/docs/5.6.5
+// https://reference.opcfoundation.org/Core/Part4/v105/docs/5.7.5
+//
+// "All outstanding requests with the matching requestHandle shall be
+// cancelled", and "Successfully cancelled service requests shall respond
+// with Bad_RequestCancelledByClient"; cancelCount is the number of requests
+// that were cancelled (Part 4 §5.7.5). The server handles every request but
+// Publish before it reads the next one, so the outstanding requests are the
+// Publish requests queued on the session. Each one that is cancelled is
+// answered with a ServiceFault; the others stay queued, in their order.
 func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r ua.Request, reqID uint32) (ua.Response, error) {
 	s.srv.cfg.logger.Debug("handling request", "type", fmt.Sprintf("%T", r))
 
@@ -590,43 +598,92 @@ func (s *SessionService) Cancel(ctx context.Context, sc *uasc.SecureChannel, r u
 		return nil, err
 	}
 
-	// Per OPC-UA spec, Cancel cancels outstanding service requests
-	// matching the given RequestHandle. The server returns the number
-	// of requests successfully cancelled.
-	// In this implementation outstanding requests are limited to
-	// queued Publish requests on the session.
-	session := s.srv.session(req.Header())
 	var cancelCount uint32
-
-	if session != nil {
-		// Drain publish requests matching the handle.
-		remaining := make([]PubReq, 0)
-	drain:
-		for {
-			select {
-			case pr := <-session.PublishRequests:
-				if pr.Req.RequestHeader.RequestHandle == req.RequestHandle {
-					cancelCount++
-				} else {
-					remaining = append(remaining, pr)
-				}
-			default:
-				break drain
-			}
-		}
-		// Put back the non-matching ones.
-		for _, pr := range remaining {
-			select {
-			case session.PublishRequests <- pr:
-			default:
-			}
-		}
+	if session := s.srv.session(req.Header()); session != nil {
+		cancelCount = s.srv.cancelPublishRequests(session, req.RequestHandle, sc)
 	}
 
 	return &ua.CancelResponse{
 		ResponseHeader: responseHeader(req.RequestHeader.RequestHandle, ua.StatusOK),
 		CancelCount:    cancelCount,
 	}, nil
+}
+
+// queuePublishRequest queues the Publish request pr on sess. When the queue
+// is full its oldest request is answered with Bad_TooManyPublishRequests
+// and pr is queued: "When a Server receives a new Publish request that
+// exceeds its limit it shall de-queue the oldest Publish request and return
+// a response with the result set to Bad_TooManyPublishRequests" (Part 4
+// §5.14.5.1). A request is answered by whoever takes it from the queue, so
+// none is answered twice.
+func (s *Server) queuePublishRequest(sess *session, pr PubReq) {
+	var evicted []PubReq
+	sess.publishMu.Lock()
+	for queued := false; !queued; {
+		select {
+		case sess.PublishRequests <- pr:
+			queued = true
+		default:
+			// Full. A subscription may take a request meanwhile, then
+			// there is nothing to de-queue and the next round queues pr.
+			select {
+			case old := <-sess.PublishRequests:
+				evicted = append(evicted, old)
+			default:
+			}
+		}
+	}
+	sess.publishMu.Unlock()
+	for _, old := range evicted {
+		s.cfg.logger.Warn("too many publish requests: answering the oldest with Bad_TooManyPublishRequests")
+		s.faultPublishRequest(old, pr.Channel, ua.StatusBadTooManyPublishRequests)
+	}
+}
+
+// cancelPublishRequests answers the Publish requests queued on sess whose
+// RequestHandle is handle with Bad_RequestCancelledByClient and returns how
+// many there were. The other requests are queued again, in their order: no
+// Publish request is queued while the queue is taken apart (publishMu), and
+// the subscriptions only take requests from it, so they fit again.
+// fallback is the channel of a request that does not name its own.
+func (s *Server) cancelPublishRequests(sess *session, handle uint32, fallback *uasc.SecureChannel) uint32 {
+	var cancelled []PubReq
+	sess.publishMu.Lock()
+	var remaining []PubReq
+	for drained := false; !drained; {
+		select {
+		case pr := <-sess.PublishRequests:
+			if pr.Req != nil && pr.Req.RequestHeader != nil && pr.Req.RequestHeader.RequestHandle == handle {
+				cancelled = append(cancelled, pr)
+			} else {
+				remaining = append(remaining, pr)
+			}
+		default:
+			drained = true
+		}
+	}
+	for _, pr := range remaining {
+		sess.PublishRequests <- pr // there is room: see above
+	}
+	sess.publishMu.Unlock()
+	for _, pr := range cancelled {
+		s.faultPublishRequest(pr, fallback, ua.StatusBadRequestCancelledByClient)
+	}
+	return uint32(len(cancelled))
+}
+
+// faultPublishRequest answers the queued Publish request pr with a
+// ServiceFault of the given status. fallback is the channel used when pr
+// does not name its own.
+func (s *Server) faultPublishRequest(pr PubReq, fallback *uasc.SecureChannel, status ua.StatusCode) {
+	if s.publishFaulted != nil {
+		s.publishFaulted(pr, status)
+	}
+	h := faultHeader(status)
+	if pr.Req != nil && pr.Req.RequestHeader != nil {
+		h.RequestHandle = pr.Req.RequestHeader.RequestHandle
+	}
+	_ = s.sendPublishResponse(pr.replyChannel(fallback), pr.ID, &ua.ServiceFault{ResponseHeader: h})
 }
 
 // serverCertificate returns the application instance certificate the server

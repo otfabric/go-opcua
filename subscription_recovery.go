@@ -20,7 +20,10 @@ const (
 	SubscriptionRecoveryRecreated SubscriptionRecoveryOutcome = "recreated"
 
 	// SubscriptionRecoveryPartial means recovery was only partially successful:
-	// some sequence numbers were republished but a gap remains.
+	// some sequence numbers were republished but a gap remains, or the
+	// subscription was recreated but the server did not create all of its
+	// triggering links again (Detail names them; the next recreation tries
+	// them again).
 	SubscriptionRecoveryPartial SubscriptionRecoveryOutcome = "partially_recovered"
 
 	// SubscriptionRecoveryUnrecoverableGap means the client's expected next

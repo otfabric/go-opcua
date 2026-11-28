@@ -1,7 +1,16 @@
 // SPDX-License-Identifier: MIT
 
-// Package nodeset prepares NodeSet2 documents for import into a server
-// whose namespace table differs from the table of the document.
+// Package nodeset reads NodeSet2 documents (OPC 10000-6 Annex F) and
+// prepares them for import into a server whose namespace table differs
+// from the table of the document.
+//
+// [Parse] reads a document into a [Set]: its namespaces, models and their
+// RequiredModels, aliases and every node with all the attributes of its
+// class, its references, the DataType definitions and the values, with the
+// defaults of UANodeSet.xsd applied. Its queries ([Set.Related],
+// [Set.Children], [Set.ModellingRule], [Set.MethodArguments] and others)
+// serve the code generators (cmd/uafx) and the server import
+// (server.ImportNodeSetXML), which share this one reader.
 //
 // A NodeSet2 document carries its own namespace table, NamespaceUris: a
 // NamespaceIndex in a NodeId or a QualifiedName of the document is an index
@@ -195,10 +204,11 @@ func URIs(src []byte) ([]string, error) {
 // RolePermissionType; nothing else in an ExtensionObject Body);
 // the prefix of BrowseName attributes and of the Name of a DataType
 // Definition; and the NamespaceIndex of a QualifiedName value. A
-// BrowseName without a prefix is a name in namespace 0 (Part 6 §F.3) and
-// gets the prefix "0:", so that it is not read as a name in the namespace
-// of its node. Everything else, Extensions included, is copied as it is.
-// An index outside the namespace table of the document is an error.
+// BrowseName without a prefix is a name in the OPC UA namespace, "The form
+// without a prefix ... shall only be used for QualifiedNames in the OPC UA
+// Namespace" (Part 6 §5.1.12), and gets the prefix "0:", which says the
+// same. Everything else, Extensions included, is copied as it is. An index
+// outside the namespace table of the document is an error.
 func Remap(src []byte, resolve Resolver) ([]byte, error) {
 	uris, err := URIs(src)
 	if err != nil {
@@ -300,9 +310,10 @@ func remapTag(raw []byte, el string, mapIndex, mapNodeID func([]byte) []byte) []
 		case nodeIDAttrs[name]:
 			v = mapNodeID(v)
 		case name == "BrowseName":
-			if idx, n, ok := qualifiedPrefix(v); ok {
+			switch idx, n, ok := qualifiedPrefix(v); {
+			case ok:
 				v = concat(mapIndex(idx), []byte(":"), v[n:])
-			} else {
+			default:
 				v = concat([]byte("0:"), v)
 			}
 		case name == "Name" && el == "Definition":
