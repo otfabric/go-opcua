@@ -100,7 +100,8 @@ func TestSession_TimeoutEnforced(t *testing.T) {
 	// server can tell and rightly timed out: the attempt proves nothing and
 	// is made again with new sessions.
 	for attempt := 1; ; attempt++ {
-		idle := newClient(t, url, opcua.SessionTimeout(timeout))
+		// The idle client sends nothing at all: no keep-alive either.
+		idle := newClient(t, url, opcua.SessionTimeout(timeout), opcua.SessionKeepAlive(0))
 		busy := newClient(t, url, opcua.SessionTimeout(timeout))
 		require.Equal(t, timeout, idle.Session().RevisedTimeout())
 

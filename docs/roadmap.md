@@ -96,13 +96,18 @@ alarms and UAFX.
 | RoleSet Methods (AddRole, AddIdentity and the others) | roles only from the Go RoleMapper |
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | not emitted |
 | History annotations (UpdateStructureData) | not dispatched |
-| Client session keepalive while idle | only silent subscriptions are found |
+| Client session keepalive while idle | done in v1.43.0 |
 | ServerProfileArray | no value; Read returns Bad_AttributeIdInvalid |
 
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
 Enumeration and OptionSet DataType of namespace 0 and of the imported models,
 from the NodeSet Definition with the fields of the supertypes (Part 3 §5.8.3,
 Part 6 §F.12); see docs/server-guide.md.
+
+Done in v1.43.0: the client session keep-alive. A connected client reads
+the ServerStatus State after half the revised session timeout without a
+request (`SessionKeepAlive`, Part 4 §5.7.2.1 and §6.7), and a keep-alive
+without response is a lost connection; see docs/client-guide.md.
 
 ## Phase 4: durable administration
 

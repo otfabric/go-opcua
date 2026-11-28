@@ -437,6 +437,7 @@ if _, err := c.Read(ctx, req); err != nil {
 | `AutoReconnect(bool)` | Enable automatic reconnection |
 | `ReconnectInterval(d)` | Time between reconnect attempts |
 | `SessionTimeout(d)` | Session timeout duration |
+| `SessionKeepAlive(d)` | Idle time after which the client sends a keep-alive Read (default: half the revised session timeout; `0` turns it off), see [Session keep-alive](#session-keep-alive) |
 | `ApplicationURI(uri)` | Application URI (auto-read from cert if provided) |
 | `ApplicationName(name)` | Application name |
 | `WithConnStateHandler(fn)` | Connection state change callback |
@@ -1101,7 +1102,7 @@ c, _ := opcua.NewClient("opc.tcp://server:4840",
 | `Closed` | Not connected (initial state or permanently closed) |
 | `Connecting` | First connection attempt in progress |
 | `Connected` | Active session, ready for operations |
-| `Disconnected` | Lost connection (auto-reconnect will trigger) |
+| `Disconnected` | Lost connection, also a [session keep-alive](#session-keep-alive) without response (auto-reconnect will trigger) |
 | `Reconnecting` | Recovery in progress |
 
 With `AutoReconnect(true)` (default), reconnect runs Transfer → Republish → Recreate
@@ -1126,6 +1127,51 @@ tr, err := c.TransferSubscriptions(ctx, []uint32{subscriptionID}, false)
 ---
 
 ## Session Management
+
+### Session keep-alive
+
+A server terminates a session "if the Client fails to issue a Service request
+on the Session" within the revised session timeout, and "Clients shall be
+prepared to submit requests in a timely manner to prevent the Session from
+closing automatically" (Part 4 §5.7.2.1). A client that `Connect` connected
+does so by itself: when its session has had no request for half the revised
+session timeout (`Session().RevisedTimeout()`), it reads the State of the
+ServerStatus (`i=2259`), the Variable Part 4 §6.7 names for monitoring a
+connection without a Subscription. Every request of the session counts,
+Publish requests too, so a client in use or with a subscription sends none.
+
+```go
+c, _ := opcua.NewClient(endpoint,
+    opcua.SessionTimeout(10*time.Minute),
+    // keep-alive after 30 s without a request: a dead connection is
+    // noticed within 30 s plus the request timeout
+    opcua.SessionKeepAlive(30*time.Second),
+)
+```
+
+- A keep-alive that gets no response within the `RequestTimeout`
+  (`Bad_Timeout`) or that the server answers with `Bad_SessionClosed` is
+  handled as a lost connection: the state goes to `Disconnected` and, with
+  `AutoReconnect`, the client recovers as after a broken connection (new
+  secure channel, the session restored or recreated, subscriptions
+  transferred). This is how a connection that is gone without being closed,
+  a peer that vanished or a network that drops everything, is noticed while
+  the client sends nothing else.
+- Any other answer, `Bad_UserAccessDenied` for example, changes nothing: the
+  server received the request, and that is what keeps the session open. The
+  value read is not used.
+- An interval at or above the revised session timeout is replaced by half of
+  it. `SessionKeepAlive(0)` turns the keep-alive off; a negative interval is
+  an error of `NewClient`.
+- The keep-alive runs only while the client is `Connected`, from `Connect`
+  until `Close`; it sends nothing during a reconnect, after `CloseSession` or
+  for a session set up with `Dial`, `CreateSession` and `ActivateSession`.
+  It is sent once, without the `RetryPolicy`, and counted by `ClientMetrics`
+  as a `Read`.
+
+Neither clause says when a client sends such a request or what it does when
+one fails; half the revised timeout and the handling of a failure are this
+client's design.
 
 ### Session Transfer
 

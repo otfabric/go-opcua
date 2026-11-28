@@ -157,6 +157,7 @@ For TCP-only reachability checks (e.g. connection diagnostics or "ping" without 
 - A single `*Client` is safe for concurrent use from multiple goroutines for ordinary service calls (reads, writes, browse, method calls) once connected. Race tests cover concurrent reads and subscription create/cancel.
 - Subscription notification delivery and recovery handlers run on library goroutines; handlers must not block (see `WithSubscriptionRecoveryHandler`).
 - Auto-reconnect (default on) may recreate sessions and subscriptions after disconnect; observe `ConnState` / recovery events if your application needs to react.
+- The session keep-alive (default on, `SessionKeepAlive`) runs on a library goroutine from `Connect` to `Close`: an idle session gets a Read of the ServerStatus State after half its revised timeout, and a keep-alive without response makes the client `Disconnected`.
 
 Errors: [ERRORS.md](ERRORS.md). Observability: [OBSERVABILITY.md](OBSERVABILITY.md).
 
@@ -880,6 +881,7 @@ All option functions return `Option` and are passed to `NewClient`:
 | `InsecureSkipDiscoveredEndpointsCheck()` | Turn the comparison of the discovered endpoint list off (the behaviour of v1.32.1) |
 | `SessionName(s string)` | Session name |
 | `SessionTimeout(d time.Duration)` | Session timeout |
+| `SessionKeepAlive(d time.Duration)` | Idle time after which a connected client reads the State of the ServerStatus (`i=2259`) to keep its session open (Part 4 §5.7.2.1, §6.7). Default: half the revised session timeout; an interval at or above it is replaced by half of it; `0` turns it off; negative is an error. A keep-alive without response within the `RequestTimeout`, or answered with `Bad_SessionClosed`, is handled as a lost connection (`Disconnected`, then recovery with `AutoReconnect`); see [docs/client-guide.md](docs/client-guide.md#session-keep-alive) |
 | `SkipNamespaceUpdate()` | Skip automatic namespace table update on connect |
 | `Certificate(cert []byte)` | Client application certificate (DER) |
 | `CertificateFile(filename string)` | Load client application certificate from file |

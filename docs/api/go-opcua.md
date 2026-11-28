@@ -350,6 +350,9 @@ type Client struct {
 	// lastPublishResponse is when the last Publish response arrived (unix
 	// nanoseconds), see markSilentSubscriptions.
 
+	// lastSessionRequest is when the client last sent a request in its
+	// session (since keepAliveEpoch), see keepAliveStep.
+
 	// pausech pauses the subscription publish loop
 
 	// resumech resumes subscription publish loop
@@ -1571,6 +1574,9 @@ type Config struct {
 	// discoveredEndpoints is the list given to DiscoveredEndpoints, and
 	// skipDiscoveredEndpoints is set by InsecureSkipDiscoveredEndpointsCheck.
 
+	// keepAlive is the SessionKeepAlive interval (0: half the revised
+	// session timeout), and keepAliveOff is set by SessionKeepAlive(0).
+
 }
 ```
 
@@ -2339,6 +2345,18 @@ func SendBufferSize(n uint32) Option
 ```
 
 SendBufferSize sets the send buffer size for the UACP handshake.
+
+#### func SessionKeepAlive
+
+```go
+func SessionKeepAlive(d time.Duration) Option
+```
+
+SessionKeepAlive sets how long the session of a connected client may go without a request before the client sends one to keep it open: a Read of the State Variable of the ServerStatus (i=2259). "Clients shall be prepared to submit requests in a timely manner to prevent the Session from closing automatically" (Part 4 §5.7.2.1), and without a Subscription "the connection can be monitored by periodically reading the State Variable" (Part 4 §6.7).
+
+By default the keep-alive is sent after half the revised session timeout without a request. A d > 0 sets that time; one at or above the revised session timeout is replaced by half of it. SessionKeepAlive(0) turns the keep-alive off. A negative d is an error.
+
+Every request of the session counts, Publish requests too, so a client that is in use sends no keep-alive. The keep-alive runs while the client is Connected, from Connect to Close. A keep-alive that gets no response within the RequestTimeout, or that the server answers with Bad\_SessionClosed, is handled as a lost connection: the client goes to Disconnected and, with AutoReconnect, recovers as after a broken connection. Any other answer of the server leaves the client as it is: the server received the request. The value read is not used.
 
 #### func SessionName
 
