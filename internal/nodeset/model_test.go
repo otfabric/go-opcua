@@ -119,7 +119,7 @@ func TestParse(t *testing.T) {
 	}
 	wantModel := []Model{{
 		ModelURI: "urn:a", XMLSchemaURI: "urn:a/Types.xsd", Version: "1.00", ModelVersion: "1.0.0",
-		PublicationDate: "2026-01-01T00:00:00Z", AccessRestrictions: 2,
+		PublicationDate: "2026-01-01T00:00:00Z", AccessRestrictions: 2, HasAccessRestrictions: true,
 		RolePermissions: []RolePermission{{Role: "i=15668", Permissions: 1}},
 		RequiredModels:  []Model{{ModelURI: "http://opcfoundation.org/UA/", Version: "1.05.07", ModelVersion: "1.5.7", PublicationDate: "2026-07-30T00:00:00Z"}},
 	}}
@@ -142,7 +142,7 @@ func TestParse(t *testing.T) {
 	typ := s.Node("ns=1;i=1")
 	want := &Node{
 		Class: ObjectType, NodeID: "ns=1;i=1", BrowseName: "1:T", SymbolicName: "T_", WriteMask: 3, UserWriteMask: 4,
-		AccessRestrictions: 5, HasNoPermissions: true, ReleaseStatus: "Draft",
+		AccessRestrictions: 5, HasAccessRestrictions: true, HasNoPermissions: true, ReleaseStatus: "Draft",
 		DisplayName:   []LocalizedText{{"en", "T"}, {"de", "T-de"}},
 		Description:   []LocalizedText{{"", "a type"}},
 		Category:      []string{"Cat"},

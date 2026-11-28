@@ -77,8 +77,9 @@ func (s *Server) namespaceIndex(uri string) (uint16, error) {
 	if idx, ok := s.namespaceLookup(uri); ok {
 		return idx, nil
 	}
-	ns := NewNodeNameSpace(s, uri)
+	ns := newNodeNameSpace(s, uri)
 	if idx, ok := s.namespaceLookup(uri); ok && idx == ns.ID() {
+		s.markImported(idx)
 		return idx, nil
 	}
 	return 0, fmt.Errorf("the server has no namespace index left for %q", uri)
@@ -162,6 +163,8 @@ func (s *Server) importNodeSet(nodes *nodeset.Set) error {
 	// The DataTypeDefinitions need the HasSubtype and HasEncoding
 	// References of the DataTypes.
 	s.importDataTypeDefinitions(nodes)
+	// The defaults of the Models and their NamespaceMetadata Objects.
+	s.importModels(nodes.Models)
 	return nil
 }
 
@@ -171,7 +174,7 @@ func (s *Server) namespacesImportNodeSet(nodes *nodeset.Set) error {
 	// (planNamespaces).
 	for _, uri := range nodes.NamespaceURIs {
 		if _, ok := s.namespaceLookup(uri); !ok {
-			_ = NewNodeNameSpace(s, uri)
+			s.markImported(newNodeNameSpace(s, uri).ID())
 		}
 	}
 	return nil
@@ -221,6 +224,7 @@ func (s *Server) nodesImportNodeSet(nodes *nodeset.Set) error {
 		var refs References = make([]*ua.ReferenceDescription, 0)
 
 		n := NewNode(nid, attrs, refs, nil)
+		importPermissionFlags(n, rt)
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
 			// This namespace doesn't exist.
@@ -259,6 +263,7 @@ func (s *Server) nodesImportNodeSet(nodes *nodeset.Set) error {
 
 		n := NewNode(nid, attrs, refs, nil)
 		n.rolePermissions = resolveRolePermissions(dt.RolePermissions, nid)
+		importPermissionFlags(n, dt)
 
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
@@ -297,6 +302,7 @@ func (s *Server) nodesImportNodeSet(nodes *nodeset.Set) error {
 
 		n := NewNode(nid, attrs, refs, nil)
 		n.rolePermissions = resolveRolePermissions(ot.RolePermissions, nid)
+		importPermissionFlags(n, ot)
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
 			// This namespace doesn't exist.
@@ -333,6 +339,7 @@ func (s *Server) nodesImportNodeSet(nodes *nodeset.Set) error {
 
 		n := NewNode(nid, attrs, refs, nil)
 		n.rolePermissions = resolveRolePermissions(ot.RolePermissions, nid)
+		importPermissionFlags(n, ot)
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
 			// This namespace doesn't exist.
@@ -371,6 +378,7 @@ func (s *Server) nodesImportNodeSet(nodes *nodeset.Set) error {
 
 		n := NewNode(nid, attrs, refs, s.importVariableValue(ot))
 		n.rolePermissions = resolveRolePermissions(ot.RolePermissions, nid)
+		importPermissionFlags(n, ot)
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
 			// This namespace doesn't exist.
@@ -407,6 +415,7 @@ func (s *Server) nodesImportNodeSet(nodes *nodeset.Set) error {
 
 		n := NewNode(nid, attrs, refs, nil)
 		n.rolePermissions = resolveRolePermissions(ot.RolePermissions, nid)
+		importPermissionFlags(n, ot)
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
 			// This namespace doesn't exist.
@@ -447,6 +456,7 @@ func (s *Server) nodesImportNodeSet(nodes *nodeset.Set) error {
 
 		n := NewNode(nid, attrs, refs, nil)
 		n.rolePermissions = resolveRolePermissions(ot.RolePermissions, nid)
+		importPermissionFlags(n, ot)
 		ns, err := s.Namespace(int(nid.Namespace()))
 		if err != nil {
 			// This namespace doesn't exist.
@@ -940,30 +950,7 @@ func (s *Server) refsImportNodeSet(nodes *nodeset.Set) error {
 // node is in namespace 0, it falls back to the generated defaults from the
 // OPC UA specification.
 func resolveRolePermissions(rp []nodeset.RolePermission, nid *ua.NodeID) []*ua.RolePermissionType {
-	var perms []*ua.RolePermissionType
-
-	if len(rp) > 0 {
-		for _, p := range rp {
-			// The role is a NodeId ("i=15704", "ns=1;i=1661"), as a NodeSet
-			// writes it, or the name of a well-known role.
-			var roleID *ua.NodeID
-			if role, ok := ua.RoleByName[p.Role]; ok {
-				roleID = role.NodeID()
-			} else if v := strings.TrimSpace(p.Role); strings.Contains(v, "=") {
-				n, err := ua.ParseNodeID(v)
-				if err != nil {
-					continue
-				}
-				roleID = n
-			} else {
-				continue
-			}
-			perms = append(perms, &ua.RolePermissionType{
-				RoleID:      roleID,
-				Permissions: ua.PermissionType(p.Permissions),
-			})
-		}
-	}
+	perms := importRoles(rp)
 
 	if len(perms) == 0 && nid.Namespace() == 0 {
 		if def, ok := DefaultNodePermissions[nid.IntID()]; ok {

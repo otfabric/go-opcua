@@ -138,6 +138,8 @@ type Server struct {
 
 	// ps is the PubSub runtime and its information model (pubsub.go).
 	ps pubsubState
+	// nsMeta: NamespaceMetadata Objects and namespace defaults.
+	nsMeta namespaceMeta
 
 	// diag holds the server diagnostics (diagnostics.go).
 	diag *serverDiagnostics
@@ -147,6 +149,7 @@ type Server struct {
 }
 
 type serverConfig struct {
+	addrSpace addressSpaceConfig // model change and namespace defaults
 	// idMu guards privateKey, certificate and identities, which push
 	// certificate management replaces at run time (push_methods.go).
 	idMu           sync.RWMutex
@@ -704,6 +707,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Register all service handlers
 	s.initHandlers()
+	s.startNamespaceMetadata()
 
 	if s.url == "" {
 		s.url = defaultListenAddr

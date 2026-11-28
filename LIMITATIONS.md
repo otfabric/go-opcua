@@ -71,6 +71,19 @@ behaviour you may notice, and the deviations of peers are in
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
 - mDNS has no probing or conflict resolution.
+- Model change events (`server`): only nodes with a NodeVersion Property are
+  reported (Part 3 §9.32.2); the server has no View other than the default,
+  so the events go to the Server Object only. `ImportNodeSetXML` reports
+  nothing. A Value of a Property with the SemanticChange bit that a
+  `SetValueFunc` or another data source changes is not seen, only a Write or
+  `Node.SetAttribute`.
+- NamespaceMetadata (`server`): a `MapNamespace` has none; NamespaceFile and
+  ConfigurationVersion are not provided; StaticNodeIdTypes,
+  StaticNumericNodeIdRange and StaticStringNodeIdPattern promise no static
+  node. Reading the RolePermissions, UserRolePermissions or
+  AccessRestrictions Attribute of a node without its own does not answer
+  with the defaults of its namespace, which are read from the
+  NamespaceMetadata Object.
 
 ## Verification
 

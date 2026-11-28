@@ -73,17 +73,11 @@ func checkAccessRestrictions(sc *uasc.SecureChannel, n *Node) ua.StatusCode {
 }
 
 // accessRestrictionsFor is checkAccessRestrictions for a channel with the
-// security mode mode.
+// security mode mode. A node without AccessRestrictions of its own has the
+// DefaultAccessRestrictions of its namespace (Part 3 §5.2.11; see
+// [Server.SetNamespaceDefaults]).
 func accessRestrictionsFor(mode ua.MessageSecurityMode, n *Node) ua.StatusCode {
-	av, err := n.Attribute(ua.AttributeIDAccessRestrictions)
-	if err != nil || av == nil || av.Value == nil || av.Value.Value == nil {
-		return ua.StatusOK
-	}
-	restrictions, ok := av.Value.Value.Value().(uint16)
-	if !ok {
-		return ua.StatusOK
-	}
-	ar := ua.AccessRestrictionType(restrictions)
+	ar := effectiveAccessRestrictions(n)
 	if ar == ua.AccessRestrictionTypeNone {
 		return ua.StatusOK
 	}
@@ -107,15 +101,7 @@ func restrictionsMet(ar ua.AccessRestrictionType, mode ua.MessageSecurityMode) u
 // Per OPC UA Part 3 §5.2.11, access restrictions do not apply to Browse
 // operations unless this bit is present.
 func checkAccessRestrictionsForBrowse(sc *uasc.SecureChannel, n *Node) ua.StatusCode {
-	av, err := n.Attribute(ua.AttributeIDAccessRestrictions)
-	if err != nil || av == nil || av.Value == nil || av.Value.Value == nil {
-		return ua.StatusOK
-	}
-	restrictions, ok := av.Value.Value.Value().(uint16)
-	if !ok {
-		return ua.StatusOK
-	}
-	if ua.AccessRestrictionType(restrictions)&ua.AccessRestrictionTypeApplyRestrictionsToBrowse == 0 {
+	if effectiveAccessRestrictions(n)&ua.AccessRestrictionTypeApplyRestrictionsToBrowse == 0 {
 		return ua.StatusOK
 	}
 	return checkAccessRestrictions(sc, n)
@@ -151,7 +137,9 @@ func WithRoleMapper(rm RoleMapper) Option {
 //
 // For each operation, it looks up the target node, retrieves its rolePermissions,
 // and verifies that at least one of the session's roles has the required permission.
-// If the node has no rolePermissions defined, the operation is allowed.
+// A node without RolePermissions is checked against the DefaultRolePermissions
+// of its namespace (Part 3 §4.9.3, §5.2.9; see [Server.SetNamespaceDefaults]).
+// If neither is defined, the operation is allowed.
 type RBACAccessController struct {
 	srv *Server
 }
@@ -185,7 +173,8 @@ func (ac *RBACAccessController) checkPermission(sess *Session, nodeID *ua.NodeID
 	if n == nil {
 		return ua.StatusOK
 	}
-	if len(n.rolePermissions) == 0 {
+	perms, ok := ac.srv.effectiveRolePermissions(n)
+	if !ok {
 		return ua.StatusOK
 	}
 	var s *session
@@ -193,7 +182,7 @@ func (ac *RBACAccessController) checkPermission(sess *Session, nodeID *ua.NodeID
 		s = sess.s
 	}
 	roles := sessionRoles(s)
-	for _, rp := range n.rolePermissions {
+	for _, rp := range perms {
 		for _, role := range roles {
 			if rp.RoleID != nil && rp.RoleID.String() == role.String() {
 				if rp.Permissions&required != 0 {
@@ -267,9 +256,10 @@ func (ac *RBACAccessController) CheckDeleteReferences(_ context.Context, sess *S
 }
 
 // checkExplicitPermission is checkPermission for operations that need the
-// permission to be granted: a node without RolePermissions refuses them.
-// A node that does not exist is left to the service, which refuses the
-// operation with the status of an unknown node.
+// permission to be granted: a node without RolePermissions, and without
+// DefaultRolePermissions of its namespace, refuses them. A node that does
+// not exist is left to the service, which refuses the operation with the
+// status of an unknown node.
 func (ac *RBACAccessController) checkExplicitPermission(sess *Session, nodeID *ua.NodeID, required ua.PermissionType) ua.StatusCode {
 	if nodeID == nil {
 		return ua.StatusOK
@@ -278,10 +268,7 @@ func (ac *RBACAccessController) checkExplicitPermission(sess *Session, nodeID *u
 	if n == nil {
 		return ua.StatusOK
 	}
-	n.mu.RLock()
-	empty := len(n.rolePermissions) == 0
-	n.mu.RUnlock()
-	if empty {
+	if _, ok := ac.srv.effectiveRolePermissions(n); !ok {
 		return ua.StatusBadUserAccessDenied
 	}
 	return ac.checkPermission(sess, nodeID, required)

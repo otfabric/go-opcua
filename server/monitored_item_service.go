@@ -154,7 +154,11 @@ func reviseQueueSize(requested uint32) uint32 {
 // enqueue applies Part 4 MonitoringParameters queue semantics.
 // Caller must hold s.Mu.
 func (item *MonitoredItem) enqueue(n *ua.MonitoredItemNotification) {
+	item.markSemantics(n)
 	if item.queueSize <= 1 {
+		if len(item.queue) > 0 {
+			dropSemantics(item.queue[0], n)
+		}
 		item.queue = item.queue[:0]
 		item.queue = append(item.queue, n)
 		return
@@ -165,12 +169,15 @@ func (item *MonitoredItem) enqueue(n *ua.MonitoredItemNotification) {
 	}
 	// Queue full — apply discard policy and set Overflow InfoBit.
 	if item.discardOldest {
+		dropped := item.queue[0]
 		item.queue = append(item.queue[1:], n)
+		dropSemantics(dropped, item.queue[0])
 		if item.queue[0].Value != nil {
 			item.queue[0].Value.Status = item.queue[0].Value.Status.WithOverflow()
 			item.queue[0].Value.EncodingMask |= ua.DataValueStatusCode
 		}
 	} else {
+		dropSemantics(item.queue[len(item.queue)-1], n)
 		item.queue[len(item.queue)-1] = n
 		if n.Value != nil {
 			n.Value.Status = n.Value.Status.WithOverflow()
@@ -373,6 +380,10 @@ type MonitoredItem struct {
 	// Part 4 §5.12.1.6): when this item's notifications are reported, the
 	// queued notifications of those in Sampling mode are reported with them.
 	triggers map[uint32]struct{}
+	// semanticsPending: the next data change Notification carries the
+	// SemanticsChanged bit (model_change.go). Guarded by
+	// MonitoredItemService.Mu.
+	semanticsPending bool
 }
 
 // CreateMonitoredItems implements the OPC UA CreateMonitoredItems service.

@@ -607,8 +607,8 @@ answers them with `Bad_ServiceUnsupported`. Turn them on with
   (`CheckAddNodes`, `CheckDeleteNodes`, `CheckAddReferences`,
   `CheckDeleteReferences`) decides each operation; `RBACAccessController`
   does, from the AddNode, DeleteNode, AddReference and RemoveReference
-  permissions, which a node must grant explicitly (a node without
-  RolePermissions refuses node management);
+  permissions, which a node or the DefaultRolePermissions of its namespace
+  must grant explicitly (a node without either refuses node management);
 - any other controller, `DefaultAccessController` included, is asked
   `CheckWrite` for the node the operation changes (the parent of AddNodes,
   the node of DeleteNodes, the source node of the reference services), and
@@ -816,6 +816,66 @@ err := s.EmitBaseEvent(nodeID, &server.BaseEvent{
     Severity:   500,
 })
 ```
+
+### Model change and semantic change events
+
+The server reports changes of the structure of its address space in
+GeneralModelChangeEvents (Part 3 §9.32, Part 5 §6.4.32) and changes of
+the meaning of a Variable in SemanticChangeEvents (Part 3 §9.33, Part 5
+§6.4.33). A client receives them with an event monitored item on the
+Server Object (`i=2253`, EventNotifier SubscribeToEvents), the notifier of
+the default View (§9.32.3); SourceNode is the Server Object, SourceName
+`Server` and Severity 1.
+
+"Only those Nodes of the AddressSpace having a NodeVersion shall trigger a
+ModelChangeEvent", and "every time a ModelChangeEvent is issued for a
+Node, its NodeVersion shall be changed" (Part 3 §9.32.2). A node takes
+part when it has a NodeVersion Property: from its NodeSet, from
+`NodeNameSpace.AddNodeVersion`, or from AddNodes with
+`server.WithNodeVersionOnAddNodes(true)` (off by default). For such a node
+the server reports, and increments the NodeVersion, when
+
+- it is added (`NodeAdded`) or deleted (`NodeDeleted`), by AddNodes,
+  DeleteNodes, `NodeNameSpace.AddNode` or `DeleteNode`;
+- a Reference from or to it is added (`ReferenceAdded`) or deleted
+  (`ReferenceDeleted`), by AddReferences, DeleteReferences, AddNodes,
+  DeleteNodes or `Node.AddRef`, `AddReference`, `AddObject`,
+  `AddVariable` and `RemoveRef`; a bidirectional Reference reports both
+  ends (Part 5 §12.16);
+- the DataType of a Variable or VariableType changes (`DataTypeChanged`),
+  by Write or `Node.SetAttribute`. A change of the ValueRank or
+  ArrayDimensions changes the NodeVersion too (Part 3 §5.6.2); Part 5
+  §12.16 has no verb for it, and the server reports it with a
+  BaseModelChangeEvent without Changes.
+
+```go
+folder := server.NewFolderNode(ua.NewStringNodeID(ns.ID(), "Plant"), "Plant")
+ns.AddNode(folder)
+ns.AddNodeVersion(folder) // NodeVersion "0"
+// AddRef reports ReferenceAdded for folder and NodeVersion becomes "1".
+folder.AddRef(motor, id.Organizes, true)
+```
+
+Our choices, where Part 3 §9.32.4 and §9.32.7 leave one: a service request
+is one event with each node once and its verbs ORed, and so is a call of
+the Go API; an added or deleted node keeps its NodeVersion; a NodeVersion
+is a decimal counter (a value that is not a number becomes `1`); the
+AffectedType is the TypeDefinition of an Object or Variable, otherwise
+null (Part 5 §12.16); `ImportNodeSetXML` reports nothing.
+
+When the Value of a Property with the SemanticChange bit (`0x10`) of its
+AccessLevel changes, by Write or `Node.SetAttribute`, the server emits a
+SemanticChangeEvent whose Affected is the node owning the Property (the
+source of its HasProperty Reference) and sets the SemanticsChanged bit
+(`1<<14` of the StatusCode, Part 4 §7.38.1) on the next data change
+Notification of each monitored item of that node; a Notification dropped
+from a full queue passes the bit to the one that takes its place. The
+NodeVersion does not change (Part 3 §9.33.2). The program or the NodeSet
+sets the bit; the server sets it on no Property itself.
+
+`server.WithModelChangeEvents(false)` turns all of it off: no NodeVersion
+changes, no model or semantic change events and no SemanticsChanged bit,
+as in v1.42 and earlier.
 
 ### Alarms and Conditions
 
@@ -1501,6 +1561,58 @@ s, err := server.New(
 ```
 
 The `DefaultAccessController` allows all operations.
+
+### Namespace metadata and default permissions
+
+The Namespaces Object of the Server Object (`i=11715`) holds a
+NamespaceMetadata Object (Part 5 §6.3.13) for each namespace: the one an
+imported NodeSet brings, or one the server creates for a `NodeNameSpace`
+at `Start` (and at once for one added after `Start`), with the NodeId
+`s=NamespaceMetadata` in that namespace. It has the mandatory Properties
+NamespaceUri, NamespaceVersion and NamespacePublicationDate (from the
+`Model` of the NodeSet, null otherwise), IsNamespaceSubset (FALSE for a
+namespace of the program, TRUE for one an import added without its own
+Object), StaticNodeIdTypes, StaticNumericNodeIdRange and
+StaticStringNodeIdPattern (empty: the server promises no static node),
+and ModelVersion, DefaultRolePermissions, DefaultUserRolePermissions and
+DefaultAccessRestrictions where they have a value. A `MapNamespace` has no
+NamespaceMetadata Object ("Clients should not assume that all namespaces
+provided by a Server are present in this list", Part 5 §6.3.14).
+
+The defaults apply to the nodes of the namespace that have no
+RolePermissions or AccessRestrictions of their own (Part 3 §4.9.3,
+§5.2.9, §5.2.11): the `RBACAccessController` checks such a node against
+the DefaultRolePermissions, and every service checks it against the
+DefaultAccessRestrictions. They come from
+
+- the `RolePermissions` and `AccessRestrictions` of the `Model` of an
+  imported NodeSet, "the default RolePermissions for all Nodes in the
+  model" (Part 6 §F.2); a node with `HasNoPermissions="true"` is exempt
+  (§F.3); `server.WithModelDefaultPermissions(false)` ignores them, as
+  v1.42 and earlier did;
+- `Server.SetNamespaceDefaults`, which replaces those of a Model; a zero
+  `NamespaceDefaults` removes them.
+
+```go
+err := srv.SetNamespaceDefaults("urn:example:plant", server.NamespaceDefaults{
+    RolePermissions: []*ua.RolePermissionType{
+        {RoleID: ua.RoleOperator.NodeID(), Permissions: ua.PermissionTypeBrowse | ua.PermissionTypeRead},
+    },
+    AccessRestrictions:    ua.AccessRestrictionTypeSigningRequired,
+    HasAccessRestrictions: true,
+})
+```
+
+A namespace without defaults behaves as before: a node without
+RolePermissions is allowed. "The DefaultRolePermissions Property ...
+shall only be readable by administrators" (Part 3 §5.2.9): under the
+`RBACAccessController` only ConfigureAdmin and SecurityAdmin read it;
+DefaultUserRolePermissions is reduced to the roles of the session. The
+NamespaceMetadata Objects the server creates are not subject to the
+defaults of their namespace. Reading the RolePermissions,
+UserRolePermissions or AccessRestrictions Attribute of a node without its
+own answers as before; the defaults are read from the NamespaceMetadata
+Object.
 
 ---
 

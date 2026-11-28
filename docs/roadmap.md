@@ -91,8 +91,8 @@ alarms and UAFX.
 | Client decoding of structures it has no Go type for, from DataTypeDefinition, per session and namespace URI | one process-wide registry keyed by NodeId; unknown bodies stay raw |
 | Part 13 aggregates and AggregateFilter in monitored items | the server implements Average, Minimum, Maximum and Count; AggregateFilter is refused |
 | Part 5 Methods: GetMonitoredItems, ResendData, SetSubscriptionDurable, RequestServerStateChange | not implemented |
-| ModelChange and SemanticChange events | never emitted |
-| NamespaceMetadata, DefaultRolePermissions | not implemented; a node without RolePermissions is allowed |
+| ModelChange and SemanticChange events | done in v1.43.0 |
+| NamespaceMetadata, DefaultRolePermissions | done in v1.43.0 |
 | RoleSet Methods (AddRole, AddIdentity and the others) | roles only from the Go RoleMapper |
 | AuditWriteUpdate, AuditHistoryUpdate, AuditNodeManagement events | not emitted |
 | History annotations (UpdateStructureData) | not dispatched |
@@ -102,7 +102,13 @@ alarms and UAFX.
 Done in v1.43.0: the DataTypeDefinition Attribute of every Structure, Union,
 Enumeration and OptionSet DataType of namespace 0 and of the imported models,
 from the NodeSet Definition with the fields of the supertypes (Part 3 §5.8.3,
-Part 6 §F.12); see docs/server-guide.md.
+Part 6 §F.12); see docs/server-guide.md. GeneralModelChangeEvents for the
+nodes that have a NodeVersion, with the NodeVersion maintained, and
+SemanticChangeEvents with the SemanticsChanged bit (Part 3 §9.32, §9.33).
+NamespaceMetadata Objects for every namespace of a NodeNameSpace, from the
+NodeSet Models, and DefaultRolePermissions and DefaultAccessRestrictions
+applied to the nodes without their own (Part 3 §5.2.9, §5.2.11; Part 5
+§6.3.13; Part 6 §F.2).
 
 ## Phase 4: durable administration
 
