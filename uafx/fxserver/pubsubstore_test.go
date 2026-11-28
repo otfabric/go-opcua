@@ -182,3 +182,39 @@ func (failingStore) LoadPubSubConfiguration(context.Context, []string) (*ua.PubS
 func (failingStore) StorePubSubConfiguration(context.Context, *ua.PubSubConfigurationDataType, []string) error {
 	return nil
 }
+
+// TestPubSubStoreCoexistenceReader: a DataSetReader an endpoint owns in a
+// ReaderGroup of the server is the connections'; the group and its
+// PubSubConnection stay in the server's store.
+func TestPubSubStoreCoexistenceReader(t *testing.T) {
+	t.Parallel()
+	f, st := newFXStored(t, fxserver.ConnectionOptions{}, &fxstore.MemoryStore{})
+	require.NoError(t, f.srv.ChangePubSubConfiguration(func(rt *pubsub.PubSub) error {
+		_, err := rt.AddConnection(pubsub.AttachReaderGroups(pubsub.UDPConnection(subConn, f.udp, nil), pubsub.ReaderGroup(rgName)))
+		return err
+	}))
+	r := f.fullRequest("N")
+	r.CommunicationConfigurations[0].ConfigurationReferences = []*ua.PubSubConfigurationRefDataType{
+		ref(refAdd|refPDS, 0, 0, 0), ref(refAdd|refConn, 0, 0, 0), ref(refAdd|refWG, 0, 0, 0),
+		ref(refAdd|refWriter, 0, 0, 0), ref(refAdd|refReader, 1, 0, 0),
+	}
+	res := f.establish(t, r)
+	require.Equal(t, ua.StatusOK, res.Status, "%+v", res.ConnectionEndpointConfigurationResults[0])
+	conns, _ := storedNames(t, f, st)
+	require.Equal(t, []string{subConn}, conns)
+	var uris []string
+	for _, n := range f.srv.Namespaces() {
+		uris = append(uris, n.Name())
+	}
+	cfg, err := st.LoadPubSubConfiguration(context.Background(), uris)
+	require.NoError(t, err)
+	require.Len(t, cfg.Connections[0].ReaderGroups, 1)
+	require.Empty(t, cfg.Connections[0].ReaderGroups[0].DataSetReaders, "the reader is the endpoint's")
+	rt := f.srv.PubSub()
+	cid, ok := rt.Lookup(pubsub.KindConnection, pubsub.Root, subConn)
+	require.True(t, ok)
+	gid, ok := rt.Lookup(pubsub.KindReaderGroup, cid, rgName)
+	require.True(t, ok)
+	_, ok = rt.Lookup(pubsub.KindDataSetReader, gid, readerName)
+	require.True(t, ok)
+}
