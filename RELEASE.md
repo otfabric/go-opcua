@@ -7,16 +7,87 @@
 
 The first item of phase 3 of docs/roadmap.md: the server gives every Structure, Union, Enumeration and OptionSet DataType its DataTypeDefinition Attribute, from the Definition of the NodeSet it imports.
 
+With it, phase 2 of docs/roadmap.md, generated Method contracts, with its
+pilot: Part 20 files. A generator emits typed contracts of Methods from the NodeSet; a
+public FileType and FileDirectoryType on the server and in a new client
+package are built on them, and the four FileType implementations of the
+library (the TrustLists of push management and `ServeTrustList`, the
+PubSubConfiguration file, the UAFX ConnectionManagerConfiguration) and the
+clients of their files now share them.
+
 ### Added
 
 - server: the DataTypeDefinition Attribute (AttributeId 23) of the DataTypes of namespace 0 and of every model `ImportNodeSetXML` imports. "The Attribute shall be mandatory for DataTypes derived from Structure and Union", with a StructureDefinition, and "for DataTypes derived from Enumeration, OptionSet and subtypes of UInteger representing an OptionSet", with an EnumDefinition (OPC 10000-3 §5.8.3, Table 16). "The DataTypeDefinition Attribute can be populated from the DataTypeDefinition belonging to a UADataType" (OPC 10000-6 §F.12), which lists only the fields the DataType adds: the importer follows the HasSubtype Reference to the supertype, in the document or already in the address space (namespace 0, a model imported before or a DataType a program gave the Attribute), and puts its fields first, "this list shall begin with the fields of the baseDataType followed by the fields of this StructureDefinition" (Part 3 §8.48).
   - StructureDefinition: BaseDataType is the direct supertype; DefaultEncodingId the DataTypeEncoding with the BrowseName `0:Default Binary` (Part 3 §5.8.3), null for an abstract DataType ("If the DataType is abstract the DefaultEncodingId shall be null", §8.48) and for one without that encoding; StructureType from IsUnion, IsOptional and AllowSubTypes by OPC 10000-6 §F.12 Table F.13, over the inherited fields as well, as "the subtypes extend the EncodingMask defined for the parent" (Part 6 §5.2.7); a StructureField per field with its Name, Description, DataType (an alias resolved, BaseDataType when absent), ValueRank, ArrayDimensions (one 0, "unknown", per dimension when the NodeSet gives none; null for a scalar, Part 3 §8.51), MaxStringLength and IsOptional, which is the field's IsOptional in a StructureWithOptionalFields, its AllowSubTypes in a StructureWithSubtypedValues or UnionWithSubtypedValues and false otherwise (§8.51). Union (`i=12756`) and its subtypes are unions.
   - EnumDefinition: an EnumField per field with its Name, Value, DisplayName and Description (Part 3 §8.50, §8.52); for an OptionSet the Value is the number of the bit, as the NodeSet writes it. A subtype of an Enumeration without a Definition of its own has the fields of its supertype.
   - A Definition that cannot be mapped is logged at Warn and the DataType has no Attribute; the import goes on. These are a combination of flags Table F.13 does not have ("Any combination of flags that does not have a mapping is invalid and an error should be raised"), a field DataType that is no NodeId or alias, a ValueRank that is neither -1 nor ≥ 1 ("It shall be Scalar (-1) or a fixed rank Array (>=1)", §8.51), ArrayDimensions with another number of dimensions than the ValueRank or that are not UInt32s, a Definition with fields on a DataType that is no Structure, Enumeration or OptionSet (Part 6 §F.11) and a Structure whose supertype has no StructureDefinition.
+- `cmd/methods` (run by `make gen`, checked by `make check-gen`): emits the
+  contracts of the Methods of the ObjectTypes `cmd/methods/config.go`
+  selects, from the InputArguments and OutputArguments of the pinned
+  NodeSet, into `uamethod/methods_gen.go`.
+- Package `uamethod`: for FileType and FileDirectoryType (OPC 10000-20
+  §4.2, §4.3), a `Method` value per Method (NodeIds of the Method and its
+  ObjectType, clause, Mandatory, `InputArguments` / `OutputArguments`),
+  Input and Output structs with `Pack` and `Unpack` (the argument count,
+  built-in type and ValueRank checks of the Call service, as
+  `*ArgumentError` with `Bad_ArgumentsMissing`, `Bad_TooManyArguments` or
+  `Bad_TypeMismatch`), and `Call<Type><Method>` functions for a client
+  (`*CallError` for a Bad result).
+- `server`: `AddFile`, `ServeFile` and `NewFile` serve a FileType Object
+  (`FileObject`): per-session handles closed at the end of the session,
+  the Open rules of §4.2.2 (Table 4 modes, several readers, one writer,
+  `Bad_NotWritable` / `Bad_NotReadable`), Read, Write, GetPosition,
+  SetPosition, the Properties Size, Writable, UserWritable, OpenCount,
+  MaxByteStringLength, MimeType and LastModifiedTime; `FileConfig` with
+  Modes, MaxHandles, Authorize and OnChange; backends `MemoryFile`,
+  `OSFile`, `SnapshotFile` or your own `FileBackend`; `OpenBytes` and
+  `CloseAndTake` for subtypes with Methods of their own.
+- `server`: `AddFileDirectory` serves a file system of FileDirectoryType
+  Objects (§4.3) with CreateDirectory, CreateFile, Delete and MoveOrCopy,
+  on a `MemoryDirectory`, an `OSDirectory` (`os.OpenRoot`) or your own
+  `DirectoryBackend`, with an Authorize hook per operation and path.
+- Package `filetransfer`: the client of FileType (`NewObject`, `Open`,
+  `Read`, `Write`, `Position`, `SetPosition`, `Close`, `ReadAll`,
+  `WriteAll`, `Info`, `io.Reader` and `io.Writer` adapters, `Attach` for a
+  handle of OpenWithMasks or CreateFile, `ObjectFunc` for an own call path)
+  and of FileDirectoryType (`NewDirectory`, `Entries`, `CreateDirectory`,
+  `CreateFile`, `Delete`, `MoveOrCopy`).
+
+### Changed
+
+- The TrustList objects of push management and `ServeTrustList`, the
+  PubSubConfiguration file and `fxserver`'s ConnectionManagerConfiguration
+  use `server.FileObject` for their FileType Methods; `gds.ReadTrustList`,
+  `gds.WriteTrustList`, `remote.ReadConfiguration` and
+  `remote.UpdateConfiguration` use `filetransfer` (their errors stay
+  `*gds.Error` and `*remote.Error`).
 
 ### Behaviour changes
 
 - server: Read of the DataTypeDefinition Attribute of a Structure, Union, Enumeration or OptionSet DataType returns its StructureDefinition or EnumDefinition, where it returned `Bad_AttributeIdInvalid` for every DataType; 250 DataTypes of namespace 0 have it, and every DataType of the GDS, DI and UAFX models. Read of it on BaseDataType, Structure, Enumeration, Number and the other abstract, built-in and simple DataTypes still returns `Bad_AttributeIdInvalid`: the Attribute is optional for them (Part 3 §5.8.3) and the NodeSet has no fields for them. A value written to the Attribute, or set with `Node.SetAttribute`, replaces the imported one as before. A new server builds the definitions of namespace 0 at start (about 2 % more allocations in `BenchmarkNewServer`).
+- Read with a length of zero is `Bad_InvalidArgument` on every file
+  (OPC 10000-20 §4.2.4, Table 6: "Only positive values are allowed"); the
+  TrustList, PubSubConfiguration and ConnectionManagerConfiguration files
+  returned an empty ByteString.
+  A client that wants the old result treats `Bad_InvalidArgument` of a Read
+  of length 0 as an empty read.
+- ConnectionManagerConfiguration: an Open for writing beside another handle
+  is `Bad_NotWritable` and an Open for reading beside a writer
+  `Bad_NotReadable` (§4.2.2), not `Bad_InvalidState`; a negative Read
+  length is `Bad_InvalidArgument` (§4.2.4), not `Bad_InvalidState`; an Open
+  outside a session is `Bad_SessionIdInvalid`. A client that matched
+  `Bad_InvalidState` matches the new codes.
+- The handles of the TrustList, push and PubSubConfiguration files are
+  closed when their session ends, as those of the ConnectionManager file
+  were; before, a handle of a closed session was found and dropped at the
+  next Open or OpenCount. OpenCount is the same; there is no option to keep
+  the old timing.
+- The `gds` and `pubsub/remote` clients check the output arguments of the
+  FileType Methods against their declarations: an Open whose FileHandle is
+  not a UInt32, or a Read whose Data is not a ByteString, is an
+  `*uamethod.ArgumentError` (`Bad_TypeMismatch`); a Read result of another
+  type was taken as the end of the file. `gds.ReadTrustList` beyond 64 MiB
+  says `filetransfer: the file exceeds 67108864 bytes`.
 
 ### Tests
 
@@ -24,6 +95,24 @@ The first item of phase 3 of docs/roadmap.md: the server gives every Structure, 
 - `TestDataTypeDefinition_CompanionModels`: the GDS, DI and UAFX models imported at the namespace indexes of the server (the field DataTypes, supertypes and encodings in the server's namespaces), a union, a union with subtyped values, optional fields, and the Attribute on every DataType of the models.
 - `TestDataTypeDefinition_Import`, `TestDataTypeDefinition_Invalid`, `TestDataTypeDefinition_SupertypeOfAnotherImport`, `TestDataTypeDefinition_Cycle` and `TestDataTypeDefinition_Guards`: a NodeSet imported at its own and at another namespace index, inherited fields over two levels, arrays with and without ArrayDimensions, a matrix, a field without DataType, an enumeration and its subtype, an OptionSet of a UInt32, abstract types and a type without encoding, a supertype of another import and of the program, and every Definition that cannot be mapped.
 - `TestImportedAddressSpaceGolden`: `testdata/nodeset_golden.txt` is rewritten for the Attribute; the dumps of the address space differ from those of v1.42.0 by the added Attribute 23 of 250 nodes of namespace 0 and of 84 nodes of the GDS, DI and UAFX models, and in nothing else.
+- `uamethod`: round trips of every contract; wrong count, type, ValueRank
+  and null for each argument; the helpers of every ValueRank of Part 3
+  §5.6.2 and of structures; the call functions against a fake caller;
+  `FuzzUnpack`.
+- `server`: FileType conformance (`TestFileOpenModes`, `TestFileHandles`,
+  `TestFileReadWritePosition`, `TestFileSessionEnd`, `TestFileOpenRace`,
+  `TestFileBackendErrors`, `TestFileCloseAndTake`, `TestFileProperties`,
+  `TestFileMethodHandlers`, `TestOSFile`), `TestAddFile`, and
+  FileDirectoryType (`TestFileDirectory`, `TestFileDirectoryBackendErrors`,
+  `TestMemoryDirectory`, `TestOSDirectory`).
+- `filetransfer`: the client against a server (`TestFile`,
+  `TestFileOfType`, `TestDirectory`) and `TestObjectFunc`.
+- `cmd/methods`: the committed output, the next families
+  (`TestNextFamilies`), load errors and clauses. CI and the release
+  workflow run the tests of `cmd/` (policy CI-005); they excluded it.
+- No interop ledger rows: the FileType Methods are tested against go-opcua
+  only; the interop suite reads TrustLists of the peers through the
+  migrated `gds` client.
 
 ---
 ## v1.42.1

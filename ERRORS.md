@@ -198,6 +198,8 @@ Match these with `errors.As`.
 | `*monitor.ItemError` | The server rejected one monitored item of a batch (`NodeID`, `StatusCode`); the other items are still monitored. Unwraps to the StatusCode |
 | `*pubsub.ConfigError` | An invalid PubSub configuration (`Path` of the setting, `Msg`); unwraps to `ua.StatusBadConfigurationError` |
 | `*jsonmsg.UnsupportedMessageTypeError` | A well-formed JSON message of a type package `pubsub/jsonmsg` does not decode, or the called function does not handle (`MessageType`) |
+| `*uamethod.CallError` | A Bad result of a Method called with a contract of package `uamethod` or with package `filetransfer` (`Method` "ObjectType.Name", `Status`, `InputArgumentResults`); unwraps to the StatusCode. In `gds` and `pubsub/remote` the TrustList and PubSubConfiguration file calls stay `*gds.Error` and `*remote.Error` |
+| `*uamethod.ArgumentError` | Arguments that do not match the declaration of a Method (`Method`, `Output`, `Index` (-1 for the count), `Name`, `Detail`): `Unpack` of an Input on the server, of an Output on the client. `Status` is `ua.StatusBadArgumentsMissing`, `ua.StatusBadTooManyArguments` or `ua.StatusBadTypeMismatch`, which it unwraps to and `uamethod.StatusOf` returns |
 | `*uasc.RequestFault` | How the secure channel reports a service fault that asks for recovery (an invalid session or subscription): the fault (`Err`, which it unwraps to) and the `AuthToken` of the request it answers |
 
 Package documentation: [`errors/doc.go`](errors/doc.go).

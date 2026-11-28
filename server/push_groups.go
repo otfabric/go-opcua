@@ -284,7 +284,7 @@ func (m *pushManager) buildCustomGroups() {
 		prop(tn, "Size", id.UInt64, -1, func() *ua.DataValue { return DataValueFromValue(uint64(g.trust.Load().size)) }, true)
 		prop(tn, "Writable", id.Boolean, -1, static(true), false)
 		prop(tn, "UserWritable", id.Boolean, -1, static(true), false)
-		prop(tn, "OpenCount", id.UInt16, -1, func() *ua.DataValue { return DataValueFromValue(uint16(g.openCount.Load())) }, true)
+		prop(tn, "OpenCount", id.UInt16, -1, func() *ua.DataValue { return DataValueFromValue(uint16(g.file.OpenCount())) }, true)
 		prop(tn, "LastUpdateTime", id.UtcTime, -1, func() *ua.DataValue {
 			return DataValueFromValue(time.Unix(0, g.lastUpdate.Load()).UTC())
 		}, true)

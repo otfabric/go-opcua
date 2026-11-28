@@ -83,6 +83,26 @@ client, which replaces the four FileType implementations (TrustList, push,
 PubSub configuration file, ConnectionManager file). Then SKS, push, GDS,
 alarms and UAFX.
 
+Progress (v1.43.0): the generator `cmd/methods` (run by `make gen`) emits
+the contracts of the Methods of the ObjectTypes `cmd/methods/config.go`
+selects into package `uamethod`: typed Input and Output structs with Pack
+and Unpack (the count, built-in type and ValueRank checks of the Call
+service), the NodeIds of the Method and its ObjectType, the clause, and a
+call function. The pilot is done: `server.FileObject` (`AddFile`,
+`ServeFile`, `NewFile`, `AddFileDirectory`) and package `filetransfer` are
+built on the FileType and FileDirectoryType contracts, and the four FileType
+implementations and the `gds` and `pubsub/remote` clients of their files use
+them. Not generated yet: the events a Method generates, mandatory children
+and state machine transitions. The next families, TrustListType
+(OpenWithMasks, CloseAndUpdate, AddCertificate, RemoveCertificate),
+PubSubConfigurationType (ReserveIds, CloseAndUpdate) and
+PubSubKeyServiceType (GetSecurityKeys, GetSecurityGroup), resolve with the
+generator as it is (`TestNextFamilies`): adding them to the config and
+moving their handlers and clients is the work. The GDS DirectoryType and
+CertificateDirectoryType need DataTypes outside namespace 0
+(ApplicationRecordDataType of the GDS NodeSet) and a contracts package per
+namespace.
+
 ## Phase 3: core symmetry
 
 | Item | Today |

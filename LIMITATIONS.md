@@ -71,6 +71,15 @@ behaviour you may notice, and the deviations of peers are in
   persisted across a restart (Part 14 §9.1.2), outside the components UAFX
   persists.
 - mDNS has no probing or conflict resolution.
+- Part 20 files: the server adds no FileSystem Object of its own (the
+  application adds one with `AddFileDirectory`); a FileDirectory reads the
+  backend when it is added and follows only the changes of its Methods; the
+  generated Method contracts (`uamethod`) cover FileType and
+  FileDirectoryType, the other Method handlers and clients keep their
+  argument code. `filetransfer.Directory.Entries` recognizes the Objects
+  whose TypeDefinition is FileType or FileDirectoryType, not those of a
+  subtype. The FileType Methods are tested against go-opcua only, besides
+  the TrustList reads and writes of the interop suite.
 
 ## Verification
 

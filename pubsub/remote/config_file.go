@@ -7,8 +7,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/otfabric/go-opcua/filetransfer"
 	"github.com/otfabric/go-opcua/id"
 	"github.com/otfabric/go-opcua/ua"
+	"github.com/otfabric/go-opcua/uamethod"
 )
 
 // PubSubConfiguration is the PubSubConfiguration file object of the
@@ -18,53 +20,36 @@ var PubSubConfiguration = ua.NewNumericNodeID(0, id.PublishSubscribePubSubConfig
 // configChunk is the size of the Read and Write calls on the file.
 const configChunk = 64 << 10
 
-// The modes of FileType.Open used on the file.
-const (
-	openRead       byte = 0x01
-	openWriteErase byte = 0x06
-)
-
 func (r *Client) fileCall(ctx context.Context, name string, method uint32, outputs int, args ...*ua.Variant) ([]*ua.Variant, error) {
 	return r.call(ctx, PubSubConfiguration, name, method, outputs, args...)
 }
 
-func (r *Client) openFile(ctx context.Context, mode byte) (uint32, error) {
-	out, err := r.fileCall(ctx, "Open", id.PublishSubscribePubSubConfigurationOpen, 1, ua.MustVariant(mode))
-	if err != nil {
-		return 0, err
-	}
-	h, ok := out[0].Value().(uint32)
-	if !ok {
-		return 0, fmt.Errorf("remote: Open returned %T, want a UInt32", out[0].Value())
-	}
-	return h, nil
+// configFileMethods are the FileType Methods of PubSubConfiguration.
+var configFileMethods = map[string]uint32{
+	"Open":        id.PublishSubscribePubSubConfigurationOpen,
+	"Close":       id.PublishSubscribePubSubConfigurationClose,
+	"Read":        id.PublishSubscribePubSubConfigurationRead,
+	"Write":       id.PublishSubscribePubSubConfigurationWrite,
+	"GetPosition": id.PublishSubscribePubSubConfigurationGetPosition,
+	"SetPosition": id.PublishSubscribePubSubConfigurationSetPosition,
 }
 
-func (r *Client) closeFile(ctx context.Context, h uint32) error {
-	_, err := r.fileCall(ctx, "Close", id.PublishSubscribePubSubConfigurationClose, 0, ua.MustVariant(h))
-	return err
+// configFile returns PubSubConfiguration as a FileType Object (OPC 10000-20
+// §4.2) whose Methods are called like the other Methods of r, so a failing
+// call is an *Error.
+func (r *Client) configFile() *filetransfer.Object {
+	o := filetransfer.ObjectFunc(func(ctx context.Context, m *uamethod.Method, in []*ua.Variant) ([]*ua.Variant, error) {
+		return r.fileCall(ctx, m.Name, configFileMethods[m.Name], 0, in...)
+	})
+	o.Chunk = configChunk
+	return o
 }
 
 // ReadConfiguration reads the PubSubConfiguration file: the configuration of
 // the server.
 func (r *Client) ReadConfiguration(ctx context.Context) (*ua.PubSubConfiguration2DataType, error) {
-	h, err := r.openFile(ctx, openRead)
+	b, err := r.configFile().ReadAll(ctx, 0)
 	if err != nil {
-		return nil, err
-	}
-	var b []byte
-	for {
-		out, err := r.fileCall(ctx, "Read", id.PublishSubscribePubSubConfigurationRead, 1, ua.MustVariant(h), ua.MustVariant(int32(configChunk)))
-		if err != nil {
-			return nil, errors.Join(err, r.closeFile(ctx, h))
-		}
-		chunk, _ := out[0].Value().([]byte)
-		if len(chunk) == 0 {
-			break
-		}
-		b = append(b, chunk...)
-	}
-	if err := r.closeFile(ctx, h); err != nil {
 		return nil, err
 	}
 	var fd ua.UABinaryFileDataType
@@ -130,24 +115,20 @@ func (r *Client) UpdateConfiguration(ctx context.Context, cfg *ua.PubSubConfigur
 	if err != nil {
 		return nil, err
 	}
-	h, err := r.openFile(ctx, openWriteErase)
+	f, err := r.configFile().Open(ctx, ua.OpenFileModeWrite|ua.OpenFileModeEraseExisting)
 	if err != nil {
 		return nil, err
 	}
-	for len(b) > 0 {
-		n := min(len(b), configChunk)
-		if _, err := r.fileCall(ctx, "Write", id.PublishSubscribePubSubConfigurationWrite, 0, ua.MustVariant(h), ua.MustVariant(b[:n])); err != nil {
-			return nil, errors.Join(err, r.closeFile(ctx, h))
-		}
-		b = b[n:]
+	if err := f.Write(ctx, b); err != nil {
+		return nil, errors.Join(err, f.Close(ctx))
 	}
 	out, err := r.fileCall(ctx, "CloseAndUpdate", id.PublishSubscribePubSubConfigurationCloseAndUpdate, 3,
-		ua.MustVariant(h), ua.MustVariant(requireComplete), structsArg(refs))
+		ua.MustVariant(f.Handle()), ua.MustVariant(requireComplete), structsArg(refs))
 	if err != nil {
 		var e *Error
 		if errors.As(err, &e) && e.Status != ua.StatusBadInvalidArgument {
 			// The handle is still open after a call the server refused.
-			err = errors.Join(err, r.closeFile(ctx, h))
+			err = errors.Join(err, f.Close(ctx))
 		}
 		return nil, err
 	}

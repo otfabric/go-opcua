@@ -14,13 +14,6 @@ import (
 	"github.com/otfabric/go-opcua/ua"
 )
 
-// The modes of FileType.Open (Part 20 §4.2.2).
-const (
-	fileModeRead          = 0x01
-	fileModeWrite         = 0x02
-	fileModeEraseExisting = 0x04
-)
-
 const (
 	// maxConfigFileSize bounds what a client may write to the
 	// PubSubConfiguration file.
@@ -42,29 +35,19 @@ const (
 // and applies element operations of it with CloseAndUpdate.
 type configFile struct {
 	m *pubsubModel
+	// file are the handles of the file (OPC 10000-20 §4.2).
+	file *FileObject
 
 	mu       sync.Mutex
-	handles  map[uint32]*configHandle
-	next     uint32
 	reserved map[string]*idReservation // by SessionId
 
 	// beforeReconcile, set by tests only, runs in applyLocked between
 	// reading the configuration and applying the update.
 	beforeReconcile func()
 
-	openCount atomic.Int32
-	modified  atomic.Int64 // UnixNano
-	obj       *Node
-	nodes     []*ua.NodeID // Size, OpenCount, LastModifiedTime
-}
-
-// configHandle is an open handle of the file. Reads see the configuration at
-// Open; writes are kept until CloseAndUpdate.
-type configHandle struct {
-	session *ua.NodeID
-	mode    byte
-	buf     []byte
-	pos     int
+	modified atomic.Int64 // UnixNano
+	obj      *Node
+	nodes    []*ua.NodeID // Size, OpenCount, LastModifiedTime
 }
 
 // idReservation are the ids ReserveIds gave a session.
@@ -82,8 +65,22 @@ func (m *pubsubModel) buildConfigFile() {
 	if obj == nil {
 		return
 	}
-	f := &configFile{m: m, obj: obj, handles: map[uint32]*configHandle{}, reserved: map[string]*idReservation{}}
+	f := &configFile{m: m, obj: obj, reserved: map[string]*idReservation{}}
 	f.modified.Store(time.Now().UnixNano())
+	// Part 14 §9.1.3.7.1: Open takes Read, Write + EraseExisting and
+	// Read + Write only; what a client writes is applied by CloseAndUpdate.
+	f.file, _ = s.NewFile(FileConfig{ // the configuration is valid
+		Backend: &SnapshotFile{
+			Content:      func(context.Context) ([]byte, error) { return f.content() },
+			MaxSize:      maxConfigFileSize,
+			SizeExceeded: ua.StatusBadResourceUnavailable,
+		},
+		Writable:            true,
+		Modes:               []ua.OpenFileMode{fileModeRead, fileModeRead | fileModeWrite, fileModeWrite | fileModeEraseExisting},
+		MaxByteStringLength: maxConfigRead,
+		MaxHandles:          maxConfigHandles,
+		OnChange:            f.changed,
+	})
 	m.file = f
 	set := func(nid uint32, v ValueFunc, dynamic bool) {
 		if n := s.ownNode(nid); n != nil {
@@ -103,7 +100,7 @@ func (m *pubsubModel) buildConfigFile() {
 		return DataValueFromValue(uint64(len(b)))
 	}, true)
 	set(id.PublishSubscribePubSubConfigurationOpenCount, func() *ua.DataValue {
-		return DataValueFromValue(uint16(f.openCount.Load()))
+		return DataValueFromValue(uint16(f.file.OpenCount()))
 	}, true)
 	set(id.PublishSubscribePubSubConfigurationLastModifiedTime, func() *ua.DataValue {
 		return DataValueFromValue(time.Unix(0, f.modified.Load()).UTC())
@@ -117,12 +114,12 @@ func (m *pubsubModel) buildConfigFile() {
 		method uint32
 		h      func(context.Context, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode)
 	}{
-		{"Open", id.PublishSubscribePubSubConfigurationOpen, f.open},
-		{"Close", id.PublishSubscribePubSubConfigurationClose, f.close},
-		{"Read", id.PublishSubscribePubSubConfigurationRead, f.read},
-		{"Write", id.PublishSubscribePubSubConfigurationWrite, f.write},
-		{"GetPosition", id.PublishSubscribePubSubConfigurationGetPosition, f.getPosition},
-		{"SetPosition", id.PublishSubscribePubSubConfigurationSetPosition, f.setPosition},
+		{"Open", id.PublishSubscribePubSubConfigurationOpen, f.fileMethod("Open")},
+		{"Close", id.PublishSubscribePubSubConfigurationClose, f.fileMethod("Close")},
+		{"Read", id.PublishSubscribePubSubConfigurationRead, f.fileMethod("Read")},
+		{"Write", id.PublishSubscribePubSubConfigurationWrite, f.fileMethod("Write")},
+		{"GetPosition", id.PublishSubscribePubSubConfigurationGetPosition, f.fileMethod("GetPosition")},
+		{"SetPosition", id.PublishSubscribePubSubConfigurationSetPosition, f.fileMethod("SetPosition")},
 		{"ReserveIds", id.PublishSubscribePubSubConfigurationReserveIDs, f.reserveIDs},
 		{"CloseAndUpdate", id.PublishSubscribePubSubConfigurationCloseAndUpdate, f.closeAndUpdate},
 	} {
@@ -164,188 +161,22 @@ func sessionOf(ctx context.Context) *ua.NodeID {
 	return nil
 }
 
-// pruneLocked forgets the handles and the reservations of sessions that are
-// closed: they are valid for the session only (Part 20 §4.2.1, Part 14
-// §9.1.3.7.5).
+// fileMethod returns a Method of FileType of the file.
+func (f *configFile) fileMethod(name string) func(context.Context, *ua.NodeID, []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+	h := f.file.Method(name)
+	return func(ctx context.Context, obj *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+		return h(ctx, obj, nil, args)
+	}
+}
+
+// pruneLocked forgets the reservations of sessions that are closed: they
+// are valid for the session only (Part 14 §9.1.3.7.5).
 func (f *configFile) pruneLocked() {
-	alive := map[string]bool{}
-	live := func(sid *ua.NodeID) bool {
-		k := sid.String()
-		ok, seen := alive[k]
-		if !seen {
-			ok = f.m.s.sb.hasID(sid)
-			alive[k] = ok
-		}
-		return ok
-	}
-	for h, x := range f.handles {
-		if !live(x.session) {
-			delete(f.handles, h)
-			f.openCount.Add(-1)
-		}
-	}
 	for k, r := range f.reserved {
-		if !live(r.session) {
+		if !f.m.s.sb.hasID(r.session) {
 			delete(f.reserved, k)
 		}
 	}
-}
-
-func (f *configFile) open(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	mode, ok := argValue[byte](args, 0)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	sess := sessionOf(ctx)
-	if sess == nil {
-		return nil, ua.StatusBadSessionIDInvalid
-	}
-	// Part 14 §9.1.3.7.1: Read, Write + EraseExisting and Read + Write only.
-	switch mode {
-	case fileModeRead, fileModeRead | fileModeWrite, fileModeWrite | fileModeEraseExisting:
-	default:
-		return nil, ua.StatusBadInvalidArgument
-	}
-	var buf []byte
-	if mode&fileModeRead != 0 {
-		b, err := f.content()
-		if err != nil {
-			return nil, ua.StatusBadInternalError
-		}
-		buf = b
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.pruneLocked()
-	// Reading may be shared, writing is exclusive.
-	for _, h := range f.handles {
-		if mode&fileModeWrite != 0 {
-			return nil, ua.StatusBadNotWritable
-		}
-		if h.mode&fileModeWrite != 0 {
-			return nil, ua.StatusBadNotReadable
-		}
-	}
-	if len(f.handles) >= maxConfigHandles {
-		return nil, ua.StatusBadTooManyOperations
-	}
-	for {
-		f.next++
-		if _, used := f.handles[f.next]; f.next != 0 && !used {
-			break
-		}
-	}
-	f.handles[f.next] = &configHandle{session: sess, mode: mode, buf: buf}
-	f.openCount.Add(1)
-	go f.changed()
-	return []*ua.Variant{ua.MustVariant(f.next)}, ua.StatusOK
-}
-
-// handleLocked returns the handle of argument 0, which must be one of the
-// calling session.
-func (f *configFile) handleLocked(ctx context.Context, args []*ua.Variant) (uint32, *configHandle, ua.StatusCode) {
-	h, ok := argValue[uint32](args, 0)
-	if !ok {
-		return 0, nil, ua.StatusBadTypeMismatch
-	}
-	x := f.handles[h]
-	if x == nil || !x.session.Equal(sessionOf(ctx)) {
-		return 0, nil, ua.StatusBadInvalidArgument
-	}
-	return h, x, ua.StatusOK
-}
-
-func (f *configFile) closeLocked(h uint32) {
-	delete(f.handles, h)
-	f.openCount.Add(-1)
-	go f.changed()
-}
-
-func (f *configFile) close(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	h, _, sc := f.handleLocked(ctx, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	f.closeLocked(h)
-	return nil, ua.StatusOK
-}
-
-func (f *configFile) read(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_, x, sc := f.handleLocked(ctx, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	n, ok := argValue[int32](args, 1)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	if n < 0 {
-		return nil, ua.StatusBadInvalidArgument
-	}
-	if x.mode&fileModeRead == 0 {
-		return nil, ua.StatusBadInvalidState
-	}
-	end := min(x.pos+min(int(n), maxConfigRead), len(x.buf))
-	b := append([]byte{}, x.buf[x.pos:end]...)
-	x.pos = end
-	return []*ua.Variant{ua.MustVariant(b)}, ua.StatusOK
-}
-
-func (f *configFile) write(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_, x, sc := f.handleLocked(ctx, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	var b []byte
-	if len(args) > 1 && args[1] != nil && args[1].Value() != nil {
-		var ok bool
-		if b, ok = args[1].Value().([]byte); !ok {
-			return nil, ua.StatusBadTypeMismatch
-		}
-	}
-	if x.mode&fileModeWrite == 0 {
-		return nil, ua.StatusBadInvalidState
-	}
-	if x.pos+len(b) > maxConfigFileSize {
-		return nil, ua.StatusBadResourceUnavailable
-	}
-	if end := x.pos + len(b); end > len(x.buf) {
-		x.buf = append(x.buf, make([]byte, end-len(x.buf))...)
-	}
-	x.pos += copy(x.buf[x.pos:], b)
-	return nil, ua.StatusOK
-}
-
-func (f *configFile) getPosition(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_, x, sc := f.handleLocked(ctx, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	return []*ua.Variant{ua.MustVariant(uint64(x.pos))}, ua.StatusOK
-}
-
-func (f *configFile) setPosition(ctx context.Context, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	_, x, sc := f.handleLocked(ctx, args)
-	if sc != ua.StatusOK {
-		return nil, sc
-	}
-	pos, ok := argValue[uint64](args, 1)
-	if !ok {
-		return nil, ua.StatusBadTypeMismatch
-	}
-	// A position past the end sets it to the end (Part 20 §4.2.8).
-	x.pos = int(min(pos, uint64(len(x.buf))))
-	return nil, ua.StatusOK
 }
 
 // defaultPublisherID is the PublisherId ReserveIds returns and an added
@@ -494,33 +325,36 @@ func (f *configFile) closeAndUpdate(ctx context.Context, _ *ua.NodeID, args []*u
 	f.m.s.ps.txn.Lock()
 	defer f.m.s.ps.txn.Unlock()
 
-	f.mu.Lock()
-	h, x, sc := f.handleLocked(ctx, args)
-	if sc != ua.StatusOK {
-		f.mu.Unlock()
-		return nil, sc
-	}
-	if x.mode&fileModeWrite == 0 {
-		f.mu.Unlock()
-		return nil, ua.StatusBadInvalidState
-	}
-	require, ok := argValue[bool](args, 1)
-	refs, ok2 := argStructs[ua.PubSubConfigurationRefDataType](args, 2)
-	if !ok || !ok2 {
-		f.mu.Unlock()
+	h, ok := argValue[uint32](args, 0)
+	if !ok {
 		return nil, ua.StatusBadTypeMismatch
 	}
-	file, sc := decodeConfigFile(x.buf)
+	var (
+		file    *ua.PubSubConfiguration2DataType
+		require bool
+		refs    []*ua.PubSubConfigurationRefDataType
+	)
+	// The handle stays open when the arguments or what was written are
+	// refused: the client may close it, or write again.
+	_, sc := f.file.CloseAndTake(ctx, h, func(b []byte) ua.StatusCode {
+		var ok, ok2 bool
+		require, ok = argValue[bool](args, 1)
+		refs, ok2 = argStructs[ua.PubSubConfigurationRefDataType](args, 2)
+		if !ok || !ok2 {
+			return ua.StatusBadTypeMismatch
+		}
+		var sc ua.StatusCode
+		if file, sc = decodeConfigFile(b); sc != ua.StatusOK {
+			return sc
+		}
+		if len(refs) == 0 {
+			return ua.StatusBadNothingToDo
+		}
+		return ua.StatusOK
+	})
 	if sc != ua.StatusOK {
-		f.mu.Unlock()
 		return nil, sc
 	}
-	if len(refs) == 0 {
-		f.mu.Unlock()
-		return nil, ua.StatusBadNothingToDo
-	}
-	f.closeLocked(h)
-	f.mu.Unlock()
 	u, sc := f.applyLocked(ctx, file, require, refs)
 	if sc != ua.StatusOK {
 		return nil, sc

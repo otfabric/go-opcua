@@ -1596,7 +1596,10 @@ ConnectionManagerConfiguration (F.3, a FileType of OPC 10000-20) reads and
 writes the sets as the file of F.2. Open takes Read (0x01), which reads
 the sets of the Manager, or Write with EraseExisting (0x06), which needs
 the authorizer (F.3.2); other modes are `Bad_InvalidArgument`. There is
-one writer, and no reader beside it. Handles belong to their session
+one writer, and no reader beside it: an Open for writing beside another
+handle is `Bad_NotWritable`, an Open for reading beside the writer
+`Bad_NotReadable` (OPC 10000-20 §4.2.2; `Bad_InvalidState` before
+v1.43.0). Handles belong to their session
 (OPC 10000-20 §4.2.1): they go when it ends, so a writer that went away
 does not block the next. CloseAndUpdate (F.3.3, Tables F.39 to
 F.41) closes the written file and applies its sets, one operation per Body

@@ -19,6 +19,7 @@
 | | HistoryRead | Via pluggable `HistoryProvider` (`SetHistorian`); default `*Historian` supports raw, modified, at-time, processed aggregates and events (`ReadEventDetails`) |
 | | HistoryUpdate | Via optional historian interfaces (`HistoryDataUpdater`, `EventHistoryUpdater`, deleters); default `*Historian` supports UpdateData, raw/at-time deletes, UpdateEventDetails and DeleteEventDetails |
 | **Method** | Call | Fully implemented |
+| **Files** (Part 20) | `AddFile`, `ServeFile`, `NewFile` (FileType), `AddFileDirectory` (FileDirectoryType) | Implemented; see [Files](#files-part-20) |
 | **Monitored Items** | CreateMonitoredItems, ModifyMonitoredItems, SetMonitoringMode, SetTriggering, DeleteMonitoredItems | Fully implemented (exact `QueueSize` / `DiscardOldest` / Overflow, `DataChangeFilter`, sampling interval, `IndexRange`) |
 | **Subscription** | CreateSubscription, ModifySubscription, SetPublishingMode, Publish, Republish, TransferSubscriptions, DeleteSubscriptions | Fully implemented (revise clamps, `MoreNotifications`, Publish ACK, lifetime expiry) |
 | **Query** | QueryFirst, QueryNext | Opt-in with `WithQuery(true)` (`BadServiceUnsupported` otherwise); results honour the access controller and AccessRestrictions |
@@ -668,6 +669,95 @@ err := method.SetMethodArguments(
     []*ua.Argument{{Name: "result", DataType: ua.NewNumericNodeID(0, id.Double), ValueRank: -1}},
 )
 ```
+
+### Typed Method contracts
+
+Package `uamethod` has the contracts of Methods of namespace 0, generated
+from the InputArguments and OutputArguments of the NodeSet (`make gen`,
+`cmd/methods`): for each Method an Input and an Output struct with `Pack`
+and `Unpack`. `Unpack` makes the checks of the Call service (the number
+of arguments, their built-in type and ValueRank) and returns an
+`*uamethod.ArgumentError`, whose status `uamethod.StatusOf` gives:
+
+```go
+func read(ctx context.Context, _, _ *ua.NodeID, args []*ua.Variant) ([]*ua.Variant, ua.StatusCode) {
+    var in uamethod.FileTypeReadInput
+    if err := in.Unpack(args); err != nil {
+        return nil, uamethod.StatusOf(err) // Bad_ArgumentsMissing, Bad_TooManyArguments, Bad_TypeMismatch
+    }
+    return (&uamethod.FileTypeReadOutput{Data: data(in.FileHandle, in.Length)}).Pack(), ua.StatusOK
+}
+```
+
+The contracts are those of FileType and FileDirectoryType today; the
+families are chosen in `cmd/methods/config.go`.
+
+---
+
+## Files (Part 20)
+
+`AddFile` adds a FileType Object (OPC 10000-20 §4.2.1) with its Properties
+(Size, Writable, UserWritable, OpenCount, MaxByteStringLength, MimeType when
+set, LastModifiedTime when the backend knows it) and its Methods Open,
+Close, Read, Write, GetPosition and SetPosition, whose arguments are those
+of the declarations:
+
+```go
+f, err := s.AddFile(objectsFolder, ua.NewStringNodeID(ns.ID(), "log"),
+    &ua.QualifiedName{NamespaceIndex: ns.ID(), Name: "Log"},
+    server.FileConfig{
+        Backend:  server.NewOSFile("/var/log/app.log"), // or server.NewMemoryFile(data)
+        Writable: true,
+        MimeType: "text/plain",
+    })
+```
+
+The rules of Open are those of §4.2.2: the mode is a combination of the
+bits of Table 4 (Read, Write, EraseExisting only with Write, Append; the
+reserved bits zero), else `Bad_InvalidArgument`; a file opens several
+times for reading, an Open for writing beside any other handle is
+`Bad_NotWritable` and an Open for reading beside a writer
+`Bad_NotReadable`; Open with the Write bit of a file that is not
+`Writable` is `Bad_NotWritable`. A handle belongs to the session that
+opened it (another session's handle is `Bad_InvalidArgument`, as an
+unknown one) and is closed when the session ends. Read takes a positive
+length (zero or less is `Bad_InvalidArgument`) and returns at most
+`MaxByteStringLength` bytes, an empty ByteString at the end of the file;
+SetPosition past the end is the end; Read on a handle not opened for
+reading, and Write on one not opened for writing, are `Bad_InvalidState`.
+`FileConfig.Modes` narrows the modes, `MaxHandles` bounds the handles
+(`Bad_TooManyOperations`) and `Authorize` decides per caller and mode.
+
+The backends: `MemoryFile` (a writer works on a copy that becomes the
+content when its handle closes, by Close or at the end of its session),
+`OSFile` (an `*os.File` per handle, writes go to the file) and
+`SnapshotFile`, whose writes stay with the handle for a CloseAndUpdate
+Method of a subtype (`FileObject.CloseAndTake`); a backend of your own
+implements `FileBackend`. `ServeFile` serves a FileType Object of an
+imported NodeSet, and `NewFile` returns a `FileObject` whose `Method` and
+`Property` the application attaches to nodes of its own.
+
+`AddFileDirectory` adds a file system (§4.3): a FileDirectoryType Object
+(the root has the BrowseName FileSystem, §4.3.2) that Organizes the
+directories and files of a `DirectoryBackend`, with CreateDirectory,
+CreateFile, Delete and MoveOrCopy (§4.3.3 to §4.3.6) on each directory:
+
+```go
+root, err := server.NewOSDirectory("/srv/files") // os.OpenRoot: no path leaves it
+fs, err := s.AddFileDirectory(objectsFolder, ua.NewStringNodeID(ns.ID(), "fs"),
+    &ua.QualifiedName{Name: "FileSystem"},
+    server.FileDirectoryConfig{Backend: root, File: server.FileConfig{Writable: true}})
+```
+
+A name that exists is `Bad_BrowseNameDuplicated`; a file or directory the
+directory does not Organize `Bad_NotFound`; a file with an open handle, or
+a directory with one below it, cannot be deleted, moved or copied
+(`Bad_InvalidState`). A name that is empty, `.`, `..` or has `/`, `\` or
+NUL, a target that is not a directory of the file system and a directory
+moved into itself are `Bad_InvalidArgument` (library interpretation:
+Part 20 names no code for them). The children have string NodeIds
+`<root>/<path>`, so a moved object gets a new NodeId, which MoveOrCopy
+returns (§4.3.6 allows it).
 
 ---
 

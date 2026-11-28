@@ -51,6 +51,12 @@ const CertificateAlarmsNamespaceURI = "urn:otfabric:go-opcua:certificates"
 CertificateAlarmsNamespaceURI is the namespace of the nodes of the certificate alarms.
 
 ```go
+const DefaultFileMaxByteStringLength = 1 << 20
+```
+
+DefaultFileMaxByteStringLength is the most one Read of a FileObject returns when FileConfig.MaxByteStringLength is zero.
+
+```go
 const (
 	// DefaultRegisterInterval is how often a server renews its registration
 	// with a discovery server (Part 4 §5.4.5 recommends 10 minutes at most).
@@ -1178,6 +1184,43 @@ type DialogConfig struct {
 
 DialogConfig describes a dialog (DialogConditionType, Part 9 §5.6).
 
+### type DirEntry
+
+```go
+type DirEntry struct {
+	Name string
+	Dir  bool
+}
+```
+
+DirEntry is an entry of a directory.
+
+### type DirectoryBackend
+
+```go
+type DirectoryBackend interface {
+	// ReadDir lists the files and directories of a directory.
+	ReadDir(path string) ([]DirEntry, error)
+	// Mkdir creates a directory (CreateDirectory, §4.3.3).
+	Mkdir(path string) error
+	// CreateFile creates an empty file (CreateFile, §4.3.4).
+	CreateFile(path string) error
+	// File returns the content of a file.
+	File(path string) FileBackend
+	// Remove deletes a file, or a directory with all below it (Delete,
+	// §4.3.5: "all file and directory Objects below the directory to
+	// delete are deleted recursively").
+	Remove(path string) error
+	// Rename moves a file or directory (MoveOrCopy, §4.3.6).
+	Rename(from, to string) error
+	// Copy copies a file, or a directory with all below it (MoveOrCopy
+	// with createCopy).
+	Copy(from, to string) error
+}
+```
+
+DirectoryBackend is the storage of a [FileDirectory](#type-filedirectory) (OPC 10000-20 §4.3). A path is the slash-separated names below the root of the FileSystem, "" for the root; the FileDirectory checks every name before it calls the backend. An error that wraps fs.ErrExist is Bad\_BrowseNameDuplicated, one that wraps fs.ErrNotExist Bad\_NotFound, a ua.StatusCode is that status, another error Bad\_UnexpectedError.
+
 ### type DiscoveryService
 
 ```go
@@ -1332,6 +1375,280 @@ type EventMonitoredItem struct {
 ```
 
 EventMonitoredItem extends MonitoredItem with event-specific state: the validated SelectClauses, the OfType filter (if any), and the full WhereClause stored for runtime evaluation during emission.
+
+### type FileBackend
+
+```go
+type FileBackend interface {
+	// Open opens the content for a new handle with the mode of the Open
+	// Method, after the FileObject checked the mode and that the handle
+	// may be opened (OPC 10000-20 §4.2.2): with EraseExisting the content
+	// of the handle is empty. The FileObject reads and writes the content
+	// at the position of the handle and closes it with Close, at the end
+	// of the session of the handle or with [FileObject.CloseAll].
+	Open(ctx context.Context, mode ua.OpenFileMode) (FileContent, error)
+
+	// Size is the value of the Size Property: "The size of the file in
+	// Bytes" (OPC 10000-20 §4.2.1). A ua.StatusCode error is the status of
+	// the value, so Bad_NotSupported for a size the backend cannot tell.
+	Size() (uint64, error)
+}
+```
+
+FileBackend is the content of a file that a [FileObject](#type-fileobject) serves.
+
+The methods are called from the goroutines of the requests; a backend is used by one FileObject. Errors may be ua.StatusCode values, which the Method returns; another error is Bad\_UnexpectedError (OPC 10000-20 §4.2.2, Table 4, §4.2.4, Table 6).
+
+### type FileConfig
+
+```go
+type FileConfig struct {
+	// Backend is the content of the file; it is required.
+	Backend FileBackend
+
+	// Writable is the value of the Writable and UserWritable Properties
+	// (OPC 10000-20 §4.2.1). Open with the Write bit of a file that is not
+	// writable returns Bad_NotWritable.
+	Writable bool
+
+	// Modes are the modes Open accepts; nil accepts every mode OPC
+	// 10000-20 §4.2.2 allows (Table 4: the reserved bits 4 to 7 zero,
+	// EraseExisting only with Write). Another mode is Bad_InvalidArgument
+	// ("Mode setting is invalid"). A subtype narrows them: a TrustList
+	// takes Read and Write with EraseExisting only (Part 12 §7.8.2.1).
+	Modes []ua.OpenFileMode
+
+	// MaxByteStringLength is the most bytes one Read returns and the value
+	// of the MaxByteStringLength Property (OPC 10000-20 §4.2.1). Zero is
+	// DefaultFileMaxByteStringLength.
+	MaxByteStringLength uint32
+
+	// MimeType is the value of the MimeType Property (OPC 10000-20 §4.2.1,
+	// "based on RFC 2046"); "" leaves the Property out.
+	MimeType string
+
+	// MaxHandles bounds the handles open at once; Open returns
+	// Bad_TooManyOperations beyond it. Zero is 32.
+	MaxHandles int
+
+	// Authorize, if set, decides whether the caller may open the file with
+	// the mode, after the checks of the mode: ua.StatusOK allows it,
+	// another status is the result of Open.
+	Authorize func(ctx context.Context, caller *MethodCaller, mode ua.OpenFileMode) ua.StatusCode
+
+	// OnChange, if set, is called in a goroutine of its own after Open or
+	// Close changed the OpenCount, and after a handle that was opened for
+	// writing is closed (Size and LastModifiedTime may change).
+	OnChange func()
+}
+```
+
+FileConfig configures a [FileObject](#type-fileobject).
+
+### type FileContent
+
+```go
+type FileContent interface {
+	io.ReaderAt
+	io.WriterAt
+	// Size returns the size of the content in bytes: Append opens at it
+	// and SetPosition does not go past it (OPC 10000-20 §4.2.2, §4.2.7).
+	Size() (int64, error)
+	// Close closes the content: the client closed the handle (Close), or
+	// its session ended, which OPC 10000-20 §4.2.5 leaves to the server:
+	// "It is server-dependent whether the written data are persistently
+	// stored if the session is ended without calling the Close Method".
+	Close() error
+}
+```
+
+FileContent is the content of an open handle of a FileObject.
+
+### type FileDirectory
+
+```go
+type FileDirectory struct {
+
+	// the identifier of the root
+
+}
+```
+
+FileDirectory is a file system of OPC 10000-20 §4.3: a FileDirectoryType Object whose subdirectories (FileDirectoryType Objects) and files (FileType Objects, each a [FileObject](#type-fileobject)) it Organizes, with the Methods CreateDirectory, CreateFile, Delete and MoveOrCopy on each directory. [Server.AddFileDirectory](#func-server-addfiledirectory) adds one.
+
+The children of a directory have string NodeIds in the namespace of the root: "\<root>/\<path>" where \<root> is the identifier of the root (see [Node.SetMethodArguments](#func-node-setmethodarguments)) and \<path> the slash-separated names; a moved object gets the NodeId of its new path, which MoveOrCopy returns ("Even if the Object is moved, the Server may return a new NodeId", §4.3.6).
+
+#### func (FileDirectory) Lookup
+
+```go
+func (d *FileDirectory) Lookup(p string) (*ua.NodeID, *FileObject, bool)
+```
+
+Lookup returns the NodeId of the directory or file of a path ("" is the root) and, for a file, its FileObject.
+
+#### func (FileDirectory) NodeID
+
+```go
+func (d *FileDirectory) NodeID() *ua.NodeID
+```
+
+NodeID returns the NodeId of the root.
+
+### type FileDirectoryConfig
+
+```go
+type FileDirectoryConfig struct {
+	// Backend is the storage of the directories and files; it is
+	// required.
+	Backend DirectoryBackend
+
+	// File configures the FileObjects of the files; its Backend is
+	// ignored (each file has the backend DirectoryBackend.File returns).
+	File FileConfig
+
+	// Authorize, if set, decides whether the caller may call a Method of a
+	// directory: op is the BrowseName of the Method (CreateDirectory,
+	// CreateFile, Delete, MoveOrCopy) and path the path of the directory or
+	// file it creates or changes. ua.StatusOK allows the call; OPC 10000-20
+	// §4.3.3 to §4.3.6 give Bad_UserAccessDenied for a refused one. nil
+	// allows every call.
+	Authorize func(ctx context.Context, caller *MethodCaller, op, path string) ua.StatusCode
+}
+```
+
+FileDirectoryConfig configures a [FileDirectory](#type-filedirectory).
+
+### type FileModTimer
+
+```go
+type FileModTimer interface {
+	ModTime() (time.Time, error)
+}
+```
+
+FileModTimer is a FileBackend that knows when its content was last modified: the LastModifiedTime Property of the FileObject (OPC 10000-20 §4.2.1).
+
+### type FileObject
+
+```go
+type FileObject struct {
+
+	// the handles that are not being opened
+
+	// the Properties that change, notified by notify
+
+}
+```
+
+FileObject is a file of the FileType of OPC 10000-20 §4.2.1: the handles that sessions opened, with their position, and the Methods Open, Close, Read, Write, GetPosition and SetPosition on them.
+
+[Server.AddFile](#func-server-addfile) adds a FileType Object to the address space and [Server.ServeFile](#func-server-servefile) serves one that exists (an imported NodeSet); with [Server.NewFile](#func-server-newfile) the caller attaches the handlers of [FileObject.Method](#func-fileobject-method) and the values of [FileObject.Property](#func-fileobject-property) to nodes of its own, and a subtype adds Methods that use the handles ([FileObject.OpenBytes](#func-fileobject-openbytes), [FileObject.CloseAndTake](#func-fileobject-closeandtake)).
+
+A handle belongs to the session that opened it: "The fileHandle is generated by the server and is unique for the Session. Clients cannot transfer the fileHandle to another Session" (OPC 10000-20 §4.2.2). A handle of another session is Bad\_InvalidArgument, as an unknown one, and the handles of a session are closed when the session ends.
+
+#### func (FileObject) Changed
+
+```go
+func (f *FileObject) Changed()
+```
+
+Changed tells the FileObject that the content of its backend changed outside the Methods: the Size and LastModifiedTime Properties are notified.
+
+#### func (FileObject) Close
+
+```go
+func (f *FileObject) Close(ctx context.Context, h uint32) ua.StatusCode
+```
+
+Close is the Close Method (OPC 10000-20 §4.2.3): "When a client closes a file the handle becomes invalid.".
+
+#### func (FileObject) CloseAll
+
+```go
+func (f *FileObject) CloseAll()
+```
+
+CloseAll closes every handle, as the end of their sessions does.
+
+#### func (FileObject) CloseAndTake
+
+```go
+func (f *FileObject) CloseAndTake(ctx context.Context, h uint32, check func(data []byte) ua.StatusCode) ([]byte, ua.StatusCode)
+```
+
+CloseAndTake closes the handle h of the caller of ctx, which must have been opened for writing, and returns what was written: the CloseAndUpdate Method of a subtype of FileType (TrustListType, Part 12 §7.8.2.3; PubSubConfigurationType, Part 14 §9.1.3.7.6) applies it. A handle that was not opened for writing is Bad\_InvalidState. check, if not nil, is called with the content first: a status other than Good is returned and the handle stays open.
+
+#### func (FileObject) GetPosition
+
+```go
+func (f *FileObject) GetPosition(ctx context.Context, h uint32) (uint64, ua.StatusCode)
+```
+
+GetPosition is the GetPosition Method (OPC 10000-20 §4.2.6).
+
+#### func (FileObject) Method
+
+```go
+func (f *FileObject) Method(name string) MethodHandler
+```
+
+Method returns the handler of a Method of FileType by its BrowseName: Open, Close, Read, Write, GetPosition or SetPosition (OPC 10000-20 §4.2.2 to §4.2.7); nil for another name. The arguments are checked against the declarations of namespace 0 (package uamethod).
+
+#### func (FileObject) Open
+
+```go
+func (f *FileObject) Open(ctx context.Context, mode ua.OpenFileMode) (uint32, ua.StatusCode)
+```
+
+Open is the Open Method (OPC 10000-20 §4.2.2) for the caller of ctx.
+
+#### func (FileObject) OpenBytes
+
+```go
+func (f *FileObject) OpenBytes(ctx context.Context, data []byte) (uint32, ua.StatusCode)
+```
+
+OpenBytes opens a handle for reading on data, for an Open Method of a subtype of FileType whose content is not that of the backend (OpenWithMasks of TrustListType, Part 12 §7.8.2.2). The handle is as one of Open with the Read bit.
+
+#### func (FileObject) OpenCount
+
+```go
+func (f *FileObject) OpenCount() int
+```
+
+OpenCount is the number of open handles, the value of the OpenCount Property: "the number of currently valid file handles on the file" (OPC 10000-20 §4.2.1).
+
+#### func (FileObject) Property
+
+```go
+func (f *FileObject) Property(name string) ValueFunc
+```
+
+Property returns the value of a Property of FileType by its BrowseName: Size, Writable, UserWritable, OpenCount, MaxByteStringLength, MimeType (when FileConfig.MimeType is set) or LastModifiedTime (when the backend is a FileModTimer) (OPC 10000-20 §4.2.1); nil for another name.
+
+#### func (FileObject) Read
+
+```go
+func (f *FileObject) Read(ctx context.Context, h uint32, length int32) ([]byte, ua.StatusCode)
+```
+
+Read is the Read Method (OPC 10000-20 §4.2.4): up to length bytes from the position of the handle, at most MaxByteStringLength; an empty result is the end of the file. "Only positive values are allowed" for length: zero or less is Bad\_InvalidArgument ("non-positive length", Table 6). A handle not opened for reading is Bad\_InvalidState.
+
+#### func (FileObject) SetPosition
+
+```go
+func (f *FileObject) SetPosition(ctx context.Context, h uint32, pos uint64) ua.StatusCode
+```
+
+SetPosition is the SetPosition Method (OPC 10000-20 §4.2.7), which clamps the position: "If the position is higher than the file size the position is set to the end of the file." (§4.2.7).
+
+#### func (FileObject) Write
+
+```go
+func (f *FileObject) Write(ctx context.Context, h uint32, data []byte) ua.StatusCode
+```
+
+Write is the Write Method (OPC 10000-20 §4.2.5): data at the position of the handle, which advances by the bytes written. "Writing an empty or null ByteString returns a Good result code without any affect on the file." A handle not opened for writing is Bad\_InvalidState.
 
 ### type GroupCertificate
 
@@ -1852,6 +2169,149 @@ func (ns *MapNamespace) SetValue(key string, value any)
 ```
 
 SetValue updates the value associated with a key and triggers the change notification to the OPC server.
+
+### type MemoryDirectory
+
+```go
+type MemoryDirectory struct {
+	// contains filtered or unexported fields
+}
+```
+
+MemoryDirectory is a DirectoryBackend held in memory; its files are MemoryFiles.
+
+#### func NewMemoryDirectory
+
+```go
+func NewMemoryDirectory() *MemoryDirectory
+```
+
+NewMemoryDirectory returns an empty MemoryDirectory.
+
+#### func (MemoryDirectory) Copy
+
+```go
+func (m *MemoryDirectory) Copy(from, to string) error
+```
+
+Copy implements DirectoryBackend.
+
+#### func (MemoryDirectory) CreateFile
+
+```go
+func (m *MemoryDirectory) CreateFile(p string) error
+```
+
+CreateFile implements DirectoryBackend.
+
+#### func (MemoryDirectory) File
+
+```go
+func (m *MemoryDirectory) File(p string) FileBackend
+```
+
+File implements DirectoryBackend: the MemoryFile of the path, or a backend that reports Bad\_NotFound.
+
+#### func (MemoryDirectory) Mkdir
+
+```go
+func (m *MemoryDirectory) Mkdir(p string) error
+```
+
+Mkdir implements DirectoryBackend.
+
+#### func (MemoryDirectory) ReadDir
+
+```go
+func (m *MemoryDirectory) ReadDir(p string) ([]DirEntry, error)
+```
+
+ReadDir implements DirectoryBackend; the entries are sorted by name.
+
+#### func (MemoryDirectory) Remove
+
+```go
+func (m *MemoryDirectory) Remove(p string) error
+```
+
+Remove implements DirectoryBackend.
+
+#### func (MemoryDirectory) Rename
+
+```go
+func (m *MemoryDirectory) Rename(from, to string) error
+```
+
+Rename implements DirectoryBackend.
+
+#### func (MemoryDirectory) WriteFile
+
+```go
+func (m *MemoryDirectory) WriteFile(p string, data []byte) error
+```
+
+WriteFile creates a file with a copy of data.
+
+### type MemoryFile
+
+```go
+type MemoryFile struct {
+	// MaxSize bounds the content; a Write past it is
+	// Bad_ResourceUnavailable. Zero is no bound.
+	MaxSize int
+
+}
+```
+
+MemoryFile is a FileBackend held in memory. A handle opened for writing works on a copy, which becomes the content when the handle is closed: with Close, or at the end of its session (OPC 10000-20 §4.2.5 leaves that to the server). Readers see the content of the time they opened the file.
+
+#### func NewMemoryFile
+
+```go
+func NewMemoryFile(data []byte) *MemoryFile
+```
+
+NewMemoryFile returns a MemoryFile with a copy of data.
+
+#### func (MemoryFile) Bytes
+
+```go
+func (m *MemoryFile) Bytes() []byte
+```
+
+Bytes returns a copy of the content.
+
+#### func (MemoryFile) ModTime
+
+```go
+func (m *MemoryFile) ModTime() (time.Time, error)
+```
+
+ModTime implements FileModTimer: when the content was last replaced.
+
+#### func (MemoryFile) Open
+
+```go
+func (m *MemoryFile) Open(_ context.Context, mode ua.OpenFileMode) (FileContent, error)
+```
+
+Open implements FileBackend.
+
+#### func (MemoryFile) SetBytes
+
+```go
+func (m *MemoryFile) SetBytes(data []byte)
+```
+
+SetBytes replaces the content with a copy of data. A FileObject of the file does not know: call its Changed when the Properties should be notified.
+
+#### func (MemoryFile) Size
+
+```go
+func (m *MemoryFile) Size() (uint64, error)
+```
+
+Size implements FileBackend.
 
 ### type MethodCaller
 
@@ -2626,6 +3086,136 @@ type NonExclusiveLimits struct {
 ```
 
 NonExclusiveLimits are the states of a non-exclusive limit alarm (NonExclusiveLimitAlarmType, Part 9 §5.8.13): any combination may be active.
+
+### type OSDirectory
+
+```go
+type OSDirectory struct {
+
+	// Perm is the permission of the files CreateFile creates; zero is
+	// 0o600. Directories get 0o700.
+	Perm fs.FileMode
+
+}
+```
+
+OSDirectory is a DirectoryBackend of a directory of the operating system, opened with os.OpenRoot: no path leaves it (a symbolic link out of it is an error).
+
+#### func NewOSDirectory
+
+```go
+func NewOSDirectory(dir string) (*OSDirectory, error)
+```
+
+NewOSDirectory opens the directory dir.
+
+#### func (OSDirectory) Close
+
+```go
+func (d *OSDirectory) Close() error
+```
+
+Close closes the directory.
+
+#### func (OSDirectory) Copy
+
+```go
+func (d *OSDirectory) Copy(from, to string) error
+```
+
+Copy implements DirectoryBackend.
+
+#### func (OSDirectory) CreateFile
+
+```go
+func (d *OSDirectory) CreateFile(p string) error
+```
+
+CreateFile implements DirectoryBackend.
+
+#### func (OSDirectory) File
+
+```go
+func (d *OSDirectory) File(p string) FileBackend
+```
+
+File implements DirectoryBackend.
+
+#### func (OSDirectory) Mkdir
+
+```go
+func (d *OSDirectory) Mkdir(p string) error
+```
+
+Mkdir implements DirectoryBackend.
+
+#### func (OSDirectory) ReadDir
+
+```go
+func (d *OSDirectory) ReadDir(p string) ([]DirEntry, error)
+```
+
+ReadDir implements DirectoryBackend; entries that are neither a regular file nor a directory are left out.
+
+#### func (OSDirectory) Remove
+
+```go
+func (d *OSDirectory) Remove(p string) error
+```
+
+Remove implements DirectoryBackend.
+
+#### func (OSDirectory) Rename
+
+```go
+func (d *OSDirectory) Rename(from, to string) error
+```
+
+Rename implements DirectoryBackend; an existing target is fs.ErrExist.
+
+### type OSFile
+
+```go
+type OSFile struct {
+	Path string
+	// Perm is the permission of a file Open creates; zero is 0o600.
+	Perm fs.FileMode
+}
+```
+
+OSFile is a FileBackend of a file of the operating system. A handle is an open \*os.File: writes go to the file as they come. Open for writing creates a file that does not exist (with Perm); for reading, a file that does not exist is Bad\_NotFound.
+
+#### func NewOSFile
+
+```go
+func NewOSFile(path string) *OSFile
+```
+
+NewOSFile returns the OSFile of path.
+
+#### func (OSFile) ModTime
+
+```go
+func (o *OSFile) ModTime() (time.Time, error)
+```
+
+ModTime implements FileModTimer.
+
+#### func (OSFile) Open
+
+```go
+func (o *OSFile) Open(_ context.Context, mode ua.OpenFileMode) (FileContent, error)
+```
+
+Open implements FileBackend.
+
+#### func (OSFile) Size
+
+```go
+func (o *OSFile) Size() (uint64, error)
+```
+
+Size implements FileBackend.
 
 ### type OperationGuard
 
@@ -3988,6 +4578,8 @@ type Server struct {
 
 	// methods stores registered server-side method handlers keyed by "objectID\x00methodID".
 
+	// files are the FileObjects, whose handles end with their session.
+
 	// guards are the Guards of AddGuard: a slice AddGuard replaces, never
 	// changes in place, so that requests read it without a lock.
 
@@ -4075,6 +4667,24 @@ func (s *Server) AddCondition(cfg ConditionConfig) (*Condition, error)
 ```
 
 AddCondition creates a condition instance (Part 9 §5.5) with the components of its type and the options of cfg, attaches it to its source node and returns it. The condition reports an initial event.
+
+#### func (Server) AddFile
+
+```go
+func (s *Server) AddFile(parent, nodeID *ua.NodeID, name *ua.QualifiedName, cfg FileConfig) (*FileObject, error)
+```
+
+AddFile adds a FileType Object (OPC 10000-20 §4.2.1) with the NodeId nodeID and the BrowseName name to the address space, a component of parent (HasComponent), and serves it: the Properties Size, Writable, UserWritable, OpenCount and MaxByteStringLength, MimeType when FileConfig.MimeType is set, LastModifiedTime when the backend is a FileModTimer, and the Methods Open, Close, Read, Write, GetPosition and SetPosition with the InputArguments and OutputArguments of their declarations. The children have string NodeIds in the namespace of nodeID: "\<id>.\<BrowseName>" (see [Node.SetMethodArguments](#func-node-setmethodarguments)).
+
+The namespace of nodeID must be one of the server's and nodeID must not exist; parent must exist.
+
+#### func (Server) AddFileDirectory
+
+```go
+func (s *Server) AddFileDirectory(parent, nodeID *ua.NodeID, name *ua.QualifiedName, cfg FileDirectoryConfig) (*FileDirectory, error)
+```
+
+AddFileDirectory adds the root of a file system, a FileDirectoryType Object (OPC 10000-20 §4.3.1) with the NodeId nodeID and the BrowseName name, as a component of parent, with the directories and files the backend has. "The Object representing the root of a file directory structure shall have the BrowseName FileSystem" (§4.3.2); a directory that is not the root of a file system may have another name.
 
 #### func (Server) AddGuard
 
@@ -4327,6 +4937,14 @@ func (s *Server) Namespace(id int) (NameSpace, error)
 func (s *Server) Namespaces() []NameSpace
 ```
 
+#### func (Server) NewFile
+
+```go
+func (s *Server) NewFile(cfg FileConfig) (*FileObject, error)
+```
+
+NewFile returns a FileObject of the server that is not in the address space: see [FileObject.Method](#func-fileobject-method) and [FileObject.Property](#func-fileobject-property).
+
 #### func (Server) Node
 
 ```go
@@ -4460,6 +5078,14 @@ func (s *Server) ReverseConnects() []*ReverseConnect
 ```
 
 ReverseConnects returns the reverse connect targets of the server, in the order they were added.
+
+#### func (Server) ServeFile
+
+```go
+func (s *Server) ServeFile(obj *ua.NodeID, cfg FileConfig) (*FileObject, error)
+```
+
+ServeFile serves the FileType Object obj of the address space, for example one of an imported NodeSet: the Methods and Properties of FileType (OPC 10000-20 §4.2.1) among its HasComponent and HasProperty children are found by their BrowseName in namespace 0; a Property the FileObject has no value for (MimeType without FileConfig.MimeType) is left as it is. It returns an error if obj or one of the Mandatory Methods is missing.
 
 #### func (Server) ServeTrustList
 
@@ -4864,6 +5490,39 @@ const (
 func (s ShelvingState) String() string
 ```
 
+### type SnapshotFile
+
+```go
+type SnapshotFile struct {
+	// Content returns the content of the file. A handle opened without
+	// EraseExisting starts with it.
+	Content func(ctx context.Context) ([]byte, error)
+	// MaxSize bounds what a handle holds; zero is no bound.
+	MaxSize int
+	// SizeExceeded is the status of a Write past MaxSize; zero is
+	// Bad_ResourceUnavailable. OPC 10000-20 §4.2.5 names no code for it.
+	SizeExceeded ua.StatusCode
+}
+```
+
+SnapshotFile is a FileBackend whose content is made by Content for each handle, and whose writes stay with the handle: Close discards them, the CloseAndUpdate Method of a subtype of FileType takes them with [FileObject.CloseAndTake](#func-fileobject-closeandtake). It is the file of a TrustList (Part 12 §7.8.2: "the Server shall not apply the changes until the CloseAndUpdate Method is called"), of the PubSubConfiguration (Part 14 §9.1.3.7) and of the ConnectionManagerConfiguration of OPC UA FX.
+
+#### func (SnapshotFile) Open
+
+```go
+func (f *SnapshotFile) Open(ctx context.Context, mode ua.OpenFileMode) (FileContent, error)
+```
+
+Open implements FileBackend.
+
+#### func (SnapshotFile) Size
+
+```go
+func (f *SnapshotFile) Size() (uint64, error)
+```
+
+Size implements FileBackend: the size of Content.
+
 ### type Subscription
 
 ```go
@@ -5050,6 +5709,12 @@ TrustListConfig configures a TrustList object served by [Server.ServeTrustList](
 type TrustListObject struct {
 
 	// UnixNano
+
+	// file are the handles of the TrustList file (Part 12 §7.8.2.1).
+
+	// mu is held by Open, OpenWithMasks, CloseAndUpdate, AddCertificate
+	// and RemoveCertificate: no handle is opened while one of the last
+	// two checks that none is.
 
 	// the properties that change
 
