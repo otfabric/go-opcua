@@ -469,6 +469,14 @@ func (s *AttributeService) Write(ctx context.Context, sc *uasc.SecureChannel, r 
 				status[i] = ua.StatusBadIndexRangeInvalid
 				continue
 			}
+			// WriteFullArrayOnly (Part 3 §8.58): "A Server shall return a
+			// Bad_WriteNotSupported error if an indexRange is provided and
+			// writing of indexRange is not possible for the Node" (Part 4
+			// §5.11.4.2).
+			if node != nil && node.writeFullArrayOnly() {
+				status[i] = ua.StatusBadWriteNotSupported
+				continue
+			}
 			cur := ns.Attribute(n.NodeID, ua.AttributeIDValue)
 			// The range is merged into the current value, so there has to be
 			// one. A value of Uncertain quality is a value: only a Bad status

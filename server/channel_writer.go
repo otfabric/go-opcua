@@ -243,7 +243,8 @@ func (w *channelWriter) write(o outbound) {
 	if _, isFault := o.resp.(*ua.ServiceFault); isFault {
 		return
 	}
-	fault := &ua.ServiceFault{ResponseHeader: responseHeader(0, ua.StatusBadEncodingError)}
+	// With the requestHandle of the response it replaces (Part 4 §7.33).
+	fault := &ua.ServiceFault{ResponseHeader: responseHeader(requestHandleOf(o.resp), ua.StatusBadEncodingError)}
 	if ferr := w.sc.SendResponseWithContext(context.Background(), o.reqID, fault); ferr != nil {
 		w.logger.Warn("error sending service fault", "error", ferr)
 		if isConnError(ferr) {

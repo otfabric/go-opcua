@@ -314,6 +314,9 @@ func TestChannelWriterCov_EncodingErrorAnsweredWithFault(t *testing.T) {
 	require.NoError(t, p.w.send(msg.RequestID, unencodable()))
 	r := cwWait(t, res)
 	require.ErrorIs(t, r.err, ua.StatusBadEncodingError)
+	fault, ok := r.resp.(*ua.ServiceFault)
+	require.True(t, ok, "%T", r.resp)
+	require.Equal(t, uint32(7), fault.ResponseHeader.RequestHandle, "the requestHandle of the response it replaces (Part 4 §7.33)")
 
 	// Same channel, next request: answered normally.
 	res = p.call(cwReadRequest())

@@ -37,6 +37,40 @@ func TestDiscoveryService_GetEndpoints(t *testing.T) {
 	require.NotEmpty(t, ge.Endpoints)
 }
 
+// TestDiscoveryService_GetEndpointsProfileURIs: GetEndpoints returns the
+// Endpoints of the requested Transport Profiles, all of them for an empty
+// list and none when none matches (Part 4 §5.5.4).
+func TestDiscoveryService_GetEndpointsProfileURIs(t *testing.T) {
+	srv := discoveryTestServer(t)
+	svc := &DiscoveryService{srv: srv}
+	get := func(profiles ...string) []*ua.EndpointDescription {
+		t.Helper()
+		resp, err := svc.GetEndpoints(context.Background(), nil, &ua.GetEndpointsRequest{
+			RequestHeader: reqHeader(),
+			EndpointURL:   srv.Endpoints()[0].EndpointURL,
+			ProfileURIs:   profiles,
+		}, 1)
+		require.NoError(t, err)
+		ge := resp.(*ua.GetEndpointsResponse)
+		require.Equal(t, ua.StatusOK, ge.ResponseHeader.ServiceResult)
+		return ge.Endpoints
+	}
+	all := get()
+	require.NotEmpty(t, all)
+	require.Equal(t, all, get(ua.TransportProfileUATCP), "every endpoint of the test server is opc.tcp")
+	require.Equal(t, all, get(ua.TransportProfileHTTPS, ua.TransportProfileUATCP))
+	require.Empty(t, get(ua.TransportProfileHTTPS), "an empty list if no Endpoints match")
+	require.Empty(t, get(ua.TransportProfileUATCP+"?x=1"), "compared as they are")
+
+	tcp := &ua.EndpointDescription{TransportProfileURI: ua.TransportProfileUATCP}
+	wss := &ua.EndpointDescription{TransportProfileURI: ua.TransportProfileWSS}
+	https := &ua.EndpointDescription{TransportProfileURI: ua.TransportProfileHTTPS}
+	eps := []*ua.EndpointDescription{tcp, wss, https}
+	require.Equal(t, eps, endpointsForProfiles(eps, nil))
+	require.Equal(t, []*ua.EndpointDescription{tcp, https}, endpointsForProfiles(eps, []string{ua.TransportProfileHTTPS, ua.TransportProfileUATCP}), "in the order of the endpoints")
+	require.Equal(t, []*ua.EndpointDescription{wss}, endpointsForProfiles(eps, []string{ua.TransportProfileWSS}))
+}
+
 func TestDiscoveryService_FindServersOnNetworkUnsupported(t *testing.T) {
 	srv := newTestServer()
 	svc := &DiscoveryService{srv: srv}
